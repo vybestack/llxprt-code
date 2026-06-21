@@ -150,8 +150,43 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     const normalizedTodos = this.normalizeTodos(params.todos);
+    const validation = this.validateAndFilterTodos(normalizedTodos);
+    if ('error' in validation) {
+      return validation;
+    }
+    const { todos, emojiResult } = validation;
 
-    // Validate todos with Zod schema
+    const sessionId = this.context?.sessionId ?? 'default';
+    const agentId = this.context?.agentId;
+    const serviceStore = this.todoService?.getTodoStore(this.context);
+
+    const oldTodos = await this.readOldTodos(
+      serviceStore ?? null,
+      sessionId,
+      agentId,
+    );
+    await this.persistTodos(todos, serviceStore ?? null, sessionId, agentId);
+
+    const { stateChange, shouldGenerateReminder, reminder } =
+      this.computeStateChange(oldTodos, todos);
+
+    this.handleInteractiveMode(todos, sessionId, agentId);
+
+    return this.buildToolResult(
+      todos,
+      emojiResult,
+      shouldGenerateReminder,
+      stateChange,
+      reminder,
+    );
+  }
+
+  private validateAndFilterTodos(normalizedTodos: Todo[]):
+    | { error: { message: string }; llmContent: string; returnDisplay: string }
+    | {
+        todos: Todo[];
+        emojiResult: ReturnType<TodoWrite['applyEmojiFilter']>;
+      } {
     const result = TodoArraySchema.safeParse(normalizedTodos);
     if (!result.success) {
       const error = result.error.errors[0];
@@ -161,12 +196,11 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     }
     const emojiResult = this.applyEmojiFilter(result.data);
     if (emojiResult.blocked) {
+      const message = emojiResult.errorMessage ?? 'Emojis detected in content';
       return {
-        llmContent: emojiResult.errorMessage ?? 'Emojis detected in content',
-        returnDisplay: emojiResult.errorMessage ?? 'Emojis detected in content',
-        error: {
-          message: emojiResult.errorMessage ?? 'Emojis detected in content',
-        },
+        llmContent: message,
+        returnDisplay: message,
+        error: { message },
       };
     }
 
@@ -180,23 +214,35 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         error: { message: msg },
       };
     }
-    const todos = revalidation.data;
+    return { todos: revalidation.data, emojiResult };
+  }
 
-    // Get session and agent IDs from context
-    const sessionId = this.context?.sessionId ?? 'default';
-    const agentId = this.context?.agentId;
+  private async readOldTodos(
+    serviceStore: {
+      readTodos?: () => Promise<Todo[]>;
+      getTodos?: () => Todo[];
+    } | null,
+    sessionId: string,
+    agentId: string | undefined,
+  ): Promise<Todo[]> {
+    if (serviceStore?.readTodos) {
+      return serviceStore.readTodos();
+    }
+    if (serviceStore?.getTodos) {
+      return serviceStore.getTodos();
+    }
+    return new TodoStore(sessionId, agentId).readTodos();
+  }
 
-    const serviceStore = this.todoService?.getTodoStore(this.context);
-
-    // Read old todos for diff tracking
-    const rawOldTodos = serviceStore?.readTodos
-      ? await serviceStore.readTodos()
-      : serviceStore?.getTodos
-        ? serviceStore.getTodos()
-        : await new TodoStore(sessionId, agentId).readTodos();
-    const oldTodos = rawOldTodos as Todo[];
-
-    // Write new todos
+  private async persistTodos(
+    todos: Todo[],
+    serviceStore: {
+      writeTodos?: (todos: Todo[]) => Promise<void>;
+      setTodos?: (todos: Todo[]) => void;
+    } | null,
+    sessionId: string,
+    agentId: string | undefined,
+  ): Promise<void> {
     if (serviceStore?.writeTodos) {
       await serviceStore.writeTodos(todos);
     } else if (serviceStore?.setTodos) {
@@ -204,21 +250,31 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     } else {
       await new TodoStore(sessionId, agentId).writeTodos(todos);
     }
+  }
 
+  private computeStateChange(
+    oldTodos: Todo[],
+    todos: Todo[],
+  ): {
+    stateChange: {
+      added: unknown[];
+      removed: unknown[];
+      statusChanged: unknown[];
+    };
+    shouldGenerateReminder: boolean;
+    reminder: string | null;
+  } {
     const reminderService = this.todoService?.getReminderService();
     const localReminderService = new TodoReminderService();
 
-    // Calculate state change
     const stateChange =
       reminderService?.calculateStateChange?.(oldTodos, todos) ??
       localReminderService.calculateStateChange(oldTodos, todos);
 
     const shouldGenerateReminder =
       reminderService?.shouldGenerateReminder?.(stateChange) ??
-      localReminderService.shouldGenerateReminder(stateChange) ??
-      false;
+      localReminderService.shouldGenerateReminder(stateChange);
 
-    // Generate reminder if needed
     let reminder: string | null = null;
     if (shouldGenerateReminder) {
       reminder =
@@ -227,24 +283,43 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         null;
     }
 
-    // Set active task ID and emit event if in interactive mode
-    if (this.context?.interactiveMode === true) {
-      const scopedAgentId =
-        agentId ?? this.todoService?.getDefaultAgentId() ?? DEFAULT_AGENT_ID;
-      const serviceTracker = this.todoService?.getContextTracker(this.context);
-      if (serviceTracker?.setActiveTodo) {
-        const inProgressTodo = todos.find(
-          (todo) => todo.status === 'in_progress',
-        );
-        serviceTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
-        this.emitTodoUpdated(todos, sessionId, scopedAgentId);
-      } else {
-        this.trackInteractiveUpdate(todos, sessionId, scopedAgentId);
-      }
+    return { stateChange, shouldGenerateReminder, reminder };
+  }
+
+  private handleInteractiveMode(
+    todos: Todo[],
+    sessionId: string,
+    agentId: string | undefined,
+  ): void {
+    if (this.context?.interactiveMode !== true) {
+      return;
     }
+    const scopedAgentId =
+      agentId ?? this.todoService?.getDefaultAgentId() ?? DEFAULT_AGENT_ID;
+    const serviceTracker = this.todoService?.getContextTracker(this.context);
+    if (serviceTracker?.setActiveTodo) {
+      const inProgressTodo = todos.find(
+        (todo) => todo.status === 'in_progress',
+      );
+      serviceTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
+      this.emitTodoUpdated(todos, sessionId, scopedAgentId);
+    } else {
+      this.trackInteractiveUpdate(todos, sessionId, scopedAgentId);
+    }
+  }
 
+  private buildToolResult(
+    todos: Todo[],
+    emojiResult: ReturnType<TodoWrite['applyEmojiFilter']>,
+    shouldGenerateReminder: boolean,
+    stateChange: {
+      added: unknown[];
+      removed: unknown[];
+      statusChanged: unknown[];
+    },
+    reminder: string | null,
+  ): ToolResult {
     const formattedOutput = formatTodoListForDisplay(todos);
-
     const statistics = this.calculateStatistics(todos);
     const nextAction = this.determineNextAction(todos);
 
@@ -274,23 +349,20 @@ ${emojiResult.systemFeedback}
 
   private normalizeTodos(rawTodos: TodoWriteParams['todos']): Todo[] {
     const normalized = rawTodos.map((todo, index) => {
+      const rawTodo = todo as Record<string, unknown>;
       const normalizedId =
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
-        todo?.id !== undefined &&
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
-        todo?.id !== null &&
-        `${todo.id}`.trim() !== ''
-          ? String(todo.id)
+        rawTodo.id !== undefined &&
+        rawTodo.id !== null &&
+        `${rawTodo.id}`.trim() !== ''
+          ? String(rawTodo.id)
           : String(index + 1);
 
-      const rawSubtasks = todo?.subtasks;
+      const rawSubtasks = rawTodo.subtasks;
       const hasSubtasks = Array.isArray(rawSubtasks);
       const normalizedSubtasks = hasSubtasks
         ? rawSubtasks.map((subtask, subIndex) => {
             const subtaskId =
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
               subtask?.id !== undefined &&
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
               subtask?.id !== null &&
               `${subtask.id}`.trim() !== ''
                 ? String(subtask.id)
@@ -302,10 +374,15 @@ ${emojiResult.systemFeedback}
           })
         : undefined;
 
+      const status =
+        typeof rawTodo.status === 'string'
+          ? (rawTodo.status as Todo['status'])
+          : 'pending';
+
       const normalized: Todo = {
         ...todo,
         id: normalizedId,
-        status: todo.status ?? 'pending',
+        status,
       };
       if (hasSubtasks) {
         normalized.subtasks = normalizedSubtasks;
@@ -382,7 +459,7 @@ ${emojiResult.systemFeedback}
     if (!this.toolHost) {
       return null;
     }
-    const raw = this.toolHost.getEphemeralSettings?.().emojifilter;
+    const raw = this.toolHost.getEphemeralSettings().emojifilter;
     const mode = isEmojiFilterMode(raw) ? raw : 'auto';
     return new EmojiFilter({ mode });
   }

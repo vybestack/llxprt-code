@@ -8,6 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as Diff from 'diff';
 import { makeRelative, shortenPath } from '../utils/paths.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -71,8 +72,10 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
   }
 
   private getFilePath(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-    return this.params.absolute_path || this.params.file_path || '';
+    return stringOrDefault(
+      this.params.absolute_path,
+      stringOrDefault(this.params.file_path, ''),
+    );
   }
 
   getDescription(): string {
@@ -296,8 +299,10 @@ export class DeleteLineRangeTool extends BaseDeclarativeTool<
   protected override validateToolParamValues(
     params: DeleteLineRangeToolParams,
   ): string | null {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = stringOrDefault(
+      params.absolute_path,
+      stringOrDefault(params.file_path, ''),
+    );
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";

@@ -58,8 +58,10 @@ function makeChatSession(
   vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
   vi.spyOn(historyService, 'getStatistics').mockReturnValue({
     totalMessages: 10,
-    humanMessages: 5,
+    userMessages: 5,
     aiMessages: 5,
+    toolCalls: 0,
+    toolResponses: 0,
   });
   vi.spyOn(historyService, 'startCompression').mockImplementation(() => {});
   vi.spyOn(historyService, 'endCompression').mockImplementation(() => {});
@@ -94,7 +96,7 @@ function makeChatSession(
   const mockContentGenerator = {
     generateContent: vi.fn(),
     generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockReturnValue(100),
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
     embedContent: vi.fn(),
   };
 

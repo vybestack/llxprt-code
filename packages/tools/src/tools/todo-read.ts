@@ -47,12 +47,8 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     const agentId = this.context?.agentId;
 
     const store = this.todoService?.getTodoStore(this.context);
-    const rawTodos = store?.readTodos
-      ? await store.readTodos()
-      : store?.getTodos
-        ? store.getTodos()
-        : await new TodoStore(sessionId, agentId).readTodos();
-    const todos = rawTodos as Todo[];
+    const rawTodos = await this.readTodosFromStore(store, sessionId, agentId);
+    const todos = rawTodos;
 
     const paused = store?.readPausedState
       ? await store.readPausedState()
@@ -66,10 +62,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
       const reminder =
         this.reminderService.getReminderForEmptyTodos(isComplexTask);
       return {
-        llmContent:
-          output +
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty reminder string should not be concatenated
-          (reminder || ''),
+        llmContent: output + (reminder || ''),
         returnDisplay: output,
       };
     }
@@ -87,6 +80,25 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
         suggestedAction,
       },
     };
+  }
+
+  private async readTodosFromStore(
+    store:
+      | {
+          readTodos?: () => Promise<Todo[]>;
+          getTodos?: () => Todo[];
+        }
+      | undefined,
+    sessionId: string,
+    agentId: string | undefined,
+  ): Promise<Todo[]> {
+    if (store?.readTodos) {
+      return store.readTodos();
+    }
+    if (store?.getTodos) {
+      return store.getTodos();
+    }
+    return new TodoStore(sessionId, agentId).readTodos();
   }
 
   private calculateStatistics(todos: Todo[]): {

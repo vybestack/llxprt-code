@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import path from 'node:path';
 import process from 'node:process';
 import { type PartUnion } from '@google/genai';
@@ -28,6 +26,7 @@ import {
 import type { GitLineChangeMarker } from '../utils/gitLineChanges.js';
 import { getGitLineChanges } from '../utils/gitLineChanges.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 /**
  * Parameters for the ReadFile tool
@@ -137,9 +136,10 @@ class ReadFileToolInvocation extends BaseToolInvocation<
 
   private getFilePath(): string {
     // Use absolute_path if provided, otherwise fall back to file_path
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, absolute_path/file_path are optional strings with fallthrough intent */
-    return this.params.absolute_path || this.params.file_path || '';
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    return stringOrDefault(
+      this.params.absolute_path,
+      stringOrDefault(this.params.file_path, ''),
+    );
   }
 
   getDescription(): string {
@@ -406,9 +406,10 @@ If git status cannot be read, the tool will still return file content and includ
     params: ReadFileToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, absolute_path/file_path are optional strings with fallthrough intent */
-    const filePath = params.absolute_path || params.file_path || '';
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    const filePath = stringOrDefault(
+      params.absolute_path,
+      stringOrDefault(params.file_path, ''),
+    );
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";

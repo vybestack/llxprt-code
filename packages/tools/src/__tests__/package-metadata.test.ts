@@ -143,25 +143,25 @@ describe('Package Metadata Tests @plan:PLAN-20260608-ISSUE1585.P07', () => {
   describe('no forbidden runtime dependencies', () => {
     it('has no core dependency in dependencies', () => {
       const pkg = loadPackageJson();
-      const deps = Object.keys(pkg.dependencies ?? {});
+      const deps = Object.keys(pkg.dependencies);
       expect(deps).not.toContain('@vybestack/llxprt-code-core');
     });
 
     it('has no providers dependency in dependencies', () => {
       const pkg = loadPackageJson();
-      const deps = Object.keys(pkg.dependencies ?? {});
+      const deps = Object.keys(pkg.dependencies);
       expect(deps).not.toContain('@vybestack/llxprt-code-providers');
     });
 
     it('has no cli dependency in dependencies', () => {
       const pkg = loadPackageJson();
-      const deps = Object.keys(pkg.dependencies ?? {});
+      const deps = Object.keys(pkg.dependencies);
       expect(deps).not.toContain('@vybestack/llxprt-code');
     });
 
     it('dependencies contains only external packages, no monorepo deps', () => {
       const pkg = loadPackageJson();
-      const deps = Object.keys(pkg.dependencies ?? {});
+      const deps = Object.keys(pkg.dependencies);
       const forbidden = [
         '@vybestack/llxprt-code-core',
         '@vybestack/llxprt-code-providers',

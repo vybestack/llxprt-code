@@ -29,11 +29,10 @@ export const COMMENT_PREFIXES = ['//', '#', '*', '/*', '*/'];
 // ===== Regex Patterns =====
 /**
  * Regex patterns for code analysis.
+ * (IMPORT_MODULE parsing moved to string-scanning in language-analysis.ts
+ *  to avoid regex backtracking risks.)
  */
-export const REGEX = {
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  IMPORT_MODULE: /(?:import|from)\s+['"]([^'"]+)['"]/,
-} as const;
+export const REGEX = {} as const;
 
 // Re-export shared language mapping from utils
 export {

@@ -17,6 +17,7 @@ import {
 } from './tools.js';
 import { DIRECT_WEB_FETCH_TOOL } from '../types/tool-names.js';
 import { ToolErrorType } from '../types/tool-error.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 
 import fetch, { type RequestInit } from 'node-fetch';
@@ -120,8 +121,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
       const content = new TextDecoder().decode(arrayBuffer);
       const output = this.convertContent(
         content,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Preserve prior empty-string fallback for missing/blank content-type.
-        response.headers.get('content-type') || '',
+        stringOrDefault(response.headers.get('content-type') ?? undefined, ''),
       );
 
       return {

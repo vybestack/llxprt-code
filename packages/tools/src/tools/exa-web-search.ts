@@ -8,11 +8,9 @@
  * Licensed under the MIT License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Existing tool flow preserved during package migration. */
-
 import fetch from 'node-fetch';
 
-import type { IToolKeyStorage } from '../interfaces/index.js';
+import type { IToolKeyStorage, IToolMessageBus } from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 import {
@@ -119,7 +117,7 @@ export class ExaWebSearchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ExaWebSearchToolParams,
-    messageBus?: import('../interfaces/index.js').IToolMessageBus,
+    messageBus?: IToolMessageBus,
   ): ToolInvocation<ExaWebSearchToolParams, ToolResult> {
     return new ExaWebSearchToolInvocation(
       this.dependencies,
@@ -136,7 +134,7 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly dependencies: ExaWebSearchToolDependencies,
     params: ExaWebSearchToolParams,
-    messageBus?: import('../interfaces/index.js').IToolMessageBus,
+    messageBus?: IToolMessageBus,
   ) {
     super(params, messageBus);
   }
@@ -166,16 +164,14 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
         name: 'web_search_exa',
         arguments: {
           query: this.params.query,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional enum property
-          type: this.params.type || 'auto',
+          type: this.params.type ?? 'auto',
           numResults:
             this.params.numResults !== undefined &&
             this.params.numResults !== 0 &&
             !Number.isNaN(this.params.numResults)
               ? this.params.numResults
               : API_CONFIG.DEFAULT_NUM_RESULTS,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional enum property
-          livecrawl: this.params.livecrawl || 'fallback',
+          livecrawl: this.params.livecrawl ?? 'fallback',
           contextMaxCharacters: this.params.contextMaxCharacters ?? 10000,
         },
       },
@@ -203,22 +199,9 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
       const responseText = await response.text();
       const lines = responseText.split('\n');
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data: McpSearchResponse = JSON.parse(line.substring(6));
-            if (
-              data.result?.content !== undefined &&
-              data.result.content.length > 0
-            ) {
-              const content = ensureJsonSafe(data.result.content[0].text);
-              return {
-                llmContent: content,
-                returnDisplay: content,
-              };
-            }
-          } catch {
-            // Ignore parse errors
-          }
+        const parsed = this.parseSearchResponseLine(line);
+        if (parsed !== undefined) {
+          return parsed;
         }
       }
 
@@ -238,5 +221,29 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
         },
       };
     }
+  }
+
+  private parseSearchResponseLine(
+    line: string,
+  ): { llmContent: string; returnDisplay: string } | undefined {
+    if (!line.startsWith('data: ')) {
+      return undefined;
+    }
+    try {
+      const data: McpSearchResponse = JSON.parse(line.substring(6));
+      if (
+        data.result?.content !== undefined &&
+        data.result.content.length > 0
+      ) {
+        const content = ensureJsonSafe(data.result.content[0].text);
+        return {
+          llmContent: content,
+          returnDisplay: content,
+        };
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return undefined;
   }
 }

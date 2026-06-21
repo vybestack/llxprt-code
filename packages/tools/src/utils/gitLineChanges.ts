@@ -81,11 +81,12 @@ function runGit(
 
 function findGitRoot(startDir: string): string | undefined {
   let current = path.resolve(startDir);
-  while (true) {
+  let parent = path.dirname(current);
+  for (;;) {
     if (existsSync(path.join(current, '.git'))) return current;
-    const parent = path.dirname(current);
     if (parent === current) return undefined;
     current = parent;
+    parent = path.dirname(current);
   }
 }
 
@@ -101,43 +102,79 @@ async function fileExistsInHead(
   }
 }
 
+/** Parses a git diff hunk header like '@@ -10,3 +12,5 @@' into its components. */
+function parseHunkHeader(line: string): {
+  oldStart: number;
+  oldCount: number;
+  newStart: number;
+  newCount: number;
+} | null {
+  // Expected format: @@ -OLD_START[,OLD_COUNT] +NEW_START[,NEW_COUNT] @@
+  if (!line.startsWith('@@')) {
+    return null;
+  }
+  const dashIdx = line.indexOf('-');
+  const plusIdx = line.indexOf('+', dashIdx);
+  const endIdx = line.indexOf('@@', plusIdx);
+  if (dashIdx < 0 || plusIdx < 0 || endIdx < 0) {
+    return null;
+  }
+  const oldPart = line.substring(dashIdx + 1, plusIdx).trim();
+  const newPart = line.substring(plusIdx + 1, endIdx).trim();
+  const [oldStartStr, oldCountStr] = oldPart.split(',');
+  const [newStartStr, newCountStr] = newPart.split(',');
+  return {
+    oldStart: Number(oldStartStr),
+    oldCount: oldCountStr ? Number(oldCountStr) : 1,
+    newStart: Number(newStartStr),
+    newCount: newCountStr ? Number(newCountStr) : 1,
+  };
+}
+
+function applyHunkToMarkers(
+  hunk: {
+    oldStart: number;
+    oldCount: number;
+    newStart: number;
+    newCount: number;
+  },
+  markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>>,
+  deletionAfterLines: Set<number>,
+): void {
+  const { oldStart, oldCount, newStart, newCount } = hunk;
+
+  if (oldCount === 0) {
+    for (let i = 0; i < newCount; i++) {
+      markersByLine.set(newStart + i, 'N');
+    }
+    return;
+  }
+
+  if (newCount === 0) {
+    deletionAfterLines.add(Math.max(0, oldStart - 1));
+    return;
+  }
+
+  for (let i = 0; i < newCount; i++) {
+    markersByLine.set(newStart + i, 'M');
+  }
+  if (oldCount > newCount) {
+    deletionAfterLines.add(newStart + newCount - 1);
+  }
+}
+
 function parseUnifiedZeroDiff(diffText: string): {
   markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>>;
   deletionAfterLines: Set<number>;
 } {
   const markersByLine = new Map<number, Exclude<GitLineChangeMarker, '░'>>();
   const deletionAfterLines = new Set<number>();
-  const lines = diffText.split(/\r?\n/);
-  const hunkHeaderRe = /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/;
+  const lines = diffText.split('\n');
 
   for (const line of lines) {
-    const m = hunkHeaderRe.exec(line);
-    if (!m) continue;
-
-    const oldCount = m[2] ? Number(m[2]) : 1;
-    const newStart = Number(m[3]);
-    const newCount = m[4] ? Number(m[4]) : 1;
-
-    if (oldCount === 0) {
-      for (let i = 0; i < newCount; i++) {
-        markersByLine.set(newStart + i, 'N');
-      }
-      continue;
-    }
-
-    if (newCount === 0 && oldCount > 0) {
-      const oldStart = Number(m[1]);
-      deletionAfterLines.add(Math.max(0, oldStart - 1));
-      continue;
-    }
-
-    if (oldCount > 0 && newCount > 0) {
-      for (let i = 0; i < newCount; i++) {
-        markersByLine.set(newStart + i, 'M');
-      }
-      if (oldCount > newCount) {
-        deletionAfterLines.add(newStart + newCount - 1);
-      }
+    const hunk = parseHunkHeader(line);
+    if (hunk) {
+      applyHunkToMarkers(hunk, markersByLine, deletionAfterLines);
     }
   }
 

@@ -21,6 +21,7 @@ import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
 import { convert } from 'html-to-text';
 import type { GenerateContentResponse, UrlMetadata } from '@google/genai';
 import { debugLogger as logger } from '../utils/debugLogger.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 const URL_FETCH_TIMEOUT_MS = 10000;
 const MAX_CONTENT_LENGTH = 100000;
@@ -37,58 +38,46 @@ export function parsePrompt(text: string): {
   const validUrls: string[] = [];
   const errors: string[] = [];
 
-  const stripTrailingPunctuation = (input: string): string => {
-    let endIndex = input.length;
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    while (endIndex > 0) {
-      const lastChar = input[endIndex - 1];
-      if (
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        lastChar === '.' ||
-        lastChar === ',' ||
-        lastChar === ';' ||
-        lastChar === ':' ||
-        lastChar === '!' ||
-        lastChar === '?'
-      ) {
-        endIndex--;
-        continue;
-      }
-      break;
-    }
-    return input.slice(0, endIndex);
-  };
-
   for (const token of tokens) {
     if (!token) continue;
 
-    // Heuristic to check if the token appears to contain URL-like chars.
     if (token.includes('://')) {
-      // Strip common trailing punctuation (period, comma, semicolon, colon, etc.)
-      // This handles natural language like "Check https://example.com."
-      const cleaned = stripTrailingPunctuation(token);
-
-      try {
-        // Validate with new URL()
-        const url = new URL(cleaned);
-
-        // Allowlist protocols
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (['http:', 'https:'].includes(url.protocol)) {
-          validUrls.push(url.href);
-        } else {
-          errors.push(
-            `Unsupported protocol in URL: "${cleaned}". Only http and https are supported.`,
-          );
-        }
-      } catch {
-        // Malformed URL according to WHATWG standard.
-        errors.push(`Malformed URL detected: "${cleaned}".`);
-      }
+      processUrlToken(token, validUrls, errors, stripTrailingPunctuation);
     }
   }
 
   return { validUrls, errors };
+}
+
+const TRAILING_PUNCTUATION = new Set(['.', ',', ';', ':', '!', '?']);
+
+const stripTrailingPunctuation = (input: string): string => {
+  let endIndex = input.length;
+  while (endIndex > 0 && TRAILING_PUNCTUATION.has(input[endIndex - 1])) {
+    endIndex--;
+  }
+  return input.slice(0, endIndex);
+};
+
+function processUrlToken(
+  token: string,
+  validUrls: string[],
+  errors: string[],
+  stripPunctuation: (input: string) => string,
+): void {
+  const cleaned = stripPunctuation(token);
+  try {
+    const url = new URL(cleaned);
+    if (['http:', 'https:'].includes(url.protocol)) {
+      validUrls.push(url.href);
+    } else {
+      errors.push(
+        `Unsupported protocol in URL: "${cleaned}". Only http and https are supported.`,
+      );
+    }
+  } catch {
+    errors.push(`Malformed URL detected: "${cleaned}".`);
+  }
 }
 
 // Interfaces for grounding metadata (similar to web-search.ts)
@@ -192,8 +181,10 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         );
       }
       const rawContent = await response.text();
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: get() returns string | null, empty string should fall through
-      const contentType = response.headers.get('content-type') || '';
+      const contentType = stringOrDefault(
+        response.headers.get('content-type') ?? undefined,
+        '',
+      );
       let textContent: string;
 
       // Only use html-to-text if content type is HTML, or if no content type is provided (assume HTML)
@@ -417,8 +408,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     url: string,
   ): Promise<ToolResult> {
     const typedResponse = response as GenerateContentResponse;
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getResponseText returns string | null | undefined, empty string should fall through
-    let responseText = getResponseText(typedResponse) || '';
+    let responseText = getResponseText(typedResponse) ?? '';
     const groundingMetadata = typedResponse.candidates?.[0]?.groundingMetadata;
     const sources = groundingMetadata?.groundingChunks as
       | GroundingChunkItem[]
@@ -461,7 +451,6 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     if (urlMetadata !== undefined && urlMetadata.length > 0) {
       return urlMetadata.every(
         (metadata: UrlMetadata) =>
-          // eslint-disable-next-line sonarjs/different-types-comparison -- Generated Gemini enum typing is narrower than runtime URL retrieval statuses; preserve the original success-status comparison.
           metadata.urlRetrievalStatus !== 'URL_RETRIEVAL_STATUS_SUCCESS',
       );
     }
@@ -490,10 +479,8 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
 
   private formatSources(sources: GroundingChunkItem[]): string[] {
     return sources.map((source: GroundingChunkItem, index: number) => {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: title is optional string, empty string should fall through
-      const title = source.web?.title || 'Untitled';
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: uri is optional string, empty string should fall through
-      const uri = source.web?.uri || 'Unknown URI';
+      const title = stringOrDefault(source.web?.title, 'Untitled');
+      const uri = stringOrDefault(source.web?.uri, 'Unknown URI');
       return `[${index + 1}] ${title} (${uri})`;
     });
   }

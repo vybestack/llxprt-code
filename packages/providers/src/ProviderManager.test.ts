@@ -6,7 +6,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProviderManager } from './ProviderManager.js';
+import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import type { IProvider } from './IProvider.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 // import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js'; // Not used in tests
 import {
   registerSettingsService,
@@ -18,6 +20,31 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+function createRuntimeConfigStub(): Config {
+  return {
+    getConversationLoggingEnabled: () => false,
+    getProviderManager: () => ({ accumulateSessionTokens: () => {} }),
+    getRedactionConfig: () => ({
+      redactApiKeys: false,
+      redactCredentials: false,
+      redactFilePaths: false,
+      redactUrls: false,
+      redactEmails: false,
+      redactPersonalInfo: false,
+    }),
+  } as unknown as Config;
+}
+
+function setTestRuntimeContext(settingsService = new SettingsService()): void {
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({
+      settingsService,
+      config: createRuntimeConfigStub(),
+      metadata: { source: 'ProviderManager.test' },
+    }),
+  );
+}
 
 describe('ProviderManager provider ordering', () => {
   const createProvider = (name: string): IProvider =>
@@ -32,7 +59,7 @@ describe('ProviderManager provider ordering', () => {
 
   beforeEach(() => {
     resetSettingsService();
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    setTestRuntimeContext();
   });
 
   afterEach(() => {
@@ -66,14 +93,48 @@ describe('ProviderManager provider ordering', () => {
       'gamma',
     ]);
   });
+
+  it('falls back to active runtime config when init provides only settings service', () => {
+    const settingsService = new SettingsService();
+    const runtimeConfig = {
+      getConversationLoggingEnabled: () => false,
+      getProviderManager: () => ({ accumulateSessionTokens: () => {} }),
+      getRedactionConfig: () => ({
+        redactApiKeys: false,
+        redactCredentials: false,
+        redactFilePaths: false,
+        redactUrls: false,
+        redactEmails: false,
+        redactPersonalInfo: false,
+      }),
+    } as unknown as Config;
+    setActiveProviderRuntimeContext({
+      settingsService,
+      config: runtimeConfig,
+      runtimeId: 'provider-manager.config-fallback-test',
+      metadata: { source: 'ProviderManager.test' },
+    });
+
+    const manager = new ProviderManager({ settingsService });
+    manager.registerProvider(createProvider('fallback-provider'));
+
+    expect(manager.getProviderByName('fallback-provider')).toBeInstanceOf(
+      LoggingProviderWrapper,
+    );
+  });
 });
 
 describe('ProviderPerformanceTracker', () => {
   let mockProvider: IProvider;
 
+  it('returns null metrics when no active provider is set', () => {
+    const manager = new ProviderManager();
+
+    expect(manager.getProviderMetrics()).toBeNull();
+  });
   beforeEach(() => {
     resetSettingsService();
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    setTestRuntimeContext();
     registerSettingsService(new SettingsService());
     mockProvider = {
       name: 'test-provider',

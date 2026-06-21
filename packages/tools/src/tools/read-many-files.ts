@@ -27,6 +27,10 @@ import { type PartUnion } from '@google/genai';
 import { stat } from 'fs/promises';
 import { ToolErrorType } from '../types/tool-error.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import {
+  buildParameterSchema,
+  formatExcludePatterns,
+} from './read-many-files-schema.js';
 
 // Simple token estimation - roughly 4 characters per token
 function estimateTokens(text: string): number {
@@ -136,15 +140,10 @@ ${this.host.getTargetDir()}
         ? [...getDefaultExcludes(this.host), ...paramExcludes]
         : [...paramExcludes];
 
-    const excludeDesc = `Excluding: ${
+    const excludeDesc =
       finalExclusionPatternsForDescription.length > 0
-        ? `patterns like 
-${finalExclusionPatternsForDescription.slice(0, 2).join(
-  '`, `',
-  // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-)}${finalExclusionPatternsForDescription.length > 2 ? '...`' : '`'}`
-        : 'none specified'
-    }`;
+        ? formatExcludePatterns(finalExclusionPatternsForDescription)
+        : 'none specified';
 
     return `Will attempt to read and concatenate files ${pathDesc}. ${excludeDesc}. File encoding: ${DEFAULT_ENCODING}. Separator: "${DEFAULT_OUTPUT_SEPARATOR_FORMAT.replace(
       '{filePath}',
@@ -351,39 +350,23 @@ ${finalExclusionPatternsForDescription.slice(0, 2).join(
     let gitIgnoredCount = 0;
     let llxprtIgnoredCount = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const absoluteFilePath of entries) {
-      const pathError = validatePathWithinWorkspace(
-        this.host.getWorkspaceRoots(),
+      const result = this.checkFileFilter(
         absoluteFilePath,
+        fileFilteringOptions,
+        fileDiscovery,
       );
-      if (pathError) {
-        skippedFiles.push({
-          path: absoluteFilePath,
-          reason: 'Security: ' + pathError,
-        });
+      if (result.skipped) {
+        if (result.reason) {
+          skippedFiles.push({ path: absoluteFilePath, reason: result.reason });
+        }
+        if (result.type === 'git') gitIgnoredCount++;
+        if (result.type === 'llxprt') llxprtIgnoredCount++;
         continue;
       }
-
-      const normalizedPath = path.normalize(absoluteFilePath);
-
-      if (
-        fileFilteringOptions.respectGitIgnore &&
-        fileDiscovery.shouldGitIgnoreFile(absoluteFilePath)
-      ) {
-        gitIgnoredCount++;
-        continue;
+      if (result.normalizedPath) {
+        filesToConsider.add(result.normalizedPath);
       }
-
-      if (
-        fileFilteringOptions.respectLlxprtIgnore &&
-        fileDiscovery.shouldLlxprtIgnoreFile(absoluteFilePath)
-      ) {
-        llxprtIgnoredCount++;
-        continue;
-      }
-
-      filesToConsider.add(normalizedPath);
     }
 
     if (gitIgnoredCount > 0) {
@@ -399,6 +382,50 @@ ${finalExclusionPatternsForDescription.slice(0, 2).join(
         reason: 'llxprt ignored',
       });
     }
+  }
+
+  private checkFileFilter(
+    absoluteFilePath: string,
+    fileFilteringOptions: {
+      respectGitIgnore: boolean;
+      respectLlxprtIgnore: boolean;
+    },
+    fileDiscovery: ReturnType<IToolHost['getFileService']>,
+  ): {
+    skipped: boolean;
+    type?: 'security' | 'git' | 'llxprt';
+    reason?: string;
+    normalizedPath?: string;
+  } {
+    const pathError = validatePathWithinWorkspace(
+      this.host.getWorkspaceRoots(),
+      absoluteFilePath,
+    );
+    if (pathError) {
+      return {
+        skipped: true,
+        type: 'security',
+        reason: 'Security: ' + pathError,
+      };
+    }
+
+    const normalizedPath = path.normalize(absoluteFilePath);
+
+    if (
+      fileFilteringOptions.respectGitIgnore &&
+      fileDiscovery.shouldGitIgnoreFile(absoluteFilePath)
+    ) {
+      return { skipped: true, type: 'git' };
+    }
+
+    if (
+      fileFilteringOptions.respectLlxprtIgnore &&
+      fileDiscovery.shouldLlxprtIgnoreFile(absoluteFilePath)
+    ) {
+      return { skipped: true, type: 'llxprt' };
+    }
+
+    return { skipped: false, normalizedPath };
   }
 
   private resolveLimits(): {
@@ -478,62 +505,90 @@ ${finalExclusionPatternsForDescription.slice(0, 2).join(
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
   ): Promise<number> {
     let totalTokens = 0;
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const filePath of sortedFiles) {
-      const relativePathForDisplay = path
-        .relative(this.host.getTargetDir(), filePath)
-        .replace(/\\/g, '/');
-
-      const sizeCheck = await this.checkFileSize(
+      const result = await this.processSingleFile(
         filePath,
-        relativePathForDisplay,
-        skippedFiles,
-        limits.fileSizeLimit,
-      );
-      if (sizeCheck === 'skip') continue;
-
-      const assetCheck = await this.checkAssetFile(
-        filePath,
-        relativePathForDisplay,
+        sortedFiles,
         inputPatterns,
-        skippedFiles,
-      );
-      if (assetCheck === 'skip') continue;
-
-      const fileReadResult = await this.readFileContent(filePath);
-
-      if (fileReadResult.error) {
-        skippedFiles.push({
-          path: relativePathForDisplay,
-          reason: `Read error: ${fileReadResult.error}`,
-        });
-        continue;
-      }
-
-      const addResult = this.addFileContent(
-        fileReadResult,
-        filePath,
-        relativePathForDisplay,
         skippedFiles,
         processedFilesRelativePaths,
         contentParts,
         limits,
         totalTokens,
-        sortedFiles,
       );
-
-      if (addResult.action === 'stop') {
-        return addResult.totalTokens;
+      if (result.done) {
+        return result.totalTokens;
       }
-      totalTokens = addResult.totalTokens;
-
-      processedFilesRelativePaths.push(relativePathForDisplay);
-      this.recordReadMetric(filePath, fileReadResult.llmContent);
-      if (addResult.action === 'stopAfterRecord') {
-        return totalTokens;
-      }
+      totalTokens = result.totalTokens;
     }
     return totalTokens;
+  }
+
+  private async processSingleFile(
+    filePath: string,
+    sortedFiles: string[],
+    inputPatterns: string[],
+    skippedFiles: Array<{ path: string; reason: string }>,
+    processedFilesRelativePaths: string[],
+    contentParts: Array<string | PartUnion>,
+    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+    currentTokens: number,
+  ): Promise<{ done: boolean; totalTokens: number }> {
+    const relativePathForDisplay = path
+      .relative(this.host.getTargetDir(), filePath)
+      .replace(/\\/g, '/');
+
+    const sizeCheck = await this.checkFileSize(
+      filePath,
+      relativePathForDisplay,
+      skippedFiles,
+      limits.fileSizeLimit,
+    );
+    if (sizeCheck === 'skip') {
+      return { done: false, totalTokens: currentTokens };
+    }
+
+    const assetCheck = await this.checkAssetFile(
+      filePath,
+      relativePathForDisplay,
+      inputPatterns,
+      skippedFiles,
+    );
+    if (assetCheck === 'skip') {
+      return { done: false, totalTokens: currentTokens };
+    }
+
+    const fileReadResult = await this.readFileContent(filePath);
+    if (fileReadResult.error) {
+      skippedFiles.push({
+        path: relativePathForDisplay,
+        reason: `Read error: ${fileReadResult.error}`,
+      });
+      return { done: false, totalTokens: currentTokens };
+    }
+
+    const addResult = this.addFileContent(
+      fileReadResult,
+      filePath,
+      relativePathForDisplay,
+      skippedFiles,
+      processedFilesRelativePaths,
+      contentParts,
+      limits,
+      currentTokens,
+      sortedFiles,
+    );
+
+    if (addResult.action === 'stop') {
+      return { done: true, totalTokens: addResult.totalTokens };
+    }
+
+    processedFilesRelativePaths.push(relativePathForDisplay);
+    this.recordReadMetric(filePath, fileReadResult.llmContent);
+    if (addResult.action === 'stopAfterRecord') {
+      return { done: true, totalTokens: addResult.totalTokens };
+    }
+    return { done: false, totalTokens: addResult.totalTokens };
   }
 
   private async checkFileSize(
@@ -841,72 +896,4 @@ IMPORTANT LIMITS:
   ): Promise<ToolResult> {
     return this.build(params).execute(signal);
   }
-}
-
-function buildParameterSchema() {
-  return {
-    type: 'object',
-    properties: {
-      paths: {
-        type: 'array',
-        items: {
-          type: 'string',
-          minLength: 1,
-        },
-        minItems: 1,
-        description:
-          "Required. An array of glob patterns or paths relative to the tool's target directory. Examples: ['src/**/*.ts'], ['README.md', 'docs/']",
-      },
-      include: {
-        type: 'array',
-        items: {
-          type: 'string',
-          minLength: 1,
-        },
-        description:
-          'Optional. Additional glob patterns to include. These are merged with `paths`. Example: "*.test.ts" to specifically add test files if they were broadly excluded.',
-        default: [],
-      },
-      exclude: {
-        type: 'array',
-        items: {
-          type: 'string',
-          minLength: 1,
-        },
-        description:
-          'Optional. Glob patterns for files/directories to exclude. Added to default excludes if useDefaultExcludes is true. Example: "**/*.log", "temp/"',
-        default: [],
-      },
-      recursive: {
-        type: 'boolean',
-        description:
-          'Optional. Whether to search recursively (primarily controlled by `**` in glob patterns). Defaults to true.',
-        default: true,
-      },
-      useDefaultExcludes: {
-        type: 'boolean',
-        description:
-          'Optional. Whether to apply a list of default exclusion patterns (e.g., node_modules, .git, binary files). Defaults to true.',
-        default: true,
-      },
-      file_filtering_options: {
-        description:
-          'Whether to respect ignore patterns from .gitignore or .llxprtignore',
-        type: 'object',
-        properties: {
-          respect_git_ignore: {
-            description:
-              'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
-            type: 'boolean',
-          },
-          respect_llxprt_ignore: {
-            description:
-              'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
-            type: 'boolean',
-          },
-        },
-      },
-    },
-    required: ['paths'],
-  };
 }

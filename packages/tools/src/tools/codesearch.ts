@@ -10,7 +10,11 @@
 
 import fetch from 'node-fetch';
 
-import type { ISettingsService, IToolKeyStorage } from '../interfaces/index.js';
+import type {
+  ISettingsService,
+  IToolKeyStorage,
+  IToolMessageBus,
+} from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 import {
@@ -103,7 +107,7 @@ export class CodeSearchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: CodeSearchToolParams,
-    messageBus?: import('../interfaces/index.js').IToolMessageBus,
+    messageBus?: IToolMessageBus,
   ): ToolInvocation<CodeSearchToolParams, ToolResult> {
     return new CodeSearchToolInvocation(this.dependencies, params, messageBus);
   }
@@ -116,7 +120,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly dependencies: CodeSearchToolDependencies,
     params: CodeSearchToolParams,
-    messageBus?: import('../interfaces/index.js').IToolMessageBus,
+    messageBus?: IToolMessageBus,
   ) {
     super(params, messageBus);
   }
@@ -173,22 +177,9 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
       const responseText = await response.text();
       const lines = responseText.split('\n');
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data: McpCodeResponse = JSON.parse(line.substring(6));
-            if (
-              data.result?.content !== undefined &&
-              data.result.content.length > 0
-            ) {
-              const content = ensureJsonSafe(data.result.content[0].text);
-              return {
-                llmContent: content,
-                returnDisplay: content,
-              };
-            }
-          } catch {
-            // Ignore parse errors for intermediate lines
-          }
+        const parsed = this.parseCodeResponseLine(line);
+        if (parsed !== undefined) {
+          return parsed;
         }
       }
 
@@ -209,6 +200,30 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
         },
       };
     }
+  }
+
+  private parseCodeResponseLine(
+    line: string,
+  ): { llmContent: string; returnDisplay: string } | undefined {
+    if (!line.startsWith('data: ')) {
+      return undefined;
+    }
+    try {
+      const data: McpCodeResponse = JSON.parse(line.substring(6));
+      if (
+        data.result?.content !== undefined &&
+        data.result.content.length > 0
+      ) {
+        const content = ensureJsonSafe(data.result.content[0].text);
+        return {
+          llmContent: content,
+          returnDisplay: content,
+        };
+      }
+    } catch {
+      // Ignore parse errors for intermediate lines
+    }
+    return undefined;
   }
 
   private getEffectiveTokensNum(): number {

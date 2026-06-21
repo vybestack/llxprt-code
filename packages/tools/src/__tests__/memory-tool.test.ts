@@ -33,12 +33,6 @@ import { tmpdir } from 'node:os';
 import { MemoryTool } from '../index.js';
 import type { IStorageService } from '../interfaces/index.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
-import {
-  MASK_KEY_FIXTURES,
-  SUPPORTED_TOOL_NAMES_FIXTURE,
-  VALID_KEY_CHECK_FIXTURES,
-  KEY_ENTRY_FIXTURES,
-} from './fixtures/key-storage-fixtures.js';
 
 function createTempDir(prefix = 'llxprt-memory-test-'): {
   dir: string;

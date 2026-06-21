@@ -155,10 +155,28 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/utils/terminalSerializer.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/tool-utils.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/userAccountManager.ts', // remaining core cleanup after #2081/#2082
-  'packages/providers/src/**/*.{ts,tsx}', // #2083/#2084/#2092
+  // #2083 completed files are locked in completedDirectiveCleanupScopes below.
+  // Remaining #2084/#2092 provider files keep narrowed globs here.
+  'packages/providers/src/**/*.{test,spec}.ts', // #2092 provider tests
+  'packages/providers/src/anthropic/**/*.ts', // #2084/#2092
+  'packages/providers/src/openai/**/*.ts', // #2084/#2092
+  'packages/providers/src/openai-responses/**/*.ts', // #2084/#2092
+  'packages/providers/src/openai-vercel/**/*.ts', // #2084/#2092
+  'packages/providers/src/gemini/**/*.ts', // #2084/#2092
+  'packages/providers/src/auth/**/*.ts', // #2092
+  'packages/providers/src/BaseProvider.ts', // #2084
+  'packages/providers/src/composition/**/*.ts', // #2084
+  'packages/providers/src/fake/**/*.ts', // #2084
+  'packages/providers/src/logging/ProviderContentExtractor.ts', // #2084
+  'packages/providers/src/reasoning/**/*.ts', // #2084
+  'packages/providers/src/runtime/bucketFailover.ts', // #2092
+  'packages/providers/src/runtime/modelParamParser.ts', // #2084
+  'packages/providers/src/runtime/runtimeAccessors.ts', // #2084
+  'packages/providers/src/utils/localEndpoint.ts', // #2084
+  'packages/providers/src/utils/toolNameNormalization.ts', // #2084
+  'packages/providers/src/utils/toolResponsePayload.ts', // #2084
   'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2087/#2091
-  'packages/tools/src/**/*.{ts,tsx}', // #2088
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
   // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
@@ -228,6 +246,35 @@ const completedDirectiveCleanupScopes = [
   'packages/core/src/prompt-config/prompt-resolver.ts', // #2082
   'packages/core/src/prompt-config/resolver/**/*.{ts,tsx}', // #2082
   'packages/core/src/runtime/runtimeStateFactory.ts', // #2082
+  'packages/tools/src/**/*.{ts,tsx}', // #2088
+  // #2083 providers core cleanup — only these enumerated files are locked;
+  // ProviderContentExtractor.ts remains in legacyDirectiveCleanupScopes for #2084.
+  'packages/providers/src/LoadBalancingProvider.ts', // #2083
+  'packages/providers/src/LoggingProviderWrapper.ts', // #2083
+  'packages/providers/src/ProviderManager.ts', // #2083
+  'packages/providers/src/RetryOrchestrator.ts', // #2083
+  'packages/providers/src/runtime/profileSnapshot.ts', // #2083
+  'packages/providers/src/runtime/runtimeContextFactory.ts', // #2083
+  'packages/providers/src/runtime/runtimeRegistry.ts', // #2083
+  'packages/providers/src/runtime/settingsResolver.ts', // #2083
+  'packages/providers/src/utils/retryStrategy.ts', // #2083
+  'packages/providers/src/baseUrlResolver.ts', // #2083
+  'packages/providers/src/modelResolver.ts', // #2083
+  'packages/providers/src/providerCapabilitiesService.ts', // #2083
+  'packages/providers/src/runtimeNormalizer.ts', // #2083
+  'packages/providers/src/tokenUsageTracker.ts', // #2083
+  'packages/providers/src/loadBalancing/**/*.ts', // #2083
+  'packages/providers/src/logging/ConfigBasedRedactor.ts', // #2083
+  'packages/providers/src/logging/configValidator.ts', // #2083
+  'packages/providers/src/logging/conversationLogger.ts', // #2083
+  'packages/providers/src/logging/optionsNormalizer.ts', // #2083
+  'packages/providers/src/logging/streamChunkUtils.ts', // #2083
+  'packages/providers/src/logging/telemetryEmitter.ts', // #2083
+  'packages/providers/src/logging/tokenAccumulator.ts', // #2083
+  'packages/providers/src/logging/tokenCounts.ts', // #2083
+  'packages/providers/src/runtime/keyResolution.ts', // #2083
+  'packages/providers/src/runtime/runtimeIdentityResolution.ts', // #2083
+  'packages/providers/src/utils/statusExtraction.ts', // #2083
   // #2089 scope — six target files and their extracted modules are fully
   // compliant: zero inline lint directives. Locked to error so any new
   // directive fails immediately.
@@ -253,7 +300,7 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-2.ts', // #2089
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
-  'packages/telemetry/src/telemetry/events/*.ts', // #2089,
+  'packages/telemetry/src/telemetry/events/*.ts', // #2089
   // #2086 scope — ten target files and their extracted modules are fully
   // compliant: zero inline lint directives. Locked to error so any new
   // directive fails immediately. The broad 'packages/cli/src/**' entry in
@@ -281,6 +328,119 @@ const completedDirectiveCleanupScopes = [
   'packages/cli/src/ui/commands/todoCommand.ts', // #2086
   'packages/cli/src/ui/commands/todoOperations.ts', // #2086
   'packages/cli/src/ui/commands/todoFormatters.ts', // #2086
+  // #2090 packages/agents test cleanup — target files and extracted helpers are
+  // fully compliant: zero inline lint directives. Locked to error so any new
+  // directive fails immediately while the rest of packages/agents remains in
+  // legacy cleanup scope for other issues.
+  'packages/agents/src/agents/executor.test.ts', // #2090
+  'packages/agents/src/agents/executor-test-helpers.ts', // #2090
+  'packages/agents/src/agents/executor.execution.test.ts', // #2090
+  'packages/agents/src/agents/executor.recovery.test.ts', // #2090
+  'packages/agents/src/agents/executor.stream-idle-timeout.test.ts', // #2090
+  'packages/agents/src/agents/executor.termination-conditions.test.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-test-helpers.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-core.test.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-edge.test.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-error.test.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-media.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-helpers.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-behavior.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-classification.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-cooldown.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-hardlimit.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-helpers.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-dedup.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-failure.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-orchestration.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-property.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-recency.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-rwpruning.test.ts', // #2090
+  'packages/agents/src/core/TodoContinuationService.complexity.test.ts', // #2090
+  'packages/agents/src/core/TodoContinuationService.postturn.test.ts', // #2090
+  'packages/agents/src/core/TodoContinuationService.reminders.test.ts', // #2090
+  'packages/agents/src/core/TodoContinuationService.todoops.test.ts', // #2090
+  'packages/agents/src/core/__tests__/chatSession-density.test.ts', // #2090
+  'packages/agents/src/core/__tests__/chatSession-density-helpers.ts', // #2090
+  'packages/agents/src/core/__tests__/chatSession-density.integration.test.ts', // #2090
+  'packages/agents/src/core/__tests__/chatSession-density.property.test.ts', // #2090
+  'packages/agents/src/core/__tests__/subagentOrchestrator-runtime.test.ts', // #2090
+  'packages/agents/src/core/__tests__/subagentOrchestrator-test-helpers.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.integration.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop-test-helpers.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.auto-policy.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.cancellation.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.display-callbacks.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.prompt-id.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.scheduler-isolation.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.terminal-outcomes.test.ts', // #2090
+  'packages/agents/src/core/chatSession.runtime.test.ts', // #2090
+  'packages/agents/src/core/chatSession-runtime-helpers.ts', // #2090
+  'packages/agents/src/core/chatSession.runtime.history.test.ts', // #2090
+  'packages/agents/src/core/chatSession.runtime.streaming.test.ts', // #2090
+  'packages/agents/src/core/chatSession.runtime.timeout.test.ts', // #2090
+  'packages/agents/src/core/chatSession.thinking-toolcalls.test.ts', // #2090
+  'packages/agents/src/core/chatSession-thinking-helpers.ts', // #2090
+  'packages/agents/src/core/chatSession.thinking-toolcalls.repro.test.ts', // #2090
+  'packages/agents/src/core/chatSession.tokenSync.test.ts', // #2090
+  'packages/agents/src/core/chatSession-tokenSync-helpers.ts', // #2090
+  'packages/agents/src/core/chatSession.tokenSync.nonstream.test.ts', // #2090
+  'packages/agents/src/core/client.test.ts', // #2090
+  'packages/agents/src/core/client-test-helpers.ts', // #2090
+  'packages/agents/src/core/client.editor-context.test.ts', // #2090
+  'packages/agents/src/core/client.hooks.test.ts', // #2090
+  'packages/agents/src/core/client.ide-context.test.ts', // #2090
+  'packages/agents/src/core/client.lifecycle.test.ts', // #2090
+  'packages/agents/src/core/client.methods.test.ts', // #2090
+  'packages/agents/src/core/client.model-profile.test.ts', // #2090
+  'packages/agents/src/core/client.sendMessageStream-errors.test.ts', // #2090
+  'packages/agents/src/core/client.sendMessageStream-overflow.test.ts', // #2090
+  'packages/agents/src/core/client.sendMessageStream-thinking.test.ts', // #2090
+  'packages/agents/src/core/client.sendMessageStream.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler-test-helpers.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.agent-id.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.cancel-continuation.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.cancel-response.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.confirmation.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.context-aware.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.convert-response.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.edit-cancel.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.non-interactive.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.parallel.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.payload.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.policy.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.race-condition.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.suggest-edit.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.tool-suggestion.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.yolo.test.ts', // #2090
+  'packages/agents/src/core/subagent.test.ts', // #2090
+  'packages/agents/src/core/subagent-test-helpers.ts', // #2090
+  'packages/agents/src/core/subagent.buildParts.test.ts', // #2090
+  'packages/agents/src/core/subagent.create.test.ts', // #2090
+  'packages/agents/src/core/subagent.runNonInteractive-execution.test.ts', // #2090
+  'packages/agents/src/core/subagent.runNonInteractive-term.test.ts', // #2090
+  'packages/agents/src/core/subagent.runNonInteractive.test.ts', // #2090
+  'packages/agents/src/core/subagent.stream-idle.test.ts', // #2090
+  'packages/agents/src/core/subagentOrchestrator.test.ts', // #2090
+  'packages/agents/src/core/subagentRuntimeSetup.test.ts', // #2090
+  'packages/agents/src/core/subagentRuntimeSetup.chat.test.ts', // #2090
+  'packages/agents/src/core/subagentRuntimeSetup.scheduler.test.ts', // #2090
+  'packages/agents/src/core/turn.test.ts', // #2090
+  'packages/agents/src/core/turn-test-helpers.ts', // #2090
+  'packages/agents/src/core/turn.abort-timeout.test.ts', // #2090
+  'packages/agents/src/core/turn.debug-responses.test.ts', // #2090
+  'packages/agents/src/core/turn.hook-events.test.ts', // #2090
+  'packages/agents/src/core/turn.idle-timeout.test.ts', // #2090
+  'packages/agents/src/core/turn.tool-restrictions.test.ts', // #2090
+  'packages/agents/src/scheduler/confirmation-coordinator.test.ts', // #2090
+  'packages/agents/src/scheduler/confirmation-coordinator-confirmation.test.ts', // #2090
+  'packages/agents/src/scheduler/confirmation-coordinator-test-helpers.ts', // #2090
+  'packages/agents/src/tools/task.test.ts', // #2090
+  'packages/agents/src/tools/task-test-helpers.ts', // #2090
+  'packages/agents/src/tools/task.async-settings.test.ts', // #2090
+  'packages/agents/src/tools/task.async.test.ts', // #2090
+  'packages/agents/src/tools/task.issues.test.ts', // #2090
+  'packages/agents/src/tools/task.max-turns.test.ts', // #2090
+  'packages/agents/src/tools/task.timeout.test.ts', // #2090
 ];
 
 export default tseslint.config(
@@ -728,8 +888,8 @@ export default tseslint.config(
   },
 
 
-  // Issues #2081/#2082 completed cleanup scopes. Keep these paths locked even
-  // while remaining core files still use the temporary legacy directive override.
+  // Completed cleanup scopes stay locked against inline ESLint directives even
+  // while remaining files still use temporary legacy directive overrides.
   {
     files: completedDirectiveCleanupScopes,
     linterOptions: {
@@ -1398,40 +1558,52 @@ export default tseslint.config(
       ],
     },
   },
-  // ============================================================================
-  // Issue #1585: tools package migration lint compatibility
-  // ============================================================================
-  // The tools package contains legacy tool implementations moved out of core.
-  // Preserve behavior during extraction; post-extraction cleanup can tighten
-  // rules per module without mixing large semantic refactors into the move.
+  // Issue #2088: tools package lint cleanup complete.
+  // The blanket #1585 migration suppression was removed after all inline
+  // directives and lint violations were resolved. sonarjs/os-command and
+  // sonarjs/no-os-command-from-path remain off project-wide (see global rules).
+
+  // Issue #2088: The "todo" subsystem naturally uses the domain word "todo" in
+  // comments (todo store, todo tools, ITodoService, etc.). sonarjs/todo-tag
+  // matches case-insensitively, producing false positives on legitimate domain
+  // vocabulary rather than actual TODO task markers.
   {
-    files: ['packages/tools/src/**/*.{ts,tsx}'],
+    files: [
+      'packages/tools/src/interfaces/ITodoService.ts',
+      'packages/tools/src/tools/todo-*.ts',
+      'packages/tools/src/utils/todo*.ts',
+      'packages/tools/src/__tests__/todo-*.ts',
+    ],
     rules: {
-      '@typescript-eslint/array-type': 'off',
-      '@typescript-eslint/consistent-type-imports': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-inferrable-types': 'off',
-      '@typescript-eslint/no-misused-promises': 'off',
-      '@typescript-eslint/no-unnecessary-condition': 'off',
-      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      '@typescript-eslint/prefer-nullish-coalescing': 'off',
-      '@typescript-eslint/strict-boolean-expressions': 'off',
-      'arrow-body-style': 'off',
-      complexity: 'off',
-      'default-case': 'off',
-      'max-lines': 'off',
-      'max-lines-per-function': 'off',
-      'no-useless-escape': 'off',
-      'sonarjs/expression-complexity': 'off',
-      'sonarjs/nested-control-flow': 'off',
-      'sonarjs/no-nested-conditional': 'off',
-      'sonarjs/no-identical-functions': 'off',
-      'sonarjs/no-os-command-from-path': 'off',
-      'sonarjs/os-command': 'off',
-      'sonarjs/regular-expr': 'off',
-      'sonarjs/todo-tag': 'off',
-      'sonarjs/too-many-break-or-continue-in-loop': 'off',
+      'sonarjs/todo-tag': 'off', // eslint-policy-allow-off: #2088 domain vocabulary
+    },
+  },
+  // Issue #2088: EmojiFilter uses inherently complex Unicode emoji range regexes
+  // that are safe but exceed SonarJS regex-complexity heuristics, analogous to
+  // ANSI/terminal control-character parsing.
+  {
+    files: ['packages/tools/src/utils/EmojiFilter.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2088 emoji Unicode ranges
+    },
+  },
+  // Issue #2088: IToolMessageBus is a cross-package bridge interface consumed
+  // by core, mcp, and agents. Its `any` types serve as forward-compatible duck-
+  // typing escape hatches for implementations with heterogeneous signatures.
+  {
+    files: ['packages/tools/src/interfaces/IToolMessageBus.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off', // eslint-policy-allow-off: #2088 cross-package bridge
+    },
+  },
+  // Issue #2088: schemaValidator uses ajv subpath import (ajv/dist/2020.js)
+  // which is the only supported way to load draft-2020-12 per ajv docs.
+  // The `any` cast is required for ajv's ESM/CJS interop default resolution.
+  {
+    files: ['packages/tools/src/utils/schemaValidator.ts'],
+    rules: {
+      'import/no-internal-modules': 'off', // eslint-policy-allow-off: #2088 ajv subpath
+      '@typescript-eslint/no-explicit-any': 'off', // eslint-policy-allow-off: #2088 ajv interop
     },
   },
   {
@@ -1443,6 +1615,15 @@ export default tseslint.config(
       'vitest/no-conditional-expect': 'off',
       'vitest/no-conditional-in-test': 'off',
       'vitest/prefer-strict-equal': 'off',
+    },
+  },
+  // Issue #2088: tools.ts defines abstract base classes (BaseDeclarativeTool,
+  // BaseToolInvocation) whose `any` return/parameter types serve as cross-
+  // package compatibility bridges for subclasses in core, mcp, and agents.
+  {
+    files: ['packages/tools/src/tools/tools.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off', // eslint-policy-allow-off: #2088 cross-package bridge
     },
   },
   {

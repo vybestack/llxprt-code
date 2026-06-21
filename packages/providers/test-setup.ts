@@ -10,5 +10,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Provider package test setup.
-// Will be extended with provider-specific test utilities in later phases.
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { setProviderRuntimeStateFactory } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+// Provider package tests include legacy runtime-context helpers that create a
+// runtime before registering a SettingsService singleton. Provide an isolated
+// default settings state for those test-only contexts.
+setProviderRuntimeStateFactory(() => new SettingsService());

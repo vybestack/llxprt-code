@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { debugLogger } from './debugLogger.js';
+import { stringOrDefault } from './stringCoalescing.js';
 
 /**
  * Cross-platform ripgrep path resolution
@@ -82,14 +83,15 @@ function findFirstExistingPath(paths: string[]): string | null {
 function tryWindowsPaths(): string | null {
   const envPaths = [
     path.join(
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var fallback for path
-      process.env.PROGRAMFILES || 'C:\\Program Files',
+      stringOrDefault(process.env.PROGRAMFILES, 'C:\\Program Files'),
       'ripgrep',
       'rg.exe',
     ),
     path.join(
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var fallback for path
-      process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
+      stringOrDefault(
+        process.env['PROGRAMFILES(X86)'],
+        'C:\\Program Files (x86)',
+      ),
       'ripgrep',
       'rg.exe',
     ),
@@ -123,9 +125,7 @@ function tryBundledPath(isWindows: boolean): string | null {
   const nodeModulesExists = fs.existsSync(
     path.join(projectRoot, 'node_modules'),
   );
-  const isBundled =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string property may be empty, check node_modules as fallback
-    Boolean(pkgEntrypoint || !nodeModulesExists);
+  const isBundled = Boolean(pkgEntrypoint) || !nodeModulesExists;
 
   if (isBundled) {
     const bundleDir = path.join(projectRoot, 'bundle');

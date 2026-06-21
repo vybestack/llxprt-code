@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy tool behavior retained while moving ownership to packages/tools. */
-
 /* @plan PLAN-20250212-LSP.P31 */
 /* @requirement REQ-DIAG-010, REQ-DIAG-040, REQ-DIAG-070, REQ-GRACE-050, REQ-GRACE-055 */
 
@@ -41,6 +39,7 @@ import { APPLY_PATCH_TOOL } from '../types/tool-names.js';
 import { collectLspDiagnosticsBlock } from '../utils/lsp-diagnostics-helper.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 /**
  * Type representing a parsed patch operation
@@ -76,7 +75,7 @@ function createDefaultToolHost(): IToolHost {
 }
 
 function getTargetDirCompat(host: IToolHost): string {
-  return host.getTargetDir?.() ?? process.cwd();
+  return host.getTargetDir();
 }
 
 function getWorkspaceRootsCompat(host: IToolHost): string[] {
@@ -107,35 +106,39 @@ function toIdeConnectionStatus(
   return 'disconnected';
 }
 
+function isNonNullObject(value: unknown): value is object {
+  return typeof value === 'object' && value !== null;
+}
+
+const MESSAGE_BUS_KEYS = [
+  'requestConfirmation',
+  'publishPolicyUpdate',
+  'publish',
+  'subscribe',
+] as const;
+
+const IDE_SERVICE_KEYS = [
+  'applyDiff',
+  'openDiff',
+  'getConnectionStatus',
+] as const;
+
+const LSP_SERVICE_KEYS = [
+  'waitForDiagnostics',
+  'getDiagnostics',
+  'getLspConfig',
+] as const;
+
 function hasMessageBusShape(value: unknown): value is IToolMessageBus {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    ('requestConfirmation' in value ||
-      'publishPolicyUpdate' in value ||
-      'publish' in value ||
-      'subscribe' in value)
-  );
+  return isNonNullObject(value) && MESSAGE_BUS_KEYS.some((k) => k in value);
 }
 
 function hasIdeServiceShape(value: unknown): value is IIdeService {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    ('applyDiff' in value ||
-      'openDiff' in value ||
-      'getConnectionStatus' in value)
-  );
+  return isNonNullObject(value) && IDE_SERVICE_KEYS.some((k) => k in value);
 }
 
 function hasLspServiceShape(value: unknown): value is ILspService {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    ('waitForDiagnostics' in value ||
-      'getDiagnostics' in value ||
-      'getLspConfig' in value)
-  );
+  return isNonNullObject(value) && LSP_SERVICE_KEYS.some((k) => k in value);
 }
 
 function getLegacyIdeService(host: IToolHost): IIdeService | undefined {
@@ -314,8 +317,11 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   }
 
   private getFilePath(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths should fall through to next option
-    return this.params.absolute_path || this.params.file_path || '';
+    // Use absolute_path if provided, otherwise fall back to file_path
+    return stringOrDefault(
+      this.params.absolute_path,
+      stringOrDefault(this.params.file_path, ''),
+    );
   }
 
   override toolLocations(): ToolLocation[] {
@@ -551,10 +557,10 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
         newContent,
       );
       const fileName = path.basename(filePath);
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string ai_proposed_content should be preserved, not replaced */
-      const originallyProposedContent =
-        this.params.ai_proposed_content || newContent;
-      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+      const originallyProposedContent = stringOrDefault(
+        this.params.ai_proposed_content,
+        newContent,
+      );
       const diffStat = getDiffStat(
         fileName,
         currentContent,
@@ -626,7 +632,6 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
     if (this.host.getConversationLoggingEnabled?.() !== true) return null;
     const gitStatsService = this.host.getGitStatsService?.();
     if (!gitStatsService) return null;
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     try {
       return await gitStatsService.trackFileEdit(
         filePath,
@@ -648,7 +653,6 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   ): Promise<void> {
     try {
       if (this.lspService !== undefined) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         for (const contentFile of classification.contentWriteFiles) {
           const absoluteFilePath = path.resolve(
             getTargetDirCompat(this.host),
@@ -702,7 +706,7 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
       ? explicitIdeService
       : getLegacyIdeService(host);
     const messageBus = secondArgumentIsMessageBus
-      ? (messageBusOrIdeService as IToolMessageBus)
+      ? messageBusOrIdeService
       : undefined;
     const explicitLspService = secondArgumentIsMessageBus
       ? lspService
@@ -756,8 +760,10 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
     params: ApplyPatchToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths should fall through to next option
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = stringOrDefault(
+      params.absolute_path,
+      stringOrDefault(params.file_path, ''),
+    );
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
