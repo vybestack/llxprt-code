@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 /**
  * StreamProcessor - Handles API stream requests and response processing.
  * Extracted from chatSession.ts Phase 05.
@@ -18,7 +16,7 @@ import {
   type Content,
   type SendMessageParameters,
   type Part,
-  FinishReason,
+  type FinishReason,
   type GenerateContentConfig,
 } from '@google/genai';
 import {
@@ -28,13 +26,9 @@ import {
 import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIterator.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
-import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type {
-  IContent,
-  UsageStats,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
@@ -45,21 +39,13 @@ import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+import { convertIContentToResponse } from './MessageConverter.js';
+import { logApiResponse, logApiError } from './turnLogging.js';
 import {
-  isValidResponse,
-  isValidNonThoughtTextPart,
-  convertIContentToResponse,
-} from './MessageConverter.js';
-import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
-import {
-  InvalidStreamError,
   EmptyStreamError,
   isSchemaDepthError,
-  isThoughtPart,
-  type UsageMetadataWithCache,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import { analyzeResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
 import { isStructuredError } from '@vybestack/llxprt-code-core/utils/quotaErrorDetection.js';
 import {
@@ -69,36 +55,52 @@ import {
 import {
   attachHookRestrictedAllowedTools,
   filterHookRestrictedContent,
-  filterHookRestrictedFunctionCalls,
-  filterHookRestrictedParts,
   getHookRestrictedAllowedTools,
-  getHookRestrictedFunctionCallsFromParts,
-  mergeHookRestrictedFunctionCalls,
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
+import {
+  buildRequestContents,
+  selectRequestTools,
+  prepareRequestPayload,
+  buildRuntimeContext,
+  patchMissingFinishReason,
+  applyRequestModifications,
+  resolveUserMemory,
+  logOutgoingRequest,
+  type ToolGroupArray,
+  type ToolSelectionHookResult,
+} from './streamRequestHelpers.js';
+import {
+  createStreamAccumulator,
+  accumulateChunkMetadata,
+  consolidateTextParts,
+  extractResponseText,
+  validateStreamCompletion,
+  recordHistoryWithUsage,
+  trackPromptTokens,
+  isMissingFinishReason,
+  type StreamAccumulator,
+} from './streamResponseHelpers.js';
 
 /**
  * StreamProcessor handles making API calls and processing streaming responses.
  * Extracted from ChatSession to isolate streaming concerns.
  */
 
-type ToolGroupArray = Array<{
-  functionDeclarations?: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-  }>;
-}>;
-
-interface ToolSelectionHookResult {
-  tools: GenerateContentConfig['tools'];
-  allowedFunctionNames: string[] | undefined;
-}
-
-function isMissingFinishReason(
-  finishReason: FinishReason | null | undefined | '',
-): boolean {
-  return finishReason == null || finishReason === '';
+/**
+ * Extract the allowedFunctionNames array from a tool-config object.
+ *
+ * Returns `undefined` when the config is absent or does not carry an
+ * `allowedFunctionNames` string array, otherwise returns the typed array.
+ */
+function extractAllowedFunctionNames(
+  toolConfig: unknown,
+): string[] | undefined {
+  if (toolConfig === null || toolConfig === undefined) return undefined;
+  if (typeof toolConfig !== 'object') return undefined;
+  if (!('allowedFunctionNames' in toolConfig)) return undefined;
+  if (!Array.isArray(toolConfig.allowedFunctionNames)) return undefined;
+  return toolConfig.allowedFunctionNames;
 }
 
 export class StreamProcessor {
@@ -136,7 +138,6 @@ export class StreamProcessor {
       () => '[StreamProcessor] Active provider snapshot before stream request',
       {
         providerName: provider.name,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeContext.state.model,
         baseUrl: providerBaseUrl,
@@ -283,10 +284,9 @@ export class StreamProcessor {
     );
     requestPayload.contents = finalContents;
 
-    logApiRequest(
+    logOutgoingRequest(
       this.runtimeContext,
-      this.runtimeContext.state,
-      ContentConverters.toGeminiContents(requestPayload.contents),
+      requestPayload,
       this.runtimeContext.state.model,
       promptId,
     );
@@ -347,7 +347,6 @@ export class StreamProcessor {
 
     if (beforeModelResult?.isBlockingDecision() === true) {
       let syntheticResponse = beforeModelResult.getSyntheticResponse();
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       if (syntheticResponse) {
         const candidate = syntheticResponse.candidates?.[0];
         const candidateFinishReason = candidate?.finishReason as
@@ -386,29 +385,18 @@ export class StreamProcessor {
     syntheticResponse: GenerateContentResponse,
     candidate: NonNullable<GenerateContentResponse['candidates']>[0],
   ): GenerateContentResponse {
-    return {
-      ...syntheticResponse,
-      candidates: [{ ...candidate, finishReason: FinishReason.STOP }],
-    } as GenerateContentResponse;
+    return patchMissingFinishReason(syntheticResponse, candidate);
   }
 
   private _applyRequestModifications(
     beforeModelResult: BeforeModelHookOutput | undefined,
     requestContents: IContent[],
   ): IContent[] {
-    if (!beforeModelResult) return requestContents;
-
-    const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
-      model: this.runtimeContext.state.model || '',
-      contents: ContentConverters.toGeminiContents(requestContents),
-    });
-    const modifiedContents = (
-      modifiedRequest as { contents?: Content[] | null }
-    ).contents;
-    if (modifiedContents !== undefined && modifiedContents !== null) {
-      return ContentConverters.toIContents(modifiedContents);
-    }
-    return requestContents;
+    return applyRequestModifications(
+      beforeModelResult,
+      requestContents,
+      this.runtimeContext.state.model,
+    );
   }
 
   private _prepareRequestPayload(
@@ -420,23 +408,15 @@ export class StreamProcessor {
     baseRuntimeContext: ProviderRuntimeContext;
     runtimeContext: ProviderRuntimeContext;
   } {
-    this.logger.debug(
-      () => '[StreamProcessor] Calling provider.generateChatCompletion',
-      {
-        providerName: this.providerResolver('stream').name,
-        model: this.runtimeContext.state.model,
-        historyLength: requestContents.length,
-        toolCount: tools?.length ?? 0,
-        baseUrl: this.runtimeContext.state.baseUrl,
-      },
-    );
-
-    const baseRuntimeContext = this.providerRuntimeBuilder(
-      'StreamProcessor.generateRequest',
-      { historyLength: requestContents.length },
-    );
-
-    const requestPayload = { contents: requestContents, tools };
+    const { requestPayload, baseRuntimeContext } = prepareRequestPayload({
+      requestContents,
+      tools,
+      logger: this.logger,
+      providerRuntimeBuilder: this.providerRuntimeBuilder,
+      providerName: this.providerResolver('stream').name,
+      modelName: this.runtimeContext.state.model,
+      baseUrl: this.runtimeContext.state.baseUrl,
+    });
 
     const runtimeContext = this._buildRuntimeContext(
       baseRuntimeContext,
@@ -454,19 +434,11 @@ export class StreamProcessor {
   ): ProviderRuntimeContext {
     // The runtime context's `config` MUST stay the live llxprt `Config`
     // class instance so provider-side resolution (ProviderManager
-    // .resolveModelField -> config.getModel()) keeps working. Per-request
-    // genai GenerateContentConfig (params.config), tools, and abortSignal
-    // reach the provider via dedicated channels (requestPayload.tools,
-    // metadata.abortSignal, and direct params.config reads); spreading them
-    // into the Config slot would strip its prototype methods.
-    if (!params.config?.abortSignal) return baseRuntimeContext;
-    return {
-      ...baseRuntimeContext,
-      metadata: {
-        ...(baseRuntimeContext.metadata ?? {}),
-        abortSignal: params.config.abortSignal,
-      },
-    };
+    // .resolveModelField -> config.getModel()) keeps working. buildRuntimeContext
+    // only layers the per-request abortSignal onto metadata, leaving the Config
+    // slot untouched (genai config and tools reach the provider via dedicated
+    // channels: requestPayload.tools, metadata.abortSignal, params.config reads).
+    return buildRuntimeContext(baseRuntimeContext, params);
   }
 
   private async _sendProviderRequest(
@@ -480,6 +452,7 @@ export class StreamProcessor {
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const startTime = Date.now();
     try {
+      const userMemory = resolveUserMemory(baseRuntimeContext.config);
       const streamResponse = provider.generateChatCompletion({
         contents: requestPayload.contents,
         tools: requestPayload.tools as ProviderToolset | undefined,
@@ -491,8 +464,7 @@ export class StreamProcessor {
           ...runtimeContext.metadata,
           abortSignal: params.config?.abortSignal,
         },
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-        userMemory: baseRuntimeContext.config?.getUserMemory?.(),
+        userMemory,
       } as GenerateChatOptions);
 
       return await this._consumeFirstChunkAndReturn(
@@ -546,7 +518,7 @@ export class StreamProcessor {
   private _selectRequestTools(
     params: SendMessageParameters,
   ): GenerateContentConfig['tools'] {
-    return params.config?.tools ?? this.generationConfig.tools;
+    return selectRequestTools(params, this.generationConfig.tools);
   }
 
   private async _applyToolSelectionHook(
@@ -586,15 +558,8 @@ export class StreamProcessor {
     });
 
     const toolConfig = modifiedConfig?.toolConfig as unknown;
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      toolConfig !== undefined &&
-      toolConfig !== null &&
-      typeof toolConfig === 'object' &&
-      'allowedFunctionNames' in toolConfig &&
-      Array.isArray(toolConfig.allowedFunctionNames)
-    ) {
-      const allowedFunctions = toolConfig.allowedFunctionNames;
+    const allowedFunctions = extractAllowedFunctionNames(toolConfig);
+    if (allowedFunctions !== undefined) {
       const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
       const filteredTools = toolsFromConfig
         .map((toolGroup) => ({
@@ -615,24 +580,11 @@ export class StreamProcessor {
   }
 
   private _buildRequestContents(userContent: Content | Content[]): IContent[] {
-    const matcher = this.conversationManager.makePositionMatcher();
-    if (Array.isArray(userContent)) {
-      const userIContents = userContent.map((content) => {
-        const turnKey = this.historyService.generateTurnKey();
-        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-        return ContentConverters.toIContent(content, idGen, matcher, turnKey);
-      });
-      return this.historyService.getCuratedForProvider(userIContents);
-    }
-    const turnKey = this.historyService.generateTurnKey();
-    const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-    const userIContent = ContentConverters.toIContent(
+    return buildRequestContents(
       userContent,
-      idGen,
-      matcher,
-      turnKey,
+      this.conversationManager,
+      this.historyService,
     );
-    return this.historyService.getCuratedForProvider([userIContent]);
   }
 
   private async _handleBucketFailover(): Promise<boolean | null> {
@@ -707,18 +659,7 @@ export class StreamProcessor {
   }
 
   private _trackPromptTokens(iContent: IContent): void {
-    const promptTokens = iContent.metadata?.usage?.promptTokens;
-    if (promptTokens === undefined) return;
-
-    const cacheReads = iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
-    const cacheWrites =
-      iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
-    const combinedPromptTokens = promptTokens + cacheReads + cacheWrites;
-    this.logger.debug(
-      () =>
-        `[StreamProcessor] Tracking promptTokens from IContent: ${combinedPromptTokens}`,
-    );
-    this.compressionHandler.lastPromptTokenCount = combinedPromptTokens;
+    trackPromptTokens(iContent, this.compressionHandler, this.logger);
   }
 
   private async _processAfterModelHook(
@@ -745,7 +686,6 @@ export class StreamProcessor {
         : undefined;
     if (hookSystem === undefined) return { type: 'passthrough' };
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (!hookSystem.isInitialized()) {
       await hookSystem.initialize();
     }
@@ -761,7 +701,6 @@ export class StreamProcessor {
       ContentConverters.toIContent(filteredContent),
     );
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (afterModelResult?.shouldStopExecution() === true) {
       const effectiveReason = afterModelResult.getEffectiveReason() as
         | string
@@ -772,7 +711,6 @@ export class StreamProcessor {
       );
     }
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (afterModelResult?.isBlockingDecision() === true) {
       const modifiedResponse = afterModelResult.getModifiedResponse();
       const syntheticResponse = attachHookRestrictedAllowedTools(
@@ -790,7 +728,6 @@ export class StreamProcessor {
     }
 
     const modifiedResponse = afterModelResult?.getModifiedResponse();
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (modifiedResponse) {
       return { type: 'modified', response: modifiedResponse };
     }
@@ -846,95 +783,22 @@ export class StreamProcessor {
     await this._finalizeStreamProcessing(acc, userInput);
   }
 
-  private _createStreamAccumulator(): {
-    modelResponseParts: Part[];
-    outcome: ResponseOutcome;
-    finishReason: FinishReason | undefined;
-    allChunks: GenerateContentResponse[];
-  } {
-    return {
-      modelResponseParts: [],
-      outcome: {
-        hasVisibleText: false,
-        hasThinking: false,
-        hasToolCalls: false,
-        isActionable: false,
-      },
-      finishReason: undefined,
-      allChunks: [],
-    };
+  private _createStreamAccumulator(): StreamAccumulator {
+    return createStreamAccumulator();
   }
 
   private _accumulateChunkMetadata(
     chunk: GenerateContentResponse,
-    acc: {
-      modelResponseParts: Part[];
-      outcome: ResponseOutcome;
-      finishReason: FinishReason | undefined;
-      allChunks: GenerateContentResponse[];
-    },
+    acc: StreamAccumulator,
     includeThoughts: boolean,
   ): void {
-    const candidateWithReason = chunk.candidates?.find(
-      (c) => c.finishReason !== undefined,
+    accumulateChunkMetadata(
+      chunk,
+      acc,
+      includeThoughts,
+      this.logger,
+      this.compressionHandler,
     );
-    if (candidateWithReason !== undefined)
-      acc.finishReason = candidateWithReason.finishReason as FinishReason;
-
-    const allowedTools = getHookRestrictedAllowedTools(chunk);
-    const parts = chunk.candidates?.[0]?.content?.parts ?? [];
-    const effectiveParts = isValidResponse(chunk)
-      ? filterHookRestrictedParts(parts, allowedTools)
-      : [];
-    const allowedPartCalls = getHookRestrictedFunctionCallsFromParts(
-      effectiveParts,
-      allowedTools,
-    );
-    const allowedMergedCalls = mergeHookRestrictedFunctionCalls(
-      allowedPartCalls,
-      filterHookRestrictedFunctionCalls(
-        chunk.functionCalls ?? [],
-        allowedTools,
-      ),
-    );
-    const allowedTopLevelCallParts = allowedMergedCalls
-      .slice(allowedPartCalls.length)
-      .map((functionCall) => ({ functionCall }));
-    const outcomeParts = [...effectiveParts, ...allowedTopLevelCallParts];
-
-    if (outcomeParts.length > 0) {
-      const chunkOutcome = analyzeResponseOutcome(outcomeParts);
-      acc.outcome = {
-        hasVisibleText:
-          acc.outcome.hasVisibleText || chunkOutcome.hasVisibleText,
-        hasThinking: acc.outcome.hasThinking || chunkOutcome.hasThinking,
-        hasToolCalls: acc.outcome.hasToolCalls || chunkOutcome.hasToolCalls,
-        isActionable: acc.outcome.isActionable || chunkOutcome.isActionable,
-      };
-      acc.modelResponseParts.push(
-        ...(includeThoughts
-          ? outcomeParts
-          : outcomeParts.filter((p) => !isThoughtPart(p))),
-      );
-    }
-
-    const chunkText = typeof chunk.text === 'string' ? chunk.text : '';
-    this.logger.debug(() => `[stream:terminal] observed converted chunk`, {
-      chunkFinishReason: candidateWithReason?.finishReason,
-      partCount: effectiveParts.length,
-      toolCallCount: allowedMergedCalls.length,
-      textLength: chunkText.length,
-      hasUsageMetadata: Boolean(chunk.usageMetadata),
-    });
-
-    if (chunk.usageMetadata?.promptTokenCount !== undefined) {
-      const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
-      this.compressionHandler.lastPromptTokenCount =
-        chunk.usageMetadata.promptTokenCount +
-        (chunkUsage.cache_read_input_tokens ?? 0) +
-        (chunkUsage.cache_creation_input_tokens ?? 0);
-    }
-    acc.allChunks.push(chunk);
   }
 
   private async _finalizeStreamProcessing(
@@ -988,32 +852,14 @@ export class StreamProcessor {
    * Consolidate adjacent text parts.
    */
   private _consolidateTextParts(modelResponseParts: Part[]): Part[] {
-    const consolidatedParts: Part[] = [];
-    for (const part of modelResponseParts) {
-      const lastPart = consolidatedParts[consolidatedParts.length - 1];
-      if (
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve defensive runtime boundary guard despite current static types.
-        lastPart?.text &&
-        isValidNonThoughtTextPart(lastPart) &&
-        isValidNonThoughtTextPart(part)
-      ) {
-        lastPart.text += part.text;
-      } else {
-        consolidatedParts.push(part);
-      }
-    }
-    return consolidatedParts;
+    return consolidateTextParts(modelResponseParts);
   }
 
   /**
    * Extract response text from consolidated parts.
    */
   private _extractResponseText(consolidatedParts: Part[]): string {
-    return consolidatedParts
-      .filter((part) => isValidNonThoughtTextPart(part))
-      .map((part) => part.text)
-      .join('')
-      .trim();
+    return extractResponseText(consolidatedParts);
   }
 
   /**
@@ -1025,76 +871,12 @@ export class StreamProcessor {
     finishReason: FinishReason | undefined,
     responseText: string,
   ): void {
-    const isToolContinuationInput = Array.isArray(userInput)
-      ? userInput.some(isFunctionResponse)
-      : isFunctionResponse(userInput);
-
-    const validationContext = {
-      hasToolCall: outcome.hasToolCalls,
-      hasTextResponse: outcome.hasVisibleText,
-      hasThinkingResponse: outcome.hasThinking,
+    validateStreamCompletion(
+      userInput,
+      outcome,
       finishReason,
-      responseTextLength: responseText.length,
-      isToolContinuationInput,
-    };
-
-    this.logger.debug(
-      () => `[stream:terminal] validating converted stream completion`,
-      validationContext,
-    );
-
-    const hasMissingFinishAndNoText =
-      isMissingFinishReason(finishReason) && !outcome.hasVisibleText;
-    const isEmptyResponse = responseText === '';
-    const noRelevantContent =
-      !outcome.hasToolCalls && !isToolContinuationInput && !outcome.hasThinking;
-    const isInvalidResponse =
-      noRelevantContent && (hasMissingFinishAndNoText || isEmptyResponse);
-
-    if (isInvalidResponse) {
-      this._throwMissingResponseError(
-        finishReason,
-        outcome.hasVisibleText,
-        validationContext,
-      );
-    }
-
-    if (finishReason === FinishReason.MALFORMED_FUNCTION_CALL) {
-      this.logger.warn(
-        () =>
-          `[stream:terminal] validation failed: malformed function call finishReason`,
-        validationContext,
-      );
-      throw new InvalidStreamError(
-        'Model stream ended with malformed function call.',
-        'MALFORMED_FUNCTION_CALL',
-      );
-    }
-  }
-
-  private _throwMissingResponseError(
-    finishReason: FinishReason | undefined,
-    hasTextResponse: boolean,
-    validationContext: Record<string, unknown>,
-  ): void {
-    if (isMissingFinishReason(finishReason) && !hasTextResponse) {
-      this.logger.warn(
-        () =>
-          `[stream:terminal] validation failed: missing finishReason and text`,
-        validationContext,
-      );
-      throw new InvalidStreamError(
-        'Model stream ended without a finish reason and no text response.',
-        'NO_FINISH_REASON_NO_TEXT',
-      );
-    }
-    this.logger.warn(
-      () => `[stream:terminal] validation failed: empty response text`,
-      validationContext,
-    );
-    throw new InvalidStreamError(
-      'Model stream ended with empty response text.',
-      'NO_RESPONSE_TEXT',
+      responseText,
+      this.logger,
     );
   }
 
@@ -1106,74 +888,15 @@ export class StreamProcessor {
     consolidatedParts: Part[],
     allChunks: GenerateContentResponse[],
   ): Promise<void> {
-    // Use recordHistory to correctly save the conversation turn.
-    const modelOutput: Content[] = [
-      { role: 'model', parts: consolidatedParts },
-    ];
-
-    // Capture usage metadata from the stream
-    let streamingUsageMetadata: UsageStats | null = null;
-    let actualPromptTokens: number | null = null;
-    // Find the last chunk that has usage metadata (similar to getLastChunkWithMetadata logic)
-    const lastChunkWithMetadata = allChunks
-      .slice()
-      .reverse()
-      .find((chunk) => chunk.usageMetadata);
-    if (lastChunkWithMetadata?.usageMetadata) {
-      streamingUsageMetadata = {
-        promptTokens: lastChunkWithMetadata.usageMetadata.promptTokenCount ?? 0,
-        completionTokens:
-          lastChunkWithMetadata.usageMetadata.candidatesTokenCount ?? 0,
-        totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount ?? 0,
-      };
-      const usageMetadata =
-        lastChunkWithMetadata.usageMetadata as UsageMetadataWithCache;
-      const cacheReads = usageMetadata.cache_read_input_tokens ?? 0;
-      const cacheWrites = usageMetadata.cache_creation_input_tokens ?? 0;
-      actualPromptTokens =
-        streamingUsageMetadata.promptTokens + cacheReads + cacheWrites;
-    }
-
-    // Record history first (adds estimated tokens)
-    this.conversationManager.recordHistory(
+    await recordHistoryWithUsage({
       userInput,
-      modelOutput,
-      undefined,
-      streamingUsageMetadata,
-    );
-
-    // Ensure token estimation updates are complete before syncing to actual API prompt tokens.
-    await this.historyService.waitForTokenUpdates();
-
-    // Sync token counts AFTER recording history to replace estimated tokens with actual API prompt tokens
-    // Use explicit check for undefined to allow 0 values
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- preserve defensive runtime boundary guard despite current static types.
-    if (actualPromptTokens !== null && actualPromptTokens !== undefined) {
-      if (actualPromptTokens > 0) {
-        this.logger.debug(
-          () =>
-            `[StreamProcessor] Syncing prompt token count to HistoryService: ${actualPromptTokens}`,
-        );
-        this.historyService.syncTotalTokens(actualPromptTokens);
-        await this.historyService.waitForTokenUpdates();
-      }
-    } else if (this.compressionHandler.lastPromptTokenCount !== null) {
-      if (this.compressionHandler.lastPromptTokenCount > 0) {
-        this.logger.debug(
-          () =>
-            `[StreamProcessor] Syncing prompt token count to HistoryService: ${this.compressionHandler.lastPromptTokenCount}`,
-        );
-        this.historyService.syncTotalTokens(
-          this.compressionHandler.lastPromptTokenCount,
-        );
-        await this.historyService.waitForTokenUpdates();
-      }
-    } else {
-      this.logger.debug(
-        () =>
-          `[StreamProcessor] No token count to sync (lastPromptTokenCount: ${this.compressionHandler.lastPromptTokenCount})`,
-      );
-    }
+      consolidatedParts,
+      allChunks,
+      conversationManager: this.conversationManager,
+      historyService: this.historyService,
+      compressionHandler: this.compressionHandler,
+      logger: this.logger,
+    });
   }
 
   /**

@@ -4,13 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines -- ChatSession coordinates legacy decomposed modules; further splitting is outside this change. */
-
 // ChatSession — thin coordinator that wires up the decomposed modules.
 
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import type {
   Content,
   GenerateContentConfig,
@@ -23,7 +18,6 @@ import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type {
@@ -35,15 +29,6 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
 import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { getProviderKeyStorage } from '@vybestack/llxprt-code-core/storage/provider-key-storage.js';
-
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
-import type {
-  LoadBalancerProfile,
-  StandardProfile,
-} from '@vybestack/llxprt-code-settings';
 
 // Decomposed modules
 import { CompressionHandler } from '../compression/CompressionHandler.js';
@@ -56,6 +41,8 @@ import {
   convertIContentToResponse,
   validateHistory,
 } from './MessageConverter.js';
+import { resolveCompressionProvider } from './CompressionProfileResolver.js';
+import type { CompressionProfileResolverContext } from './CompressionProfileResolver.js';
 
 // Re-exports — consumers import from './chatSession.js'
 export {
@@ -94,8 +81,10 @@ export class AgentExecutionStoppedError extends Error {
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty systemMessage should fall through to reason
-    super(`Agent execution stopped: ${systemMessage || reason}`);
+    // Intentional falsy coalescing: empty systemMessage must fall through to reason.
+    const message =
+      systemMessage && systemMessage.length > 0 ? systemMessage : reason;
+    super(`Agent execution stopped: ${message}`);
     this.name = 'AgentExecutionStoppedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
@@ -118,127 +107,15 @@ export class AgentExecutionBlockedError extends Error {
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty systemMessage should fall through to reason
-    super(`Agent execution blocked: ${systemMessage || reason}`);
+    // Intentional falsy coalescing: empty systemMessage must fall through to reason.
+    const message =
+      systemMessage && systemMessage.length > 0 ? systemMessage : reason;
+    super(`Agent execution blocked: ${message}`);
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
     this.syntheticResponse = syntheticResponse;
     this.contextCleared = contextCleared;
-  }
-}
-
-interface CompressionLoadBalancerCandidate {
-  profileName: string;
-  provider: IProvider;
-  runtime: ProviderRuntimeContext;
-  config: Config | undefined;
-  resolved: RuntimeGenerateChatOptions['resolved'];
-  invocation: NonNullable<RuntimeGenerateChatOptions['invocation']>;
-}
-
-class CompressionLoadBalancingProvider implements IProvider {
-  readonly name = 'load-balancer';
-  private readonly selectedRoundRobinCandidate?: CompressionLoadBalancerCandidate;
-
-  constructor(
-    private readonly strategy: 'round-robin' | 'failover',
-    private readonly candidates: readonly CompressionLoadBalancerCandidate[],
-    initialIndex: number,
-  ) {
-    if (candidates.length === 0) {
-      throw new Error('Load-balanced compression profile requires subprofiles');
-    }
-    if (strategy === 'round-robin') {
-      this.selectedRoundRobinCandidate =
-        this.candidates[initialIndex % this.candidates.length];
-    }
-  }
-
-  async getModels() {
-    return [];
-  }
-
-  getDefaultModel(): string {
-    return this.candidates[0]?.resolved?.model ?? '';
-  }
-
-  getServerTools(): string[] {
-    return [];
-  }
-
-  async invokeServerTool(toolName: string): Promise<unknown> {
-    throw new Error(
-      `Server tool '${toolName}' not supported by compression load-balancer provider`,
-    );
-  }
-
-  generateChatCompletion(
-    options: RuntimeGenerateChatOptions,
-  ): AsyncIterableIterator<IContent>;
-  generateChatCompletion(content: IContent[]): AsyncIterableIterator<IContent>;
-  async *generateChatCompletion(
-    optionsOrContent: RuntimeGenerateChatOptions | IContent[],
-  ): AsyncIterableIterator<IContent> {
-    const options = Array.isArray(optionsOrContent)
-      ? { contents: optionsOrContent }
-      : optionsOrContent;
-
-    if (this.strategy === 'failover') {
-      yield* this.generateWithFailover(options);
-      return;
-    }
-
-    yield* this.generateWithCandidate(
-      this.selectedRoundRobinCandidate ?? this.candidates[0],
-      options,
-    );
-  }
-
-  private async *generateWithFailover(
-    options: RuntimeGenerateChatOptions,
-  ): AsyncIterableIterator<IContent> {
-    let lastError: unknown;
-    for (const candidate of this.candidates) {
-      try {
-        const bufferedChunks: IContent[] = [];
-        for await (const chunk of this.generateWithCandidate(
-          candidate,
-          options,
-        )) {
-          bufferedChunks.push(chunk);
-        }
-        yield* bufferedChunks;
-        return;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
-  }
-
-  private async *generateWithCandidate(
-    candidate: CompressionLoadBalancerCandidate,
-    options: RuntimeGenerateChatOptions,
-  ): AsyncIterableIterator<IContent> {
-    const candidateOptions: RuntimeGenerateChatOptions = {
-      ...options,
-      runtime: candidate.runtime,
-      settings: candidate.runtime
-        .settingsService as RuntimeGenerateChatOptions['settings'],
-      config: candidate.config,
-      resolved: {
-        ...options.resolved,
-        ...candidate.resolved,
-      },
-      invocation: candidate.invocation,
-      metadata: {
-        ...options.metadata,
-        ...(candidate.invocation.metadata as Record<string, unknown>),
-        selectedCompressionProfile: candidate.profileName,
-      },
-    };
-    yield* candidate.provider.generateChatCompletion(candidateOptions);
   }
 }
 
@@ -275,11 +152,6 @@ export class ChatSession {
     generationConfig: GenerateContentConfig = {},
     initialHistory: Content[] = [],
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-    if (view == null) {
-      throw new Error('AgentRuntimeContext is required for ChatSession');
-    }
-
     this.runtimeContext = view;
     this.runtimeState = view.state;
     this.historyService = view.history;
@@ -313,8 +185,7 @@ export class ChatSession {
       this.generationConfig,
       this.resolveCompressionProvider.bind(this),
       async (context: CompressionContext) => {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-        const config = view.providerRuntime?.config;
+        const config = view.providerRuntime.config;
         if (config) {
           await triggerPreCompressHook(
             config,
@@ -407,8 +278,7 @@ export class ChatSession {
     const originalAdd = this.historyService.add.bind(this.historyService);
     this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
       const result = originalAdd(...args);
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-      this.compressionHandler?.markDensityDirty();
+      this.compressionHandler.markDensityDirty();
       return result;
     };
     hs[ChatSession.DENSITY_WRAPPED] = true;
@@ -454,8 +324,7 @@ export class ChatSession {
   }
 
   resolveProviderForRuntime(compressionProfileName: string): IProvider {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-    const desiredProviderName = this.runtimeState.provider?.trim();
+    const desiredProviderName = this.runtimeState.provider.trim();
     const adapter = this.runtimeContext.provider;
 
     if (desiredProviderName) {
@@ -478,11 +347,7 @@ export class ChatSession {
       const previousProviderName = provider.name;
       try {
         adapter.setActiveProvider(desiredProviderName);
-        const updatedProvider = adapter.getActiveProvider();
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-        if (updatedProvider != null) {
-          provider = updatedProvider;
-        }
+        provider = adapter.getActiveProvider();
         this.logger.debug(
           () =>
             `[ChatSession] enforced provider switch to '${desiredProviderName}' (previous '${previousProviderName}') [${compressionProfileName}]`,
@@ -535,364 +400,28 @@ export class ChatSession {
     );
   }
 
+  // ── Compression profile resolution (delegated to CompressionProfileResolver) ──
+
+  private getCompressionProfileResolverContext(): CompressionProfileResolverContext {
+    return {
+      providerRuntime: this.runtimeContext.providerRuntime,
+      resolveExplicitCompressionProvider:
+        this.resolveExplicitCompressionProvider.bind(this),
+      roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
+    };
+  }
+
   private async resolveCompressionProvider(
     profileName: string | undefined,
   ): Promise<CompressionProviderResult> {
-    if (!profileName) {
-      const provider = this.resolveProviderForRuntime(
-        'ChatSession.resolveCompressionProvider.default',
-      );
-      const runtime = this.runtimeContext.providerRuntime;
-      return {
-        provider,
-        runtime,
-        config: runtime.config,
-      };
-    }
-
-    const config = this.runtimeContext.providerRuntime.config;
-    const profileManager = config?.getProfileManager();
-    if (!profileManager) {
-      throw new CompressionProfileNotFoundError(
-        profileName,
-        'profile manager is unavailable',
-      );
-    }
-
-    let profile: Awaited<ReturnType<typeof profileManager.loadProfile>>;
-    try {
-      profile = await profileManager.loadProfile(profileName);
-    } catch (error) {
-      throw new CompressionProfileNotFoundError(
-        profileName,
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-
-    if (isLoadBalancerProfile(profile)) {
-      return this.resolveLoadBalancedCompressionProvider(
-        profileName,
-        profile,
-        config,
-        profileManager,
-      );
-    }
-
-    return this.resolveStandardCompressionProvider(
+    return resolveCompressionProvider(
+      this.getCompressionProfileResolverContext(),
       profileName,
-      profile,
-      profileManager,
-      config,
+      () =>
+        this.resolveProviderForRuntime(
+          'ChatSession.resolveCompressionProvider.default',
+        ),
     );
-  }
-  private async resolveLoadBalancedCompressionProvider(
-    profileName: string,
-    profile: LoadBalancerProfile,
-    config: Config | undefined,
-    profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
-  ): Promise<CompressionProviderResult> {
-    const candidates = await this.buildCompressionLoadBalancerCandidates(
-      profileName,
-      profile,
-      config,
-      profileManager,
-    );
-
-    const strategy = profile.policy === 'failover' ? 'failover' : 'round-robin';
-    const initialIndex =
-      this.compressionLoadBalancerRoundRobinIndexes.get(profileName) ?? 0;
-    if (strategy === 'round-robin') {
-      this.compressionLoadBalancerRoundRobinIndexes.set(
-        profileName,
-        (initialIndex + 1) % candidates.length,
-      );
-    }
-    const provider = new CompressionLoadBalancingProvider(
-      strategy,
-      candidates,
-      initialIndex,
-    );
-    const runtimeId = `${this.runtimeContext.providerRuntime.runtimeId}::compression-profile:${profileName}`;
-    const settings = new SettingsService();
-    settings.setCurrentProfileName(profileName);
-    settings.set('activeProvider', 'load-balancer');
-    settings.set('model', profile.model || provider.getDefaultModel());
-    for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
-      if (value !== undefined) {
-        settings.set(key, value);
-      }
-    }
-    const metadata = {
-      ...(this.runtimeContext.providerRuntime.metadata ?? {}),
-      source: 'ChatSession.resolveCompressionProvider',
-      compressionProfile: profileName,
-      compressionProvider: 'load-balancer',
-      runtimeId,
-      provider: 'load-balancer',
-      model: settings.get('model'),
-    };
-    const runtime: ProviderRuntimeContext = {
-      settingsService: settings,
-      config,
-      runtimeId,
-      metadata,
-    };
-    const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
-      providerName: 'load-balancer',
-      ephemeralsSnapshot: this.buildCompressionProfileEphemeralsSnapshot(
-        settings,
-        'load-balancer',
-      ),
-      metadata,
-      fallbackRuntimeId: runtimeId,
-    });
-    return {
-      provider,
-      runtime,
-      config,
-      invocation,
-    };
-  }
-
-  private async buildCompressionLoadBalancerCandidates(
-    profileName: string,
-    profile: LoadBalancerProfile,
-    config: Config | undefined,
-    profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
-  ): Promise<CompressionLoadBalancerCandidate[]> {
-    const candidates: CompressionLoadBalancerCandidate[] = [];
-    for (const subProfileName of profile.profiles) {
-      const subProfile = await profileManager.loadProfile(subProfileName);
-      if (isLoadBalancerProfile(subProfile)) {
-        throw new CompressionProfileNotFoundError(
-          profileName,
-          `load-balanced compression profile references nested load-balanced profile '${subProfileName}'`,
-        );
-      }
-      const candidate = await this.resolveStandardCompressionProvider(
-        subProfileName,
-        subProfile,
-        profileManager,
-        config,
-        profile.ephemeralSettings as Record<string, unknown>,
-      );
-      if (!candidate.invocation) {
-        throw new CompressionProfileNotFoundError(
-          profileName,
-          `failed to build invocation context for subprofile '${subProfileName}'`,
-        );
-      }
-      candidates.push({
-        profileName: subProfileName,
-        provider: candidate.provider,
-        runtime: candidate.runtime,
-        config: candidate.config,
-        resolved: candidate.resolved,
-        invocation: candidate.invocation,
-      });
-    }
-    return candidates;
-  }
-
-  private async resolveStandardCompressionProvider(
-    profileName: string,
-    profile: StandardProfile,
-    profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
-    config: Config | undefined,
-    parentEphemerals: Record<string, unknown> = {},
-  ): Promise<CompressionProviderResult> {
-    const provider = this.resolveExplicitCompressionProvider(
-      profileName,
-      profile.provider,
-    );
-    const profileSettings = new SettingsService();
-    await profileManager.applyLoadedProfile(
-      profileName,
-      profile,
-      profileSettings,
-    );
-    this.applyCompressionProfileParentEphemerals(
-      profileSettings,
-      profile.provider,
-      parentEphemerals,
-    );
-
-    this.applyCompressionProfileSettings(profileSettings, profileName, profile);
-
-    const runtimeId = `${this.runtimeContext.providerRuntime.runtimeId}::compression-profile:${profileName}`;
-    const metadata = {
-      ...(this.runtimeContext.providerRuntime.metadata ?? {}),
-      source: 'ChatSession.resolveCompressionProvider',
-      compressionProfile: profileName,
-      compressionProvider: profile.provider,
-      runtimeId,
-      provider: profile.provider,
-      model: profile.model,
-    };
-    const runtime: ProviderRuntimeContext = {
-      settingsService: profileSettings,
-      config,
-      runtimeId,
-      metadata,
-    };
-    const resolved = await this.buildCompressionProfileResolvedOptions(
-      profileSettings,
-      profile,
-    );
-    const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings: profileSettings,
-      providerName: profile.provider,
-      ephemeralsSnapshot: this.buildCompressionProfileEphemeralsSnapshot(
-        profileSettings,
-        profile.provider,
-      ),
-      metadata,
-      fallbackRuntimeId: runtimeId,
-    });
-
-    return {
-      provider,
-      runtime,
-      config,
-      resolved,
-      invocation,
-    };
-  }
-
-  private applyCompressionProfileSettings(
-    profileSettings: SettingsService,
-    profileName: string,
-    profile: StandardProfile,
-  ): void {
-    const provider = profile.provider;
-    const ephemerals = profile.ephemeralSettings as Record<string, unknown>;
-
-    profileSettings.setCurrentProfileName(profileName);
-    profileSettings.set('activeProvider', provider);
-    profileSettings.set('model', profile.model);
-    profileSettings.setProviderSetting(provider, 'enabled', true);
-    profileSettings.setProviderSetting(provider, 'model', profile.model);
-
-    for (const [key, value] of Object.entries(ephemerals)) {
-      if (value !== undefined) {
-        profileSettings.set(key, value);
-        profileSettings.setProviderSetting(provider, key, value);
-      }
-    }
-
-    this.applyCompressionProfileAuthSettings(
-      profileSettings,
-      provider,
-      ephemerals,
-    );
-    this.applyCompressionProfileModelParams(
-      profileSettings,
-      provider,
-      profile.modelParams,
-    );
-
-    if (profile.auth) {
-      profileSettings.set('auth.type', profile.auth.type);
-      profileSettings.setProviderSetting(provider, 'auth', profile.auth);
-      if (profile.auth.buckets) {
-        profileSettings.set('auth.buckets', profile.auth.buckets);
-      }
-    }
-  }
-
-  private applyCompressionProfileAuthSettings(
-    profileSettings: SettingsService,
-    provider: string,
-    ephemerals: Record<string, unknown>,
-  ): void {
-    this.copyProfileSettingAliases(profileSettings, provider, ephemerals, [
-      { sourceKey: 'auth-key', globalKey: 'auth-key', providerKey: 'auth-key' },
-      {
-        sourceKey: 'auth-keyfile',
-        globalKey: 'auth-keyfile',
-        providerKey: 'auth-keyfile',
-      },
-      {
-        sourceKey: 'auth-key-name',
-        globalKey: 'auth-key-name',
-        providerKey: 'auth-key-name',
-      },
-    ]);
-
-    for (const key of ['base-url', 'sandbox-base-url', 'api-version']) {
-      const value = ephemerals[key];
-      if (value !== undefined) {
-        profileSettings.setProviderSetting(provider, key, value);
-      }
-    }
-  }
-
-  private copyProfileSettingAliases(
-    profileSettings: SettingsService,
-    provider: string,
-    ephemerals: Record<string, unknown>,
-    aliases: ReadonlyArray<{
-      sourceKey: string;
-      globalKey?: string;
-      providerKey: string;
-    }>,
-  ): void {
-    for (const alias of aliases) {
-      const value = ephemerals[alias.sourceKey];
-      if (value === undefined) {
-        continue;
-      }
-      if (alias.globalKey) {
-        profileSettings.set(alias.globalKey, value);
-      }
-      profileSettings.setProviderSetting(provider, alias.providerKey, value);
-    }
-  }
-
-  private applyCompressionProfileModelParams(
-    profileSettings: SettingsService,
-    provider: string,
-    modelParams: StandardProfile['modelParams'],
-  ): void {
-    for (const [key, value] of Object.entries(modelParams)) {
-      if (value !== undefined) {
-        profileSettings.setProviderSetting(provider, key, value);
-      }
-    }
-    const aliases: Record<string, unknown> = {
-      temperature: modelParams.temperature,
-      maxTokens: modelParams.max_tokens,
-      topP: modelParams.top_p,
-      topK: modelParams.top_k,
-      presencePenalty: modelParams.presence_penalty,
-      frequencyPenalty: modelParams.frequency_penalty,
-    };
-    for (const [key, value] of Object.entries(aliases)) {
-      if (value !== undefined) {
-        profileSettings.setProviderSetting(provider, key, value);
-      }
-    }
-  }
-
-  private applyCompressionProfileParentEphemerals(
-    profileSettings: SettingsService,
-    provider: string,
-    parentEphemerals: Record<string, unknown>,
-  ): void {
-    for (const [key, value] of Object.entries(parentEphemerals)) {
-      if (value !== undefined && profileSettings.get(key) === undefined) {
-        profileSettings.set(key, value);
-      }
-    }
-    for (const key of ['custom-headers', 'api-version', 'sandbox-base-url']) {
-      const value = parentEphemerals[key];
-      if (value !== undefined) {
-        profileSettings.setProviderSetting(provider, key, value);
-      }
-    }
   }
 
   private resolveProviderBaseUrl(_provider: IProvider): string | undefined {
@@ -904,9 +433,7 @@ export class ChatSession {
     metadata: Record<string, unknown> = {},
   ): ProviderRuntimeContext {
     const baseRuntime = this.runtimeContext.providerRuntime;
-    const runtimeId =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-      baseRuntime.runtimeId ?? this.runtimeState.runtimeId ?? 'chatSession';
+    const runtimeId = baseRuntime.runtimeId ?? this.runtimeState.runtimeId;
 
     return {
       ...baseRuntime,
@@ -916,105 +443,6 @@ export class ChatSession {
         source,
         ...metadata,
       },
-    };
-  }
-
-  private async buildCompressionProfileResolvedOptions(
-    profileSettings: SettingsService,
-    profile: StandardProfile,
-  ): Promise<RuntimeGenerateChatOptions['resolved']> {
-    const providerSettings = profileSettings.getProviderSettings(
-      profile.provider,
-    );
-    const baseURL =
-      typeof providerSettings['base-url'] === 'string'
-        ? providerSettings['base-url']
-        : undefined;
-    const temperature =
-      typeof providerSettings.temperature === 'number'
-        ? providerSettings.temperature
-        : undefined;
-    const maxTokens =
-      typeof providerSettings.maxTokens === 'number'
-        ? providerSettings.maxTokens
-        : undefined;
-    return {
-      model: profile.model,
-      ...(baseURL ? { baseURL } : {}),
-      ...(await this.resolveCompressionProfileAuthToken(
-        profileSettings,
-        profile.provider,
-      )),
-      ...(temperature !== undefined ? { temperature } : {}),
-      ...(maxTokens !== undefined ? { maxTokens } : {}),
-    };
-  }
-
-  private async resolveCompressionProfileAuthToken(
-    profileSettings: SettingsService,
-    provider: string,
-  ): Promise<{ authToken: string } | Record<string, never>> {
-    const providerSettings = profileSettings.getProviderSettings(provider);
-    const directAuth = this.getStringSettingFromValues([
-      providerSettings['auth-key'],
-      profileSettings.get('auth-key'),
-    ]);
-    if (directAuth) {
-      return { authToken: directAuth };
-    }
-
-    const keyName = this.getStringSettingFromValues([
-      providerSettings['auth-key-name'],
-      profileSettings.get('auth-key-name'),
-    ]);
-    if (keyName) {
-      const token = await getProviderKeyStorage().getKey(keyName);
-      if (token) {
-        return { authToken: token };
-      }
-    }
-
-    const keyFile = this.getStringSettingFromValues([
-      providerSettings['auth-keyfile'],
-      profileSettings.get('auth-keyfile'),
-    ]);
-    if (keyFile) {
-      const token = (
-        await fs.readFile(this.expandProfilePath(keyFile), 'utf8')
-      ).trim();
-      if (token) {
-        return { authToken: token };
-      }
-    }
-
-    return {};
-  }
-
-  private getStringSettingFromValues(
-    values: readonly unknown[],
-  ): string | undefined {
-    for (const value of values) {
-      if (typeof value === 'string' && value.trim() !== '') {
-        return value.trim();
-      }
-    }
-    return undefined;
-  }
-
-  private expandProfilePath(value: string): string {
-    if (value.startsWith('~/')) {
-      return path.join(os.homedir(), value.slice(2));
-    }
-    return value;
-  }
-
-  private buildCompressionProfileEphemeralsSnapshot(
-    profileSettings: SettingsService,
-    provider: string,
-  ): Record<string, unknown> {
-    return {
-      ...profileSettings.getAllGlobalSettings(),
-      [provider]: { ...profileSettings.getProviderSettings(provider) },
     };
   }
 
@@ -1183,7 +611,6 @@ export class ChatSession {
    * Used by Turn and other consumers to access ephemeral settings.
    */
   getConfig(): Config | undefined {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
-    return this.runtimeContext.providerRuntime?.config;
+    return this.runtimeContext.providerRuntime.config;
   }
 }
