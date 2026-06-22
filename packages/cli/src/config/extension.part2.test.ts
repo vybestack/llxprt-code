@@ -266,9 +266,9 @@ describe('extension tests', () => {
         );
         expect(
           activeExtensions.every(
-            (e) => e.installMetadata?.autoUpdate === false,
+            (e) => (e.installMetadata?.autoUpdate ?? false) === false,
           ),
-        ).toBe(false);
+        ).toBe(true);
       });
 
       it('should be true if autoUpdate is true in install metadata', () => {

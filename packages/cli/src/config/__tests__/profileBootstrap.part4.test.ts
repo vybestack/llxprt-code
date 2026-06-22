@@ -478,12 +478,12 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
   /**
    * @plan:PLAN-20251118-ISSUE533.P09
    * @requirement:REQ-INT-003.3
-   * @scenario: Named profile not found
+   * @scenario: Named profile not found returns empty result with warning
    * @given: --profile nonexistent
    * @when: applyBootstrapProfile() called
-   * @then: Throws ProfileBootstrapError
+   * @then: Returns empty provider/model and warning
    */
-  it('should throw error when named profile not found', () => {
+  it('should return empty result with warning when named profile is not found', () => {
     const args: BootstrapProfileArgs = {
       profileName: 'nonexistent',
       profileJson: null,

@@ -5,12 +5,22 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { Profile } from '@vybestack/llxprt-code-settings';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,
   createTempKeyfile,
 } from './test-utils.js';
 import { runCli } from './cli-args-test-helpers.js';
+
+async function saveProfile(name: string, profile: Profile): Promise<void> {
+  await new ProfileManager().saveProfile(name, profile);
+}
+
+function expectGeminiProviderAttempt(output: string): void {
+  expect(output).toContain('Error when talking to gemini API');
+}
 
 describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () => {
   let tempDir: string;
@@ -23,7 +33,9 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
   });
 
   afterEach(async () => {
-    if (originalHome) {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
       process.env.HOME = originalHome;
     }
     await cleanupTempDirectory(tempDir);
@@ -34,15 +46,15 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
      * @plan:PLAN-20251118-ISSUE533.P12
      * @requirement:REQ-INT-003.1
      * @scenario: CLI accepts --profile flag
-     * @given: llxprt --profile '{"provider":"openai","model":"gpt-4","key":"sk-test"}' --prompt "test"
+     * @given: llxprt --profile '{"provider":"gemini","model":"gemini-exp-1206","key":"test-key"}' --prompt "test"
      * @when: CLI starts
      * @then: No parsing errors, profile applied
      */
     it('should accept --profile flag', async () => {
       const profile = JSON.stringify({
-        provider: 'openai',
-        model: 'gpt-4',
-        key: 'sk-test123',
+        provider: 'gemini',
+        model: 'gemini-exp-1206',
+        key: 'test-key',
       });
 
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
@@ -54,11 +66,11 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
         },
       );
 
-      // Should not have parsing errors
-      expect(result.stderr).not.toContain('Invalid JSON');
-      expect(result.stderr).not.toContain('Failed to parse');
-      // Should complete (may fail on auth but shouldn't crash during parsing)
+      const fullOutput = result.stdout + result.stderr;
+      expect(fullOutput).not.toContain('Invalid JSON');
+      expect(fullOutput).not.toContain('Failed to parse');
       expect(result.exitCode).not.toBe(-1);
+      expectGeminiProviderAttempt(fullOutput);
     });
 
     /**
@@ -71,9 +83,9 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
      */
     it('should apply overrides with --profile', async () => {
       const profile = JSON.stringify({
-        provider: 'openai',
-        model: 'gpt-3.5-turbo',
-        key: 'sk-test',
+        provider: 'gemini',
+        model: 'gemini-exp-1114',
+        key: 'test-key',
       });
 
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
@@ -83,7 +95,7 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
           '--profile',
           profile,
           '--model',
-          'gpt-4',
+          'gemini-exp-1206',
           '--keyfile',
           keyfilePath,
           '--prompt',
@@ -95,10 +107,10 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
         },
       );
 
-      // Should not crash
+      const fullOutput = result.stdout + result.stderr;
       expect(result.exitCode).not.toBe(-1);
-      // Should not have parsing errors
-      expect(result.stderr).not.toContain('Invalid JSON');
+      expect(fullOutput).not.toContain('Invalid JSON');
+      expectGeminiProviderAttempt(fullOutput);
     });
 
     /**
@@ -194,24 +206,26 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
      * @then: Uses profile from env var
      */
     it('should read profile from environment variable', async () => {
-      const profile = JSON.stringify({
-        provider: 'openai',
-        model: 'gpt-4',
-        key: 'sk-env-test',
+      await saveProfile('env-profile', {
+        version: 1,
+        provider: 'gemini',
+        model: 'gemini-exp-1206',
+        modelParams: {},
+        ephemeralSettings: {},
       });
-
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
 
       const result = await runCli(
-        ['--keyfile', keyfilePath, '--prompt', 'test'],
+        ['--keyfile', keyfilePath, '--prompt', 'test', '--debug'],
         {
           HOME: tempDir,
-          LLXPRT_PROFILE: profile,
+          LLXPRT_PROFILE: 'env-profile',
         },
       );
 
-      // Should not have parsing errors (profile from env should be read)
+      const fullOutput = result.stdout + result.stderr;
       expect(result.exitCode).not.toBe(-1);
+      expectGeminiProviderAttempt(fullOutput);
     });
 
     /**
@@ -223,55 +237,59 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
      * @then: Uses --profile flag (higher precedence)
      */
     it('should prioritize --profile over environment', async () => {
-      const envProfile = JSON.stringify({
+      await saveProfile('env-profile', {
+        version: 1,
         provider: 'gemini',
         model: 'gemini-exp-1114',
-        key: 'sk-env',
+        modelParams: {},
+        ephemeralSettings: {},
       });
       const cliProfile = JSON.stringify({
         provider: 'gemini',
         model: 'gemini-exp-1206',
-        key: 'sk-cli',
+        key: 'test-key',
       });
-
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
 
       const result = await runCli(
-        ['--profile', cliProfile, '--keyfile', keyfilePath, '--prompt', 'test'],
+        [
+          '--profile',
+          cliProfile,
+          '--keyfile',
+          keyfilePath,
+          '--prompt',
+          'test',
+          '--debug',
+        ],
         {
           HOME: tempDir,
-          LLXPRT_PROFILE: envProfile,
+          LLXPRT_PROFILE: 'env-profile',
         },
       );
 
-      // Should not timeout - CLI profile takes precedence
+      const fullOutput = result.stdout + result.stderr;
       expect(result.exitCode).not.toBe(-1);
-      // CLI should process without hanging
-      // Note: Both profiles may appear in logs/errors, but CLI profile should be applied
-      expect(result.stderr).toBeDefined();
+      expect(fullOutput).not.toContain("Loaded profile 'env-profile':");
+      expect(fullOutput).not.toContain('gemini-exp-1114');
     });
 
     /**
      * @plan:PLAN-20251118-ISSUE533.P12
      * @requirement:REQ-INT-003.2
-     * @scenario: Invalid JSON in environment variable
-     * @given: LLXPRT_PROFILE with invalid JSON
+     * @scenario: Missing profile named by environment variable
+     * @given: LLXPRT_PROFILE with a profile name that does not exist
      * @when: CLI starts
-     * @then: Error message, exit code 1
+     * @then: Error output records the failed profile load without timing out
      */
-    it('should reject invalid JSON in environment variable', async () => {
-      const result = await runCli(['--prompt', 'test'], {
+    it('should report missing profile from environment variable', async () => {
+      const result = await runCli(['--prompt', 'test', '--debug'], {
         HOME: tempDir,
-        LLXPRT_PROFILE: '{invalid}',
+        LLXPRT_PROFILE: 'missing-env-profile',
       });
 
-      // Should fail (either timeout or error) due to invalid JSON
-      // Exit code may be 0 or 1 depending on error handling
-      expect(result.exitCode).not.toBe(-1); // Should not timeout
       const fullOutput = result.stdout + result.stderr;
-      // May show parse error or continue with default settings
-      // This test validates the CLI doesn't crash on invalid env var
-      expect(fullOutput.length).toBeGreaterThan(0);
+      expect(result.exitCode).not.toBe(-1);
+      expectGeminiProviderAttempt(fullOutput);
     });
   });
 
@@ -286,9 +304,9 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
      */
     it('should not warn about profile reapplication for inline profiles', async () => {
       const profile = JSON.stringify({
-        provider: 'openai',
-        model: 'gpt-4',
-        key: 'sk-test',
+        provider: 'gemini',
+        model: 'gemini-exp-1206',
+        key: 'test-key',
       });
 
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
@@ -351,13 +369,8 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
      * @then: Error about disallowed field, exit code 1
      */
     it('should reject profile with dangerous fields', async () => {
-      const maliciousProfile = JSON.stringify({
-        provider: 'openai',
-        model: 'gpt-4',
-        key: 'sk-test',
-        __proto__: { polluted: true },
-      });
-
+      const maliciousProfile =
+        '{"provider":"openai","model":"gpt-4","key":"sk-test","__proto__":{"polluted":true}}';
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
 
       const result = await runCli(
@@ -374,10 +387,8 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
         },
       );
 
-      // Note: __proto__ field validation may not be implemented yet
-      // JSON.stringify actually removes __proto__ from the output
-      // This test verifies the CLI handles such profiles gracefully
-      expect(result.exitCode).not.toBe(-1); // Should not timeout
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Profile contains dangerous fields');
     });
   });
 });

@@ -506,35 +506,24 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should exclude DEBUG and DEBUG_MODE from project .env files by default', () => {
-      // Create a workspace settings file with excludedProjectEnvVars
       const workspaceSettingsContent = {
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
       };
+      const projectEnvPath = pathActual.join(MOCK_WORKSPACE_DIR, '.env');
+
+      vi.spyOn(process, 'cwd').mockReturnValue(MOCK_WORKSPACE_DIR);
+      delete process.env.DEBUG;
+      delete process.env.DEBUG_MODE;
+      delete process.env.GEMINI_API_KEY;
 
       (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === MOCK_WORKSPACE_SETTINGS_PATH,
+        (p: fs.PathLike) =>
+          p === MOCK_WORKSPACE_SETTINGS_PATH || p === projectEnvPath,
       );
 
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
-
-      // Mock findEnvFile to return a project .env file
-      const originalFindEnvFile = (
-        loadSettings as unknown as { findEnvFile: () => string }
-      ).findEnvFile;
-      (loadSettings as unknown as { findEnvFile: () => string }).findEnvFile =
-        () => '/mock/project/.env';
-
-      // Mock fs.readFileSync for .env file content
-      const originalReadFileSync = fs.readFileSync;
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === '/mock/project/.env') {
+          if (p === projectEnvPath) {
             return 'DEBUG=true\nDEBUG_MODE=1\nGEMINI_API_KEY=test-key';
           }
           if (p === MOCK_WORKSPACE_SETTINGS_PATH) {
@@ -544,24 +533,15 @@ describe('Settings Loading and Merging', () => {
         },
       );
 
-      try {
-        // This will call loadEnvironment internally with the merged settings
-        const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-        // Verify the settings were loaded correctly
-        expect(settings.merged.excludedProjectEnvVars).toStrictEqual([
-          'DEBUG',
-          'DEBUG_MODE',
-        ]);
-
-        // Note: We can't directly test process.env changes here because the mocking
-        // prevents the actual file system operations, but we can verify the settings
-        // are correctly merged and passed to loadEnvironment
-      } finally {
-        (loadSettings as unknown as { findEnvFile: () => string }).findEnvFile =
-          originalFindEnvFile;
-        (fs.readFileSync as Mock).mockImplementation(originalReadFileSync);
-      }
+      expect(settings.merged.excludedProjectEnvVars).toStrictEqual([
+        'DEBUG',
+        'DEBUG_MODE',
+      ]);
+      expect(process.env.GEMINI_API_KEY).toBe('test-key');
+      expect(process.env.DEBUG).toBeUndefined();
+      expect(process.env.DEBUG_MODE).toBeUndefined();
     });
 
     it('should respect custom excludedProjectEnvVars from user settings', () => {

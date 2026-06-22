@@ -513,7 +513,8 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
       await fc.assert(
         fc.asyncProperty(
           fc.integer({ min: 2, max: 5 }),
-          async (sessionCount) => {
+          fc.nat(),
+          async (sessionCount, indexSeed) => {
             const localTempDir = await fs.mkdtemp(
               path.join(os.tmpdir(), 'prop-index-'),
             );
@@ -529,7 +530,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
                 await new Promise((resolve) => setTimeout(resolve, 20));
               }
 
-              const validIndex = Math.floor(Math.random() * sessionCount) + 1;
+              const validIndex = (indexSeed % sessionCount) + 1;
 
               const context = makeResumeContext(localChatsDir, {
                 currentSessionId: 'other-session',

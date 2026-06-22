@@ -610,7 +610,7 @@ describe('parseArguments with positional prompt', () => {
   const originalArgv = process.argv;
 
   afterEach(() => {
-    beforeEach(() => resetRuntimeSettingsState());
+    resetRuntimeSettingsState();
     process.argv = originalArgv;
   });
 
