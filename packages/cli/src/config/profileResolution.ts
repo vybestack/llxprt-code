@@ -10,7 +10,10 @@ import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { MergedSettings, Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
-import type { BootstrapProfileArgs } from './profileBootstrap.js';
+import {
+  parseInlineProfile,
+  type BootstrapProfileArgs,
+} from './profileBootstrap.js';
 
 const logger = new DebugLogger('llxprt:config:profileResolution');
 
@@ -151,6 +154,10 @@ function applyInlineProfile(
   argv: CliArgs,
   settings: Settings,
 ): Omit<ProfileLoadResult, 'profileToLoad' | 'profileWarnings'> {
+  const validationResult = parseInlineProfile(profileJson);
+  if (validationResult.error !== undefined) {
+    throw new Error(validationResult.error);
+  }
   const profile = JSON.parse(profileJson) as Profile;
   const prepared = prepareProfileForApplication(
     profile,

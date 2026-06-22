@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: behavioral coverage boundary retained while larger decomposition continues. */
-
 import { describe, it, expect } from 'vitest';
 import { textBufferReducer } from './buffer-reducer.js';
 import type {
@@ -62,32 +60,76 @@ const initialState: TextBufferState = {
 };
 
 // Parse action string into action object
-function parseAction(actionStr: string): TextBufferAction {
-  const [type, payload] = actionStr.split(':');
+function positiveCountOrOne(payload: string): number {
+  const n = Number(payload);
+  return n > 0 ? n : 1;
+}
 
+type VimCountActionType = Extract<
+  TextBufferAction,
+  { payload: { count: number } }
+>['type'];
+
+function vimCountAction(
+  type: VimCountActionType,
+  payload: string,
+): TextBufferAction {
+  return {
+    type,
+    payload: { count: positiveCountOrOne(payload) },
+  } as TextBufferAction;
+}
+
+const VIM_COUNT_ACTIONS = new Set<VimCountActionType>([
+  'vim_delete_word_forward',
+  'vim_delete_word_backward',
+  'vim_move_word_forward',
+  'vim_move_word_backward',
+  'vim_delete_line',
+  'vim_change_word_forward',
+  'vim_delete_char',
+]);
+
+const NO_ARG_ACTIONS = new Set<TextBufferAction['type']>([
+  'backspace',
+  'delete',
+  'delete_word_left',
+  'delete_word_right',
+  'kill_line_right',
+  'kill_line_left',
+  'undo',
+  'redo',
+  'create_undo_snapshot',
+  'vim_insert_at_cursor',
+  'vim_append_at_cursor',
+  'vim_escape_insert_mode',
+  'vim_move_to_first_line',
+  'vim_move_to_last_line',
+  'vim_move_to_line_start',
+  'vim_move_to_line_end',
+  'vim_move_to_first_nonwhitespace',
+  'vim_open_line_below',
+  'vim_open_line_above',
+  'vim_append_at_line_end',
+  'vim_insert_at_line_start',
+  'vim_delete_to_end_of_line',
+  'vim_change_to_end_of_line',
+]);
+
+const TEXT_PAYLOAD_ACTIONS: Partial<
+  Record<string, (payload: string) => TextBufferAction>
+> = {
+  insert: (p) => ({ type: 'insert', payload: p }),
+  set_text: (p) => ({ type: 'set_text', payload: p }),
+};
+
+function parseParameterizedAction(
+  type: string,
+  payload: string,
+): TextBufferAction | undefined {
   switch (type) {
-    case 'insert':
-      return { type: 'insert', payload: payload || '' };
-    case 'set_text':
-      return { type: 'set_text', payload: payload || '' };
-    case 'backspace':
-      return { type: 'backspace' };
-    case 'delete':
-      return { type: 'delete' };
     case 'move':
       return { type: 'move', payload: { dir: payload as Direction } };
-    case 'delete_word_left':
-      return { type: 'delete_word_left' };
-    case 'delete_word_right':
-      return { type: 'delete_word_right' };
-    case 'kill_line_right':
-      return { type: 'kill_line_right' };
-    case 'kill_line_left':
-      return { type: 'kill_line_left' };
-    case 'undo':
-      return { type: 'undo' };
-    case 'redo':
-      return { type: 'redo' };
     case 'set_cursor': {
       const [row, col] = payload.split(',').map(Number);
       return {
@@ -99,8 +141,6 @@ function parseAction(actionStr: string): TextBufferAction {
       const [width, height] = payload.split(',').map(Number);
       return { type: 'set_viewport', payload: { width, height } };
     }
-    case 'create_undo_snapshot':
-      return { type: 'create_undo_snapshot' };
     case 'move_to_offset':
       return { type: 'move_to_offset', payload: { offset: Number(payload) } };
     case 'replace_range': {
@@ -116,125 +156,49 @@ function parseAction(actionStr: string): TextBufferAction {
         },
       };
     }
-    case 'vim_delete_word_forward':
-      return {
-        type: 'vim_delete_word_forward',
-        payload: {
-          count: (() => {
-            const n = Number(payload);
-            return n > 0 ? n : 1;
-          })(),
-        },
-      };
-    case 'vim_delete_word_backward':
-      return {
-        type: 'vim_delete_word_backward',
-        payload: {
-          count: (() => {
-            const n = Number(payload);
-            return n > 0 ? n : 1;
-          })(),
-        },
-      };
-    case 'vim_move_word_forward':
-      return {
-        type: 'vim_move_word_forward',
-        payload: {
-          count: (() => {
-            const n = Number(payload);
-            return n > 0 ? n : 1;
-          })(),
-        },
-      };
-    case 'vim_move_word_backward':
-      return {
-        type: 'vim_move_word_backward',
-        payload: {
-          count: (() => {
-            const n = Number(payload);
-            return n > 0 ? n : 1;
-          })(),
-        },
-      };
-    case 'vim_delete_line':
-      return {
-        type: 'vim_delete_line',
-        payload: {
-          count: (() => {
-            const n = Number(payload);
-            return n > 0 ? n : 1;
-          })(),
-        },
-      };
-    case 'vim_change_word_forward':
-      return {
-        type: 'vim_change_word_forward',
-        payload: {
-          count: (() => {
-            const n = Number(payload);
-            return n > 0 ? n : 1;
-          })(),
-        },
-      };
-    case 'vim_insert_at_cursor':
-      return { type: 'vim_insert_at_cursor' };
-    case 'vim_append_at_cursor':
-      return { type: 'vim_append_at_cursor' };
-    case 'vim_escape_insert_mode':
-      return { type: 'vim_escape_insert_mode' };
-    case 'vim_move_to_first_line':
-      return { type: 'vim_move_to_first_line' };
-    case 'vim_move_to_last_line':
-      return { type: 'vim_move_to_last_line' };
-    case 'vim_move_to_line_start':
-      return { type: 'vim_move_to_line_start' };
-    case 'vim_move_to_line_end':
-      return { type: 'vim_move_to_line_end' };
-    case 'vim_move_to_first_nonwhitespace':
-      return { type: 'vim_move_to_first_nonwhitespace' };
-    case 'vim_open_line_below':
-      return { type: 'vim_open_line_below' };
-    case 'vim_open_line_above':
-      return { type: 'vim_open_line_above' };
-    case 'vim_append_at_line_end':
-      return { type: 'vim_append_at_line_end' };
-    case 'vim_insert_at_line_start':
-      return { type: 'vim_insert_at_line_start' };
     case 'vim_move_to_line':
       return {
         type: 'vim_move_to_line',
         payload: { lineNumber: Number(payload) },
       };
-    case 'vim_delete_char':
-      return {
-        type: 'vim_delete_char',
-        payload: {
-          count: (() => {
-            const n = Number(payload);
-            return n > 0 ? n : 1;
-          })(),
-        },
-      };
-    case 'vim_delete_to_end_of_line':
-      return { type: 'vim_delete_to_end_of_line' };
-    case 'vim_change_to_end_of_line':
-      return { type: 'vim_change_to_end_of_line' };
     case 'vim_change_movement': {
       const parts = payload.split(':');
       return {
         type: 'vim_change_movement',
         payload: {
           movement: parts[0] as 'h' | 'j' | 'k' | 'l',
-          count: (() => {
-            const n = Number(parts[1]);
-            return n > 0 ? n : 1;
-          })(),
+          count: positiveCountOrOne(parts[1]),
         },
       };
     }
     default:
-      throw new Error(`Unknown action type: ${type}`);
+      return undefined;
   }
+}
+
+function parseAction(actionStr: string): TextBufferAction {
+  const [type, payload] = actionStr.split(':');
+
+  const actionType = type as VimCountActionType;
+  if (VIM_COUNT_ACTIONS.has(actionType)) {
+    return vimCountAction(actionType, payload);
+  }
+
+  if (NO_ARG_ACTIONS.has(type as TextBufferAction['type'])) {
+    return { type } as TextBufferAction;
+  }
+
+  const textFactory = TEXT_PAYLOAD_ACTIONS[type];
+  if (textFactory) {
+    return textFactory(payload || '');
+  }
+
+  const parameterized = parseParameterizedAction(type, payload);
+  if (parameterized) {
+    return parameterized;
+  }
+
+  throw new Error(`Unknown action type: ${type}`);
 }
 
 // Apply a sequence of actions and return final state

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
-
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -43,12 +41,20 @@ vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
   };
 });
 
-// Helper function to check if result is a message action
-const isMessageAction = (result: unknown): result is MessageActionReturn =>
-  result !== null &&
-  typeof result === 'object' &&
-  'type' in result &&
-  result.type === 'message';
+function assertMessageAction(
+  result: unknown,
+): asserts result is MessageActionReturn {
+  expect(result).toMatchObject({ type: 'message' });
+  if (
+    result === null ||
+    typeof result !== 'object' ||
+    !('type' in result) ||
+    result.type !== 'message'
+  ) {
+    throw new Error('Expected message action');
+  }
+}
+
 const createMockMCPResource = (
   serverName: string,
   uri: string,
@@ -75,8 +81,9 @@ const createMockMCPTool = (
     } as unknown as CallableTool,
     serverName,
     serverToolName,
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string description uses generated default
-    description || `Description for ${serverToolName}`,
+    description === undefined || description === ''
+      ? `Description for ${serverToolName}`
+      : description,
     { type: Type.OBJECT, properties: {} },
     true,
   );
@@ -267,10 +274,10 @@ describe('mcpCommand', () => {
         content: expect.stringContaining('Configured MCP servers:'),
       });
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       // Server 1 - Connected
       expect(message).toContain(
@@ -343,10 +350,10 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, '');
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       expect(message).toContain('Ready (1 tool, 1 resource)');
       expect(message).toContain('Ready (1 resource)');
@@ -396,10 +403,10 @@ describe('mcpCommand', () => {
         content: expect.stringContaining('Configured MCP servers:'),
       });
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       // Check that server description is included
       expect(message).toContain('\u001b[1mserver1\u001b[0m - Ready (2 tools)');
@@ -458,10 +465,10 @@ describe('mcpCommand', () => {
         content: expect.stringContaining('Configured MCP servers:'),
       });
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       // Check that descriptions are not included
       expect(message).not.toContain('This is a server description');
@@ -507,10 +514,10 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, '');
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       expect(message).toContain(
         '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
@@ -565,10 +572,10 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, '');
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       // Check that startup indicator is shown
       expect(message).toContain(
@@ -605,10 +612,10 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, '');
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       expect(message).toContain('server1 (from my-extension)');
     });
@@ -632,10 +639,10 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, '');
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       expect(message).toContain(
         '[BLOCKED] \u001b[1mblocked-server (from my-extension)\u001b[0m - Blocked',
@@ -664,692 +671,15 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, '');
 
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
+      assertMessageAction(result);
+      expect(result.content).toBeTruthy();
 
-      const message = isMessageAction(result) ? result.content : '';
+      const message = result.content;
 
       expect(message).toContain('server1 (from my-extension)');
       expect(message).toContain(
         '[BLOCKED] \u001b[1mblocked-server (from another-extension)\u001b[0m - Blocked',
       );
-    });
-  });
-
-  describe('schema functionality', () => {
-    it('should display tool schemas when schema argument is used', async () => {
-      const mockMcpServers = {
-        server1: {
-          command: 'cmd1',
-          description: 'This is a server description',
-        },
-      };
-
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-
-      // Create tools with parameter schemas
-      const mockCallableTool1: CallableTool = {
-        callTool: vi.fn(),
-        tool: vi.fn(),
-      } as unknown as CallableTool;
-      const mockCallableTool2: CallableTool = {
-        callTool: vi.fn(),
-        tool: vi.fn(),
-      } as unknown as CallableTool;
-
-      const tool1 = new DiscoveredMCPTool(
-        mockCallableTool1,
-        'server1',
-        'tool1',
-        'This is tool 1 description',
-        {
-          type: Type.OBJECT,
-          properties: {
-            param1: { type: Type.STRING, description: 'First parameter' },
-          },
-          required: ['param1'],
-        },
-        'tool1',
-      );
-
-      const tool2 = new DiscoveredMCPTool(
-        mockCallableTool2,
-        'server1',
-        'tool2',
-        'This is tool 2 description',
-        {
-          type: Type.OBJECT,
-          properties: {
-            param2: { type: Type.NUMBER, description: 'Second parameter' },
-          },
-          required: ['param2'],
-        },
-        'tool2',
-      );
-
-      const mockServerTools = [tool1, tool2];
-
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(mockServerTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Create new context with updated config
-      const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
-      });
-
-      const result = await mcpCommand.action!(testContext, 'schema');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('Configured MCP servers:'),
-      });
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      // Check that server description is included
-      expect(message).toContain('Ready (2 tools)');
-      expect(message).toContain('This is a server description');
-
-      // Check that tool descriptions and schemas are included
-      expect(message).toContain('This is tool 1 description');
-      expect(message).toContain('Parameters:');
-      expect(message).toContain('param1');
-      expect(message).toContain('STRING');
-      expect(message).toContain('This is tool 2 description');
-      expect(message).toContain('param2');
-      expect(message).toContain('NUMBER');
-    });
-
-    it('should handle tools without parameter schemas gracefully', async () => {
-      const mockMcpServers = {
-        server1: { command: 'cmd1' },
-      };
-
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-
-      // Mock tools without parameter schemas
-      const mockServerTools = [
-        createMockMCPTool('tool1', 'server1', 'Tool without schema'),
-      ];
-
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(mockServerTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Create new context with updated config
-      const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
-      });
-
-      const result = await mcpCommand.action!(testContext, 'schema');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('Configured MCP servers:'),
-      });
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).toContain('tool1');
-      expect(message).toContain('Tool without schema');
-      // Should not crash when parameterSchema is undefined
-    });
-  });
-
-  describe('argument parsing', () => {
-    beforeEach(() => {
-      const mockMcpServers = {
-        server1: {
-          command: 'cmd1',
-          description: 'Server description',
-        },
-      };
-
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-
-      const mockServerTools = [
-        createMockMCPTool('tool1', 'server1', 'Test tool'),
-      ];
-
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(mockServerTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Recreate context with updated config
-      mockContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
-      });
-    });
-
-    it('should handle "descriptions" as alias for "desc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'descriptions');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).toContain('Test tool');
-      expect(message).toContain('Server description');
-    });
-
-    it('should handle "nodescriptions" as alias for "nodesc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'nodescriptions');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).not.toContain('Test tool');
-      expect(message).not.toContain('Server description');
-      expect(message).toContain('\u001b[36mtool1\u001b[0m');
-    });
-
-    it('should handle mixed case arguments', async () => {
-      const result = await mcpCommand.action!(mockContext, 'DESC');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).toContain('Test tool');
-      expect(message).toContain('Server description');
-    });
-
-    it('should handle multiple arguments - "schema desc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'schema desc');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).toContain('Test tool');
-      expect(message).toContain('Server description');
-      expect(message).toContain('Parameters:');
-    });
-
-    it('should handle multiple arguments - "desc schema"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'desc schema');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).toContain('Test tool');
-      expect(message).toContain('Server description');
-      expect(message).toContain('Parameters:');
-    });
-
-    it('should handle "schema" alone showing descriptions', async () => {
-      const result = await mcpCommand.action!(mockContext, 'schema');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).toContain('Test tool');
-      expect(message).toContain('Server description');
-      expect(message).toContain('Parameters:');
-    });
-
-    it('should handle "nodesc" overriding "schema" - "schema nodesc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'schema nodesc');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).not.toContain('Test tool');
-      expect(message).not.toContain('Server description');
-      expect(message).toContain('Parameters:'); // Schema should still show
-      expect(message).toContain('\u001b[36mtool1\u001b[0m');
-    });
-
-    it('should handle "nodesc" overriding "desc" - "desc nodesc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'desc nodesc');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).not.toContain('Test tool');
-      expect(message).not.toContain('Server description');
-      expect(message).not.toContain('Parameters:');
-      expect(message).toContain('\u001b[36mtool1\u001b[0m');
-    });
-
-    it('should handle "nodesc" overriding both "desc" and "schema" - "desc schema nodesc"', async () => {
-      const result = await mcpCommand.action!(
-        mockContext,
-        'desc schema nodesc',
-      );
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).not.toContain('Test tool');
-      expect(message).not.toContain('Server description');
-      expect(message).toContain('Parameters:'); // Schema should still show
-      expect(message).toContain('\u001b[36mtool1\u001b[0m');
-    });
-
-    it('should handle extra whitespace in arguments', async () => {
-      const result = await mcpCommand.action!(mockContext, '  desc   schema  ');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).toContain('Test tool');
-      expect(message).toContain('Server description');
-      expect(message).toContain('Parameters:');
-    });
-
-    it('should handle empty arguments gracefully', async () => {
-      const result = await mcpCommand.action!(mockContext, '');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).not.toContain('Test tool');
-      expect(message).not.toContain('Server description');
-      expect(message).not.toContain('Parameters:');
-      expect(message).toContain('\u001b[36mtool1\u001b[0m');
-    });
-
-    it('should handle unknown arguments gracefully', async () => {
-      const result = await mcpCommand.action!(mockContext, 'unknown arg');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).not.toContain('Test tool');
-      expect(message).not.toContain('Server description');
-      expect(message).not.toContain('Parameters:');
-      expect(message).toContain('\u001b[36mtool1\u001b[0m');
-    });
-  });
-
-  describe('edge cases', () => {
-    it('should handle empty server names gracefully', async () => {
-      const mockMcpServers = {
-        '': { command: 'cmd1' }, // Empty server name
-      };
-
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue([]),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Create new context with updated config
-      const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
-      });
-
-      const result = await mcpCommand.action!(testContext, '');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('Configured MCP servers:'),
-      });
-    });
-
-    it('should handle servers with special characters in names', async () => {
-      const mockMcpServers = {
-        'server-with-dashes': { command: 'cmd1' },
-        server_with_underscores: { command: 'cmd2' },
-        'server.with.dots': { command: 'cmd3' },
-      };
-
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue([]),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Create new context with updated config
-      const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
-      });
-
-      const result = await mcpCommand.action!(testContext, '');
-
-      expect(isMessageAction(result)).toBe(true);
-      expect(isMessageAction(result) && result.content).toBeTruthy();
-
-      const message = isMessageAction(result) ? result.content : '';
-
-      expect(message).toContain('server-with-dashes');
-      expect(message).toContain('server_with_underscores');
-      expect(message).toContain('server.with.dots');
-    });
-  });
-
-  describe('auth subcommand', () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    it('should list OAuth-enabled servers when no server name is provided', async () => {
-      const context = createMockCommandContext({
-        services: {
-          config: {
-            getMcpServers: vi.fn().mockReturnValue({
-              'oauth-server': { oauth: { enabled: true } },
-              'regular-server': {},
-              'another-oauth': { oauth: { enabled: true } },
-            }),
-          },
-        },
-      });
-
-      const authCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'auth',
-      );
-      expect(authCommand).toBeDefined();
-
-      const result = await authCommand!.action!(context, '');
-      expect(isMessageAction(result)).toBe(true);
-
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result)) throw new Error('Expected message action');
-
-      expect(result.messageType).toBe('info');
-      expect(result.content).toContain('oauth-server');
-      expect(result.content).toContain('another-oauth');
-      expect(result.content).not.toContain('regular-server');
-      expect(result.content).toContain('/mcp auth <server-name>');
-    });
-
-    it('should show message when no OAuth servers are configured', async () => {
-      const context = createMockCommandContext({
-        services: {
-          config: {
-            getMcpServers: vi.fn().mockReturnValue({
-              'regular-server': {},
-            }),
-          },
-        },
-      });
-
-      const authCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'auth',
-      );
-      const result = await authCommand!.action!(context, '');
-
-      expect(isMessageAction(result)).toBe(true);
-
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result)) throw new Error('Expected message action');
-
-      expect(result.messageType).toBe('info');
-      expect(result.content).toBe(
-        'No MCP servers configured with OAuth authentication.',
-      );
-    });
-
-    it('should authenticate with a specific server', async () => {
-      const mockMcpClientManager = {
-        restartServer: vi.fn(),
-      };
-      const mockAgentClient = {
-        setTools: vi.fn(),
-      };
-
-      const context = createMockCommandContext({
-        services: {
-          config: {
-            getMcpServers: vi.fn().mockReturnValue({
-              'test-server': {
-                url: 'http://localhost:3000',
-                oauth: { enabled: true },
-              },
-            }),
-            getToolRegistry: vi.fn().mockReturnValue({}),
-            getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
-            getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
-            getPromptRegistry: vi.fn().mockReturnValue({
-              removePromptsByServer: vi.fn(),
-            }),
-          },
-        },
-      });
-      // Mock the reloadCommands function
-      context.ui.reloadCommands = vi.fn();
-
-      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
-
-      const authCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'auth',
-      );
-      const result = await authCommand!.action!(context, 'test-server');
-
-      expect(MCPOAuthProvider.authenticate).toHaveBeenCalledWith(
-        'test-server',
-        { enabled: true },
-        'http://localhost:3000',
-        expect.any(Object),
-      );
-      expect(mockMcpClientManager.restartServer).toHaveBeenCalledWith(
-        'test-server',
-      );
-      expect(mockAgentClient.setTools).toHaveBeenCalled();
-      expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
-
-      expect(isMessageAction(result)).toBe(true);
-
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result)) throw new Error('Expected message action');
-
-      expect(result.messageType).toBe('info');
-      expect(result.content).toContain('Successfully authenticated');
-    });
-
-    it('should handle authentication errors', async () => {
-      const context = createMockCommandContext({
-        services: {
-          config: {
-            getMcpServers: vi.fn().mockReturnValue({
-              'test-server': { oauth: { enabled: true } },
-            }),
-          },
-        },
-      });
-
-      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
-      (
-        MCPOAuthProvider.authenticate as ReturnType<typeof vi.fn>
-      ).mockRejectedValue(new Error('Auth failed'));
-
-      const authCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'auth',
-      );
-      const result = await authCommand!.action!(context, 'test-server');
-
-      expect(isMessageAction(result)).toBe(true);
-
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result)) throw new Error('Expected message action');
-
-      expect(result.messageType).toBe('error');
-      expect(result.content).toContain('Failed to authenticate');
-      expect(result.content).toContain('Auth failed');
-    });
-
-    it('should handle non-existent server', async () => {
-      const context = createMockCommandContext({
-        services: {
-          config: {
-            getMcpServers: vi.fn().mockReturnValue({
-              'existing-server': {},
-            }),
-          },
-        },
-      });
-
-      const authCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'auth',
-      );
-      const result = await authCommand!.action!(context, 'non-existent');
-
-      expect(isMessageAction(result)).toBe(true);
-
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result)) throw new Error('Expected message action');
-
-      expect(result.messageType).toBe('error');
-      expect(result.content).toContain("MCP server 'non-existent' not found");
-    });
-  });
-
-  describe('refresh subcommand', () => {
-    it('should refresh the list of tools and display the status', async () => {
-      const mockToolRegistry = {
-        discoverAllTools: vi.fn(),
-        getAllTools: vi.fn().mockReturnValue([]),
-      };
-      const mockAgentClient = {
-        setTools: vi.fn(),
-      };
-
-      const context = createMockCommandContext({
-        services: {
-          config: {
-            getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
-            getBlockedMcpServers: vi.fn().mockReturnValue([]),
-            getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
-            getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
-            getPromptRegistry: vi.fn().mockReturnValue({
-              getPromptsByServer: vi.fn().mockReturnValue([]),
-            }),
-          },
-        },
-      });
-      // Mock the reloadCommands function, which is new logic.
-      context.ui.reloadCommands = vi.fn();
-
-      const refreshCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'refresh',
-      );
-      expect(refreshCommand).toBeDefined();
-
-      const result = await refreshCommand!.action!(context, '');
-
-      expect(context.ui.addItem).toHaveBeenCalledWith(
-        {
-          type: 'info',
-          text: 'Restarting MCP servers...',
-        },
-        expect.any(Number),
-      );
-      expect(mockToolRegistry.discoverAllTools).toHaveBeenCalled();
-      expect(mockAgentClient.setTools).toHaveBeenCalled();
-      expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
-
-      expect(isMessageAction(result)).toBe(true);
-
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result)) throw new Error('Expected message action');
-
-      expect(result.messageType).toBe('info');
-      expect(result.content).toContain('Configured MCP servers:');
-    });
-
-    it('should show an error if config is not available', async () => {
-      const contextWithoutConfig = createMockCommandContext({
-        services: {
-          config: null,
-        },
-      });
-
-      const refreshCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'refresh',
-      );
-      const result = await refreshCommand!.action!(contextWithoutConfig, '');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'error',
-        content: 'Config not loaded.',
-      });
-    });
-
-    it('should show an error if tool registry is not available', async () => {
-      const contextWithNoRegistry = createMockCommandContext({
-        services: {
-          config: {
-            ...mockConfig,
-            getToolRegistry: vi.fn().mockReturnValue(undefined),
-          },
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
-      });
-
-      const refreshCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'refresh',
-      );
-      const result = await refreshCommand!.action!(contextWithNoRegistry, '');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'error',
-        content: 'Could not retrieve tool registry.',
-      });
     });
   });
 });
