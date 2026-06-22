@@ -24,6 +24,9 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { adjustForToolCallBoundary } from '../../compression/utils.js';
 
 function createToolCallAiMessage(callIds: string[]): IContent {
@@ -104,23 +107,42 @@ function buildRuntimeContext(
     provider: mockProviderAdapter,
     telemetry: mockTelemetryAdapter,
     tools: mockToolsView,
-    providerRuntime: {
+    providerRuntime: createProviderRuntimeContext({
       runtimeId: 'test-runtime',
-      settingsService: { get: vi.fn(() => undefined) } as never,
-      config: {} as never,
-    },
+      settingsService: new SettingsService(),
+    }),
   });
 }
 
-function buildMockProvider(summaryText: string) {
+function buildMockProvider(summaryText: string): RuntimeProvider {
   return {
     name: 'test-provider',
+    isDefault: true,
     generateChatCompletion: vi.fn(async function* () {
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: summaryText }],
       };
     }),
+    getModels: vi.fn(async () => []),
+    getDefaultModel: vi.fn(() => 'test-model'),
+    getServerTools: vi.fn(() => []),
+    invokeServerTool: vi.fn(async () => undefined),
+  };
+}
+
+/**
+ * Builds a fully-typed ContentGenerator stub for tests.
+ * `countTokens` resolves to a token count that drives compression decisions.
+ */
+function createMockContentGenerator(tokenCount = 100): ContentGenerator {
+  return {
+    generateContent: vi.fn(),
+    generateContentStream: vi.fn(),
+    countTokens: vi.fn(async () => ({
+      totalTokens: tokenCount,
+    })),
+    embedContent: vi.fn(),
   };
 }
 
@@ -134,12 +156,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
     historyService = new HistoryService();
     runtimeContext = buildRuntimeContext(historyService);
 
-    mockContentGenerator = {
-      generateContent: vi.fn(),
-      generateContentStream: vi.fn(),
-      countTokens: vi.fn().mockReturnValue(100),
-      embedContent: vi.fn(),
-    } as unknown as ContentGenerator;
+    mockContentGenerator = createMockContentGenerator();
   });
 
   describe('adjustForToolCallBoundary (unit via compression/utils)', () => {
@@ -224,10 +241,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       const summaryText =
         '<state_snapshot><overall_goal>Tool heavy</overall_goal></state_snapshot>';
       const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       const beforeCount = historyService.getCurated().length;
       await chat.performCompression('test-prompt-id');
@@ -262,10 +277,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       const summaryText =
         '<state_snapshot><overall_goal>Boundary preserve</overall_goal></state_snapshot>';
       const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       await chat.performCompression('test-prompt-id');
 
@@ -328,10 +341,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       const summaryText =
         '<state_snapshot><overall_goal>Continuous tools</overall_goal></state_snapshot>';
       const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       const beforeCount = historyService.getCurated().length;
       await chat.performCompression('test-prompt-id');
@@ -366,10 +377,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       const summaryText =
         '<state_snapshot><overall_goal>Long tool seq</overall_goal></state_snapshot>';
       const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       await chat.performCompression('test-prompt-id');
 
@@ -405,10 +414,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       const summaryText =
         '<state_snapshot><overall_goal>Issue 982</overall_goal></state_snapshot>';
       const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       await chat.performCompression('test-prompt-id');
 
@@ -437,10 +444,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       const summaryText =
         '<state_snapshot><overall_goal>Edge case</overall_goal></state_snapshot>';
       const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       // Should not throw - small history may or may not compress
       await expect(

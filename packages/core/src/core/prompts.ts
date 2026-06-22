@@ -30,43 +30,78 @@ const SESSION_STARTED_AT = new Date();
 const SESSION_STARTED_AT_LABEL = SESSION_STARTED_AT.toLocaleString();
 const logger = new DebugLogger('llxprt:core:prompts');
 
-// Singleton instance of PromptService
-let promptService: PromptService | null = null;
-let promptServiceInitialized = false;
-let promptServiceInitPromise: Promise<void> | null = null;
-
 /**
- * Initialize the PromptService singleton
+ * Owns the lifecycle of a single {@link PromptService} instance.
+ *
+ * Replaces the previous ad-hoc module-level singleton variables
+ * (`promptService`, `promptServiceInitialized`, `promptServiceInitPromise`).
+ * Encapsulating the state in a class makes initialization idempotent and
+ * concurrent-safe, and allows the manager to be reset or replaced in tests.
  */
-async function initializePromptService(): Promise<void> {
-  promptServiceInitPromise ??= (async () => {
+export class PromptServiceManager {
+  private service: PromptService | null = null;
+  private initPromise: Promise<void> | null = null;
+
+  /**
+   * Returns true once initialization has fully completed.
+   */
+  isInitialized(): boolean {
+    return this.service !== null && this.initPromise !== null;
+  }
+
+  /**
+   * Initializes the underlying PromptService exactly once. Concurrent calls
+   * share the same in-flight promise, so initialization is idempotent and
+   * safe under concurrent access.
+   */
+  initialize(): Promise<void> {
+    this.initPromise ??= this.doInitialize();
+    return this.initPromise;
+  }
+
+  private async doInitialize(): Promise<void> {
     const envDir = process.env.LLXPRT_PROMPTS_DIR;
     const baseDir =
       envDir !== undefined && envDir !== ''
         ? envDir
         : path.join(os.homedir(), '.llxprt', 'prompts');
-    promptService = new PromptService({
+    const instance = new PromptService({
       baseDir,
       debugMode: process.env.DEBUG === 'true',
     });
-    await promptService.initialize();
-    promptServiceInitialized = true;
-  })();
-  return promptServiceInitPromise;
+    await instance.initialize();
+    this.service = instance;
+  }
+
+  /**
+   * Returns the initialized PromptService, initializing it if necessary.
+   * The returned instance is guaranteed to be fully initialized.
+   */
+  async getService(): Promise<PromptService> {
+    await this.initialize();
+    return this.service!;
+  }
+
+  /**
+   * Resets the manager to its pre-initialization state.
+   *
+   * Intended for tests that need to re-initialize with a different prompts
+   * directory. Not part of the stable public API surface consumed by the
+   * rest of the codebase.
+   */
+  reset(): void {
+    this.service = null;
+    this.initPromise = null;
+  }
 }
 
 /**
- * Get the singleton PromptService instance (async)
+ * The default module-level manager instance backing the public prompt API.
  */
-async function getPromptService(): Promise<PromptService> {
-  if (!promptServiceInitialized) {
-    await initializePromptService();
-  }
-  return promptService!;
-}
+const promptServiceManager = new PromptServiceManager();
 
 export async function drainPromptInstallerNotices(): Promise<string[]> {
-  const service = await getPromptService();
+  const service = await promptServiceManager.getService();
   return service.consumeInstallerNotices();
 }
 
@@ -537,7 +572,7 @@ export async function getCoreSystemPromptAsync(
   model?: string,
   tools?: string[],
 ): Promise<string> {
-  const service = await getPromptService();
+  const service = await promptServiceManager.getService();
 
   const {
     userMemory,
@@ -572,7 +607,7 @@ export async function getCoreSystemPromptAsync(
  * Initialize the prompt system - call this early in application startup
  */
 export async function initializePromptSystem(): Promise<void> {
-  await initializePromptService();
+  await promptServiceManager.initialize();
 }
 
 /**
