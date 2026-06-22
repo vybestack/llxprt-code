@@ -163,15 +163,16 @@ describe('validateCompressionConfig', () => {
     expect(result.errors.length).toBeGreaterThan(0);
   });
 
-  it('collects multiple errors rather than failing fast', () => {
+  it('collects unrelated field errors with combined preserve errors', () => {
     const result = validateCompressionConfig({
-      tokenThreshold: Number.NaN,
-      preserveThreshold: 5,
-      topPreserveThreshold: -1,
+      tokenThreshold: 0.5,
+      preserveThreshold: 0.3,
+      topPreserveThreshold: 0.3,
       maxMessageCharsInPreserved: -10,
     } satisfies CompressionConfig);
     expect(result.valid).toBe(false);
-    // At least one error per invalid field.
-    expect(result.errors.length).toBeGreaterThanOrEqual(4);
+    expect(result.errors).toHaveLength(2);
+    expect(result.errors[0]).toContain('maxMessageCharsInPreserved');
+    expect(result.errors[1]).toContain('combined preserve');
   });
 });

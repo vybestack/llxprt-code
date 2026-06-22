@@ -38,6 +38,7 @@ describe('PromptServiceManager', () => {
     } else {
       process.env.LLXPRT_PROMPTS_DIR = originalPromptsDir;
     }
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('reports not initialized before initialize() is called', () => {

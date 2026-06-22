@@ -82,17 +82,21 @@ export function validateCompressionConfig(
     maxMessageCharsInPreserved,
   } = config;
 
-  if (!isFiniteFraction(tokenThreshold)) {
+  const tokenThresholdIsValid = isFiniteFraction(tokenThreshold);
+  const preserveThresholdIsValid = isFiniteFraction(preserveThreshold);
+  const topPreserveThresholdIsValid = isFiniteFraction(topPreserveThreshold);
+
+  if (!tokenThresholdIsValid) {
     errors.push(
       `tokenThreshold must be finite and in (0, 1); got ${tokenThreshold}`,
     );
   }
-  if (!isFiniteFraction(preserveThreshold)) {
+  if (!preserveThresholdIsValid) {
     errors.push(
       `preserveThreshold must be finite and in (0, 1); got ${preserveThreshold}`,
     );
   }
-  if (!isFiniteFraction(topPreserveThreshold)) {
+  if (!topPreserveThresholdIsValid) {
     errors.push(
       `topPreserveThreshold must be finite and in (0, 1); got ${topPreserveThreshold}`,
     );
@@ -107,10 +111,10 @@ export function validateCompressionConfig(
     );
   }
 
-  // Only enforce the combined invariant when individual thresholds are in range,
-  // otherwise the individual errors already explain the problem.
   if (
-    errors.length === 0 &&
+    tokenThresholdIsValid &&
+    preserveThresholdIsValid &&
+    topPreserveThresholdIsValid &&
     topPreserveThreshold + preserveThreshold >= tokenThreshold
   ) {
     errors.push(
