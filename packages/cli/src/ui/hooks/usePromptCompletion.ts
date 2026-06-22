@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -69,14 +67,11 @@ function shouldSkipPromptCompletion(
   isPromptCompletionEnabled: boolean,
   agentClient: AgentClient | undefined,
 ): boolean {
-  return (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    trimmedText.length < PROMPT_COMPLETION_MIN_LENGTH ||
-    !agentClient ||
-    isSlashCommand(trimmedText) ||
-    trimmedText.includes('@') ||
-    !isPromptCompletionEnabled
-  );
+  const tooShort = trimmedText.length < PROMPT_COMPLETION_MIN_LENGTH;
+  const noClient = !agentClient;
+  const isSpecialInput =
+    isSlashCommand(trimmedText) || trimmedText.includes('@');
+  return tooShort || noClient || isSpecialInput || !isPromptCompletionEnabled;
 }
 
 function buildPromptCompletionRequest(trimmedText: string): {

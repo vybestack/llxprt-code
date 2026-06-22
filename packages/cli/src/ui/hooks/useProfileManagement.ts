@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import { useCallback, useEffect, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
@@ -578,6 +576,7 @@ export const useProfileManagement = ({
 
   const dialogStates = useProfileDialogStates(appState);
   const dataStates = useProfileDataStates();
+  const { setActiveProfileName } = dataStates;
 
   // Initialize activeProfileName on mount from runtime diagnostics
   useEffect(() => {
@@ -585,13 +584,12 @@ export const useProfileManagement = ({
       const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
       const current = diagnostics.profileName;
       if (current) {
-        dataStates.setActiveProfileName(current);
+        setActiveProfileName(current);
       }
     } catch {
       // Ignore errors getting active profile on mount
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- dataStates setters are stable
-  }, [runtime]);
+  }, [runtime, setActiveProfileName]);
 
   const loadProfiles = useProfileLoader(
     runtime,

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 /**
  * Terminal setup utility for configuring Shift+Enter and Ctrl+Enter support.
  *
@@ -42,8 +40,6 @@ const execAsync = promisify(exec);
  * VS Code style JSON files that may contain comments.
  */
 function stripJsonComments(content: string): string {
-  // Remove single-line comments (// ...)
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   return content.replace(/^\s*\/\/.*$/gm, '');
 }
 

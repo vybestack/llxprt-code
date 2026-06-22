@@ -265,7 +265,7 @@ describe('buildSandboxEnvArgs', () => {
 describe('sandbox error message branding', () => {
   it('image-pull failure message contains discussions URL', async () => {
     const sandboxSource = fs.readFileSync(
-      path.join(__dirname, 'sandbox.ts'),
+      path.join(__dirname, 'sandbox-exec.ts'),
       'utf-8',
     );
     expect(sandboxSource).toContain(
@@ -275,7 +275,7 @@ describe('sandbox error message branding', () => {
 
   it('image-pull failure message does not contain gemini-cli-dev@google.com', () => {
     const sandboxSource = fs.readFileSync(
-      path.join(__dirname, 'sandbox.ts'),
+      path.join(__dirname, 'sandbox-exec.ts'),
       'utf-8',
     );
     expect(sandboxSource).not.toContain('gemini-cli-dev@google.com');
@@ -285,7 +285,7 @@ describe('sandbox error message branding', () => {
 describe('container environment variables - GIT_DISCOVERY', () => {
   it('GIT_DISCOVERY_ACROSS_FILESYSTEM=1 is set in container args', () => {
     const sandboxSource = fs.readFileSync(
-      path.join(__dirname, 'sandbox.ts'),
+      path.join(__dirname, 'sandbox-containers.ts'),
       'utf-8',
     );
     expect(sandboxSource).toContain('GIT_DISCOVERY_ACROSS_FILESYSTEM=1');

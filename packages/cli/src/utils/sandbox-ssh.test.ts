@@ -859,16 +859,16 @@ describe('setupSshAgentDockerLinux', () => {
       ) as never,
     );
     vi.spyOn(os, 'platform').mockReturnValue('linux');
-    // shouldUseCurrentUserInSandbox logs an INFO message via debugLogger.error on Debian/Ubuntu
-    const errorSpy = vi
-      .spyOn(DebugLogger.prototype, 'error')
+    // shouldUseCurrentUserInSandbox logs an INFO message via debugLogger.log on Debian/Ubuntu
+    const logSpy = vi
+      .spyOn(DebugLogger.prototype, 'log')
       .mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
 
     expect(result).toStrictEqual({});
     expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
-    expect(errorSpy).toHaveBeenCalledWith(
+    expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining('Defaulting to use current user UID/GID'),
     );
   });
