@@ -27,6 +27,7 @@ import {
   updateOAuthState,
   type GeminiAuthMode,
 } from './geminiAuth.js';
+import { throwIfAborted } from './geminiAbort.js';
 import { resolveModelList } from './geminiModels.js';
 import {
   invokeWebFetch,
@@ -332,18 +333,10 @@ export class GeminiProvider extends BaseProvider {
   private async resolveAuthWithAbortCheck(
     signal?: AbortSignal,
   ): Promise<{ authMode: GeminiAuthMode; token: string }> {
-    this.throwIfAborted(signal);
+    throwIfAborted(signal);
     const result = await this.determineBestAuth();
-    this.throwIfAborted(signal);
+    throwIfAborted(signal);
     return result;
-  }
-
-  private throwIfAborted(signal?: AbortSignal): void {
-    if (signal !== undefined && signal.aborted === true) {
-      const error = new Error('Operation was aborted');
-      error.name = 'AbortError';
-      throw error;
-    }
   }
 
   private async createGenAIClient(

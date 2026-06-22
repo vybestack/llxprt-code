@@ -71,18 +71,20 @@ export function isDeepSeekReasonerModel(model: string): boolean {
   return model.toLowerCase().includes('deepseek-reasoner');
 }
 
+const MISTRAL_KEYWORDS = [
+  'mistral',
+  'devstral',
+  'codestral',
+  'pixtral',
+  'ministral',
+];
+
 /**
  * Checks if a model name indicates a Mistral model.
  */
 export function isMistralModel(model: string): boolean {
   const lowerModel = model.toLowerCase();
-  return (
-    lowerModel.includes('mistral') ||
-    lowerModel.includes('devstral') ||
-    lowerModel.includes('codestral') ||
-    lowerModel.includes('pixtral') ||
-    lowerModel.includes('ministral')
-  );
+  return MISTRAL_KEYWORDS.some((keyword) => lowerModel.includes(keyword));
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   LANGUAGE_MAP,
   JAVASCRIPT_FAMILY_EXTENSIONS,
 } from '../../utils/ast-grep-utils.js';
+import { stringOrDefault } from '../../utils/stringCoalescing.js';
 import type { EnhancedDeclaration, Declaration } from './types.js';
 import { KEYWORDS, COMMENT_PREFIXES } from './constants.js';
 
@@ -22,8 +23,10 @@ export class ASTQueryExtractor {
     filePath: string,
     content: string,
   ): Promise<EnhancedDeclaration[]> {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: file extension may be empty string, should fall through to empty
-    const extension = (filePath.split('.').pop() || '').toLowerCase();
+    const extension = stringOrDefault(
+      filePath.split('.').pop(),
+      '',
+    ).toLowerCase();
     const lang = LANGUAGE_MAP[extension];
     if (!lang) {
       return this.fallbackExtraction(content, 'unknown');
@@ -220,9 +223,14 @@ export class ASTQueryExtractor {
   }
 
   private extractNameBasic(line: string): string {
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    const match = line.match(/(?:function|def|class)\s+(\w+)/);
-    return match ? match[1] : 'unknown';
+    // Use string scanning instead of regex to avoid polynomial backtracking.
+    for (const keyword of ['function', 'def', 'class']) {
+      const name = extractWordAfterKeyword(line, keyword);
+      if (name !== null) {
+        return name;
+      }
+    }
+    return 'unknown';
   }
 
   private extractSignatureBasic(line: string): string {
@@ -237,4 +245,19 @@ export class ASTQueryExtractor {
     }
     return '';
   }
+}
+
+/**
+ * Finds the identifier word immediately following a keyword in a line.
+ * Uses linear scanning to avoid regex backtracking.
+ * Returns null if the keyword is absent or no identifier follows it.
+ */
+function extractWordAfterKeyword(line: string, keyword: string): string | null {
+  const idx = line.indexOf(keyword);
+  if (idx === -1) {
+    return null;
+  }
+  const after = line.slice(idx + keyword.length);
+  const match = after.trimStart().match(/^[A-Za-z_$][\w$]*/);
+  return match ? match[0] : null;
 }

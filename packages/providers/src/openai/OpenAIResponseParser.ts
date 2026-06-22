@@ -156,7 +156,7 @@ function buildKimiToolCall(
     id: normalizeToHistoryToolId(rawId),
     name: toolName,
     parameters: processedParameters,
-  } as ToolCallBlock;
+  };
 }
 
 /**

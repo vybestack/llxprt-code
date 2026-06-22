@@ -13,7 +13,7 @@ import { findInFiles } from '@ast-grep/napi';
 import FastGlob from 'fast-glob';
 import { debugLogger } from '../../utils/debugLogger.js';
 import { LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';
-import type { SymbolReference } from './types.js';
+import type { SymbolReference, EnhancedDeclaration, Import } from './types.js';
 import { ASTConfig } from './ast-config.js';
 import { ASTQueryExtractor } from './ast-query-extractor.js';
 import { detectLanguage, extractImports } from './language-analysis.js';
@@ -82,42 +82,47 @@ export class CrossFileRelationshipAnalyzer {
         );
         const imports = extractImports(content, detectLanguage(filePath));
 
-        // Build symbol index
-        for (const decl of declarations) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!this.symbolIndex.has(decl.name)) {
-            this.symbolIndex.set(decl.name, []);
-          }
-
-          this.symbolIndex.get(decl.name)!.push({
-            type: 'definition',
-            filePath,
-            line: decl.line,
-            column: decl.column,
-          });
-        }
-
-        // Build import relationships
-        for (const imp of imports) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const item of imp.items) {
-            if (!this.symbolIndex.has(item)) {
-              this.symbolIndex.set(item, []);
-            }
-
-            this.symbolIndex.get(item)!.push({
-              type: 'import',
-              filePath,
-              line: imp.line,
-              column: 0, // Default column for imports
-              sourceModule: imp.module,
-            });
-          }
-        }
+        this.indexDeclarations(declarations, filePath);
+        this.indexImports(imports, filePath);
       } catch {
         // File read failed - skip this import
       }
     }
+  }
+
+  private indexDeclarations(
+    declarations: EnhancedDeclaration[],
+    filePath: string,
+  ): void {
+    for (const decl of declarations) {
+      this.addToSymbolIndex(decl.name, {
+        type: 'definition',
+        filePath,
+        line: decl.line,
+        column: decl.column,
+      });
+    }
+  }
+
+  private indexImports(imports: Import[], filePath: string): void {
+    for (const imp of imports) {
+      for (const item of imp.items) {
+        this.addToSymbolIndex(item, {
+          type: 'import',
+          filePath,
+          line: imp.line,
+          column: 0, // Default column for imports
+          sourceModule: imp.module,
+        });
+      }
+    }
+  }
+
+  private addToSymbolIndex(name: string, ref: SymbolReference): void {
+    if (!this.symbolIndex.has(name)) {
+      this.symbolIndex.set(name, []);
+    }
+    this.symbolIndex.get(name)!.push(ref);
   }
 
   /**
@@ -147,9 +152,9 @@ export class CrossFileRelationshipAnalyzer {
 
       await withTimeout(queryPromise, ASTConfig.FIND_RELATED_TIMEOUT_MS);
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Workspace-size guard is set inside async search callbacks before this await resumes.
-      if (workspaceTooLarge) return [];
-      if (references.length > 0) return references;
+      if (isWorkspaceTooLarge(workspaceTooLarge)) return [];
+      const found = collectFoundReferences(references);
+      if (found) return found;
     } catch (error) {
       logger.warn(
         `findRelatedSymbols failed or timed out for symbol '${symbolName}' in workspace '${workspacePath}' (lang: ${lang ?? 'mixed'})`,
@@ -258,7 +263,6 @@ export class CrossFileRelationshipAnalyzer {
     for (const file of files) {
       const extension = path.extname(file).substring(1);
       const fileLang = LANGUAGE_MAP[extension];
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       if (fileLang) {
         if (!filesByLanguage.has(fileLang)) {
           filesByLanguage.set(fileLang, new Set());
@@ -283,7 +287,6 @@ export class CrossFileRelationshipAnalyzer {
             matcher: { rule: { pattern: symbolName } },
           },
           (err, matches) => {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
             if (err !== null || matches.length === 0) {
               resolve();
               return;
@@ -380,4 +383,22 @@ export class CrossFileRelationshipAnalyzer {
       return false;
     }
   }
+}
+
+/**
+ * Returns the references array if non-empty, otherwise null.
+ * Extracted as a standalone function so TypeScript's control-flow analysis
+ * does not narrow the array length to 0 after cross-function mutation.
+ */
+function collectFoundReferences(
+  references: SymbolReference[],
+): SymbolReference[] | null {
+  return references.length > 0 ? references : null;
+}
+
+/**
+ * Extracted check to prevent TS control-flow narrowing of the mutated flag.
+ */
+function isWorkspaceTooLarge(flag: boolean): boolean {
+  return flag;
 }

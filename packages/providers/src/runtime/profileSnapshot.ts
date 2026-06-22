@@ -1,10 +1,8 @@
 /**
- * @license
- * Copyright 2025 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
+ * @plan:PLAN-20260603-ISSUE1584.P12
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-15
  */
-
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import {
   DebugLogger,
@@ -172,6 +170,30 @@ function getProfileEphemeralValue(
   return undefined;
 }
 
+/**
+ * Determine whether a profile ephemeral key should be skipped during snapshot
+ * collection. Internal settings are always skipped, and lower-precedence auth
+ * keys are skipped when a higher-precedence auth source is present.
+ */
+function isSkippableProfileKey(
+  key: string,
+  authState: { hasAuthKeyfile: boolean; hasAuthKeyName: boolean },
+): boolean {
+  if (isInternalSettingKey(key)) {
+    return true;
+  }
+  if (
+    key === 'auth-key' &&
+    (authState.hasAuthKeyfile || authState.hasAuthKeyName)
+  ) {
+    return true;
+  }
+  if (key === 'auth-keyfile' && authState.hasAuthKeyName) {
+    return true;
+  }
+  return false;
+}
+
 export function buildRuntimeProfileSnapshot(): Profile {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
   const snapshotConfig = config as RuntimeSnapshotConfig;
@@ -204,15 +226,8 @@ export function buildRuntimeProfileSnapshot(): Profile {
     ephemeralRecord['auth-key-name'] !== undefined &&
     ephemeralRecord['auth-key-name'] !== null;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const key of PROFILE_EPHEMERAL_KEYS) {
-    if (isInternalSettingKey(key)) {
-      continue;
-    }
-    if (key === 'auth-key' && (hasAuthKeyfile || hasAuthKeyName)) {
-      continue;
-    }
-    if (key === 'auth-keyfile' && hasAuthKeyName) {
+    if (isSkippableProfileKey(key, { hasAuthKeyfile, hasAuthKeyName })) {
       continue;
     }
 

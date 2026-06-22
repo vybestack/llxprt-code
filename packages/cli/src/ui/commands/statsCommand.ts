@@ -12,8 +12,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type { HistoryItemStats } from '../types.js';
 import { MessageType } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
@@ -23,418 +21,20 @@ import {
   CommandKind,
 } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
-import {
-  CodexUsageInfoSchema,
-  detectApiKeyProvider,
-  detectApiKeyProviderFromName,
-  fetchApiKeyQuota,
-  formatAllUsagePeriods,
-  formatCodexUsage,
-} from '@vybestack/llxprt-code-providers';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
+import { fetchAllQuotaInfo } from './statsQuota.js';
 import { formatSessionSection } from './formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../types/SessionRecordingMetadata.js';
 
-const logger = new DebugLogger('llxprt:cli:stats');
-
-/** Sort bucket names with 'default' first, then lexicographic. */
-function defaultFirstSort(a: string, b: string): number {
-  if (a === 'default') return -1;
-  if (b === 'default') return 1;
-  return a.localeCompare(b);
-}
-
-/**
- * Read API key from a keyfile path, handling tilde expansion
- */
-async function readKeyFile(filePath: string): Promise<string | null> {
-  try {
-    const expandedPath = filePath.startsWith('~')
-      ? path.join(os.homedir(), filePath.slice(1))
-      : filePath;
-
-    const resolvedPath = path.isAbsolute(expandedPath)
-      ? expandedPath
-      : path.resolve(process.cwd(), expandedPath);
-
-    const content = await fs.readFile(resolvedPath, 'utf-8');
-    const key = content.trim();
-    return key || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Resolve the API key for the current profile.
- * Checks ephemeral settings for auth-keyfile first, then falls back to auth-key.
- */
-async function resolveApiKey(
-  runtimeApi: ReturnType<typeof getRuntimeApi>,
-): Promise<string | null> {
-  // Try auth-keyfile first
-  const keyfilePath = runtimeApi.getEphemeralSetting('auth-keyfile');
-  if (typeof keyfilePath === 'string' && keyfilePath.trim() !== '') {
-    const key = await readKeyFile(keyfilePath.trim());
-    if (key) return key;
-  }
-
-  // Try auth-key directly
-  const authKey = runtimeApi.getEphemeralSetting('auth-key');
-  if (typeof authKey === 'string' && authKey.trim() !== '') {
-    return authKey.trim();
-  }
-
-  return null;
-}
-
-/**
- * Attempt to fetch quota for the current profile's API-key-based provider.
- * Returns null if the profile doesn't use a supported API-key provider.
- *
- * Detection strategy (in priority order):
- * 1. Ephemeral base-url setting (most specific, user override)
- * 2. Provider config base-url (from providerConfig) - uses kebab-case per PR #1491
- * 3. Base provider config base-url (from baseProviderConfig) - uses kebab-case per PR #1491
- * 4. Provider name detection (least specific, fallback only)
- */
-async function fetchApiKeyProviderQuota(
-  runtimeApi: ReturnType<typeof getRuntimeApi>,
-): Promise<{ provider: string; lines: string[] } | null> {
-  let provider: 'zai' | 'synthetic' | 'chutes' | 'kimi' | null = null;
-  let baseUrlForFetch: string | undefined;
-  const activeProviderName = runtimeApi.getActiveProviderName();
-
-  // Strategy 1: Check ephemeral base-url setting (highest priority)
-  const ephemeralBaseUrl = runtimeApi.getEphemeralSetting('base-url');
-  if (typeof ephemeralBaseUrl === 'string') {
-    provider = detectApiKeyProvider(ephemeralBaseUrl);
-    baseUrlForFetch = ephemeralBaseUrl;
-    if (provider) {
-      logger.debug(() => `Detected ${provider} from ephemeral base-url`);
-    }
-  }
-
-  // Strategy 2 & 3: If not found, try provider config base URLs
-  if (!provider && activeProviderName) {
-    const providerManager = runtimeApi.getCliProviderManager();
-    const providerInstance =
-      providerManager.getProviderByName(activeProviderName);
-    if (providerInstance) {
-      // Try providerConfig['base-url'] first (kebab-case per PR #1491)
-      const providerConfig = (
-        providerInstance as {
-          providerConfig?: { 'base-url'?: string };
-        }
-      ).providerConfig;
-      if (providerConfig) {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
-        const configBaseUrl = providerConfig['base-url']?.trim() || undefined;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (configBaseUrl) {
-          provider = detectApiKeyProvider(configBaseUrl);
-          baseUrlForFetch = configBaseUrl;
-          if (provider) {
-            logger.debug(
-              () => `Detected ${provider} from provider config base-url`,
-            );
-          }
-        }
-      }
-
-      // Try baseProviderConfig['base-url'] if still not found (kebab-case per PR #1491)
-      if (!provider) {
-        const baseProviderConfig = (
-          providerInstance as {
-            baseProviderConfig?: { 'base-url'?: string };
-          }
-        ).baseProviderConfig;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (baseProviderConfig) {
-          const baseConfigUrl =
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
-            baseProviderConfig['base-url']?.trim() || undefined;
-          if (baseConfigUrl) {
-            provider = detectApiKeyProvider(baseConfigUrl);
-            baseUrlForFetch = baseConfigUrl;
-            if (provider) {
-              logger.debug(
-                () => `Detected ${provider} from base provider config base-url`,
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Strategy 4: If still not found, try active provider name (fallback only)
-  if (!provider && activeProviderName) {
-    provider = detectApiKeyProviderFromName(activeProviderName);
-    // Note: baseUrlForFetch remains undefined for name-based detection
-    if (provider) {
-      logger.debug(() => `Detected ${provider} from active provider name`);
-    }
-  }
-
-  if (!provider) {
-    return null;
-  }
-
-  const apiKey = await resolveApiKey(runtimeApi);
-  if (!apiKey) {
-    logger.debug(
-      () => `Detected ${provider} provider but no API key available`,
-    );
-    return null;
-  }
-
-  return fetchApiKeyQuota(provider, apiKey, baseUrlForFetch);
-}
-
-function formatQuotaResetTime(resetTime: string): string {
-  try {
-    const reset = new Date(resetTime);
-    if (Number.isNaN(reset.getTime())) {
-      return resetTime;
-    }
-    const now = new Date();
-    const diffMs = reset.getTime() - now.getTime();
-    if (diffMs <= 0) {
-      return 'now';
-    }
-    const diffMin = Math.ceil(diffMs / 60000);
-    if (diffMin < 60) {
-      return `${diffMin}m`;
-    }
-    const diffHr = Math.floor(diffMin / 60);
-    const remainMin = diffMin % 60;
-    return remainMin > 0 ? `${diffHr}h ${remainMin}m` : `${diffHr}h`;
-  } catch {
-    return resetTime;
-  }
-}
-
-function formatGeminiQuotaLines(quotaData: Record<string, unknown>): string[] {
-  const buckets = quotaData.buckets;
-  if (!Array.isArray(buckets) || buckets.length === 0) {
-    return [];
-  }
-
-  const lines: string[] = [];
-  for (const bucket of buckets) {
-    const b = bucket as Record<string, unknown>;
-    const model = typeof b.modelId === 'string' ? b.modelId : 'unknown';
-    const tokenType = typeof b.tokenType === 'string' ? b.tokenType : 'tokens';
-    const remaining =
-      typeof b.remainingAmount === 'string' ? b.remainingAmount : '?';
-    const fraction =
-      typeof b.remainingFraction === 'number'
-        ? ` (${Math.round(b.remainingFraction * 100)}%)`
-        : '';
-    const resetStr =
-      typeof b.resetTime === 'string'
-        ? ` · resets in ${formatQuotaResetTime(b.resetTime)}`
-        : '';
-    lines.push(`  ${model} ${tokenType}: ${remaining}${fraction}${resetStr}`);
-  }
-  return lines;
-}
-
-type UsageMap = Map<string, Record<string, unknown>>;
-
-function formatAnthropicLines(anthropicUsageInfo: UsageMap): string[] {
-  if (anthropicUsageInfo.size === 0) return [];
-  const anthropicLines: string[] = [];
-  const sortedBuckets = Array.from(anthropicUsageInfo.keys()).sort(
-    defaultFirstSort,
-  );
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  for (const bucket of sortedBuckets) {
-    const usageInfo = anthropicUsageInfo.get(bucket)!;
-    const lines = formatAllUsagePeriods(usageInfo);
-    if (lines.length > 0) {
-      if (anthropicUsageInfo.size > 1) {
-        anthropicLines.push(`### Bucket: ${bucket}\n`);
-      }
-      anthropicLines.push(...lines);
-      anthropicLines.push('');
-    }
-  }
-  if (anthropicLines[anthropicLines.length - 1] === '') {
-    anthropicLines.pop();
-  }
-  return anthropicLines;
-}
-
-function formatCodexLines(codexUsageInfo: UsageMap): string[] {
-  if (codexUsageInfo.size === 0) return [];
-  const codexLines: string[] = [];
-  const sortedBuckets = Array.from(codexUsageInfo.keys()).sort(
-    defaultFirstSort,
-  );
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  for (const bucket of sortedBuckets) {
-    const usageInfo = codexUsageInfo.get(bucket)!;
-    const parsed = CodexUsageInfoSchema.safeParse(usageInfo);
-    if (!parsed.success) {
-      logger.warn(
-        `Invalid Codex usage info for bucket ${bucket}:`,
-        parsed.error,
-      );
-      continue;
-    }
-    const lines = formatCodexUsage(parsed.data);
-    if (lines.length > 0) {
-      if (codexUsageInfo.size > 1) {
-        codexLines.push(`### Bucket: ${bucket}\n`);
-      }
-      codexLines.push(...lines);
-      codexLines.push('');
-    }
-  }
-  if (codexLines[codexLines.length - 1] === '') {
-    codexLines.pop();
-  }
-  return codexLines;
-}
-
-function formatGeminiLines(geminiUsageInfo: UsageMap): string[] {
-  if (geminiUsageInfo.size === 0) return [];
-  const geminiLines: string[] = [];
-  const sortedBuckets = Array.from(geminiUsageInfo.keys()).sort(
-    defaultFirstSort,
-  );
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  for (const bucket of sortedBuckets) {
-    const quotaData = geminiUsageInfo.get(bucket)!;
-    const lines = formatGeminiQuotaLines(quotaData);
-    if (lines.length > 0) {
-      if (geminiUsageInfo.size > 1) {
-        geminiLines.push(`### Bucket: ${bucket}\n`);
-      }
-      geminiLines.push(...lines);
-      geminiLines.push('');
-    }
-  }
-  if (geminiLines[geminiLines.length - 1] === '') {
-    geminiLines.pop();
-  }
-  return geminiLines;
-}
-
-async function fetchOAuthQuotaLines(
-  oauthManager: NonNullable<
-    ReturnType<ReturnType<typeof getRuntimeApi>['getCliOAuthManager']>
-  >,
-): Promise<string[]> {
-  const output: string[] = [];
-
-  const [anthropicResult, codexResult, geminiResult] = await Promise.allSettled(
-    [
-      oauthManager.getAllAnthropicUsageInfo(),
-      oauthManager.getAllCodexUsageInfo(),
-      oauthManager.getAllGeminiUsageInfo(),
-    ],
-  );
-
-  if (anthropicResult.status === 'rejected') {
-    logger.warn(
-      'Failed to fetch Anthropic usage info:',
-      anthropicResult.reason,
-    );
-  }
-  if (codexResult.status === 'rejected') {
-    logger.warn('Failed to fetch Codex usage info:', codexResult.reason);
-  }
-
-  const anthropicUsageInfo: UsageMap =
-    anthropicResult.status === 'fulfilled'
-      ? anthropicResult.value
-      : new Map<string, Record<string, unknown>>();
-  const codexUsageInfo: UsageMap =
-    codexResult.status === 'fulfilled'
-      ? codexResult.value
-      : new Map<string, Record<string, unknown>>();
-  const geminiUsageInfo: UsageMap =
-    geminiResult.status === 'fulfilled'
-      ? geminiResult.value
-      : new Map<string, Record<string, unknown>>();
-
-  const anthropicLines = formatAnthropicLines(anthropicUsageInfo);
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  if (anthropicLines.length > 0) {
-    output.push('## Anthropic Quota Information\n');
-    output.push(...anthropicLines);
-  }
-
-  const codexLines = formatCodexLines(codexUsageInfo);
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  if (codexLines.length > 0) {
-    if (output.length > 0) {
-      output.push('');
-    }
-    output.push('## Codex Quota Information\n');
-    output.push(...codexLines);
-  }
-
-  const geminiLines = formatGeminiLines(geminiUsageInfo);
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  if (geminiLines.length > 0) {
-    if (output.length > 0) {
-      output.push('');
-    }
-    output.push('## Gemini Quota Information\n');
-    output.push(...geminiLines);
-  }
-
-  return output;
-}
-
-/**
- * Fetch all available quota information for the default stats view.
- * Returns formatted lines ready for display, or empty array if no quota available.
- */
-async function fetchAllQuotaInfo(
-  runtimeApi: ReturnType<typeof getRuntimeApi>,
-): Promise<string[]> {
-  const output: string[] = [];
-  const oauthManager = runtimeApi.getCliOAuthManager();
-
-  try {
-    // 1. Fetch OAuth provider quotas (Anthropic + Codex + Gemini)
-    if (oauthManager) {
-      const oauthLines = await fetchOAuthQuotaLines(oauthManager);
-      output.push(...oauthLines);
-    }
-
-    // 2. Fetch API-key provider quota (Z.ai, Synthetic, Chutes, Kimi)
-    const apiKeyQuotaResult = await fetchApiKeyProviderQuota(runtimeApi);
-    if (apiKeyQuotaResult) {
-      if (output.length > 0) {
-        output.push('');
-      }
-      output.push(`## ${apiKeyQuotaResult.provider} Quota Information\n`);
-      output.push(...apiKeyQuotaResult.lines);
-    }
-  } catch (error) {
-    logger.warn(
-      'Error fetching quota info for default stats view:',
-      error instanceof Error ? error.message : String(error),
-    );
-  }
-
-  return output;
-}
-
 async function defaultSessionView(context: CommandContext): Promise<void> {
   const now = new Date();
-  const { sessionStartTime } = context.session.stats;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Runtime stats may be incomplete before session initialization.
-  if (sessionStartTime == null) {
+  // Runtime stats may be incomplete before session initialization, so the
+  // declared non-null type is narrowed at the boundary to reflect that
+  // the value can legitimately be missing.
+  const rawStartTime = context.session.stats.sessionStartTime as
+    | Date
+    | null
+    | undefined;
+  if (rawStartTime == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -444,7 +44,7 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
     );
     return;
   }
-  const wallDuration = now.getTime() - sessionStartTime.getTime();
+  const wallDuration = now.getTime() - rawStartTime.getTime();
 
   // Fetch quota information
   const runtimeApi = getRuntimeApi();
@@ -462,6 +62,157 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
   // @plan PLAN-20260214-SESSIONBROWSER.P24
   const _sessionMetadata: SessionRecordingMetadata | null = null;
   await formatSessionSection(_sessionMetadata);
+}
+
+async function quotaSubcommandAction(context: CommandContext): Promise<void> {
+  const runtimeApi = getRuntimeApi();
+
+  try {
+    const quotaLines = await fetchAllQuotaInfo(runtimeApi);
+
+    if (quotaLines.length === 0) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'No quota information available. Supported providers: Anthropic (OAuth), Codex (OAuth), Gemini (Google OAuth), Z.ai, Synthetic, Chutes, Kimi.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: quotaLines.join('\n'),
+      },
+      Date.now(),
+    );
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: `Failed to retrieve quota information: ${errorMessage}`,
+      },
+      Date.now(),
+    );
+  }
+}
+
+function formatBucketLastUsed(stats: { lastUsed?: number }): string {
+  if (
+    stats.lastUsed != null &&
+    stats.lastUsed !== 0 &&
+    !Number.isNaN(stats.lastUsed)
+  ) {
+    return new Date(stats.lastUsed).toISOString().split('T')[0];
+  }
+  return 'Never';
+}
+
+function formatBucketLines(
+  bucket: string,
+  stats: {
+    requestCount: number;
+    percentage: number;
+    lastUsed?: number;
+  },
+): string[] {
+  return [
+    `- ${bucket}:`,
+    `  - ${stats.requestCount} requests (${stats.percentage.toFixed(1)}%)`,
+    `  - Last used: ${formatBucketLastUsed(stats)}`,
+  ];
+}
+
+async function collectProviderBuckets(
+  tokenStore: NonNullable<
+    NonNullable<CommandContext['services']['oauthManager']>['getTokenStore']
+  > extends () => infer T
+    ? T
+    : never,
+  provider: string,
+  output: string[],
+): Promise<void> {
+  const buckets = await tokenStore.listBuckets(provider);
+  if (buckets.length === 0) {
+    return;
+  }
+
+  output.push(`### ${provider}\n`);
+
+  for (const bucket of buckets) {
+    const stats = await tokenStore.getBucketStats(provider, bucket);
+    if (stats) {
+      output.push(...formatBucketLines(bucket, stats));
+    }
+  }
+
+  output.push('');
+}
+
+async function bucketsSubcommandAction(
+  context: CommandContext,
+  _args: string,
+): Promise<void> {
+  const { oauthManager } = context.services;
+
+  if (!oauthManager) {
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: 'OAuth is not available or configured',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  try {
+    const tokenStore = oauthManager.getTokenStore();
+    const supportedProviders = oauthManager.getSupportedProviders();
+    const output: string[] = ['## OAuth Bucket Statistics\n'];
+    let hasAnyBuckets = false;
+
+    for (const provider of supportedProviders) {
+      const beforeLength = output.length;
+      await collectProviderBuckets(tokenStore, provider, output);
+      if (output.length > beforeLength) {
+        hasAnyBuckets = true;
+      }
+    }
+
+    if (!hasAnyBuckets) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'No OAuth buckets available',
+        },
+        Date.now(),
+      );
+      return;
+    }
+
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: output.join('\n'),
+      },
+      Date.now(),
+    );
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: `Failed to retrieve bucket statistics: ${errorMessage}`,
+      },
+      Date.now(),
+    );
+  }
 }
 
 export const statsCommand: SlashCommand = {
@@ -529,130 +280,13 @@ export const statsCommand: SlashCommand = {
       description:
         'Show quota/usage information for OAuth providers (Anthropic, Codex) and API-key providers (Z.ai, Synthetic, Chutes, Kimi).',
       kind: CommandKind.BUILT_IN,
-      action: async (context: CommandContext) => {
-        const runtimeApi = getRuntimeApi();
-
-        try {
-          const quotaLines = await fetchAllQuotaInfo(runtimeApi);
-
-          if (quotaLines.length === 0) {
-            context.ui.addItem(
-              {
-                type: MessageType.INFO,
-                text: 'No quota information available. Supported providers: Anthropic (OAuth), Codex (OAuth), Gemini (Google OAuth), Z.ai, Synthetic, Chutes, Kimi.',
-              },
-              Date.now(),
-            );
-            return;
-          }
-
-          context.ui.addItem(
-            {
-              type: MessageType.INFO,
-              text: quotaLines.join('\n'),
-            },
-            Date.now(),
-          );
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          context.ui.addItem(
-            {
-              type: MessageType.ERROR,
-              text: `Failed to retrieve quota information: ${errorMessage}`,
-            },
-            Date.now(),
-          );
-        }
-      },
+      action: quotaSubcommandAction,
     },
     {
       name: 'buckets',
       description: 'Show OAuth bucket usage statistics.',
       kind: CommandKind.BUILT_IN,
-      action: async (context: CommandContext, _args: string) => {
-        const { oauthManager } = context.services;
-
-        if (!oauthManager) {
-          context.ui.addItem(
-            {
-              type: MessageType.INFO,
-              text: 'OAuth is not available or configured',
-            },
-            Date.now(),
-          );
-          return;
-        }
-
-        try {
-          const tokenStore = oauthManager.getTokenStore();
-          const supportedProviders = oauthManager.getSupportedProviders();
-          const output: string[] = ['## OAuth Bucket Statistics\n'];
-          let hasAnyBuckets = false;
-
-          for (const provider of supportedProviders) {
-            const buckets = await tokenStore.listBuckets(provider);
-
-            if (buckets.length === 0) {
-              continue;
-            }
-
-            hasAnyBuckets = true;
-            output.push(`### ${provider}\n`);
-
-            for (const bucket of buckets) {
-              const stats = await tokenStore.getBucketStats(provider, bucket);
-
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (stats) {
-                const lastUsedStr =
-                  stats.lastUsed != null &&
-                  stats.lastUsed !== 0 &&
-                  !Number.isNaN(stats.lastUsed)
-                    ? new Date(stats.lastUsed).toISOString().split('T')[0]
-                    : 'Never';
-
-                output.push(`- ${bucket}:`);
-                output.push(
-                  `  - ${stats.requestCount} requests (${stats.percentage.toFixed(1)}%)`,
-                );
-                output.push(`  - Last used: ${lastUsedStr}`);
-              }
-            }
-
-            output.push('');
-          }
-
-          if (!hasAnyBuckets) {
-            context.ui.addItem(
-              {
-                type: MessageType.INFO,
-                text: 'No OAuth buckets available',
-              },
-              Date.now(),
-            );
-            return;
-          }
-
-          context.ui.addItem(
-            {
-              type: MessageType.INFO,
-              text: output.join('\n'),
-            },
-            Date.now(),
-          );
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          context.ui.addItem(
-            {
-              type: MessageType.ERROR,
-              text: `Failed to retrieve bucket statistics: ${errorMessage}`,
-            },
-            Date.now(),
-          );
-        }
-      },
+      action: bucketsSubcommandAction,
     },
     {
       name: 'lb',

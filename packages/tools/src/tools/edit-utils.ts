@@ -4,12 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IToolHost } from '../interfaces/index.js';
+import * as path from 'path';
+import process from 'node:process';
+import type {
+  IIdeService,
+  ILspService,
+  IToolHost,
+  IToolMessageBus,
+} from '../interfaces/index.js';
+import type { ModifyContext } from './modifiable-tool.js';
+import { isNodeError } from '../utils/errors.js';
 import { EmojiFilter } from '../utils/EmojiFilter.js';
 import { ReadFileTool } from './read-file.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import type { EditToolParams } from './edit.js';
 import { fuzzyReplace } from '../utils/fuzzy-replacer.js';
+import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 /**
  * Computes the character offset for the start of a 1-based line number
@@ -126,12 +137,18 @@ export function applyLineGuardedReplacement(
  * Gets emoji filter instance based on configuration
  */
 export function getEmojiFilter(host: IToolHost): EmojiFilter {
-  // Get emojifilter from ephemeral settings or default to 'auto'
-  const mode = host.getEphemeralSettings?.().emojifilter as
-    | 'allowed'
-    | 'auto'
-    | 'warn'
-    | 'error';
+  // Get emojifilter from ephemeral settings or default to 'auto'.
+  // IToolHost types getEphemeralSettings() as required, but some partial
+  // host implementations (e.g. test fakes, legacy adapters) may omit it at
+  // runtime, so validate at this boundary before dereferencing.
+  const maybeHost = host as unknown as {
+    getEphemeralSettings?: () => Record<string, unknown>;
+  };
+  const settings =
+    typeof maybeHost.getEphemeralSettings === 'function'
+      ? maybeHost.getEphemeralSettings()
+      : {};
+  const mode = settings.emojifilter as 'allowed' | 'auto' | 'warn' | 'error';
 
   // Map auto to warn for file operations (we want warnings when filtering files)
   let filterMode: 'allowed' | 'warn' | 'error';
@@ -360,4 +377,392 @@ export function validateEditState(
     };
   }
   return undefined;
+}
+
+/**
+ * Reads a text file via the host's file-system service when available,
+ * falling back to `node:fs/promises` otherwise.
+ */
+export async function readTextFileViaHost(
+  host: IToolHost,
+  filePath: string,
+): Promise<string> {
+  const fileSystemService = host.getFileSystemService?.();
+  if (fileSystemService !== undefined) {
+    return fileSystemService.readTextFile(filePath);
+  }
+  // Defer import to keep this module side-effect free for callers that only
+  // use the pure helpers above.
+  const fs = await import('node:fs/promises');
+  return fs.readFile(filePath, 'utf8');
+}
+
+function isNonNullObject(value: unknown): value is object {
+  return typeof value === 'object' && value !== null;
+}
+
+const MESSAGE_BUS_KEYS = [
+  'requestConfirmation',
+  'publishPolicyUpdate',
+  'publish',
+  'subscribe',
+] as const;
+
+const IDE_SERVICE_KEYS = [
+  'applyDiff',
+  'openDiff',
+  'getConnectionStatus',
+] as const;
+
+const LSP_SERVICE_KEYS = [
+  'waitForDiagnostics',
+  'getDiagnostics',
+  'getLspConfig',
+] as const;
+
+/** Type guard matching objects shaped like {@link IToolMessageBus}. */
+export function hasMessageBusShape(value: unknown): value is IToolMessageBus {
+  return isNonNullObject(value) && MESSAGE_BUS_KEYS.some((k) => k in value);
+}
+
+/** Type guard matching objects shaped like {@link IIdeService}. */
+export function hasIdeServiceShape(value: unknown): value is IIdeService {
+  return isNonNullObject(value) && IDE_SERVICE_KEYS.some((k) => k in value);
+}
+
+/** Type guard matching objects shaped like {@link ILspService}. */
+export function hasLspServiceShape(value: unknown): value is ILspService {
+  return isNonNullObject(value) && LSP_SERVICE_KEYS.some((k) => k in value);
+}
+
+/**
+ * Normalizes an opaque IDE connection status value into one of the canonical
+ * string states.
+ */
+export function toIdeConnectionStatus(
+  status: unknown,
+): 'connected' | 'disconnected' | 'connecting' {
+  if (typeof status === 'string') {
+    return status === 'connected' || status === 'connecting'
+      ? status
+      : 'disconnected';
+  }
+  if (typeof status === 'object' && status !== null && 'status' in status) {
+    return toIdeConnectionStatus((status as { status?: unknown }).status);
+  }
+  return 'disconnected';
+}
+
+/** Creates a minimal {@link IToolHost} used as a default argument fallback. */
+export function createDefaultToolHost(): IToolHost {
+  return {
+    getTargetDir: () => process.cwd(),
+    getWorkspaceRoots: () => [path.parse(process.cwd()).root],
+    getApprovalMode: () => 'auto',
+    setApprovalMode: () => {},
+    isInteractive: () => false,
+    hasFeatureFlag: () => false,
+    getFileService: () => ({
+      shouldGitIgnoreFile: () => false,
+      shouldLlxprtIgnoreFile: () => false,
+      filterFiles: (paths: string[]) => paths,
+    }),
+    getFileFilteringOptions: () => ({
+      respectGitIgnore: true,
+      respectLlxprtIgnore: true,
+    }),
+    getFileExclusions: () => [],
+    getReadManyFilesExclusions: () => [],
+    getFileFilteringRespectLlxprtIgnore: () => true,
+    getLlxprtIgnoreFilePath: () => null,
+    recordFileRead: () => {},
+    getLlxprtIgnorePatterns: () => [],
+    getEphemeralSettings: () => ({}),
+    getDebugMode: () => false,
+  };
+}
+
+/** Returns the working directory for a host, falling back to cwd. */
+export function getTargetDirCompat(host: IToolHost): string {
+  return host.getTargetDir();
+}
+
+/** Resolves workspace roots from a host with optional legacy accessors. */
+export function getWorkspaceRootsCompat(host: IToolHost): string[] {
+  const maybeHost = host as unknown as {
+    getWorkspaceRoots?: () => string[];
+    getWorkspaceContext?: () => { getDirectories?: () => string[] };
+    getTargetDir?: () => string;
+  };
+  return (
+    maybeHost.getWorkspaceContext?.().getDirectories?.() ??
+    maybeHost.getWorkspaceRoots?.() ?? [
+      maybeHost.getTargetDir?.() ?? process.cwd(),
+    ]
+  );
+}
+
+type LegacyIdeClient = {
+  openDiff?: (
+    filePath: string,
+    content?: string,
+  ) => Promise<{ status: 'accepted' | 'rejected'; content?: string }>;
+  getConnectionStatus?: () => unknown;
+};
+
+/**
+ * Builds an {@link IIdeService} adapter from a host's legacy IDE client when
+ * present.
+ */
+export function getLegacyIdeService(host: IToolHost): IIdeService | undefined {
+  const maybeHost = host as unknown as {
+    getIdeMode?: () => boolean;
+    getIdeClient?: () => unknown;
+  };
+  if (
+    typeof maybeHost.getIdeMode !== 'function' ||
+    typeof maybeHost.getIdeClient !== 'function'
+  ) {
+    return undefined;
+  }
+  const getLegacyIdeClient = (): LegacyIdeClient | undefined => {
+    if (maybeHost.getIdeMode?.() !== true) {
+      return undefined;
+    }
+    const ideClient = maybeHost.getIdeClient?.();
+    if (
+      typeof ideClient !== 'object' ||
+      ideClient === null ||
+      !('openDiff' in ideClient)
+    ) {
+      return undefined;
+    }
+    return ideClient as LegacyIdeClient;
+  };
+  return {
+    applyDiff: async ({ filePath, diff }) => {
+      const legacyIdeClient = getLegacyIdeClient();
+      if (legacyIdeClient?.openDiff === undefined) {
+        return { status: 'rejected', content: undefined };
+      }
+      const result = await legacyIdeClient.openDiff(filePath, diff);
+      return result.status === 'accepted'
+        ? { status: 'accepted', content: result.content }
+        : { status: 'rejected', content: undefined };
+    },
+    getConnectionStatus: () =>
+      toIdeConnectionStatus(getLegacyIdeClient()?.getConnectionStatus?.()),
+    openDiff: async ({ filePath, newContent }) => {
+      await getLegacyIdeClient()?.openDiff?.(filePath, newContent);
+    },
+  };
+}
+
+/**
+ * Builds an {@link ILspService} adapter from a host's legacy LSP client when
+ * present.
+ */
+export function getLegacyLspService(host: IToolHost): ILspService | undefined {
+  const maybeHost = host as unknown as {
+    getLspServiceClient?: () => unknown;
+    getLspConfig?: () => unknown;
+  };
+  const lspClient = maybeHost.getLspServiceClient?.();
+  if (typeof lspClient !== 'object' || lspClient === null) {
+    return undefined;
+  }
+  return {
+    getDiagnostics: () => [],
+    waitForDiagnostics: async (filePath, _timeout) => {
+      const isAlive = (lspClient as { isAlive?: () => boolean }).isAlive?.();
+      if (isAlive !== true) {
+        return [];
+      }
+      const checkFile = (
+        lspClient as {
+          checkFile?: (
+            filePath: string,
+            signal?: AbortSignal,
+          ) => Promise<unknown>;
+        }
+      ).checkFile;
+      if (typeof checkFile !== 'function') {
+        return [];
+      }
+      const diagnostics = await checkFile.call(lspClient, filePath);
+      return Array.isArray(diagnostics) ? diagnostics : [];
+    },
+    getLspConfig: () =>
+      maybeHost.getLspConfig?.() as ReturnType<ILspService['getLspConfig']>,
+  };
+}
+
+/** Resolves the absolute file path from edit params, preferring absolute_path. */
+export function resolveEditFilePath(params: EditToolParams): string {
+  return stringOrDefault(
+    params.absolute_path,
+    stringOrDefault(params.file_path, ''),
+  );
+}
+
+/**
+ * Builds the {@link ModifyContext} used by the Edit tool, parameterized by a
+ * `readTextFile` accessor so it can be reused by both the tool and its
+ * invocation.
+ */
+export function createEditModifyContext(
+  readTextFile: (filePath: string) => Promise<string>,
+): ModifyContext<EditToolParams> {
+  return {
+    getFilePath: (params: EditToolParams) => resolveEditFilePath(params),
+    getCurrentContent: async (params: EditToolParams): Promise<string> => {
+      const filePath = resolveEditFilePath(params);
+      try {
+        return await readTextFile(filePath);
+      } catch (err) {
+        if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
+        return '';
+      }
+    },
+    getProposedContent: async (params: EditToolParams): Promise<string> => {
+      const filePath = resolveEditFilePath(params);
+      try {
+        const raw = await readTextFile(filePath);
+        const currentContent = raw.replace(/\r\n/g, '\n');
+
+        const replaceLine = params.replaceBeginLineNumber;
+
+        if (
+          replaceLine !== undefined &&
+          replaceLine > 0 &&
+          params.old_string !== ''
+        ) {
+          // When replaceBeginLineNumber is set, only replace occurrences
+          // whose start falls on the specified line.
+          const expectedReplacements = params.expected_replacements ?? 1;
+          const eligibleCount = countLineGuardedOccurrences(
+            currentContent,
+            params.old_string,
+            replaceLine,
+          );
+
+          // If eligible count doesn't match expected_replacements, execute()
+          // would reject with a mismatch error. Return unchanged content to
+          // avoid presenting a partial proposal that would never be written.
+          if (eligibleCount !== expectedReplacements) {
+            return currentContent;
+          }
+
+          return applyLineGuardedReplacement(
+            currentContent,
+            params.old_string,
+            params.new_string,
+            expectedReplacements,
+            replaceLine,
+          );
+        }
+
+        const isNewFile = params.old_string === '' && currentContent === '';
+        return applyReplacement(
+          currentContent,
+          params.old_string,
+          params.new_string,
+          isNewFile,
+          params.expected_replacements ?? 1,
+        );
+      } catch (err) {
+        if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
+        // File does not exist: if old_string is empty, this is a new-file creation.
+        if (params.old_string === '') {
+          return params.new_string;
+        }
+        return '';
+      }
+    },
+    createUpdatedParams: (
+      oldContent: string,
+      modifiedProposedContent: string,
+      originalParams: EditToolParams,
+    ): EditToolParams => ({
+      ...originalParams,
+      ai_proposed_content: oldContent,
+      old_string: oldContent,
+      new_string: modifiedProposedContent,
+      modified_by_user: true,
+    }),
+  };
+}
+
+/** Pure validation of Edit tool parameters against the given workspace roots. */
+export function validateEditToolParams(
+  params: EditToolParams,
+  workspaceRoots: string[],
+): string | null {
+  const filePath = stringOrDefault(
+    params.absolute_path,
+    stringOrDefault(params.file_path, ''),
+  );
+
+  if (filePath.trim() === '') {
+    return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
+  }
+
+  if (!path.isAbsolute(filePath)) {
+    return `File path must be absolute: ${filePath}`;
+  }
+
+  const pathError = validatePathWithinWorkspace(workspaceRoots, filePath);
+  if (pathError) {
+    return pathError;
+  }
+
+  // Validate that empty old_string with multiple replacements is not allowed
+  const expectedReplacements = params.expected_replacements ?? 1;
+  if (params.old_string === '' && expectedReplacements > 1) {
+    return `Cannot perform multiple replacements with empty old_string (would cause infinite loop)`;
+  }
+
+  const replaceLine = params.replaceBeginLineNumber;
+  if (
+    replaceLine !== undefined &&
+    (!Number.isFinite(replaceLine) ||
+      !Number.isInteger(replaceLine) ||
+      replaceLine <= 0)
+  ) {
+    return `replaceBeginLineNumber must be a positive integer (1-based)`;
+  }
+
+  return null;
+}
+
+/**
+ * Resolves the overloaded constructor arguments of the Edit tool into the
+ * concrete ideService / messageBus / lspService triple.
+ */
+export function resolveConstructorArguments(
+  host: IToolHost,
+  messageBusOrIdeService: IToolMessageBus | IIdeService | undefined,
+  ideServiceOrLspService: IIdeService | ILspService | undefined,
+  lspService: ILspService | undefined,
+): {
+  ideService: IIdeService | undefined;
+  messageBus: IToolMessageBus | undefined;
+  resolvedLspService: ILspService | undefined;
+} {
+  const secondArgumentIsMessageBus = hasMessageBusShape(messageBusOrIdeService);
+  const explicitIdeService = secondArgumentIsMessageBus
+    ? ideServiceOrLspService
+    : messageBusOrIdeService;
+  const explicitLspService = secondArgumentIsMessageBus
+    ? lspService
+    : ideServiceOrLspService;
+  return {
+    ideService: hasIdeServiceShape(explicitIdeService)
+      ? explicitIdeService
+      : getLegacyIdeService(host),
+    messageBus: secondArgumentIsMessageBus ? messageBusOrIdeService : undefined,
+    resolvedLspService: hasLspServiceShape(explicitLspService)
+      ? explicitLspService
+      : getLegacyLspService(host),
+  };
 }

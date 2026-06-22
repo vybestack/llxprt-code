@@ -24,6 +24,7 @@ export interface CaptureBuffer {
   reasoningChunks: string[];
   finalized: boolean;
   headers?: Headers;
+  parsePromise?: Promise<void>;
 }
 
 export function createCaptureBuffer(): CaptureBuffer {
@@ -31,6 +32,7 @@ export function createCaptureBuffer(): CaptureBuffer {
     reasoningChunks: [],
     finalized: false,
     headers: undefined,
+    parsePromise: undefined,
   };
 }
 
@@ -136,7 +138,7 @@ export function createReasoningCaptureFetch(
     }
 
     const [parserStream, sdkStream] = response.body.tee();
-    void parseReasoningFromSseStream(
+    captureBuffer.parsePromise = parseReasoningFromSseStream(
       parserStream.getReader(),
       captureBuffer,
       logger,

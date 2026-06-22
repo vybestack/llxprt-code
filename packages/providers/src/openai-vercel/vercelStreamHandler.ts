@@ -150,6 +150,9 @@ async function* processFullStream(
       yield* processStreamPart(part, state, rs, logger);
     }
     yield* flushRemainingTextBuffer(state, logger);
+    if (captureBuffer.parsePromise !== undefined) {
+      await captureBuffer.parsePromise;
+    }
     yield* emitRemainingStreamThinking(state, rs, captureBuffer, logger);
   } catch (error) {
     rethrowIfAbortSignal(error, abortSignal, logger, providerName);

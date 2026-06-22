@@ -244,8 +244,15 @@ export async function oauthNonStreamingGenerate(
     requestBaseId = reqResult?.baseId;
   }
 
+  const generateContent = generator.generateContent;
+  if (generateContent === undefined) {
+    throw new Error(
+      'OAuth content generator does not support non-streaming generation',
+    );
+  }
+
   try {
-    const response = await generator.generateContent!(oauthRequest, sessionId);
+    const response = await generateContent(oauthRequest, sessionId);
     if (shouldDumpSuccess && requestBaseId) {
       await bestEffortDump('response', 'gemini', () =>
         dumpSDKResponseContext(requestBaseId, 'gemini', response, false),

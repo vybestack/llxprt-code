@@ -41,23 +41,31 @@ export function prioritizeSymbolsFromDeclarations(
 ): string[] {
   const scores = new Map<string, number>();
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const decl of declarations) {
-    if (decl.name.length < ASTConfig.MIN_SYMBOL_LENGTH) continue;
-
-    let score = 0;
-    if (decl.type === 'class') score += 10;
-    if (decl.type === 'function') score += 5;
-    if (score === 0) continue;
-    if (decl.visibility === 'public') score += 3;
-
-    scores.set(decl.name, (scores.get(decl.name) ?? 0) + score);
+    const score = scoreDeclaration(decl);
+    if (score > 0) {
+      scores.set(decl.name, (scores.get(decl.name) ?? 0) + score);
+    }
   }
 
   return Array.from(scores.entries())
     .sort((a, b) => b[1] - a[1])
     .map(([name]) => name)
     .slice(0, ASTConfig.MAX_RELATED_SYMBOLS);
+}
+
+function scoreDeclaration(decl: EnhancedDeclaration): number {
+  if (decl.name.length < ASTConfig.MIN_SYMBOL_LENGTH) {
+    return 0;
+  }
+  let score = 0;
+  if (decl.type === 'class') score += 10;
+  if (decl.type === 'function') score += 5;
+  if (score === 0) {
+    return 0;
+  }
+  if (decl.visibility === 'public') score += 3;
+  return score;
 }
 
 /**

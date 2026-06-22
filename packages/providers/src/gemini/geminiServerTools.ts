@@ -13,8 +13,10 @@ import {
   type GenerateContentResponse,
   type GoogleGenAI,
 } from '@google/genai';
+import type { GeminiAuthMode } from './geminiAuth.js';
+import { throwIfAborted } from './geminiAbort.js';
 
-export type GeminiAuthMode = 'oauth' | 'gemini-api-key' | 'vertex-ai' | 'none';
+export type { GeminiAuthMode } from './geminiAuth.js';
 
 export type HttpOptions = { headers: Record<string, string> };
 
@@ -77,14 +79,6 @@ async function resolveOAuthConfig(
     });
   }
   return globalConfig;
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal !== undefined && signal.aborted === true) {
-    const error = new Error('Operation was aborted');
-    error.name = 'AbortError';
-    throw error;
-  }
 }
 
 /** Invoke web_search server tool. */
@@ -217,7 +211,7 @@ export async function invokeWebFetch(
     case 'vertex-ai':
       return invokeWebFetchVertex(context, authToken, httpOptions, prompt);
     case 'oauth':
-      return invokeWebFetchOAuth(context, httpOptions, prompt);
+      return invokeWebFetchOAuth(context, httpOptions, prompt, logger);
     default:
       throw new Error(`Web fetch not supported in auth mode: ${authMode}`);
   }
@@ -229,6 +223,9 @@ async function invokeWebFetchApiKey(
   httpOptions: HttpOptions,
   prompt: string,
 ): Promise<unknown> {
+  if (!authToken || authToken === 'USE_LOGIN_WITH_GOOGLE' || authToken === '') {
+    throw new Error('No valid Gemini API key available for web fetch');
+  }
   const genAI = await context.createGenAIClient(
     authToken,
     'gemini-api-key',
@@ -267,10 +264,12 @@ async function invokeWebFetchOAuth(
   context: ServerToolContext,
   httpOptions: HttpOptions,
   prompt: string,
+  logger: DebugLogger,
 ): Promise<unknown> {
+  const configForOAuth = await resolveOAuthConfig(context.globalConfig, logger);
   const oauthContentGenerator = await context.createOAuthContentGenerator(
     httpOptions,
-    context.globalConfig!,
+    configForOAuth,
     undefined,
   );
   const oauthRequest: GenerateContentParameters = {

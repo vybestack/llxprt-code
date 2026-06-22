@@ -79,7 +79,7 @@ export function flushTextBuffer(
   if (
     !state.hasEmittedThinking &&
     state.accumulatedThinkingContent.length > 0 &&
-    (isEnd || buffer.includes('</think>'))
+    (isEnd || hasClosingThinkingTag(buffer))
   ) {
     items.push({
       speaker: 'ai',
@@ -120,9 +120,9 @@ export function handleTextDelta(
 ): IContent[] {
   if (!text) return [];
   const hasThinkContent =
-    text.includes('<think') ||
-    text.includes('</think') ||
-    state.textBuffer.includes('<think');
+    hasOpeningThinkingTag(text) ||
+    hasClosingThinkingTag(text) ||
+    hasOpeningThinkingTag(state.textBuffer);
 
   if (hasThinkContent) {
     state.textBuffer += text;
@@ -344,7 +344,25 @@ export function flushRemainingTextBuffer(
 }
 
 function hasOpenThinkTag(text: string): boolean {
-  const openCount = (text.match(/<think>/gi) ?? []).length;
-  const closeCount = (text.match(/<\/think>/gi) ?? []).length;
+  return (
+    hasUnclosedTag(text, 'think') ||
+    hasUnclosedTag(text, 'thinking') ||
+    hasUnclosedTag(text, 'analysis')
+  );
+}
+
+function hasUnclosedTag(text: string, tagName: string): boolean {
+  const openPattern = new RegExp(`<${tagName}>`, 'gi');
+  const closePattern = new RegExp(`</${tagName}>`, 'gi');
+  const openCount = (text.match(openPattern) ?? []).length;
+  const closeCount = (text.match(closePattern) ?? []).length;
   return openCount > closeCount;
+}
+
+function hasOpeningThinkingTag(text: string): boolean {
+  return /<(?:think|thinking|analysis)>/i.test(text);
+}
+
+function hasClosingThinkingTag(text: string): boolean {
+  return /<\/(?:think|thinking|analysis)>/i.test(text);
 }

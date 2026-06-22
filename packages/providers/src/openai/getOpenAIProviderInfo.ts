@@ -167,7 +167,9 @@ function resolveCurrentModel(
   const configModel =
     typeof config?.getModel === 'function' ? config.getModel() : undefined;
   const normalizedModel =
-    getValidString(ephemeralModel) ?? providerModel ?? configModel;
+    getValidString(ephemeralModel) ??
+    getValidString(providerModel) ??
+    getValidString(configModel);
   return normalizedModel ?? null;
 }
 
@@ -178,11 +180,11 @@ function resolveResponsesApiMode(
 ): boolean {
   const providerSettings = settingsService.getProviderSettings('openai');
   const configuredMode =
-    (providerSettings.apiMode as string | undefined) ??
-    (providerSettings.responsesMode as string | undefined) ??
-    (settingsService.get('responses-mode') as string | undefined);
+    getValidString(providerSettings.apiMode) ??
+    getValidString(providerSettings.responsesMode) ??
+    getValidString(settingsService.get('responses-mode'));
 
-  if (configuredMode) {
+  if (configuredMode !== undefined) {
     return configuredMode.toLowerCase() === 'responses';
   }
   if (!currentModel) {

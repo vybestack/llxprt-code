@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import fs from 'fs';
 import path from 'path';
 import * as Diff from 'diff';
@@ -35,6 +33,7 @@ import {
 import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import { stringOrDefault } from '../utils/stringCoalescing.js';
 
 /**
  * Parameters for the WriteFile tool
@@ -80,7 +79,7 @@ interface GetCorrectedFileContentResult {
 async function getCorrectedFileContent(
   filePath: string,
   proposedContent: string,
-  host: IToolHost,
+  _host: IToolHost,
 ): Promise<GetCorrectedFileContentResult> {
   let originalContent = '';
   let fileExists = false;
@@ -135,8 +134,10 @@ class WriteFileToolInvocation extends BaseToolInvocation<
   }
 
   private getFilePath(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-    return this.params.absolute_path || this.params.file_path || '';
+    return stringOrDefault(
+      this.params.absolute_path,
+      stringOrDefault(this.params.file_path, ''),
+    );
   }
 
   override toolLocations(): ToolLocation[] {
@@ -302,9 +303,10 @@ class WriteFileToolInvocation extends BaseToolInvocation<
   }
 
   private buildSuccessMessageParts(isNewFile: boolean): string[] {
-    const displayPath =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-      this.params.absolute_path || this.params.file_path || '';
+    const displayPath = stringOrDefault(
+      this.params.absolute_path,
+      stringOrDefault(this.params.file_path, ''),
+    );
     const parts = [
       isNewFile
         ? `Successfully created and wrote to new file: ${displayPath}.`
@@ -420,8 +422,10 @@ export class WriteFileTool
   protected override validateToolParamValues(
     params: WriteFileToolParams,
   ): string | null {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = stringOrDefault(
+      params.absolute_path,
+      stringOrDefault(params.file_path, ''),
+    );
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
@@ -477,11 +481,15 @@ export class WriteFileTool
   ): ModifyContext<WriteFileToolParams> {
     return {
       getFilePath: (params: WriteFileToolParams) =>
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-        params.absolute_path || params.file_path || '',
+        stringOrDefault(
+          params.absolute_path,
+          stringOrDefault(params.file_path, ''),
+        ),
       getCurrentContent: async (params: WriteFileToolParams) => {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-        const filePath = params.absolute_path || params.file_path || '';
+        const filePath = stringOrDefault(
+          params.absolute_path,
+          stringOrDefault(params.file_path, ''),
+        );
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
           params.content,
@@ -490,8 +498,10 @@ export class WriteFileTool
         return correctedContentResult.originalContent;
       },
       getProposedContent: async (params: WriteFileToolParams) => {
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
-        const filePath = params.absolute_path || params.file_path || '';
+        const filePath = stringOrDefault(
+          params.absolute_path,
+          stringOrDefault(params.file_path, ''),
+        );
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
           params.content,

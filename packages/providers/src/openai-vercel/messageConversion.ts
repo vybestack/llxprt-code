@@ -500,11 +500,12 @@ function extractSystemText(systemContent: unknown): string {
     return '';
   }
   return (systemContent as Array<{ type: string; text?: string } | string>)
-    .map((part) => {
+    .flatMap((part) => {
       if (typeof part === 'string') return part;
       if (part.type === 'text') return part.text ?? '';
-      return '';
+      return [];
     })
+    .filter((part) => part !== '')
     .join('\n');
 }
 

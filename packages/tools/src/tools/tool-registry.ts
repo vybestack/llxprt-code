@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- ToolRegistry migration preserves legacy behavior while dependency inversion is completed. */
-
 import { type FunctionDeclaration } from '@google/genai';
 import {
   type AnyDeclarativeTool,
@@ -40,6 +38,26 @@ function isDiscoveredMcpTool(
     typeof (tool as { serverName?: unknown }).serverName === 'string' &&
     (tool as { serverName?: string }).serverName !== ''
   );
+}
+
+/**
+ * Extracts a usable JSON schema object from a discovered function
+ * declaration. Returns `{}` when the schema is missing, null, or not a
+ * plain object.
+ */
+function extractParametersSchema(
+  func: FunctionDeclaration,
+): Record<string, unknown> {
+  const schema = func.parametersJsonSchema;
+  if (
+    schema !== undefined &&
+    schema !== null &&
+    typeof schema === 'object' &&
+    !Array.isArray(schema)
+  ) {
+    return schema as Record<string, unknown>;
+  }
+  return {};
 }
 
 export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
@@ -142,13 +160,11 @@ Signal: Signal number or \`(none)\` if no signal was received.
     try {
       await new Promise<void>((resolve) => {
         const onStdout = (data: Buffer) => {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          stdout += data?.toString();
+          stdout += data.toString();
         };
 
         const onStderr = (data: Buffer) => {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          stderr += data?.toString();
+          stderr += data.toString();
         };
 
         const onError = (err: Error) => {
@@ -193,22 +209,17 @@ Signal: Signal number or \`(none)\` if no signal was received.
     code: number | null,
     exitSignal: NodeJS.Signals | null,
   ): ToolResult {
-    /* eslint-disable @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types. */
     if (
       error !== null ||
       code !== 0 ||
       exitSignal !== null ||
       stderr.length > 0
     ) {
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
       const llmContent = [
         `Stdout: ${stdout.length > 0 ? stdout : '(empty)'}`,
         `Stderr: ${stderr.length > 0 ? stderr : '(empty)'}`,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         `Error: ${error ?? '(none)'}`,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         `Exit Code: ${code ?? '(none)'}`,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         `Signal: ${exitSignal ?? '(none)'}`,
       ].join('\n');
       return {
@@ -291,40 +302,36 @@ export class ToolRegistry {
             | 0
             | '')
         : undefined;
-    const ephemerals =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      rawEphemerals !== null &&
-      rawEphemerals !== undefined &&
-      rawEphemerals !== false &&
-      rawEphemerals !== 0 &&
-      rawEphemerals !== ''
-        ? rawEphemerals
-        : {};
+
+    const ephemerals: Record<string, unknown> =
+      resolveEphemerals(rawEphemerals);
 
     const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
       ? (ephemerals['tools.allowed'] as string[])
       : [];
-    const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
-      ? (ephemerals['tools.disabled'] as string[])
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        Array.isArray(ephemerals['disabled-tools'])
-        ? (ephemerals['disabled-tools'] as string[])
-        : [];
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+
+    function resolveDisabled(ephemeralsMap: Record<string, unknown>): string[] {
+      if (Array.isArray(ephemeralsMap['tools.disabled'])) {
+        return ephemeralsMap['tools.disabled'] as string[];
+      }
+      if (Array.isArray(ephemeralsMap['disabled-tools'])) {
+        return ephemeralsMap['disabled-tools'] as string[];
+      }
+      return [];
+    }
+
+    const disabledRaw = resolveDisabled(ephemerals);
     const excludedRaw = this.config.getExcludeTools?.() ?? [];
 
     return {
       allowed: new Set(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string normalized name should fall through to original name
-        allowedRaw.map((name) => normalizeToolName(name) || name),
+        allowedRaw.map((name) => normalizeToolName(name) ?? name),
       ),
       disabled: new Set(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string normalized name should fall through to original name
-        disabledRaw.map((name) => normalizeToolName(name) || name),
+        disabledRaw.map((name) => normalizeToolName(name) ?? name),
       ),
       excluded: new Set(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string normalized name should fall through to original name
-        excludedRaw.map((name) => normalizeToolName(name) || name),
+        excludedRaw.map((name) => normalizeToolName(name) ?? name),
       ),
     };
   }
@@ -333,8 +340,7 @@ export class ToolRegistry {
     toolName: string,
     governance: ReturnType<ToolRegistry['getToolGovernance']>,
   ): boolean {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string normalized name should fall through to original name
-    const canonical = normalizeToolName(toolName) || toolName;
+    const canonical = normalizeToolName(toolName) ?? toolName;
     if (governance.excluded.has(canonical)) {
       return false;
     }
@@ -553,7 +559,6 @@ export class ToolRegistry {
 
     for (const tool of discoveredItems) {
       if (tool !== null && typeof tool === 'object') {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (Array.isArray(tool['function_declarations'])) {
           functions.push(...tool['function_declarations']);
         } else if (Array.isArray(tool['functionDeclarations'])) {
@@ -575,20 +580,13 @@ export class ToolRegistry {
         this.logger.warn(() => 'Discovered a tool with no name. Skipping.');
         continue;
       }
-      const parameters =
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        func.parametersJsonSchema !== undefined &&
-        func.parametersJsonSchema !== null &&
-        typeof func.parametersJsonSchema === 'object' &&
-        !Array.isArray(func.parametersJsonSchema)
-          ? func.parametersJsonSchema
-          : {};
+      const parameters = extractParametersSchema(func);
       this.registerToolIntoMap(
         new DiscoveredTool(
           this.config,
           `discovered_tool_${func.name}`,
           func.description ?? '',
-          parameters as Record<string, unknown>,
+          parameters,
           this.messageBus,
         ),
 
@@ -602,16 +600,12 @@ export class ToolRegistry {
    * Used to conditionally hide tool parameters that are disabled by settings.
    */
   private getSchemaTransforms(): { hideTaskAsync: boolean } {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const settingsService = this.config.getSettingsService?.();
 
     // Global setting from /settings (subagents.asyncEnabled)
     let globalAsyncEnabled = true;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (settingsService !== undefined) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const globalSettings = settingsService.getAllGlobalSettings?.();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const subagentsSettings = globalSettings?.['subagents'] as
         | { asyncEnabled?: boolean }
         | undefined;
@@ -620,7 +614,6 @@ export class ToolRegistry {
 
     // Profile setting from /set (subagents.async.enabled)
     const profileAsyncEnabled =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       settingsService?.get?.('subagents.async.enabled') !== false;
 
     return {
@@ -791,8 +784,7 @@ export class ToolRegistry {
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
     // Normalize the tool name for consistent storage and lookup
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string tool name should fall through to original name
-    const normalizedName = normalizeToolName(tool.name) || tool.name;
+    const normalizedName = normalizeToolName(tool.name) ?? tool.name;
 
     if (targetMap.has(normalizedName) && !isDiscoveredMcpTool(tool)) {
       // For non-MCP tools, log warning and overwrite
@@ -825,4 +817,22 @@ export class ToolRegistry {
       this.discoveryLock = null;
     }
   }
+}
+
+type EphemeralValue =
+  | Record<string, unknown>
+  | null
+  | undefined
+  | false
+  | 0
+  | '';
+
+function resolveEphemerals(raw: EphemeralValue): Record<string, unknown> {
+  if (raw === null || raw === undefined || raw === false || raw === 0) {
+    return {};
+  }
+  if (raw === '') {
+    return {};
+  }
+  return raw;
 }

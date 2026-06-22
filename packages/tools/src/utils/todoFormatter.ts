@@ -75,22 +75,9 @@ const formatParameters = (parameters: Record<string, unknown>): string => {
 
   for (const [key, value] of Object.entries(parameters)) {
     if (typeof value === 'string') {
-      let displayValue = value;
-
-      if (
-        key === 'file_path' ||
-        key === 'absolute_path' ||
-        value.includes('/')
-      ) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (displayValue.length > MAX_LENGTH) {
-          displayValue = '...' + displayValue.slice(-(MAX_LENGTH - 3));
-        }
-      } else if (displayValue.length > MAX_LENGTH) {
-        displayValue = `${displayValue.substring(0, MAX_LENGTH - 3)}...`;
-      }
-
-      segments.push(`${key}: '${displayValue}'`);
+      segments.push(
+        `${key}: '${formatStringDisplayValue(key, value, MAX_LENGTH)}'`,
+      );
     } else {
       const jsonValue = JSON.stringify(value);
       const displayValue =
@@ -194,13 +181,7 @@ export const formatTodoListForDisplay = (
     lines.push(formatTodoEntry(todo));
 
     if (todo.subtasks) {
-      for (const subtask of todo.subtasks) {
-        lines.push(`  • ${subtask.content}`);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (subtask.toolCalls && subtask.toolCalls.length > 0) {
-          pushToolCalls(lines, subtask.toolCalls, '    ', maxToolCalls);
-        }
-      }
+      formatSubtasks(lines, todo.subtasks, maxToolCalls);
     }
 
     const combinedToolCalls = mergeToolCalls(todo, options.getLiveToolCalls);
@@ -213,3 +194,32 @@ export const formatTodoListForDisplay = (
 const orderTodos = (todos: Todo[]): Todo[] =>
   // Sort by status only, preserving original array order within each status group
   [...todos].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+
+function formatStringDisplayValue(
+  key: string,
+  value: string,
+  maxLength: number,
+): string {
+  const isPathLike =
+    key === 'file_path' || key === 'absolute_path' || value.includes('/');
+  if (isPathLike && value.length > maxLength) {
+    return '...' + value.slice(-(maxLength - 3));
+  }
+  if (!isPathLike && value.length > maxLength) {
+    return `${value.substring(0, maxLength - 3)}...`;
+  }
+  return value;
+}
+
+function formatSubtasks(
+  lines: string[],
+  subtasks: NonNullable<Todo['subtasks']>,
+  maxToolCalls: number,
+): void {
+  for (const subtask of subtasks) {
+    lines.push(`  • ${subtask.content}`);
+    if (subtask.toolCalls && subtask.toolCalls.length > 0) {
+      pushToolCalls(lines, subtask.toolCalls, '    ', maxToolCalls);
+    }
+  }
+}

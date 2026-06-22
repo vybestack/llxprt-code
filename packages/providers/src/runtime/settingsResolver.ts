@@ -4,25 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
 /**
  * @plan:PLAN-20260320-ISSUE1575.P03
  * Settings resolver module - extracted from runtimeSettings.ts
  * Handles CLI argument resolution into runtime overrides.
  */
 
-import { homedir } from 'node:os';
-import { readFile } from 'node:fs/promises';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { applyCliSetArguments } from './cliEphemeralSettings.js';
 import { getCliRuntimeServices } from './runtimeAccessors.js';
+import { updateActiveProviderBaseUrl } from './providerMutations.js';
 import {
-  updateActiveProviderApiKey,
-  updateActiveProviderBaseUrl,
-} from './providerMutations.js';
-import { createProviderKeyStorage } from '../auth/index.js';
+  resolveFromKeyArg,
+  resolveFromKeyName,
+  resolveFromProfileKeyName,
+  resolveFromKeyfile,
+} from './keyResolution.js';
+
+export { resolveNamedKey } from './keyResolution.js';
 
 /**
  * Apply CLI argument overrides to configuration.
@@ -94,54 +94,29 @@ async function resolveAndApplyApiKey(
     return;
   }
 
-  let keyResolved = false;
-
   // 1. --key (bootstrap override takes precedence, then argv)
   const keyToUse = bootstrapArgs?.keyOverride ?? argv.key;
-  if (keyToUse) {
-    await updateActiveProviderApiKey(keyToUse.trim());
-    config.setEphemeralSetting('auth-key', keyToUse.trim());
-    config.setEphemeralSetting('auth-keyfile', undefined);
-    keyResolved = true;
+  if (await resolveFromKeyArg(keyToUse, config)) {
+    return;
   }
 
   // 2. --key-name (CLI flag, named key from keyring)
-  if (!keyResolved) {
-    const keyNameToUse = bootstrapArgs?.keyNameOverride ?? null;
-    if (keyNameToUse) {
-      const resolvedKey = await resolveNamedKey(keyNameToUse);
-      await updateActiveProviderApiKey(resolvedKey);
-      config.setEphemeralSetting('auth-key-name', keyNameToUse);
-      config.setEphemeralSetting('auth-key', undefined);
-      config.setEphemeralSetting('auth-keyfile', undefined);
-      keyResolved = true;
-    }
+  const keyNameToUse = bootstrapArgs?.keyNameOverride ?? null;
+  if (await resolveFromKeyName(keyNameToUse, config)) {
+    return;
   }
 
   // 3. auth-key-name from profile ephemeral settings
-  if (!keyResolved) {
-    const profileKeyName = config.getEphemeralSetting('auth-key-name') as
-      | string
-      | undefined;
-    if (profileKeyName) {
-      const resolvedKey = await resolveNamedKey(profileKeyName);
-      await updateActiveProviderApiKey(resolvedKey);
-      config.setEphemeralSetting('auth-key-name', profileKeyName);
-      config.setEphemeralSetting('auth-key', undefined);
-      config.setEphemeralSetting('auth-keyfile', undefined);
-      keyResolved = true;
-    }
+  const profileKeyName = config.getEphemeralSetting('auth-key-name') as
+    | string
+    | undefined;
+  if (await resolveFromProfileKeyName(profileKeyName, config)) {
+    return;
   }
 
   // 4. --keyfile (only if no higher-precedence key resolved)
   const keyfileToUse = bootstrapArgs?.keyfileOverride ?? argv.keyfile;
-  if (!keyResolved && keyfileToUse) {
-    const resolvedPath = keyfileToUse.replace(/^~/, homedir());
-    const keyContent = await readFile(resolvedPath, 'utf-8');
-    await updateActiveProviderApiKey(keyContent.trim());
-    config.setEphemeralSetting('auth-key', undefined);
-    config.setEphemeralSetting('auth-keyfile', resolvedPath);
-  }
+  await resolveFromKeyfile(keyfileToUse, config);
 }
 
 /**
@@ -158,37 +133,4 @@ async function applyBaseUrlOverride(
 
   await updateActiveProviderBaseUrl(trimmed);
   config.setEphemeralSetting('base-url', trimmed);
-}
-
-/**
- * Resolve a named key from the credential store.
- *
- * @param name - The key name to resolve
- * @returns The resolved key
- * @throws Error if key not found or invalid
- */
-export async function resolveNamedKey(name: string): Promise<string> {
-  const storage = createProviderKeyStorage();
-
-  let key: string | null;
-  try {
-    key = await storage.getKey(name);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    const isValidation = msg.includes('is invalid');
-    const prefix = isValidation
-      ? `Invalid key name '${name}'`
-      : `Failed to access keyring while resolving named key '${name}'`;
-    throw new Error(
-      `${prefix}: ${msg}. Use '/key save ${name} <key>' to store it, or use --key to provide the key directly.`,
-    );
-  }
-
-  if (key === null) {
-    throw new Error(
-      `Named key '${name}' not found. Use '/key save ${name} <key>' to store it.`,
-    );
-  }
-
-  return key;
 }

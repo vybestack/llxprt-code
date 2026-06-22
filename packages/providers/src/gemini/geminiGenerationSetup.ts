@@ -21,7 +21,7 @@ import {
   prepareContentsWithSignatures,
 } from './geminiRequestBuilding.js';
 import { createGeminiResponseMapper } from './geminiResponseMapper.js';
-import type { GeminiAuthMode } from './geminiServerTools.js';
+import type { GeminiAuthMode } from './geminiAuth.js';
 
 export type HttpOptions = { headers: Record<string, string> };
 

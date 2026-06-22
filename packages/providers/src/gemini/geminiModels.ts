@@ -5,7 +5,9 @@
  */
 
 import { type IModel } from '../IModel.js';
-import type { GeminiAuthMode } from './geminiServerTools.js';
+import type { GeminiAuthMode } from './geminiAuth.js';
+
+const MODEL_LIST_TIMEOUT_MS = 10_000;
 
 /** Default model list used for OAuth mode and as fallback. */
 export function getDefaultModelList(providerName: string): IModel[] {
@@ -66,6 +68,7 @@ export async function fetchModelsFromApi(
     const response = await fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
     });
 
     if (response.ok) {

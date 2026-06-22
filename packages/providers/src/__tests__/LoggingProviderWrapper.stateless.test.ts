@@ -196,6 +196,43 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     expect(result.done).toBe(false);
   });
 
+  it('fails fast when config lost its prototype instead of repairing it @requirement:REQ-SP4-004', async () => {
+    const provider = new StubProvider();
+    const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+    const settings = new SettingsService();
+    const invalidConfig = Object.freeze({
+      getConversationLogPath: () => '/tmp/prototype-lost',
+      getRedactionConfig: () => ({
+        redactApiKeys: false,
+        redactCredentials: false,
+        redactFilePaths: false,
+        redactUrls: false,
+        redactEmails: false,
+        redactPersonalInfo: false,
+      }),
+    }) as unknown as Config;
+    const runtime: ProviderRuntimeContext = {
+      runtimeId: 'prototype-lost-runtime',
+      settingsService: settings,
+      config: invalidConfig,
+      metadata: { source: 'prototype-lost-test' },
+    };
+
+    const iterator = wrapper.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [],
+        settings,
+        config: invalidConfig,
+        runtime,
+      }),
+    );
+
+    await expect(iterator.next()).rejects.toThrow(
+      'FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method',
+    );
+  });
+
   describe('extractTokenCountsFromTokenUsage', () => {
     it('extracts cachedTokens from new provider-agnostic field', () => {
       const provider = new StubProvider();

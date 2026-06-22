@@ -584,7 +584,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   ): AsyncGenerator<IContent, void, unknown> {
     const { metadata } = options;
     const abortSignal = metadata.abortSignal as AbortSignal | undefined;
-    const ephemeralSettings = options.invocation.ephemerals;
+    const ephemeralSettings = (
+      options.invocation as { ephemerals?: Readonly<Record<string, unknown>> }
+    ).ephemerals;
 
     const { prepareRequest } = await import('./OpenAIRequestPreparation.js');
     const { executeApiRequest } = await import('./OpenAIApiExecution.js');
@@ -612,7 +614,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     const customHeaders = this.getCustomHeaders();
     const mergedHeaders = mergeInvocationHeaders(options, customHeaders);
-    const dumpMode = ephemeralSettings.dumpcontext as DumpMode | undefined;
+    const dumpMode = ephemeralSettings?.dumpcontext as DumpMode | undefined;
 
     const response = await executeApiRequest({
       client,

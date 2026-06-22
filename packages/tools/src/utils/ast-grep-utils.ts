@@ -6,10 +6,11 @@
  */
 
 import {
-  parse,
   Lang,
+  parse,
   findInFiles,
   registerDynamicLanguage,
+  type DynamicLangRegistrations,
 } from '@ast-grep/napi';
 
 import python from '@ast-grep/lang-python';
@@ -36,7 +37,7 @@ function ensureDynamicLanguages(): void {
     c,
     json,
     ruby,
-  } as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- Required for ast-grep dynamic language registration (third-party API limitation)
+  } as unknown as DynamicLangRegistrations);
   dynamicLanguagesRegistered = true;
 }
 

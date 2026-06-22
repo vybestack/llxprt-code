@@ -55,19 +55,14 @@ function createInMemoryKeyStorage(): IToolKeyStorage {
     saveKey: async (toolName: string, key: string) => {
       store.set(toolName, key);
     },
-    getKey: async (toolName: string) => {
-      return store.get(toolName) ?? null;
-    },
+    getKey: async (toolName: string) => store.get(toolName) ?? null,
     deleteKey: async (toolName: string) => {
       store.delete(toolName);
     },
-    hasKey: async (toolName: string) => {
-      return store.has(toolName);
-    },
-    resolveKey: async (toolName: string) => {
+    hasKey: async (toolName: string) => store.has(toolName),
+    resolveKey: async (toolName: string) =>
       // Resolution order: direct storage → null
-      return store.get(toolName) ?? null;
-    },
+      store.get(toolName) ?? null,
     maskKeyForDisplay: (key: string) => maskKeyForDisplay(key),
     getSupportedToolNames: () => getSupportedToolNames(),
   };

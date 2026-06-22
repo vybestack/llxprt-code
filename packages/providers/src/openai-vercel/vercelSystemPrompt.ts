@@ -29,11 +29,14 @@ export async function buildSystemPrompt(
   modelId: string,
 ): Promise<string> {
   const flattenedToolNames =
-    tools?.flatMap((group) =>
-      group.functionDeclarations
+    tools?.flatMap((group) => {
+      const declarations = (
+        group as { functionDeclarations?: Array<{ name?: string }> }
+      ).functionDeclarations;
+      return (declarations ?? [])
         .map((decl) => decl.name)
-        .filter((name): name is string => !!name),
-    ) ?? [];
+        .filter((name): name is string => !!name);
+    }) ?? [];
   const toolNamesArg =
     tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
 

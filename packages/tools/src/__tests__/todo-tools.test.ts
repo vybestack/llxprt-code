@@ -43,13 +43,11 @@ function createFakeTodoService(
     },
   };
 
-  const paused = false;
-
   return {
     getTodoStore: () => store,
     getReminderService: () => ({
-      shouldGenerateReminder: () => !paused && todos.length > 0,
-      getReminderForStateChange: () => (paused ? undefined : 'reminder text'),
+      shouldGenerateReminder: () => todos.length > 0,
+      getReminderForStateChange: () => 'reminder text',
     }),
     getContextTracker: () => ({
       setActiveTodo: (id: string) => {
