@@ -301,6 +301,52 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
+  // #2084 scope — provider implementation files fully compliant: zero inline
+  // lint directives. Locked to error so any new directive fails immediately.
+  // The broad packages/providers/src/** legacy override above is overridden
+  // here for these specific files. Extracted modules added as created.
+  'packages/providers/src/anthropic/AnthropicProvider.ts', // #2084
+  'packages/providers/src/anthropic/AnthropicRequestPreparation.ts', // #2084
+  'packages/providers/src/gemini/GeminiProvider.ts', // #2084
+  'packages/providers/src/gemini/thoughtSignatures.ts', // #2084
+  'packages/providers/src/gemini/geminiAuth.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiGenerationExecution.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiGenerationSetup.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiModels.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiReasoningConfig.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiRequestBuilding.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiResponseMapper.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiSchemaHelpers.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiServerTools.ts', // #2084 extracted
+  'packages/providers/src/openai-responses/buildResponsesInputFromContent.ts', // #2084
+  'packages/providers/src/openai-vercel/messageConversion.ts', // #2084
+  'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts', // #2084
+  'packages/providers/src/openai-vercel/vercelDeveloperRoleFetch.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelLogging.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelMetadataMapper.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelModelClient.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelModelListing.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelNonStreamingHandler.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiAbort.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelNonStreamingResponse.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelReasoningCapture.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelRequestParams.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamHandler.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamProcessor.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamTypes.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelSystemPrompt.ts', // #2084 extracted
+  'packages/providers/src/openai/buildResponsesRequest.ts', // #2084
+  'packages/providers/src/openai/getOpenAIProviderInfo.ts', // #2084
+  'packages/providers/src/openai/OpenAIApiExecution.ts', // #2084
+  'packages/providers/src/openai/OpenAINonStreamHandler.ts', // #2084
+  'packages/providers/src/openai/OpenAIProvider.ts', // #2084
+  'packages/providers/src/openai/OpenAIStreamChunkText.ts', // #2084 extracted
+  'packages/providers/src/openai/OpenAIRequestPreparation.ts', // #2084
+  'packages/providers/src/openai/OpenAIResponseParser.ts', // #2084
+  'packages/providers/src/openai/parseResponsesStream.ts', // #2084
+  'packages/providers/src/openai/responsesErrorParsing.ts', // #2084 extracted
+  // #2084 extracted shared helpers
+  'packages/providers/src/utils/falsyFallback.ts', // #2084
   // #2087 scope — packages/cli UI hooks, components, utils, state, themes,
   // and Zed integration are fully compliant: zero inline lint directives.
   // Locked to error so any new directive fails immediately.
@@ -1469,6 +1515,19 @@ export default tseslint.config(
     },
   },
 
+  // Issue #2084: Kimi K2 fixed-format tool-call template regexes.
+  // These parse the vendor-specific protocol emitted by HF/vLLM-style Kimi
+  // deployments. Inputs are bounded to model-generated tool-call sections, and
+  // the patterns use explicit delimiters and lazy quantifiers to avoid
+  // unbounded backtracking. sonarjs/regular-expr is a generic heuristic that
+  // cannot distinguish these reviewed, bounded protocol parsers from unsafe
+  // regexes.
+  {
+    files: ['packages/providers/src/openai/OpenAIResponseParser.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2084 Kimi protocol template regex
+    },
+  },
   // Issue #2087: Static, reviewed regex patterns that parse terminal/command
   // input at trusted boundaries. The inputs are bounded (single CLI command
   // lines or local config values, not untrusted network data) and the patterns

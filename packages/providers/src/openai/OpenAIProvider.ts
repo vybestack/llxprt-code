@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 /**
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
@@ -25,6 +23,7 @@ import type OpenAI from 'openai';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
+import { firstTruthyString } from '../utils/falsyFallback.js';
 import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 
 import {
@@ -52,8 +51,7 @@ import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
-import { coerceMessageContentToString } from './OpenAIResponseParser.js';
-import { sanitizeProviderText } from '../utils/textSanitizer.js';
+import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
 import {
   createHttpAgents,
   resolveRuntimeKey,
@@ -80,19 +78,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     config?: IProviderConfig,
     oauthManager?: OAuthManager,
   ) {
-    // Normalize empty string to undefined for proper precedence handling
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
-
-    // Detect if this is a Qwen endpoint
-    // CRITICAL FIX: For now, only use base URL check in constructor since `this.name` isn't available yet
-    // The name-based check will be handled in the supportsOAuth() method after construction
     const isQwenEndpoint = isQwenBaseURL(baseURL);
     const forceQwenOAuth = Boolean(
       (config as { forceQwenOAuth?: boolean } | undefined)?.forceQwenOAuth,
     );
 
-    // Initialize base provider with auth configuration
     super(
       {
         name: 'openai',
@@ -105,8 +97,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
       config,
     );
-
-    // Initialize tool call pipeline
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002
@@ -141,12 +131,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
     }
 
-    // Resolve settings for HTTP agents from invocation or provider config
-    const agentSettings =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      options.invocation?.ephemerals ??
-      this.providerConfig?.getEphemeralSettings?.() ??
-      {};
+    const agentSettings = resolveAgentSettings(
+      options.invocation.ephemerals,
+      this.providerConfig,
+    );
     const agents = createHttpAgents(agentSettings);
 
     // Apply invocation/provider header overrides at client construction time.
@@ -162,10 +150,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Qwen endpoints support OAuth, standard OpenAI does not
    */
   protected supportsOAuth(): boolean {
-    const providerConfig = this.providerConfig as IProviderConfig & {
-      forceQwenOAuth?: boolean;
-    };
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+    const providerConfig = this.providerConfig as
+      | (IProviderConfig & {
+          forceQwenOAuth?: boolean;
+        })
+      | undefined;
     if (providerConfig?.forceQwenOAuth === true) {
       return true;
     }
@@ -280,11 +269,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
     // Check if this is a Qwen provider instance based on baseURL
     if (isQwenBaseURL(this.getBaseURL())) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to default
-      return process.env.LLXPRT_DEFAULT_MODEL || 'qwen3-coder-plus';
+      return firstTruthyString(
+        process.env.LLXPRT_DEFAULT_MODEL,
+        'qwen3-coder-plus',
+      );
     }
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to default
-    return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5.5';
+    return firstTruthyString(process.env.LLXPRT_DEFAULT_MODEL, 'gpt-5.5');
   }
 
   /**
@@ -299,8 +289,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * @requirement:REQ-SP4-002
    * No-op retained for compatibility because clients are no longer cached.
    */
-  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
-  public clearClientCache(runtimeKey?: string): void {
+  clearClientCache(runtimeKey?: string): void {
     void runtimeKey;
   }
 
@@ -308,9 +297,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Override isAuthenticated for qwen provider to check OAuth directly
    */
   override async isAuthenticated(): Promise<boolean> {
-    const config = this.providerConfig as IProviderConfig & {
-      forceQwenOAuth?: boolean;
-    };
+    const config = this.providerConfig as
+      | (IProviderConfig & {
+          forceQwenOAuth?: boolean;
+        })
+      | undefined;
 
     const directApiKey = this.baseProviderConfig.apiKey;
     if (typeof directApiKey === 'string' && directApiKey.trim() !== '') {
@@ -334,7 +325,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (this.name === 'qwen' && config?.forceQwenOAuth === true) {
       try {
         const token = await this.authResolver.resolveAuthentication({
@@ -462,15 +452,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       ]);
 
       const params: Record<string, unknown> = {};
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard - providerSettings is object type but we guard against null/undefined from external sources
-      if (providerSettings != null) {
-        for (const [key, value] of Object.entries(providerSettings)) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (reservedKeys.has(key) || value === undefined || value === null) {
-            continue;
-          }
-          params[key] = value;
+      for (const [key, value] of Object.entries(providerSettings)) {
+        if (reservedKeys.has(key) || value === undefined || value === null) {
+          continue;
         }
+        params[key] = value;
       }
 
       return Object.keys(params).length > 0 ? params : undefined;
@@ -513,8 +499,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       authTokenPresent: Boolean(resolved.authToken),
       messageCount: options.contents.length,
       toolCount: options.tools?.length ?? 0,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      metadataKeys: Object.keys(metadata ?? {}),
+      metadataKeys: Object.keys(metadata),
     });
     logger.debug(() => `[OpenAIProvider] Sending chat request`, {
       model: requestContext.model,
@@ -528,8 +513,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       logger.debug(() => `[OpenAIProvider] Exact tools being sent to API:`, {
         toolCount: requestContext.requestBody.tools?.length,
         toolNames: requestContext.requestBody.tools?.map((t) =>
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          'function' in t ? t.function?.name : undefined,
+          'function' in t ? t.function.name : undefined,
         ),
         firstTool: requestContext.requestBody.tools?.[0],
       });
@@ -599,10 +583,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     logger: DebugLogger,
   ): AsyncGenerator<IContent, void, unknown> {
     const { metadata } = options;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    const ephemeralSettings = options.invocation?.ephemerals ?? {};
+    const abortSignal = metadata.abortSignal as AbortSignal | undefined;
+    const ephemeralSettings = (
+      options.invocation as { ephemerals?: Readonly<Record<string, unknown>> }
+    ).ephemerals;
 
     const { prepareRequest } = await import('./OpenAIRequestPreparation.js');
     const { executeApiRequest } = await import('./OpenAIApiExecution.js');
@@ -630,7 +614,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     const customHeaders = this.getCustomHeaders();
     const mergedHeaders = mergeInvocationHeaders(options, customHeaders);
-    const dumpMode = ephemeralSettings.dumpcontext as DumpMode | undefined;
+    const dumpMode = ephemeralSettings?.dumpcontext as DumpMode | undefined;
 
     const response = await executeApiRequest({
       client,
@@ -755,36 +739,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       let accumulatedText = '';
 
       // Process the continuation response
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for await (const chunk of continuationResponse as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
         if (abortSignal?.aborted === true) {
           break;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        const choice = chunk.choices?.[0];
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        if (choice === null || choice === undefined) continue;
-
-        const deltaContent = coerceMessageContentToString(
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          choice.delta?.content as unknown,
-        );
-        if (deltaContent !== undefined && deltaContent !== '') {
-          const sanitized = sanitizeProviderText(deltaContent);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (sanitized !== '') {
-            accumulatedText += sanitized;
-            yield {
-              speaker: 'ai',
-              blocks: [
-                {
-                  type: 'text',
-                  text: sanitized,
-                } as TextBlock,
-              ],
-            } as IContent;
-          }
+        const sanitized = extractSanitizedChunkText(chunk);
+        if (sanitized !== '') {
+          accumulatedText += sanitized;
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'text',
+                text: sanitized,
+              } as TextBlock,
+            ],
+          } as IContent;
         }
       }
 
@@ -809,4 +780,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Don't re-throw - tool calls were already successful
     }
   }
+}
+
+function resolveAgentSettings(
+  invocationSettings: Record<string, unknown> | undefined,
+  providerConfig?: IProviderConfig,
+): Record<string, unknown> {
+  return invocationSettings ?? providerConfig?.getEphemeralSettings?.() ?? {};
 }

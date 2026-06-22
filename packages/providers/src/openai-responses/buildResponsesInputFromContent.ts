@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import type {
   IContent,
   TextBlock,
@@ -29,6 +27,7 @@ import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
 } from '../utils/mediaUtils.js';
+import { firstTruthyString } from '../utils/falsyFallback.js';
 
 type ResponsesContentPart =
   | { type: 'input_text'; text: string }
@@ -141,9 +140,7 @@ function processToolContent(
         ? { content: rawResult, wasTruncated: false }
         : limitOutputTokens(rawResult, config, toolResponseBlock.toolName);
 
-    const textResult =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty content should fall through to message
-      limited.content || limited.message || '';
+    const textResult = firstTruthyString(limited.content, limited.message);
 
     items.push({
       type: 'function_call_output',

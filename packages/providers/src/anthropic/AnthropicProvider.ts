@@ -4,8 +4,6 @@
  * @project-plans/debuglogging/requirements.md
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -21,7 +19,10 @@ import {
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
+import type {
+  ProviderTelemetryContext,
+  RuntimeAuthTokenProvider,
+} from '../types/providerRuntime.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -37,6 +38,7 @@ import {
   getLatestClaude4Model as getLatestClaude4ModelFn,
 } from './AnthropicModelData.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
+import { firstTruthyString } from '../utils/falsyFallback.js';
 import {
   buildAnthropicCustomHeaders,
   createAnthropicApiCall,
@@ -159,7 +161,7 @@ export class AnthropicProvider extends BaseProvider {
     telemetry?: ProviderTelemetryContext,
   ): Promise<{ client: Anthropic; authToken: string }> {
     const authLogger = this.getAuthLogger();
-    const runtimeAuthToken = options.resolved.authToken;
+    const runtimeAuthToken: unknown = options.resolved.authToken;
     let authToken: string | undefined;
 
     if (
@@ -167,13 +169,7 @@ export class AnthropicProvider extends BaseProvider {
       runtimeAuthToken.trim() !== ''
     ) {
       authToken = runtimeAuthToken;
-    } else if (
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Anthropic runtime token provider */
-      typeof runtimeAuthToken === 'object' &&
-      runtimeAuthToken !== null &&
-      'provide' in runtimeAuthToken &&
-      typeof runtimeAuthToken.provide === 'function'
-    ) {
+    } else if (isRuntimeAuthTokenProvider(runtimeAuthToken)) {
       try {
         const freshToken = await runtimeAuthToken.provide();
         if (!freshToken) {
@@ -190,12 +186,11 @@ export class AnthropicProvider extends BaseProvider {
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy check: empty string authToken should also trigger fallback
-    if (!authToken) {
+    if (authToken === undefined || authToken === '') {
       authToken = await this.getAuthTokenForPrompt();
     }
 
-    if (!authToken) {
+    if (authToken === '') {
       authLogger.debug(
         () => 'No authentication available for Anthropic API calls',
       );
@@ -279,11 +274,11 @@ export class AnthropicProvider extends BaseProvider {
       // Add "latest" aliases for Claude 4 tiers (opus, sonnet). We pick the newest
       // version of each tier based on the sorted order created above.
       const addLatestAlias = (tier: 'opus' | 'sonnet') => {
-        const latest = models
+        const tierModels = models
           .filter((m) => m.id.startsWith(`claude-${tier}-4-`))
-          .sort((a, b) => b.id.localeCompare(a.id))[0];
-
-        if (latest != null) {
+          .sort((a, b) => b.id.localeCompare(a.id));
+        if (tierModels.length > 0) {
+          const latest = tierModels[0];
           models.push({
             ...latest,
             id: `claude-${tier}-4-latest`,
@@ -588,8 +583,7 @@ export class AnthropicProvider extends BaseProvider {
     isOAuth: boolean,
   ) {
     return buildAnthropicCustomHeaders({
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getCustomHeaders returns Record<string, string> | undefined, empty object should fall through
-      baseHeaders: this.getCustomHeaders() || {},
+      baseHeaders: this.getCustomHeaders() ?? {},
       isOAuth,
       wantCaching: requestContext.wantCaching,
       ttl: requestContext.ttl,
@@ -603,15 +597,17 @@ export class AnthropicProvider extends BaseProvider {
   ): Promise<void> {
     const waitDecision = calculateWaitTime(this.lastRateLimitInfo ?? {}, {
       throttleEnabled:
-        (requestContext.configEphemerals['rate-limit-throttle'] as string) ??
-        'on',
+        (requestContext.configEphemerals['rate-limit-throttle'] as
+          | string
+          | undefined) ?? 'on',
       thresholdPercentage:
-        (requestContext.configEphemerals[
-          'rate-limit-throttle-threshold'
-        ] as number) ?? 5,
+        (requestContext.configEphemerals['rate-limit-throttle-threshold'] as
+          | number
+          | undefined) ?? 5,
       maxWaitMs:
-        (requestContext.configEphemerals['rate-limit-max-wait'] as number) ??
-        60000,
+        (requestContext.configEphemerals['rate-limit-max-wait'] as
+          | number
+          | undefined) ?? 60000,
     });
     if (waitDecision.shouldWait) {
       rateLimitLogger.debug(() => waitDecision.reason);
@@ -628,15 +624,14 @@ export class AnthropicProvider extends BaseProvider {
     }>,
     rateLimitLogger: { debug: (fn: () => string) => void },
   ) {
-    const dumpMode = options.invocation?.ephemerals?.dumpcontext as
+    const dumpMode = options.invocation.ephemerals.dumpcontext as
       | DumpMode
       | undefined;
-    const baseURL =
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, baseURL is optional string */
-      options.resolved.baseURL ||
-      this.getBaseURL() ||
-      'https://api.anthropic.com';
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    const baseURL = firstTruthyString(
+      options.resolved.baseURL,
+      this.getBaseURL(),
+      'https://api.anthropic.com',
+    );
 
     return executeAnthropicApiCall({
       apiCallFn: apiCallWithResponse,
@@ -694,4 +689,14 @@ export class AnthropicProvider extends BaseProvider {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+}
+function isRuntimeAuthTokenProvider(
+  value: unknown,
+): value is RuntimeAuthTokenProvider {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'provide' in value &&
+    typeof value.provide === 'function'
+  );
 }

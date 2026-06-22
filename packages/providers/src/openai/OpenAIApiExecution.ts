@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import type OpenAI from 'openai';
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
@@ -93,6 +91,17 @@ async function dumpOpenAIErrorContext(
 }
 
 /**
+ * Extract a numeric HTTP status from an unknown error object, if present.
+ */
+function resolveErrorStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('status' in error)) {
+    return undefined;
+  }
+  const status = (error as { status: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/**
  * Check for Cerebras/Qwen "Tool not present" errors and throw enhanced error.
  * Returns true if the error was a Cerebras tool error (caller should not continue).
  */
@@ -142,14 +151,7 @@ async function handleApiError(
 
   const capturedErrorMessage =
     error instanceof Error ? error.message : String(error);
-  const status =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    typeof error === 'object' &&
-    error !== null &&
-    'status' in error &&
-    typeof (error as { status: unknown }).status === 'number'
-      ? (error as { status: number }).status
-      : undefined;
+  const status = resolveErrorStatus(error);
 
   ctx.logger.error(
     () =>
