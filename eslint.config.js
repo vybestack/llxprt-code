@@ -301,6 +301,33 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
+  // #2086 scope — ten target files and their extracted modules are fully
+  // compliant: zero inline lint directives. Locked to error so any new
+  // directive fails immediately. The broad 'packages/cli/src/**' entry in
+  // legacyDirectiveCleanupScopes is retained for #2087/#2091; this block
+  // overrides it for the completed #2086 files so directives are rejected.
+  'packages/cli/src/config/profileRuntimeApplication.ts', // #2086
+  'packages/cli/src/services/McpPromptLoader.ts', // #2086
+  'packages/cli/src/services/mcpPromptArgParser.ts', // #2086
+  'packages/cli/src/ui/commands/diagnosticsCommand.ts', // #2086
+  'packages/cli/src/ui/commands/diagnosticsTokens.ts', // #2086
+  'packages/cli/src/ui/commands/mcpCommand.ts', // #2086
+  'packages/cli/src/ui/commands/mcpDisplay.ts', // #2086
+  'packages/cli/src/ui/commands/mcpAuth.ts', // #2086
+  'packages/cli/src/ui/commands/memoryCommand.ts', // #2086
+  'packages/cli/src/ui/commands/profileCommand.ts', // #2086
+  'packages/cli/src/ui/commands/profileLoadBalancer.ts', // #2086
+  'packages/cli/src/ui/commands/profileLoad.ts', // #2086
+  'packages/cli/src/ui/commands/profileSchemas.ts', // #2086
+  'packages/cli/src/ui/commands/schema/index.ts', // #2086
+  'packages/cli/src/ui/commands/schema/schemaHelpers.ts', // #2086
+  'packages/cli/src/ui/commands/setCommand.ts', // #2086
+  'packages/cli/src/ui/commands/setCommandSchema.ts', // #2086
+  'packages/cli/src/ui/commands/statsCommand.ts', // #2086
+  'packages/cli/src/ui/commands/statsQuota.ts', // #2086
+  'packages/cli/src/ui/commands/todoCommand.ts', // #2086
+  'packages/cli/src/ui/commands/todoOperations.ts', // #2086
+  'packages/cli/src/ui/commands/todoFormatters.ts', // #2086
   // #2090 packages/agents test cleanup — target files and extracted helpers are
   // fully compliant: zero inline lint directives. Locked to error so any new
   // directive fails immediately while the rest of packages/agents remains in
@@ -452,6 +479,7 @@ export default tseslint.config(
       '**/.yalc/**',
       'yalc.lock',
       '**/yalc.lock',
+      '.worktrees/**',
       '.integration-tests/**',
       'eslint.config.js',
       'packages/**/dist/**',
@@ -1420,6 +1448,30 @@ export default tseslint.config(
     files: ['packages/core/src/services/environmentSanitization.ts'],
     rules: {
       'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2081/#2082 security credential-detection regex
+    },
+  },
+
+  // Issue #2086: MCP prompt argument parsing regexes. These patterns parse
+  // double-quoted strings with escape sequences (\.) for CLI prompt
+  // arguments. The sonarjs regular-expr/slow-regex heuristics flag the
+  // alternation-with-backreference structure, but the patterns operate on
+  // bounded single-line user input with explicit non-overlapping alternation
+  // branches that prevent catastrophic backtracking.
+  {
+    files: ['packages/cli/src/services/mcpPromptArgParser.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
+    },
+  },
+  // Issue #2086: position/range argument parsing regexes in todoOperations.
+  // These parse user-supplied positional numbers (e.g. "1", "1.2", "2-5")
+  // and are anchored with ^...$; inputs are bounded single-line tokens.
+  {
+    files: ['packages/cli/src/ui/commands/todoOperations.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 position arg parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 position arg parsing
     },
   },
 
