@@ -4,92 +4,65 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
-import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import {
   type Config,
-  type ContentGeneratorConfig,
   type AgentChatContract,
   type AgentClientContract,
-  logToolCall,
-  type ToolResult,
-  convertToFunctionResponse,
-  type ToolCallConfirmationDetails,
-  ToolConfirmationOutcome,
-  type ContextAwareTool,
   clearCachedCredentialFile,
-  isNodeError,
-  getErrorMessage,
-  isWithinRoot,
   getErrorStatus,
   DebugLogger,
   getFunctionCalls,
-  getResponseTextFromParts,
   EmojiFilter,
   type FilterConfiguration,
   todoEvents,
   type TodoUpdateEvent,
-  type AnyToolInvocation,
-  type AnyDeclarativeTool,
   type Todo,
   DEFAULT_AGENT_ID,
-  type ToolConfirmationPayload,
-  createInkStdio,
-  ApprovalMode,
+  type ApprovalMode,
   debugLogger,
+  createInkStdio,
 } from '@vybestack/llxprt-code-core';
-import type { FilterFilesOptions } from '@vybestack/llxprt-code-storage';
 import * as acp from '@agentclientprotocol/sdk';
-import { AcpFileSystemService } from './fileSystemService.js';
 import {
   StreamEventType,
   type StreamEvent,
 } from '@vybestack/llxprt-code-agents';
 
 import { Readable, Writable } from 'node:stream';
-import {
-  type Content,
-  type Part,
-  type FunctionCall,
-  type PartListUnion,
-} from '@google/genai';
+import { type Content, type Part, type FunctionCall } from '@google/genai';
 import { type LoadedSettings } from '../config/settings.js';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { z } from 'zod';
-import os from 'os';
-
 import { randomUUID } from 'crypto';
 import {
-  setProviderApiKey,
-  setProviderBaseUrl,
-} from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
-import {
-  clearActiveModelParam,
-  getActiveModelParams,
-  setActiveModelParam,
   getActiveProfileName,
   loadProfileByName,
   setCliRuntimeContext,
-  switchActiveProvider,
 } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import { runExitCleanup } from '../utils/cleanup.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { AcpFileSystemService } from './fileSystemService.js';
+import { parseZedAuthMethodId, buildAvailableModes } from './zed-helpers.js';
+import { ZedPathResolver } from './zed-path-resolver.js';
+import { ZedToolHandler } from './zed-tool-handler.js';
+import {
+  applyRuntimeProviderOverrides,
+  activateProviderFromConfig,
+  applyProfileModelParams,
+  authenticateWithProviderOrFallback,
+  verifyContentGeneratorConfig,
+  startChatWithRetry,
+} from './zed-provider-auth.js';
 
-type ToolRunResult = {
-  parts: Part[];
-  message?: string | null;
-};
+export { parseZedAuthMethodId } from './zed-helpers.js';
 
-export function parseZedAuthMethodId(
-  methodId: string,
-  availableProfiles: string[],
-): string {
-  if (availableProfiles.length === 0) {
-    throw new Error('No profiles available for selection');
-  }
-  return z.enum(availableProfiles as [string, ...string[]]).parse(methodId);
+function isAbortSignalAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
+function getRuntimeAgentClient(
+  config: Config,
+): AgentClientContract | undefined {
+  return (
+    config as { getAgentClient: () => AgentClientContract | undefined }
+  ).getAgentClient();
 }
 
 export async function runZedIntegration(
@@ -105,13 +78,6 @@ export async function runZedIntegration(
 
   logger.debug(() => 'Streams created');
 
-  /**
-   * @plan:PLAN-20250218-STATELESSPROVIDER.P07
-   * @requirement:REQ-SP-005
-   * Align Zed integration with cli-runtime pseudocode by registering the
-   * current Config/SettingsService pair before spawning session handlers.
-   * @pseudocode:cli-runtime.md lines 2-11
-   */
   setCliRuntimeContext(config.getSettingsService(), config, {
     metadata: { source: 'zed-integration', stage: 'bootstrap' },
   });
@@ -132,13 +98,6 @@ export async function runZedIntegration(
     throw e;
   }
 }
-function getRuntimeAgentClient(
-  config: Config,
-): AgentClientContract | undefined {
-  return (
-    config as { getAgentClient: () => AgentClientContract | undefined }
-  ).getAgentClient();
-}
 
 export class GeminiAgent {
   private sessions: Map<string, Session> = new Map();
@@ -151,50 +110,6 @@ export class GeminiAgent {
     private connection: acp.AgentSideConnection,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
-  }
-
-  /**
-   * @plan:PLAN-20250218-STATELESSPROVIDER.P07
-   * @requirement:REQ-SP-005
-   * Reapply profile-derived credentials and base URLs through runtime helpers
-   * to keep provider state in sync with the CLI context.
-   * @pseudocode:cli-runtime.md lines 9-15
-   */
-  private async applyRuntimeProviderOverrides(): Promise<void> {
-    const authKey = this.config.getEphemeralSetting('auth-key') as
-      | string
-      | undefined;
-    const authKeyfile = this.config.getEphemeralSetting('auth-keyfile') as
-      | string
-      | undefined;
-    const baseUrl = this.config.getEphemeralSetting('base-url') as
-      | string
-      | undefined;
-
-    if (authKey && authKey.trim() !== '') {
-      const result = await setProviderApiKey(authKey);
-      this.logger.debug(() => `[zed-integration] ${result.message}`);
-    } else if (authKeyfile) {
-      try {
-        const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
-        const keyFromFile = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-        if (keyFromFile) {
-          const result = await setProviderApiKey(keyFromFile);
-          this.config.setEphemeralSetting('auth-keyfile', resolvedPath);
-          this.logger.debug(() => `[zed-integration] ${result.message}`);
-        }
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `ERROR: Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    if (baseUrl !== undefined) {
-      const result = await setProviderBaseUrl(baseUrl);
-      this.logger.debug(() => `[zed-integration] ${result.message}`);
-    }
   }
 
   async initialize(
@@ -225,6 +140,10 @@ export class GeminiAgent {
     };
   }
 
+  async applyRuntimeProviderOverrides(): Promise<void> {
+    await applyRuntimeProviderOverrides(this.config, this.logger);
+  }
+
   async authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
     const profileManager = this.config.getProfileManager();
     const availableProfiles = profileManager
@@ -232,7 +151,6 @@ export class GeminiAgent {
       : [];
     const profileName = parseZedAuthMethodId(methodId, availableProfiles);
 
-    // Only clear credential cache if switching to a different profile
     const currentProfile = getActiveProfileName();
     if (!currentProfile || currentProfile !== profileName) {
       await clearCachedCredentialFile();
@@ -248,11 +166,6 @@ export class GeminiAgent {
   }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
-
-      // Follow-up (#1569): Create a per-session Config to isolate approval mode, file system
-      // service, and tool registries between concurrent sessions. Currently all
-      // sessions share one Config, which is safe only while Zed opens one
-      // session at a time.
       const sessionConfig = this.config;
 
       this.logger.debug(() => `newSession - creating session ${sessionId}`);
@@ -267,7 +180,6 @@ export class GeminiAgent {
         sessionConfig.setFileSystemService(acpFileSystemService);
       }
 
-      // Try to get the client and check if it's properly initialized
       let agentClient = getRuntimeAgentClient(sessionConfig);
       const hasContentGeneratorConfig =
         sessionConfig.getContentGeneratorConfig() !== undefined;
@@ -278,14 +190,17 @@ export class GeminiAgent {
       );
 
       if (!agentClient || !hasContentGeneratorConfig) {
-        agentClient = await this.#autoAuthenticate(sessionConfig);
+        agentClient = await this.autoAuthenticate(sessionConfig);
       }
 
       this.logger.debug(() => 'Successfully obtained AgentClient');
+      verifyContentGeneratorConfig(sessionConfig, this.logger);
 
-      this.#verifyContentGeneratorConfig(sessionConfig);
-
-      const chat = await this.#startChatWithRetry(agentClient, sessionConfig);
+      const chat = await startChatWithRetry(
+        agentClient,
+        sessionConfig,
+        this.logger,
+      );
       const session = new Session(
         sessionId,
         chat,
@@ -307,34 +222,30 @@ export class GeminiAgent {
     }
   }
 
-  /**
-   * Auto-authenticate when no AgentClient or ContentGeneratorConfig is available.
-   * Attempts provider-based auth first, then falls back to OAuth.
-   */
-  async #autoAuthenticate(sessionConfig: Config): Promise<AgentClientContract> {
+  async autoAuthenticate(sessionConfig: Config): Promise<AgentClientContract> {
     this.logger.debug(
       () => 'AgentClient not available - attempting auto-authentication',
     );
 
     const { providerManager, hasActiveProvider } =
-      await this.#activateProviderFromConfig(sessionConfig);
+      await activateProviderFromConfig(sessionConfig, this.logger);
 
     if (hasActiveProvider) {
       try {
-        await this.applyRuntimeProviderOverrides();
+        await applyRuntimeProviderOverrides(sessionConfig, this.logger);
       } catch (error) {
         this.logger.debug(
           () =>
             `ERROR: Failed to apply runtime provider overrides: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-
-      this.#applyProfileModelParams(sessionConfig, providerManager);
+      applyProfileModelParams(sessionConfig, providerManager, this.logger);
     }
 
-    await this.#authenticateWithProviderOrFallback(
+    await authenticateWithProviderOrFallback(
       sessionConfig,
       providerManager,
+      this.logger,
     );
 
     const agentClient = getRuntimeAgentClient(sessionConfig);
@@ -344,265 +255,6 @@ export class GeminiAgent {
       );
     }
     return agentClient;
-  }
-
-  /**
-   * Check for provider from config and attempt to switch active provider.
-   */
-  async #activateProviderFromConfig(sessionConfig: Config): Promise<{
-    providerManager: ReturnType<Config['getProviderManager']>;
-    hasActiveProvider: boolean;
-  }> {
-    let providerManager = sessionConfig.getProviderManager();
-
-    // Debug provider state
-    if (providerManager) {
-      const pm = providerManager;
-      const providerName = pm.getActiveProviderName();
-      this.logger.debug(
-        () =>
-          `ProviderManager exists: ${pm.hasActiveProvider() ? 'has active provider' : 'no active provider'}`,
-      );
-      this.logger.debug(
-        () => `Active provider name: ${providerName ?? 'none'}`,
-      );
-    } else {
-      this.logger.debug(() => 'No ProviderManager available');
-    }
-
-    const configProvider = sessionConfig.getProvider();
-    let hasActiveProvider = providerManager?.hasActiveProvider() ?? false;
-
-    if (configProvider) {
-      this.logger.debug(() => `Config has provider: ${configProvider}`);
-      try {
-        /**
-         * @plan:PLAN-20250218-STATELESSPROVIDER.P07
-         * @requirement:REQ-SP-005
-         * Switch active provider via runtime helper to keep Config and
-         * SettingsService aligned with stateless semantics.
-         * @pseudocode:cli-runtime.md lines 9-12
-         */
-        const result = await switchActiveProvider(configProvider);
-        providerManager = sessionConfig.getProviderManager();
-        hasActiveProvider =
-          providerManager?.hasActiveProvider() ?? result.changed;
-        if (result.infoMessages.length > 0) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const info of result.infoMessages) {
-            this.logger.debug(() => `[zed-integration] ${info}`);
-          }
-        }
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `ERROR: Failed to activate provider ${configProvider}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    if (!hasActiveProvider && (providerManager?.hasActiveProvider() ?? false)) {
-      hasActiveProvider = true;
-    }
-
-    return { providerManager, hasActiveProvider };
-  }
-
-  /**
-   * Apply profile-derived model params (base URL, model params) to the active provider.
-   */
-  #applyProfileModelParams(
-    sessionConfig: Config,
-    providerManager: ReturnType<Config['getProviderManager']>,
-  ): void {
-    const activeProvider = providerManager?.getActiveProvider();
-    if (!activeProvider) {
-      return;
-    }
-
-    const configWithProfile = sessionConfig as Config & {
-      _profileModelParams?: Record<string, unknown>;
-      _cliModelParams?: Record<string, unknown>;
-    };
-    if (
-      !configWithProfile._profileModelParams ||
-      Object.keys(configWithProfile._profileModelParams).length === 0
-    ) {
-      return;
-    }
-
-    this.logger.debug(() => 'Setting model params from profile');
-    const ephemeralBaseUrl = this.config.getEphemeralSetting('base-url') as
-      | string
-      | undefined;
-    if (
-      ephemeralBaseUrl &&
-      ephemeralBaseUrl !== 'none' &&
-      'setBaseUrl' in activeProvider &&
-      typeof (activeProvider as { setBaseUrl?: (url: string) => void })
-        .setBaseUrl === 'function'
-    ) {
-      this.logger.debug(() => `Setting base URL: ${ephemeralBaseUrl}`);
-      (activeProvider as { setBaseUrl: (url: string) => void }).setBaseUrl(
-        ephemeralBaseUrl,
-      );
-    }
-
-    const mergedModelParams = {
-      ...(configWithProfile._profileModelParams ?? {}),
-      ...(configWithProfile._cliModelParams ?? {}),
-    };
-    const existingParams = getActiveModelParams();
-
-    for (const [key, value] of Object.entries(mergedModelParams)) {
-      setActiveModelParam(key, value);
-    }
-
-    for (const key of Object.keys(existingParams)) {
-      if (!(key in mergedModelParams)) {
-        clearActiveModelParam(key);
-      }
-    }
-  }
-
-  /**
-   * Authenticate using provider manager if available, otherwise fall back to OAuth.
-   */
-  async #authenticateWithProviderOrFallback(
-    sessionConfig: Config,
-    providerManager: ReturnType<Config['getProviderManager']>,
-  ): Promise<void> {
-    const providerManagerForAuth =
-      providerManager?.hasActiveProvider() === true
-        ? providerManager
-        : undefined;
-    if (providerManagerForAuth) {
-      // Use provider-based auth if a provider is configured
-      this.logger.debug(
-        () =>
-          `Auto-authenticating with provider: ${providerManagerForAuth.getActiveProviderName()}`,
-      );
-
-      await this.#ensureProviderManagerOnConfig(
-        sessionConfig,
-        providerManagerForAuth,
-      );
-
-      await sessionConfig.refreshAuth('provider');
-
-      // After refreshAuth, verify ContentGeneratorConfig was created with provider manager
-      const contentGenConfig = sessionConfig.getContentGeneratorConfig();
-      if (contentGenConfig && !contentGenConfig.providerManager) {
-        this.logger.debug(
-          () => 'Adding provider manager to ContentGeneratorConfig',
-        );
-        contentGenConfig.providerManager = providerManagerForAuth;
-      }
-    } else {
-      // Try OAuth as last resort (this might open a browser)
-      this.logger.debug(() => 'Auto-authenticating with OAuth');
-      await sessionConfig.refreshAuth('oauth');
-    }
-  }
-
-  /**
-   * Ensure provider manager is set on config before refreshAuth,
-   * and serverToolsProvider (Gemini) has config set.
-   */
-  async #ensureProviderManagerOnConfig(
-    sessionConfig: Config,
-    providerManagerForAuth: NonNullable<
-      ReturnType<Config['getProviderManager']>
-    >,
-  ): Promise<void> {
-    this.logger.debug(() => 'Setting provider runtime factories on config');
-    configureProviderRuntimeFactories(sessionConfig, providerManagerForAuth);
-
-    // Ensure serverToolsProvider (Gemini) has config set BEFORE refreshAuth
-    // This is critical for web search to work properly
-    const serverToolsProvider = providerManagerForAuth.getServerToolsProvider();
-    if (
-      serverToolsProvider &&
-      serverToolsProvider.name === 'gemini' &&
-      'setConfig' in serverToolsProvider &&
-      typeof serverToolsProvider.setConfig === 'function'
-    ) {
-      this.logger.debug(
-        () =>
-          'Setting config on serverToolsProvider for web search (before auth)',
-      );
-      serverToolsProvider.setConfig(sessionConfig);
-    }
-  }
-
-  /**
-   * Verify ContentGeneratorConfig was created properly after authentication.
-   */
-  #verifyContentGeneratorConfig(sessionConfig: Config): void {
-    let contentGenConfig: ContentGeneratorConfig | undefined;
-    try {
-      contentGenConfig = sessionConfig.getContentGeneratorConfig();
-      this.logger.debug(
-        () => `ContentGeneratorConfig exists: ${!!contentGenConfig}`,
-      );
-      if (contentGenConfig) {
-        this.logger.debug(
-          () =>
-            `ContentGeneratorConfig has providerManager: ${(contentGenConfig as Record<string, unknown>).providerManager != null}`,
-        );
-      }
-    } catch (error) {
-      this.logger.debug(() => `Failed to get ContentGeneratorConfig: ${error}`);
-      throw new Error(
-        'Content generator config not created after authentication. Please check your credentials.',
-      );
-    }
-
-    if (!contentGenConfig) {
-      throw new Error(
-        'Content generator config not created after authentication.',
-      );
-    }
-  }
-
-  /**
-   * Start a chat session, retrying with late authentication if initial attempt fails
-   * due to missing ContentGeneratorConfig.
-   */
-  async #startChatWithRetry(
-    agentClient: AgentClientContract | undefined,
-    sessionConfig: Config,
-  ): Promise<AgentChatContract> {
-    if (!agentClient) {
-      throw new Error('AgentClient is required to start a chat session.');
-    }
-    try {
-      return await agentClient.startChat();
-    } catch (error) {
-      this.logger.debug(() => `Error starting chat: ${error}`);
-
-      // If startChat fails due to missing config, try to authenticate now
-      if (
-        error instanceof Error &&
-        error.message.includes('Content generator config')
-      ) {
-        this.logger.debug(
-          () => 'Attempting late authentication due to missing config',
-        );
-
-        const providerManager = sessionConfig.getProviderManager();
-        if (providerManager?.hasActiveProvider() === true) {
-          await sessionConfig.refreshAuth('provider');
-        } else {
-          await sessionConfig.refreshAuth('oauth');
-        }
-
-        // Try again after auth
-        return agentClient.startChat();
-      }
-
-      throw error;
-    }
   }
 
   async setSessionMode(
@@ -636,6 +288,8 @@ export class Session {
   private pendingPrompt: AbortController | null = null;
   private emojiFilter: EmojiFilter;
   private logger: DebugLogger;
+  private pathResolver: ZedPathResolver;
+  private toolHandler: ZedToolHandler;
 
   constructor(
     private readonly id: string,
@@ -644,7 +298,6 @@ export class Session {
     private readonly connection: acp.AgentSideConnection,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
-    // Initialize emoji filter from settings
     const configuredEmojiFilterMode = this.config.getEphemeralSetting(
       'emojifilter',
     ) as 'allowed' | 'auto' | 'warn' | 'error' | undefined;
@@ -652,9 +305,19 @@ export class Session {
     const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
     this.emojiFilter = new EmojiFilter(filterConfig);
 
-    // Subscribe to task events for this session
+    this.pathResolver = new ZedPathResolver(
+      this.config,
+      (update) => this.sendUpdate(update),
+      (msg) => this.debug(msg),
+    );
+    this.toolHandler = new ZedToolHandler(
+      this.id,
+      this.config,
+      this.connection,
+      (update) => this.sendUpdate(update),
+    );
+
     todoEvents.onTodoUpdated((event: TodoUpdateEvent) => {
-      // Only handle events for this session
       const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
       if (event.sessionId === this.id && eventAgentId === DEFAULT_AGENT_ID) {
         this.sendPlanUpdate(event.todos).catch((error) => {
@@ -678,7 +341,6 @@ export class Session {
     if (!this.pendingPrompt) {
       return;
     }
-
     this.pendingPrompt.abort();
     this.pendingPrompt = null;
   }
@@ -691,7 +353,21 @@ export class Session {
     const promptId = Math.random().toString(16).slice(2);
     const chat = this.chat;
 
-    const parts = await this.#resolvePrompt(params.prompt, pendingSend.signal);
+    let parts: Part[];
+    try {
+      parts = await this.pathResolver.resolvePrompt(
+        params.prompt,
+        pendingSend.signal,
+      );
+    } catch (error) {
+      if (
+        pendingSend.signal.aborted ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        return { stopReason: 'cancelled' };
+      }
+      throw error;
+    }
 
     let nextMessage: Content | null = { role: 'user', parts };
     let hasStreamedAgentContent = false;
@@ -704,15 +380,13 @@ export class Session {
         const responseStream = await chat.sendMessageStream(
           {
             message: nextMessage.parts ?? [],
-            config: {
-              abortSignal: pendingSend.signal,
-            },
+            config: { abortSignal: pendingSend.signal },
           },
           promptId,
         );
         nextMessage = null;
 
-        const streamResult = await this.#processStreamResponse(
+        const streamResult = await this.processStreamResponse(
           responseStream,
           pendingSend,
           functionCalls,
@@ -730,19 +404,17 @@ export class Session {
             'Rate limit exceeded. Try again later.',
           );
         }
-
         if (
           pendingSend.signal.aborted ||
           (error instanceof Error && error.name === 'AbortError')
         ) {
           return { stopReason: 'cancelled' };
         }
-
         throw error;
       }
 
       if (functionCalls.length > 0) {
-        const toolResult = await this.#executeToolCalls(
+        const toolResult = await this.executeToolCalls(
           functionCalls,
           pendingSend.signal,
           promptId,
@@ -755,25 +427,15 @@ export class Session {
       }
     }
 
-    await this.#sendFallbackContent(hasStreamedAgentContent, fallbackMessages);
-
+    await this.sendFallbackContent(hasStreamedAgentContent, fallbackMessages);
     return { stopReason: 'end_turn' };
   }
 
-  /**
-   * Process the streaming response from the model, batching text/thought chunks
-   * and collecting function calls. Returns whether any agent content was streamed.
-   */
-  async #processStreamResponse(
+  private async processStreamResponse(
     responseStream: AsyncIterable<StreamEvent>,
     pendingSend: AbortController,
     functionCalls: FunctionCall[],
   ): Promise<{ hasStreamedAgentContent: boolean }> {
-    // Batch streaming chunks to reduce NDJSON message count.
-    // Without batching, each model token (~617 for a typical response)
-    // becomes a separate JSON message → Zed parse → UI render cycle.
-    // Accumulating for a short window collapses these into ~10-15
-    // larger messages, significantly reducing protocol overhead.
     const BATCH_INTERVAL_MS = 100;
     let pendingText = '';
     let pendingThought = '';
@@ -811,13 +473,12 @@ export class Session {
       if (pendingSend.signal.aborted) {
         break;
       }
-
       if (
         resp.type === StreamEventType.CHUNK &&
         resp.value.candidates &&
         resp.value.candidates.length > 0
       ) {
-        const chunkResult = this.#processChunkCandidates(
+        const chunkResult = this.processChunkCandidates(
           resp.value.candidates[0],
           flushBatch,
           hasStreamedAgentContent,
@@ -829,8 +490,6 @@ export class Session {
         pendingText = chunkResult.pendingText;
         pendingThought = chunkResult.pendingThought;
       }
-
-      // Extract function calls from the response, checking for chunk type
       if (resp.type === StreamEventType.CHUNK) {
         const respFunctionCalls = getFunctionCalls(resp.value);
         if (respFunctionCalls && respFunctionCalls.length > 0) {
@@ -839,17 +498,11 @@ export class Session {
       }
     }
 
-    // Flush any remaining batched content after stream ends
     flushBatch();
-
     return { hasStreamedAgentContent };
   }
 
-  /**
-   * Process candidate parts from a stream chunk: filter emojis and
-   * accumulate pending text/thought for batched sending.
-   */
-  #processChunkCandidates(
+  private processChunkCandidates(
     candidate: { content?: { parts?: Part[] } },
     flushBatch: () => void,
     hasStreamedAgentContent: boolean,
@@ -861,14 +514,12 @@ export class Session {
     pendingText: string;
     pendingThought: string;
   } {
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const part of candidate.content?.parts ?? []) {
-      if (!part.text) {
+      const text = part.text;
+      if (text === undefined || text.length === 0) {
         continue;
       }
-
-      const filterResult = this.emojiFilter.filterText(part.text);
-
+      const filterResult = this.emojiFilter.filterText(text);
       if (filterResult.blocked) {
         flushBatch();
         hasStreamedAgentContent = true;
@@ -879,29 +530,45 @@ export class Session {
             text: '[Error: Response blocked due to emoji detection]',
           },
         });
-        continue;
-      }
-
-      const filteredText =
-        typeof filterResult.filtered === 'string' ? filterResult.filtered : '';
-
-      if (filteredText.length > 0) {
-        if (part.thought === true) {
-          pendingThought += filteredText;
-        } else {
-          pendingText += filteredText;
+      } else {
+        const filteredText = this.extractFilteredText(filterResult);
+        if (filteredText.length > 0) {
+          const accumulated = this.accumulateFilteredText(
+            part,
+            filteredText,
+            pendingThought,
+            pendingText,
+          );
+          pendingThought = accumulated.pendingThought;
+          pendingText = accumulated.pendingText;
+          scheduleBatchFlush();
         }
-        scheduleBatchFlush();
       }
     }
     return { hasStreamedAgentContent, pendingText, pendingThought };
   }
 
-  /**
-   * Execute all function calls from a model turn, returning the next user message
-   * with tool response parts, or 'cancelled' if the abort signal fired.
-   */
-  async #executeToolCalls(
+  private extractFilteredText(filterResult: {
+    filtered: string | unknown;
+  }): string {
+    return typeof filterResult.filtered === 'string'
+      ? filterResult.filtered
+      : '';
+  }
+
+  private accumulateFilteredText(
+    part: Part,
+    filteredText: string,
+    pendingThought: string,
+    pendingText: string,
+  ): { pendingThought: string; pendingText: string } {
+    if (part.thought === true) {
+      return { pendingThought: pendingThought + filteredText, pendingText };
+    }
+    return { pendingThought, pendingText: pendingText + filteredText };
+  }
+
+  private async executeToolCalls(
     functionCalls: FunctionCall[],
     signal: AbortSignal,
     promptId: string,
@@ -910,27 +577,19 @@ export class Session {
     { nextMessage: Content | null; cancelled: false } | { cancelled: true }
   > {
     const toolResponseParts: Part[] = [];
-
     for (const fc of functionCalls) {
-      if (signal.aborted) {
+      if (isAbortSignalAborted(signal)) {
         return { cancelled: true };
       }
-
-      const response = await this.runTool(signal, promptId, fc);
-
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- AbortSignal can flip while runTool awaits; avoid appending responses after cancellation.
-      if (signal.aborted) {
+      const response = await this.toolHandler.runTool(signal, promptId, fc);
+      if (isAbortSignalAborted(signal)) {
         return { cancelled: true };
       }
-
       toolResponseParts.push(...response.parts);
       if (response.message) {
         fallbackMessages.push(response.message);
       }
     }
-
-    // For multiple tool responses, send them all together as the TUI does
-    // This ensures proper conversation history structure for providers like Anthropic
     if (toolResponseParts.length > 0) {
       return {
         nextMessage: { role: 'user', parts: toolResponseParts },
@@ -940,39 +599,27 @@ export class Session {
     return { nextMessage: null, cancelled: false };
   }
 
-  /**
-   * Send fallback message content if no agent content was streamed during the prompt.
-   */
-  async #sendFallbackContent(
+  private async sendFallbackContent(
     hasStreamedAgentContent: boolean,
     fallbackMessages: string[],
   ): Promise<void> {
     if (hasStreamedAgentContent || fallbackMessages.length === 0) {
       return;
     }
-
     const combinedMessage = fallbackMessages
       .map((message) => message.trim())
       .filter((message) => message.length > 0)
       .join('\n\n');
-
     if (combinedMessage.length > 0) {
       await this.sendUpdate({
         sessionUpdate: 'agent_message_chunk',
-        content: {
-          type: 'text',
-          text: combinedMessage,
-        },
+        content: { type: 'text', text: combinedMessage },
       });
     }
   }
 
   private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
-    const params: acp.SessionNotification = {
-      sessionId: this.id,
-      update,
-    };
-
+    const params: acp.SessionNotification = { sessionId: this.id, update };
     this.logger.debug(
       () =>
         `sendUpdate: ${update.sessionUpdate} ${
@@ -981,7 +628,6 @@ export class Session {
             : ''
         }`,
     );
-
     try {
       await this.connection.sessionUpdate(params);
       this.logger.debug(() => 'sendUpdate: delivered');
@@ -993,981 +639,6 @@ export class Session {
     }
   }
 
-  private async runTool(
-    abortSignal: AbortSignal,
-    promptId: string,
-    fc: FunctionCall,
-  ): Promise<ToolRunResult> {
-    const callId = fc.id ?? `${fc.name}-${Date.now()}`;
-    const args = fc.args ?? {};
-
-    const startTime = Date.now();
-
-    const errorResponse = this.#buildErrorResponse(
-      fc,
-      callId,
-      args,
-      startTime,
-      undefined,
-      promptId,
-    );
-
-    if (!fc.name) {
-      return errorResponse(new Error('Missing function name'));
-    }
-
-    const toolRegistry = this.config.getToolRegistry();
-    const tool = toolRegistry.getTool(fc.name);
-    const toolErrorResponse = this.#buildErrorResponse(
-      fc,
-      callId,
-      args,
-      startTime,
-      tool as ContextAwareTool | undefined,
-      promptId,
-    );
-
-    if (!tool) {
-      return toolErrorResponse(
-        new Error(`Tool "${fc.name}" not found in registry.`),
-      );
-    }
-
-    try {
-      if ('context' in tool) {
-        (tool as ContextAwareTool).context = {
-          sessionId: this.id,
-          interactiveMode: true,
-        };
-      }
-
-      const invocation = tool.build(args);
-      const needsConfirmation = await this.#requestToolPermission(
-        invocation,
-        tool as ContextAwareTool,
-        callId,
-        args,
-        abortSignal,
-      );
-
-      if (needsConfirmation.cancelled) {
-        return toolErrorResponse(
-          new Error(`Tool "${fc.name}" was canceled by the user.`),
-        );
-      }
-
-      return await this.#executeToolAndBuildResult(
-        invocation,
-        fc,
-        callId,
-        args,
-        promptId,
-        startTime,
-        tool as ContextAwareTool,
-        abortSignal,
-      );
-    } catch (e) {
-      const error = e instanceof Error ? e : new Error(String(e));
-
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: callId,
-        status: 'failed',
-        content: [
-          { type: 'content', content: { type: 'text', text: error.message } },
-        ],
-      });
-
-      return toolErrorResponse(error);
-    }
-  }
-
-  /**
-   * Build an error response factory for tool call failures.
-   */
-  #buildErrorResponse(
-    fc: FunctionCall,
-    callId: string,
-    args: Record<string, unknown>,
-    startTime: number,
-    tool: ContextAwareTool | undefined,
-    promptId: string,
-  ): (error: Error) => ToolRunResult {
-    return (error: Error): ToolRunResult => {
-      const durationMs = Date.now() - startTime;
-      logToolCall(this.config, {
-        'event.name': 'tool_call',
-        'event.timestamp': new Date().toISOString(),
-        prompt_id: promptId,
-        function_name: fc.name ?? '',
-        function_args: args,
-        duration_ms: durationMs,
-        success: false,
-        error: error.message,
-        tool_type:
-          typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
-            ? 'mcp'
-            : 'native',
-        agent_id: DEFAULT_AGENT_ID,
-      });
-
-      return {
-        parts: [
-          {
-            functionCall: {
-              id: callId,
-              name: fc.name ?? '',
-              args,
-            },
-          },
-          {
-            functionResponse: {
-              id: callId,
-              name: fc.name ?? '',
-              response: { error: error.message },
-            },
-          },
-        ],
-        message: error.message,
-      };
-    };
-  }
-
-  /**
-   * Request permission from the user for tool execution if confirmation is required.
-   * Returns { cancelled: true } if the tool should not proceed.
-   */
-  async #requestToolPermission(
-    invocation: AnyToolInvocation,
-    tool: ContextAwareTool,
-    callId: string,
-    args: Record<string, unknown>,
-    abortSignal: AbortSignal,
-  ): Promise<{ cancelled: boolean }> {
-    const confirmationDetails =
-      await invocation.shouldConfirmExecute(abortSignal);
-
-    if (
-      confirmationDetails === false ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool confirmation payloads can be malformed at the ACP/runtime boundary.
-      confirmationDetails == null
-    ) {
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call',
-        toolCallId: callId,
-        status: 'in_progress',
-        title: invocation.getDescription(),
-        content: [],
-        locations: invocation.toolLocations(),
-        kind: (tool as { kind?: string }).kind as acp.ToolKind | undefined,
-      });
-      return { cancelled: false };
-    }
-
-    return this.#handleConfirmationOutcome(
-      confirmationDetails,
-      invocation,
-      tool,
-      callId,
-      args,
-    );
-  }
-
-  /**
-   * Handle the confirmation dialog for a tool call: request permission,
-   * process the outcome, and determine if the tool should proceed.
-   */
-  async #handleConfirmationOutcome(
-    confirmationDetails: ToolCallConfirmationDetails,
-    invocation: AnyToolInvocation,
-    tool: ContextAwareTool,
-    callId: string,
-    _args: Record<string, unknown>,
-  ): Promise<{ cancelled: boolean }> {
-    const content: acp.ToolCallContent[] = [];
-
-    if (confirmationDetails.type === 'edit') {
-      content.push({
-        type: 'diff',
-        path: confirmationDetails.fileName,
-        oldText: confirmationDetails.originalContent,
-        newText: confirmationDetails.newContent,
-      });
-    }
-
-    const params: acp.RequestPermissionRequest = {
-      sessionId: this.id,
-      options: toPermissionOptions(confirmationDetails),
-      toolCall: {
-        toolCallId: callId,
-        status: 'pending',
-        title: invocation.getDescription(),
-        content,
-        locations: invocation.toolLocations(),
-        kind: (tool as { kind?: string }).kind as acp.ToolKind | undefined,
-      },
-    };
-
-    const output = await this.connection.requestPermission(params);
-    const { outcome, payload } = this.#parsePermissionOutput(output);
-
-    await confirmationDetails.onConfirm(outcome, payload);
-
-    switch (outcome) {
-      case ToolConfirmationOutcome.Cancel:
-        return { cancelled: true };
-      case ToolConfirmationOutcome.SuggestEdit:
-        if (confirmationDetails.type !== 'exec' || !payload?.editedCommand) {
-          return { cancelled: true };
-        }
-        break;
-      case ToolConfirmationOutcome.ProceedOnce:
-      case ToolConfirmationOutcome.ProceedAlways:
-      case ToolConfirmationOutcome.ProceedAlwaysAndSave:
-      case ToolConfirmationOutcome.ProceedAlwaysServer:
-      case ToolConfirmationOutcome.ProceedAlwaysTool:
-      case ToolConfirmationOutcome.ModifyWithEditor:
-        break;
-      default: {
-        const resultOutcome: never = outcome;
-        throw new Error(`Unexpected: ${resultOutcome}`);
-      }
-    }
-
-    return { cancelled: false };
-  }
-
-  /**
-   * Parse the permission request output into an outcome and optional payload.
-   */
-  #parsePermissionOutput(output: acp.RequestPermissionResponse): {
-    outcome: ToolConfirmationOutcome;
-    payload: ToolConfirmationPayload | undefined;
-  } {
-    let outcome: ToolConfirmationOutcome;
-    let payload: ToolConfirmationPayload | undefined;
-
-    if (output.outcome.outcome === 'cancelled') {
-      outcome = ToolConfirmationOutcome.Cancel;
-    } else {
-      outcome = z
-        .nativeEnum(ToolConfirmationOutcome)
-        .parse(output.outcome.optionId);
-      const selectedOutcome = output.outcome as {
-        payload?: { editedCommand?: string };
-      };
-      const editedCommand = selectedOutcome.payload?.editedCommand?.trim();
-      if (typeof editedCommand === 'string' && editedCommand.length > 0) {
-        payload = { editedCommand };
-      }
-    }
-
-    return { outcome, payload };
-  }
-
-  /**
-   * Execute the tool invocation, send completion update, and build the ToolRunResult.
-   */
-  async #executeToolAndBuildResult(
-    invocation: AnyToolInvocation,
-    fc: FunctionCall,
-    callId: string,
-    args: Record<string, unknown>,
-    promptId: string,
-    startTime: number,
-    tool: ContextAwareTool,
-    abortSignal: AbortSignal,
-  ): Promise<ToolRunResult> {
-    const toolResult: ToolResult = await invocation.execute(abortSignal);
-    const content = toToolCallContent(toolResult);
-
-    await this.sendUpdate({
-      sessionUpdate: 'tool_call_update',
-      toolCallId: callId,
-      status: 'completed',
-      content: content ? [content] : [],
-    });
-
-    const durationMs = Date.now() - startTime;
-    logToolCall(this.config, {
-      'event.name': 'tool_call',
-      'event.timestamp': new Date().toISOString(),
-      function_name: fc.name!,
-      function_args: args,
-      duration_ms: durationMs,
-      success: true,
-      prompt_id: promptId,
-      tool_type: tool instanceof DiscoveredMCPTool ? 'mcp' : 'native',
-      agent_id: DEFAULT_AGENT_ID,
-    });
-
-    const functionResponseParts = convertToFunctionResponse(
-      fc.name!,
-      callId,
-      toolResult.llmContent,
-      this.config,
-    );
-    const message = this.extractToolResultText(toolResult);
-
-    return {
-      parts: [
-        {
-          functionCall: {
-            id: callId,
-            name: fc.name!,
-            args,
-          },
-        },
-        ...functionResponseParts,
-      ],
-      message,
-    };
-  }
-
-  private extractToolResultText(toolResult: ToolResult): string | null {
-    const textFromLlmContent = this.extractTextFromPartList(
-      toolResult.llmContent,
-    );
-    if (textFromLlmContent) {
-      return textFromLlmContent;
-    }
-
-    if (typeof toolResult.returnDisplay === 'string') {
-      const trimmed = toolResult.returnDisplay.trim();
-      if (trimmed.length > 0) {
-        return trimmed;
-      }
-    }
-
-    return null;
-  }
-
-  private extractTextFromPartList(
-    llmContent: PartListUnion | undefined,
-  ): string | null {
-    if (llmContent === undefined) {
-      return null;
-    }
-
-    if (typeof llmContent === 'string') {
-      const trimmed = llmContent.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    }
-
-    const parts = this.normalizeToParts(llmContent);
-    const text = getResponseTextFromParts(parts);
-    if (text !== undefined) {
-      const trimmed = text.trim();
-      if (trimmed.length > 0) {
-        return trimmed;
-      }
-    }
-
-    for (const part of parts) {
-      const response = part.functionResponse?.response;
-      const extracted = this.extractOutputString(response);
-      if (extracted) {
-        return extracted;
-      }
-    }
-
-    return null;
-  }
-
-  private normalizeToParts(input: PartListUnion): Part[] {
-    if (typeof input === 'string') {
-      return [{ text: input }];
-    }
-
-    if (Array.isArray(input)) {
-      return input.flatMap((item) =>
-        this.normalizeToParts(item as PartListUnion),
-      );
-    }
-
-    if (this.isContent(input)) {
-      return input.parts ?? [];
-    }
-
-    return [input];
-  }
-
-  private extractOutputString(response: unknown): string | null {
-    if (response === undefined || response === null) {
-      return null;
-    }
-
-    if (typeof response === 'string') {
-      const trimmed = response.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    }
-
-    if (typeof response !== 'object') {
-      return null;
-    }
-
-    const responseRecord = response as Record<string, unknown>;
-
-    const output = responseRecord.output;
-    if (typeof output === 'string') {
-      const trimmed = output.trim();
-      if (trimmed.length > 0) {
-        return trimmed;
-      }
-    }
-
-    if (responseRecord.content !== undefined) {
-      const contentParts = this.normalizeToParts(
-        responseRecord.content as PartListUnion,
-      );
-      const text = getResponseTextFromParts(contentParts);
-      if (text !== undefined) {
-        const trimmed = text.trim();
-        if (trimmed.length > 0) {
-          return trimmed;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  private isContent(value: unknown): value is Content {
-    if (value === undefined || value === null || typeof value !== 'object') {
-      return false;
-    }
-
-    const candidate = value as Partial<Content>;
-    return Array.isArray(candidate.parts);
-  }
-
-  async #resolvePrompt(
-    message: acp.ContentBlock[],
-    abortSignal: AbortSignal,
-  ): Promise<Part[]> {
-    const FILE_URI_SCHEME = 'file://';
-
-    const { parts, embeddedContext } = this.#convertContentBlocks(
-      message,
-      FILE_URI_SCHEME,
-    );
-
-    const atPathCommandParts = parts.filter((part) => 'fileData' in part);
-
-    if (atPathCommandParts.length === 0 && embeddedContext.length === 0) {
-      return parts;
-    }
-
-    const atPathToResolvedSpecMap = new Map<string, string>();
-
-    // Get centralized file discovery service
-    const fileDiscovery = this.config.getFileService();
-    const fileFilteringOptions: FilterFilesOptions =
-      this.config.getFileFilteringOptions();
-
-    const pathSpecsToRead: string[] = [];
-    const contentLabelsForDisplay: string[] = [];
-    const ignoredPaths: string[] = [];
-
-    const toolRegistry = this.config.getToolRegistry();
-    const readManyFilesTool = toolRegistry.getTool('read_many_files')!;
-    const globTool = toolRegistry.getTool('glob');
-
-    await this.#resolvePathSpecs(
-      atPathCommandParts,
-      abortSignal,
-      fileDiscovery,
-      fileFilteringOptions,
-      pathSpecsToRead,
-      contentLabelsForDisplay,
-      ignoredPaths,
-      atPathToResolvedSpecMap,
-      globTool,
-    );
-
-    // Construct the initial part of the query for the LLM
-    const initialQueryText = this.#buildQueryText(
-      parts,
-      atPathToResolvedSpecMap,
-    );
-
-    // Inform user about ignored paths
-    if (ignoredPaths.length > 0) {
-      this.debug(
-        `Ignored ${ignoredPaths.length} files: ${ignoredPaths.join(', ')}`,
-      );
-    }
-
-    const processedQueryParts: Part[] = [{ text: initialQueryText }];
-
-    if (pathSpecsToRead.length === 0 && embeddedContext.length === 0) {
-      // Fallback for lone "@" or completely invalid @-commands resulting in empty initialQueryText
-      debugLogger.warn('No valid file paths found in @ commands to read.');
-      return [{ text: initialQueryText }];
-    }
-
-    if (pathSpecsToRead.length > 0) {
-      await this.#readReferencedFiles(
-        pathSpecsToRead,
-        contentLabelsForDisplay,
-        readManyFilesTool,
-        abortSignal,
-        processedQueryParts,
-      );
-    }
-
-    if (embeddedContext.length > 0) {
-      this.#appendEmbeddedContext(processedQueryParts, embeddedContext);
-    }
-
-    return processedQueryParts;
-  }
-
-  /**
-   * Convert ACP ContentBlock array to Part[] and collect embedded context resources.
-   */
-  #convertContentBlocks(
-    message: acp.ContentBlock[],
-    fileUriScheme: string,
-  ): {
-    parts: Part[];
-    embeddedContext: acp.EmbeddedResourceResource[];
-  } {
-    const embeddedContext: acp.EmbeddedResourceResource[] = [];
-
-    const parts = message.map((part) => {
-      switch (part.type) {
-        case 'text':
-          return { text: part.text };
-        case 'image':
-        case 'audio':
-          return {
-            inlineData: {
-              mimeType: part.mimeType,
-              data: part.data,
-            },
-          };
-        case 'resource_link': {
-          if (part.uri.startsWith(fileUriScheme)) {
-            return {
-              fileData: {
-                mimeData: part.mimeType,
-                name: part.name,
-                fileUri: part.uri.slice(fileUriScheme.length),
-              },
-            };
-          }
-          return { text: `@${part.uri}` };
-        }
-        case 'resource': {
-          embeddedContext.push(part.resource);
-          return { text: `@${part.resource.uri}` };
-        }
-        default: {
-          const unreachable: never = part;
-          throw new Error(`Unexpected chunk type: '${unreachable}'`);
-        }
-      }
-    });
-
-    return { parts, embeddedContext };
-  }
-
-  /**
-   * Resolve each @-path: check if it's a file/directory in the project root,
-   * or try a glob search for missing paths.
-   */
-  async #resolvePathSpecs(
-    atPathCommandParts: Part[],
-    abortSignal: AbortSignal,
-    fileDiscovery: ReturnType<Config['getFileService']>,
-    fileFilteringOptions: FilterFilesOptions,
-    pathSpecsToRead: string[],
-    contentLabelsForDisplay: string[],
-    ignoredPaths: string[],
-    atPathToResolvedSpecMap: Map<string, string>,
-    globTool: ReturnType<Config['getToolRegistry']>['getTool'] extends (
-      name: string,
-    ) => infer T
-      ? T
-      : never,
-  ): Promise<void> {
-    for (const atPathPart of atPathCommandParts) {
-      const pathName = (atPathPart as { fileData: { fileUri: string } })
-        .fileData.fileUri;
-      // Check if path should be ignored
-      if (fileDiscovery.shouldIgnoreFile(pathName, fileFilteringOptions)) {
-        ignoredPaths.push(pathName);
-        this.debug(`Path ${pathName} is ignored and will be skipped.`);
-        continue;
-      }
-      const { currentPathSpec, resolvedSuccessfully } =
-        await this.#resolveSinglePath(pathName, abortSignal, globTool);
-      if (resolvedSuccessfully) {
-        pathSpecsToRead.push(currentPathSpec);
-        atPathToResolvedSpecMap.set(pathName, currentPathSpec);
-        contentLabelsForDisplay.push(pathName);
-      }
-    }
-  }
-
-  /**
-   * Resolve a single @-path: check if it's a file/directory in the project root,
-   * or try a glob search for missing paths.
-   */
-  async #resolveSinglePath(
-    pathName: string,
-    abortSignal: AbortSignal,
-    globTool: ReturnType<Config['getToolRegistry']>['getTool'] extends (
-      name: string,
-    ) => infer T
-      ? T
-      : never,
-  ): Promise<{ currentPathSpec: string; resolvedSuccessfully: boolean }> {
-    let currentPathSpec = pathName;
-    let resolvedSuccessfully = false;
-    try {
-      const absolutePath = path.resolve(this.config.getTargetDir(), pathName);
-      if (isWithinRoot(absolutePath, this.config.getTargetDir())) {
-        const stats = await fs.stat(absolutePath);
-        if (stats.isDirectory()) {
-          currentPathSpec = pathName.endsWith('/')
-            ? `${pathName}**`
-            : `${pathName}/**`;
-          this.debug(
-            `Path ${pathName} resolved to directory, using glob: ${currentPathSpec}`,
-          );
-        } else {
-          this.debug(`Path ${pathName} resolved to file: ${currentPathSpec}`);
-        }
-        resolvedSuccessfully = true;
-      } else {
-        this.debug(
-          `Path ${pathName} is outside the project directory. Skipping.`,
-        );
-      }
-    } catch (error) {
-      const result = await this.#resolveMissingPath(
-        pathName,
-        error,
-        abortSignal,
-        globTool,
-      );
-      resolvedSuccessfully = result.resolved;
-      if (resolvedSuccessfully && result.resolvedSpec) {
-        currentPathSpec = result.resolvedSpec;
-      }
-    }
-    return { currentPathSpec, resolvedSuccessfully };
-  }
-
-  /**
-   * Attempt to resolve a missing path via glob search when stat fails with ENOENT.
-   */
-  async #resolveMissingPath(
-    pathName: string,
-    error: unknown,
-    abortSignal: AbortSignal,
-    globTool:
-      | {
-          buildAndExecute: (
-            args: { pattern: string; path: string },
-            signal: AbortSignal,
-          ) => Promise<ToolResult>;
-        }
-      | undefined,
-  ): Promise<{ resolved: boolean; resolvedSpec?: string }> {
-    if (!isNodeError(error) || error.code !== 'ENOENT') {
-      debugLogger.error(
-        `Error stating path ${pathName}. Path ${pathName} will be skipped.`,
-      );
-      return { resolved: false };
-    }
-
-    if (!this.config.getEnableRecursiveFileSearch() || !globTool) {
-      this.debug(`Glob tool not found. Path ${pathName} will be skipped.`);
-      return { resolved: false };
-    }
-
-    this.debug(`Path ${pathName} not found directly, attempting glob search.`);
-    try {
-      const globResult = await globTool.buildAndExecute(
-        {
-          pattern: `**/*${pathName}*`,
-          path: this.config.getTargetDir(),
-        },
-        abortSignal,
-      );
-      const resolved = this.#extractGlobResult(pathName, globResult);
-      if (resolved) {
-        this.debug(
-          `Glob search for ${pathName} found ${resolved.absolutePath}, using relative path: ${resolved.relativePath}`,
-        );
-        return { resolved: true, resolvedSpec: resolved.relativePath };
-      }
-      this.debug(
-        `Glob search for '**/*${pathName}*' did not return a usable path. Path ${pathName} will be skipped.`,
-      );
-    } catch (globError) {
-      debugLogger.error(
-        `Error during glob search for ${pathName}: ${getErrorMessage(globError)}`,
-      );
-    }
-    return { resolved: false };
-  }
-
-  /**
-   * Extract the first matching file path from a glob result.
-   * Returns the relative path if found, undefined otherwise.
-   */
-  #extractGlobResult(
-    pathName: string,
-    globResult: ToolResult,
-  ): { absolutePath: string; relativePath: string } | undefined {
-    if (
-      typeof globResult.llmContent === 'string' &&
-      !globResult.llmContent.startsWith('No files found') &&
-      !globResult.llmContent.startsWith('Error:')
-    ) {
-      const lines = globResult.llmContent.split('\n');
-      if (lines.length > 1 && lines[1]) {
-        const firstMatchAbsolute = lines[1].trim();
-        return {
-          absolutePath: firstMatchAbsolute,
-          relativePath: path.relative(
-            this.config.getTargetDir(),
-            firstMatchAbsolute,
-          ),
-        };
-      }
-      this.debug(
-        `Glob search for '**/*${pathName}*' did not return a usable path. Path ${pathName} will be skipped.`,
-      );
-    } else {
-      this.debug(
-        `Glob search for '**/*${pathName}*' found no files or an error. Path ${pathName} will be skipped.`,
-      );
-    }
-    return undefined;
-  }
-
-  /**
-   * Build the initial query text from parts and resolved path specs.
-   * Handles spacing between text and @-path segments.
-   */
-  #buildQueryText(
-    parts: Part[],
-    atPathToResolvedSpecMap: Map<string, string>,
-  ): string {
-    let queryText = '';
-    for (let i = 0; i < parts.length; i++) {
-      const chunk = parts[i];
-      if ('text' in chunk) {
-        queryText += chunk.text;
-      } else {
-        queryText = this.#appendPathToQueryText(
-          chunk,
-          parts,
-          i,
-          queryText,
-          atPathToResolvedSpecMap,
-        );
-      }
-    }
-    return queryText.trim();
-  }
-
-  /**
-   * Append a @-path segment to the query text with proper spacing.
-   */
-  #appendPathToQueryText(
-    chunk: Part,
-    parts: Part[],
-    i: number,
-    queryText: string,
-    atPathToResolvedSpecMap: Map<string, string>,
-  ): string {
-    const resolvedSpec =
-      chunk.fileData &&
-      atPathToResolvedSpecMap.get(
-        (chunk as { fileData: { fileUri: string } }).fileData.fileUri,
-      );
-
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      i > 0 &&
-      queryText.length > 0 &&
-      !queryText.endsWith(' ') &&
-      resolvedSpec !== undefined &&
-      resolvedSpec.length > 0
-    ) {
-      const prevPart = parts[i - 1];
-      if (
-        'text' in prevPart ||
-        ('fileData' in prevPart &&
-          atPathToResolvedSpecMap.has(
-            (prevPart as { fileData: { fileUri: string } }).fileData.fileUri,
-          ))
-      ) {
-        queryText += ' ';
-      }
-    }
-
-    if (resolvedSpec !== undefined && resolvedSpec.length > 0) {
-      return queryText + `@${resolvedSpec}`;
-    }
-
-    // If not resolved for reading, add the original @-string back with spacing
-    const fileUri = (chunk as { fileData?: { fileUri: string } }).fileData
-      ?.fileUri;
-    if (
-      i > 0 &&
-      queryText.length > 0 &&
-      !queryText.endsWith(' ') &&
-      fileUri?.startsWith(' ') !== true
-    ) {
-      queryText += ' ';
-    }
-    if (fileUri !== undefined && fileUri.length > 0) {
-      return queryText + `@${fileUri}`;
-    }
-    return queryText;
-  }
-
-  /**
-   * Read referenced files using the read_many_files tool and append
-   * their content to processedQueryParts.
-   */
-  async #readReferencedFiles(
-    pathSpecsToRead: string[],
-    contentLabelsForDisplay: string[],
-    readManyFilesTool: AnyDeclarativeTool,
-    abortSignal: AbortSignal,
-    processedQueryParts: Part[],
-  ): Promise<void> {
-    const toolArgs = { paths: pathSpecsToRead };
-    const callId = `${readManyFilesTool.name}-${Date.now()}`;
-
-    try {
-      const invocation = readManyFilesTool.build(toolArgs);
-
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call',
-        toolCallId: callId,
-        status: 'in_progress',
-        title: invocation.getDescription(),
-        content: [],
-        locations: invocation.toolLocations(),
-        kind: (invocation as { kind?: string }).kind as
-          | acp.ToolKind
-          | undefined,
-      });
-
-      const result = await invocation.execute(abortSignal);
-      const content = toToolCallContent(result) ?? {
-        type: 'content',
-        content: {
-          type: 'text',
-          text: `Successfully read: ${contentLabelsForDisplay.join(', ')}`,
-        },
-      };
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: callId,
-        status: 'completed',
-        content: [content],
-      });
-
-      this.#appendFileContent(result.llmContent, processedQueryParts);
-    } catch (error: unknown) {
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: callId,
-        status: 'failed',
-        content: [
-          {
-            type: 'content',
-            content: {
-              type: 'text',
-              text: `Error reading files (${contentLabelsForDisplay.join(', ')}): ${getErrorMessage(error)}`,
-            },
-          },
-        ],
-      });
-
-      throw error;
-    }
-  }
-
-  /**
-   * Parse read_many_files result content and append file text to processedQueryParts.
-   */
-  #appendFileContent(
-    llmContent: PartListUnion | undefined,
-    processedQueryParts: Part[],
-  ): void {
-    if (!Array.isArray(llmContent)) {
-      debugLogger.warn(
-        'read_many_files tool returned no content or empty content.',
-      );
-      return;
-    }
-
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
-    processedQueryParts.push({
-      text: '\n--- Content from referenced files ---',
-    });
-    for (const part of llmContent) {
-      if (typeof part === 'string') {
-        const match = fileContentRegex.exec(part);
-        if (match) {
-          const filePathSpecInContent = match[1]; // This is a resolved pathSpec
-          const fileActualContent = match[2].trim();
-          processedQueryParts.push({
-            text: `\nContent from @${filePathSpecInContent}:\n`,
-          });
-          processedQueryParts.push({ text: fileActualContent });
-        } else {
-          processedQueryParts.push({ text: part });
-        }
-      } else {
-        // part is a Part object.
-        processedQueryParts.push(part);
-      }
-    }
-  }
-
-  /**
-   * Append embedded context resources to processedQueryParts.
-   */
-  #appendEmbeddedContext(
-    processedQueryParts: Part[],
-    embeddedContext: acp.EmbeddedResourceResource[],
-  ): void {
-    processedQueryParts.push({
-      text: '\n--- Content from referenced context ---',
-    });
-
-    for (const contextPart of embeddedContext) {
-      processedQueryParts.push({
-        text: `\nContent from @${contextPart.uri}:\n`,
-      });
-      if ('text' in contextPart) {
-        processedQueryParts.push({
-          text: contextPart.text,
-        });
-      } else {
-        processedQueryParts.push({
-          inlineData: {
-            mimeType: contextPart.mimeType ?? 'application/octet-stream',
-            data: contextPart.blob,
-          },
-        });
-      }
-    }
-  }
-
   debug(msg: string) {
     if (this.config.getDebugMode()) {
       debugLogger.warn(msg);
@@ -1975,143 +646,11 @@ export class Session {
   }
 
   private async sendPlanUpdate(todos: Todo[]): Promise<void> {
-    // Convert llxprt-code task format to ACP PlanEntry format
     const entries: acp.PlanEntry[] = todos.map((todo) => ({
       content: todo.content,
       status: todo.status,
       priority: 'medium' as const,
     }));
-
-    // Send plan update to Zed via ACP protocol
-    await this.sendUpdate({
-      sessionUpdate: 'plan',
-      entries,
-    });
+    await this.sendUpdate({ sessionUpdate: 'plan', entries });
   }
-}
-
-function toToolCallContent(toolResult: ToolResult): acp.ToolCallContent | null {
-  if (toolResult.error?.message) {
-    throw new Error(toolResult.error.message);
-  }
-
-  const returnDisplay = toolResult.returnDisplay;
-  // Preserve old falsy empty string return null behavior
-  if (returnDisplay === '') {
-    return null;
-  }
-  if (typeof returnDisplay === 'string') {
-    return {
-      type: 'content',
-      content: { type: 'text', text: returnDisplay },
-    };
-  }
-  if (
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- ACP payloads can contain malformed returnDisplay values at runtime.
-    returnDisplay == null ||
-    typeof returnDisplay !== 'object'
-  ) {
-    return null;
-  }
-  if ('fileDiff' in returnDisplay) {
-    return {
-      type: 'diff',
-      path: returnDisplay.fileName,
-      oldText: returnDisplay.originalContent,
-      newText: returnDisplay.newContent,
-    };
-  }
-  const content =
-    'content' in returnDisplay && typeof returnDisplay.content === 'string'
-      ? returnDisplay.content
-      : '';
-  return {
-    type: 'content',
-    content: { type: 'text', text: content },
-  };
-}
-
-const basicPermissionOptions = [
-  {
-    optionId: ToolConfirmationOutcome.ProceedOnce,
-    name: 'Allow',
-    kind: 'allow_once',
-  },
-  {
-    optionId: ToolConfirmationOutcome.Cancel,
-    name: 'Reject',
-    kind: 'reject_once',
-  },
-] as const;
-
-function toPermissionOptions(
-  confirmation: ToolCallConfirmationDetails,
-): acp.PermissionOption[] {
-  switch (confirmation.type) {
-    case 'edit':
-      return [
-        {
-          optionId: ToolConfirmationOutcome.ProceedAlways,
-          name: 'Allow All Edits',
-          kind: 'allow_always',
-        },
-        ...basicPermissionOptions,
-      ];
-    case 'exec':
-      return [
-        {
-          optionId: ToolConfirmationOutcome.ProceedAlways,
-          name: `Always Allow ${confirmation.rootCommand}`,
-          kind: 'allow_always',
-        },
-        ...basicPermissionOptions,
-      ];
-    case 'mcp':
-      return [
-        {
-          optionId: ToolConfirmationOutcome.ProceedAlwaysServer,
-          name: `Always Allow ${confirmation.serverName}`,
-          kind: 'allow_always',
-        },
-        {
-          optionId: ToolConfirmationOutcome.ProceedAlwaysTool,
-          name: `Always Allow ${confirmation.toolName}`,
-          kind: 'allow_always',
-        },
-        ...basicPermissionOptions,
-      ];
-    case 'info':
-      return [
-        {
-          optionId: ToolConfirmationOutcome.ProceedAlways,
-          name: `Always Allow`,
-          kind: 'allow_always',
-        },
-        ...basicPermissionOptions,
-      ];
-    default: {
-      const unreachable: never = confirmation;
-      throw new Error(`Unexpected: ${unreachable}`);
-    }
-  }
-}
-
-function buildAvailableModes(): acp.SessionMode[] {
-  return [
-    {
-      id: ApprovalMode.DEFAULT,
-      name: 'Default',
-      description: 'Prompts for approval',
-    },
-    {
-      id: ApprovalMode.AUTO_EDIT,
-      name: 'Auto Edit',
-      description: 'Auto-approves edit tools',
-    },
-    {
-      id: ApprovalMode.YOLO,
-      name: 'YOLO',
-      description: 'Auto-approves all tools',
-    },
-  ];
 }

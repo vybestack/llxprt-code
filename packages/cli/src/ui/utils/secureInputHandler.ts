@@ -5,13 +5,47 @@ import { debugLogger } from '@vybestack/llxprt-code-core';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 export interface SecureInputState {
   isSecureMode: boolean;
   actualValue: string;
   maskedValue: string;
   commandPrefix: string;
+}
+
+const SECURE_COMMAND_PREFIXES = ['/key', '/keyfile', '/toolkey'];
+
+const SECURE_PREFIX_PATTERN = new RegExp(
+  `^(?:${SECURE_COMMAND_PREFIXES.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?:$|\\s)`,
+);
+
+const TOOLKEY_VALUE_PATTERN = /^(\/toolkey\s+\S+\s+)([\s\S]*)/;
+const KEY_SAVE_PATTERN = /^(\/key\s+save\s+\S+\s+)([\s\S]+)/;
+const KEY_SUBCOMMAND_PATTERN = /^\/key\s+(save|load|show|list|delete)(\s|$)/;
+const KEY_VALUE_PATTERN = /^\/key\s+([\s\S]*)/;
+const KEYFILE_VALUE_PATTERN = /^\/keyfile\s+([\s\S]*)/;
+const TOOLKEY_COMMAND_PATTERN = /^(\/toolkey\s+\S+\s+)(.+)$/;
+const KEY_SAVE_COMMAND_PATTERN = /^(\/key\s+save\s+\S+\s+)(.+)$/;
+const KEY_COMMAND_PATTERN = /^(\/key\s+)(.+)$/;
+const LINE_BREAK_PATTERN = /[\r\n]/;
+
+function isSecureCommand(trimmed: string): boolean {
+  return SECURE_PREFIX_PATTERN.test(trimmed);
+}
+
+interface MaskSegment {
+  keyToMask: string;
+  afterLineBreak: string;
+}
+
+function splitAtLineBreak(content: string): MaskSegment {
+  const lineBreakMatch = content.match(LINE_BREAK_PATTERN);
+  if (lineBreakMatch?.index !== undefined) {
+    return {
+      keyToMask: content.substring(0, lineBreakMatch.index),
+      afterLineBreak: content.substring(lineBreakMatch.index),
+    };
+  }
+  return { keyToMask: content, afterLineBreak: '' };
 }
 
 /**
@@ -29,133 +63,109 @@ export class SecureInputHandler {
    * Checks if the current input should be handled securely
    */
   shouldUseSecureMode(text: string): boolean {
-    const trimmed = text.trim();
-    // Check for /key, /keyfile, or /toolkey command
-    // @plan PLAN-20260206-TOOLKEY.P11
-    // @requirement REQ-006.1
-    return (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      trimmed.startsWith('/key ') ||
-      trimmed === '/key' ||
-      trimmed.startsWith('/keyfile ') ||
-      trimmed === '/keyfile' ||
-      trimmed.startsWith('/toolkey ') ||
-      trimmed === '/toolkey'
-    );
+    return isSecureCommand(text.trim());
   }
 
   /**
    * Processes input text and returns masked version if in secure mode
    */
   processInput(text: string): string {
-    // Always update the actual value
     this.secureState.actualValue = text;
 
-    // Check if we should be in secure mode based on current text
-    const shouldBeSecure = this.shouldUseSecureMode(text);
-
-    if (shouldBeSecure) {
-      // Debug logging
-      if (process.env.DEBUG_SECURE_INPUT) {
-        debugLogger.log('[SecureHandler] Input:', JSON.stringify(text));
-      }
-
-      // @plan PLAN-20260206-TOOLKEY.P11
-      // @requirement REQ-006.1
-      // @pseudocode lines 424-445
-      // Handle /toolkey BEFORE /key (because /toolkey starts with /key)
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const toolkeyMatch = text.match(/^\/toolkey\s+\S+\s+([\s\S]*)/);
-      if (toolkeyMatch?.[1]) {
-        const patContent = toolkeyMatch[1];
-        const prefixEnd = text.indexOf(patContent);
-        const prefix = text.substring(0, prefixEnd);
-
-        const lineBreakMatch = patContent.match(/[\r\n]/);
-        if (lineBreakMatch) {
-          const keyToMask = patContent.substring(0, lineBreakMatch.index);
-          const afterLineBreak = patContent.substring(lineBreakMatch.index!);
-          return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
-        }
-        return `${prefix}${this.maskValue(patContent)}`;
-      }
-
-      // @plan PLAN-20260211-SECURESTORE.P15
-      // @requirement R20.1
-      // /key save <name> <value> — mask only the value, leave subcommand and name visible
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const keySaveMatch = text.match(/^(\/key\s+save\s+\S+\s+)([\s\S]+)/);
-      if (keySaveMatch?.[2]) {
-        const prefix = keySaveMatch[1];
-        const valueContent = keySaveMatch[2];
-        const lineBreakMatch = valueContent.match(/[\r\n]/);
-        if (lineBreakMatch) {
-          const keyToMask = valueContent.substring(0, lineBreakMatch.index);
-          const afterLineBreak = valueContent.substring(lineBreakMatch.index!);
-          return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
-        }
-        return `${prefix}${this.maskValue(valueContent)}`;
-      }
-
-      // /key <subcommand> (non-save) — don't mask arguments for load/show/list/delete
-      const keySubcmdMatch = text.match(
-        /^\/key\s+(save|load|show|list|delete)(\s|$)/,
-      );
-      if (keySubcmdMatch) {
-        // Known subcommand without value to mask (save is handled above)
-        return text;
-      }
-
-      // Check if text starts with /key or /keyfile followed by space and content
-      // @requirement R20.2 — legacy /key <raw-key> masking preserved
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const keyMatch = text.match(/^\/key\s+([\s\S]*)/);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const keyfileMatch = text.match(/^\/keyfile\s+([\s\S]*)/);
-
-      if (keyMatch?.[1]) {
-        // We have content after "/key "
-        const keyContent = keyMatch[1];
-
-        // Check if the key contains newlines or carriage returns
-        const lineBreakMatch = keyContent.match(/[\r\n]/);
-        if (lineBreakMatch) {
-          const lineBreakIndex = lineBreakMatch.index!;
-          // Mask only up to the line break, preserve everything after
-          const keyToMask = keyContent.substring(0, lineBreakIndex);
-          const afterLineBreak = keyContent.substring(lineBreakIndex);
-          const maskedKey = this.maskValue(keyToMask);
-          const result = `/key ${maskedKey}${afterLineBreak}`;
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (process.env.DEBUG_SECURE_INPUT) {
-            debugLogger.log('[SecureHandler] Output:', JSON.stringify(result));
-            debugLogger.log(
-              '[SecureHandler] Key to mask:',
-              JSON.stringify(keyToMask),
-            );
-            debugLogger.log(
-              '[SecureHandler] After line break:',
-              JSON.stringify(afterLineBreak),
-            );
-          }
-
-          return result;
-        }
-        // No line break, mask the entire key portion
-        const maskedKey = this.maskValue(keyContent);
-        return `/key ${maskedKey}`;
-      } else if (keyfileMatch?.[1]) {
-        // We have content after "/keyfile "
-        // For /keyfile, we don't mask the file path (it's not sensitive)
-        return text;
-      }
-      // Just "/key", "/keyfile" or with space but no content yet
+    if (!this.shouldUseSecureMode(text)) {
       return text;
     }
 
-    // Not in secure mode
+    if (process.env.DEBUG_SECURE_INPUT) {
+      debugLogger.log('[SecureHandler] Input:', JSON.stringify(text));
+    }
+
+    const masked = this.maskProcessInput(text);
+    if (masked !== null) {
+      return masked;
+    }
     return text;
+  }
+
+  private maskProcessInput(text: string): string | null {
+    const toolkeyResult = this.maskToolKeyInput(text);
+    if (toolkeyResult !== null) {
+      return toolkeyResult;
+    }
+
+    const keySaveResult = this.maskKeySaveInput(text);
+    if (keySaveResult !== null) {
+      return keySaveResult;
+    }
+
+    if (KEY_SUBCOMMAND_PATTERN.test(text)) {
+      return text;
+    }
+
+    const keyResult = this.maskKeyInput(text);
+    if (keyResult !== null) {
+      return keyResult;
+    }
+
+    if (KEYFILE_VALUE_PATTERN.test(text)) {
+      return text;
+    }
+
+    return text;
+  }
+
+  private maskToolKeyInput(text: string): string | null {
+    const toolkeyMatch = text.match(TOOLKEY_VALUE_PATTERN);
+    if (!toolkeyMatch?.[2]) {
+      return null;
+    }
+    const prefix = toolkeyMatch[1];
+    const valueContent = toolkeyMatch[2];
+    const { keyToMask, afterLineBreak } = splitAtLineBreak(valueContent);
+    if (afterLineBreak) {
+      return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
+    }
+    return `${prefix}${this.maskValue(valueContent)}`;
+  }
+
+  private maskKeySaveInput(text: string): string | null {
+    const keySaveMatch = text.match(KEY_SAVE_PATTERN);
+    if (!keySaveMatch?.[2]) {
+      return null;
+    }
+    const prefix = keySaveMatch[1];
+    const valueContent = keySaveMatch[2];
+    const { keyToMask, afterLineBreak } = splitAtLineBreak(valueContent);
+    if (afterLineBreak) {
+      return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
+    }
+    return `${prefix}${this.maskValue(valueContent)}`;
+  }
+
+  private maskKeyInput(text: string): string | null {
+    const keyMatch = text.match(KEY_VALUE_PATTERN);
+    if (!keyMatch?.[1]) {
+      return null;
+    }
+    const keyContent = keyMatch[1];
+    const { keyToMask, afterLineBreak } = splitAtLineBreak(keyContent);
+    const maskedKey = this.maskValue(keyToMask);
+    if (afterLineBreak) {
+      const result = `/key ${maskedKey}${afterLineBreak}`;
+      if (process.env.DEBUG_SECURE_INPUT) {
+        debugLogger.log('[SecureHandler] Output:', JSON.stringify(result));
+        debugLogger.log(
+          '[SecureHandler] Key to mask:',
+          JSON.stringify(keyToMask),
+        );
+        debugLogger.log(
+          '[SecureHandler] After line break:',
+          JSON.stringify(afterLineBreak),
+        );
+      }
+      return result;
+    }
+    return `/key ${maskedKey}`;
   }
 
   /**
@@ -169,7 +179,6 @@ export class SecureInputHandler {
    * Checks if currently in secure mode
    */
   isInSecureMode(): boolean {
-    // We're in secure mode if the current actual value matches /key pattern
     return this.shouldUseSecureMode(this.secureState.actualValue || '');
   }
 
@@ -191,11 +200,10 @@ export class SecureInputHandler {
   private maskValue(value: string): string {
     if (!value) return '';
 
-    // Show first and last 2 characters for long keys, mask everything for short keys
     if (value.length > 8) {
       const firstTwo = value.substring(0, 2);
       const lastTwo = value.substring(value.length - 2);
-      const maskLength = value.length - 4; // This should be exactly the number of characters between first 2 and last 2
+      const maskLength = value.length - 4;
       return `${firstTwo}${'*'.repeat(maskLength)}${lastTwo}`;
     }
 
@@ -206,46 +214,29 @@ export class SecureInputHandler {
    * Sanitizes command for history storage
    */
   sanitizeForHistory(command: string): string {
-    if (this.shouldUseSecureMode(command)) {
-      // @plan PLAN-20260206-TOOLKEY.P11
-      // @requirement REQ-006.2
-      // @pseudocode lines 450-462
-      // /toolkey MUST be checked BEFORE /key (because /toolkey starts with /key)
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      const toolkeyCommandMatch = command.match(/^(\/toolkey\s+\S+\s+)(.+)$/);
-      if (toolkeyCommandMatch) {
-        const prefix = toolkeyCommandMatch[1];
-        const keyValue = toolkeyCommandMatch[2];
-        return `${prefix}${this.maskValue(keyValue)}`;
-      }
-
-      // @plan PLAN-20260211-SECURESTORE.P15
-      // @requirement R20.1 — /key save <name> <value>: mask only the value
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      const keySaveMatch = command.match(/^(\/key\s+save\s+\S+\s+)(.+)$/);
-      if (keySaveMatch) {
-        return `${keySaveMatch[1]}${this.maskValue(keySaveMatch[2])}`;
-      }
-
-      // /key <subcommand> (non-save) — don't mask arguments
-      const subcommandMatch = command.match(
-        /^\/key\s+(save|load|show|list|delete)(\s|$)/,
-      );
-      if (subcommandMatch) {
-        return command;
-      }
-
-      // @requirement R20.2 — legacy /key <raw-key> masking
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      const keyCommandMatch = command.match(/^(\/key\s+)(.+)$/);
-      if (keyCommandMatch) {
-        const prefix = keyCommandMatch[1];
-        const keyValue = keyCommandMatch[2];
-        return `${prefix}${this.maskValue(keyValue)}`;
-      }
-      // For /keyfile and /toolkeyfile, we don't mask the file path (it's not sensitive)
-      // Just return the command as-is
+    if (!this.shouldUseSecureMode(command)) {
+      return command;
     }
+
+    const toolkeyCommandMatch = command.match(TOOLKEY_COMMAND_PATTERN);
+    if (toolkeyCommandMatch) {
+      return `${toolkeyCommandMatch[1]}${this.maskValue(toolkeyCommandMatch[2])}`;
+    }
+
+    const keySaveMatch = command.match(KEY_SAVE_COMMAND_PATTERN);
+    if (keySaveMatch) {
+      return `${keySaveMatch[1]}${this.maskValue(keySaveMatch[2])}`;
+    }
+
+    if (KEY_SUBCOMMAND_PATTERN.test(command)) {
+      return command;
+    }
+
+    const keyCommandMatch = command.match(KEY_COMMAND_PATTERN);
+    if (keyCommandMatch) {
+      return `${keyCommandMatch[1]}${this.maskValue(keyCommandMatch[2])}`;
+    }
+
     return command;
   }
 }

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type { PartUnion } from '@google/genai';
 import { unescapePath } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -45,6 +43,57 @@ interface HandleAtCommandParams {
 
 type HandleAtCommandResult = AtCommandProcessResult;
 
+const PATH_TERMINATOR = /[,\s;!?()[\]{}]/;
+const WHITESPACE = /\s/;
+
+function findNextUnescapedAt(query: string, startIndex: number): number {
+  for (let i = startIndex; i < query.length; i++) {
+    if (query[i] !== '@') {
+      continue;
+    }
+    // Count consecutive backslashes immediately preceding '@'.
+    // Odd count => the '@' is escaped (consumed by a trailing backslash).
+    // Even count => the '@' is not escaped (backslashes pair up).
+    let backslashCount = 0;
+    for (let j = i - 1; j >= 0 && query[j] === '\\'; j--) {
+      backslashCount++;
+    }
+    if (backslashCount % 2 === 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function isPathTerminatorAt(query: string, index: number): boolean {
+  const char = query[index];
+  if (PATH_TERMINATOR.test(char)) {
+    return true;
+  }
+  if (char === '.') {
+    const nextChar = index + 1 < query.length ? query[index + 1] : '';
+    return nextChar === '' || WHITESPACE.test(nextChar);
+  }
+  return false;
+}
+
+function findPathEnd(query: string, startIndex: number): number {
+  let pathEndIndex = startIndex;
+  let inEscape = false;
+  while (pathEndIndex < query.length) {
+    const char = query[pathEndIndex];
+    if (inEscape) {
+      inEscape = false;
+    } else if (char === '\\') {
+      inEscape = true;
+    } else if (isPathTerminatorAt(query, pathEndIndex)) {
+      break;
+    }
+    pathEndIndex++;
+  }
+  return pathEndIndex;
+}
+
 /**
  * Parses a query string to find all '@<path>' commands and text segments.
  * Handles \ escaped spaces within paths.
@@ -54,8 +103,6 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
   // In PowerShell, also support '+' prefix as alternative to '@'
   // This avoids PowerShell's hashtable completion interference
   if (isPowerShell) {
-    // Replace '+' with '@' for consistent processing when it's followed by a path
-    // We look for + followed by non-whitespace to avoid replacing arithmetic
     query = query.replace(/\+(?=\S)/g, '@');
   }
 
@@ -63,29 +110,13 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
   let currentIndex = 0;
 
   while (currentIndex < query.length) {
-    let atIndex = -1;
-    let nextSearchIndex = currentIndex;
-    // Find next unescaped '@'
-    while (nextSearchIndex < query.length) {
-      if (
-        query[nextSearchIndex] === '@' &&
-        (nextSearchIndex === 0 || query[nextSearchIndex - 1] !== '\\')
-      ) {
-        atIndex = nextSearchIndex;
-        break;
-      }
-      nextSearchIndex++;
-    }
+    const atIndex = findNextUnescapedAt(query, currentIndex);
 
     if (atIndex === -1) {
-      // No more @
-      if (currentIndex < query.length) {
-        parts.push({ type: 'text', content: query.substring(currentIndex) });
-      }
+      parts.push({ type: 'text', content: query.substring(currentIndex) });
       break;
     }
 
-    // Add text before @
     if (atIndex > currentIndex) {
       parts.push({
         type: 'text',
@@ -93,38 +124,12 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
       });
     }
 
-    // Parse @path
-    let pathEndIndex = atIndex + 1;
-    let inEscape = false;
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    while (pathEndIndex < query.length) {
-      const char = query[pathEndIndex];
-      if (inEscape) {
-        inEscape = false;
-      } else if (char === '\\') {
-        inEscape = true;
-      } else if (/[,\s;!?()[\]{}]/.test(char)) {
-        // Path ends at first whitespace or punctuation not escaped
-        break;
-      } else if (char === '.') {
-        // For . we need to be more careful - only terminate if followed by whitespace or end of string
-        // This allows file extensions like .txt, .js but terminates at sentence endings like "file.txt. Next sentence"
-        const nextChar =
-          pathEndIndex + 1 < query.length ? query[pathEndIndex + 1] : '';
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (nextChar === '' || /\s/.test(nextChar)) {
-          break;
-        }
-      }
-      pathEndIndex++;
-    }
+    const pathEndIndex = findPathEnd(query, atIndex + 1);
     const rawAtPath = query.substring(atIndex, pathEndIndex);
-    // unescapePath expects the @ symbol to be present, and will handle it.
     const atPath = unescapePath(rawAtPath);
     parts.push({ type: 'atPath', content: atPath });
     currentIndex = pathEndIndex;
   }
-  // Filter out empty text parts that might result from consecutive @paths or leading/trailing spaces
   return parts.filter(
     (part) => !(part.type === 'text' && part.content.trim() === ''),
   );

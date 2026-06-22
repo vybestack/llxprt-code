@@ -176,7 +176,7 @@ const legacyDirectiveCleanupScopes = [
   'packages/providers/src/utils/toolNameNormalization.ts', // #2084
   'packages/providers/src/utils/toolResponsePayload.ts', // #2084
   'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
-  'packages/cli/src/**/*.{ts,tsx}', // #2086/#2087/#2091
+  'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
   // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
@@ -301,6 +301,24 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
+  // #2087 scope — packages/cli UI hooks, components, utils, state, themes,
+  // and Zed integration are fully compliant: zero inline lint directives.
+  // Locked to error so any new directive fails immediately.
+  'packages/cli/src/ui/components/shared/text-buffer.ts', // #2087
+  'packages/cli/src/ui/hooks/atCommandProcessor.ts', // #2087
+  'packages/cli/src/ui/hooks/keyToAnsi.ts', // #2087
+  'packages/cli/src/ui/hooks/useProfileManagement.ts', // #2087
+  'packages/cli/src/ui/hooks/usePromptCompletion.ts', // #2087
+  'packages/cli/src/ui/hooks/vim.ts', // #2087
+  'packages/cli/src/ui/state/extensions.ts', // #2087
+  'packages/cli/src/ui/themes/theme.ts', // #2087
+  'packages/cli/src/ui/utils/responsive.ts', // #2087
+  'packages/cli/src/ui/utils/secureInputHandler.ts', // #2087
+  'packages/cli/src/ui/utils/terminalSetup.ts', // #2087
+  'packages/cli/src/utils/formatRelativeTime.ts', // #2087
+  'packages/cli/src/utils/privacy/ConversationDataRedactor.ts', // #2087
+  'packages/cli/src/utils/sandbox.ts', // #2087
+  'packages/cli/src/zed-integration/zedIntegration.ts', // #2087
   // #2086 scope — ten target files and their extracted modules are fully
   // compliant: zero inline lint directives. Locked to error so any new
   // directive fails immediately. The broad 'packages/cli/src/**' entry in
@@ -1448,6 +1466,26 @@ export default tseslint.config(
     files: ['packages/core/src/services/environmentSanitization.ts'],
     rules: {
       'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2081/#2082 security credential-detection regex
+    },
+  },
+
+  // Issue #2087: Static, reviewed regex patterns that parse terminal/command
+  // input at trusted boundaries. The inputs are bounded (single CLI command
+  // lines or local config values, not untrusted network data) and the patterns
+  // are anchored with explicit quantifiers. sonarjs/regular-expr and
+  // sonarjs/slow-regex are generic heuristics that cannot distinguish these
+  // bounded parsing cases from ReDoS-vulnerable network input validation.
+  {
+    files: [
+      'packages/cli/src/ui/utils/secureInputHandler.ts',
+      'packages/cli/src/ui/utils/terminalSetup.ts',
+      'packages/cli/src/utils/privacy/ConversationDataRedactor.ts',
+      'packages/cli/src/utils/sandbox-env.ts',
+      'packages/cli/src/zed-integration/zed-path-resolver.ts',
+    ],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
     },
   },
 

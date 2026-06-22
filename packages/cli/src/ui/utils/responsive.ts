@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 export const BREAKPOINTS = {
   NARROW: 80,
   STANDARD: 120,
@@ -28,6 +26,54 @@ export function isNarrowWidth(width: number): boolean {
   return width < BREAKPOINTS.NARROW;
 }
 
+const ELLIPSIS = '...';
+
+function truncatePathMiddle(
+  text: string,
+  maxLength: number,
+  segments: string[],
+): string | null {
+  const firstDir = segments[0];
+  const filename = segments[segments.length - 1];
+  const parentDir = segments.length > 2 ? segments[segments.length - 2] : '';
+  // Preserve leading slash for absolute paths (segments[0] === '' when
+  // text starts with '/').
+  const leadingSlash = text.startsWith('/') ? '/' : '';
+
+  if (parentDir && segments.length >= 3) {
+    const candidate =
+      leadingSlash + firstDir + ELLIPSIS + '/' + parentDir + '/' + filename;
+    if (candidate.length <= maxLength) {
+      return candidate;
+    }
+  }
+
+  const candidate2 = leadingSlash + firstDir + ELLIPSIS + '/' + filename;
+  if (candidate2.length <= maxLength) {
+    return candidate2;
+  }
+
+  if (maxLength <= 10) {
+    const firstChar = firstDir.length > 0 ? firstDir.charAt(0) : '/';
+    const availableForEnd = maxLength - firstChar.length - ELLIPSIS.length - 1;
+    if (availableForEnd > 0) {
+      const endPart =
+        filename.length <= availableForEnd
+          ? filename
+          : filename.substring(filename.length - availableForEnd);
+      return firstChar + ELLIPSIS + '/' + endPart;
+    }
+  }
+
+  const availableForStart = maxLength - ELLIPSIS.length - filename.length - 1;
+  if (availableForStart > 0) {
+    const startPart = text.substring(0, availableForStart);
+    return startPart + ELLIPSIS + '/' + filename;
+  }
+
+  return null;
+}
+
 export function truncateMiddle(text: string, maxLength: number): string {
   if (text.length <= maxLength) {
     return text;
@@ -41,69 +87,24 @@ export function truncateMiddle(text: string, maxLength: number): string {
     return '..';
   }
 
-  const ellipsis = '...';
-
-  // For path-like strings, use smart path truncation
   if (text.includes('/')) {
     const segments = text.split('/');
-    if (segments.length < 2) {
-      // Not really a path, fall back to standard truncation
-    } else {
-      const firstDir = segments[0];
-      const filename = segments[segments.length - 1];
-      const parentDir =
-        segments.length > 2 ? segments[segments.length - 2] : '';
-
-      // Try: firstDir + ... + parentDir + filename
-      if (parentDir && segments.length >= 3) {
-        const candidate =
-          firstDir + ellipsis + '/' + parentDir + '/' + filename;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (candidate.length <= maxLength) {
-          return candidate;
-        }
-      }
-
-      // Try: firstDir + ... + filename
-      const candidate2 = firstDir + ellipsis + '/' + filename;
-      if (candidate2.length <= maxLength) {
-        return candidate2;
-      }
-
-      // Try: /firstChar + ... + endOfFilename (for very constrained cases)
-      if (maxLength <= 10) {
-        const firstChar = firstDir.length > 0 ? firstDir.charAt(0) : '/';
-        const availableForEnd =
-          maxLength - firstChar.length - ellipsis.length - 1; // -1 for '/'
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (availableForEnd > 0) {
-          const endPart =
-            filename.length <= availableForEnd
-              ? filename
-              : filename.substring(filename.length - availableForEnd);
-          return firstChar + ellipsis + '/' + endPart;
-        }
-      }
-
-      // Character-based fallback
-      const availableForStart =
-        maxLength - ellipsis.length - filename.length - 1; // -1 for '/'
-      if (availableForStart > 0) {
-        const startPart = text.substring(0, availableForStart);
-        return startPart + ellipsis + '/' + filename;
+    if (segments.length >= 2) {
+      const pathResult = truncatePathMiddle(text, maxLength, segments);
+      if (pathResult !== null) {
+        return pathResult;
       }
     }
   }
 
-  // Standard middle truncation for non-path strings
-  const availableSpace = maxLength - ellipsis.length;
+  const availableSpace = maxLength - ELLIPSIS.length;
   const startChars = Math.ceil(availableSpace / 2);
   const endChars = Math.floor(availableSpace / 2);
 
   const start = text.substring(0, startChars);
   const end = text.substring(text.length - endChars);
 
-  return start + ellipsis + end;
+  return start + ELLIPSIS + end;
 }
 
 export function truncateStart(text: string, maxLength: number): string {
@@ -119,9 +120,8 @@ export function truncateStart(text: string, maxLength: number): string {
     return '.'.repeat(maxLength);
   }
 
-  const ellipsis = '...';
-  const endChars = maxLength - ellipsis.length;
-  return ellipsis + text.slice(-endChars);
+  const endChars = maxLength - ELLIPSIS.length;
+  return ELLIPSIS + text.slice(-endChars);
 }
 
 export function truncateEnd(text: string, maxLength: number): string {
@@ -137,8 +137,7 @@ export function truncateEnd(text: string, maxLength: number): string {
     return '.'.repeat(maxLength);
   }
 
-  const ellipsis = '...';
-  const keepChars = maxLength - ellipsis.length;
+  const keepChars = maxLength - ELLIPSIS.length;
 
-  return text.substring(0, keepChars) + ellipsis;
+  return text.substring(0, keepChars) + ELLIPSIS;
 }

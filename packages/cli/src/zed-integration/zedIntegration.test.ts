@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseZedAuthMethodId } from './zedIntegration.js';
 
 // Mock runtimeSettings to test credential cache clearing logic
