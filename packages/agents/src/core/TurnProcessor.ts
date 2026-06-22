@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import type { GenerateContentResponse } from '@google/genai';
 import {
   type Content,
@@ -70,6 +68,19 @@ interface ToolSelectionHookResult {
 }
 
 import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
+
+/**
+ * Reads user memory from the runtime config. Config is typed with a required
+ * getUserMemory(), but runtime payloads (including test doubles) may omit it,
+ * so existence is validated at this boundary.
+ */
+function resolveUserMemory(config: Config | undefined): string {
+  if (!config) {
+    return '';
+  }
+  const getter = (config as unknown as Record<string, unknown>).getUserMemory;
+  return typeof getter === 'function' ? config.getUserMemory() : '';
+}
 
 /**
  * Handles turn-level operations: sendMessage, sendMessageStream, waitForIdle.
@@ -199,83 +210,94 @@ export class TurnProcessor {
   ): AsyncGenerator<StreamEvent> {
     try {
       let lastError: unknown = new Error('Request failed after all retries.');
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (
-        let attempt = 0;
-        attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts;
-        attempt++
-      ) {
-        try {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (attempt > 0) yield { type: StreamEventType.RETRY };
-
-          const currentParams = this._applyRetryTemperature(params, attempt);
-          const stream = await this.streamProcessor.makeApiCallAndProcessStream(
-            currentParams,
-            prompt_id,
-            pendingTokens,
-            userContent,
+      let attempt = 0;
+      let retrying = true;
+      while (retrying && attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts) {
+        const outcome = yield* this._runStreamAttempt(
+          params,
+          prompt_id,
+          pendingTokens,
+          userContent,
+          attempt,
+        );
+        lastError = outcome.error;
+        if (outcome.action !== 'retry') {
+          retrying = false;
+        } else {
+          await new Promise((res) =>
+            setTimeout(
+              res,
+              INVALID_CONTENT_RETRY_OPTIONS.initialDelayMs * (attempt + 1),
+            ),
           );
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for await (const chunk of stream) {
-            yield { type: StreamEventType.CHUNK, value: chunk };
-          }
-          lastError = null;
-          break;
-        } catch (error) {
-          // Handle hook execution control errors before retry logic
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (error instanceof AgentExecutionStoppedError) {
-            yield {
-              type: StreamEventType.AGENT_EXECUTION_STOPPED,
-              reason: error.reason,
-              systemMessage: error.systemMessage,
-              contextCleared: error.contextCleared,
-            };
-            lastError = null;
-            break;
-          }
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (error instanceof AgentExecutionBlockedError) {
-            yield {
-              type: StreamEventType.AGENT_EXECUTION_BLOCKED,
-              reason: error.reason,
-              systemMessage: error.systemMessage,
-              contextCleared: error.contextCleared,
-            };
-            // If there's a synthetic response, yield it as a chunk
-            if (error.syntheticResponse) {
-              yield {
-                type: StreamEventType.CHUNK,
-                value: error.syntheticResponse,
-              };
-            }
-            lastError = null;
-            break;
-          }
-
-          lastError = error;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (
-            (error instanceof InvalidStreamError ||
-              error instanceof EmptyStreamError) &&
-            attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts - 1
-          ) {
-            await new Promise((res) =>
-              setTimeout(
-                res,
-                INVALID_CONTENT_RETRY_OPTIONS.initialDelayMs * (attempt + 1),
-              ),
-            );
-            continue;
-          }
-          break;
+          attempt++;
         }
       }
       if (lastError != null) throw lastError;
     } finally {
       onDone();
+    }
+  }
+
+  /**
+   * Runs a single stream attempt, yielding events incrementally. Returns the
+   * outcome (error + action) so the caller loop can decide retry vs stop with
+   * a single break/continue.
+   */
+  private async *_runStreamAttempt(
+    params: SendMessageParameters,
+    prompt_id: string,
+    pendingTokens: number,
+    userContent: Content | Content[],
+    attempt: number,
+  ): AsyncGenerator<StreamEvent, { error: unknown; action: 'retry' | 'stop' }> {
+    if (attempt > 0) {
+      yield { type: StreamEventType.RETRY };
+    }
+
+    try {
+      const currentParams = this._applyRetryTemperature(params, attempt);
+      const stream = await this.streamProcessor.makeApiCallAndProcessStream(
+        currentParams,
+        prompt_id,
+        pendingTokens,
+        userContent,
+      );
+      for await (const chunk of stream) {
+        yield { type: StreamEventType.CHUNK, value: chunk };
+      }
+      return { error: null, action: 'stop' };
+    } catch (error) {
+      // Hook execution control errors are yielded then stop the loop.
+      if (error instanceof AgentExecutionStoppedError) {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_STOPPED,
+          reason: error.reason,
+          systemMessage: error.systemMessage,
+          contextCleared: error.contextCleared,
+        };
+        return { error: null, action: 'stop' };
+      }
+      if (error instanceof AgentExecutionBlockedError) {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_BLOCKED,
+          reason: error.reason,
+          systemMessage: error.systemMessage,
+          contextCleared: error.contextCleared,
+        };
+        if (error.syntheticResponse) {
+          yield { type: StreamEventType.CHUNK, value: error.syntheticResponse };
+        }
+        return { error: null, action: 'stop' };
+      }
+      if (
+        (error instanceof InvalidStreamError ||
+          error instanceof EmptyStreamError) &&
+        attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts - 1
+      ) {
+        return { error, action: 'retry' };
+      }
+      return { error, action: 'stop' };
     }
   }
 
@@ -437,7 +459,6 @@ export class TurnProcessor {
       () => '[TurnProcessor] Active provider snapshot before send',
       {
         providerName: provider.name,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeContext.state.model,
         baseUrl: this.resolveProviderBaseUrl(provider),
@@ -522,8 +543,7 @@ export class TurnProcessor {
       settings:
         runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
-      userMemory: runtimeContext.config?.getUserMemory?.(),
+      userMemory: resolveUserMemory(runtimeContext.config),
     });
   }
 
@@ -540,22 +560,23 @@ export class TurnProcessor {
       runtimeContext.config,
     );
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
-    while (true) {
-      const nextResponse = await this._readProviderStreamResponse(
+    let nextResponse = await this._readProviderStreamResponse(
+      iterator,
+      timeoutController,
+      upstreamAbortSignal,
+      effectiveTimeoutMs,
+    );
+    while (nextResponse.done !== true) {
+      const iContent = nextResponse.value;
+      this._trackProviderPromptTokens(iContent);
+      blocks.push(...iContent.blocks);
+      lastResponse = iContent;
+      nextResponse = await this._readProviderStreamResponse(
         iterator,
         timeoutController,
         upstreamAbortSignal,
         effectiveTimeoutMs,
       );
-      if (nextResponse.done === true) {
-        break;
-      }
-
-      const iContent = nextResponse.value;
-      this._trackProviderPromptTokens(iContent);
-      blocks.push(...iContent.blocks);
-      lastResponse = iContent;
     }
 
     if (!lastResponse) throw new Error('No response from provider');
@@ -678,8 +699,7 @@ export class TurnProcessor {
       {
         providerName: provider.name,
         model: this.runtimeContext.state.model,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
-        toolCount: (tools as unknown[])?.length ?? 0,
+        toolCount: Array.isArray(tools) ? tools.length : 0,
         baseUrl,
       },
     );
@@ -721,8 +741,7 @@ export class TurnProcessor {
   ): void {
     const curatedHistory = this.historyService.getCurated();
     const index = ContentConverters.toGeminiContents(curatedHistory).length;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
-    const newEntries = afcHistory.slice(index) ?? [];
+    const newEntries = afcHistory.slice(index);
     const matcher = this.makePositionMatcher();
     for (const content of newEntries) {
       const turnKey = this.historyService.generateTurnKey();
@@ -849,27 +868,11 @@ export class TurnProcessor {
       const cyclicSchemaTools: string[] = [];
 
       for (const toolGroup of tools) {
-        if (
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool groups can be malformed at runtime.
-          toolGroup !== null &&
-          typeof toolGroup === 'object' &&
-          'functionDeclarations' in toolGroup &&
-          Array.isArray(toolGroup.functionDeclarations)
-        ) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const funcDecl of toolGroup.functionDeclarations) {
-            const name = funcDecl.name ?? 'unknown';
-            toolNames.push(name);
-            const schema = funcDecl.parametersJsonSchema;
-            if (
-              schema != null &&
-              typeof schema === 'object' &&
-              hasCycleInSchema(schema as Record<string, unknown>)
-            ) {
-              cyclicSchemaTools.push(name);
-            }
-          }
-        }
+        this._collectCyclicSchemaToolNames(
+          toolGroup,
+          toolNames,
+          cyclicSchemaTools,
+        );
       }
 
       const metadata = {
@@ -889,6 +892,38 @@ export class TurnProcessor {
         () => `[TurnProcessor] Schema depth error encountered${extraDetails}`,
         metadata,
       );
+    }
+  }
+
+  /**
+   * Collects tool names and any with cyclic schemas from a single tool group.
+   * Tool groups can be malformed at runtime, so the shape is validated before use.
+   */
+  private _collectCyclicSchemaToolNames(
+    toolGroup: unknown,
+    toolNames: string[],
+    cyclicSchemaTools: string[],
+  ): void {
+    if (
+      typeof toolGroup !== 'object' ||
+      toolGroup === null ||
+      !('functionDeclarations' in toolGroup) ||
+      !Array.isArray(toolGroup.functionDeclarations)
+    ) {
+      return;
+    }
+
+    for (const funcDecl of toolGroup.functionDeclarations) {
+      const name = funcDecl.name ?? 'unknown';
+      toolNames.push(name);
+      const schema = funcDecl.parametersJsonSchema;
+      if (
+        schema != null &&
+        typeof schema === 'object' &&
+        hasCycleInSchema(schema as Record<string, unknown>)
+      ) {
+        cyclicSchemaTools.push(name);
+      }
     }
   }
 }

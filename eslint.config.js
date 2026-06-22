@@ -319,6 +319,173 @@ const completedDirectiveCleanupScopes = [
   'packages/cli/src/utils/privacy/ConversationDataRedactor.ts', // #2087
   'packages/cli/src/utils/sandbox.ts', // #2087
   'packages/cli/src/zed-integration/zedIntegration.ts', // #2087
+  // #2086 scope — ten target files and their extracted modules are fully
+  // compliant: zero inline lint directives. Locked to error so any new
+  // directive fails immediately. The broad 'packages/cli/src/**' entry in
+  // legacyDirectiveCleanupScopes is retained for #2087/#2091; this block
+  // overrides it for the completed #2086 files so directives are rejected.
+  'packages/cli/src/config/profileRuntimeApplication.ts', // #2086
+  'packages/cli/src/services/McpPromptLoader.ts', // #2086
+  'packages/cli/src/services/mcpPromptArgParser.ts', // #2086
+  'packages/cli/src/ui/commands/diagnosticsCommand.ts', // #2086
+  'packages/cli/src/ui/commands/diagnosticsTokens.ts', // #2086
+  'packages/cli/src/ui/commands/mcpCommand.ts', // #2086
+  'packages/cli/src/ui/commands/mcpDisplay.ts', // #2086
+  'packages/cli/src/ui/commands/mcpAuth.ts', // #2086
+  'packages/cli/src/ui/commands/memoryCommand.ts', // #2086
+  'packages/cli/src/ui/commands/profileCommand.ts', // #2086
+  'packages/cli/src/ui/commands/profileLoadBalancer.ts', // #2086
+  'packages/cli/src/ui/commands/profileLoad.ts', // #2086
+  'packages/cli/src/ui/commands/profileSchemas.ts', // #2086
+  'packages/cli/src/ui/commands/schema/index.ts', // #2086
+  'packages/cli/src/ui/commands/schema/schemaHelpers.ts', // #2086
+  'packages/cli/src/ui/commands/setCommand.ts', // #2086
+  'packages/cli/src/ui/commands/setCommandSchema.ts', // #2086
+  'packages/cli/src/ui/commands/statsCommand.ts', // #2086
+  'packages/cli/src/ui/commands/statsQuota.ts', // #2086
+  'packages/cli/src/ui/commands/todoCommand.ts', // #2086
+  'packages/cli/src/ui/commands/todoOperations.ts', // #2086
+  'packages/cli/src/ui/commands/todoFormatters.ts', // #2086
+  // #2090 packages/agents test cleanup — target files and extracted helpers are
+  // fully compliant: zero inline lint directives. Locked to error so any new
+  // directive fails immediately while the rest of packages/agents remains in
+  // legacy cleanup scope for other issues.
+  'packages/agents/src/agents/executor.test.ts', // #2090
+  'packages/agents/src/agents/executor-test-helpers.ts', // #2090
+  'packages/agents/src/agents/executor.execution.test.ts', // #2090
+  'packages/agents/src/agents/executor.recovery.test.ts', // #2090
+  'packages/agents/src/agents/executor.stream-idle-timeout.test.ts', // #2090
+  'packages/agents/src/agents/executor.termination-conditions.test.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-test-helpers.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-core.test.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-edge.test.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-error.test.ts', // #2090
+  'packages/agents/src/compression/MiddleOutStrategy-media.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-helpers.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-behavior.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-classification.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-cooldown.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/compression-retry-hardlimit.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-helpers.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-dedup.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-failure.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-orchestration.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-property.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-recency.test.ts', // #2090
+  'packages/agents/src/compression/__tests__/high-density-optimize-rwpruning.test.ts', // #2090
+  'packages/agents/src/core/TodoContinuationService.complexity.test.ts', // #2090
+  'packages/agents/src/core/TodoContinuationService.postturn.test.ts', // #2090
+  'packages/agents/src/core/TodoContinuationService.reminders.test.ts', // #2090
+  'packages/agents/src/core/TodoContinuationService.todoops.test.ts', // #2090
+  'packages/agents/src/core/__tests__/chatSession-density.test.ts', // #2090
+  'packages/agents/src/core/__tests__/chatSession-density-helpers.ts', // #2090
+  'packages/agents/src/core/__tests__/chatSession-density.integration.test.ts', // #2090
+  'packages/agents/src/core/__tests__/chatSession-density.property.test.ts', // #2090
+  'packages/agents/src/core/__tests__/subagentOrchestrator-runtime.test.ts', // #2090
+  'packages/agents/src/core/__tests__/subagentOrchestrator-test-helpers.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.integration.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop-test-helpers.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.auto-policy.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.cancellation.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.display-callbacks.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.prompt-id.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.scheduler-isolation.test.ts', // #2090
+  'packages/agents/src/core/agenticLoop/__tests__/agenticLoop.terminal-outcomes.test.ts', // #2090
+  'packages/agents/src/core/chatSession.runtime.test.ts', // #2090
+  'packages/agents/src/core/chatSession-runtime-helpers.ts', // #2090
+  'packages/agents/src/core/chatSession.runtime.history.test.ts', // #2090
+  'packages/agents/src/core/chatSession.runtime.streaming.test.ts', // #2090
+  'packages/agents/src/core/chatSession.runtime.timeout.test.ts', // #2090
+  'packages/agents/src/core/chatSession.thinking-toolcalls.test.ts', // #2090
+  'packages/agents/src/core/chatSession-thinking-helpers.ts', // #2090
+  'packages/agents/src/core/chatSession.thinking-toolcalls.repro.test.ts', // #2090
+  'packages/agents/src/core/chatSession.tokenSync.test.ts', // #2090
+  'packages/agents/src/core/chatSession-tokenSync-helpers.ts', // #2090
+  'packages/agents/src/core/chatSession.tokenSync.nonstream.test.ts', // #2090
+  'packages/agents/src/core/client.test.ts', // #2090
+  'packages/agents/src/core/client-test-helpers.ts', // #2090
+  'packages/agents/src/core/client.editor-context.test.ts', // #2090
+  'packages/agents/src/core/client.hooks.test.ts', // #2090
+  'packages/agents/src/core/client.ide-context.test.ts', // #2090
+  'packages/agents/src/core/client.lifecycle.test.ts', // #2090
+  'packages/agents/src/core/client.methods.test.ts', // #2090
+  'packages/agents/src/core/client.model-profile.test.ts', // #2090
+  'packages/agents/src/core/client.sendMessageStream-errors.test.ts', // #2090
+  'packages/agents/src/core/client.sendMessageStream-overflow.test.ts', // #2090
+  'packages/agents/src/core/client.sendMessageStream-thinking.test.ts', // #2090
+  'packages/agents/src/core/client.sendMessageStream.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler-test-helpers.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.agent-id.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.cancel-continuation.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.cancel-response.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.confirmation.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.context-aware.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.convert-response.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.edit-cancel.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.non-interactive.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.parallel.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.payload.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.policy.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.race-condition.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.suggest-edit.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.tool-suggestion.test.ts', // #2090
+  'packages/agents/src/core/coreToolScheduler.yolo.test.ts', // #2090
+  'packages/agents/src/core/subagent.test.ts', // #2090
+  'packages/agents/src/core/subagent-test-helpers.ts', // #2090
+  'packages/agents/src/core/subagent.buildParts.test.ts', // #2090
+  'packages/agents/src/core/subagent.create.test.ts', // #2090
+  'packages/agents/src/core/subagent.runNonInteractive-execution.test.ts', // #2090
+  'packages/agents/src/core/subagent.runNonInteractive-term.test.ts', // #2090
+  'packages/agents/src/core/subagent.runNonInteractive.test.ts', // #2090
+  'packages/agents/src/core/subagent.stream-idle.test.ts', // #2090
+  'packages/agents/src/core/subagentOrchestrator.test.ts', // #2090
+  'packages/agents/src/core/subagentRuntimeSetup.test.ts', // #2090
+  'packages/agents/src/core/subagentRuntimeSetup.chat.test.ts', // #2090
+  'packages/agents/src/core/subagentRuntimeSetup.scheduler.test.ts', // #2090
+  'packages/agents/src/core/turn.test.ts', // #2090
+  'packages/agents/src/core/turn-test-helpers.ts', // #2090
+  'packages/agents/src/core/turn.abort-timeout.test.ts', // #2090
+  'packages/agents/src/core/turn.debug-responses.test.ts', // #2090
+  'packages/agents/src/core/turn.hook-events.test.ts', // #2090
+  'packages/agents/src/core/turn.idle-timeout.test.ts', // #2090
+  'packages/agents/src/core/turn.tool-restrictions.test.ts', // #2090
+  'packages/agents/src/scheduler/confirmation-coordinator.test.ts', // #2090
+  'packages/agents/src/scheduler/confirmation-coordinator-confirmation.test.ts', // #2090
+  'packages/agents/src/scheduler/confirmation-coordinator-test-helpers.ts', // #2090
+  'packages/agents/src/tools/task.test.ts', // #2090
+  'packages/agents/src/tools/task-test-helpers.ts', // #2090
+  'packages/agents/src/tools/task.async-settings.test.ts', // #2090
+  'packages/agents/src/tools/task.async.test.ts', // #2090
+  'packages/agents/src/tools/task.issues.test.ts', // #2090
+  'packages/agents/src/tools/task.max-turns.test.ts', // #2090
+  'packages/agents/src/tools/task.timeout.test.ts', // #2090
+  'packages/agents/src/agents/executor.ts', // #2085
+  'packages/agents/src/compression/HighDensityStrategy.ts', // #2085
+  'packages/agents/src/core/bucketFailoverIntegration.ts', // #2085
+  'packages/agents/src/core/chatSession.ts', // #2085
+  'packages/agents/src/core/clientHelpers.ts', // #2085
+  'packages/agents/src/core/DirectMessageProcessor.ts', // #2085
+  'packages/agents/src/core/MessageConverter.ts', // #2085
+  'packages/agents/src/core/StreamProcessor.ts', // #2085
+  'packages/agents/src/core/subagent.ts', // #2085
+  'packages/agents/src/core/subagentOrchestrator.ts', // #2085
+  'packages/agents/src/core/subagentToolProcessing.ts', // #2085
+  'packages/agents/src/core/TurnProcessor.ts', // #2085
+  'packages/agents/src/tools/task.ts', // #2085
+  // #2085 decomposition helpers extracted from the files above; keep locked so
+  // no inline disables can be reintroduced in the new modules.
+  'packages/agents/src/agents/executor-stream-processor.ts', // #2085
+  'packages/agents/src/agents/executor-tool-dispatch.ts', // #2085
+  'packages/agents/src/agents/recovery.ts', // #2085
+  'packages/agents/src/core/CompressionLoadBalancingProvider.ts', // #2085
+  'packages/agents/src/core/CompressionProfileResolver.ts', // #2085
+  'packages/agents/src/core/streamRequestHelpers.ts', // #2085
+  'packages/agents/src/core/streamResponseHelpers.ts', // #2085
+  'packages/agents/src/core/subagentNonInteractive.ts', // #2085
+  'packages/agents/src/tools/taskAbortHelpers.ts', // #2085
+  'packages/agents/src/tools/taskAsyncExecution.ts', // #2085
+  'packages/agents/src/tools/taskResultHelpers.ts', // #2085
+  'packages/agents/src/tools/taskToolGovernance.ts', // #2085
 ];
 
 export default tseslint.config(
@@ -330,6 +497,7 @@ export default tseslint.config(
       '**/.yalc/**',
       'yalc.lock',
       '**/yalc.lock',
+      '.worktrees/**',
       '.integration-tests/**',
       'eslint.config.js',
       'packages/**/dist/**',
@@ -1318,6 +1486,30 @@ export default tseslint.config(
     rules: {
       'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
       'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
+    },
+  },
+
+  // Issue #2086: MCP prompt argument parsing regexes. These patterns parse
+  // double-quoted strings with escape sequences (\.) for CLI prompt
+  // arguments. The sonarjs regular-expr/slow-regex heuristics flag the
+  // alternation-with-backreference structure, but the patterns operate on
+  // bounded single-line user input with explicit non-overlapping alternation
+  // branches that prevent catastrophic backtracking.
+  {
+    files: ['packages/cli/src/services/mcpPromptArgParser.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
+    },
+  },
+  // Issue #2086: position/range argument parsing regexes in todoOperations.
+  // These parse user-supplied positional numbers (e.g. "1", "1.2", "2-5")
+  // and are anchored with ^...$; inputs are bounded single-line tokens.
+  {
+    files: ['packages/cli/src/ui/commands/todoOperations.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 position arg parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 position arg parsing
     },
   },
 

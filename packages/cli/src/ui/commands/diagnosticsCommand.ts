@@ -7,8 +7,6 @@
  * @requirement REQ-INT-001.3
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type {
   SlashCommand,
   CommandContext,
@@ -17,9 +15,9 @@ import type {
 import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 import process from 'node:process';
 import * as os from 'node:os';
+import { appendOAuthTokens } from './diagnosticsTokens.js';
 
 interface LoadBalancerStatsResult {
   lastSelected: string | null;
@@ -51,19 +49,27 @@ function getBucketFailoverDiagnosticsHandler(
       getBucketFailoverHandler: () => unknown;
     }
   ).getBucketFailoverHandler();
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    handler === null ||
-    typeof handler !== 'object' ||
-    typeof (handler as { getBuckets?: unknown }).getBuckets !== 'function' ||
-    typeof (handler as { getCurrentBucket?: unknown }).getCurrentBucket !==
-      'function' ||
-    typeof (handler as { isEnabled?: unknown }).isEnabled !== 'function'
-  ) {
+  if (!isBucketFailoverHandler(handler)) {
     return undefined;
   }
 
   return handler as BucketFailoverDiagnosticsHandler;
+}
+
+function isBucketFailoverHandler(handler: unknown): boolean {
+  if (handler === null || typeof handler !== 'object') {
+    return false;
+  }
+  const candidate = handler as {
+    getBuckets?: unknown;
+    getCurrentBucket?: unknown;
+    isEnabled?: unknown;
+  };
+  return (
+    typeof candidate.getBuckets === 'function' &&
+    typeof candidate.getCurrentBucket === 'function' &&
+    typeof candidate.isEnabled === 'function'
+  );
 }
 
 function isLoadBalancingProvider(
@@ -341,175 +347,6 @@ function appendToolsAndTelemetry(
   diagnostics.push(
     `- Usage Statistics: ${settings.merged.ui.usageStatisticsEnabled === true ? 'Enabled' : 'Disabled'}`,
   );
-}
-
-async function appendProviderTokens(
-  diagnostics: string[],
-  logger: DebugLogger,
-): Promise<void> {
-  const runtimeApi = getRuntimeApi();
-  const oauthManager = runtimeApi.getCliOAuthManager();
-  if (!oauthManager) {
-    return;
-  }
-
-  const supportedProviders = oauthManager.getSupportedProviders();
-  if (supportedProviders.length === 0) {
-    return;
-  }
-
-  const tokenStore = oauthManager.getTokenStore();
-
-  for (const provider of supportedProviders) {
-    let buckets: string[] = [];
-
-    try {
-      buckets = await tokenStore.listBuckets(provider);
-    } catch (error) {
-      logger.debug(
-        () => `[diagnostics] Failed to list buckets for ${provider}: ${error}`,
-      );
-    }
-
-    if (buckets.length === 0) {
-      continue;
-    }
-
-    diagnostics.push('### Provider Tokens');
-    diagnostics.push(`- ${provider}:`);
-    diagnostics.push(`  - Buckets: ${buckets.length}`);
-
-    for (const bucket of buckets) {
-      const token = await tokenStore.getToken(provider, bucket);
-
-      if (token && typeof token.expiry === 'number') {
-        const expiryDate = new Date(token.expiry * 1000);
-        const timeUntilExpiry = Math.max(0, token.expiry - Date.now() / 1000);
-        const hours = Math.floor(timeUntilExpiry / 3600);
-        const minutes = Math.floor((timeUntilExpiry % 3600) / 60);
-        const isExpired = token.expiry < Date.now() / 1000;
-
-        diagnostics.push(`  - ${bucket}:`);
-        diagnostics.push(
-          `    - Status: ${isExpired ? 'Expired' : 'Authenticated'}`,
-        );
-        diagnostics.push(`    - Expires: ${expiryDate.toISOString()}`);
-        diagnostics.push(`    - Time Remaining: ${hours}h ${minutes}m`);
-        diagnostics.push(
-          `    - Refresh Token: ${token.refresh_token ? 'Available' : 'None'}`,
-        );
-      }
-    }
-  }
-}
-
-function appendMcpServerTokenExpiry(
-  diagnostics: string[],
-  expiresAt: number,
-): void {
-  if (expiresAt === 0 || Number.isNaN(expiresAt)) {
-    return;
-  }
-  const expiryDate = new Date(expiresAt);
-  const timeUntilExpiry = Math.max(0, (expiresAt - Date.now()) / 1000);
-  const hours = Math.floor(timeUntilExpiry / 3600);
-  const minutes = Math.floor((timeUntilExpiry % 3600) / 60);
-
-  diagnostics.push(`  - Expires: ${expiryDate.toISOString()}`);
-  diagnostics.push(`  - Time Remaining: ${hours}h ${minutes}m`);
-}
-
-function formatMcpServerToken(
-  diagnostics: string[],
-  serverName: string,
-  token: {
-    expiresAt?: number;
-    refreshToken?: string;
-    tokenType: string;
-    scope?: string;
-  },
-): void {
-  const isExpired = MCPOAuthTokenStorage.isTokenExpired(token as never);
-
-  diagnostics.push(`- ${serverName}:`);
-  diagnostics.push(`  - Status: ${isExpired ? 'Expired' : 'Valid'}`);
-
-  if (
-    token.expiresAt != null &&
-    token.expiresAt !== 0 &&
-    !Number.isNaN(token.expiresAt)
-  ) {
-    appendMcpServerTokenExpiry(diagnostics, token.expiresAt);
-  }
-
-  diagnostics.push(
-    `  - Refresh Token: ${token.refreshToken ? 'Available' : 'None'}`,
-  );
-
-  if (token.tokenType) {
-    diagnostics.push(`  - Token Type: ${token.tokenType}`);
-  }
-
-  if (token.scope) {
-    diagnostics.push(`  - Scopes: ${token.scope}`);
-  }
-}
-
-async function appendMcpTokens(
-  diagnostics: string[],
-  logger: DebugLogger,
-): Promise<boolean> {
-  try {
-    const mcpTokenStorage = new MCPOAuthTokenStorage();
-    const mcpTokens = await mcpTokenStorage.getAllCredentials();
-
-    if (mcpTokens.size > 0) {
-      diagnostics.push('\n### MCP Server Tokens');
-
-      for (const [serverName, credentials] of mcpTokens) {
-        formatMcpServerToken(diagnostics, serverName, credentials.token);
-      }
-      return true;
-    }
-  } catch (error) {
-    logger.debug(() => `[diagnostics] Failed to retrieve MCP tokens: ${error}`);
-  }
-  return false;
-}
-
-async function appendOAuthTokens(
-  diagnostics: string[],
-  logger: DebugLogger,
-): Promise<void> {
-  diagnostics.push('\n## OAuth Tokens');
-
-  try {
-    const runtimeApi = getRuntimeApi();
-    const oauthManager = runtimeApi.getCliOAuthManager();
-
-    if (!oauthManager) {
-      diagnostics.push('- No OAuth tokens configured');
-      return;
-    }
-
-    let hasProviderTokens = false;
-
-    // Capture diagnostics length before provider tokens are added
-    const beforeLength = diagnostics.length;
-    await appendProviderTokens(diagnostics, logger);
-    hasProviderTokens = diagnostics.length > beforeLength;
-
-    const hasMCPTokens = await appendMcpTokens(diagnostics, logger);
-
-    if (!hasProviderTokens && !hasMCPTokens) {
-      diagnostics.push('- No OAuth tokens configured');
-    }
-  } catch (error) {
-    logger.debug(
-      () => `[diagnostics] Failed to retrieve OAuth tokens: ${error}`,
-    );
-    diagnostics.push('- Unable to retrieve OAuth token information');
-  }
 }
 
 export const diagnosticsCommand: SlashCommand = {

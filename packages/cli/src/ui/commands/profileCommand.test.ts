@@ -22,9 +22,24 @@ const runtimeMocks = vi.hoisted(() => ({
   getEphemeralSettings: vi.fn(),
 }));
 
+const tokenStoreMocks = vi.hoisted(() => ({
+  listBuckets: vi.fn(),
+}));
+
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => runtimeMocks,
 }));
+
+vi.mock('@vybestack/llxprt-code-providers/auth.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@vybestack/llxprt-code-providers/auth.js')
+    >();
+  return {
+    ...actual,
+    createTokenStore: () => ({ listBuckets: tokenStoreMocks.listBuckets }),
+  };
+});
 
 describe('profileCommand', () => {
   let context: CommandContext;
@@ -38,6 +53,7 @@ describe('profileCommand', () => {
       providerName: 'gemini',
       modelName: 'gemini-1.5-pro',
     });
+    tokenStoreMocks.listBuckets.mockResolvedValue(['bucket-a', 'bucket-b']);
   });
 
   describe('save subcommand', () => {
@@ -67,6 +83,48 @@ describe('profileCommand', () => {
       expect(result).toBeDefined();
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty('messageType', 'error');
+    });
+  });
+
+  describe('save model subcommand - quoted profile names', () => {
+    const save = profileCommand.subCommands!.find(
+      (cmd) => cmd.name === 'save',
+    )!;
+
+    it('saves a quoted profile name with spaces and undefined auth config', async () => {
+      await save.action!(context, 'model "foo bar"');
+      expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
+        'foo bar',
+        undefined,
+      );
+    });
+
+    it('saves a quoted profile name with spaces followed by bucket args', async () => {
+      await save.action!(context, 'model "foo bar" bucket-a bucket-b');
+      expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith('foo bar', {
+        auth: { type: 'oauth', buckets: ['bucket-a', 'bucket-b'] },
+      });
+    });
+
+    it('falls back to unquoted handling when adjacent text follows the closing quote', async () => {
+      // Legacy behavior: '"foo"bar' does not match the quoted-name pattern,
+      // so the whole '"foo"bar' token becomes parts[1] (the profile name).
+      await save.action!(context, 'model "foo"bar');
+      expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
+        '"foo"bar',
+        undefined,
+      );
+    });
+
+    it('falls back to unquoted/error handling for an empty quoted name', async () => {
+      // Legacy behavior: '""' does not match the quoted-name pattern (name
+      // must be non-empty), so the empty quoted token is treated as parts[1].
+      // validateProfileName allows it, so it is saved as the literal '""'.
+      await save.action!(context, 'model ""');
+      expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
+        '""',
+        undefined,
+      );
     });
   });
 
