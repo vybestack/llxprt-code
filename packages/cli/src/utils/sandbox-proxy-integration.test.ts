@@ -19,11 +19,20 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Read the sandbox.ts source for behavioral verification
-const sandboxSource = fs.readFileSync(
-  path.join(__dirname, 'sandbox.ts'),
-  'utf-8',
-);
+const sandboxSources = {
+  sandbox: fs.readFileSync(path.join(__dirname, 'sandbox.ts'), 'utf-8'),
+  containers: fs.readFileSync(
+    path.join(__dirname, 'sandbox-containers.ts'),
+    'utf-8',
+  ),
+  exec: fs.readFileSync(path.join(__dirname, 'sandbox-exec.ts'), 'utf-8'),
+  seatbelt: fs.readFileSync(
+    path.join(__dirname, 'sandbox-seatbelt.ts'),
+    'utf-8',
+  ),
+};
+
+const sandboxSource = Object.values(sandboxSources).join('\n');
 
 describe('Credential Proxy Integration - sandbox.ts', () => {
   describe('R25.1: Proxy Server Created Before Container', () => {
@@ -202,24 +211,42 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('cleans up proxy in catch block on error', () => {
-      expect(sandboxSource).toContain('await stopProxy()');
-      expect(sandboxSource).toContain(
-        '// @plan:PLAN-20250214-CREDPROXY.P34 - Clean up credential proxy on error',
+      const handlerStart = sandboxSources.sandbox.indexOf(
+        'async function handleSandboxStartError',
+      );
+      expect(handlerStart).toBeGreaterThan(-1);
+      const handlerEnd = sandboxSources.sandbox.indexOf(
+        '}',
+        sandboxSources.sandbox.indexOf('throw error;', handlerStart),
+      );
+      const handlerSection = sandboxSources.sandbox.substring(
+        handlerStart,
+        handlerEnd,
+      );
+      const stopProxyIdx = handlerSection.indexOf('await stopProxy()');
+      const throwIdx = handlerSection.indexOf('throw error;');
+      expect(stopProxyIdx).toBeGreaterThan(-1);
+      expect(throwIdx).toBeGreaterThan(-1);
+      expect(stopProxyIdx).toBeLessThan(throwIdx);
+      expect(sandboxSources.containers).toContain(
+        '@plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3:',
       );
     });
   });
 
   describe('R26.2: Seatbelt Unaffected', () => {
     it('seatbelt path does not call createAndStartProxy', () => {
-      const seatbeltStart = sandboxSource.indexOf(
+      const seatbeltStart = sandboxSources.seatbelt.indexOf(
         'async function runSeatbeltSandbox',
       );
-      const seatbeltEnd = sandboxSource.indexOf('function resolveProxyUrl');
+      const seatbeltEnd = sandboxSources.seatbelt.indexOf(
+        'function resolveProxyUrl',
+      );
 
       expect(seatbeltStart).toBeGreaterThan(-1);
       expect(seatbeltEnd).toBeGreaterThan(seatbeltStart);
 
-      const seatbeltSection = sandboxSource.substring(
+      const seatbeltSection = sandboxSources.seatbelt.substring(
         seatbeltStart,
         seatbeltEnd,
       );

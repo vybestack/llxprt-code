@@ -6,8 +6,6 @@
  * @pseudocode integration-wiring.md lines 170-212
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
 // Time constants
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -30,6 +28,112 @@ const MONTHS = [
   'Dec',
 ];
 
+type DeltaMs = number;
+
+interface RelativeBucket {
+  thresholdMs: number;
+  inclusive: boolean;
+  label: (deltaMs: DeltaMs) => string;
+}
+
+const roundTo = (unitMs: number) => (deltaMs: DeltaMs) =>
+  String(Math.round(deltaMs / unitMs));
+
+const floorDiv = (unitMs: number) => (deltaMs: DeltaMs) =>
+  String(Math.floor(deltaMs / unitMs));
+
+function matchesBucket(deltaMs: DeltaMs, bucket: RelativeBucket): boolean {
+  return bucket.inclusive
+    ? deltaMs <= bucket.thresholdMs
+    : deltaMs < bucket.thresholdMs;
+}
+
+const LONG_BUCKETS: readonly RelativeBucket[] = [
+  { thresholdMs: 30 * SECOND, inclusive: true, label: () => 'just now' },
+  { thresholdMs: 90 * SECOND, inclusive: true, label: () => '1 minute ago' },
+  {
+    thresholdMs: 45 * MINUTE,
+    inclusive: false,
+    label: (d) => `${roundTo(MINUTE)(d)} minutes ago`,
+  },
+  { thresholdMs: 90 * MINUTE, inclusive: false, label: () => '1 hour ago' },
+  {
+    thresholdMs: 22 * HOUR,
+    inclusive: false,
+    label: (d) => `${roundTo(HOUR)(d)} hours ago`,
+  },
+  { thresholdMs: 35 * HOUR, inclusive: true, label: () => 'yesterday' },
+  {
+    thresholdMs: 7 * DAY,
+    inclusive: false,
+    label: (d) => {
+      const days = Math.round(d / DAY);
+      return days === 1 ? '1 day ago' : `${days} days ago`;
+    },
+  },
+  {
+    thresholdMs: 26 * DAY,
+    inclusive: false,
+    label: (d) => {
+      const weeks = Math.floor(d / (7 * DAY));
+      return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+    },
+  },
+];
+
+const SHORT_BUCKETS: readonly RelativeBucket[] = [
+  { thresholdMs: 30 * SECOND, inclusive: true, label: () => 'now' },
+  {
+    thresholdMs: 45 * MINUTE,
+    inclusive: false,
+    label: (d) => `${Math.max(1, Math.round(d / MINUTE))}m ago`,
+  },
+  {
+    thresholdMs: 22 * HOUR,
+    inclusive: false,
+    label: (d) => `${Math.max(1, Math.round(d / HOUR))}h ago`,
+  },
+  {
+    thresholdMs: 7 * DAY,
+    inclusive: false,
+    label: (d) => `${Math.max(1, Math.round(d / DAY))}d ago`,
+  },
+  {
+    thresholdMs: 26 * DAY,
+    inclusive: false,
+    label: (d) => `${floorDiv(7 * DAY)(d)}w ago`,
+  },
+];
+
+function formatBucketed(
+  deltaMs: DeltaMs,
+  buckets: readonly RelativeBucket[],
+): string | null {
+  for (const bucket of buckets) {
+    if (matchesBucket(deltaMs, bucket)) {
+      return bucket.label(deltaMs);
+    }
+  }
+  return null;
+}
+
+function formatLongDate(date: Date): string {
+  const month = MONTHS[date.getUTCMonth()];
+  const day = date.getUTCDate();
+  const year = date.getUTCFullYear();
+  return `${month} ${day}, ${year}`;
+}
+
+function formatShortDate(date: Date, now: Date): string {
+  const month = MONTHS[date.getUTCMonth()];
+  const day = date.getUTCDate();
+  const year = date.getUTCFullYear();
+  if (year === now.getUTCFullYear()) {
+    return `${month} ${day}`;
+  }
+  return `${month} ${day}, ${year}`;
+}
+
 export function formatRelativeTime(
   date: Date,
   options?: { mode?: 'long' | 'short'; now?: Date },
@@ -37,112 +141,12 @@ export function formatRelativeTime(
   const mode = options?.mode ?? 'long';
   const now = options?.now ?? new Date();
 
-  let deltaMs = now.getTime() - date.getTime();
-
-  // Clamp future dates to 0
-  if (deltaMs < 0) {
-    deltaMs = 0;
-  }
-
-  const deltaSeconds = deltaMs / SECOND;
-  const deltaMinutes = deltaMs / MINUTE;
-  const deltaHours = deltaMs / HOUR;
-  const deltaDays = deltaMs / DAY;
+  const rawDelta = now.getTime() - date.getTime();
+  const deltaMs = rawDelta < 0 ? 0 : rawDelta;
 
   if (mode === 'long') {
-    // <= 30 seconds: "just now"
-    if (deltaSeconds <= 30) {
-      return 'just now';
-    }
-
-    // 31-90 seconds: "1 minute ago"
-    if (deltaSeconds <= 90) {
-      return '1 minute ago';
-    }
-
-    // > 90 seconds to < 45 minutes: "N minutes ago"
-    if (deltaMinutes < 45) {
-      const minutes = Math.round(deltaMinutes);
-      return `${minutes} minutes ago`;
-    }
-
-    // 45-89 minutes: "1 hour ago"
-    if (deltaMinutes < 90) {
-      return '1 hour ago';
-    }
-
-    // 90 minutes to < 22 hours: "N hours ago"
-    if (deltaHours < 22) {
-      const hours = Math.round(deltaHours);
-      return `${hours} hours ago`;
-    }
-
-    // 22-35 hours: "yesterday"
-    if (deltaHours <= 35) {
-      return 'yesterday';
-    }
-
-    // 36 hours to < 7 days: "N days ago"
-    if (deltaDays < 7) {
-      const days = Math.round(deltaDays);
-      return days === 1 ? '1 day ago' : `${days} days ago`;
-    }
-
-    // 7 days to < 26 days: "N weeks ago"
-    if (deltaDays < 26) {
-      const weeks = Math.floor(deltaDays / 7);
-      return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
-    }
-
-    // >= 26 days: formatted date (MMM D, YYYY)
-    const month = MONTHS[date.getUTCMonth()];
-    const day = date.getUTCDate();
-    const year = date.getUTCFullYear();
-    return `${month} ${day}, ${year}`;
+    return formatBucketed(deltaMs, LONG_BUCKETS) ?? formatLongDate(date);
   }
 
-  // Short mode
-  // <= 30 seconds: "now"
-  if (deltaSeconds <= 30) {
-    return 'now';
-  }
-
-  // 31 seconds to < 45 minutes: "Nm ago"
-  if (deltaMinutes < 45) {
-    const minutes = Math.max(1, Math.round(deltaMinutes));
-    return `${minutes}m ago`;
-  }
-
-  // 45 minutes to < 22 hours: "Nh ago"
-  if (deltaHours < 22) {
-    const hours = Math.max(1, Math.round(deltaHours));
-    return `${hours}h ago`;
-  }
-
-  // 22 hours to < 7 days: "Nd ago"
-  if (deltaDays < 7) {
-    const days = Math.max(1, Math.round(deltaDays));
-    return `${days}d ago`;
-  }
-
-  // 7 days to < 26 days: "Nw ago"
-  if (deltaDays < 26) {
-    const weeks = Math.floor(deltaDays / 7);
-    return `${weeks}w ago`;
-  }
-
-  // >= 26 days: formatted date
-  // Check if same year as now
-  const month = MONTHS[date.getUTCMonth()];
-  const day = date.getUTCDate();
-  const year = date.getUTCFullYear();
-  const nowYear = now.getUTCFullYear();
-
-  if (year === nowYear) {
-    // Short date (MMM D)
-    return `${month} ${day}`;
-  }
-
-  // Different year: MMM D, YYYY
-  return `${month} ${day}, ${year}`;
+  return formatBucketed(deltaMs, SHORT_BUCKETS) ?? formatShortDate(date, now);
 }

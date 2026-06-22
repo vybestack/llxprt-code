@@ -176,7 +176,7 @@ const legacyDirectiveCleanupScopes = [
   'packages/providers/src/utils/toolNameNormalization.ts', // #2084
   'packages/providers/src/utils/toolResponsePayload.ts', // #2084
   'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
-  'packages/cli/src/**/*.{ts,tsx}', // #2086/#2087/#2091
+  'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
   // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
@@ -301,6 +301,97 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
+  // #2084 scope — provider implementation files fully compliant: zero inline
+  // lint directives. Locked to error so any new directive fails immediately.
+  // The broad packages/providers/src/** legacy override above is overridden
+  // here for these specific files. Extracted modules added as created.
+  'packages/providers/src/anthropic/AnthropicProvider.ts', // #2084
+  'packages/providers/src/anthropic/AnthropicRequestPreparation.ts', // #2084
+  'packages/providers/src/gemini/GeminiProvider.ts', // #2084
+  'packages/providers/src/gemini/thoughtSignatures.ts', // #2084
+  'packages/providers/src/gemini/geminiAuth.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiGenerationExecution.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiGenerationSetup.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiModels.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiReasoningConfig.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiRequestBuilding.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiResponseMapper.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiSchemaHelpers.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiServerTools.ts', // #2084 extracted
+  'packages/providers/src/openai-responses/buildResponsesInputFromContent.ts', // #2084
+  'packages/providers/src/openai-vercel/messageConversion.ts', // #2084
+  'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts', // #2084
+  'packages/providers/src/openai-vercel/vercelDeveloperRoleFetch.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelLogging.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelMetadataMapper.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelModelClient.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelModelListing.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelNonStreamingHandler.ts', // #2084 extracted
+  'packages/providers/src/gemini/geminiAbort.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelNonStreamingResponse.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelReasoningCapture.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelRequestParams.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamHandler.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamProcessor.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelStreamTypes.ts', // #2084 extracted
+  'packages/providers/src/openai-vercel/vercelSystemPrompt.ts', // #2084 extracted
+  'packages/providers/src/openai/buildResponsesRequest.ts', // #2084
+  'packages/providers/src/openai/getOpenAIProviderInfo.ts', // #2084
+  'packages/providers/src/openai/OpenAIApiExecution.ts', // #2084
+  'packages/providers/src/openai/OpenAINonStreamHandler.ts', // #2084
+  'packages/providers/src/openai/OpenAIProvider.ts', // #2084
+  'packages/providers/src/openai/OpenAIStreamChunkText.ts', // #2084 extracted
+  'packages/providers/src/openai/OpenAIRequestPreparation.ts', // #2084
+  'packages/providers/src/openai/OpenAIResponseParser.ts', // #2084
+  'packages/providers/src/openai/parseResponsesStream.ts', // #2084
+  'packages/providers/src/openai/responsesErrorParsing.ts', // #2084 extracted
+  // #2084 extracted shared helpers
+  'packages/providers/src/utils/falsyFallback.ts', // #2084
+  // #2087 scope — packages/cli UI hooks, components, utils, state, themes,
+  // and Zed integration are fully compliant: zero inline lint directives.
+  // Locked to error so any new directive fails immediately.
+  'packages/cli/src/ui/components/shared/text-buffer.ts', // #2087
+  'packages/cli/src/ui/hooks/atCommandProcessor.ts', // #2087
+  'packages/cli/src/ui/hooks/keyToAnsi.ts', // #2087
+  'packages/cli/src/ui/hooks/useProfileManagement.ts', // #2087
+  'packages/cli/src/ui/hooks/usePromptCompletion.ts', // #2087
+  'packages/cli/src/ui/hooks/vim.ts', // #2087
+  'packages/cli/src/ui/state/extensions.ts', // #2087
+  'packages/cli/src/ui/themes/theme.ts', // #2087
+  'packages/cli/src/ui/utils/responsive.ts', // #2087
+  'packages/cli/src/ui/utils/secureInputHandler.ts', // #2087
+  'packages/cli/src/ui/utils/terminalSetup.ts', // #2087
+  'packages/cli/src/utils/formatRelativeTime.ts', // #2087
+  'packages/cli/src/utils/privacy/ConversationDataRedactor.ts', // #2087
+  'packages/cli/src/utils/sandbox.ts', // #2087
+  'packages/cli/src/zed-integration/zedIntegration.ts', // #2087
+  // #2086 scope — ten target files and their extracted modules are fully
+  // compliant: zero inline lint directives. Locked to error so any new
+  // directive fails immediately. The broad 'packages/cli/src/**' entry in
+  // legacyDirectiveCleanupScopes is retained for #2087/#2091; this block
+  // overrides it for the completed #2086 files so directives are rejected.
+  'packages/cli/src/config/profileRuntimeApplication.ts', // #2086
+  'packages/cli/src/services/McpPromptLoader.ts', // #2086
+  'packages/cli/src/services/mcpPromptArgParser.ts', // #2086
+  'packages/cli/src/ui/commands/diagnosticsCommand.ts', // #2086
+  'packages/cli/src/ui/commands/diagnosticsTokens.ts', // #2086
+  'packages/cli/src/ui/commands/mcpCommand.ts', // #2086
+  'packages/cli/src/ui/commands/mcpDisplay.ts', // #2086
+  'packages/cli/src/ui/commands/mcpAuth.ts', // #2086
+  'packages/cli/src/ui/commands/memoryCommand.ts', // #2086
+  'packages/cli/src/ui/commands/profileCommand.ts', // #2086
+  'packages/cli/src/ui/commands/profileLoadBalancer.ts', // #2086
+  'packages/cli/src/ui/commands/profileLoad.ts', // #2086
+  'packages/cli/src/ui/commands/profileSchemas.ts', // #2086
+  'packages/cli/src/ui/commands/schema/index.ts', // #2086
+  'packages/cli/src/ui/commands/schema/schemaHelpers.ts', // #2086
+  'packages/cli/src/ui/commands/setCommand.ts', // #2086
+  'packages/cli/src/ui/commands/setCommandSchema.ts', // #2086
+  'packages/cli/src/ui/commands/statsCommand.ts', // #2086
+  'packages/cli/src/ui/commands/statsQuota.ts', // #2086
+  'packages/cli/src/ui/commands/todoCommand.ts', // #2086
+  'packages/cli/src/ui/commands/todoOperations.ts', // #2086
+  'packages/cli/src/ui/commands/todoFormatters.ts', // #2086
   // #2090 packages/agents test cleanup — target files and extracted helpers are
   // fully compliant: zero inline lint directives. Locked to error so any new
   // directive fails immediately while the rest of packages/agents remains in
@@ -489,6 +580,33 @@ const completedDirectiveCleanupScopes = [
   'packages/cli/src/utils/sessionCleanup.test.ts', // #2091
   'packages/cli/src/utils/sessionCleanup.config.test.ts', // #2091
   'packages/cli/src/utils/sessionCleanup-test-helpers.ts', // #2091
+  'packages/agents/src/agents/executor.ts', // #2085
+  'packages/agents/src/compression/HighDensityStrategy.ts', // #2085
+  'packages/agents/src/core/bucketFailoverIntegration.ts', // #2085
+  'packages/agents/src/core/chatSession.ts', // #2085
+  'packages/agents/src/core/clientHelpers.ts', // #2085
+  'packages/agents/src/core/DirectMessageProcessor.ts', // #2085
+  'packages/agents/src/core/MessageConverter.ts', // #2085
+  'packages/agents/src/core/StreamProcessor.ts', // #2085
+  'packages/agents/src/core/subagent.ts', // #2085
+  'packages/agents/src/core/subagentOrchestrator.ts', // #2085
+  'packages/agents/src/core/subagentToolProcessing.ts', // #2085
+  'packages/agents/src/core/TurnProcessor.ts', // #2085
+  'packages/agents/src/tools/task.ts', // #2085
+  // #2085 decomposition helpers extracted from the files above; keep locked so
+  // no inline disables can be reintroduced in the new modules.
+  'packages/agents/src/agents/executor-stream-processor.ts', // #2085
+  'packages/agents/src/agents/executor-tool-dispatch.ts', // #2085
+  'packages/agents/src/agents/recovery.ts', // #2085
+  'packages/agents/src/core/CompressionLoadBalancingProvider.ts', // #2085
+  'packages/agents/src/core/CompressionProfileResolver.ts', // #2085
+  'packages/agents/src/core/streamRequestHelpers.ts', // #2085
+  'packages/agents/src/core/streamResponseHelpers.ts', // #2085
+  'packages/agents/src/core/subagentNonInteractive.ts', // #2085
+  'packages/agents/src/tools/taskAbortHelpers.ts', // #2085
+  'packages/agents/src/tools/taskAsyncExecution.ts', // #2085
+  'packages/agents/src/tools/taskResultHelpers.ts', // #2085
+  'packages/agents/src/tools/taskToolGovernance.ts', // #2085
 ];
 
 export default tseslint.config(
@@ -500,6 +618,7 @@ export default tseslint.config(
       '**/.yalc/**',
       'yalc.lock',
       '**/yalc.lock',
+      '.worktrees/**',
       '.integration-tests/**',
       'eslint.config.js',
       'packages/**/dist/**',
@@ -1468,6 +1587,63 @@ export default tseslint.config(
     files: ['packages/core/src/services/environmentSanitization.ts'],
     rules: {
       'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2081/#2082 security credential-detection regex
+    },
+  },
+
+  // Issue #2084: Kimi K2 fixed-format tool-call template regexes.
+  // These parse the vendor-specific protocol emitted by HF/vLLM-style Kimi
+  // deployments. Inputs are bounded to model-generated tool-call sections, and
+  // the patterns use explicit delimiters and lazy quantifiers to avoid
+  // unbounded backtracking. sonarjs/regular-expr is a generic heuristic that
+  // cannot distinguish these reviewed, bounded protocol parsers from unsafe
+  // regexes.
+  {
+    files: ['packages/providers/src/openai/OpenAIResponseParser.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2084 Kimi protocol template regex
+    },
+  },
+  // Issue #2087: Static, reviewed regex patterns that parse terminal/command
+  // input at trusted boundaries. The inputs are bounded (single CLI command
+  // lines or local config values, not untrusted network data) and the patterns
+  // are anchored with explicit quantifiers. sonarjs/regular-expr and
+  // sonarjs/slow-regex are generic heuristics that cannot distinguish these
+  // bounded parsing cases from ReDoS-vulnerable network input validation.
+  {
+    files: [
+      'packages/cli/src/ui/utils/secureInputHandler.ts',
+      'packages/cli/src/ui/utils/terminalSetup.ts',
+      'packages/cli/src/utils/privacy/ConversationDataRedactor.ts',
+      'packages/cli/src/utils/sandbox-env.ts',
+      'packages/cli/src/zed-integration/zed-path-resolver.ts',
+    ],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
+    },
+  },
+
+  // Issue #2086: MCP prompt argument parsing regexes. These patterns parse
+  // double-quoted strings with escape sequences (\.) for CLI prompt
+  // arguments. The sonarjs regular-expr/slow-regex heuristics flag the
+  // alternation-with-backreference structure, but the patterns operate on
+  // bounded single-line user input with explicit non-overlapping alternation
+  // branches that prevent catastrophic backtracking.
+  {
+    files: ['packages/cli/src/services/mcpPromptArgParser.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
+    },
+  },
+  // Issue #2086: position/range argument parsing regexes in todoOperations.
+  // These parse user-supplied positional numbers (e.g. "1", "1.2", "2-5")
+  // and are anchored with ^...$; inputs are bounded single-line tokens.
+  {
+    files: ['packages/cli/src/ui/commands/todoOperations.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 position arg parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 position arg parsing
     },
   },
 

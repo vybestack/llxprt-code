@@ -10,8 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type {
   SlashCommand,
   CommandContext,
@@ -20,606 +18,31 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { SettingScope } from '../../config/settings.js';
-import {
-  type CommandArgumentSchema,
-  type CompleterFn,
-} from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
-  getProtectedSettingKeys,
-  isInternalSettingKey,
-  type LoadBalancerProfile,
-} from '@vybestack/llxprt-code-settings';
-import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
-
-type ProfileConfigService = Partial<
-  Pick<
-    NonNullable<CommandContext['services']['config']>,
-    'getProviderManager' | 'setProvider'
-  >
-> & {
-  getAgentClient?: () =>
-    | (ReturnType<
-        NonNullable<CommandContext['services']['config']>['getAgentClient']
-      > & { setTools?: () => void | Promise<void> })
-    | undefined;
-};
-
-type ProfileLoadResultView = {
-  infoMessages?: string[];
-  warnings?: string[];
-  modelName?: string;
-};
-
-function formatProfileMessages(
-  messages: readonly string[] | undefined,
-  prefix: string,
-): string {
-  return messages?.map((message) => `\n${prefix}${message}`).join('') ?? '';
-}
-
-const profileSuggestionDescription = 'Saved profile';
-
-const RESERVED_BUCKET_NAMES = ['login', 'logout', 'status', 'switch', '--all'];
-
-function validateBucketName(bucket: string): {
-  valid: boolean;
-  error?: string;
-} {
-  const invalidChars = /[:/\\<>"|?*]/;
-  if (invalidChars.test(bucket)) {
-    return {
-      valid: false,
-      error: `Bucket name "${bucket}" contains unsafe characters. Cannot contain: : / \\ < > " | ? *`,
-    };
-  }
-
-  if (RESERVED_BUCKET_NAMES.includes(bucket.toLowerCase())) {
-    return {
-      valid: false,
-      error: `"${bucket}" is a reserved word and cannot be used as a bucket name`,
-    };
-  }
-
-  return { valid: true };
-}
-
-async function listProfiles(): Promise<string[]> {
-  return getRuntimeApi().listSavedProfiles();
-}
-
-const profileNameCompleter: CompleterFn = withFuzzyFilter(async () => {
-  try {
-    const profiles = await listProfiles();
-    return profiles.map((profile) => ({
-      value: profile,
-      description: profileSuggestionDescription,
-    }));
-  } catch {
-    return [];
-  }
-});
-
-const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
-  async (_ctx, _partial, tokens) => {
-    try {
-      const profiles = await listProfiles();
-      // tokens.tokens format: ["save", "loadbalancer", "lb-name", "policy", "prof1", "prof2", ...]
-      // Skip first 4 tokens (save, loadbalancer, lb-name, policy) to get already selected profiles
-      const alreadySelected = tokens.tokens
-        .slice(4)
-        .filter((p) => p.length > 0);
-      const available = profiles.filter((p) => !alreadySelected.includes(p));
-      return available.map((profile) => ({
-        value: profile,
-        description: 'Add to load balancer',
-      }));
-    } catch {
-      return [];
-    }
-  },
-);
-
-const bucketCompleter: CompleterFn = withFuzzyFilter(
-  async (_ctx, _partial, tokens) => {
-    try {
-      const runtime = getRuntimeApi();
-      const status = runtime.getActiveProviderStatus();
-      const provider = status.providerName;
-
-      if (!provider) {
-        return [];
-      }
-
-      // @plan:PLAN-20250214-CREDPROXY.P33
-      const tokenStore = createTokenStore();
-      const buckets = await tokenStore.listBuckets(provider);
-
-      // tokens.tokens format: ["save", "model", "profile-name", "bucket1", "bucket2", ...]
-      // Skip first 3 tokens (save, model, profile-name) to get already selected buckets
-      const alreadySelected = tokens.tokens
-        .slice(3)
-        .filter((b) => b.length > 0);
-      const available = buckets.filter((b) => !alreadySelected.includes(b));
-
-      return available.map((bucket) => ({
-        value: bucket,
-        description: 'Add bucket to profile',
-      }));
-    } catch {
-      return [];
-    }
-  },
-);
-
-// Recursive schema for unlimited profile selection
-// Each profile entry has a 'next' that points back to the same structure
-const createLbMemberProfileEntry = (
-  depth: number,
-): CommandArgumentSchema[number] => ({
-  kind: 'value',
-  name: depth === 0 ? 'profile1' : `profile${depth + 1}`,
-  description:
-    depth === 0
-      ? 'Select first profile'
-      : 'Add another profile (ESC to finish)',
-  completer: lbMemberProfileCompleter,
-  hint: 'ESC to finish selection',
-  // Create a reasonably deep chain (20 levels should be more than enough)
-  next: depth < 20 ? [createLbMemberProfileEntry(depth + 1)] : undefined,
-});
-
-const lbMemberProfileSchema: CommandArgumentSchema = [
-  createLbMemberProfileEntry(0),
-];
-
-// Recursive schema for unlimited bucket selection
-// Each bucket entry has a 'next' that points back to the same structure
-const createBucketEntry = (depth: number): CommandArgumentSchema[number] => ({
-  kind: 'value',
-  name: depth === 0 ? 'bucket1' : `bucket${depth + 1}`,
-  description:
-    depth === 0
-      ? 'Select first bucket (optional)'
-      : 'Add another bucket (ESC to finish)',
-  completer: bucketCompleter,
-  hint: 'ESC to finish selection',
-  // Create a reasonably deep chain (20 levels should be more than enough)
-  next: depth < 20 ? [createBucketEntry(depth + 1)] : undefined,
-});
-
-const bucketSchema: CommandArgumentSchema = [createBucketEntry(0)];
-
-const profileSaveSchema: CommandArgumentSchema = [
-  {
-    kind: 'literal',
-    value: 'model',
-    description: 'Save current model configuration',
-    next: [
-      {
-        kind: 'value',
-        name: 'profile-name',
-        description: 'Enter profile name',
-        completer: profileNameCompleter,
-        next: bucketSchema,
-      },
-    ],
-  },
-  {
-    kind: 'literal',
-    value: 'loadbalancer',
-    description: 'Create a load balancer profile',
-    next: [
-      {
-        kind: 'value',
-        name: 'lb-name',
-        description: 'Enter load balancer profile name',
-        completer: profileNameCompleter,
-        next: [
-          {
-            kind: 'literal',
-            value: 'roundrobin',
-            description: 'Distribute requests across backends in sequence',
-            next: lbMemberProfileSchema,
-          },
-          {
-            kind: 'literal',
-            value: 'failover',
-            description: 'Try backends sequentially until one succeeds',
-            next: lbMemberProfileSchema,
-          },
-        ],
-      },
-    ],
-  },
-];
-
-const profileLoadSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'profile',
-    description: 'Select profile to load',
-    completer: profileNameCompleter,
-  },
-];
-
-const profileDeleteSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'profile',
-    description: 'Select profile to delete',
-    completer: profileNameCompleter,
-  },
-];
-
-const profileSetDefaultSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'profile',
-    description: 'Set default profile or choose none',
-    completer: withFuzzyFilter(async () => {
-      try {
-        const profiles = await listProfiles();
-        const candidates = ['none', ...profiles];
-        return candidates.map((option) => ({
-          value: option,
-          description:
-            option === 'none'
-              ? 'Clear default profile'
-              : profileSuggestionDescription,
-        }));
-      } catch {
-        return [];
-      }
-    }),
-  },
-];
-
-function extractProfileName(trimmedArgs: string): string {
-  const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
-  return profileNameMatch ? profileNameMatch[1] : trimmedArgs;
-}
-
-function validateProfileName(profileName: string): MessageActionReturn | null {
-  if (profileName.includes('/') || profileName.includes('\\')) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'Profile name cannot contain path separators',
-    };
-  }
-  return null;
-}
-
-async function saveModelProfile(
-  parts: string[],
-): Promise<MessageActionReturn | OpenDialogActionReturn> {
-  if (parts.length < 2) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content:
-        'Usage: /profile save model "<profile-name>" [bucket1] [bucket2] ...',
-    };
-  }
-
-  let profileName: string;
-  let bucketArgs: string[] = [];
-
-  // Check if profile name is quoted
-  // Static regex for quoted profile name parsing - no dynamic parts
-  const profileNameMatch = parts
-    .slice(1)
-    .join(' ')
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    .match(/^"([^"]+)"(?:\s+(.+))?$/);
-  if (profileNameMatch) {
-    profileName = profileNameMatch[1];
-    if (profileNameMatch[2]) {
-      bucketArgs = profileNameMatch[2].split(/\s+/).filter((b) => b.length > 0);
-    }
-  } else {
-    profileName = parts[1];
-    bucketArgs = parts.slice(2);
-  }
-
-  if (!profileName) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content:
-        'Usage: /profile save model "<profile-name>" [bucket1] [bucket2] ...',
-    };
-  }
-
-  const nameError = validateProfileName(profileName);
-  if (nameError) return nameError;
-
-  // Validate bucket names
-  for (const bucket of bucketArgs) {
-    const validation = validateBucketName(bucket);
-    if (!validation.valid) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: validation.error ?? 'Invalid bucket name',
-      };
-    }
-  }
-
-  // Verify buckets exist if any specified
-  if (bucketArgs.length > 0) {
-    const bucketError = await verifyBucketsExist(bucketArgs);
-    if (bucketError) return bucketError;
-  }
-
-  try {
-    const runtime = getRuntimeApi();
-    const authConfig =
-      bucketArgs.length > 0
-        ? { auth: { type: 'oauth' as const, buckets: bucketArgs } }
-        : undefined;
-
-    await runtime.saveProfileSnapshot(profileName, authConfig);
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: `Profile '${profileName}' saved`,
-    };
-  } catch (error) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to save profile: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-}
-
-async function verifyBucketsExist(
-  bucketArgs: string[],
-): Promise<MessageActionReturn | null> {
-  try {
-    const runtime = getRuntimeApi();
-    const status = runtime.getActiveProviderStatus();
-    const provider = status.providerName;
-
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    if (!provider) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'No active provider found',
-      };
-    }
-
-    const tokenStore = createTokenStore();
-    const availableBuckets = await tokenStore.listBuckets(provider);
-
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const bucket of bucketArgs) {
-      if (!availableBuckets.includes(bucket)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Bucket '${bucket}' not found for provider ${provider}. Use /auth ${provider} login ${bucket}`,
-        };
-      }
-    }
-    return null;
-  } catch (error) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to validate buckets: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-}
-
-function extractExplicitLoadBalancerContextLimit(args: string[]): {
-  contextLimit: number | undefined;
-  profileArgs: string[];
-  error?: MessageActionReturn;
-} {
-  const profileArgs: string[] = [];
-  let contextLimit: number | undefined;
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    const valueFromEquals = arg.startsWith('--context-limit=')
-      ? arg.slice('--context-limit='.length)
-      : undefined;
-    const valueFromNext =
-      arg === '--context-limit' ? args[index + 1] : undefined;
-    const rawValue = valueFromEquals ?? valueFromNext;
-
-    if (rawValue === undefined) {
-      if (isContextLimitFlag(arg)) {
-        return {
-          contextLimit: undefined,
-          profileArgs,
-          error: {
-            type: 'message',
-            messageType: 'error',
-            content: 'context limit must be a positive integer',
-          },
-        };
-      }
-      profileArgs.push(arg);
-      continue;
-    }
-
-    const parsed = Number(rawValue);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      return {
-        contextLimit: undefined,
-        profileArgs,
-        error: {
-          type: 'message',
-          messageType: 'error',
-          content: 'context limit must be a positive integer',
-        },
-      };
-    }
-
-    contextLimit = parsed;
-    if (valueFromNext !== undefined) {
-      index += 1;
-    }
-  }
-
-  return { contextLimit, profileArgs };
-}
-function isContextLimitFlag(arg: string): boolean {
-  return arg === '--context-limit' || arg.startsWith('--context-limit=');
-}
-
-function shouldPersistLoadBalancerEphemeral(
-  protectedSettings: string[],
-  key: string,
-  value: unknown,
-): boolean {
-  if (key === 'context-limit' || protectedSettings.includes(key)) {
-    return false;
-  }
-  return !isInternalSettingKey(key) && value !== undefined && value !== null;
-}
-
-function getAmbientLoadBalancerContextLimit(
-  currentEphemerals: Record<string, unknown>,
-): number | undefined {
-  const value = currentEphemerals['context-limit'];
-  return typeof value === 'number' && Number.isInteger(value) && value > 0
-    ? value
-    : undefined;
-}
-
-function buildLoadBalancerEphemeralSettings(
-  currentEphemerals: Record<string, unknown>,
-): Record<string, unknown> {
-  const protectedSettings = getProtectedSettingKeys();
-  const filteredEphemerals = Object.fromEntries(
-    Object.entries(currentEphemerals).filter(([key, value]) =>
-      shouldPersistLoadBalancerEphemeral(protectedSettings, key, value),
-    ),
-  );
-
-  return filteredEphemerals;
-}
-
-function createLoadBalancerProfileDefinition(
-  policy: 'roundrobin' | 'failover',
-  selectedProfiles: string[],
-  ephemeralSettings: Record<string, unknown>,
-  contextLimit: number | undefined,
-): LoadBalancerProfile {
-  return {
-    version: 1,
-    type: 'loadbalancer',
-    policy,
-    profiles: selectedProfiles,
-    ...(contextLimit !== undefined && {
-      contextLimit,
-    }),
-    provider: '',
-    model: '',
-    modelParams: {},
-    ephemeralSettings,
-  };
-}
-
-async function saveLoadBalancerProfile(
-  parts: string[],
-): Promise<MessageActionReturn | OpenDialogActionReturn> {
-  if (parts.length < 5) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content:
-        'Usage: /profile save loadbalancer <lb-name> <roundrobin|failover> [--context-limit N] <profile1> <profile2> [...]',
-    };
-  }
-
-  const lbProfileName = parts[1];
-
-  const nameError = validateProfileName(lbProfileName);
-  if (nameError) return nameError;
-
-  const policyInput = parts[2]?.toLowerCase();
-
-  if (policyInput !== 'failover' && policyInput !== 'roundrobin') {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Invalid policy "${parts[2]}". Must be "roundrobin" or "failover".`,
-    };
-  }
-
-  const policy: 'roundrobin' | 'failover' = policyInput;
-
-  const explicitContextLimit = extractExplicitLoadBalancerContextLimit(
-    parts.slice(3),
-  );
-  if (explicitContextLimit.error !== undefined) {
-    return explicitContextLimit.error;
-  }
-
-  const selectedProfiles = explicitContextLimit.profileArgs.filter(
-    (p) => p.length > 0,
-  );
-
-  if (selectedProfiles.length < 2) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'Load balancer profile requires at least 2 profiles',
-    };
-  }
-
-  try {
-    const runtime = getRuntimeApi();
-    const availableProfiles = await runtime.listSavedProfiles();
-
-    for (const profileName of selectedProfiles) {
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      if (!availableProfiles.includes(profileName)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Profile ${profileName} does not exist`,
-        };
-      }
-    }
-
-    const currentEphemerals = runtime.getEphemeralSettings();
-    const filteredEphemerals =
-      buildLoadBalancerEphemeralSettings(currentEphemerals);
-    const contextLimit =
-      explicitContextLimit.contextLimit ??
-      getAmbientLoadBalancerContextLimit(currentEphemerals);
-    const lbProfile = createLoadBalancerProfileDefinition(
-      policy,
-      selectedProfiles,
-      filteredEphemerals,
-      contextLimit,
-    );
-
-    await runtime.saveLoadBalancerProfile(lbProfileName, lbProfile);
-
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: `Load balancer profile '${lbProfileName}' saved with ${selectedProfiles.length} profiles (policy: ${policy})`,
-    };
-  } catch (error) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to save load balancer profile: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-}
+  profileSaveSchema,
+  profileLoadSchema,
+  profileDeleteSchema,
+  profileSetDefaultSchema,
+  profileShowSchema,
+  profileEditSchema,
+  extractProfileName,
+  validateProfileName,
+  listProfiles,
+} from './profileSchemas.js';
+import {
+  saveModelProfile,
+  saveLoadBalancerProfile,
+} from './profileLoadBalancer.js';
+import {
+  classifyLoadError,
+  applyLoadedProfileConfig,
+  recordProviderSwitch,
+  schedulePaymentModeCheck,
+  formatProfileMessages,
+  logger,
+  type ProfileLoadResultView,
+} from './profileLoad.js';
 
 /**
  * Profile save subcommand
@@ -667,158 +90,6 @@ const saveCommand: SlashCommand = {
 /**
  * Profile load subcommand
  */
-const logger = new DebugLogger('llxprt:ui:profile-command');
-
-function classifyLoadError(
-  error: unknown,
-  profileName: string,
-): MessageActionReturn {
-  if (!(error instanceof Error)) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to load profile: ${String(error)}`,
-    };
-  }
-  if (error.message.includes('OAuth bucket')) {
-    return { type: 'message', messageType: 'error', content: error.message };
-  }
-  if (error.message.includes('not found')) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Profile '${profileName}' not found`,
-    };
-  }
-  if (error.message.includes('corrupted')) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Profile '${profileName}' is corrupted`,
-    };
-  }
-  if (error.message.includes('missing required fields')) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Profile '${profileName}' is invalid: missing required fields`,
-    };
-  }
-  return {
-    type: 'message',
-    messageType: 'error',
-    content: `Failed to load profile: ${error.message}`,
-  };
-}
-
-async function applyLoadedProfileConfig(
-  context: CommandContext,
-  result: { providerName?: string },
-): Promise<void> {
-  const configService = context.services
-    .config as unknown as ProfileConfigService | null;
-  if (configService === null) return;
-
-  const providerManager = configService.getProviderManager?.();
-  if (result.providerName) {
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    if (providerManager !== undefined) {
-      await switchProviderManager(providerManager, result.providerName);
-    }
-    configService.setProvider?.(result.providerName);
-  }
-
-  await refreshGeminiTools(configService);
-}
-
-async function switchProviderManager(
-  providerManager: {
-    setActiveProvider(name: string): void | Promise<void>;
-    getActiveProvider(): { name: string } | undefined;
-  },
-  providerName: string,
-): Promise<void> {
-  logger.debug(
-    () =>
-      `[profile] forcing config provider manager switch to '${providerName}'`,
-  );
-  try {
-    void providerManager.setActiveProvider(providerName);
-    logActiveProviderName(providerManager);
-  } catch (error) {
-    logger.error(
-      () =>
-        `[profile] failed to set provider on config manager: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-function logActiveProviderName(providerManager: {
-  setActiveProvider(name: string): void | Promise<void>;
-  getActiveProvider(): { name: string } | undefined;
-}): void {
-  logger.debug(() => {
-    let activeName = 'unknown';
-    try {
-      activeName = providerManager.getActiveProvider()?.name ?? 'unknown';
-    } catch (readError) {
-      logger.debug(
-        () =>
-          `[profile] unable to read active provider: ${readError instanceof Error ? readError.message : String(readError)}`,
-      );
-    }
-    return `[profile] config manager active provider after switch: ${activeName}`;
-  });
-}
-
-async function refreshGeminiTools(
-  configService: ProfileConfigService,
-): Promise<void> {
-  const agentClient = configService.getAgentClient?.();
-  if (agentClient !== undefined && typeof agentClient.setTools === 'function') {
-    try {
-      await agentClient.setTools();
-    } catch (error) {
-      logger.warn(
-        () =>
-          `[profile] failed to refresh Gemini tool schema after load: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-}
-
-function recordProviderSwitch(
-  context: CommandContext,
-  result: { providerName?: string },
-  profileLoadResult: ProfileLoadResultView,
-): void {
-  try {
-    const runtime = getRuntimeApi();
-    const statusAfter = runtime.getActiveProviderStatus();
-    context.recordingIntegration?.recordProviderSwitch(
-      statusAfter.providerName ?? result.providerName ?? '',
-      statusAfter.modelName ?? profileLoadResult.modelName ?? 'unknown',
-    );
-  } catch {
-    // Best-effort recording -- don't let it block profile loading
-  }
-}
-
-function schedulePaymentModeCheck(
-  context: CommandContext,
-  previousProvider: string | undefined,
-): void {
-  const extendedContext = context as CommandContext & {
-    checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
-  };
-  if (extendedContext.checkPaymentModeChange) {
-    setTimeout(
-      () => extendedContext.checkPaymentModeChange?.(previousProvider),
-      100,
-    );
-  }
-}
-
 const loadCommand: SlashCommand = {
   name: 'load',
   description: 'load configuration from a saved profile',
@@ -848,7 +119,9 @@ const loadCommand: SlashCommand = {
     }
 
     const nameError = validateProfileName(profileName);
-    if (nameError) return nameError;
+    if (nameError) {
+      return nameError;
+    }
 
     try {
       const runtime = getRuntimeApi();
@@ -944,7 +217,9 @@ const deleteCommand: SlashCommand = {
     }
 
     const nameError = validateProfileName(profileName);
-    if (nameError) return nameError;
+    if (nameError) {
+      return nameError;
+    }
 
     try {
       const runtime = getRuntimeApi();
@@ -956,7 +231,6 @@ const deleteCommand: SlashCommand = {
         content: `Profile '${profileName}' deleted`,
       };
     } catch (error) {
-      // Handle specific error messages
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
           return {
@@ -1016,7 +290,6 @@ const setDefaultCommand: SlashCommand = {
 
     try {
       if (profileName.toLowerCase() === 'none') {
-        // Clear the default profile
         getRuntimeApi().setDefaultProfileName(null);
         context.services.settings.setValue(
           SettingScope.User,
@@ -1031,7 +304,6 @@ const setDefaultCommand: SlashCommand = {
         };
       }
 
-      // Verify profile exists
       const profiles = await listProfiles();
       if (!profiles.includes(profileName)) {
         return {
@@ -1041,7 +313,6 @@ const setDefaultCommand: SlashCommand = {
         };
       }
 
-      // Set the default profile
       getRuntimeApi().setDefaultProfileName(profileName);
       context.services.settings.setValue(
         SettingScope.User,
@@ -1082,7 +353,6 @@ const createCommand: SlashCommand = {
 
 /**
  * Profile list subcommand
- * Opens interactive profile list dialog
  */
 const listCommand: SlashCommand = {
   name: 'list',
@@ -1092,7 +362,6 @@ const listCommand: SlashCommand = {
     _context: CommandContext,
     _args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    // Open interactive profile list dialog
     logger.log(() => 'list action returning profileList dialog');
     return {
       type: 'dialog',
@@ -1101,18 +370,8 @@ const listCommand: SlashCommand = {
   },
 };
 
-const profileShowSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'profile',
-    description: 'Select profile to view',
-    completer: profileNameCompleter,
-  },
-];
-
 /**
  * Profile show subcommand
- * Opens profile detail dialog directly for the specified profile
  */
 const showCommand: SlashCommand = {
   name: 'show',
@@ -1143,7 +402,6 @@ const showCommand: SlashCommand = {
       };
     }
 
-    // Verify profile exists
     try {
       const profiles = await listProfiles();
       if (!profiles.includes(profileName)) {
@@ -1165,18 +423,8 @@ const showCommand: SlashCommand = {
   },
 };
 
-const profileEditSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'profile',
-    description: 'Select profile to edit',
-    completer: profileNameCompleter,
-  },
-];
-
 /**
  * Profile edit subcommand
- * Opens profile editor dialog directly for the specified profile
  */
 const editCommand: SlashCommand = {
   name: 'edit',
@@ -1207,7 +455,6 @@ const editCommand: SlashCommand = {
       };
     }
 
-    // Verify profile exists
     try {
       const profiles = await listProfiles();
       if (!profiles.includes(profileName)) {

@@ -293,6 +293,28 @@ describe('todoCommand', () => {
       expect(call.type).toBe('error');
     });
 
+    it('rejects zero subtask position without mutating subtasks', async () => {
+      const ctx = createMockContext([
+        {
+          id: '1',
+          content: 'Parent',
+          status: 'pending',
+          subtasks: [{ id: '1.1', content: 'Sub 1' }],
+        },
+      ]);
+
+      const addSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'add',
+      );
+
+      await addSubcommand!.action!(ctx, '1.0 New subtask');
+
+      expect(ctx.todoContext?.updateTodos).not.toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(call.type).toBe('error');
+      expect(call.text).toContain('Subtask position 0 out of range');
+    });
     /**
      * @requirement REQ-005
      * @scenario Show help when no arguments provided
@@ -428,6 +450,31 @@ describe('todoCommand', () => {
       expect(updatedTodos[0].subtasks?.[0].content).toBe('Sub 2');
     });
 
+    it('rejects zero subtask removal without removing from the end', async () => {
+      const ctx = createMockContext([
+        {
+          id: '1',
+          content: 'Parent',
+          status: 'pending',
+          subtasks: [
+            { id: '1.1', content: 'Sub 1' },
+            { id: '1.2', content: 'Sub 2' },
+          ],
+        },
+      ]);
+
+      const removeSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'remove',
+      );
+
+      await removeSubcommand!.action!(ctx, '1.0');
+
+      expect(ctx.todoContext?.updateTodos).not.toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(call.type).toBe('error');
+      expect(call.text).toContain('Subtask position 0 out of range');
+    });
     /**
      * @requirement REQ-006
      * @scenario Remove range of tasks

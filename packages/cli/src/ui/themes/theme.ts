@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import {
   isValidColor,
   resolveColor,
@@ -331,34 +329,61 @@ export class Theme {
  * @param customTheme The custom theme configuration.
  * @returns A new Theme instance.
  */
+function resolveField(
+  preferred: string | undefined,
+  fallback: string | undefined,
+): string {
+  return preferred ?? fallback ?? '';
+}
+
 function buildColorsFromCustomTheme(customTheme: CustomTheme): ColorsTheme {
+  const DarkGray =
+    customTheme.DarkGray ??
+    interpolateColor(
+      resolveField(customTheme.text?.secondary, customTheme.Gray),
+      resolveField(customTheme.background?.primary, customTheme.Background),
+      0.5,
+    );
   return {
     type: 'custom',
-    Background: customTheme.background?.primary ?? customTheme.Background ?? '',
-    Foreground: customTheme.text?.primary ?? customTheme.Foreground ?? '',
-    LightBlue: customTheme.text?.link ?? customTheme.LightBlue ?? '',
-    AccentBlue: customTheme.text?.link ?? customTheme.AccentBlue ?? '',
-    AccentPurple: customTheme.text?.accent ?? customTheme.AccentPurple ?? '',
-    AccentCyan: customTheme.text?.link ?? customTheme.AccentCyan ?? '',
-    AccentGreen: customTheme.status?.success ?? customTheme.AccentGreen ?? '',
-    AccentYellow: customTheme.status?.warning ?? customTheme.AccentYellow ?? '',
-    Warning: customTheme.status?.warning ?? customTheme.AccentYellow ?? '',
+    Background: resolveField(
+      customTheme.background?.primary,
+      customTheme.Background,
+    ),
+    Foreground: resolveField(customTheme.text?.primary, customTheme.Foreground),
+    LightBlue: resolveField(customTheme.text?.link, customTheme.LightBlue),
+    AccentBlue: resolveField(customTheme.text?.link, customTheme.AccentBlue),
+    AccentPurple: resolveField(
+      customTheme.text?.accent,
+      customTheme.AccentPurple,
+    ),
+    AccentCyan: resolveField(customTheme.text?.link, customTheme.AccentCyan),
+    AccentGreen: resolveField(
+      customTheme.status?.success,
+      customTheme.AccentGreen,
+    ),
+    AccentYellow: resolveField(
+      customTheme.status?.warning,
+      customTheme.AccentYellow,
+    ),
+    Warning: resolveField(
+      customTheme.status?.warning,
+      customTheme.AccentYellow,
+    ),
 
-    AccentRed: customTheme.status?.error ?? customTheme.AccentRed ?? '',
-    DiffAdded:
-      customTheme.background?.diff?.added ?? customTheme.DiffAdded ?? '',
-    DiffRemoved:
-      customTheme.background?.diff?.removed ?? customTheme.DiffRemoved ?? '',
-    Comment: customTheme.ui?.comment ?? customTheme.Comment ?? '',
-    DimComment: customTheme.ui?.comment ?? customTheme.DimComment ?? '',
-    Gray: customTheme.text?.secondary ?? customTheme.Gray ?? '',
-    DarkGray:
-      customTheme.DarkGray ??
-      interpolateColor(
-        customTheme.text?.secondary ?? customTheme.Gray ?? '',
-        customTheme.background?.primary ?? customTheme.Background ?? '',
-        0.5,
-      ),
+    AccentRed: resolveField(customTheme.status?.error, customTheme.AccentRed),
+    DiffAdded: resolveField(
+      customTheme.background?.diff?.added,
+      customTheme.DiffAdded,
+    ),
+    DiffRemoved: resolveField(
+      customTheme.background?.diff?.removed,
+      customTheme.DiffRemoved,
+    ),
+    Comment: resolveField(customTheme.ui?.comment, customTheme.Comment),
+    DimComment: resolveField(customTheme.ui?.comment, customTheme.DimComment),
+    Gray: resolveField(customTheme.text?.secondary, customTheme.Gray),
+    DarkGray,
     GradientColors: customTheme.ui?.gradient ?? customTheme.GradientColors,
   };
 }
@@ -433,38 +458,73 @@ function buildSemanticColorsFromCustomTheme(
   colors: ColorsTheme,
 ): SemanticColors {
   return {
-    text: {
-      primary: customTheme.text?.primary ?? colors.Foreground,
-      secondary: customTheme.text?.secondary ?? colors.Gray,
-      link: customTheme.text?.link ?? colors.AccentBlue,
-      accent: customTheme.text?.accent ?? colors.AccentPurple,
-      response:
-        customTheme.text?.response ??
-        customTheme.text?.primary ??
-        colors.Foreground,
+    text: buildSemanticText(customTheme, colors),
+    background: buildSemanticBackground(customTheme, colors),
+    border: buildSemanticBorder(customTheme, colors),
+    ui: buildSemanticUi(customTheme, colors),
+    status: buildSemanticStatus(customTheme, colors),
+  };
+}
+
+function buildSemanticText(
+  customTheme: CustomTheme,
+  colors: ColorsTheme,
+): SemanticColors['text'] {
+  return {
+    primary: customTheme.text?.primary ?? colors.Foreground,
+    secondary: customTheme.text?.secondary ?? colors.Gray,
+    link: customTheme.text?.link ?? colors.AccentBlue,
+    accent: customTheme.text?.accent ?? colors.AccentPurple,
+    response:
+      customTheme.text?.response ??
+      customTheme.text?.primary ??
+      colors.Foreground,
+  };
+}
+
+function buildSemanticBackground(
+  customTheme: CustomTheme,
+  colors: ColorsTheme,
+): SemanticColors['background'] {
+  return {
+    primary: customTheme.background?.primary ?? colors.Background,
+    diff: {
+      added: customTheme.background?.diff?.added ?? colors.DiffAdded,
+      removed: customTheme.background?.diff?.removed ?? colors.DiffRemoved,
     },
-    background: {
-      primary: customTheme.background?.primary ?? colors.Background,
-      diff: {
-        added: customTheme.background?.diff?.added ?? colors.DiffAdded,
-        removed: customTheme.background?.diff?.removed ?? colors.DiffRemoved,
-      },
-    },
-    border: {
-      default: customTheme.border?.default ?? colors.Gray,
-      focused: customTheme.border?.focused ?? colors.AccentBlue,
-    },
-    ui: {
-      comment: customTheme.ui?.comment ?? colors.Comment,
-      symbol: customTheme.ui?.symbol ?? colors.Gray,
-      dark: colors.DarkGray,
-      gradient: customTheme.ui?.gradient ?? colors.GradientColors,
-    },
-    status: {
-      error: customTheme.status?.error ?? colors.AccentRed,
-      success: customTheme.status?.success ?? colors.AccentGreen,
-      warning: customTheme.status?.warning ?? colors.AccentYellow,
-    },
+  };
+}
+
+function buildSemanticBorder(
+  customTheme: CustomTheme,
+  colors: ColorsTheme,
+): SemanticColors['border'] {
+  return {
+    default: customTheme.border?.default ?? colors.Gray,
+    focused: customTheme.border?.focused ?? colors.AccentBlue,
+  };
+}
+
+function buildSemanticUi(
+  customTheme: CustomTheme,
+  colors: ColorsTheme,
+): SemanticColors['ui'] {
+  return {
+    comment: customTheme.ui?.comment ?? colors.Comment,
+    symbol: customTheme.ui?.symbol ?? colors.Gray,
+    dark: colors.DarkGray,
+    gradient: customTheme.ui?.gradient ?? colors.GradientColors,
+  };
+}
+
+function buildSemanticStatus(
+  customTheme: CustomTheme,
+  colors: ColorsTheme,
+): SemanticColors['status'] {
+  return {
+    error: customTheme.status?.error ?? colors.AccentRed,
+    success: customTheme.status?.success ?? colors.AccentGreen,
+    warning: customTheme.status?.warning ?? colors.AccentYellow,
   };
 }
 

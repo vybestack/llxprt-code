@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 import type OpenAI from 'openai';
 import {
   type IContent,
@@ -131,7 +129,6 @@ function applyFinishReason(
  * Build text and Kimi tool blocks from choice message content.
  */
 function buildTextBlocks(
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   messageContent: unknown,
   logger: DebugLogger,
 ): {
@@ -165,7 +162,6 @@ function buildTextBlocks(
  * Build tool call blocks from choice.message.tool_calls.
  */
 function buildToolCallBlocks(
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   toolCalls:
     | OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]
     | undefined,
@@ -219,18 +215,12 @@ function logFinishReason(
     {
       model,
       finishReason: choice.finish_reason,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      hasContent: !!choice.message?.content,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+      hasContent: !!choice.message.content,
       hasToolCalls:
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        choice.message?.tool_calls != null &&
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        choice.message.tool_calls != null &&
         choice.message.tool_calls.length > 0,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      contentLength: choice.message?.content?.length ?? 0,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      toolCallCount: choice.message?.tool_calls?.length ?? 0,
+      contentLength: choice.message.content?.length ?? 0,
+      toolCallCount: choice.message.tool_calls?.length ?? 0,
       detectedFormat,
     },
   );
@@ -315,8 +305,8 @@ export async function* handleNonStreamingResponse(
   deps: NonStreamHandlerDeps,
 ): AsyncGenerator<IContent, void, unknown> {
   const completion = response;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const choice = completion.choices?.[0];
+  const choicesRuntime: unknown = completion.choices;
+  const choice = Array.isArray(choicesRuntime) ? choicesRuntime[0] : undefined;
 
   // Widen to unknown for defensive runtime check (provider may return malformed responses)
   const choiceRuntime: unknown = choice;
@@ -328,16 +318,14 @@ export async function* handleNonStreamingResponse(
 
   // Build text and Kimi tool blocks
   const textResult = buildTextBlocks(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    choice.message?.content as unknown,
+    choice.message.content as unknown,
     deps.logger,
   );
   const blocks: Array<TextBlock | ToolCallBlock> = [...textResult.blocks];
 
   // Build structured tool call blocks
   const toolBlocks = buildToolCallBlocks(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    choice.message?.tool_calls,
+    choice.message.tool_calls,
     deps.toolCallPipeline,
     deps.logger,
   );

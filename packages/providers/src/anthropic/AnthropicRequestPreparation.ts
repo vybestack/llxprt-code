@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
-
 /**
  * Anthropic Request Preparation Module
  * Encapsulates the full request preparation pipeline from content to API-ready request body
@@ -76,8 +74,7 @@ function resolveModelBehavior<T>(
   key: string,
 ): T | undefined {
   const fromBehavior =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    typeof options.invocation?.getModelBehavior === 'function'
+    typeof options.invocation.getModelBehavior === 'function'
       ? options.invocation.getModelBehavior(key)
       : undefined;
   return (fromBehavior ?? options.settings.get(key)) as T | undefined;
@@ -91,8 +88,7 @@ function resolveCliSetting<T>(
   key: string,
 ): T | undefined {
   const fromCli =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    typeof options.invocation?.getCliSetting === 'function'
+    typeof options.invocation.getCliSetting === 'function'
       ? options.invocation.getCliSetting(key)
       : undefined;
   return (fromCli ?? options.settings.get(key)) as T | undefined;
@@ -194,12 +190,11 @@ function resolveRequestSettings(
   providerName: string,
 ): RequestSettings {
   // Get streaming setting from ephemeral settings (default: enabled)
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const invocationEphemerals = options.invocation?.ephemerals ?? {};
+  const invocationEphemerals = options.invocation.ephemerals;
+  const providerEphemerals = providerConfig?.getEphemeralSettings?.();
   const streamingSetting =
     (invocationEphemerals['streaming'] as string | undefined) ??
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    providerEphemerals?.['streaming'];
   const streamingEnabled = streamingSetting !== 'disabled';
 
   // Get current model
@@ -207,8 +202,7 @@ function resolveRequestSettings(
 
   // Get pre-separated model parameters from invocation context
   const requestOverrides: Record<string, unknown> = {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    ...(options.invocation?.modelParams ?? {}),
+    ...options.invocation.modelParams,
   };
 
   // Translate generic maxOutputTokens ephemeral to Anthropic's max_tokens
@@ -229,9 +223,7 @@ function resolveRequestSettings(
   const configEphemerals = invocationEphemerals;
 
   // Get caching setting from options.settings or provider settings
-  const providerSettings =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    options.settings.getProviderSettings(providerName) ?? {};
+  const providerSettings = options.settings.getProviderSettings(providerName);
   const cachingSetting =
     (options.settings.get('prompt-caching') as
       | 'off'
@@ -418,12 +410,12 @@ function mapEffortLevel(
     return 'medium';
   } else if (rawEffort === 'high') {
     return 'high';
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  } else if (rawEffort === 'xhigh' || rawEffort === 'max') {
+  } else if (rawEffort === 'xhigh') {
     return opus46Plus ? 'max' : 'high';
   }
 
-  return undefined;
+  // rawEffort is 'max' here
+  return opus46Plus ? 'max' : 'high';
 }
 
 /**
@@ -587,15 +579,22 @@ async function resolveMcpAndSubagentConfig(params: {
 }> {
   const { config, toolNamesForPrompt } = params;
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const mcpInstructions = config?.getMcpClientManager?.()?.getMcpInstructions();
+  const mcpInstructions =
+    typeof config?.getMcpClientManager === 'function'
+      ? config.getMcpClientManager()?.getMcpInstructions()
+      : undefined;
   const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
     toolNamesForPrompt ?? [],
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    () => config?.getSubagentManager?.(),
+    () =>
+      typeof config?.getSubagentManager === 'function'
+        ? config.getSubagentManager()
+        : undefined,
   );
 
-  const isInteractive = config !== undefined ? config.isInteractive() : false;
+  const isInteractive =
+    config !== undefined && typeof config.isInteractive === 'function'
+      ? config.isInteractive()
+      : false;
   const interactionMode = isInteractive ? 'interactive' : 'non-interactive';
 
   return { mcpInstructions, includeSubagentDelegation, interactionMode };
@@ -757,8 +756,7 @@ export async function prepareAnthropicRequest(
 
   const userMemory = await resolveUserMemory(
     params.options.userMemory,
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    () => params.options.invocation?.userMemory,
+    () => params.options.invocation.userMemory,
   );
 
   const { mcpInstructions, includeSubagentDelegation, interactionMode } =

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy core boundary retained while larger decomposition continues. */
-
 import type { GenerateContentResponse } from '@google/genai';
 import {
   type Content,
@@ -31,12 +29,14 @@ import {
   convertIContentToResponse,
   aggregateTextWithSpacing,
 } from './MessageConverter.js';
+import { resolveUserMemory } from './streamRequestHelpers.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { getResponseTextFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -65,6 +65,33 @@ function isContentArray(value: unknown): value is Content[] {
   return Array.isArray(value);
 }
 
+/**
+ * Reads the next chunk from the stream iterator, applying idle-timeout
+ * watchdog when effectiveTimeoutMs > 0, or calling iterator.next() directly.
+ */
+async function readNextStreamChunk(
+  iterator: AsyncIterator<IContent>,
+  effectiveTimeoutMs: number,
+  timeoutSignal: AbortSignal,
+  upstreamAbortSignal: AbortSignal | undefined,
+  timeoutController: AbortController,
+): Promise<IteratorResult<IContent, unknown>> {
+  if (effectiveTimeoutMs <= 0) {
+    return iterator.next();
+  }
+  return nextStreamEventWithIdleTimeout({
+    iterator,
+    timeoutMs: effectiveTimeoutMs,
+    signal: timeoutSignal,
+    onTimeout: () => {
+      if (upstreamAbortSignal?.aborted !== true) {
+        timeoutController.abort();
+      }
+    },
+    createTimeoutError: () => createAbortError(),
+  });
+}
+
 function getIContentAutomaticFunctionCallingHistory(
   content: IContent,
 ): Content[] | undefined {
@@ -77,6 +104,32 @@ function getIContentAutomaticFunctionCallingHistory(
   const metadataValue =
     content.metadata?.providerMetadata?.['automaticFunctionCallingHistory'];
   return isContentArray(metadataValue) ? metadataValue : undefined;
+}
+
+/**
+ * Boundary-validation helper: resolves whether hooks are enabled.
+ * `Config.getEnableHooks()` is declared required, but test-doubles / partial
+ * Configs may omit it, so validate `typeof === 'function'` (mirrors main's
+ * optional-call `getEnableHooks?.()` short-circuit).
+ */
+function resolveHooksEnabled(config: Config | undefined): boolean {
+  if (config && typeof config.getEnableHooks === 'function') {
+    return config.getEnableHooks() === true;
+  }
+  return false;
+}
+
+/**
+ * Boundary-validation helper: resolves the HookSystem instance.
+ * `Config.getHookSystem()` is declared required, but test-doubles / partial
+ * Configs may omit it, so validate `typeof === 'function'` (mirrors main's
+ * optional-call `getHookSystem?.()` short-circuit).
+ */
+function resolveHookSystem(config: Config | undefined): HookSystem | undefined {
+  if (config && typeof config.getHookSystem === 'function') {
+    return config.getHookSystem();
+  }
+  return undefined;
 }
 
 /**
@@ -255,32 +308,14 @@ export class DirectMessageProcessor {
     let aggregatedText = '';
     try {
       const iterator = streamResponse[Symbol.asyncIterator]();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      while (true) {
-        // Use watchdog if timeout > 0, otherwise call iterator.next() directly
-        let nextResponse: IteratorResult<IContent, unknown>;
-        if (effectiveTimeoutMs > 0) {
-          nextResponse = await nextStreamEventWithIdleTimeout({
-            iterator,
-            timeoutMs: effectiveTimeoutMs,
-            signal: timeoutSignal,
-            onTimeout: () => {
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (upstreamAbortSignal?.aborted === true) {
-                return;
-              }
-              timeoutController.abort();
-            },
-            createTimeoutError: () => createAbortError(),
-          });
-        } else {
-          // Watchdog disabled: call iterator.next() directly
-          nextResponse = await iterator.next();
-        }
-        if (nextResponse.done === true) {
-          break;
-        }
-
+      let nextResponse = await readNextStreamChunk(
+        iterator,
+        effectiveTimeoutMs,
+        timeoutSignal,
+        upstreamAbortSignal,
+        timeoutController,
+      );
+      while (nextResponse.done !== true) {
         const iContent = nextResponse.value;
         const { filteredIContent, response } = this._filterStreamedIContent(
           iContent,
@@ -289,13 +324,19 @@ export class DirectMessageProcessor {
         lastResponse = response;
 
         const result = aggregateTextWithSpacing(
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          filteredIContent.blocks ?? [],
+          filteredIContent.blocks,
           aggregatedText,
           lastBlockWasNonText,
         );
         aggregatedText = result.text;
         lastBlockWasNonText = result.lastBlockWasNonText;
+        nextResponse = await readNextStreamChunk(
+          iterator,
+          effectiveTimeoutMs,
+          timeoutSignal,
+          upstreamAbortSignal,
+          timeoutController,
+        );
       }
     } finally {
       timeoutController.abort();
@@ -458,8 +499,7 @@ export class DirectMessageProcessor {
       settings:
         runtimeContext.settingsService as GenerateChatOptions['settings'],
       metadata: runtimeContext.metadata,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      userMemory: runtimeContext.config?.getUserMemory?.(),
+      userMemory: resolveUserMemory(runtimeContext.config),
     });
   }
 
@@ -526,12 +566,10 @@ export class DirectMessageProcessor {
     configForHooks: Config,
     toolsFromConfig: ToolGroupArray,
   ): Promise<ToolSelectionHookResult> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (!configForHooks.getEnableHooks?.()) {
+    if (!resolveHooksEnabled(configForHooks)) {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    const hookSystem = configForHooks.getHookSystem?.();
+    const hookSystem = resolveHookSystem(configForHooks);
     if (!hookSystem) {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     }
@@ -592,10 +630,8 @@ export class DirectMessageProcessor {
     };
 
     let beforeModelResult = undefined;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (configForHooks.getEnableHooks?.()) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      const hookSystem = configForHooks.getHookSystem?.();
+    if (resolveHooksEnabled(configForHooks)) {
+      const hookSystem = resolveHookSystem(configForHooks);
       if (hookSystem) {
         await hookSystem.initialize();
         beforeModelResult =
@@ -682,10 +718,8 @@ export class DirectMessageProcessor {
     let afterModelModifiedText = false;
 
     // Trigger AfterModel hook
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (config?.getEnableHooks?.() === true) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      const hookSystem = config.getHookSystem?.();
+    if (resolveHooksEnabled(config)) {
+      const hookSystem = resolveHookSystem(config);
       if (hookSystem) {
         await hookSystem.initialize();
         const filteredContent = filterHookRestrictedContent(
@@ -700,23 +734,15 @@ export class DirectMessageProcessor {
           ContentConverters.toIContent(filteredContent),
         );
         if (afterModelResult) {
-          const modifiedResponse = afterModelResult.getModifiedResponse();
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (modifiedResponse) {
-            directResponse = this._applyHookRestrictedAllowedTools(
-              modifiedResponse,
-              allowedFunctionNames,
-            );
-            afterModelModifiedResponse = true;
-            // Re-derive aggregatedText from the hook-modified response so the
-            // text getter reflects the hook's intended text rather than the
-            // stale pre-hook provider output (issue #1749).
-            const modifiedText = this._extractResponseText(directResponse);
-            if (modifiedText !== '') {
-              aggregatedText = modifiedText;
-              afterModelModifiedText = true;
-            }
-          }
+          const outcome = this._applyAfterModelResult(
+            afterModelResult,
+            directResponse,
+            allowedFunctionNames,
+          );
+          directResponse = outcome.directResponse;
+          afterModelModifiedResponse = outcome.responseModified;
+          afterModelModifiedText = outcome.aggregatedText !== undefined;
+          aggregatedText = outcome.aggregatedText ?? aggregatedText;
         }
       }
     }
@@ -731,6 +757,41 @@ export class DirectMessageProcessor {
     }
 
     return directResponse;
+  }
+
+  /**
+   * Applies an AfterModel hook result, returning the (possibly modified)
+   * response along with flags indicating whether the response/text changed.
+   */
+  private _applyAfterModelResult(
+    afterModelResult: {
+      getModifiedResponse(): GenerateContentResponse | undefined;
+    },
+    currentResponse: GenerateContentResponse,
+    allowedFunctionNames: string[] | undefined,
+  ): {
+    directResponse: GenerateContentResponse;
+    responseModified: boolean;
+    aggregatedText: string | undefined;
+  } {
+    const modifiedResponse = afterModelResult.getModifiedResponse();
+    if (!modifiedResponse) {
+      return {
+        directResponse: currentResponse,
+        responseModified: false,
+        aggregatedText: undefined,
+      };
+    }
+    const directResponse = this._applyHookRestrictedAllowedTools(
+      modifiedResponse,
+      allowedFunctionNames,
+    );
+    // Re-derive aggregatedText from the hook-modified response so the
+    // text getter reflects the hook's intended text rather than the
+    // stale pre-hook provider output (issue #1749).
+    const modifiedText = this._extractResponseText(directResponse);
+    const aggregatedText = modifiedText !== '' ? modifiedText : undefined;
+    return { directResponse, responseModified: true, aggregatedText };
   }
 
   /**

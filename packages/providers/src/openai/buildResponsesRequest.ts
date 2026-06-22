@@ -2,7 +2,6 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
 
 import {
   buildToolResponsePayload,
@@ -26,7 +25,7 @@ export interface ResponsesRequestParams {
   stream?: boolean;
   conversationId?: string;
   parentId?: string;
-  tool_choice?: string | object;
+  tool_choice?: string | object | null;
   stateful?: boolean;
   model?: string;
   temperature?: number;
@@ -102,16 +101,41 @@ const MAX_JSON_SIZE_KB = 32;
 // Create a single logger instance for the module (following singleton pattern)
 const logger = new DebugLogger('llxprt:openai:provider');
 
+function resolveSpeakerRole(speaker: string): 'user' | 'assistant' | 'system' {
+  if (speaker === 'human') {
+    return 'user';
+  }
+  if (speaker === 'ai') {
+    return 'assistant';
+  }
+  return 'system';
+}
+
+function hasRuntimeMessage(value: unknown): value is IContent {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'speaker' in value &&
+    'blocks' in value
+  );
+}
+
+function hasMalformedRuntimeMessage(value: unknown): boolean {
+  return value !== undefined && value !== null && !hasRuntimeMessage(value);
+}
+
 function validateParams(params: ResponsesRequestParams): void {
   const { messages, prompt, tools, model } = params;
 
-  if (prompt && messages && messages.length > 0) {
+  const hasMessages = messages !== undefined && messages.length > 0;
+
+  if (Boolean(prompt) && hasMessages) {
     throw new Error(
       'Cannot specify both "prompt" and "messages". Use either prompt (for simple queries) or messages (for conversation history).',
     );
   }
 
-  if (!prompt && (!messages || messages.length === 0)) {
+  if (!prompt && !hasMessages) {
     throw new Error('Either "prompt" or "messages" must be provided.');
   }
 
@@ -148,7 +172,6 @@ function findMatchingAiMessageIndex(
   for (let i = currentStart - 1; i >= 0; i--) {
     const prevMsg = messages[i];
     if (prevMsg.speaker === 'ai') {
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       const hasMatchingCall = prevMsg.blocks.some((block) => {
         if (block.type === 'tool_call') {
           const toolCallBlock = block;
@@ -201,62 +224,58 @@ function extractFunctionCalls(messages: IContent[]): {
   const functionCalls: FunctionCall[] = [];
   const functionCallOutputs: FunctionCallOutput[] = [];
 
-  messages
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
-    .filter((msg): msg is IContent => msg !== undefined && msg !== null)
-    .forEach((msg) => {
-      if (msg.speaker === 'ai') {
-        msg.blocks.forEach((block) => {
-          if (block.type === 'tool_call') {
-            const toolCallBlock = block;
-            functionCalls.push({
-              type: 'function_call' as const,
-              call_id: normalizeToOpenAIToolId(toolCallBlock.id),
-              name: toolCallBlock.name,
-              arguments:
-                typeof toolCallBlock.parameters === 'string'
-                  ? toolCallBlock.parameters
-                  : JSON.stringify(toolCallBlock.parameters),
-            });
-          }
-        });
-      }
+  messages.forEach((msg) => {
+    if (msg.speaker === 'ai') {
+      msg.blocks.forEach((block) => {
+        if (block.type === 'tool_call') {
+          const toolCallBlock = block;
+          functionCalls.push({
+            type: 'function_call' as const,
+            call_id: normalizeToOpenAIToolId(toolCallBlock.id),
+            name: toolCallBlock.name,
+            arguments:
+              typeof toolCallBlock.parameters === 'string'
+                ? toolCallBlock.parameters
+                : JSON.stringify(toolCallBlock.parameters),
+          });
+        }
+      });
+    }
 
-      if (msg.speaker === 'tool') {
-        msg.blocks.forEach((block) => {
-          if (block.type === 'tool_response') {
-            const toolResponseBlock = block;
+    if (msg.speaker === 'tool') {
+      msg.blocks.forEach((block) => {
+        if (block.type === 'tool_response') {
+          const toolResponseBlock = block;
 
-            const payload = buildToolResponsePayload(
-              toolResponseBlock,
-              undefined,
-              true,
+          const payload = buildToolResponsePayload(
+            toolResponseBlock,
+            undefined,
+            true,
+          );
+          let sanitizedContent = formatToolResponseText({
+            status: payload.status,
+            toolName: payload.toolName ?? toolResponseBlock.toolName,
+            error: payload.error,
+            output: payload.result,
+          });
+
+          if (hasUnicodeReplacements(sanitizedContent)) {
+            logger.debug(
+              () =>
+                'Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
             );
-            let sanitizedContent = formatToolResponseText({
-              status: payload.status,
-              toolName: payload.toolName ?? toolResponseBlock.toolName,
-              error: payload.error,
-              output: payload.result,
-            });
-
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (hasUnicodeReplacements(sanitizedContent)) {
-              logger.debug(
-                () =>
-                  'Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
-              );
-              sanitizedContent = ensureJsonSafe(sanitizedContent);
-            }
-
-            functionCallOutputs.push({
-              type: 'function_call_output' as const,
-              call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
-              output: sanitizedContent,
-            });
+            sanitizedContent = ensureJsonSafe(sanitizedContent);
           }
-        });
-      }
-    });
+
+          functionCallOutputs.push({
+            type: 'function_call_output' as const,
+            call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
+            output: sanitizedContent,
+          });
+        }
+      });
+    }
+  });
 
   return { functionCalls, functionCallOutputs };
 }
@@ -264,61 +283,47 @@ function extractFunctionCalls(messages: IContent[]): {
 function transformMessages(
   messages: IContent[],
 ): ResponsesMessage[] | undefined {
-  return (
-    messages
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
-      .filter((msg): msg is IContent => msg !== undefined && msg !== null)
-      .filter((msg) => msg.speaker !== 'tool')
-      .map((msg) => {
-        const textBlocks = msg.blocks.filter(
-          (block): block is Extract<typeof block, { type: 'text' }> =>
-            block.type === 'text',
+  return messages
+    .filter((msg) => msg.speaker !== 'tool')
+    .map((msg) => {
+      const textBlocks = msg.blocks.filter(
+        (block): block is Extract<typeof block, { type: 'text' }> =>
+          block.type === 'text',
+      );
+      const content =
+        textBlocks.length > 0
+          ? textBlocks.map((block) => block.text).join('\n')
+          : '';
+
+      const role = resolveSpeakerRole(msg.speaker);
+
+      let sanitizedContent = content;
+      if (hasUnicodeReplacements(content)) {
+        logger.debug(
+          () =>
+            'Message content contains Unicode replacement characters (U+FFFD), sanitizing...',
         );
-        const content =
-          textBlocks.length > 0
-            ? textBlocks.map((block) => block.text).join('\n')
-            : '';
+        sanitizedContent = ensureJsonSafe(content);
+      }
 
-        const role =
-          msg.speaker === 'human'
-            ? 'user'
-            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              msg.speaker === 'ai'
-              ? 'assistant'
-              : 'system';
+      const result: {
+        role: 'user' | 'assistant' | 'system' | 'developer';
+        content?: string;
+        usage?: unknown;
+      } = {
+        role: role as 'user' | 'assistant' | 'system' | 'developer',
+      };
 
-        let sanitizedContent = content;
-        if (hasUnicodeReplacements(content)) {
-          logger.debug(
-            () =>
-              'Message content contains Unicode replacement characters (U+FFFD), sanitizing...',
-          );
-          sanitizedContent = ensureJsonSafe(content);
-        }
+      if (sanitizedContent) {
+        result.content = sanitizedContent;
+      }
 
-        const result: {
-          role: 'user' | 'assistant' | 'system' | 'developer';
-          content?: string;
-          usage?: unknown;
-        } = {
-          role: role as 'user' | 'assistant' | 'system' | 'developer',
-        };
+      if (msg.metadata?.usage) {
+        result.usage = msg.metadata.usage;
+      }
 
-        if (sanitizedContent) {
-          result.content = sanitizedContent;
-        }
-
-        if (msg.metadata?.usage) {
-          result.usage = msg.metadata.usage;
-        }
-
-        return result as ResponsesMessage;
-      })
-      .filter(
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
-        (msg): msg is NonNullable<typeof msg> => msg !== null,
-      ) as ResponsesMessage[]
-  );
+      return result as ResponsesMessage;
+    });
 }
 
 function buildInputArray(
@@ -362,15 +367,14 @@ function applyConversationFields(
 function applyToolFields(
   request: ResponsesRequest,
   tools: ITool[] | ResponsesTool[] | undefined,
-  toolChoice: string | object | undefined,
+  toolChoice: string | object | null | undefined,
 ): void {
   if (tools && tools.length > 0) {
     request.tools = tools as ResponsesTool[];
-    if (
+    const hasToolChoice =
       (typeof toolChoice === 'string' && toolChoice !== '') ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve old runtime-boundary falsy handling for malformed null tool choices.
-      (typeof toolChoice === 'object' && toolChoice !== null)
-    ) {
+      (typeof toolChoice === 'object' && toolChoice !== null);
+    if (hasToolChoice) {
       request.tool_choice = toolChoice;
     }
   }
@@ -393,18 +397,29 @@ export function buildResponsesRequest(
     ...otherParams
   } = params;
 
+  const validMessages = (messages ?? []).filter(hasRuntimeMessage);
+  if (
+    messages !== undefined &&
+    messages.some(hasMalformedRuntimeMessage) &&
+    validMessages.length === 0 &&
+    !prompt
+  ) {
+    throw new Error('Either "prompt" or "messages" must be provided.');
+  }
   const processedMessages = trimMessagesForStatefulMode(
-    messages ?? [],
+    validMessages,
     conversationId,
   );
 
   const { functionCalls, functionCallOutputs } =
     extractFunctionCalls(processedMessages);
 
-  const transformedMessages =
-    processedMessages.length > 0
-      ? transformMessages(processedMessages)
-      : undefined;
+  let transformedMessages: ResponsesMessage[] | undefined;
+  if (processedMessages.length > 0) {
+    transformedMessages = transformMessages(processedMessages);
+  } else if (messages !== undefined && messages.length > 0) {
+    transformedMessages = [];
+  }
 
   const request: ResponsesRequest = {
     model: model ?? '',

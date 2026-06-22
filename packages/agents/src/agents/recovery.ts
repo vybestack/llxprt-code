@@ -18,7 +18,7 @@
  * original termination reason is preserved and the loop ends immediately.
  */
 
-import type { Content } from '@google/genai';
+import type { Content, FunctionCall } from '@google/genai';
 import { AgentTerminateMode, type SubagentActivityEventType } from './types.js';
 
 /** Tool name used to signal task completion. */
@@ -187,4 +187,164 @@ export function recoveryFailureResult(
           '\n\nPartial result before recovery:\n' +
           partialResult,
   };
+}
+
+/**
+ * Callback for emitting activity events during recovery checks.
+ */
+export type EmitActivityFn = (
+  type: SubagentActivityEventType,
+  data: Record<string, unknown>,
+) => void;
+
+/** Emit a RECOVERY_OUTCOME telemetry event. */
+function emitRecoveryOutcome(
+  emitActivity: EmitActivityFn,
+  originalReason: AgentTerminateMode,
+  outcome: 'success' | 'failure',
+  terminateReason: AgentTerminateMode,
+  gracePeriodSeconds: number,
+): void {
+  emitActivity('RECOVERY_OUTCOME', {
+    originalReason,
+    outcome,
+    terminateReason,
+    gracePeriodSeconds,
+  });
+}
+
+/**
+ * Check tool calls during recovery: non-complete_task = recovery failure.
+ *
+ * Returns a failure result if the model (during its one recovery response)
+ * did not call `complete_task`, or called other tools alongside it.
+ * Returns `null` if recovery is not active, the response hasn't been used,
+ * or the calls are valid (exactly one `complete_task`).
+ */
+export function checkRecoveryToolCalls(
+  recoveryState: RecoveryState,
+  recoveryModelResponseUsed: boolean,
+  functionCalls: FunctionCall[],
+  finalResult: string | null,
+  emitActivity: EmitActivityFn,
+): { terminateReason: AgentTerminateMode; finalResult: string } | null {
+  if (recoveryState.phase !== 'active' || !recoveryModelResponseUsed) {
+    return null;
+  }
+  const hasCompleteTask = functionCalls.some(
+    (fc) => fc.name === TASK_COMPLETE_TOOL_NAME,
+  );
+  if (!hasCompleteTask) {
+    emitRecoveryOutcome(
+      emitActivity,
+      recoveryState.originalReason,
+      'failure',
+      recoveryState.originalReason,
+      recoveryState.gracePeriodSeconds,
+    );
+    return recoveryFailureResult(recoveryState.originalReason, finalResult);
+  }
+
+  // Recovery response must be exactly one complete_task call.
+  // If complete_task is accompanied by other tools, fail recovery immediately
+  // and do not execute any of the tool calls.
+  if (functionCalls.length > 1) {
+    emitRecoveryOutcome(
+      emitActivity,
+      recoveryState.originalReason,
+      'failure',
+      recoveryState.originalReason,
+      recoveryState.gracePeriodSeconds,
+    );
+    return recoveryFailureResult(recoveryState.originalReason, finalResult);
+  }
+
+  return null;
+}
+
+/** Result when a termination reason is handled (either enter recovery or finish). */
+export type TerminationHandlingResult =
+  | { handled: true; newState: RecoveryActive; currentMessage: Content }
+  | {
+      handled: false;
+      result: {
+        terminateReason: AgentTerminateMode;
+        finalResult: string | null;
+      };
+    };
+
+/**
+ * Handle termination-reason checks: enter recovery or return immediately.
+ *
+ * If the reason is recoverable and we're not already in recovery, enter
+ * recovery. If already in recovery, the second termination means recovery
+ * failed. Otherwise return the plain termination result.
+ */
+export function handleTerminationReason(
+  reason: AgentTerminateMode,
+  recoveryState: RecoveryState,
+  finalResult: string | null,
+  gracePeriodSeconds: number,
+  emitActivity: EmitActivityFn,
+): TerminationHandlingResult {
+  if (isRecoverableTermination(reason) && recoveryState.phase === 'none') {
+    const { state, warningMessage } = enterRecovery(
+      reason,
+      gracePeriodSeconds,
+      emitActivity,
+    );
+    return { handled: true, newState: state, currentMessage: warningMessage };
+  }
+
+  if (recoveryState.phase === 'active') {
+    const fail = recoveryFailureResult(
+      recoveryState.originalReason,
+      finalResult,
+    );
+    emitRecoveryOutcome(
+      emitActivity,
+      recoveryState.originalReason,
+      'failure',
+      fail.terminateReason,
+      recoveryState.gracePeriodSeconds,
+    );
+    return { handled: false, result: fail };
+  }
+
+  return { handled: false, result: { terminateReason: reason, finalResult } };
+}
+
+/** Result when a protocol violation is handled. */
+export type ProtocolViolationResult =
+  | { entered: true; state: RecoveryActive; warningMessage: Content }
+  | {
+      entered: false;
+      result: { terminateReason: AgentTerminateMode; finalResult: string };
+    };
+
+/**
+ * Handle the protocol-violation path (model stopped calling tools).
+ *
+ * If not already in recovery, enter recovery for a protocol violation.
+ * If already in recovery, the empty response confirms recovery failure.
+ */
+export function handleProtocolViolation(
+  recoveryState: RecoveryState,
+  finalResult: string | null,
+  gracePeriodSeconds: number,
+  emitActivity: EmitActivityFn,
+): ProtocolViolationResult {
+  if (recoveryState.phase === 'none') {
+    const { state, warningMessage } = enterRecovery(
+      AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+      gracePeriodSeconds,
+      emitActivity,
+    );
+    return { entered: true, state, warningMessage };
+  }
+
+  // Already in recovery: the one recovery model response didn't call
+  // complete_task, so this empty response confirms recovery failure.
+  const fail = recoveryFailureResult(recoveryState.originalReason, finalResult);
+  return { entered: false, result: fail };
 }

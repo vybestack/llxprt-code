@@ -5,7 +5,6 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
-/* eslint-disable complexity, sonarjs/cognitive-complexity -- Phase 5: legacy provider boundary retained while larger decomposition continues. */
 
 import {
   type ContentBlock,
@@ -80,9 +79,8 @@ function appendReasoningDelta(current: string, delta: string): string {
   if (!current) {
     return delta;
   }
-  const lastChar = current[current.length - 1] ?? '';
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
-  const nextChar = delta[0] ?? '';
+  const lastChar = current[current.length - 1];
+  const nextChar = delta[0];
   const needsSpace =
     /[\w)]/.test(lastChar) && /[\w(]/.test(nextChar) && !/\s/.test(nextChar);
   return needsSpace ? `${current} ${delta}` : `${current}${delta}`;
@@ -247,10 +245,7 @@ function* handleReasoningItem(
   }
 > {
   const finalThought = extractThoughtText(event, '', '');
-  const hasEncryptedContent = Boolean(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
-    event.item?.encrypted_content,
-  );
+  const hasEncryptedContent = Boolean(event.item?.encrypted_content);
   const prior = emittedThoughts.get(finalThought);
 
   // Emit if:
@@ -275,7 +270,6 @@ function* handleReasoningItem(
     const reasoningBlock: ContentBlock = hasEncryptedContent
       ? {
           ...baseReasoningBlock,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
           encryptedContent: event.item?.encrypted_content,
         }
       : baseReasoningBlock;
@@ -401,7 +395,6 @@ function* handleResponseCompleted(
   }
 
   // Usage data
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
   const terminalReason = event.response?.status ?? 'completed';
   if (event.response?.usage) {
     yield {
@@ -656,6 +649,46 @@ function* dispatchEvent(
   };
 }
 
+/**
+ * Parses a single SSE data payload and dispatches it, returning updated
+ * dispatch state. Returns null for malformed JSON (preserving prior behavior
+ * of silently skipping unparseable events).
+ */
+async function* tryDispatchEvent(
+  data: string,
+  reasoningText: string,
+  reasoningSummaryText: string,
+  functionCalls: Map<string, FunctionCallState>,
+  includeThinkingInResponse: boolean,
+  hasEmittedVisibleThinking: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  lastLoggedType: string | undefined,
+): AsyncGenerator<IContent, DispatchResult> {
+  let event: ResponsesEvent;
+  try {
+    event = JSON.parse(data);
+  } catch {
+    // Skip malformed JSON events: return unchanged state
+    return {
+      hasEmittedVisibleThinking,
+      reasoningText,
+      reasoningSummaryText,
+      lastLoggedType,
+    };
+  }
+
+  return yield* dispatchEvent(
+    event,
+    reasoningText,
+    reasoningSummaryText,
+    functionCalls,
+    includeThinkingInResponse,
+    hasEmittedVisibleThinking,
+    emittedThoughts,
+    lastLoggedType,
+  );
+}
+
 export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
   options: ParseResponsesStreamOptions = {},
@@ -676,11 +709,14 @@ export async function* parseResponsesStream(
   let lastLoggedType: string | undefined;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
-    while (true) {
+    const streamActive = { done: false };
+    while (!streamActive.done) {
       const { done, value } = await reader.read();
 
-      if (done) break;
+      if (done) {
+        streamActive.done = true;
+        break;
+      }
 
       // Decode chunk and add to buffer
       buffer += decoder.decode(value, { stream: true });
@@ -689,37 +725,26 @@ export async function* parseResponsesStream(
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? ''; // Keep incomplete line in buffer
 
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      for (const line of lines) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (line.startsWith('data: ')) {
-          const data = line.substring(6);
+      const dataLines = lines
+        .filter((line) => line.startsWith('data: '))
+        .map((line) => line.substring(6))
+        .filter((data) => data !== '[DONE]');
 
-          // Skip [DONE] marker
-          if (data === '[DONE]') continue;
-
-          try {
-            const event: ResponsesEvent = JSON.parse(data);
-
-            const result: DispatchResult = yield* dispatchEvent(
-              event,
-              reasoningText,
-              reasoningSummaryText,
-              functionCalls,
-              includeThinkingInResponse,
-              hasEmittedVisibleThinking,
-              emittedThoughts,
-              lastLoggedType,
-            );
-            hasEmittedVisibleThinking = result.hasEmittedVisibleThinking;
-            reasoningText = result.reasoningText;
-            reasoningSummaryText = result.reasoningSummaryText;
-            lastLoggedType = result.lastLoggedType;
-          } catch {
-            // Skip malformed JSON events
-            continue;
-          }
-        }
+      for (const data of dataLines) {
+        const dispatchState: DispatchResult = yield* tryDispatchEvent(
+          data,
+          reasoningText,
+          reasoningSummaryText,
+          functionCalls,
+          includeThinkingInResponse,
+          hasEmittedVisibleThinking,
+          emittedThoughts,
+          lastLoggedType,
+        );
+        hasEmittedVisibleThinking = dispatchState.hasEmittedVisibleThinking;
+        reasoningText = dispatchState.reasoningText;
+        reasoningSummaryText = dispatchState.reasoningSummaryText;
+        lastLoggedType = dispatchState.lastLoggedType;
       }
     }
   } finally {
@@ -727,81 +752,6 @@ export async function* parseResponsesStream(
   }
 }
 
-export function parseErrorResponse(
-  status: number,
-  body: string,
-  providerName: string,
-): Error {
-  // Try to parse JSON error response first
-  try {
-    const errorData = JSON.parse(body);
-
-    // Handle various error response formats
-    let message = 'Unknown error';
-    if (
-      typeof errorData.error?.message === 'string' &&
-      errorData.error.message !== ''
-    ) {
-      message = errorData.error.message;
-    } else if (
-      typeof errorData.error?.description === 'string' &&
-      errorData.error.description !== ''
-    ) {
-      message = errorData.error.description;
-    } else if (
-      typeof errorData.message === 'string' &&
-      errorData.message !== ''
-    ) {
-      message = errorData.message;
-    } else if (
-      typeof errorData.description === 'string' &&
-      errorData.description !== ''
-    ) {
-      message = errorData.description;
-    } else if (typeof errorData === 'string' && errorData !== '') {
-      message = errorData;
-    }
-
-    // Determine the error prefix based on specific status codes
-    let errorPrefix = 'API Error';
-    switch (status) {
-      case 409:
-        errorPrefix = 'Conflict';
-        break;
-      case 410:
-        errorPrefix = 'Gone';
-        break;
-      case 418: {
-        // For 418 I'm a teapot, just return the message without prefix
-        const teapotError = new Error(message);
-        (teapotError as { status?: number }).status = status;
-        (teapotError as { code?: string }).code =
-          errorData.error?.code ?? errorData.code;
-        return teapotError;
-      }
-      case 429:
-        errorPrefix = 'Rate limit exceeded';
-        break;
-      default:
-        if (status >= 400 && status < 500) {
-          errorPrefix = 'Client error';
-        } else if (status >= 500 && status < 600) {
-          errorPrefix = 'Server error';
-        }
-    }
-
-    const error = new Error(`${errorPrefix}: ${message}`);
-    (error as { status?: number }).status = status;
-    (error as { code?: string }).code = errorData.error?.code ?? errorData.code;
-    return error;
-  } catch {
-    // For invalid JSON, use a consistent format
-    const errorPrefix =
-      status >= 500 && status < 600 ? 'Server error' : 'API Error';
-    const error = new Error(
-      `${errorPrefix}: ${providerName} API error: ${status}`,
-    );
-    (error as { status?: number }).status = status;
-    return error;
-  }
-}
+// Re-exported to preserve the public API surface; implementation moved to
+// responsesErrorParsing.ts to keep this module within the max-lines budget.
+export { parseErrorResponse } from './responsesErrorParsing.js';

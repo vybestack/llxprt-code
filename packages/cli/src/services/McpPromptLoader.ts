@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   getErrorMessage,
@@ -19,6 +17,7 @@ import type {
 } from '../ui/commands/types.js';
 import { CommandKind } from '../ui/commands/types.js';
 import type { ICommandLoader } from './types.js';
+import { parsePromptArgs } from './mcpPromptArgParser.js';
 import type {
   PromptArgument,
   PromptMessage,
@@ -58,10 +57,11 @@ export class McpPromptLoader implements ICommandLoader {
     serverName: string,
   ): SlashCommand {
     const commandName = `${prompt.name}`.trim().replace(/\s+/g, '-');
+    const description = prompt.description ?? '';
     return {
       name: commandName,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string description should use generated default
-      description: prompt.description || `Invoke prompt ${prompt.name}`,
+      description:
+        description !== '' ? description : `Invoke prompt ${prompt.name}`,
       kind: CommandKind.MCP_PROMPT,
       autoExecute: !prompt.arguments || prompt.arguments.length === 0,
       subCommands: [
@@ -206,6 +206,8 @@ export class McpPromptLoader implements ICommandLoader {
    * Parses the `userArgs` string representing the prompt arguments (all the text
    * after the command) into a record matching the shape of the `promptArgs`.
    *
+   * Delegates to {@link parsePromptArgs} in mcpPromptArgParser.ts.
+   *
    * @param userArgs
    * @param promptArgs
    * @returns A record of the parsed arguments
@@ -215,80 +217,6 @@ export class McpPromptLoader implements ICommandLoader {
     userArgs: string,
     promptArgs: PromptArgument[] | undefined,
   ): Record<string, unknown> | Error {
-    const argValues: { [key: string]: string } = {};
-    const promptInputs: Record<string, unknown> = {};
-
-    // arg parsing: --key="value" or --key=value
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const namedArgRegex = /--([^=]+)=(?:"((?:\\.|[^"\\])*)"|([^ ]+))/g;
-    let match;
-    let lastIndex = 0;
-    const positionalParts: string[] = [];
-
-    while ((match = namedArgRegex.exec(userArgs)) !== null) {
-      const key = match[1];
-      // Extract the quoted or unquoted argument and remove escape chars.
-      const value = (match.at(2) ?? match.at(3) ?? '').replace(/\\(.)/g, '$1');
-
-      argValues[key] = value;
-      // Capture text between matches as potential positional args
-      if (match.index > lastIndex) {
-        positionalParts.push(userArgs.substring(lastIndex, match.index));
-      }
-      lastIndex = namedArgRegex.lastIndex;
-    }
-
-    // Capture any remaining text after the last named arg
-    if (lastIndex < userArgs.length) {
-      positionalParts.push(userArgs.substring(lastIndex));
-    }
-
-    const positionalArgsString = positionalParts.join('').trim();
-    // extracts either quoted strings or non-quoted sequences of non-space characters.
-    // Static regex for positional argument parsing - no dynamic parts
-    // eslint-disable-next-line sonarjs/regular-expr
-    const positionalArgRegex = /(?:"((?:\\.|[^"\\])*)"|([^ ]+))/g;
-    const positionalArgs: string[] = [];
-    while ((match = positionalArgRegex.exec(positionalArgsString)) !== null) {
-      positionalArgs.push(
-        (match.at(1) ?? match.at(2) ?? '').replace(/\\(.)/g, '$1'),
-      );
-    }
-
-    if (!promptArgs) {
-      return promptInputs;
-    }
-    for (const arg of promptArgs) {
-      if (argValues[arg.name]) {
-        promptInputs[arg.name] = argValues[arg.name];
-      }
-    }
-    const unfilledArgs = promptArgs.filter(
-      // eslint-disable-next-line no-extra-boolean-cast -- preserve old truthiness behavior for argument values
-      (arg) => arg.required === true && !Boolean(promptInputs[arg.name]),
-    );
-
-    if (unfilledArgs.length === 1) {
-      // If we have only one unfilled arg, we don't require quotes we just
-      // join all the given arguments together as if they were quoted.
-      promptInputs[unfilledArgs[0].name] = positionalArgs.join(' ');
-    } else {
-      const missingArgs: string[] = [];
-      for (let i = 0; i < unfilledArgs.length; i++) {
-        if (positionalArgs.length > i) {
-          promptInputs[unfilledArgs[i].name] = positionalArgs[i];
-        } else {
-          missingArgs.push(unfilledArgs[i].name);
-        }
-      }
-      if (missingArgs.length > 0) {
-        const missingArgNames = missingArgs
-          .map((name) => `--${name}`)
-          .join(', ');
-        return new Error(`Missing required argument(s): ${missingArgNames}`);
-      }
-    }
-
-    return promptInputs;
+    return parsePromptArgs(userArgs, promptArgs);
   }
 }
