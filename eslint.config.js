@@ -414,6 +414,81 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/task.issues.test.ts', // #2090
   'packages/agents/src/tools/task.max-turns.test.ts', // #2090
   'packages/agents/src/tools/task.timeout.test.ts', // #2090
+  // #2091 packages/cli test cleanup — target files (and extracted helpers)
+  // are fully compliant: zero inline lint directives. Locked to error so any
+  // new directive fails immediately while the rest of packages/cli remains in
+  // legacy cleanup scope for #2086/#2087.
+  'packages/cli/src/config/__tests__/profileBootstrap.test.ts', // #2091
+  'packages/cli/src/config/__tests__/profileBootstrap.part2.test.ts', // #2091
+  'packages/cli/src/config/__tests__/profileBootstrap.part3.test.ts', // #2091
+  'packages/cli/src/config/__tests__/profileBootstrap.part4.test.ts', // #2091
+  'packages/cli/src/config/config.test.ts', // #2091
+  'packages/cli/src/config/config.part2.test.ts', // #2091
+  'packages/cli/src/config/config.part3.test.ts', // #2091
+  'packages/cli/src/config/config.part4.test.ts', // #2091
+  'packages/cli/src/config/extension.test.ts', // #2091
+  'packages/cli/src/config/extension.part2.test.ts', // #2091
+  'packages/cli/src/config/extension.part3.test.ts', // #2091
+  'packages/cli/src/config/extension.part4.test.ts', // #2091
+  'packages/cli/src/config/settings.test.ts', // #2091
+  'packages/cli/src/config/settings.part2.test.ts', // #2091
+  'packages/cli/src/config/settings.part3.test.ts', // #2091
+  'packages/cli/src/config/settings.part4.test.ts', // #2091
+  'packages/cli/src/config/settings.part5.test.ts', // #2091
+  'packages/cli/src/config/settings.part6.test.ts', // #2091
+  'packages/cli/src/config/settings.part7.test.ts', // #2091
+  'packages/cli/src/integration-tests/cli-args.integration.test.ts', // #2091
+  'packages/cli/src/integration-tests/cli-args.profile-flag.integration.test.ts', // #2091
+  'packages/cli/src/integration-tests/cli-args-test-helpers.ts', // #2091
+  'packages/cli/src/services/__tests__/performResume.spec.ts', // #2091
+  'packages/cli/src/services/__tests__/performResume.property.spec.ts', // #2091
+  'packages/cli/src/services/__tests__/performResume.swap.spec.ts', // #2091
+  'packages/cli/src/services/__tests__/performResume-test-helpers.ts', // #2091
+  'packages/cli/src/services/FileCommandLoader.test.ts', // #2091
+  'packages/cli/src/services/FileCommandLoader.processors.test.ts', // #2091
+  'packages/cli/src/ui/commands/diagnosticsCommand.spec.ts', // #2091
+  'packages/cli/src/ui/commands/diagnosticsCommand.edges.spec.ts', // #2091
+  'packages/cli/src/ui/commands/diagnosticsCommand-test-helpers.ts', // #2091
+  'packages/cli/src/ui/commands/mcpCommand.test.ts', // #2091
+  'packages/cli/src/ui/commands/mcpCommand.schema-edge.test.ts', // #2091
+  'packages/cli/src/ui/commands/mcpCommand.auth-refresh.test.ts', // #2091
+  'packages/cli/src/ui/commands/todoCommand.test.ts', // #2091
+  'packages/cli/src/ui/commands/todoCommand.disk-set.test.ts', // #2091
+  'packages/cli/src/ui/commands/todoCommand.list-parse-property.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/golden-snapshot.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/text-buffer.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/text-buffer.part2.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/text-buffer.part3.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/text-buffer.part4.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/text-buffer.part5.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/vim-buffer-actions.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/vim-buffer-actions.insert-change.test.ts', // #2091
+  'packages/cli/src/ui/components/shared/vim-buffer-actions-test-helpers.ts', // #2091
+  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.spec.ts', // #2091
+  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part2.spec.ts', // #2091
+  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part3.spec.ts', // #2091
+  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part4.spec.ts', // #2091
+  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part5.spec.ts', // #2091
+  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part6.spec.ts', // #2091
+  'packages/cli/src/ui/hooks/atCommandProcessor.test.ts', // #2091
+  'packages/cli/src/ui/hooks/atCommandProcessor.filtering.test.ts', // #2091
+  'packages/cli/src/ui/hooks/atCommandProcessor.punctuation.test.ts', // #2091
+  'packages/cli/src/ui/hooks/atCommandProcessor-test-helpers.ts', // #2091
+  'packages/cli/src/ui/hooks/useAtCompletion.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useAtCompletion.subagent.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useAtCompletion-test-helpers.ts', // #2091
+  'packages/cli/src/ui/hooks/useSlashCompletion.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useSlashCompletion.part2.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useSlashCompletion.part3.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useSlashCompletion.part4.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useToolScheduler.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useToolScheduler.part2.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useToolScheduler.part3.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useToolScheduler.part4.test.ts', // #2091
+  'packages/cli/src/ui/hooks/useToolScheduler.part5.test.ts', // #2091
+  'packages/cli/src/utils/sessionCleanup.test.ts', // #2091
+  'packages/cli/src/utils/sessionCleanup.config.test.ts', // #2091
+  'packages/cli/src/utils/sessionCleanup-test-helpers.ts', // #2091
 ];
 
 export default tseslint.config(
