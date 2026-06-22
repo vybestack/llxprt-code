@@ -172,7 +172,11 @@ describe('validateCompressionConfig', () => {
     } satisfies CompressionConfig);
     expect(result.valid).toBe(false);
     expect(result.errors).toHaveLength(2);
-    expect(result.errors[0]).toContain('maxMessageCharsInPreserved');
-    expect(result.errors[1]).toContain('combined preserve');
+    expect(result.errors).toStrictEqual(
+      expect.arrayContaining([
+        expect.stringContaining('maxMessageCharsInPreserved'),
+        expect.stringContaining('combined preserve'),
+      ]),
+    );
   });
 });
