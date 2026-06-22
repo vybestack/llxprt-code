@@ -11,7 +11,6 @@ import { expect } from 'vitest';
 import type { TextBuffer } from '../ui/components/shared/text-buffer.js';
 
 // RegExp to detect invalid characters: backspace, and ANSI escape codes
-// eslint-disable-next-line no-control-regex
 const invalidCharsRegex = /[\b\x1b]/;
 
 function toHaveOnlyValidCharacters(this: Assertion, buffer: TextBuffer) {

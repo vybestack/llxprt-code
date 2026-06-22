@@ -184,7 +184,6 @@ export function isValidColor(color: string): boolean {
 
   // 1. Check if it's a hex code
   if (lowerColor.startsWith('#')) {
-    /* eslint-disable-next-line sonarjs/regular-expr */
     return /^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(color);
   }
 
@@ -212,7 +211,6 @@ export function resolveColor(colorValue: string): string | undefined {
 
   // 1. Check if it's already a hex code and valid
   if (lowerColor.startsWith('#')) {
-    /* eslint-disable-next-line sonarjs/regular-expr */
     if (/^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(colorValue)) {
       return lowerColor;
     }
@@ -296,7 +294,6 @@ export function getThemeTypeFromBackgroundColor(
  * 5. Non-TTY detection: Returns undefined immediately if stdin is not a TTY
  * 6. Proper cleanup: Always removes listeners and restores terminal state
  */
-/* eslint-disable prefer-const, no-control-regex */
 export function detectTerminalBackgroundColor(): Promise<string | undefined> {
   return new Promise((resolve) => {
     const stdin = process.stdin;
@@ -306,13 +303,13 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
     }
 
     const wasRaw = stdin.isRaw === true;
-    let timeoutHandle: NodeJS.Timeout;
+    const timeoutHandle: { current?: NodeJS.Timeout } = {};
     let response = '';
 
     const cleanup = () => {
       stdin.setRawMode(wasRaw);
       stdin.removeListener('data', dataHandler);
-      clearTimeout(timeoutHandle);
+      clearTimeout(timeoutHandle.current);
     };
 
     const dataHandler = (data: Buffer) => {
@@ -325,12 +322,10 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
       // Match either terminator (case-insensitive hex)
       // Static regex for OSC 11 response with ST terminator - no dynamic parts
       const matchST = response.match(
-        /* eslint-disable-next-line sonarjs/regular-expr */
         /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x1b\\/i,
       );
       // Static regex for OSC 11 response with BEL terminator - no dynamic parts
       const matchBEL = response.match(
-        /* eslint-disable-next-line sonarjs/regular-expr */
         /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x07/i,
       );
 
@@ -357,10 +352,9 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
     process.stdout.write('\x1b]11;?\x1b\\');
 
     // Timeout after 100ms (terminal doesn't support OSC 11 or no response)
-    timeoutHandle = setTimeout(() => {
+    timeoutHandle.current = setTimeout(() => {
       cleanup();
       resolve(undefined);
     }, 100);
   });
 }
-/* eslint-enable prefer-const, no-control-regex */

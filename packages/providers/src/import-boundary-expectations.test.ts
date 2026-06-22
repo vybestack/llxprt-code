@@ -153,11 +153,9 @@ describe('Core must not import from providers package', () => {
     }
     const content = fs.readFileSync(tsconfigPath, 'utf-8');
     // Strip comments — these regexes are bounded for test-only JSON content
-    /* eslint-disable sonarjs/regular-expr, sonarjs/slow-regex */
     const stripped = content
       .replace(/\/\/.*$/gm, '')
       .replace(/\/\*[\s\S]*?\*\//g, '');
-    /* eslint-enable sonarjs/regular-expr, sonarjs/slow-regex */
     try {
       const tsconfig = JSON.parse(stripped) as Record<string, unknown>;
       const references = (tsconfig.references ?? []) as Array<

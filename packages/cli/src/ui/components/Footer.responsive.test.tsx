@@ -96,7 +96,6 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should NOT show timestamp
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/);
     });
 
@@ -129,7 +128,6 @@ describe('Footer Responsive Behavior', () => {
       // Should show full "Memory:" label
       expect(output).toMatch(/Memory:/);
       // Should NOT show percentage details in parens
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/Memory: \d+% \(\d+\.\d+GB\/\d+\.\d+GB\)/);
     });
 
@@ -140,7 +138,6 @@ describe('Footer Responsive Behavior', () => {
       // Should show full "Context:" label
       expect(output).toMatch(/Context:/);
       // Should NOT show fully expanded token counts
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/Context: \d+,\d+\/\d+,\d+ tokens/);
     });
 
@@ -158,7 +155,6 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should NOT show timestamp
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/);
     });
   });
@@ -174,7 +170,6 @@ describe('Footer Responsive Behavior', () => {
 
       // Should show detailed memory format (may wrap across lines in two-line layout)
       expect(output).toMatch(/Memory: \d+%/);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/\(\d+\.\d+GB\/\d+\.\d+GB\)/);
     });
 
@@ -183,7 +178,6 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show detailed context format (shows as 8,234/100,000 tokens)
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/Context: \d+,\d+\/\d+,\d+/);
     });
 
@@ -201,7 +195,6 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show timestamp in HH:MM:SS format (may wrap across lines)
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/\d{1,2}:\d{2}:\d/);
     });
 
@@ -229,7 +222,6 @@ describe('Footer Responsive Behavior', () => {
       // At exactly 80, should be STANDARD behavior
       expect(output).toMatch(/Memory:/); // Not abbreviated
       expect(output).toContain('gemini-2.5-pro'); // Model shown
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // No timestamp
     });
 
@@ -243,7 +235,6 @@ describe('Footer Responsive Behavior', () => {
       // At exactly 120, should be STANDARD behavior (not WIDE)
       expect(output).toMatch(/Memory:/);
       expect(output).toContain('gemini-2.5-pro');
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // Still no timestamp
     });
   });
@@ -313,11 +304,9 @@ describe('Footer Responsive Behavior', () => {
       // Should have Memory, Context, and Time displayed
       expect(output).toMatch(/Memory:/);
       expect(output).toMatch(/Context:/);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/\d{1,2}:\d{2}:\d/); // Timestamp (may wrap)
 
       // Should also have path and model displayed
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/home.*user.*projects|long-project-name/);
       expect(output).toContain('gemini-2.5-pro');
     });
@@ -329,7 +318,6 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should contain path and model information
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/home.*user.*projects|long-project-name/);
       expect(output).toContain('gemini-2.5-pro');
       expect(output).toContain('feature'); // Branch name (from defaultProps)
@@ -347,7 +335,6 @@ describe('Footer Responsive Behavior', () => {
 
       expect(output).toMatch(/Mem:/); // Abbreviated
       expect(output).toMatch(/Ctx:/); // Abbreviated
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // No timestamp at narrow
 
       // Test standard width
@@ -357,7 +344,6 @@ describe('Footer Responsive Behavior', () => {
 
       expect(output).toMatch(/Memory:/); // Full label
       expect(output).toMatch(/Context:/); // Full label
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // Still no timestamp at standard
 
       // Test wide width
@@ -367,7 +353,6 @@ describe('Footer Responsive Behavior', () => {
 
       expect(output).toMatch(/Memory:/); // Full label
       expect(output).toMatch(/Context:/); // Full label
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/\d{1,2}:\d{2}:\d/); // Timestamp at wide (may wrap)
     });
   });

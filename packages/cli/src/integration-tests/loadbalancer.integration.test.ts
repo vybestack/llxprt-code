@@ -173,7 +173,6 @@ describe('LoadBalancer Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /Loaded profile.*lb-profile|Loading profile.*lb-profile/i,
       );
     });
@@ -219,7 +218,6 @@ describe('LoadBalancer Integration Tests', () => {
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(fullOutput).toMatch(/profile.*not found|failed.*load/i);
     });
 

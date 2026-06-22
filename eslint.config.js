@@ -848,8 +848,20 @@ export default tseslint.config(
       'sonarjs/cognitive-complexity': ['error', 30],
       'sonarjs/todo-tag': 'error',
       'sonarjs/no-ignored-exceptions': 'error',
-      'sonarjs/regular-expr': 'error',
-      'sonarjs/slow-regex': 'error',
+      // Issue #2113: sonarjs/regular-expr is a deprecated, non-recommended
+      // blanket review heuristic for ordinary regex usage. Keep targeted regex
+      // correctness rules enabled and disable broad security-sensitive review
+      // heuristics that produced source-level suppression comments instead of
+      // actionable fixes.
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2113 deprecated blanket regex heuristic
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2113 broad regex security review heuristic
+      'sonarjs/no-invalid-regexp': 'error',
+      'sonarjs/stateful-regex': 'error',
+      'sonarjs/unicode-aware-regex': 'error',
+      'sonarjs/no-regex-spaces': 'error',
+      // Issue #2113: terminal/TUI code intentionally parses ANSI/control
+      // sequences and security boundary code explicitly checks control chars.
+      'no-control-regex': 'off', // eslint-policy-allow-off: #2113 terminal/control-character regexes are intentional
       // Issue #2079: this CLI intentionally invokes user/platform tools such as
       // git, shells, editors, and ripgrep. These rules are not useful signal.
       'sonarjs/os-command': 'off', // eslint-policy-allow-off: #2079

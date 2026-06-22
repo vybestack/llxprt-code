@@ -41,7 +41,6 @@ const extractCountFromText = (text?: string): number | undefined => {
     return undefined;
   }
   // Static regex for extracting counts from text - no dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   const match = text.match(/(\d+)\s+(tasks?|items?)/i);
   if (!match) {
     return undefined;

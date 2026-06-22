@@ -87,7 +87,6 @@ describe('TodoPanel Semantic Colors', () => {
 
     const output = lastFrame();
     // Check for the marker and content pattern in the rendered output
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     expect(output).toMatch(/✔.*Completed task/);
 
     // Verify the output contains the task text - exact color testing is hard with ink
@@ -113,7 +112,6 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     expect(output).toMatch(/→.*Current task.*← current/);
   });
 
@@ -135,7 +133,6 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     expect(output).toMatch(/○.*Pending task/);
   });
 
@@ -159,7 +156,6 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const darkOutput = darkFrame();
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     expect(darkOutput).toMatch(/✔.*Test task/);
 
     // Test with light theme
@@ -173,7 +169,6 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const lightOutput = lightFrame();
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     expect(lightOutput).toMatch(/✔.*Test task/);
 
     // Both should render correctly even though colors might be different
@@ -217,11 +212,8 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     expect(output).toMatch(/→.*Main task.*← current/);
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     expect(output).toMatch(/•.*Subtask 1/);
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     expect(output).toMatch(/•.*Subtask 2/);
   });
 });

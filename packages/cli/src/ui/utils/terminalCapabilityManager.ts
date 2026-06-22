@@ -29,20 +29,15 @@ export class TerminalCapabilityManager {
   private static readonly MODIFY_OTHER_KEYS_QUERY = '\x1b[>4;?m';
 
   // Kitty keyboard flags: CSI ? flags u
-  // eslint-disable-next-line no-control-regex
   private static readonly KITTY_REGEX = /\x1b\[\?(\d+)u/;
   // Terminal Name/Version response: DCS > | text ST (or BEL)
-  // eslint-disable-next-line no-control-regex
   private static readonly TERMINAL_NAME_REGEX = /\x1bP>\|(.+?)(\x1b\\|\x07)/;
   // Primary Device Attributes: CSI ? ID ; ... c
-  // eslint-disable-next-line no-control-regex, sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   private static readonly DEVICE_ATTRIBUTES_REGEX = /\x1b\[\?(\d+)(;\d+)*c/;
   // OSC 11 response: OSC 11 ; rgb:rrrr/gggg/bbbb ST (or BEL)
   private static readonly OSC_11_REGEX =
-    // eslint-disable-next-line no-control-regex, sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /\x1b\]11;rgb:([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})(\x1b\\|\x07)?/;
   // modifyOtherKeys response: CSI > 4 ; level m
-  // eslint-disable-next-line no-control-regex
   private static readonly MODIFY_OTHER_KEYS_REGEX = /\x1b\[>4;(\d+)m/;
 
   private detectionComplete = false;

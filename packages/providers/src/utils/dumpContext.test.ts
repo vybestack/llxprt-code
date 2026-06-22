@@ -181,7 +181,6 @@ describe('dumpContext', () => {
       createdFiles.push(requestFilename, responseFilename);
       // dumpContext returns a dump base id, not a generated filename.
       expect(baseId).not.toMatch(/\.json$/);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(baseId).toMatch(/^\d{8}-\d{6}-openai-\w+$/);
 
       const filepath = path.join(testDumpDir, requestFilename);
@@ -239,7 +238,6 @@ describe('dumpContext', () => {
       const requestFilename = `${baseId}-request.json`;
       const responseFilename = `${baseId}-response.json`;
       createdFiles.push(requestFilename, responseFilename);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(baseId).toMatch(/^\d{8}-\d{6}-anthropic-\w+$/);
 
       const filepath = path.join(testDumpDir, requestFilename);
@@ -293,7 +291,6 @@ describe('dumpContext', () => {
       const requestFilename = `${baseId}-request.json`;
       const responseFilename = `${baseId}-response.json`;
       createdFiles.push(requestFilename, responseFilename);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(baseId).toMatch(/^\d{8}-\d{6}-gemini-\w+$/);
 
       const filepath = path.join(testDumpDir, requestFilename);

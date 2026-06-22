@@ -105,7 +105,6 @@ export function computeTerminalTitle({
   }
 
   // Remove control characters that could cause issues in terminal titles
-  // eslint-disable-next-line no-control-regex
   const safeTitle = title.replace(/[\x00-\x1F\x7F]/g, '');
 
   // Pad the title to a fixed width to prevent taskbar icon resizing/jitter.

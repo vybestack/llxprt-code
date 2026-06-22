@@ -29,7 +29,6 @@ export function truthyJsonValueOrEmptyObject(value: unknown): unknown {
 }
 
 export function parseScalarValue(value: string): string | number | boolean {
-  // eslint-disable-next-line sonarjs/regular-expr -- Static scalar-number regex preserves existing attribute parsing behavior.
   if (/^-?\d+(\.\d+)?$/.test(value)) {
     return Number(value);
   }

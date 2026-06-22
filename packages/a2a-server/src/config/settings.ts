@@ -116,7 +116,6 @@ export function loadSettings(workspaceDir: string): Settings {
 
 function resolveEnvVarsInString(value: string): string {
   // Static regex pattern for $VAR or ${VAR} syntax - no user-controlled dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr
   const envVarRegex = /\$(?:(\w+)|{([^}]+)})/g;
   return value.replace(envVarRegex, (match, varName1, varName2) => {
     // Regex guarantees exactly one of varName1/varName2 is defined based on $VAR vs ${VAR} syntax

@@ -28,7 +28,6 @@ function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
   let currentNewLine = 0;
   let inHunk = false;
   // Static regex for unified diff hunk headers - no dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   const hunkHeaderRegex = /^@@ -(\d+),?\d* \+(\d+),?\d* @@/;
 
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
