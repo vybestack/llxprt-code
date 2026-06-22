@@ -63,9 +63,11 @@ const CANONICAL_CONFIG: CompressionConfig = {
  *
  * - Each threshold must be finite and strictly within the open interval (0, 1).
  * - `maxMessageCharsInPreserved` must be a positive integer.
- * - The combined preserved fraction (`topPreserveThreshold + preserveThreshold`)
- *   must remain strictly below `tokenThreshold`, otherwise compression would
- *   never remove enough history to be effective.
+ * - As a conservative sanity check, the combined preserved fraction
+ *   (`topPreserveThreshold + preserveThreshold`) must remain strictly below
+ *   `tokenThreshold`. The preservation thresholds are applied to message ranges
+ *   while `tokenThreshold` is a token-limit fraction, so this catches obviously
+ *   non-compressive settings rather than modeling exact token reduction.
  *
  * @returns A {@link CompressionConfigValidationResult} listing all violations
  * (does not fail fast).

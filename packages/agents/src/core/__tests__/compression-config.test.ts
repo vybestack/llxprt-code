@@ -57,9 +57,8 @@ describe('compression-config exported thresholds', () => {
 
   describe('preserve invariant', () => {
     it('keeps combined top + middle preserve below the token threshold', () => {
-      // The combined preserved fraction (top + middle) must not reach or exceed
-      // the compression trigger threshold, otherwise compression would never
-      // actually remove enough history to be worthwhile.
+      // This is a conservative sanity check: preserve thresholds apply to
+      // message ranges while the trigger threshold applies to token limits.
       const combined =
         COMPRESSION_TOP_PRESERVE_THRESHOLD + COMPRESSION_PRESERVE_THRESHOLD;
       expect(combined).toBeLessThan(COMPRESSION_TOKEN_THRESHOLD);
