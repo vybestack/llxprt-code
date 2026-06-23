@@ -193,7 +193,7 @@ export class LoadBalancerFailoverError extends Error {
     profileName: string,
     failures: Array<{ profile: string; error: Error }>,
   ) {
-    const profileNames = failures.map((f) => f.profile).join(', ');
+    const profileNames = failures.map((f) => f.profile).join(', ') || 'none';
     const errorSummary = summarizeFailures(failures);
     super(
       `Load balancer "${profileName}" failover exhausted: ${errorSummary} (tried: ${profileNames})`,
@@ -213,6 +213,10 @@ export class LoadBalancerFailoverError extends Error {
 function summarizeFailures(
   failures: Array<{ profile: string; error: Error }>,
 ): string {
+  if (failures.length === 0) {
+    return 'no backend attempts were recorded';
+  }
+
   if (failures.length === 1) {
     return failures[0].error.message;
   }

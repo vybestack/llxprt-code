@@ -13,9 +13,8 @@ import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
-import type { IProvider } from '../IProvider.js';
+import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
 
 describe('LoadBalancingProvider - Failover Strategy', () => {
   let settingsService: SettingsService;
@@ -515,8 +514,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       try {
         const provider = new LoadBalancingProvider(lbConfig, providerManager);
         const options: GenerateChatOptions = {
-          prompt: 'test prompt',
-          messages: [{ role: 'user' as const, content: 'test' }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
           resolved: {
             model: 'original-model',
             baseURL: 'https://original.api.com',
@@ -712,8 +712,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       try {
         const provider = new LoadBalancingProvider(lbConfig, providerManager);
         const options: GenerateChatOptions = {
-          prompt: 'test prompt',
-          messages: [{ role: 'user' as const, content: 'test' }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
           resolved: {
             model: 'parent-model',
             authToken: 'leaked-opus-token',

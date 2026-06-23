@@ -319,6 +319,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(error.message).toContain('test-profile');
       expect(error.message).toContain('sole');
     });
+
+    it('uses diagnostic fallback when no backend attempts were recorded', () => {
+      const error = new LoadBalancerFailoverError('test-profile', []);
+
+      expect(error.message).toContain('no backend attempts were recorded');
+      expect(error.message).toContain('(tried: none)');
+    });
   });
   describe('ResolvedSubProfile settings propagation', () => {
     it('applies sub-profile ephemerals and modelParams on the failover path', async () => {
