@@ -37,10 +37,23 @@ import type {
   PerformResumeActionReturn,
   MessageActionReturn,
 } from '../commands/types.js';
+import type {
+  ValueArgument,
+  LiteralArgument,
+} from '../commands/schema/types.js';
 import type { UIState } from '../contexts/UIStateContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
-import { assertTrue } from '../../test-utils/assertions.js';
+import { assertType } from '../../test-utils/assertions.js';
+
+/**
+ * Helper to narrow a command argument to the ValueArgument variant.
+ */
+function isValueArgument(
+  arg: LiteralArgument | ValueArgument,
+): arg is ValueArgument {
+  return arg.kind === 'value';
+}
 
 // ---------------------------------------------------------------------------
 // Type Guards
@@ -167,7 +180,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      assertTrue(isDialogAction(result));
+      assertType(result, isDialogAction);
       expect(result.dialog).toBe('sessionBrowser');
 
       // Verify the action structure matches what processor expects
@@ -217,7 +230,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       const result = await continueCommand.action!(ctx, 'abc123');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('abc123');
       // The processor will invoke performResume() which updates metadata
     });
@@ -252,7 +265,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(result).not.toBeNull();
       expect(result!.type).toBe('dialog');
 
-      assertTrue(isDialogAction(result));
+      assertType(result, isDialogAction);
       // These fields are what slashCommandProcessor checks
       expect(result.dialog).toBe('sessionBrowser');
       // No dialogData expected for sessionBrowser
@@ -275,7 +288,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(result).toBeDefined();
       expect(result!.type).toBe('perform_resume');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('latest');
       // Processor will call performResume(sessionRef, context)
     });
@@ -302,7 +315,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      assertTrue(isMessageAction(result));
+      assertType(result, isMessageAction);
       expect(result.messageType).toBe('error');
       expect(result.content.length).toBeGreaterThan(0);
     });
@@ -501,7 +514,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const sessionArg = continueCommand.schema![0];
       expect(sessionArg.kind).toBe('value');
       // Type guard for ValueArgument which has 'name' property
-      assertTrue(sessionArg.kind === 'value');
+      assertType(sessionArg, isValueArgument);
       expect(sessionArg.name).toBe('session');
 
       // CLI flags (--continue, --list-sessions) are handled in config.ts
@@ -541,7 +554,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       });
       const errorResult = await continueCommand.action!(nonInteractiveCtx, '');
       expect(errorResult).toBeDefined();
-      assertTrue(isMessageAction(errorResult));
+      assertType(errorResult, isMessageAction);
       expect(errorResult.messageType).toBe('error');
       expect(errorResult.content.length).toBeGreaterThan(0);
 
@@ -580,7 +593,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
     it('perform_resume action has correct structure', async () => {
       const result = await continueCommand.action!(ctx, 'my-session-123');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('my-session-123');
     });
 
@@ -615,7 +628,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      assertTrue(isDialogAction(result));
+      assertType(result, isDialogAction);
       expect(result.dialog).toBe('sessionBrowser');
     });
 
@@ -628,7 +641,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
     it('perform_resume supports "latest" as session ref', async () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('latest');
     });
   });

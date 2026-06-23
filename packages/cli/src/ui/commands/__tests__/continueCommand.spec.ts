@@ -18,8 +18,24 @@ import type {
   OpenDialogActionReturn,
   PerformResumeActionReturn,
 } from '../types.js';
-import type { TokenInfo } from '../schema/types.js';
-import { assertDefined, assertTrue } from '../../../test-utils/assertions.js';
+import type {
+  TokenInfo,
+  ValueArgument,
+  LiteralArgument,
+} from '../schema/types.js';
+import {
+  assertDefined,
+  assertType,
+} from '../../../test-utils/assertions.js';
+
+/**
+ * Helper to narrow a command argument to the ValueArgument variant.
+ */
+function isValueArgument(
+  arg: LiteralArgument | ValueArgument,
+): arg is ValueArgument {
+  return arg.kind === 'value';
+}
 
 /**
  * Helper to create mock TokenInfo for completer tests
@@ -79,7 +95,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      assertTrue(isDialogAction(result));
+      assertType(result, isDialogAction);
       expect(result.dialog).toBe('sessionBrowser');
     });
 
@@ -94,7 +110,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      assertTrue(isMessageAction(result));
+      assertType(result, isMessageAction);
       expect(result.messageType).toBe('error');
       expect(result.content.toLowerCase()).toContain('interactive');
     });
@@ -104,28 +120,28 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
     it('/continue latest returns perform_resume', async () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('latest');
     });
 
     it('/continue <id> returns perform_resume with ID', async () => {
       const result = await continueCommand.action!(ctx, 'abc123');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('abc123');
     });
 
     it('/continue <number> returns perform_resume with index', async () => {
       const result = await continueCommand.action!(ctx, '3');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('3');
     });
 
     it('/continue <prefix> returns perform_resume with prefix', async () => {
       const result = await continueCommand.action!(ctx, 'abc');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('abc');
     });
   });
@@ -146,7 +162,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       // When active conversation exists, requiresConfirmation should be true
       expect(result.requiresConfirmation).toBe(true);
     });
@@ -166,7 +182,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      assertTrue(isMessageAction(result));
+      assertType(result, isMessageAction);
       expect(result.messageType).toBe('error');
       expect(result.content.toLowerCase()).toMatch(/conversation|replace/);
     });
@@ -185,7 +201,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       // No confirmation flag when no active conversation
       expect(result.requiresConfirmation).toBeFalsy();
     });
@@ -204,7 +220,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      assertTrue(isMessageAction(result));
+      assertType(result, isMessageAction);
       expect(result.messageType).toBe('error');
       expect(result.content.toLowerCase()).toContain('request');
       expect(result.content.toLowerCase()).toContain('progress');
@@ -216,7 +232,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      assertTrue(isMessageAction(result));
+      assertType(result, isMessageAction);
       expect(result.messageType).toBe('error');
       expect(result.content.toLowerCase()).toContain('request');
       expect(result.content.toLowerCase()).toContain('progress');
@@ -228,7 +244,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('latest');
     });
   });
@@ -248,7 +264,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       assertDefined(schema);
       const firstArg = schema[0];
       assertDefined(firstArg);
-      assertTrue(firstArg.kind === 'value');
+      assertType(firstArg, isValueArgument);
       assertDefined(firstArg.completer);
 
       const completions = await firstArg.completer(ctx, '', mockTokenInfo());
@@ -273,7 +289,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       assertDefined(schema);
       const firstArg = schema[0];
       assertDefined(firstArg);
-      assertTrue(firstArg.kind === 'value');
+      assertType(firstArg, isValueArgument);
       assertDefined(firstArg.completer);
 
       const completions = await firstArg.completer(ctx, '', mockTokenInfo());
@@ -293,7 +309,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       assertDefined(schema);
       const firstArg = schema[0];
       assertDefined(firstArg);
-      assertTrue(firstArg.kind === 'value');
+      assertType(firstArg, isValueArgument);
       assertDefined(firstArg.completer);
 
       const completions = await firstArg.completer(ctx, '', mockTokenInfo());
@@ -313,14 +329,14 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, '   ');
 
-      assertTrue(isDialogAction(result));
+      assertType(result, isDialogAction);
       expect(result.dialog).toBe('sessionBrowser');
     });
 
     it('trims whitespace around session ref', async () => {
       const result = await continueCommand.action!(ctx, '  abc123  ');
 
-      assertTrue(isPerformResumeAction(result));
+      assertType(result, isPerformResumeAction);
       expect(result.sessionRef).toBe('abc123');
     });
   });

@@ -29,7 +29,6 @@ const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
 const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
 const heapSizeLimit = rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
 
-const footerPropValidator = () => null;
 
 function areFooterStablePropsEqual(
   prevProps: FooterProps,
@@ -87,10 +86,12 @@ interface FooterProps {
 }
 
 // Responsive Memory Usage Display - Memoized to prevent re-renders
-const ResponsiveMemoryDisplay = React.memo<{
+interface ResponsiveMemoryDisplayProps {
   compact: boolean;
   detailed: boolean;
-}>(({ compact, detailed }) => {
+}
+
+const ResponsiveMemoryDisplay = React.memo(({ compact, detailed }: ResponsiveMemoryDisplayProps) => {
   const initialUsage = process.memoryUsage().rss;
   const initialPercentage = Math.round((initialUsage / heapSizeLimit) * 100);
 
@@ -141,19 +142,17 @@ const ResponsiveMemoryDisplay = React.memo<{
   return <Text color={memoryUsageColor}>{memoryUsage}</Text>;
 });
 ResponsiveMemoryDisplay.displayName = 'ResponsiveMemoryDisplay';
-ResponsiveMemoryDisplay.propTypes = {
-  compact: footerPropValidator,
-  detailed: footerPropValidator,
-};
 
 // Responsive Context Usage Display - Memoized to prevent re-renders
-const ResponsiveContextDisplay = React.memo<{
+interface ResponsiveContextDisplayProps {
   historyTokenCount: number;
   model: string;
   contextLimit?: number;
   compact: boolean;
   detailed: boolean;
-}>(({ historyTokenCount, model, contextLimit, compact, detailed }) => {
+}
+
+const ResponsiveContextDisplay = React.memo(({ historyTokenCount, model, contextLimit, compact, detailed }: ResponsiveContextDisplayProps) => {
   const limit = tokenLimit(model, contextLimit);
   const percentage = historyTokenCount / limit;
   const remainingPercentage = (1 - percentage) * 100;
@@ -180,19 +179,14 @@ const ResponsiveContextDisplay = React.memo<{
   return <Text color={color}>{displayText}</Text>;
 });
 ResponsiveContextDisplay.displayName = 'ResponsiveContextDisplay';
-ResponsiveContextDisplay.propTypes = {
-  historyTokenCount: footerPropValidator,
-  model: footerPropValidator,
-  contextLimit: footerPropValidator,
-  compact: footerPropValidator,
-  detailed: footerPropValidator,
-};
 
 // Debounced TPM Display - Updates less frequently to reduce flicker
-const DebouncedTPMDisplay = React.memo<{
+interface DebouncedTPMDisplayProps {
   tokensPerMinute?: number;
   themeName?: string;
-}>(({ tokensPerMinute }) => {
+}
+
+const DebouncedTPMDisplay = React.memo(({ tokensPerMinute }: DebouncedTPMDisplayProps) => {
   const [displayTPM, setDisplayTPM] = useState<number | undefined>(
     tokensPerMinute,
   );
@@ -217,16 +211,14 @@ const DebouncedTPMDisplay = React.memo<{
   );
 });
 DebouncedTPMDisplay.displayName = 'DebouncedTPMDisplay';
-DebouncedTPMDisplay.propTypes = {
-  tokensPerMinute: footerPropValidator,
-  themeName: footerPropValidator,
-};
 
 // Debounced Wait Time Display
-const DebouncedWaitDisplay = React.memo<{
+interface DebouncedWaitDisplayProps {
   throttleWaitTimeMs?: number;
   themeName?: string;
-}>(({ throttleWaitTimeMs }) => {
+}
+
+const DebouncedWaitDisplay = React.memo(({ throttleWaitTimeMs }: DebouncedWaitDisplayProps) => {
   const [displayWait, setDisplayWait] = useState<number | undefined>(
     throttleWaitTimeMs,
   );
@@ -254,10 +246,6 @@ const DebouncedWaitDisplay = React.memo<{
   return <Text color={SemanticColors.status.warning}>{waitText}</Text>;
 });
 DebouncedWaitDisplay.displayName = 'DebouncedWaitDisplay';
-DebouncedWaitDisplay.propTypes = {
-  throttleWaitTimeMs: footerPropValidator,
-  themeName: footerPropValidator,
-};
 
 // Responsive Timestamp Display - Isolated component for clock updates
 const ResponsiveTimestamp = React.memo(() => {
@@ -281,11 +269,13 @@ const ResponsiveTimestamp = React.memo(() => {
 ResponsiveTimestamp.displayName = 'ResponsiveTimestamp';
 
 // Branch display sub-component
-const BranchDisplay = React.memo<{
+interface BranchDisplayProps {
   branchName: string;
   nightly: boolean;
   maxBranchLength: number;
-}>(({ branchName, nightly, maxBranchLength }) => {
+}
+
+const BranchDisplay = React.memo(({ branchName, nightly, maxBranchLength }: BranchDisplayProps) => {
   const displayBranch =
     branchName.length > maxBranchLength
       ? truncateMiddle(branchName, maxBranchLength)
@@ -300,18 +290,15 @@ const BranchDisplay = React.memo<{
   return <Text color={SemanticColors.text.accent}>({displayBranch}*)</Text>;
 });
 BranchDisplay.displayName = 'BranchDisplay';
-BranchDisplay.propTypes = {
-  branchName: footerPropValidator,
-  nightly: footerPropValidator,
-  maxBranchLength: footerPropValidator,
-};
 
 // Model name sub-component with load-balancer logic
-const ModelNameDisplay = React.memo<{
+interface ModelNameDisplayProps {
   model: string;
   showModelName: boolean;
   runtime: ReturnType<typeof useRuntimeApi>;
-}>(({ model, showModelName, runtime }) => {
+}
+
+const ModelNameDisplay = React.memo(({ model, showModelName, runtime }: ModelNameDisplayProps) => {
   if (!showModelName) return null;
   const providerStatus = runtime.getActiveProviderStatus();
   const lbDisplay = tryGetLBDisplayName(runtime, providerStatus);
@@ -319,11 +306,6 @@ const ModelNameDisplay = React.memo<{
   return <Text color={SemanticColors.text.primary}>{model}</Text>;
 });
 ModelNameDisplay.displayName = 'ModelNameDisplay';
-ModelNameDisplay.propTypes = {
-  model: footerPropValidator,
-  showModelName: footerPropValidator,
-  runtime: footerPropValidator,
-};
 
 function tryGetLBDisplayName(
   runtime: ReturnType<typeof useRuntimeApi>,
@@ -368,11 +350,13 @@ function tryGetLBDisplayName(
 }
 
 // Paid/free mode sub-component
-const PaidModeDisplay = React.memo<{
+interface PaidModeDisplayProps {
   isPaidMode: boolean | undefined;
   showModelName: boolean;
   runtime: ReturnType<typeof useRuntimeApi>;
-}>(({ isPaidMode, showModelName, runtime }) => {
+}
+
+const PaidModeDisplay = React.memo(({ isPaidMode, showModelName, runtime }: PaidModeDisplayProps) => {
   if (isPaidMode === undefined) return null;
   const status = runtime.getActiveProviderStatus();
   if (status.providerName !== 'gemini') return null;
@@ -392,17 +376,14 @@ const PaidModeDisplay = React.memo<{
   );
 });
 PaidModeDisplay.displayName = 'PaidModeDisplay';
-PaidModeDisplay.propTypes = {
-  isPaidMode: footerPropValidator,
-  showModelName: footerPropValidator,
-  runtime: footerPropValidator,
-};
 
 // Sandbox status sub-component
-const SandboxStatusDisplay = React.memo<{
+interface SandboxStatusDisplayProps {
   hideSandboxStatus: boolean;
   isCompact: boolean;
-}>(({ hideSandboxStatus, isCompact }) => {
+}
+
+const SandboxStatusDisplay = React.memo(({ hideSandboxStatus, isCompact }: SandboxStatusDisplayProps) => {
   if (isCompact || hideSandboxStatus) return null;
 
   let sandboxStatus: React.ReactNode;
@@ -434,13 +415,9 @@ const SandboxStatusDisplay = React.memo<{
   return <Box marginLeft={2}>{sandboxStatus}</Box>;
 });
 SandboxStatusDisplay.displayName = 'SandboxStatusDisplay';
-SandboxStatusDisplay.propTypes = {
-  hideSandboxStatus: footerPropValidator,
-  isCompact: footerPropValidator,
-};
 
 // Right side: Memory | Context | TPM | Wait Time | Time
-const FooterMetricsRow = React.memo<{
+interface FooterMetricsRowProps {
   hideModelInfo: boolean;
   showMemoryUsage?: boolean;
   isCompact: boolean;
@@ -452,8 +429,9 @@ const FooterMetricsRow = React.memo<{
   throttleWaitTimeMs?: number;
   themeName?: string;
   showTimestamp: boolean;
-}>(
-  ({
+}
+
+const FooterMetricsRow = React.memo(({
     hideModelInfo,
     showMemoryUsage,
     isCompact,
@@ -465,7 +443,7 @@ const FooterMetricsRow = React.memo<{
     throttleWaitTimeMs,
     themeName,
     showTimestamp,
-  }) => {
+  }: FooterMetricsRowProps) => {
     if (hideModelInfo) return null;
     return (
       <Box flexDirection="row" alignItems="center">
@@ -514,22 +492,9 @@ const FooterMetricsRow = React.memo<{
   },
 );
 FooterMetricsRow.displayName = 'FooterMetricsRow';
-FooterMetricsRow.propTypes = {
-  hideModelInfo: footerPropValidator,
-  showMemoryUsage: footerPropValidator,
-  isCompact: footerPropValidator,
-  isDetailed: footerPropValidator,
-  historyTokenCount: footerPropValidator,
-  model: footerPropValidator,
-  contextLimit: footerPropValidator,
-  tokensPerMinute: footerPropValidator,
-  throttleWaitTimeMs: footerPropValidator,
-  themeName: footerPropValidator,
-  showTimestamp: footerPropValidator,
-};
 
 // Footer first line: Branch (left) | Memory | Context | Time (right)
-const FooterFirstLine = React.memo<{
+interface FooterFirstLineProps {
   branchName?: string;
   nightly: boolean;
   isTrustedFolder?: boolean;
@@ -548,7 +513,9 @@ const FooterFirstLine = React.memo<{
   throttleWaitTimeMs?: number;
   themeName?: string;
   showTimestamp: boolean;
-}>((props) => {
+}
+
+const FooterFirstLine = React.memo((props: FooterFirstLineProps) => {
   const {
     branchName,
     nightly,
@@ -611,29 +578,9 @@ const FooterFirstLine = React.memo<{
   );
 });
 FooterFirstLine.displayName = 'FooterFirstLine';
-FooterFirstLine.propTypes = {
-  branchName: footerPropValidator,
-  nightly: footerPropValidator,
-  isTrustedFolder: footerPropValidator,
-  debugMode: footerPropValidator,
-  debugMessage: footerPropValidator,
-  vimMode: footerPropValidator,
-  maxBranchLength: footerPropValidator,
-  hideModelInfo: footerPropValidator,
-  showMemoryUsage: footerPropValidator,
-  isCompact: footerPropValidator,
-  isDetailed: footerPropValidator,
-  historyTokenCount: footerPropValidator,
-  model: footerPropValidator,
-  contextLimit: footerPropValidator,
-  tokensPerMinute: footerPropValidator,
-  throttleWaitTimeMs: footerPropValidator,
-  themeName: footerPropValidator,
-  showTimestamp: footerPropValidator,
-};
 
 // Footer second line: Path (left) | Model | Session Tokens (right)
-const FooterSecondLine = React.memo<{
+interface FooterSecondLineProps {
   hideCWD: boolean;
   nightly: boolean;
   targetDir: string;
@@ -647,7 +594,9 @@ const FooterSecondLine = React.memo<{
   sessionTokenTotal: number | undefined;
   showErrorDetails: boolean;
   errorCount: number;
-}>((props) => {
+}
+
+const FooterSecondLine = React.memo((props: FooterSecondLineProps) => {
   const {
     hideCWD,
     nightly,
@@ -716,21 +665,6 @@ const FooterSecondLine = React.memo<{
   );
 });
 FooterSecondLine.displayName = 'FooterSecondLine';
-FooterSecondLine.propTypes = {
-  hideCWD: footerPropValidator,
-  nightly: footerPropValidator,
-  targetDir: footerPropValidator,
-  isCompact: footerPropValidator,
-  hideSandboxStatus: footerPropValidator,
-  hideModelInfo: footerPropValidator,
-  showModelName: footerPropValidator,
-  model: footerPropValidator,
-  runtime: footerPropValidator,
-  isPaidMode: footerPropValidator,
-  sessionTokenTotal: footerPropValidator,
-  showErrorDetails: footerPropValidator,
-  errorCount: footerPropValidator,
-};
 
 function getMaxBranchLength(breakpoint: string): number {
   if (breakpoint === 'NARROW') return 15;
@@ -738,7 +672,7 @@ function getMaxBranchLength(breakpoint: string): number {
   return 100;
 }
 
-export const Footer = React.memo<FooterProps>(
+export const Footer = React.memo(
   ({
     model,
     targetDir,
@@ -761,7 +695,7 @@ export const Footer = React.memo<FooterProps>(
     hideCWD = false,
     hideSandboxStatus = false,
     hideModelInfo = false,
-  }) => {
+  }: FooterProps) => {
     const { breakpoint } = useResponsive();
     const runtime = useRuntimeApi();
     const showTimestamp = breakpoint === 'WIDE';
@@ -813,26 +747,3 @@ export const Footer = React.memo<FooterProps>(
   areFooterStablePropsEqual,
 );
 Footer.displayName = 'Footer';
-Footer.propTypes = {
-  model: footerPropValidator,
-  targetDir: footerPropValidator,
-  branchName: footerPropValidator,
-  debugMode: footerPropValidator,
-  debugMessage: footerPropValidator,
-  errorCount: footerPropValidator,
-  showErrorDetails: footerPropValidator,
-  showMemoryUsage: footerPropValidator,
-  historyTokenCount: footerPropValidator,
-  isPaidMode: footerPropValidator,
-  nightly: footerPropValidator,
-  vimMode: footerPropValidator,
-  contextLimit: footerPropValidator,
-  isTrustedFolder: footerPropValidator,
-  tokensPerMinute: footerPropValidator,
-  throttleWaitTimeMs: footerPropValidator,
-  sessionTokenTotal: footerPropValidator,
-  themeName: footerPropValidator,
-  hideCWD: footerPropValidator,
-  hideSandboxStatus: footerPropValidator,
-  hideModelInfo: footerPropValidator,
-};

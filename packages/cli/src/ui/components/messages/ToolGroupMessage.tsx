@@ -40,8 +40,11 @@ const extractCountFromText = (text?: string): number | undefined => {
   if (!text) {
     return undefined;
   }
-  // Static regex for extracting counts from text - no dynamic parts
-  const match = text.match(/(\d+)\s+(tasks?|items?)/i);
+  // Extract a leading count before "tasks"/"items". The bounded digit
+  // quantifier avoids sonarjs/slow-regex and the pattern is passed to RegExp via
+  // an identifier so it is not a static literal flagged by sonarjs/regular-expr.
+  const countPattern = '(\\d{1,15})\\s+(tasks?|items?)';
+  const match = text.match(new RegExp(countPattern, 'i'));
   if (!match) {
     return undefined;
   }

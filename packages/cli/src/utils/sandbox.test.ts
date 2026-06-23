@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import type { MockInstance } from 'vitest';
 import {
   buildSandboxEnvArgs,
   getPassthroughEnvVars,
@@ -295,7 +296,7 @@ describe('container environment variables - GIT_DISCOVERY', () => {
 // --- Fix 3: Git config mounts (R3.1-R3.7) ---
 
 describe('mountGitConfigFiles', () => {
-  let existsSyncSpy: ReturnType<typeof vi.spyOn>;
+  let existsSyncSpy: MockInstance<typeof fs.existsSync>;
 
   beforeEach(() => {
     existsSyncSpy = vi.spyOn(fs, 'existsSync');
@@ -423,7 +424,7 @@ describe('mountGitConfigFiles', () => {
   });
 
   it('adds --volume for ~/.ssh/known_hosts when file exists', () => {
-    existsSyncSpy.mockImplementation((p: string) =>
+    existsSyncSpy.mockImplementation((p: fs.PathLike) =>
       String(p).includes('known_hosts'),
     );
     const args: string[] = [];

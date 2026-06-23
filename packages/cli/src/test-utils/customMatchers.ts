@@ -6,7 +6,6 @@
 
 /// <reference types="vitest/globals" />
 
-import type { Assertion } from 'vitest';
 import { expect } from 'vitest';
 import type { TextBuffer } from '../ui/components/shared/text-buffer.js';
 
@@ -18,10 +17,10 @@ const ESCAPE_CHAR = String.fromCharCode(0x1b);
 const invalidCharsRegex = new RegExp(`[${BACKSPACE_CHAR}${ESCAPE_CHAR}]`);
 
 function toHaveOnlyValidCharacters(
-  this: Assertion,
+  this: { isNot: boolean },
   buffer: TextBuffer,
 ) {
-  const { isNot } = this as Assertion & { isNot: boolean };
+  const { isNot } = this;
   let pass = true;
   const invalidLines: Array<{ line: number; content: string }> = [];
 

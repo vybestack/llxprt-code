@@ -47,12 +47,10 @@ const originalConsoleError = globalThis.console.error;
 const originalConsoleLog = globalThis.console.log;
 
 describe('generateDynamicToolSettings', () => {
-  let mockConfig: Pick<Config, 'getToolRegistry' | 'getToolRegistryInfo'> &
-    Record<string, ReturnType<typeof vi.fn>>;
-  let mockToolRegistry: { getAllTools: () => DiscoveredTool[] } & Record<
-    string,
-    ReturnType<typeof vi.fn>
-  >;
+  let mockConfig: Record<string, ReturnType<typeof vi.fn>>;
+  let mockToolRegistry: Record<string, ReturnType<typeof vi.fn>>;
+  const asConfig = (value: Record<string, ReturnType<typeof vi.fn>>): Config =>
+    value as unknown as Config;
 
   // Mock tools for testing - create actual tool instances
   const mockCoreTools = [
@@ -167,7 +165,7 @@ describe('generateDynamicToolSettings', () => {
       globalThis.console.log('Mock tool registry:', mockToolRegistry);
       globalThis.console.log('Mock all tools:', mockAllTools);
 
-      const toolSettings = generateDynamicToolSettings(mockConfig);
+      const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
       globalThis.console.log('Generated tool settings:', toolSettings);
 
       // Should include core tools (4 tools) + unregistered tools (Task, ListSubagents)
@@ -224,7 +222,7 @@ describe('generateDynamicToolSettings', () => {
         unregistered: [],
       });
 
-      const toolSettings = generateDynamicToolSettings(mockConfig);
+      const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
 
       // Spaces should be removed from the setting key
       expect(toolSettings).toHaveProperty('ShellCommand');
@@ -260,7 +258,7 @@ describe('generateDynamicToolSettings', () => {
         ],
       });
 
-      const toolSettings = generateDynamicToolSettings(mockConfig);
+      const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
       // Even with empty registry, should still show unregistered tools
       expect(Object.keys(toolSettings)).toHaveLength(2);
       expect(toolSettings).toHaveProperty('Task');
@@ -359,9 +357,8 @@ describe('generateDynamicToolSettings', () => {
         return toolName === toolKey;
       });
 
-      if (!actualTool) {
-        globalThis.console.error(`Tool not found for key: ${toolKey}`);
-      }
+      expect(actualTool).toBeUndefined();
+      globalThis.console.error(`Tool not found for key: ${toolKey}`);
 
       expect(globalThis.console.error).toHaveBeenCalledWith(
         'Tool not found for key: NonExistentTool',

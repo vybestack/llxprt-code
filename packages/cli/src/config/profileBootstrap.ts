@@ -662,7 +662,7 @@ ${baseProfile.error}`);
 }
 
 interface ProfileLookupService {
-  getProfile?(name: string):
+  getProfile?(name: string | null):
     | { provider?: string; model?: string }
     | null
     | undefined;
@@ -672,9 +672,8 @@ function createLoadedProfileBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
   runtimeMetadata: RuntimeBootstrapMetadata,
 ): ProfileApplicationResult {
-  const settingsService = runtimeMetadata.settingsService as
-    | SettingsService
-    | ProfileLookupService;
+  const settingsService =
+    runtimeMetadata.settingsService as ProfileLookupService | undefined;
   if (settingsService) {
     const profile = settingsService.getProfile?.(bootstrapArgs.profileName);
     if (profile !== null && profile !== undefined) {

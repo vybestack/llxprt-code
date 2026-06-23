@@ -265,8 +265,9 @@ describe('DynamicSettingsRegistry', () => {
 });
 
 describe('generateDynamicToolSettings', () => {
-  let mockConfig: Pick<Config, 'getToolRegistryInfo'> &
-    Record<string, ReturnType<typeof vi.fn>>;
+  let mockConfig: { getToolRegistryInfo: ReturnType<typeof vi.fn> };
+  const asConfig = (value: typeof mockConfig): Config =>
+    value as unknown as Config;
   const originalEnv = process.env;
 
   const mockRegisteredTools = [
@@ -333,7 +334,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should generate settings for registered tools', () => {
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(toolSettings).toHaveProperty('ReadFile');
     expect(toolSettings).toHaveProperty('WriteFile');
@@ -349,7 +350,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should generate settings for unregistered tools', () => {
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(toolSettings).toHaveProperty('Task');
     expect(toolSettings).toHaveProperty('ListSubagents');
@@ -367,7 +368,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should handle tools with spaces in names correctly', () => {
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
 
     // Spaces should be removed from setting keys
     expect(toolSettings).toHaveProperty('ShellCommand');
@@ -385,7 +386,7 @@ describe('generateDynamicToolSettings', () => {
       unregistered: [],
     });
 
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
     expect(toolSettings).toStrictEqual({});
   });
 
@@ -395,7 +396,7 @@ describe('generateDynamicToolSettings', () => {
       unregistered: mockUnregisteredTools,
     });
 
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
     expect(Object.keys(toolSettings)).toHaveLength(2);
     expect(toolSettings).toHaveProperty('Task');
     expect(toolSettings).toHaveProperty('ListSubagents');
@@ -417,7 +418,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should log basic debug information', () => {
-    generateDynamicToolSettings(mockConfig);
+    generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(mockLog).toHaveBeenCalledWith(
       'Processing 3 registered and 2 unregistered tools',
@@ -427,7 +428,7 @@ describe('generateDynamicToolSettings', () => {
 
   it('should NOT log detailed tool info when DEBUG is not verbose', () => {
     process.env.DEBUG = ''; // Ensure verbose is not set
-    generateDynamicToolSettings(mockConfig);
+    generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(mockLog).not.toHaveBeenCalledWith(
       expect.stringContaining('✅ REGISTERED'),
@@ -439,7 +440,7 @@ describe('generateDynamicToolSettings', () => {
 
   it('should log detailed tool info when DEBUG includes verbose', () => {
     process.env.DEBUG = 'verbose'; // Set verbose mode
-    generateDynamicToolSettings(mockConfig);
+    generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(mockLog).toHaveBeenCalledWith('✅ REGISTERED: Read File');
     expect(mockLog).toHaveBeenCalledWith('✅ REGISTERED: Write File');

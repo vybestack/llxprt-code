@@ -39,3 +39,23 @@ export function assertTruthy<T>(
     throw new Error(message);
   }
 }
+
+export function assertType<T, S extends T>(
+  value: T,
+  guard: (value: T) => value is S,
+  message = 'Expected value to satisfy type guard',
+): asserts value is S {
+  if (!guard(value)) {
+    throw new Error(message);
+  }
+}
+
+export function assertHasType<T extends { type: string }, K extends T['type']>(
+  value: T,
+  type: K,
+  message = `Expected value to have type "${type}"`,
+): asserts value is Extract<T, { type: K }> {
+  if (value.type !== type) {
+    throw new Error(message);
+  }
+}

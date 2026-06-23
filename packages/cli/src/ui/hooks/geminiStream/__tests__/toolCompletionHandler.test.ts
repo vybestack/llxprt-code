@@ -71,7 +71,7 @@ function makeCompletedTool(overrides: {
       description: 'test',
       build: vi.fn(),
     },
-  } as TrackedCompletedToolCall;
+  } as unknown as TrackedCompletedToolCall;
 }
 
 // ─── classifyCompletedTools ───────────────────────────────────────────────────
@@ -137,7 +137,7 @@ describe('classifyCompletedTools', () => {
         description: 'test',
         build: vi.fn(),
       },
-    } as TrackedToolCall;
+    } as unknown as TrackedToolCall;
     const result = classifyCompletedTools([executingTool]);
     expect(result.primaryTools).toHaveLength(0);
   });

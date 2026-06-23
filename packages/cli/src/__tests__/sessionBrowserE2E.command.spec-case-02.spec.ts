@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { assertTrue } from '../test-utils/assertions.js';
+import { assertHasType } from '../test-utils/assertions.js';
 import { continueCommand } from '../ui/commands/continueCommand.js';
 import type {
   CommandContext,
@@ -90,7 +90,7 @@ describe('Continue command integration #2', () => {
 
     expect(result).toBeDefined();
     expect(result.type).toBe('perform_resume');
-    assertTrue(result.type === 'perform_resume');
+    assertHasType(result, 'perform_resume');
     expect(result.sessionRef).toBe('latest');
   });
 });

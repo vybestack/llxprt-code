@@ -26,8 +26,9 @@ describe('statsCommand - load balancer stats', () => {
       const lbSubCommand = statsCommand.subCommands?.find(
         (sc) => sc.name === 'lb',
       );
+      assertDefined(lbSubCommand?.action);
 
-      void lbSubCommand.action!(mockContext, '');
+      void lbSubCommand.action(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
