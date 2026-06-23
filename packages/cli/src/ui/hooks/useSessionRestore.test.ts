@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 interface MockHistoryService {
   clear: ReturnType<typeof vi.fn>;
@@ -50,12 +51,11 @@ describe('Session Restore Chat Initialization', () => {
       expect(mockAgentClient.resetChat).not.toHaveBeenCalled();
 
       const agentClient = mockConfig.getAgentClient();
-      if (agentClient) {
-        await agentClient.resetChat();
-      }
+      assertDefined(agentClient);
+      await agentClient.resetChat();
 
       expect(mockAgentClient.resetChat).toHaveBeenCalled();
-      expect(agentClient?.getHistoryService()).toBeDefined();
+      expect(agentClient.getHistoryService()).toBeDefined();
     });
 
     it('handles resetChat errors gracefully without throwing', async () => {
@@ -64,12 +64,11 @@ describe('Session Restore Chat Initialization', () => {
       );
 
       const agentClient = mockConfig.getAgentClient();
+      assertDefined(agentClient);
 
-      expect(async () => {
-        if (agentClient) {
-          await agentClient.resetChat().catch(() => {});
-        }
-      }).not.toThrow();
+      await expect(
+        agentClient.resetChat().catch(() => {}),
+      ).resolves.toBeUndefined();
 
       expect(mockAgentClient.resetChat).toHaveBeenCalled();
     });
@@ -81,11 +80,7 @@ describe('Session Restore Chat Initialization', () => {
 
       const agentClient = mockConfig.getAgentClient();
 
-      expect(() => {
-        if (agentClient) {
-          agentClient.resetChat();
-        }
-      }).not.toThrow();
+      expect(agentClient).toBeUndefined();
     });
 
     it('restores core history after chat initialization makes historyService available', async () => {
@@ -101,14 +96,12 @@ describe('Session Restore Chat Initialization', () => {
       ];
 
       const agentClient = mockConfig.getAgentClient();
+      assertDefined(agentClient);
 
-      if (agentClient) {
-        await agentClient.resetChat();
-        const historyService = agentClient.getHistoryService();
-        if (historyService) {
-          historyService.addAll(restoredSessionHistory);
-        }
-      }
+      await agentClient.resetChat();
+      const historyService = agentClient.getHistoryService();
+      assertDefined(historyService);
+      historyService.addAll(restoredSessionHistory);
 
       expect(mockHistoryService.addAll).toHaveBeenCalledWith(
         restoredSessionHistory,
@@ -132,14 +125,12 @@ describe('Session Restore Chat Initialization', () => {
       ];
 
       const agentClient = mockConfig.getAgentClient();
+      assertDefined(agentClient);
 
-      if (agentClient) {
-        await agentClient.resetChat().catch(() => {});
-        const historyService = agentClient.getHistoryService();
-        if (historyService) {
-          historyService.addAll(restoredSessionHistory);
-        }
-      }
+      await agentClient.resetChat().catch(() => {});
+      const historyService = agentClient.getHistoryService();
+      assertDefined(historyService);
+      historyService.addAll(restoredSessionHistory);
 
       expect(mockAgentClient.resetChat).toHaveBeenCalled();
       expect(mockHistoryService.addAll).toHaveBeenCalledWith(

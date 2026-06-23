@@ -26,18 +26,6 @@ describe('computeTerminalTitle', () => {
       expected: '◇  Ready (my-project)',
     },
     {
-      description: 'legacy title when useDynamicTitle is false',
-      args: {
-        streamingState: StreamingState.Responding,
-        isConfirming: false,
-        folderName: 'my-project',
-        showThoughts: true,
-        useDynamicTitle: false,
-      },
-      expected: 'LLxprt (my-project)'.padEnd(80, ' '),
-      exact: true,
-    },
-    {
       description:
         'active state title with "Working…" when thoughts are disabled',
       args: {
@@ -64,6 +52,35 @@ describe('computeTerminalTitle', () => {
       expected: '  Short thought (my-project)',
     },
     {
+      description: 'action required state when confirming',
+      args: {
+        streamingState: StreamingState.Idle,
+        isConfirming: true,
+        folderName: 'my-project',
+        showThoughts: false,
+        useDynamicTitle: true,
+      },
+      expected: '  Action Required (my-project)',
+    },
+  ])('should return $description (contains)', ({ args, expected }) => {
+    const title = computeTerminalTitle(args);
+    expect(title).toContain(expected);
+    expect(title.length).toBe(80);
+  });
+
+  it.each([
+    {
+      description: 'legacy title when useDynamicTitle is false',
+      args: {
+        streamingState: StreamingState.Responding,
+        isConfirming: false,
+        folderName: 'my-project',
+        showThoughts: true,
+        useDynamicTitle: false,
+      },
+      expected: 'LLxprt (my-project)'.padEnd(80, ' '),
+    },
+    {
       description:
         'fallback active title with suffix if no thought subject is provided even when thoughts are enabled',
       args: {
@@ -75,26 +92,10 @@ describe('computeTerminalTitle', () => {
         useDynamicTitle: true,
       },
       expected: '  Working… (my-project)'.padEnd(80, ' '),
-      exact: true,
     },
-    {
-      description: 'action required state when confirming',
-      args: {
-        streamingState: StreamingState.Idle,
-        isConfirming: true,
-        folderName: 'my-project',
-        showThoughts: false,
-        useDynamicTitle: true,
-      },
-      expected: '  Action Required (my-project)',
-    },
-  ])('should return $description', ({ args, expected, exact }) => {
+  ])('should return $description (exact)', ({ args, expected }) => {
     const title = computeTerminalTitle(args);
-    if (exact === true) {
-      expect(title).toBe(expected);
-    } else {
-      expect(title).toContain(expected);
-    }
+    expect(title).toBe(expected);
     expect(title.length).toBe(80);
   });
 
@@ -164,38 +165,35 @@ describe('computeTerminalTitle', () => {
     expect(title.length).toBe(80);
   });
 
-  it.each([
-    {
-      name: 'folder name',
+  it('should truncate very long folder name to fit within 80 characters', () => {
+    const title = computeTerminalTitle({
+      streamingState: StreamingState.Idle,
+      isConfirming: false,
       folderName: 'A'.repeat(100),
-      expected: '◇  Ready (AAAAA',
-    },
-    {
-      name: 'CLI_TITLE',
+      showThoughts: false,
+      useDynamicTitle: true,
+    });
+
+    expect(title.length).toBe(80);
+    expect(title).toContain('◇  Ready (AAAAA');
+    expect(title).toContain('…)');
+  });
+
+  it('should truncate very long CLI_TITLE to fit within 80 characters', () => {
+    vi.stubEnv('CLI_TITLE', 'B'.repeat(100));
+
+    const title = computeTerminalTitle({
+      streamingState: StreamingState.Idle,
+      isConfirming: false,
       folderName: 'my-project',
-      envTitle: 'B'.repeat(100),
-      expected: '◇  Ready (BBBBB',
-    },
-  ])(
-    'should truncate very long $name to fit within 80 characters',
-    ({ folderName, envTitle, expected }) => {
-      if (envTitle) {
-        vi.stubEnv('CLI_TITLE', envTitle);
-      }
+      showThoughts: false,
+      useDynamicTitle: true,
+    });
 
-      const title = computeTerminalTitle({
-        streamingState: StreamingState.Idle,
-        isConfirming: false,
-        folderName,
-        showThoughts: false,
-        useDynamicTitle: true,
-      });
-
-      expect(title.length).toBe(80);
-      expect(title).toContain(expected);
-      expect(title).toContain('…)');
-    },
-  );
+    expect(title.length).toBe(80);
+    expect(title).toContain('◇  Ready (BBBBB');
+    expect(title).toContain('…)');
+  });
 
   it('should truncate long folder name when useDynamicTitle is false', () => {
     const longFolderName = 'C'.repeat(100);

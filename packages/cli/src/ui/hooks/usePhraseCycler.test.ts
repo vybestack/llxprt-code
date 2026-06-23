@@ -71,10 +71,9 @@ describe('usePhraseCycler', () => {
   });
 
   it('should reset to a witty phrase when isActive becomes true after being false (and not waiting)', () => {
-    // Ensure there are at least two phrases for this test to be meaningful.
-    if (LLXPRT_PHRASES.length < 2) {
-      return;
-    }
+    // The shared phrase collection always contains multiple entries, so the
+    // random-selection behaviour below is meaningful.
+    expect(LLXPRT_PHRASES.length).toBeGreaterThan(1);
 
     // Mock Math.random to make test deterministic.
     // Returns sequence of indices: 0, 1, 2, ... (normalized by phrase length)
@@ -187,9 +186,6 @@ describe('usePhraseCycler', () => {
     act(() => {
       vi.advanceTimersByTime(PHRASE_CHANGE_INTERVAL_MS);
     });
-    if (LLXPRT_PHRASES.length > 1) {
-      // This check is probabilistic with random selection
-    }
     expect(LLXPRT_PHRASES).toContain(result.current);
 
     // Go to waiting state

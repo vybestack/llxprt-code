@@ -13,54 +13,56 @@ import {
   parsePastedPaths,
 } from './clipboardUtils.js';
 
+const isClipboardPlatform =
+  process.platform === 'darwin' || process.platform === 'win32';
+
 describe('clipboardUtils', () => {
   describe('clipboardHasImage', () => {
-    it('should return false on unsupported platforms', async () => {
-      if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    it.skipIf(isClipboardPlatform)(
+      'should return false on unsupported platforms',
+      async () => {
         const result = await clipboardHasImage();
         expect(result).toBe(false);
-      } else {
-        // Skip on macOS/Windows as it would require actual clipboard state
-        expect(true).toBe(true);
-      }
-    });
+      },
+    );
 
-    it('should return boolean on macOS or Windows', async () => {
-      if (process.platform === 'darwin' || process.platform === 'win32') {
+    it.runIf(isClipboardPlatform)(
+      'should return boolean on macOS or Windows',
+      async () => {
         const result = await clipboardHasImage();
         expect(typeof result).toBe('boolean');
-      } else {
-        // Skip on unsupported platforms
-        expect(true).toBe(true);
-      }
-    }, 10000);
+      },
+      10000,
+    );
   });
 
   describe('saveClipboardImage', () => {
-    it('should return null on unsupported platforms', async () => {
-      if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    it.skipIf(isClipboardPlatform)(
+      'should return null on unsupported platforms',
+      async () => {
         const result = await saveClipboardImage();
         expect(result).toBe(null);
-      } else {
-        // Skip on macOS/Windows
-        expect(true).toBe(true);
-      }
-    });
+      },
+    );
 
-    it('should handle errors gracefully', async () => {
-      // Test with invalid directory (should not throw)
+    it('should handle errors gracefully without throwing', async () => {
+      // Test with invalid directory (should not throw); null or a string path
+      // are both acceptable outcomes across platforms.
       const result = await saveClipboardImage(
         '/invalid/path/that/does/not/exist',
       );
-
-      if (process.platform === 'darwin' || process.platform === 'win32') {
-        // On macOS/Windows, might return null due to various errors
-        expect(result === null || typeof result === 'string').toBe(true);
-      } else {
-        // On other platforms, should always return null
-        expect(result).toBe(null);
-      }
+      expect(result === null || typeof result === 'string').toBe(true);
     });
+
+    it.skipIf(isClipboardPlatform)(
+      'should return null for invalid directory on unsupported platforms',
+      async () => {
+        const result = await saveClipboardImage(
+          '/invalid/path/that/does/not/exist',
+        );
+        expect(result).toBe(null);
+      },
+    );
   });
 
   describe('cleanupOldClipboardImages', () => {
