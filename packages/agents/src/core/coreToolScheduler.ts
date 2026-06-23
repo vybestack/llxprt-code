@@ -679,19 +679,32 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       // the batch against the signal and, when abort wins, force any
       // still-active calls to 'cancelled' so checkAndNotifyCompletion() can
       // settle the loop promptly.
-      const toolPromises = callsToExecute.map((toolCall) => {
-        const scheduledCall = toolCall;
-        const executionIndex = executionIndices.get(
-          scheduledCall.request.callId,
-        )!;
-        return this.launchToolExecution(scheduledCall, executionIndex, signal);
-      });
-
-      const batchPromise = Promise.all(toolPromises);
-
+      //
+      // Guard against an already-aborted signal *before* launching any tool
+      // executions: launchToolExecution() immediately marks the call as
+      // 'executing' and starts side-effecting work via toolExecutor.execute().
+      // If the batch was cancelled on entry, finalize immediately without
+      // launching individual executions.
       if (signal.aborted) {
-        await this.finalizeAbortedBatch(callsToExecute, batchPromise, signal);
+        await this.finalizeAbortedBatch(
+          callsToExecute,
+          Promise.resolve(),
+          signal,
+        );
       } else {
+        const toolPromises = callsToExecute.map((toolCall) => {
+          const scheduledCall = toolCall;
+          const executionIndex = executionIndices.get(
+            scheduledCall.request.callId,
+          )!;
+          return this.launchToolExecution(
+            scheduledCall,
+            executionIndex,
+            signal,
+          );
+        });
+
+        const batchPromise = Promise.all(toolPromises);
         await this.awaitBatchOrAbort(callsToExecute, batchPromise, signal);
       }
     }
@@ -710,6 +723,13 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   ): Promise<void> {
     let abortListener: (() => void) | undefined;
     const abortPromise = new Promise<true>((resolve) => {
+      // Close the check-then-listen race: if the signal is already aborted
+      // when we enter the executor, resolve immediately rather than attaching
+      // a 'once' listener that would never fire.
+      if (signal.aborted) {
+        resolve(true);
+        return;
+      }
       abortListener = () => resolve(true);
       signal.addEventListener('abort', abortListener, { once: true });
     });
