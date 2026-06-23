@@ -673,10 +673,26 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       // divided equally among them. (#1301)
       this.resultAggregator.beginBatch(callsToExecute.length);
 
-      // Execute all tools in parallel and wait for all to complete
-      // @requirement:HOOK-134 - Hook results are now awaited, so we wait for all executions
-      await Promise.all(
-        callsToExecute.map((toolCall) => {
+      // Execute all tools in parallel.  Issue #2099: a bare Promise.all(...)
+      // waits for every tool promise even after the shared AbortSignal fires,
+      // so a tool that ignores/delays abort stalls the subagent loop.  Race
+      // the batch against the signal and, when abort wins, force any
+      // still-active calls to 'cancelled' so checkAndNotifyCompletion() can
+      // settle the loop promptly.
+      //
+      // Guard against an already-aborted signal *before* launching any tool
+      // executions: launchToolExecution() immediately marks the call as
+      // 'executing' and starts side-effecting work via toolExecutor.execute().
+      // If the batch was cancelled on entry, finalize immediately without
+      // launching individual executions.
+      if (signal.aborted) {
+        await this.finalizeAbortedBatch(
+          callsToExecute,
+          Promise.resolve(),
+          signal,
+        );
+      } else {
+        const toolPromises = callsToExecute.map((toolCall) => {
           const scheduledCall = toolCall;
           const executionIndex = executionIndices.get(
             scheduledCall.request.callId,
@@ -686,9 +702,81 @@ export class CoreToolScheduler implements ToolSchedulerContract {
             executionIndex,
             signal,
           );
-        }),
-      );
+        });
+
+        const batchPromise = Promise.all(toolPromises);
+        await this.awaitBatchOrAbort(callsToExecute, batchPromise, signal);
+      }
     }
+  }
+
+  /**
+   * Issue #2099: race the parallel batch against the shared AbortSignal so a
+   * tool that ignores/delays abort cannot stall the subagent loop.  When
+   * abort wins, force any still-active calls to 'cancelled' so the loop
+   * settles promptly.
+   */
+  private async awaitBatchOrAbort(
+    callsToExecute: ToolCall[],
+    batchPromise: Promise<unknown>,
+    signal: AbortSignal,
+  ): Promise<void> {
+    let abortListener: (() => void) | undefined;
+    const abortPromise = new Promise<true>((resolve) => {
+      // Close the check-then-listen race: if the signal is already aborted
+      // when we enter the executor, resolve immediately rather than attaching
+      // a 'once' listener that would never fire.
+      if (signal.aborted) {
+        resolve(true);
+        return;
+      }
+      abortListener = () => resolve(true);
+      signal.addEventListener('abort', abortListener, { once: true });
+    });
+    try {
+      const winner = await Promise.race([batchPromise, abortPromise]);
+      if (winner === true) {
+        await this.finalizeAbortedBatch(callsToExecute, batchPromise, signal);
+      }
+    } finally {
+      if (abortListener) {
+        signal.removeEventListener('abort', abortListener);
+      }
+    }
+  }
+
+  /**
+   * Issue #2099: after the AbortSignal fires mid-batch, do not wait
+   * indefinitely for tool promises that may never settle.  Transition any
+   * non-terminal calls to 'cancelled' (checkAndNotifyCompletion fires via
+   * setStatusInternal) and swallow rejections from tool promises that
+   * eventually settle after the batch has been finalized.
+   */
+  private async finalizeAbortedBatch(
+    callsToExecute: ToolCall[],
+    batchPromise: Promise<unknown>,
+    _signal: AbortSignal,
+  ): Promise<void> {
+    for (const call of callsToExecute) {
+      const current = this.toolCalls.find(
+        (tc) => tc.request.callId === call.request.callId,
+      );
+      if (current && this.isNonTerminalStatus(current.status)) {
+        this.setStatusInternal(
+          call.request.callId,
+          'cancelled',
+          'Tool call cancelled by user.',
+        );
+      }
+    }
+
+    // Swallow late rejections so an abort-ignoring tool cannot surface an
+    // unhandled-rejection after we have already finalized the batch.
+    void batchPromise.catch(() => {});
+  }
+
+  private isNonTerminalStatus(status: Status): boolean {
+    return status !== 'success' && status !== 'error' && status !== 'cancelled';
   }
 
   private async checkAndNotifyCompletion(): Promise<void> {
