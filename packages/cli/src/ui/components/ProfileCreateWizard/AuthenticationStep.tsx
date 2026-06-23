@@ -145,6 +145,39 @@ const AuthOAuthInput: React.FC<{
   </>
 );
 
+const getAuthHeaderTitle = (
+  focusedComponent: 'select' | 'input',
+  authMethod: AuthMethod,
+): string => {
+  if (focusedComponent !== 'input') {
+    return 'Authentication:';
+  }
+  if (authMethod === 'apikey') {
+    return 'Enter API Key:';
+  }
+  if (authMethod === 'keyfile') {
+    return 'Specify Key File:';
+  }
+  return 'Configure OAuth:';
+};
+
+const getAuthHeaderDetail = (
+  focusedComponent: 'select' | 'input',
+  authMethod: AuthMethod,
+  providerLabel: string | null,
+): string => {
+  if (focusedComponent !== 'input') {
+    return `Choose how to authenticate with ${providerLabel}`;
+  }
+  if (authMethod === 'apikey') {
+    return `Enter your ${providerLabel} API key:`;
+  }
+  if (authMethod === 'keyfile') {
+    return 'Enter the path to your API key file:';
+  }
+  return 'OAuth authentication will be set up when you load this profile';
+};
+
 const AuthHeaderView: React.FC<{
   focusedComponent: 'select' | 'input';
   authMethod: AuthMethod;
@@ -152,22 +185,10 @@ const AuthHeaderView: React.FC<{
 }> = ({ focusedComponent, authMethod, providerLabel }) => (
   <>
     <Text color={Colors.Foreground}>
-      {focusedComponent === 'input'
-        ? authMethod === 'apikey'
-          ? 'Enter API Key:'
-          : authMethod === 'keyfile'
-            ? 'Specify Key File:'
-            : 'Configure OAuth:'
-        : 'Authentication:'}
+      {getAuthHeaderTitle(focusedComponent, authMethod)}
     </Text>
     <Text color={Colors.Gray}>
-      {focusedComponent === 'input'
-        ? authMethod === 'apikey'
-          ? `Enter your ${providerLabel} API key:`
-          : authMethod === 'keyfile'
-            ? 'Enter the path to your API key file:'
-            : 'OAuth authentication will be set up when you load this profile'
-        : `Choose how to authenticate with ${providerLabel}`}
+      {getAuthHeaderDetail(focusedComponent, authMethod, providerLabel)}
     </Text>
   </>
 );

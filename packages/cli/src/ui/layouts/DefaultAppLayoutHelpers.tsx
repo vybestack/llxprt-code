@@ -40,60 +40,42 @@ import { ShellModeIndicator } from '../components/ShellModeIndicator.js';
 import { ContextSummaryDisplay } from '../components/ContextSummaryDisplay.js';
 import { DetailedMessagesDisplay } from '../components/DetailedMessagesDisplay.js';
 
-export interface ScrollableMainContentItem {
-  key: string;
-  estimatedHeight: number;
-  element: React.ReactElement;
-}
-
-export function renderScrollableMainContentItem({
-  item,
-}: {
-  item: ScrollableMainContentItem;
-  index: number;
-}): React.ReactElement {
-  return item.element;
-}
-
-export function keyExtractorScrollableMainContentItem(
-  item: ScrollableMainContentItem,
-): string {
-  return item.key;
-}
-
-export function estimateScrollableMainContentItemHeight(
-  _index: number,
-): number {
-  return 100;
-}
+export type { ScrollableMainContentItem } from './scrollableMainContent.js';
+export {
+  renderScrollableMainContentItem,
+  keyExtractorScrollableMainContentItem,
+  estimateScrollableMainContentItemHeight,
+} from './scrollableMainContent.js';
+import type { ScrollableMainContentItem } from './scrollableMainContent.js';
 
 export function hasActiveDialog(uiState: UIState): boolean {
-  return (
-    uiState.showWorkspaceMigrationDialog ||
-    uiState.shouldShowIdePrompt ||
-    uiState.showIdeRestartPrompt ||
-    uiState.isFolderTrustDialogOpen ||
-    uiState.isWelcomeDialogOpen ||
-    uiState.isPermissionsDialogOpen ||
-    Boolean(uiState.confirmationRequest) ||
-    uiState.isThemeDialogOpen ||
-    uiState.isSettingsDialogOpen ||
-    uiState.isAuthDialogOpen ||
-    uiState.isOAuthCodeDialogOpen ||
-    uiState.isEditorDialogOpen ||
-    uiState.isProviderDialogOpen ||
-    uiState.isLoadProfileDialogOpen ||
-    uiState.isCreateProfileDialogOpen ||
-    uiState.isProfileListDialogOpen ||
-    uiState.isProfileDetailDialogOpen ||
-    uiState.isProfileEditorDialogOpen ||
-    uiState.isToolsDialogOpen ||
-    uiState.isLoggingDialogOpen ||
-    uiState.isSubagentDialogOpen ||
-    uiState.isModelsDialogOpen ||
-    uiState.isSessionBrowserDialogOpen ||
-    uiState.showPrivacyNotice
-  );
+  const dialogFlags = [
+    uiState.showWorkspaceMigrationDialog,
+    uiState.shouldShowIdePrompt,
+    uiState.showIdeRestartPrompt,
+    uiState.isFolderTrustDialogOpen,
+    uiState.isWelcomeDialogOpen,
+    uiState.isPermissionsDialogOpen,
+    Boolean(uiState.confirmationRequest),
+    uiState.isThemeDialogOpen,
+    uiState.isSettingsDialogOpen,
+    uiState.isAuthDialogOpen,
+    uiState.isOAuthCodeDialogOpen,
+    uiState.isEditorDialogOpen,
+    uiState.isProviderDialogOpen,
+    uiState.isLoadProfileDialogOpen,
+    uiState.isCreateProfileDialogOpen,
+    uiState.isProfileListDialogOpen,
+    uiState.isProfileDetailDialogOpen,
+    uiState.isProfileEditorDialogOpen,
+    uiState.isToolsDialogOpen,
+    uiState.isLoggingDialogOpen,
+    uiState.isSubagentDialogOpen,
+    uiState.isModelsDialogOpen,
+    uiState.isSessionBrowserDialogOpen,
+    uiState.showPrivacyNotice,
+  ];
+  return dialogFlags.some(Boolean);
 }
 
 export interface LayoutSettings {
@@ -727,30 +709,40 @@ function StatusBar(props: InlineContentProps) {
   );
 }
 
+function StatusBarLeftPrompt(props: InlineContentProps) {
+  const transientPrompt = [
+    { active: props.ctrlCPressedOnce, text: 'Press Ctrl+C again to exit.' },
+    { active: props.ctrlDPressedOnce, text: 'Press Ctrl+D again to exit.' },
+  ].find((entry) => entry.active);
+  if (transientPrompt) {
+    return <Text color={Colors.AccentYellow}>{transientPrompt.text}</Text>;
+  }
+  if (props.showEscapePrompt) {
+    return <Text color={Colors.Gray}>Press Esc again to clear.</Text>;
+  }
+  if (!props.hideContextSummary) {
+    return (
+      <ContextSummaryDisplay
+        ideContext={props.ideContextState}
+        llxprtMdFileCount={props.llxprtMdFileCount}
+        coreMemoryFileCount={props.coreMemoryFileCount}
+        contextFileNames={props.contextFileNames}
+        mcpServers={props.config.getMcpServers()}
+        blockedMcpServers={props.config.getBlockedMcpServers()}
+        showToolDescriptions={props.showToolDescriptions}
+      />
+    );
+  }
+  return null;
+}
+
 function StatusBarLeft(props: InlineContentProps) {
   return (
     <Box>
       {process.env.GEMINI_SYSTEM_MD && (
         <Text color={Colors.AccentRed}>|&#x2310;&#x25A0;_&#x25A0;| </Text>
       )}
-      {}
-      {props.ctrlCPressedOnce ? (
-        <Text color={Colors.AccentYellow}>Press Ctrl+C again to exit.</Text>
-      ) : props.ctrlDPressedOnce ? (
-        <Text color={Colors.AccentYellow}>Press Ctrl+D again to exit.</Text>
-      ) : props.showEscapePrompt ? (
-        <Text color={Colors.Gray}>Press Esc again to clear.</Text>
-      ) : !props.hideContextSummary ? (
-        <ContextSummaryDisplay
-          ideContext={props.ideContextState}
-          llxprtMdFileCount={props.llxprtMdFileCount}
-          coreMemoryFileCount={props.coreMemoryFileCount}
-          contextFileNames={props.contextFileNames}
-          mcpServers={props.config.getMcpServers()}
-          blockedMcpServers={props.config.getBlockedMcpServers()}
-          showToolDescriptions={props.showToolDescriptions}
-        />
-      ) : null}
+      <StatusBarLeftPrompt {...props} />
     </Box>
   );
 }

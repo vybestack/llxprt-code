@@ -14,6 +14,9 @@ import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 
+// Matches a single printable ASCII character (space through tilde).
+const PRINTABLE_ASCII = /[\x20-\x7E]/;
+
 export interface CapabilityFilters {
   vision: boolean;
   reasoning: boolean;
@@ -146,13 +149,10 @@ function useFilteredModels(
     }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      models = models.filter(
-        (m) =>
-          m.id.toLowerCase().includes(term) ||
-          m.name.toLowerCase().includes(term) ||
-          (m.modelId?.toLowerCase().includes(term) ?? false) ||
-          m.provider.toLowerCase().includes(term),
-      );
+      models = models.filter((m) => {
+        const haystacks = [m.id, m.name, m.modelId ?? '', m.provider];
+        return haystacks.some((value) => value.toLowerCase().includes(term));
+      });
     }
     if (filters.vision) {
       models = models.filter((m) => m.capabilities?.vision === true);
@@ -207,6 +207,21 @@ function handleFilterModeKeys(
   return false;
 }
 
+function isPrintableCharacterKey(key: {
+  sequence?: string;
+  ctrl?: boolean;
+  meta?: boolean;
+}): key is { sequence: string } {
+  if (key.ctrl === true || key.meta === true) {
+    return false;
+  }
+  const sequence = key.sequence;
+  if (sequence === undefined || sequence.length !== 1) {
+    return false;
+  }
+  return PRINTABLE_ASCII.test(sequence);
+}
+
 function handleSearchModeKeys(
   key: { name?: string; sequence?: string; ctrl?: boolean; meta?: boolean },
   setState: React.Dispatch<React.SetStateAction<ModelsDialogState>>,
@@ -218,13 +233,7 @@ function handleSearchModeKeys(
     }));
     return true;
   }
-  if (
-    key.sequence &&
-    key.sequence.length === 1 &&
-    key.ctrl !== true &&
-    key.meta !== true &&
-    key.sequence.match(/[\x20-\x7E]/)
-  ) {
+  if (isPrintableCharacterKey(key)) {
     setState((prev) => ({
       ...prev,
       searchTerm: prev.searchTerm + key.sequence,
@@ -445,16 +454,28 @@ const HelpBar: React.FC<{
   isNarrow: boolean;
   currentProvider: string | null;
   providerFilter: string | null;
-}> = ({ isNarrow, currentProvider, providerFilter }) => (
-  <Box marginTop={1}>
-    <Text color={SemanticColors.text.secondary}>
-      {}
-      {isNarrow
-        ? `\u2191/\u2193 Enter${currentProvider ? ' ^A' : ''} Tab Esc`
-        : `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  ^A ${providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
-    </Text>
-  </Box>
-);
+}> = ({ isNarrow, currentProvider, providerFilter }) => {
+  const buildHint = (): string => {
+    if (isNarrow) {
+      const narrowApply = currentProvider !== null ? ' ^A' : '';
+      return `\u2191/\u2193 Enter${narrowApply} Tab Esc`;
+    }
+
+    let applyHint = '';
+    if (currentProvider !== null) {
+      const scope =
+        providerFilter === null ? `${currentProvider} only` : 'all providers';
+      applyHint = `  ^A ${scope}`;
+    }
+    return `\u2191/\u2193 select  Enter copy ID${applyHint}  Tab filters  Esc close`;
+  };
+
+  return (
+    <Box marginTop={1}>
+      <Text color={SemanticColors.text.secondary}>{buildHint()}</Text>
+    </Box>
+  );
+};
 
 const ModelsDialogHeader: React.FC<{
   providerFilter: string | null;

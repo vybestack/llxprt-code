@@ -65,11 +65,23 @@ const ProfileItem: React.FC<{
   const indicatorText = indicators ? ` [${indicators}]` : '';
 
   const maxNameLen = colWidth - 6 - indicatorText.length;
-  const displayName = isWide
-    ? profile.name
-    : profile.name.length > maxNameLen
-      ? truncateEnd(profile.name, maxNameLen)
-      : profile.name;
+  const needsTruncation = !isWide && profile.name.length > maxNameLen;
+  const displayName = needsTruncation
+    ? truncateEnd(profile.name, maxNameLen)
+    : profile.name;
+
+  const getNameColor = (): string => {
+    if (selected) {
+      return SemanticColors.text.accent;
+    }
+    if (isSearching && !isNarrow) {
+      return SemanticColors.text.secondary;
+    }
+    if (isActiveProfile) {
+      return SemanticColors.status.success;
+    }
+    return SemanticColors.text.primary;
+  };
 
   return (
     <Box
@@ -77,17 +89,7 @@ const ProfileItem: React.FC<{
       width={isWide ? undefined : colWidth}
       marginRight={2}
     >
-      <Text
-        color={
-          selected
-            ? SemanticColors.text.accent
-            : isSearching && !isNarrow
-              ? SemanticColors.text.secondary
-              : isActiveProfile
-                ? SemanticColors.status.success
-                : SemanticColors.text.primary
-        }
-      >
+      <Text color={getNameColor()}>
         {selected ? '● ' : '○ '}
         {displayName}
         {indicatorText && (
@@ -125,15 +127,20 @@ function handleSearchModeKeys(
     setSearchTerm((prev) => prev.slice(0, -1));
     return;
   }
-  if (
-    key.sequence != null &&
-    typeof key.sequence === 'string' &&
-    key.ctrl !== true &&
-    key.meta !== true &&
-    key.sequence.length === 1
-  ) {
+  if (isSingleCharacterInput(key)) {
     setSearchTerm((prev) => prev + key.sequence);
   }
+}
+
+function isSingleCharacterInput(key: {
+  sequence?: string;
+  ctrl?: boolean;
+  meta?: boolean;
+}): key is { sequence: string } {
+  if (key.ctrl === true || key.meta === true) {
+    return false;
+  }
+  return typeof key.sequence === 'string' && key.sequence.length === 1;
 }
 
 function handleNavModeKeys(
@@ -439,7 +446,13 @@ function useListLayout(
   isWide: boolean,
   filteredProfiles: ProfileListItem[],
 ) {
-  const columns = isNarrow ? 1 : isWide ? 3 : 2;
+  const getColumnCount = (): number => {
+    if (isNarrow) {
+      return 1;
+    }
+    return isWide ? 3 : 2;
+  };
+  const columns = getColumnCount();
   const longest = filteredProfiles.reduce(
     (len, p) => Math.max(len, p.name.length + 10),
     0,
