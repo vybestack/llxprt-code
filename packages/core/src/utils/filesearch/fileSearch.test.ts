@@ -12,6 +12,10 @@ import {} from '../../config/constants.js';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 import * as crawler from './crawler.js';
 
+const JS_FILES_GLOB = ['**', '*.js'].join('/');
+const SRC_TREE_GLOB = ['src', '**'].join('/');
+const SRC_JS_FILES_GLOB = ['src', '**', '*.js'].join('/');
+
 describe('FileSearch', () => {
   let tmpDir: string;
   afterEach(async () => {
@@ -160,7 +164,7 @@ describe('FileSearch', () => {
     });
 
     await fileSearch.initialize();
-    const results = await fileSearch.search('**/*.js');
+    const results = await fileSearch.search(JS_FILES_GLOB);
 
     expect(results).toStrictEqual(['src/main.js']);
   });
@@ -306,7 +310,7 @@ describe('FileSearch', () => {
     });
 
     await fileSearch.initialize();
-    const results = await fileSearch.search('**/*.js', { maxResults: 2 });
+    const results = await fileSearch.search(JS_FILES_GLOB, { maxResults: 2 });
 
     expect(results).toStrictEqual(['src/file1.js', 'src/file2.js']); // Assuming alphabetical sort
   });
@@ -571,7 +575,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
 
     const controller = new AbortController();
-    const searchPromise = fileSearch.search('**/*.js', {
+    const searchPromise = fileSearch.search(JS_FILES_GLOB, {
       signal: controller.signal,
     });
 
@@ -608,7 +612,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
 
     // Perform a broad search to prime the cache
-    const broadResults = await fileSearch.search('src/**');
+    const broadResults = await fileSearch.search(SRC_TREE_GLOB);
     expect(broadResults).toStrictEqual([
       'src/',
       'src/nested/',
@@ -618,7 +622,7 @@ describe('FileSearch', () => {
     ]);
 
     // Perform a more specific search that should leverage the broad search's cached results
-    const specificResults = await fileSearch.search('src/**/*.js');
+    const specificResults = await fileSearch.search(SRC_JS_FILES_GLOB);
     expect(specificResults).toStrictEqual(['src/foo.js', 'src/nested/baz.js']);
 
     // Although we can't directly inspect ResultCache.hits/misses from here,

@@ -1741,17 +1741,6 @@ export default tseslint.config(
       'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2088 emoji Unicode ranges
     },
   },
-  // Issue #2092: fileSearch.test.ts passes glob patterns (e.g. '**\/*.js',
-  // 'src/**') as arguments to fileSearch.search(). SonarJS flags the glob
-  // wildcard characters as potentially unsafe regexes, but these are file
-  // glob patterns, not regular expressions. The patterns are bounded single-
-  // line strings used only for file path matching.
-  {
-    files: ['packages/core/src/utils/filesearch/fileSearch.test.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2092 glob patterns are not regexes
-    },
-  },
   // Issue #2088: IToolMessageBus is a cross-package bridge interface consumed
   // by core, mcp, and agents. Its `any` types serve as forward-compatible duck-
   // typing escape hatches for implementations with heterogeneous signatures.
