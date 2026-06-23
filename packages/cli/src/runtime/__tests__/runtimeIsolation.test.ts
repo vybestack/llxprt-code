@@ -50,26 +50,25 @@ interface RuntimeFixture {
 
 const runtimeFixtures: RuntimeFixture[] = [];
 
-beforeEach(() => {
-  resetCliProviderInfrastructure();
-});
-
-afterEach(async () => {
-  resetCliProviderInfrastructure();
-  while (runtimeFixtures.length > 0) {
-    const fixture = runtimeFixtures.pop();
-    if (!fixture) {
-      continue;
-    }
-    try {
-      await fixture.handle.cleanup();
-    } finally {
-      await cleanupTempDirectory(fixture.tempDir);
-    }
-  }
-});
-
 describe('CLI runtime isolation', () => {
+  beforeEach(() => {
+    resetCliProviderInfrastructure();
+  });
+
+  afterEach(async () => {
+    resetCliProviderInfrastructure();
+    while (runtimeFixtures.length > 0) {
+      const fixture = runtimeFixtures.pop();
+      if (!fixture) {
+        continue;
+      }
+      try {
+        await fixture.handle.cleanup();
+      } finally {
+        await cleanupTempDirectory(fixture.tempDir);
+      }
+    }
+  });
   it('isolates concurrent runtime activations across sessions @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003 @pseudocode cli-runtime-isolation.md lines 1-3', async () => {
     const runtimeA = await bootstrapRuntimeFixture({
       id: 'runtime-a',

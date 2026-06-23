@@ -45,19 +45,19 @@ interface RuntimeFixture {
 
 const runtimeFixtures: RuntimeFixture[] = [];
 
-afterEach(async () => {
-  resetCliProviderInfrastructure();
-  while (runtimeFixtures.length > 0) {
-    const runtime = runtimeFixtures.pop();
-    if (runtime) {
-      // Ensure isolated runtimes release resources even when assertions fail (Step 7, multi-runtime-baseline.md line 8).
-      await runtime.handle.cleanup();
-      await cleanupTempDirectory(runtime.tempDir);
-    }
-  }
-});
-
 describe('provider multi-runtime guardrails', () => {
+  afterEach(async () => {
+    resetCliProviderInfrastructure();
+    while (runtimeFixtures.length > 0) {
+      const runtime = runtimeFixtures.pop();
+      if (runtime) {
+        // Ensure isolated runtimes release resources even when assertions fail (Step 7, multi-runtime-baseline.md line 8).
+        await runtime.handle.cleanup();
+        await cleanupTempDirectory(runtime.tempDir);
+      }
+    }
+  });
+
   it('restores runtime-scoped provider manager isolation @plan:PLAN-20251018-STATELESSPROVIDER2.P02 @requirement:REQ-SP2-002', async () => {
     const runtimeA = await bootstrapRuntimeFixture({
       runtimeId: 'runtime-a',
