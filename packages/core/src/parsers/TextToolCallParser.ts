@@ -601,12 +601,13 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   private removePartialJsonToolCall(content: string): string {
     const start = content.indexOf('{"name"');
     if (start === -1) return content;
+    const argsKey = content.indexOf('"arguments"', start + 1);
+    if (argsKey === -1) return content;
+    const argStart = content.indexOf('{', argsKey);
+    if (argStart === -1) return content;
     const full = this.extractBalancedSegment(content, start, '{', '}');
     if (full === null) return content.slice(0, start);
-    const argsKey = content.indexOf('"arguments"', start + 1);
-    const argStart = content.indexOf('{', argsKey);
-    if (argsKey === -1 || argStart === -1 || argStart >= full.endIndex)
-      return content;
+    if (argStart >= full.endIndex) return content;
     const arg = this.extractBalancedSegment(content, argStart, '{', '}');
     if (arg === null || arg.endIndex > full.endIndex)
       return content.slice(0, start);

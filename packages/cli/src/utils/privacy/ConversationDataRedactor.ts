@@ -417,8 +417,16 @@ export class ConversationDataRedactor {
   private redactShellCommand(command: string): string {
     const trimmed = command.trimStart();
     const lower = trimmed.toLowerCase();
-    if (trimmed.startsWith('export ') && trimmed.includes('=')) {
-      const assignment = trimmed.slice('export '.length);
+    const exportWsIndex = 'export'.length;
+    const hasExportSeparator =
+      trimmed.length > exportWsIndex &&
+      (trimmed[exportWsIndex] === ' ' || trimmed[exportWsIndex] === '\t');
+    if (
+      trimmed.startsWith('export') &&
+      hasExportSeparator &&
+      trimmed.includes('=')
+    ) {
+      const assignment = trimmed.slice(exportWsIndex + 1);
       const equalsIndex = assignment.indexOf('=');
       const name = assignment.slice(0, equalsIndex).trim();
       const value = assignment.slice(equalsIndex + 1).trim();

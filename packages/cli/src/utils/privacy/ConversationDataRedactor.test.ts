@@ -564,6 +564,25 @@ describe('Conversation Data Redaction', () => {
       ).command,
     ).toBe('export [REDACTED-TOKEN]');
   });
+
+  it('should redact tab-separated sensitive export assignments', () => {
+    const tabTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: 'Run command',
+        parameters: { command: 'export\tSESSION_TOKEN=abc123' },
+      },
+    };
+
+    expect(
+      (
+        redactor.redactToolCall(tabTool).function.parameters as {
+          command: string;
+        }
+      ).command,
+    ).toBe('export [REDACTED-TOKEN]');
+  });
   /**
    * @requirement REDACTION-009: Preserve message structure
    * @scenario Complex message with multiple fields

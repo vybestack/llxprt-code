@@ -98,6 +98,13 @@ describe('GemmaToolCallParser', () => {
       content: 'ends with \\\\',
     });
   });
+
+  it('should not truncate incomplete non-tool JSON that starts with {"name"', () => {
+    const result = parser.parse('Hello {"name": "Alice"');
+
+    expect(result.cleanedContent).toBe('Hello {"name": "Alice"');
+    expect(result.toolCalls).toHaveLength(0);
+  });
   describe('Hermes format', () => {
     it('should parse single Hermes tool call', () => {
       const content = `<|im_start|>assistant
