@@ -34,16 +34,6 @@ function isTokenBoundary(char: string): boolean {
   return [' ', '\t', '\n', '\r', '"', "'"].includes(char);
 }
 
-function isAsciiLetter(char: string): boolean {
-  return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z');
-}
-
-function isWindowsDrivePath(content: string, index: number): boolean {
-  if (index + 2 >= content.length) return false;
-  if (!isAsciiLetter(content[index])) return false;
-  return content[index + 1] === ':' && content[index + 2] === '\\';
-}
-
 function replacePathTokens(
   content: string,
   redactToken: (token: string) => string | null,
@@ -51,20 +41,14 @@ function replacePathTokens(
   let result = '';
   let index = 0;
   while (index < content.length) {
-    if (
-      isTokenBoundary(content[index]) &&
-      !isWindowsDrivePath(content, index)
-    ) {
+    if (isTokenBoundary(content[index])) {
       result += content[index];
       index += 1;
       continue;
     }
 
     let end = index;
-    while (
-      end < content.length &&
-      (!isTokenBoundary(content[end]) || isWindowsDrivePath(content, end))
-    ) {
+    while (end < content.length && !isTokenBoundary(content[end])) {
       end += 1;
     }
     const token = content.slice(index, end);
@@ -90,6 +74,50 @@ function splitPathSegments(path: string): string[] {
     .split(/[/\\]/)
     .filter((segment) => segment.length > 0)
     .map((segment) => segment.toLowerCase());
+}
+
+function isEmailEdgePunctuation(char: string): boolean {
+  return ['(', ')', '[', ']', '{', '}', '<', '>', ',', '.', ';', ':'].includes(
+    char,
+  );
+}
+
+function redactEmailToken(token: string): string {
+  let start = 0;
+  let end = token.length;
+  while (start < end && isEmailEdgePunctuation(token[start])) {
+    start += 1;
+  }
+  while (end > start && isEmailEdgePunctuation(token[end - 1])) {
+    end -= 1;
+  }
+  const candidate = token.slice(start, end);
+  if (!isEmailAddress(candidate)) return token;
+  return token.slice(0, start) + '[REDACTED-EMAIL]' + token.slice(end);
+}
+
+function isSensitiveEnvironmentName(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  return [
+    'api_key',
+    'apikey',
+    'auth',
+    'bearer',
+    'credential',
+    'credentials',
+    'password',
+    'secret',
+    'token',
+  ].some((part) => lowerName.includes(part));
+}
+
+function isKnownSecretValue(value: string): boolean {
+  const unquoted = value.replaceAll('"', '').replaceAll("'", '');
+  return (
+    unquoted.includes('sk-') ||
+    unquoted.startsWith('ghp_') ||
+    unquoted.startsWith('xoxb-')
+  );
 }
 
 function redactPhoneAndCardNumbers(content: string): string {
@@ -267,7 +295,7 @@ export class ConversationDataRedactor {
 
     const emailRedacted = content
       .split(/(\s+)/)
-      .map((token) => (isEmailAddress(token) ? '[REDACTED-EMAIL]' : token))
+      .map((token) => redactEmailToken(token))
       .join('');
 
     return redactPhoneAndCardNumbers(emailRedacted);
@@ -390,9 +418,15 @@ export class ConversationDataRedactor {
     const trimmed = command.trimStart();
     const lower = trimmed.toLowerCase();
     if (trimmed.startsWith('export ') && trimmed.includes('=')) {
-      const value = trimmed.slice(trimmed.indexOf('=') + 1).trim();
+      const assignment = trimmed.slice('export '.length);
+      const equalsIndex = assignment.indexOf('=');
+      const name = assignment.slice(0, equalsIndex).trim();
+      const value = assignment.slice(equalsIndex + 1).trim();
       if (value.includes('sk-')) return 'export [REDACTED-API-KEY]';
-      if (value.length > 0) return 'export [REDACTED-TOKEN]';
+      if (value.length > 0 && isSensitiveEnvironmentName(name)) {
+        return 'export [REDACTED-TOKEN]';
+      }
+      if (isKnownSecretValue(value)) return 'export [REDACTED-TOKEN]';
     }
     if (
       lower.startsWith('curl ') &&

@@ -508,6 +508,62 @@ describe('Conversation Data Redaction', () => {
     );
   });
 
+  it('should redact emails adjacent to punctuation in personal info scanning', () => {
+    const redacted = redactor.redactPersonalInfo(
+      'Contacts (john.doe@example.com) and jane@example.org.',
+    );
+
+    expect(redacted).toBe('Contacts ([REDACTED-EMAIL]) and [REDACTED-EMAIL].');
+  });
+
+  it('should preserve benign shell exports while redacting sensitive exports', () => {
+    const pathTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: 'Run command',
+        parameters: { command: 'export PATH=/usr/local/bin' },
+      },
+    };
+    const envTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: 'Run command',
+        parameters: { command: 'export NODE_ENV=production' },
+      },
+    };
+    const secretTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: 'Run command',
+        parameters: { command: 'export SESSION_TOKEN=abc123' },
+      },
+    };
+
+    expect(
+      (
+        redactor.redactToolCall(pathTool).function.parameters as {
+          command: string;
+        }
+      ).command,
+    ).toBe('export PATH=/usr/local/bin');
+    expect(
+      (
+        redactor.redactToolCall(envTool).function.parameters as {
+          command: string;
+        }
+      ).command,
+    ).toBe('export NODE_ENV=production');
+    expect(
+      (
+        redactor.redactToolCall(secretTool).function.parameters as {
+          command: string;
+        }
+      ).command,
+    ).toBe('export [REDACTED-TOKEN]');
+  });
   /**
    * @requirement REDACTION-009: Preserve message structure
    * @scenario Complex message with multiple fields

@@ -599,19 +599,18 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   }
 
   private removePartialJsonToolCall(content: string): string {
-    const toolCallStart = content.indexOf('{"name"');
-    const argumentsIndex = content.indexOf('"arguments"', toolCallStart + 1);
-    if (toolCallStart === -1 || argumentsIndex === -1) return content;
-    const argumentObjectStart = content.indexOf('{', argumentsIndex);
-    if (argumentObjectStart === -1) return content;
-
-    const argumentObject = this.extractBalancedSegment(
-      content,
-      argumentObjectStart,
-      '{',
-      '}',
-    );
-    return argumentObject === null ? content.slice(0, toolCallStart) : content;
+    const start = content.indexOf('{"name"');
+    if (start === -1) return content;
+    const full = this.extractBalancedSegment(content, start, '{', '}');
+    if (full === null) return content.slice(0, start);
+    const argsKey = content.indexOf('"arguments"', start + 1);
+    const argStart = content.indexOf('{', argsKey);
+    if (argsKey === -1 || argStart === -1 || argStart >= full.endIndex)
+      return content;
+    const arg = this.extractBalancedSegment(content, argStart, '{', '}');
+    if (arg === null || arg.endIndex > full.endIndex)
+      return content.slice(0, start);
+    return content;
   }
 
   private normalizeArguments(

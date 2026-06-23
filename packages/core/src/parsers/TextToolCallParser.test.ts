@@ -77,6 +77,13 @@ describe('GemmaToolCallParser', () => {
     expect(partialResult.cleanedContent).toBe('Before');
     expect(partialResult.toolCalls).toHaveLength(0);
 
+    const partialOuterResult = parser.parse(
+      'Before {"name":"write_file","arguments":{"path":"x"}',
+    );
+
+    expect(partialOuterResult.cleanedContent).toBe('Before');
+    expect(partialOuterResult.toolCalls).toHaveLength(0);
+
     const completeJson = JSON.stringify({
       name: 'write_file',
       arguments: { content: 'ends with \\\\' },
