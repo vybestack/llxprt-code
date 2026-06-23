@@ -13,7 +13,7 @@
  * @plan PLAN-20260211-SECURESTORE.P05
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -600,8 +600,8 @@ describe('SecureStore — Cross-Instance Consistency', () => {
 // Type for accessing the private fallbackDir field in tests.
 type SecureStoreInternals = { fallbackDir: string };
 
-function getFallbackDir(store: SecureStore): string {
-  return (store as unknown as SecureStoreInternals).fallbackDir;
+function getFallbackDir(store: object): string {
+  return (store as SecureStoreInternals).fallbackDir;
 }
 
 describe('SecureStore — Default Path Uses Platform Standards', () => {
@@ -652,17 +652,22 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
 
   it.runIf(process.platform === 'linux')(
     'default fallbackDir uses Linux XDG data path with XDG_DATA_HOME set',
-    () => {
-      process.env.XDG_DATA_HOME = '/tmp/custom-xdg';
+    async () => {
+      vi.stubEnv('XDG_DATA_HOME', '/tmp/custom-xdg');
       try {
-        const store = new SecureStore('test-service', {
+        vi.resetModules();
+        const { SecureStore: EnvSecureStore } = await import(
+          './secure-store.js'
+        );
+        const store = new EnvSecureStore('test-service', {
           keyringLoader: async () => null,
           fallbackPolicy: 'allow',
         });
         const fallbackDir = getFallbackDir(store);
         expect(fallbackDir).toContain('/tmp/custom-xdg');
       } finally {
-        delete process.env.XDG_DATA_HOME;
+        vi.unstubAllEnvs();
+        vi.resetModules();
       }
     },
   );
