@@ -568,13 +568,11 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       const token1 = await tokenStore.getToken('anthropic', 'bucket1');
       const token2 = await tokenStore.getToken('anthropic', 'bucket2');
 
-      expect(token1).not.toBeNull();
-      expect(token2).not.toBeNull();
-      if (token1 && token2) {
-        const now = Math.floor(Date.now() / 1000);
-        expect(token1.expiry).toBeLessThan(now);
-        expect(token2.expiry).toBeLessThan(now);
-      }
+      assertDefined(token1);
+      assertDefined(token2);
+      const nowExpired = Math.floor(Date.now() / 1000);
+      expect(token1.expiry).toBeLessThan(nowExpired);
+      expect(token2.expiry).toBeLessThan(nowExpired);
 
       // Attempting to use expired buckets should be detected
       // This would normally trigger re-authentication flow
@@ -958,15 +956,13 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       );
       const geminiWork = await tokenStore.getToken('gemini', 'work-company');
 
-      expect(anthropicWork).not.toBeNull();
-      expect(geminiWork).not.toBeNull();
+      assertDefined(anthropicWork);
+      assertDefined(geminiWork);
 
       // Verify expiry is tracked correctly
-      if (anthropicWork && geminiWork) {
-        const now = Math.floor(Date.now() / 1000);
-        expect(anthropicWork.expiry).toBeGreaterThan(now); // Not expired
-        expect(geminiWork.expiry).toBeGreaterThan(now); // Not expired
-      }
+      const nowActive = Math.floor(Date.now() / 1000);
+      expect(anthropicWork.expiry).toBeGreaterThan(nowActive); // Not expired
+      expect(geminiWork.expiry).toBeGreaterThan(nowActive); // Not expired
 
       // Verify personal bucket is expired
       const anthropicPersonal = await tokenStore.getToken(

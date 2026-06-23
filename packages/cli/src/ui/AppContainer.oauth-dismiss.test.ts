@@ -6,78 +6,90 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+type GlobalOAuthState = Record<string, unknown> & {
+  __oauth_browser_auth_complete?: unknown;
+  __oauth_needs_code?: unknown;
+};
+
+interface DismissAction {
+  type: string;
+  payload: string;
+}
+
+type DismissDispatch = (action: DismissAction) => void;
+
+const oauthGlobal = global as GlobalOAuthState;
+
+/**
+ * Mirror of the AppContainer auto-dismiss guard: the OAuth code dialog should
+ * only auto-dismiss when it is open AND the browser auth completion flag is
+ * strictly true.
+ */
+function computeShouldAutoDismiss(isOAuthCodeDialogOpen: boolean): boolean {
+  return (
+    isOAuthCodeDialogOpen &&
+    oauthGlobal.__oauth_browser_auth_complete === true
+  );
+}
+
+/**
+ * Mirror of the AppContainer useEffect body: when the auto-dismiss condition is
+ * met, reset the completion flag and dispatch CLOSE_DIALOG for the code dialog.
+ */
+function runOAuthAutoDismissEffect(
+  isOAuthCodeDialogOpen: boolean,
+  dispatch: DismissDispatch,
+): void {
+  if (!computeShouldAutoDismiss(isOAuthCodeDialogOpen)) {
+    return;
+  }
+  oauthGlobal.__oauth_browser_auth_complete = false;
+  dispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+}
+
 describe('OAuthCodeDialog auto-dismiss behavior', () => {
   beforeEach(() => {
     // Reset global OAuth state
-    delete (global as Record<string, unknown>).__oauth_needs_code;
-    delete (global as Record<string, unknown>).__oauth_browser_auth_complete;
+    delete oauthGlobal.__oauth_needs_code;
+    delete oauthGlobal.__oauth_browser_auth_complete;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    delete (global as Record<string, unknown>).__oauth_needs_code;
-    delete (global as Record<string, unknown>).__oauth_browser_auth_complete;
+    delete oauthGlobal.__oauth_needs_code;
+    delete oauthGlobal.__oauth_browser_auth_complete;
   });
 
   describe('Auto-dismiss condition logic', () => {
     it('should auto-dismiss when dialog is open and __oauth_browser_auth_complete is true', () => {
       // Arrange: Dialog is open, browser auth just completed
-      const isOAuthCodeDialogOpen = true;
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
+      oauthGlobal.__oauth_browser_auth_complete = true;
 
       // Act & Assert: The condition should be true
-      const shouldAutoDismiss = !!(
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      );
-
-      expect(shouldAutoDismiss).toBe(true);
+      expect(computeShouldAutoDismiss(true)).toBe(true);
     });
 
     it('should NOT auto-dismiss when dialog is open but __oauth_browser_auth_complete is false', () => {
       // Arrange: Dialog is open, browser auth not completed
-      const isOAuthCodeDialogOpen = true;
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
+      oauthGlobal.__oauth_browser_auth_complete = false;
 
       // Act & Assert: The condition should be false
-      const shouldAutoDismiss = !!(
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      );
-
-      expect(shouldAutoDismiss).toBe(false);
+      expect(computeShouldAutoDismiss(true)).toBe(false);
     });
 
     it('should NOT auto-dismiss when dialog is open but __oauth_browser_auth_complete is undefined', () => {
-      // Arrange: Dialog is open, flag is undefined (initial state)
-      const isOAuthCodeDialogOpen = true;
-      // __oauth_browser_auth_complete is undefined by default after delete in beforeEach
+      // Arrange: Dialog is open, flag is undefined (initial state after delete)
 
       // Act & Assert: The condition should be false (strict equality check)
-      const shouldAutoDismiss = !!(
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      );
-
-      expect(shouldAutoDismiss).toBe(false);
+      expect(computeShouldAutoDismiss(true)).toBe(false);
     });
 
     it('should NOT auto-dismiss when dialog is closed even if __oauth_browser_auth_complete is true', () => {
       // Arrange: Dialog is closed, browser auth completed
-      const isOAuthCodeDialogOpen = false;
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
+      oauthGlobal.__oauth_browser_auth_complete = true;
 
       // Act & Assert: The condition should be false
-      const shouldAutoDismiss = !!(
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      );
-
-      expect(shouldAutoDismiss).toBe(false);
+      expect(computeShouldAutoDismiss(false)).toBe(false);
     });
   });
 
@@ -85,20 +97,10 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
     it('should dispatch CLOSE_DIALOG with oauthCode payload when auto-dismiss condition is met', () => {
       // Arrange
       const mockDispatch = vi.fn();
-      const isOAuthCodeDialogOpen = true;
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
+      oauthGlobal.__oauth_browser_auth_complete = true;
 
       // Act: Simulate the useEffect logic
-      if (
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      ) {
-        // Reset flag and dispatch
-        (global as Record<string, unknown>).__oauth_browser_auth_complete =
-          false;
-        mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-      }
+      runOAuthAutoDismissEffect(true, mockDispatch);
 
       // Assert
       expect(mockDispatch).toHaveBeenCalledTimes(1);
@@ -107,25 +109,16 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
         payload: 'oauthCode',
       });
       // Verify flag was reset
-      expect(
-        (global as Record<string, unknown>).__oauth_browser_auth_complete,
-      ).toBe(false);
+      expect(oauthGlobal.__oauth_browser_auth_complete).toBe(false);
     });
 
     it('should NOT dispatch CLOSE_DIALOG when auto-dismiss condition is NOT met', () => {
       // Arrange
       const mockDispatch = vi.fn();
-      const isOAuthCodeDialogOpen = true;
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
+      oauthGlobal.__oauth_browser_auth_complete = false;
 
       // Act: Simulate the useEffect logic
-      if (
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      ) {
-        mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-      }
+      runOAuthAutoDismissEffect(true, mockDispatch);
 
       // Assert
       expect(mockDispatch).not.toHaveBeenCalled();
@@ -138,54 +131,36 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
 
       // First auth attempt starts
       let isOAuthCodeDialogOpen = false;
-      (global as Record<string, unknown>).__oauth_needs_code = true;
+      oauthGlobal.__oauth_needs_code = true;
 
       // Polling effect opens dialog and clears __oauth_needs_code
       isOAuthCodeDialogOpen = true;
-      (global as Record<string, unknown>).__oauth_needs_code = false;
+      oauthGlobal.__oauth_needs_code = false;
       // Browser auth completes
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
+      oauthGlobal.__oauth_browser_auth_complete = true;
 
       // Auto-dismiss should trigger (using distinct flag, not __oauth_needs_code)
-      if (
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      ) {
-        mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-      }
+      runOAuthAutoDismissEffect(isOAuthCodeDialogOpen, mockDispatch);
 
       expect(mockDispatch).toHaveBeenCalledTimes(1);
       mockDispatch.mockClear();
 
       // Second auth attempt starts immediately
-      (global as Record<string, unknown>).__oauth_needs_code = true;
+      oauthGlobal.__oauth_needs_code = true;
       isOAuthCodeDialogOpen = true;
       // Browser auth NOT complete yet
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
+      oauthGlobal.__oauth_browser_auth_complete = false;
 
       // Dialog should NOT auto-dismiss (flag is false)
-      if (
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      ) {
-        mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-      }
+      runOAuthAutoDismissEffect(isOAuthCodeDialogOpen, mockDispatch);
 
       expect(mockDispatch).not.toHaveBeenCalled();
 
       // Browser auth completes
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
+      oauthGlobal.__oauth_browser_auth_complete = true;
 
       // Now dialog should auto-dismiss
-      if (
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      ) {
-        mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-      }
+      runOAuthAutoDismissEffect(isOAuthCodeDialogOpen, mockDispatch);
 
       expect(mockDispatch).toHaveBeenCalledTimes(1);
     });
@@ -196,19 +171,12 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
 
       // Auth starts, polling opens dialog
       const isOAuthCodeDialogOpen = true;
-      (global as Record<string, unknown>).__oauth_needs_code = false; // Cleared by polling
+      oauthGlobal.__oauth_needs_code = false; // Cleared by polling
       // Browser auth did NOT complete (no callback)
-      (global as Record<string, unknown>).__oauth_browser_auth_complete =
-        undefined;
+      oauthGlobal.__oauth_browser_auth_complete = undefined;
 
       // Dialog should NOT auto-dismiss - user can still paste code manually
-      if (
-        isOAuthCodeDialogOpen &&
-        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
-          true
-      ) {
-        mockDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-      }
+      runOAuthAutoDismissEffect(isOAuthCodeDialogOpen, mockDispatch);
 
       expect(mockDispatch).not.toHaveBeenCalled();
     });
