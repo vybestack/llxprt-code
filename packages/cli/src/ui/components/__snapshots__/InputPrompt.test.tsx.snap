@@ -31,6 +31,37 @@ exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match
 "
 `;
 
+exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-collapsed-match 2`] = `
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - useMousePaste (packages/cli/src/ui/components/InputPrompt.tsx:1753:3)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:1794:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+"
+`;
+
 exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-expanded-match 1`] = `
 "
   ERROR  useMouseContext must be used within a MouseProvider
@@ -59,6 +90,37 @@ exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match
  - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
  - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
  - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
+`;
+
+exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-expanded-match 2`] = `
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - useMousePaste (packages/cli/src/ui/components/InputPrompt.tsx:1753:3)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:1794:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
 "
 `;
 
@@ -93,6 +155,37 @@ exports[`InputPrompt > snapshots > should not show inverted cursor when shell is
 "
 `;
 
+exports[`InputPrompt > snapshots > should not show inverted cursor when shell is focused 2`] = `
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - useMousePaste (packages/cli/src/ui/components/InputPrompt.tsx:1753:3)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:1794:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+"
+`;
+
 exports[`InputPrompt > snapshots > should render correctly in shell mode 1`] = `
 "
   ERROR  useMouseContext must be used within a MouseProvider
@@ -121,6 +214,37 @@ exports[`InputPrompt > snapshots > should render correctly in shell mode 1`] = `
  - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
  - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
  - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
+`;
+
+exports[`InputPrompt > snapshots > should render correctly in shell mode 2`] = `
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - useMousePaste (packages/cli/src/ui/components/InputPrompt.tsx:1753:3)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:1794:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
 "
 `;
 
@@ -155,6 +279,37 @@ exports[`InputPrompt > snapshots > should render correctly in yolo mode 1`] = `
 "
 `;
 
+exports[`InputPrompt > snapshots > should render correctly in yolo mode 2`] = `
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - useMousePaste (packages/cli/src/ui/components/InputPrompt.tsx:1753:3)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:1794:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+"
+`;
+
 exports[`InputPrompt > snapshots > should render correctly when accepting edits 1`] = `
 "
   ERROR  useMouseContext must be used within a MouseProvider
@@ -183,5 +338,36 @@ exports[`InputPrompt > snapshots > should render correctly when accepting edits 
  - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
  - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
  - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
+`;
+
+exports[`InputPrompt > snapshots > should render correctly when accepting edits 2`] = `
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - useMousePaste (packages/cli/src/ui/components/InputPrompt.tsx:1753:3)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:1794:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
 "
 `;
