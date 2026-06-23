@@ -27,6 +27,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import stripJsonComments from 'strip-json-comments';
 
 const ROOT_DIR = path.resolve(__dirname, '..', '..', '..');
 const CORE_DIR = path.join(ROOT_DIR, 'packages', 'core');
@@ -152,12 +153,7 @@ describe('Core must not import from providers package', () => {
       return;
     }
     const content = fs.readFileSync(tsconfigPath, 'utf-8');
-    // Strip comments — these regexes are bounded for test-only JSON content
-    /* eslint-disable sonarjs/regular-expr, sonarjs/slow-regex */
-    const stripped = content
-      .replace(/\/\/.*$/gm, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    /* eslint-enable sonarjs/regular-expr, sonarjs/slow-regex */
+    const stripped = stripJsonComments(content);
     try {
       const tsconfig = JSON.parse(stripped) as Record<string, unknown>;
       const references = (tsconfig.references ?? []) as Array<

@@ -59,7 +59,6 @@ export function getSystemEncoding(): string | null {
     try {
       // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       const output = execSync('chcp', { encoding: 'utf8' });
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex parses bounded Windows chcp output; behavior preserved.
       const match = output.match(/:\s*(\d+)/);
       if (match) {
         const codePage = parseInt(match[1], 10);

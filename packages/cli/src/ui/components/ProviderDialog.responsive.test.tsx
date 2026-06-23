@@ -89,7 +89,6 @@ describe('ProviderDialog Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should not show complex grid layout
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).not.toMatch(/├|┤|│.*│.*│/); // No multi-column separators
 
       // Should show results in single column or minimal columns
@@ -115,7 +114,6 @@ describe('ProviderDialog Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should have proper borders
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/┌─+┐|╭─+╮/); // Should have borders
 
       // Should show providers in a grid layout but condensed
@@ -130,7 +128,6 @@ describe('ProviderDialog Responsive Behavior', () => {
       );
 
       // Should have navigation instructions
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/←\/→\/↑\/↓.*enter.*esc/i);
     });
 
@@ -182,12 +179,10 @@ describe('ProviderDialog Responsive Behavior', () => {
       expect(output).toContain('another-moderately-long-provider-name');
 
       // Should have full decorative borders
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(output).toMatch(/┌─+┐|╭─+╮/);
 
       // Should show full instructions
       expect(output).toMatch(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /select provider.*←\/→\/↑\/↓.*enter to choose.*esc to cancel/i,
       );
 
@@ -240,7 +235,6 @@ describe('ProviderDialog Responsive Behavior', () => {
 
       const standardOutput = standardFrame();
       // At 80 columns, should be STANDARD behavior (not NARROW)
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(standardOutput).toMatch(/┌─+┐|╭─+╮/); // Should have borders
       expect(standardOutput).not.toMatch(/type to filter/i); // No search-first approach
 

@@ -22,6 +22,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import stripJsonComments from 'strip-json-comments';
 
 // This test file lives in packages/core/src/runtime/contracts/
 // Resolve paths relative to this file's location
@@ -62,23 +63,14 @@ function collectTsFiles(dir: string, excludeTests = true): string[] {
  * NOT a comment. Matches both relative and package-level provider imports.
  */
 const PROVIDER_IMPORT_PATTERNS = [
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"][^'"]*\/providers\//,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"]@vybestack\/llxprt-code-providers/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"][^'"]*providers\/IProvider/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"][^'"]*providers\/ProviderManager/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"][^'"]*providers\/ProviderContentGenerator/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"][^'"]*providers\/tokenizers\//,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"][^'"]*providers\/errors/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"][^'"]*providers\/types/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
   /from\s+['"][^'"]*providers\/utils\//,
 ];
 
@@ -215,11 +207,7 @@ describe('Core package metadata must not reference providers', () => {
     }
     const content = fs.readFileSync(coreTsconfigPath, 'utf-8');
     // Strip comments before parsing (TypeScript tsconfig can have comments)
-    const strippedContent = content
-      // eslint-disable-next-line sonarjs/slow-regex -- Static regex on config file content; no ReDoS risk
-      .replace(/\/\/.*$/gm, '')
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex on config file content; no ReDoS risk
-      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const strippedContent = stripJsonComments(content);
     try {
       const tsconfig = JSON.parse(strippedContent);
       const references = tsconfig.references ?? [];

@@ -13,23 +13,32 @@ export interface SecureInputState {
 }
 
 const SECURE_COMMAND_PREFIXES = ['/key', '/keyfile', '/toolkey'];
+const KEY_SUBCOMMANDS = ['save', 'load', 'show', 'list', 'delete'];
 
-const SECURE_PREFIX_PATTERN = new RegExp(
-  `^(?:${SECURE_COMMAND_PREFIXES.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?:$|\\s)`,
-);
-
-const TOOLKEY_VALUE_PATTERN = /^(\/toolkey\s+\S+\s+)([\s\S]*)/;
-const KEY_SAVE_PATTERN = /^(\/key\s+save\s+\S+\s+)([\s\S]+)/;
-const KEY_SUBCOMMAND_PATTERN = /^\/key\s+(save|load|show|list|delete)(\s|$)/;
-const KEY_VALUE_PATTERN = /^\/key\s+([\s\S]*)/;
-const KEYFILE_VALUE_PATTERN = /^\/keyfile\s+([\s\S]*)/;
-const TOOLKEY_COMMAND_PATTERN = /^(\/toolkey\s+\S+\s+)(.+)$/;
-const KEY_SAVE_COMMAND_PATTERN = /^(\/key\s+save\s+\S+\s+)(.+)$/;
-const KEY_COMMAND_PATTERN = /^(\/key\s+)(.+)$/;
-const LINE_BREAK_PATTERN = /[\r\n]/;
+function isWhitespace(char: string | undefined): boolean {
+  return char === ' ' || char === '\t' || char === '\r' || char === '\n';
+}
 
 function isSecureCommand(trimmed: string): boolean {
-  return SECURE_PREFIX_PATTERN.test(trimmed);
+  return SECURE_COMMAND_PREFIXES.some(
+    (prefix) =>
+      trimmed === prefix ||
+      (trimmed.startsWith(prefix) && isWhitespace(trimmed[prefix.length])),
+  );
+}
+
+function findCommandStart(text: string, command: string): number | null {
+  let commandStart = 0;
+  while (commandStart < text.length && isWhitespace(text[commandStart])) {
+    commandStart += 1;
+  }
+  if (
+    !text.startsWith(command, commandStart) ||
+    !isWhitespace(text[commandStart + command.length])
+  ) {
+    return null;
+  }
+  return commandStart;
 }
 
 interface MaskSegment {
@@ -38,14 +47,131 @@ interface MaskSegment {
 }
 
 function splitAtLineBreak(content: string): MaskSegment {
-  const lineBreakMatch = content.match(LINE_BREAK_PATTERN);
-  if (lineBreakMatch?.index !== undefined) {
+  const carriageReturnIndex = content.indexOf('\r');
+  const lineFeedIndex = content.indexOf('\n');
+  let lineBreakIndex = Math.min(carriageReturnIndex, lineFeedIndex);
+  if (carriageReturnIndex === -1) {
+    lineBreakIndex = lineFeedIndex;
+  } else if (lineFeedIndex === -1) {
+    lineBreakIndex = carriageReturnIndex;
+  }
+  if (lineBreakIndex !== -1) {
     return {
-      keyToMask: content.substring(0, lineBreakMatch.index),
-      afterLineBreak: content.substring(lineBreakMatch.index),
+      keyToMask: content.substring(0, lineBreakIndex),
+      afterLineBreak: content.substring(lineBreakIndex),
     };
   }
   return { keyToMask: content, afterLineBreak: '' };
+}
+
+function splitAfterTokens(
+  text: string,
+  command: string,
+  tokenCount: number,
+): { prefix: string; value: string } | null {
+  const commandStart = findCommandStart(text, command);
+  if (commandStart === null) {
+    return null;
+  }
+
+  let index = commandStart + command.length;
+  for (let token = 0; token < tokenCount; token++) {
+    if (!isWhitespace(text[index])) {
+      return null;
+    }
+    while (isWhitespace(text[index])) {
+      index += 1;
+    }
+    const tokenStart = index;
+    while (index < text.length && !isWhitespace(text[index])) {
+      index += 1;
+    }
+    if (index === tokenStart) {
+      return null;
+    }
+  }
+
+  if (!isWhitespace(text[index])) {
+    return null;
+  }
+  while (isWhitespace(text[index])) {
+    index += 1;
+  }
+  if (index >= text.length) {
+    return null;
+  }
+  return { prefix: text.substring(0, index), value: text.substring(index) };
+}
+
+function splitKeySaveInput(
+  text: string,
+): { prefix: string; value: string } | null {
+  const command = '/key';
+  const commandStart = findCommandStart(text, command);
+  if (commandStart === null) {
+    return null;
+  }
+
+  let index = commandStart + command.length;
+  while (isWhitespace(text[index])) {
+    index += 1;
+  }
+  const saveEnd = index + 'save'.length;
+  if (!text.startsWith('save', index) || !isWhitespace(text[saveEnd])) {
+    return null;
+  }
+
+  index = saveEnd;
+  while (isWhitespace(text[index])) {
+    index += 1;
+  }
+  const nameStart = index;
+  while (index < text.length && !isWhitespace(text[index])) {
+    index += 1;
+  }
+  if (index === nameStart || !isWhitespace(text[index])) {
+    return null;
+  }
+  while (isWhitespace(text[index])) {
+    index += 1;
+  }
+  if (index >= text.length) {
+    return null;
+  }
+  return { prefix: text.substring(0, index), value: text.substring(index) };
+}
+
+function splitKeyInput(text: string): { prefix: string; value: string } | null {
+  const command = '/key';
+  const commandStart = findCommandStart(text, command);
+  if (commandStart === null) {
+    return null;
+  }
+  let index = commandStart + command.length;
+  while (isWhitespace(text[index])) {
+    index += 1;
+  }
+  if (index >= text.length) {
+    return null;
+  }
+  return { prefix: text.substring(0, index), value: text.substring(index) };
+}
+
+function isKeySubcommand(text: string): boolean {
+  const prefix = '/key';
+  const commandStart = findCommandStart(text, prefix);
+  if (commandStart === null) {
+    return false;
+  }
+  let index = commandStart + prefix.length;
+  while (isWhitespace(text[index])) {
+    index += 1;
+  }
+  const subcommandStart = index;
+  while (index < text.length && !isWhitespace(text[index])) {
+    index += 1;
+  }
+  return KEY_SUBCOMMANDS.includes(text.substring(subcommandStart, index));
 }
 
 /**
@@ -98,7 +224,7 @@ export class SecureInputHandler {
       return keySaveResult;
     }
 
-    if (KEY_SUBCOMMAND_PATTERN.test(text)) {
+    if (isKeySubcommand(text)) {
       return text;
     }
 
@@ -107,7 +233,7 @@ export class SecureInputHandler {
       return keyResult;
     }
 
-    if (KEYFILE_VALUE_PATTERN.test(text)) {
+    if (text === '/keyfile' || text.startsWith('/keyfile ')) {
       return text;
     }
 
@@ -115,43 +241,41 @@ export class SecureInputHandler {
   }
 
   private maskToolKeyInput(text: string): string | null {
-    const toolkeyMatch = text.match(TOOLKEY_VALUE_PATTERN);
-    if (!toolkeyMatch?.[2]) {
+    const toolkeyMatch = splitAfterTokens(text, '/toolkey', 1);
+    if (toolkeyMatch === null) {
       return null;
     }
-    const prefix = toolkeyMatch[1];
-    const valueContent = toolkeyMatch[2];
+    const { prefix, value: valueContent } = toolkeyMatch;
     const { keyToMask, afterLineBreak } = splitAtLineBreak(valueContent);
-    if (afterLineBreak) {
+    if (afterLineBreak !== '') {
       return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
     }
     return `${prefix}${this.maskValue(valueContent)}`;
   }
 
   private maskKeySaveInput(text: string): string | null {
-    const keySaveMatch = text.match(KEY_SAVE_PATTERN);
-    if (!keySaveMatch?.[2]) {
+    const keySaveMatch = splitKeySaveInput(text);
+    if (keySaveMatch === null) {
       return null;
     }
-    const prefix = keySaveMatch[1];
-    const valueContent = keySaveMatch[2];
+    const { prefix, value: valueContent } = keySaveMatch;
     const { keyToMask, afterLineBreak } = splitAtLineBreak(valueContent);
-    if (afterLineBreak) {
+    if (afterLineBreak !== '') {
       return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
     }
     return `${prefix}${this.maskValue(valueContent)}`;
   }
 
   private maskKeyInput(text: string): string | null {
-    const keyMatch = text.match(KEY_VALUE_PATTERN);
-    if (!keyMatch?.[1]) {
+    const keyMatch = splitKeyInput(text);
+    if (keyMatch === null) {
       return null;
     }
-    const keyContent = keyMatch[1];
+    const { prefix, value: keyContent } = keyMatch;
     const { keyToMask, afterLineBreak } = splitAtLineBreak(keyContent);
     const maskedKey = this.maskValue(keyToMask);
-    if (afterLineBreak) {
-      const result = `/key ${maskedKey}${afterLineBreak}`;
+    if (afterLineBreak !== '') {
+      const result = `${prefix}${maskedKey}${afterLineBreak}`;
       if (process.env.DEBUG_SECURE_INPUT) {
         debugLogger.log('[SecureHandler] Output:', JSON.stringify(result));
         debugLogger.log(
@@ -165,7 +289,7 @@ export class SecureInputHandler {
       }
       return result;
     }
-    return `/key ${maskedKey}`;
+    return `${prefix}${maskedKey}`;
   }
 
   /**
@@ -218,23 +342,23 @@ export class SecureInputHandler {
       return command;
     }
 
-    const toolkeyCommandMatch = command.match(TOOLKEY_COMMAND_PATTERN);
-    if (toolkeyCommandMatch) {
-      return `${toolkeyCommandMatch[1]}${this.maskValue(toolkeyCommandMatch[2])}`;
+    const toolkeyCommandMatch = splitAfterTokens(command, '/toolkey', 1);
+    if (toolkeyCommandMatch !== null) {
+      return `${toolkeyCommandMatch.prefix}${this.maskValue(toolkeyCommandMatch.value)}`;
     }
 
-    const keySaveMatch = command.match(KEY_SAVE_COMMAND_PATTERN);
-    if (keySaveMatch) {
-      return `${keySaveMatch[1]}${this.maskValue(keySaveMatch[2])}`;
+    const keySaveMatch = splitKeySaveInput(command);
+    if (keySaveMatch !== null) {
+      return `${keySaveMatch.prefix}${this.maskValue(keySaveMatch.value)}`;
     }
 
-    if (KEY_SUBCOMMAND_PATTERN.test(command)) {
+    if (isKeySubcommand(command)) {
       return command;
     }
 
-    const keyCommandMatch = command.match(KEY_COMMAND_PATTERN);
-    if (keyCommandMatch) {
-      return `${keyCommandMatch[1]}${this.maskValue(keyCommandMatch[2])}`;
+    const keyMatch = splitKeyInput(command);
+    if (keyMatch !== null) {
+      return `${keyMatch.prefix}${this.maskValue(keyMatch.value)}`;
     }
 
     return command;

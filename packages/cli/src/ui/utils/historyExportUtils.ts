@@ -67,7 +67,6 @@ export function sanitizeTranscript(text: string): string {
   // Redact Bearer tokens
   // Static regex for Bearer token redaction - no dynamic parts
   sanitized = sanitized.replace(
-    /* eslint-disable-next-line sonarjs/regular-expr */
     /Bearer\s+[a-zA-Z0-9_.-]+/gi,
     'Bearer [REDACTED]',
   );
@@ -75,7 +74,6 @@ export function sanitizeTranscript(text: string): string {
   // Redact generic API keys in common formats
   // Static regex for API key redaction - no dynamic parts
   sanitized = sanitized.replace(
-    /* eslint-disable-next-line sonarjs/regular-expr */
     /api[_-]?key["\s:=]+[a-zA-Z0-9_.-]{20,}/gi,
     'api_key=[REDACTED]',
   );

@@ -17,6 +17,56 @@ const MAX_HISTORY_LENGTH = 5000;
 const DEFAULT_TOOL_CALL_LOOP_THRESHOLD = 50;
 const DEFAULT_CONTENT_LOOP_THRESHOLD = 50;
 
+function countOccurrences(content: string, needle: string): number {
+  let count = 0;
+  let index = content.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = content.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+function hasLineStartingWith(
+  content: string,
+  predicate: (line: string) => boolean,
+): boolean {
+  return content.split('\n').some(predicate);
+}
+
+function isMarkdownTableLine(line: string): boolean {
+  const trimmed = line.trimStart();
+  return (
+    trimmed.length > 0 &&
+    ((trimmed.startsWith('|') && trimmed.includes('|', 1)) ||
+      [...trimmed].every((char) => ['|', '+', '-'].includes(char)))
+  );
+}
+
+function isMarkdownListItem(line: string): boolean {
+  const trimmed = line.trimStart();
+  if (trimmed.length < 2) return false;
+  if (['*', '-', '+'].includes(trimmed[0]) && trimmed[1] === ' ') {
+    return true;
+  }
+  const dotIndex = trimmed.indexOf('.');
+  if (dotIndex <= 0 || trimmed[dotIndex + 1] !== ' ') {
+    return false;
+  }
+  return [...trimmed.slice(0, dotIndex)].every(
+    (char) => char >= '0' && char <= '9',
+  );
+}
+
+function isMarkdownHeading(line: string): boolean {
+  const trimmed = line.trimStart();
+  return trimmed.startsWith('#') && trimmed.includes(' ');
+}
+
+function isMarkdownBlockquote(line: string): boolean {
+  return line.trimStart().startsWith('> ');
+}
+
 /**
  * Service for detecting and preventing infinite loops in AI responses.
  * Monitors tool call repetitions and content sentence repetitions.
@@ -166,14 +216,11 @@ export class LoopDetectionService {
     // Different content elements can often contain repetitive syntax that is not indicative of a loop.
     // To avoid false positives, we detect when we encounter different content types and
     // reset tracking to avoid analyzing content that spans across different element boundaries.
-    const numFences = (content.match(/```/g) ?? []).length;
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const hasTable = /(^|\n)\s*(\|.*\||[|+-]{3,})/.test(content);
-    const hasListItem =
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      /(^|\n)\s*[*-+]\s/.test(content) || /(^|\n)\s*\d+\.\s/.test(content);
-    const hasHeading = /(^|\n)#+\s/.test(content);
-    const hasBlockquote = /(^|\n)>\s/.test(content);
+    const numFences = countOccurrences(content, '```');
+    const hasTable = hasLineStartingWith(content, isMarkdownTableLine);
+    const hasListItem = hasLineStartingWith(content, isMarkdownListItem);
+    const hasHeading = hasLineStartingWith(content, isMarkdownHeading);
+    const hasBlockquote = hasLineStartingWith(content, isMarkdownBlockquote);
     const isDivider =
       content.length > 0 &&
       [...content].every((char) =>

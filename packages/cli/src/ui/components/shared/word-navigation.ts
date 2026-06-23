@@ -23,7 +23,6 @@ import { toCodePoints, cpLen } from '../../utils/textUtils.js';
  * @returns true if the character is a word character
  */
 export const isWordCharStrict = (char: string): boolean =>
-  /* eslint-disable-next-line sonarjs/regular-expr */
   /[\w\p{L}\p{N}]/u.test(char);
 
 /**

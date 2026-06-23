@@ -107,7 +107,6 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     it('wraps createAndStartProxy in try-catch', () => {
       // Verify the pattern: try { credentialProxyHandle = await createAndStartProxy
       const pattern =
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /try\s*\{\s*credentialProxyHandle\s*=\s*await\s+createAndStartProxy/;
       expect(sandboxSource).toMatch(pattern);
     });
@@ -143,7 +142,6 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
 
       // Should not have any mount specifically for credential socket
       expect(dockerPath).not.toMatch(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
         /--volume.*LLXPRT_CREDENTIAL_SOCKET|--volume.*llxprt-cred/,
       );
     });
