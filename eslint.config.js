@@ -33,7 +33,6 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/code_assist/oauth-credential-storage.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/code_assist/setup.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/config/config-lsp-integration.test.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/config/config.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/config/configBaseCore.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/config/endpoints.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/config/lspIntegration.ts', // remaining core cleanup after #2081/#2082
@@ -46,7 +45,6 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/core/subagentTypes.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/debug/DebugLogger.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/debug/FileOutput.test.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/filters/EmojiFilter.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/filters/EmojiFilter.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/hooks/__tests__/hookEventHandler-messagebus.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/hooks/__tests__/hookSemantics.test.ts', // remaining core cleanup after #2081/#2082
@@ -68,9 +66,6 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/prompt-config/prompt-service.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/prompt-config/TemplateEngine.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/recording/__tests__/SessionDiscovery.extensions.spec.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/recording/integration.test.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/recording/RecordingIntegration.test.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/recording/ReplayEngine.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/recording/ReplayEngine.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/recording/resumeSession.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/recording/sessionCleanupUtils.test.ts', // remaining core cleanup after #2081/#2082
@@ -89,14 +84,11 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/services/gitService.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/services/history/__tests__/density-history.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/services/history/canonicalToolIds.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/services/history/HistoryService.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/services/loopDetectionService.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/services/shellExecutionService.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/skills/skillLoader.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/skills/skillManager.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/storage/SessionPersistenceService.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/telemetry/loggers.test.circular.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/telemetry/loggers.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/test-utils/runtime.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/test-utils/tools.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/todo/todoFormatter.ts', // remaining core cleanup after #2081/#2082
@@ -113,7 +105,6 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/utils/events.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/fileDiffUtils.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/filesearch/crawler.ts', // remaining core cleanup after #2081/#2082
-  'packages/core/src/utils/filesearch/fileSearch.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/filesearch/fileSearch.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/fileUtils.test.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/fileUtils.ts', // remaining core cleanup after #2081/#2082
@@ -156,8 +147,9 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/utils/tool-utils.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/userAccountManager.ts', // remaining core cleanup after #2081/#2082
   // #2083 completed files are locked in completedDirectiveCleanupScopes below.
-  // Remaining #2084/#2092 provider files keep narrowed globs here.
-  'packages/providers/src/**/*.{test,spec}.ts', // #2092 provider tests
+  // Remaining #2084/#2092 provider files keep narrowed globs here. #2092 test
+  // files are locked in completedDirectiveCleanupScopes (overrides this block).
+  'packages/providers/src/**/*.{test,spec}.ts', // #2084 (non-#2092 test files)
   'packages/providers/src/anthropic/**/*.ts', // #2084/#2092
   'packages/providers/src/openai/**/*.ts', // #2084/#2092
   'packages/providers/src/openai-responses/**/*.ts', // #2084/#2092
@@ -607,6 +599,103 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/taskAsyncExecution.ts', // #2085
   'packages/agents/src/tools/taskResultHelpers.ts', // #2085
   'packages/agents/src/tools/taskToolGovernance.ts', // #2085
+  // #2092 scope — 25 target test files plus their split/helper modules are
+  // fully compliant: zero inline lint directives. Locked to error so any new
+  // directive fails immediately. The broad provider/mcp/storage legacy globs
+  // remain for other issues' non-target files.
+  'packages/providers/src/__tests__/LoadBalancingProvider.failover.selection.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.failover.errors.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.failover.settings.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.failover.streaming.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.interface.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.roundrobin.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.delegation.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.delegation2.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.settings-merge.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.stats.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.stats2.test.ts', // #2092
+  'packages/providers/src/__tests__/LoadBalancingProvider.types.test.ts', // #2092
+  'packages/providers/src/__tests__/LoggingProviderWrapper.apiTelemetry.test.ts', // #2092
+  'packages/providers/src/__tests__/LoggingProviderWrapper.tpm.test.ts', // #2092
+  'packages/providers/src/__tests__/LoggingProviderWrapper.enhancedMetrics.test.ts', // #2092
+  'packages/providers/src/__tests__/LoggingProviderWrapper.test-helpers.ts', // #2092
+  'packages/providers/src/__tests__/RetryOrchestrator.basic.test.ts', // #2092
+  'packages/providers/src/__tests__/RetryOrchestrator.failover.test.ts', // #2092
+  'packages/providers/src/__tests__/RetryOrchestrator.integration.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.issue1150.toolresult.adjacency.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.issue1150.toolresult.edgecases.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.getModels.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.chat.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.tools.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.caching.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.caching-metrics.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.ratelimits.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.throttling.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.oauth.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.messaging.test.ts', // #2092
+  'packages/providers/src/anthropic/test-utils/anthropicProviderTestSetup.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.thinking.config.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.thinking.context.test.ts', // #2092
+  'packages/providers/src/anthropic/AnthropicProvider.thinking.multiturn.test.ts', // #2092
+  'packages/providers/src/anthropic/test-utils/anthropicThinkingTestSetup.ts', // #2092
+  'packages/providers/src/openai-vercel/nonStreaming.test.ts', // #2092
+  'packages/providers/src/openai-vercel/nonStreaming.config.test.ts', // #2092
+  'packages/providers/src/openai/OpenAIProvider.emptyResponseRetry.test.ts', // #2092
+  'packages/providers/src/openai/OpenAIProvider.emptyResponseRetry.conditions.test.ts', // #2092
+  'packages/providers/src/runtime/__tests__/profileApplication.lb.detection.test.ts', // #2092
+  'packages/providers/src/runtime/__tests__/profileApplication.lb.authkey.test.ts', // #2092
+  'packages/providers/src/runtime/__tests__/lbProfileApplicationTestSetup.ts', // #2092
+  'packages/providers/src/runtime/__tests__/profileApplication.basics.test.ts', // #2092
+  'packages/providers/src/runtime/__tests__/profileApplication.authtiming.test.ts', // #2092
+  'packages/providers/src/runtime/__tests__/profileApplication.workflow.test.ts', // #2092
+  'packages/providers/src/runtime/__tests__/profileApplicationTestSetup.ts', // #2092
+  'packages/providers/src/runtime/provider-alias-defaults.switch.test.ts', // #2092
+  'packages/providers/src/runtime/provider-alias-defaults.modeldefaults.test.ts', // #2092
+  'packages/providers/src/runtime/provider-alias-defaults.propagation.test.ts', // #2092
+  'packages/core/src/config/config.a.test.ts', // #2092
+  'packages/core/src/config/config.b.test.ts', // #2092
+  'packages/core/src/config/config.b2.test.ts', // #2092
+  'packages/core/src/config/config.d.test.ts', // #2092
+  'packages/core/src/config/config.includeDirectories.test.ts', // #2092
+  'packages/core/src/config/configTestHarness.ts', // #2092
+  'packages/core/src/filters/EmojiFilter.basic.test.ts', // #2092
+  'packages/core/src/filters/EmojiFilter.tools.test.ts', // #2092
+  'packages/core/src/recording/integration.basic.test.ts', // #2092
+  'packages/core/src/recording/integration.advanced.test.ts', // #2092
+  'packages/core/src/recording/RecordingIntegration.core.test.ts', // #2092
+  'packages/core/src/recording/RecordingIntegration.replay.test.ts', // #2092
+  'packages/core/src/recording/ReplayEngine.accumulation.test.ts', // #2092
+  'packages/core/src/recording/ReplayEngine.replay.test.ts', // #2092
+  'packages/core/src/recording/ReplayEngine.cycles.test.ts', // #2092
+  'packages/core/src/recording/ReplayEngine.property.test.ts', // #2092
+  'packages/core/src/recording/ReplayEngine.property2.test.ts', // #2092
+  'packages/core/src/recording/ReplayEngine.bom.test.ts', // #2092
+  'packages/core/src/recording/replay-test-helpers.ts', // #2092
+  'packages/core/src/services/history/HistoryService.basic.test.ts', // #2092
+  'packages/core/src/services/history/HistoryService.management.test.ts', // #2092
+  'packages/core/src/services/history/HistoryService.idnormalization.test.ts', // #2092
+  'packages/core/src/services/shellExecutionService.main.test.ts', // #2092
+  'packages/core/src/services/shellExecutionService.fallback.test.ts', // #2092
+  'packages/core/src/services/shellExecutionService.selection.test.ts', // #2092
+  'packages/core/src/telemetry/loggers.basic.test.ts', // #2092
+  'packages/core/src/telemetry/loggers.toolcall.test.ts', // #2092
+  'packages/core/src/telemetry/loggers.misc.test.ts', // #2092
+  'packages/core/src/utils/filesearch/fileSearch.test.ts', // #2092
+  'packages/core/src/utils/filesearch/fileSearch.directory.test.ts', // #2092
+  'packages/mcp/src/auth/oauthProviderTestSetup.ts', // #2092
+  'packages/mcp/src/auth/oauth-provider.authenticate.test.ts', // #2092
+  'packages/mcp/src/auth/oauth-provider.token.test.ts', // #2092
+  'packages/mcp/src/client/mcpClientTestHelpers.ts', // #2092
+  'packages/mcp/src/client/mcp-client.discovery.test.ts', // #2092
+  'packages/mcp/src/client/mcp-client.lifecycle.test.ts', // #2092
+  'packages/mcp/src/client/mcp-client.tools.test.ts', // #2092
+  'packages/mcp/src/client/mcp-client.transport.test.ts', // #2092
+  'packages/mcp/src/client/mcp-client.oauth.test.ts', // #2092
+  'packages/mcp/src/client/mcp-tool.execute.test.ts', // #2092
+  'packages/mcp/src/client/mcp-tool.confirm.test.ts', // #2092
+  'packages/storage/src/secure-store/secure-store.basic.test.ts', // #2092
+  'packages/storage/src/secure-store/secure-store.fallback2.test.ts', // #2092
+  'packages/storage/src/secure-store/secure-store.fallback.test.ts', // #2092
 ];
 
 export default tseslint.config(
@@ -1160,7 +1249,7 @@ export default tseslint.config(
       'vitest/no-standalone-expect': [
         'error',
         {
-          additionalTestBlockFunctions: ['itProp'],
+          additionalTestBlockFunctions: ['itProp', 'it.prop'],
         },
       ],
 

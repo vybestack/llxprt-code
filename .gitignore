@@ -95,3 +95,6 @@ gha-creds-*.json
 evals/logs/
 .evals/
 .playwright-mcp/
+
+# Git worktrees (ad-hoc local checkouts; keep out of git and test discovery)
+.worktrees/
