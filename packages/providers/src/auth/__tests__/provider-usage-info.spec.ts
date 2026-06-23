@@ -640,6 +640,24 @@ describe('getAllGeminiUsageInfo', () => {
     const result = await getAllGeminiUsageInfo(store);
     expect(result.size).toBe(0);
   });
+
+  it('skips non-record quota results', async () => {
+    const token: OAuthToken = {
+      access_token: 'gemini-token',
+      token_type: 'Bearer',
+      expiry: futureExpiry(),
+    };
+    const store = makeTokenStore({
+      listBuckets: vi.fn().mockResolvedValue(['primitive', 'array']),
+      getToken: vi.fn().mockResolvedValue(token),
+    });
+    mockFetchGeminiQuota.mockResolvedValueOnce('not-a-record');
+    mockFetchGeminiQuota.mockResolvedValueOnce(['not-a-record']);
+
+    const result = await getAllGeminiUsageInfo(store);
+
+    expect(result.size).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

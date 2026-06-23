@@ -234,6 +234,18 @@ describe('ToolCallNormalizer', () => {
       expect(result?.name).toBe('list_directory');
     });
 
+    it('should preserve underscore-delimited tool names that start with functions', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'functions_list_directory',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('functions_list_directory');
+    });
     it('should strip "call_functions" prefix from search_file_content', () => {
       const result = normalizer.normalize({
         index: 0,

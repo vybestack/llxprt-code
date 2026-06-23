@@ -204,10 +204,17 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
 
     await oauthManagerNoConfig.getOAuthToken('anthropic');
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect.stringMatching(/\[issue1029\].*buckets.*no Config available/),
+    const warningMessages = warnSpy.mock.calls.map(([message]) =>
+      String(message),
     );
+    expect(
+      warningMessages.some(
+        (message) =>
+          message.includes('[issue1029]') &&
+          message.includes('buckets') &&
+          message.includes('no Config available'),
+      ),
+    ).toBe(true);
 
     warnSpy.mockRestore();
   });

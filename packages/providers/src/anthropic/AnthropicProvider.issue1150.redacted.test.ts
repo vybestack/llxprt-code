@@ -59,6 +59,36 @@ vi.mock('@anthropic-ai/sdk', () => ({
   })),
 }));
 
+function collectRedactedThinking(
+  blocks: unknown[],
+  collected: Array<{ type: 'redacted_thinking'; data: string }>,
+): void {
+  for (const block of blocks) {
+    const b = block as { type?: string };
+    if (b.type === 'redacted_thinking') {
+      collected.push(block as { type: 'redacted_thinking'; data: string });
+    }
+  }
+}
+
+function collectThinking(
+  blocks: unknown[],
+  collected: Array<{ type: 'thinking'; thinking: string; signature?: string }>,
+): void {
+  for (const block of blocks) {
+    const b = block as { type?: string };
+    if (b.type === 'thinking') {
+      collected.push(
+        block as {
+          type: 'thinking';
+          thinking: string;
+          signature?: string;
+        },
+      );
+    }
+  }
+}
+
 describe('AnthropicProvider Issue #1150: redacted_thinking Data Validation', () => {
   let provider: AnthropicProvider;
   let runtimeContext: ProviderRuntimeContext;
@@ -148,12 +178,7 @@ describe('AnthropicProvider Issue #1150: redacted_thinking Data Validation', () 
     const blocks: Array<{ type: 'redacted_thinking'; data: string }> = [];
     for (const msg of request.messages) {
       if (Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (block.type === 'redacted_thinking') {
-            blocks.push(block as { type: 'redacted_thinking'; data: string });
-          }
-        }
+        collectRedactedThinking(msg.content, blocks);
       }
     }
     return blocks;
@@ -164,26 +189,15 @@ describe('AnthropicProvider Issue #1150: redacted_thinking Data Validation', () 
    */
   const findThinkingBlocks = (
     request: AnthropicRequestBody,
-  ): Array<{ type: 'thinking'; thinking: string; signature: string }> => {
+  ): Array<{ type: 'thinking'; thinking: string; signature?: string }> => {
     const blocks: Array<{
       type: 'thinking';
       thinking: string;
-      signature: string;
+      signature?: string;
     }> = [];
     for (const msg of request.messages) {
       if (Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (block.type === 'thinking') {
-            blocks.push(
-              block as {
-                type: 'thinking';
-                thinking: string;
-                signature: string;
-              },
-            );
-          }
-        }
+        collectThinking(msg.content, blocks);
       }
     }
     return blocks;

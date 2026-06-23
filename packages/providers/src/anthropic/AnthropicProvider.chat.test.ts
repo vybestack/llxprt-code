@@ -636,6 +636,57 @@ describe('AnthropicProvider', () => {
       expect(toolUseBlock.id).toMatch(/^toolu_[a-zA-Z0-9_-]+$/);
     });
 
+    it('should normalize non-object tool_call parameters to empty input objects', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'toolu_invalid_params',
+              name: 'read_file',
+              parameters: '[]',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+
+      for await (const _chunk of generator) {
+        /* drain */
+      }
+
+      const request = mockAnthropicInstance.messages.create.mock.calls[0]?.[0];
+      expect(request).toBeDefined();
+      const anthropicMessages = request?.messages as
+        | AnthropicMessage[]
+        | undefined;
+      const assistantContent = anthropicMessages?.find(
+        (msg) => msg.role === 'assistant' && Array.isArray(msg.content),
+      )?.content as AnthropicContentBlock[] | undefined;
+      const toolUseInput = assistantContent?.find(
+        (block) => block.type === 'tool_use',
+      )?.input;
+
+      expect(toolUseInput).toStrictEqual({});
+    });
+
     it('should sanitize tool_result IDs to be Anthropic-compatible', async () => {
       settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
 

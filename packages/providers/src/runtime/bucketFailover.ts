@@ -31,21 +31,60 @@ export function shouldFailover(error: Error): boolean {
     return true;
   }
 
-  return (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    message.includes('429') ||
-    message.includes('401') ||
-    message.includes('403') ||
-    message.includes('rate limit') ||
-    message.includes('quota') ||
-    message.includes('402') ||
-    message.includes('payment') ||
-    message.includes('revoked') ||
-    message.includes('permission_error') ||
-    (message.includes('token') && message.includes('expired'))
-  );
+  const FAILOVER_KEYWORDS = [
+    '429',
+    '401',
+    '403',
+    'rate limit',
+    'quota',
+    '402',
+    'payment',
+    'revoked',
+    'permission_error',
+  ];
+  if (FAILOVER_KEYWORDS.some((kw) => message.includes(kw))) {
+    return true;
+  }
+  return message.includes('token') && message.includes('expired');
 }
 
+function normalizeThrownError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  const normalized: Error & { status?: number } = new Error(
+    getThrownMessage(error),
+  );
+  if (hasNumericStatus(error)) {
+    normalized.status = error.status;
+  }
+  return normalized;
+}
+
+function getThrownMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function hasNumericStatus(error: unknown): error is { status: number } {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'status' in error &&
+    typeof error.status === 'number'
+  );
+}
 export interface NotificationLog {
   messages: string[];
 }
@@ -192,20 +231,17 @@ export async function executeWithBucketFailover(
       const response = await executor(request, bucket);
       return response;
     } catch (error) {
-      const err = error as Error;
+      const err = normalizeThrownError(error);
       lastError = err;
 
-      if (shouldFailover(err)) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (i < buckets.length - 1) {
-          continue;
-        } else {
-          // Last bucket also failed with failover error
-          throw new Error(`All buckets exhausted. Last error: ${err.message}`);
-        }
+      if (!shouldFailover(err)) {
+        throw err;
       }
-
-      throw err;
+      if (i < buckets.length - 1) {
+        continue;
+      }
+      // Last bucket also failed with failover error
+      throw new Error(`All buckets exhausted. Last error: ${err.message}`);
     }
   }
 

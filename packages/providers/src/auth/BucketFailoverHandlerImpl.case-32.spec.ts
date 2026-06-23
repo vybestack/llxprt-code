@@ -44,10 +44,7 @@ describe('BucketFailoverHandlerImpl #32', () => {
     // Mock refresh to fail for all
     const provider = oauthManager.getProvider('anthropic');
     expect(provider).toBeDefined();
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (provider) {
-      provider.refreshToken = vi.fn(async () => null);
-    }
+    provider!.refreshToken = vi.fn(async () => null);
 
     // Mock authenticate to succeed for bucket-b
     const authenticateSpy = vi.fn(async (provider: string, bucket?: string) => {

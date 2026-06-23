@@ -224,9 +224,7 @@ function sanitizeToolArgumentsString(raw: unknown): string {
 
   // Strip fenced code blocks like ```json { ... } ```.
   if (text.startsWith('```')) {
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    text = text.replace(/^```[a-zA-Z0-9_-]*\s*/m, '');
-    text = text.replace(/```$/m, '');
+    text = stripCodeFence(text);
     text = text.trim();
   }
 
@@ -332,20 +330,88 @@ function extractKimiToolCallsFromSection(
 }
 
 /**
+ * Strip markdown code fence delimiters (```lang ... ```) from text.
+ */
+function stripCodeFence(text: string): string {
+  if (text.startsWith('```')) {
+    text = stripOpeningCodeFence(text);
+  }
+
+  const trimmed = text.trimEnd();
+  if (trimmed.endsWith('```')) {
+    text = trimmed.slice(0, -3);
+  }
+  return text;
+}
+
+function stripOpeningCodeFence(text: string): string {
+  const afterTicks = text.slice(3);
+  const endOfFirstLine = afterTicks.indexOf('\n');
+  const firstLine =
+    endOfFirstLine >= 0 ? afterTicks.slice(0, endOfFirstLine) : afterTicks;
+  const languageEnd = firstLine.search(/\s/u);
+  const fenceInfo = languageEnd >= 0 ? firstLine.slice(0, languageEnd) : '';
+
+  if (endOfFirstLine >= 0) {
+    if (
+      firstLine.length === 0 ||
+      firstLine.startsWith('{') ||
+      firstLine.startsWith('[')
+    ) {
+      return afterTicks;
+    }
+    if (languageEnd >= 0 && languageEnd + 1 < firstLine.length) {
+      const inlinePayload = firstLine.slice(languageEnd + 1).trimStart();
+      if (inlinePayload.startsWith('{') || inlinePayload.startsWith('[')) {
+        return `${inlinePayload}${afterTicks.slice(endOfFirstLine)}`;
+      }
+    }
+    return afterTicks.slice(endOfFirstLine + 1);
+  }
+
+  if (
+    fenceInfo.length === 0 ||
+    fenceInfo.startsWith('{') ||
+    fenceInfo.startsWith('[')
+  ) {
+    return afterTicks;
+  }
+
+  return afterTicks.slice(languageEnd + 1);
+}
+
+/**
  * Infer tool name from a raw tool ID string.
  * Handles various formats including functions.X:N, X.Y:N, etc.
  */
 function inferToolNameFromId(rawId: string): string {
-  const match =
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ??
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
-  if (match) {
-    return match[1];
+  // Try "functions.<name>:<seq>" or "<group>.<name>:<seq>" pattern
+  const colonIdx = rawId.indexOf(':');
+  if (colonIdx > 0) {
+    const beforeColon = rawId.slice(0, colonIdx);
+    const dotIdx = beforeColon.indexOf('.');
+    if (dotIdx >= 0) {
+      const prefix = beforeColon.slice(0, dotIdx).toLowerCase();
+      const name = beforeColon.slice(dotIdx + 1);
+      if (name.length > 0 && (prefix === 'functions' || isWordChar(prefix))) {
+        return name;
+      }
+    }
   }
   const colonParts = rawId.split(':');
   const head = colonParts[0] || rawId;
   const dotParts = head.split('.');
   return dotParts[dotParts.length - 1] || head;
+}
+
+function isWordChar(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    const isUpper = c >= 65 && c <= 90;
+    const isLower = c >= 97 && c <= 122;
+    const isDigit = c >= 48 && c <= 57;
+    const isUnderscore = c === 95;
+    if (!isUpper && !isLower && !isDigit && !isUnderscore) return false;
+  }
+  return s.length > 0;
 }

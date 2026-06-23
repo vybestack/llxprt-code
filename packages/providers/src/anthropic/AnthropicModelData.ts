@@ -14,24 +14,24 @@
 import type { IModel } from '../IModel.js';
 
 /**
- * Model token patterns for max output tokens - static configuration only
+ * Model token patterns for max output tokens - static configuration only.
+ * These intentionally use substring matchers rather than regexes so the table
+ * stays readable. The v4 hardcoded checks in getMaxTokensForModel run first,
+ * and Anthropic model IDs consistently use claude-family-name ordering.
  */
-export const MODEL_TOKEN_PATTERNS: Array<{ pattern: RegExp; tokens: number }> =
-  [
-    { pattern: /claude-.*opus-4/i, tokens: 32000 },
-    { pattern: /claude-.*sonnet-4/i, tokens: 64000 },
-    { pattern: /claude-.*haiku-4/i, tokens: 200000 }, // Future-proofing for Haiku 4
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    { pattern: /claude-.*3-7.*sonnet/i, tokens: 64000 },
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    { pattern: /claude-.*3-5.*sonnet/i, tokens: 8192 },
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    { pattern: /claude-.*3-5.*haiku/i, tokens: 8192 },
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    { pattern: /claude-.*3.*opus/i, tokens: 4096 },
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    { pattern: /claude-.*3.*haiku/i, tokens: 4096 },
-  ];
+export const MODEL_TOKEN_PATTERNS: Array<{
+  matchers: string[];
+  tokens: number;
+}> = [
+  { matchers: ['claude-', 'opus-4'], tokens: 32000 },
+  { matchers: ['claude-', 'sonnet-4'], tokens: 64000 },
+  { matchers: ['claude-', 'haiku-4'], tokens: 200000 }, // Future-proofing for Haiku 4
+  { matchers: ['claude-', '3-7', 'sonnet'], tokens: 64000 },
+  { matchers: ['claude-', '3-5', 'sonnet'], tokens: 8192 },
+  { matchers: ['claude-', '3-5', 'haiku'], tokens: 8192 },
+  { matchers: ['claude-', '3', 'opus'], tokens: 4096 },
+  { matchers: ['claude-', '3', 'haiku'], tokens: 4096 },
+];
 
 /**
  * OAuth-compatible models (without provider field - added by provider class)
@@ -251,8 +251,9 @@ export function getMaxTokensForModel(modelId: string): number {
   }
 
   // Try to match model patterns
-  for (const { pattern, tokens } of MODEL_TOKEN_PATTERNS) {
-    if (pattern.test(modelId)) {
+  const loweredModelId = modelId.toLowerCase();
+  for (const { matchers, tokens } of MODEL_TOKEN_PATTERNS) {
+    if (matchers.every((m) => loweredModelId.includes(m))) {
       return tokens;
     }
   }

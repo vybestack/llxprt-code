@@ -190,8 +190,7 @@ function getStreamingError(
   parsedData: Record<string, unknown> | undefined,
 ): unknown {
   return (
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    chunkRecord?.error ??
+    chunkRecord.error ??
     parsedData?.error ??
     (parsedData?.data as { error?: unknown } | undefined)?.error
   );
@@ -201,8 +200,7 @@ function getStreamingEvent(
   chunkRecord: Record<string, unknown>,
   parsedData: Record<string, unknown> | undefined,
 ): string | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  return (chunkRecord?.event ?? parsedData?.event) as string | undefined;
+  return (chunkRecord.event ?? parsedData?.event) as string | undefined;
 }
 
 function getStreamingErrorMessage(
@@ -234,8 +232,7 @@ function isStreamingErrorEvent(
 export function parseChunkData(
   chunkRecord: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const rawData = chunkRecord?.data;
+  const rawData = chunkRecord.data;
   if (typeof rawData === 'string') {
     try {
       return JSON.parse(rawData) as Record<string, unknown>;
@@ -299,10 +296,7 @@ export function applyTerminalMetadata(
   state: StreamingState,
 ): void {
   if (state.lastFinishReason) {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional metadata initialization
-    if (!content.metadata) {
-      content.metadata = {};
-    }
+    content.metadata ??= {};
     // stopReason was already set to the normalized value; do NOT
     // overwrite it with the raw provider string.
     content.metadata.finishReason = state.lastFinishReason;

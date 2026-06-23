@@ -18,6 +18,28 @@ import type {
   AnthropicToolResultContent,
 } from './AnthropicMessageNormalizer.js';
 
+function collectToolUseIds(
+  blocks: AnthropicMessageBlock[],
+  ids: Set<string>,
+): void {
+  for (const block of blocks) {
+    if (block.type === 'tool_use') {
+      ids.add(block.id);
+    }
+  }
+}
+
+function collectToolResultIds(
+  blocks: AnthropicMessageBlock[],
+  ids: Set<string>,
+): void {
+  for (const block of blocks) {
+    if (block.type === 'tool_result') {
+      ids.add(block.tool_use_id);
+    }
+  }
+}
+
 /**
  * Validates that all tool_result blocks have matching tool_use blocks
  * Removes orphaned tool results that don't match any tool_use
@@ -31,19 +53,9 @@ export function validateToolResults(
 
   for (const msg of messages) {
     if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-      for (const block of msg.content) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (block.type === 'tool_use') {
-          toolUseIds.add(block.id);
-        }
-      }
+      collectToolUseIds(msg.content, toolUseIds);
     } else if (msg.role === 'user' && Array.isArray(msg.content)) {
-      for (const block of msg.content) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (block.type === 'tool_result') {
-          toolResultIds.add(block.tool_use_id);
-        }
-      }
+      collectToolResultIds(msg.content, toolResultIds);
     }
   }
 
@@ -285,12 +297,7 @@ function handleMissingUserMessage(
   const currentToolResultIds = new Set<string>();
   for (const msg of messages) {
     if (msg.role === 'user' && Array.isArray(msg.content)) {
-      for (const block of msg.content) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (block.type === 'tool_result') {
-          currentToolResultIds.add(block.tool_use_id);
-        }
-      }
+      collectToolResultIds(msg.content, currentToolResultIds);
     }
   }
 

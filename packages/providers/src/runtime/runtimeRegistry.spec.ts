@@ -143,29 +143,15 @@ describe('runtimeRegistry', () => {
     });
 
     it('should include runtime registration in error message', () => {
-      try {
-        requireRuntimeEntry('nonexistent-runtime-2');
-        expect.fail('Should have thrown');
-      } catch (error) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(error).toBeInstanceOf(Error);
-        const message = (error as Error).message;
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(message).toContain('runtime registration');
-      }
+      expect(() => requireRuntimeEntry('nonexistent-runtime-2')).toThrow(
+        /runtime registration/,
+      );
     });
 
     it('should include hint about setCliRuntimeContext in error message', () => {
-      try {
-        requireRuntimeEntry('nonexistent-runtime-3');
-        expect.fail('Should have thrown');
-      } catch (error) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(error).toBeInstanceOf(Error);
-        const message = (error as Error).message;
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(message).toContain('setCliRuntimeContext');
-      }
+      expect(() => requireRuntimeEntry('nonexistent-runtime-3')).toThrow(
+        /setCliRuntimeContext/,
+      );
     });
   });
 

@@ -251,38 +251,54 @@ function readAliasFile(
   }
 }
 
+function readAliasDirectoryFiles(dirPath: string): string[] | null {
+  try {
+    return fs.readdirSync(dirPath);
+  } catch (error) {
+    debugLogger.warn(
+      `[ProviderAliases] Failed to read directory ${dirPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return null;
+  }
+}
+
+function collectAliasEntriesFromFiles(
+  dirPath: string,
+  source: ProviderAliasSource,
+  files: string[],
+  aliases: ProviderAliasEntry[],
+): void {
+  for (const file of files) {
+    const extension = path.extname(file).toLowerCase();
+    if (!SUPPORTED_EXTENSIONS.has(extension)) {
+      continue;
+    }
+    const fullPath = path.join(dirPath, file);
+    const entry = readAliasFile(fullPath, source);
+    if (entry) {
+      aliases.push(entry);
+    }
+  }
+}
+
 export function loadProviderAliasEntries(): ProviderAliasEntry[] {
   const aliases: ProviderAliasEntry[] = [];
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const directory of getAliasDirectories()) {
     if (!fs.existsSync(directory.path)) {
       continue;
     }
 
-    let files: string[] = [];
-    try {
-      files = fs.readdirSync(directory.path);
-    } catch (error) {
-      debugLogger.warn(
-        `[ProviderAliases] Failed to read directory ${directory.path}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+    const files = readAliasDirectoryFiles(directory.path);
+    if (files !== null) {
+      collectAliasEntriesFromFiles(
+        directory.path,
+        directory.source,
+        files,
+        aliases,
       );
-      continue;
-    }
-
-    for (const file of files) {
-      const extension = path.extname(file).toLowerCase();
-      if (!SUPPORTED_EXTENSIONS.has(extension)) {
-        continue;
-      }
-
-      const fullPath = path.join(directory.path, file);
-      const entry = readAliasFile(fullPath, directory.source);
-      if (entry) {
-        aliases.push(entry);
-      }
     }
   }
 

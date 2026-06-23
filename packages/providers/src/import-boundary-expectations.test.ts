@@ -36,6 +36,95 @@ const _CLI_DIR = path.join(ROOT_DIR, 'packages', 'cli');
 const CORE_SRC_DIR = path.join(CORE_DIR, 'src');
 const CORE_PROVIDERS_DIR = path.join(CORE_SRC_DIR, 'providers');
 
+interface JsonCommentStripState {
+  output: string;
+  index: number;
+  inString: boolean;
+  escaped: boolean;
+}
+
+function stripJsonComments(input: string): string {
+  const state: JsonCommentStripState = {
+    output: '',
+    index: 0,
+    inString: false,
+    escaped: false,
+  };
+
+  while (state.index < input.length) {
+    advanceJsonCommentStripState(input, state);
+  }
+
+  return state.output;
+}
+
+function advanceJsonCommentStripState(
+  input: string,
+  state: JsonCommentStripState,
+): void {
+  const char = input[state.index];
+  const next = input[state.index + 1];
+
+  if (state.inString) {
+    appendStringCharacter(state, char);
+    return;
+  }
+
+  if (char === '"') {
+    state.inString = true;
+    state.output += char;
+    state.index += 1;
+    return;
+  }
+
+  if (char === '/' && next === '/') {
+    state.index = skipLineComment(input, state.index);
+    return;
+  }
+
+  if (char === '/' && next === '*') {
+    state.index = skipBlockComment(input, state.index + 2);
+    return;
+  }
+
+  state.output += char;
+  state.index += 1;
+}
+
+function appendStringCharacter(
+  state: JsonCommentStripState,
+  char: string,
+): void {
+  state.output += char;
+  if (state.escaped) {
+    state.escaped = false;
+  } else if (char === '\\') {
+    state.escaped = true;
+  } else if (char === '"') {
+    state.inString = false;
+  }
+  state.index += 1;
+}
+
+function skipLineComment(input: string, index: number): number {
+  let nextIndex = index;
+  while (nextIndex < input.length && input[nextIndex] !== '\n') {
+    nextIndex += 1;
+  }
+  return nextIndex;
+}
+
+function skipBlockComment(input: string, index: number): number {
+  let nextIndex = index;
+  while (
+    nextIndex < input.length &&
+    !(input[nextIndex] === '*' && input[nextIndex + 1] === '/')
+  ) {
+    nextIndex += 1;
+  }
+  return nextIndex < input.length ? nextIndex + 2 : nextIndex;
+}
+
 /** Patterns for forbidden imports in core production code. */
 const FORBIDDEN_PROVIDERS_PACKAGE_IMPORT =
   /from\s+['"]@vybestack\/llxprt-code-providers['"]/u;
@@ -144,20 +233,11 @@ describe('Core must not import from providers package', () => {
    *
    * GREEN TEST: Core tsconfig must not reference providers.
    */
-  // eslint-disable-next-line vitest/no-conditional-in-test -- tsconfig may not exist in all environments, early return is intentional
   it('core tsconfig.json has no providers reference', () => {
     const tsconfigPath = path.join(CORE_DIR, 'tsconfig.json');
-    // eslint-disable-next-line vitest/no-conditional-in-test -- tsconfig may not exist in all environments
-    if (!fs.existsSync(tsconfigPath)) {
-      return;
-    }
+    expect(fs.existsSync(tsconfigPath)).toBe(true);
     const content = fs.readFileSync(tsconfigPath, 'utf-8');
-    // Strip comments — these regexes are bounded for test-only JSON content
-    /* eslint-disable sonarjs/regular-expr, sonarjs/slow-regex */
-    const stripped = content
-      .replace(/\/\/.*$/gm, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    /* eslint-enable sonarjs/regular-expr, sonarjs/slow-regex */
+    const stripped = stripJsonComments(content);
     try {
       const tsconfig = JSON.parse(stripped) as Record<string, unknown>;
       const references = (tsconfig.references ?? []) as Array<
@@ -341,7 +421,6 @@ describe('Expected post-P11 import patterns', () => {
    *
    * RED TEST: After P11, providers package must export ProviderManager.
    */
-  // eslint-disable-next-line vitest/no-conditional-in-test -- RED/GREEN migration test uses try/catch intentionally
   it('providers package exports ProviderManager (P11 green)', async () => {
     try {
       const mod = await import('@vybestack/llxprt-code-providers');
@@ -359,7 +438,6 @@ describe('Expected post-P11 import patterns', () => {
    *
    * RED TEST: After P11, providers package must export FakeProvider.
    */
-  // eslint-disable-next-line vitest/no-conditional-in-test -- RED/GREEN migration test uses try/catch intentionally
   it('providers package exports FakeProvider (P11 green)', async () => {
     try {
       const mod = await import('@vybestack/llxprt-code-providers');
@@ -377,7 +455,6 @@ describe('Expected post-P11 import patterns', () => {
    *
    * RED TEST: After P11, providers package must export ProviderContentGenerator.
    */
-  // eslint-disable-next-line vitest/no-conditional-in-test -- RED/GREEN migration test uses try/catch intentionally
   it('providers package exports ProviderContentGenerator (P11 green)', async () => {
     try {
       const mod = await import('@vybestack/llxprt-code-providers');
@@ -396,7 +473,6 @@ describe('Expected post-P11 import patterns', () => {
    *
    * RED TEST: After P11, providers package must export tokenizers.
    */
-  // eslint-disable-next-line vitest/no-conditional-in-test -- RED/GREEN migration test uses try/catch intentionally
   it('providers package exports tokenizer classes (P11 green)', async () => {
     try {
       const mod = await import('@vybestack/llxprt-code-providers');
@@ -417,7 +493,6 @@ describe('Expected post-P11 import patterns', () => {
    *
    * RED TEST: After P11, providers package must export provider errors.
    */
-  // eslint-disable-next-line vitest/no-conditional-in-test -- RED/GREEN migration test uses try/catch intentionally
   it('providers package exports error types (P11 green)', async () => {
     try {
       const mod = await import('@vybestack/llxprt-code-providers');

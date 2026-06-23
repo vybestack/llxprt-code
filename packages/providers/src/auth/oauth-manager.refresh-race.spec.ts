@@ -195,19 +195,15 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       expect(fulfilled.length).toBeGreaterThanOrEqual(1);
 
       // All successful results should have the same refreshed token
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (fulfilled.length > 0) {
-        const firstToken = (
-          fulfilled[0] as PromiseFulfilledResult<OAuthToken | null>
-        ).value?.access_token;
-        const allSame = fulfilled.every(
-          (r) =>
-            (r as PromiseFulfilledResult<OAuthToken | null>).value
-              ?.access_token === firstToken,
-        );
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(allSame).toBe(true);
-      }
+      const fulfilledTokens = fulfilled
+        .map((r) => (r as PromiseFulfilledResult<OAuthToken | null>).value)
+        .filter((token): token is OAuthToken => token !== null);
+      expect(fulfilledTokens.length).toBeGreaterThan(0);
+      const firstToken = fulfilledTokens[0]?.access_token;
+      const allSame = fulfilledTokens.every(
+        (token) => token.access_token === firstToken,
+      );
+      expect(allSame).toBe(true);
     });
   });
 

@@ -49,7 +49,7 @@ export type OpenAIResponsesRequest = {
   input: ResponsesInputItem[];
   instructions?: string;
   tools?: OpenAIResponsesTool[];
-  tool_choice?: string;
+  tool_choice?: string | object | null;
   parallel_tool_calls?: boolean;
   stream: boolean;
   include?: string[];
