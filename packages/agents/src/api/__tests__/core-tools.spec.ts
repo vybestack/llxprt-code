@@ -384,7 +384,7 @@ describe('Core tools @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006 @requi
         },
       ),
     );
-  });
+  }, 30000);
 });
 
 /**

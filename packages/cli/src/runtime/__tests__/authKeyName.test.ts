@@ -240,7 +240,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       prepare: async ({ providerManager }) => {
         const stub = createStubProvider();
         providerManager.registerProvider(stub);
-        providerManager.setActiveProvider('test-provider');
+        await providerManager.setActiveProvider('test-provider');
       },
     });
     await handle.activate();
@@ -515,7 +515,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
         workspaceDir: tempDir,
         prepare: async ({ providerManager }) => {
           providerManager.registerProvider(createStubProvider());
-          providerManager.setActiveProvider('test-provider');
+          await providerManager.setActiveProvider('test-provider');
         },
       });
       await handle.activate();

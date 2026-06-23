@@ -424,6 +424,219 @@ starting fresh. See
 [`packages/agents/src/api/agentImpl.ts`](../packages/agents/src/api/agentImpl.ts)
 (`setModel`, `applyProviderSwitch`, `restoreChatVisibility`).
 
+<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
+
+## Adopting an existing Config (`fromConfig`)
+
+In addition to `createAgent` (which _builds and owns_ its own `Config`/client), the
+public API exposes `fromConfig` for **adopting a caller-supplied `Config`**. This is
+the seam the CLI uses to inject an already-constructed, CLI-style `Config` into an
+agent without the agent rebuilding its own runtime from scratch.
+
+```ts
+import { fromConfig } from '@vybestack/llxprt-code-agents';
+
+// `config` is a caller-owned Config built however you like (e.g. the CLI's
+// Config builder). fromConfig ADOPTS it — it does not clone or rebuild it.
+const agent = await fromConfig({ config });
+
+// The adopted Config is projected back by reference.
+console.log(agent.getConfig() === config); // true
+```
+
+### Ownership semantics (critical)
+
+The `Config` you hand to `fromConfig` is **caller-owned**:
+
+- `fromConfig({ config })` adopts the `Config` (and the `Config`'s already-active
+  provider manager + message bus). It does **not** take ownership of the `Config`
+  itself.
+- `await agent.dispose()` tears down the agent's runtime context, message bus,
+  and tool schedulers, but it does **not** dispose the caller-supplied `Config`.
+  The `Config` remains usable after the agent is disposed (e.g.
+  `config.getEphemeralSettings()` still works).
+
+This is the **opposite** of `createAgent`, which builds and **owns** its own
+`Config`/client and **does** tear them down on `agent.dispose()`:
+
+```ts
+import { createAgent, fromConfig } from '@vybestack/llxprt-code-agents';
+
+// createAgent: builds and OWNS its Config — disposed on agent.dispose().
+const owned = await createAgent({ provider: 'fake', model: 'fake-model' });
+await owned.dispose(); // owned Config/client is torn down.
+
+// fromConfig: ADOPTS a caller-owned Config — NOT disposed by agent.dispose().
+const agent = await fromConfig({ config });
+await agent.dispose();
+// `config` is STILL usable here — the caller owns its lifecycle.
+```
+
+### Optional tool confirmation
+
+To drive turns that issue tool calls requiring confirmation, supply an
+`onApproval` handler (the same field `createAgent` accepts):
+
+```ts
+import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+
+const agent = await fromConfig({
+  config,
+  onApproval: () => ToolConfirmationOutcome.ProceedOnce,
+});
+```
+
+See [Tool Confirmations and Safe Denial](#tool-confirmations-and-safe-denial)
+for the full confirmation contract.
+
+<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
+
+## Settings & Config Projection
+
+An agent exposes a focused projection of its underlying `Config` for reading and
+mutating ephemeral (per-session) settings. **Normalization and side effects are
+delegated to the `Config`** — the agent is a thin pass-through, so the exact
+rules the `Config` applies (numeric coercion, enum validation, throws on invalid
+values) are the rules the agent enforces.
+
+### `agent.getConfig()`
+
+Returns the adopted (or, for `createAgent`, the owned) `Config` by reference:
+
+```ts
+const agent = await fromConfig({ config });
+agent.getConfig() === config; // true — same instance
+```
+
+### `agent.getEphemeralSetting(key)` / `setEphemeralSetting(key, value)`
+
+Read and mutate a single ephemeral setting. The `Config` normalizes the value:
+
+```ts
+// Numeric normalization: a numeric string is coerced to a number.
+agent.setEphemeralSetting('context-limit', '1000');
+agent.getEphemeralSetting('context-limit'); // → 1000  (number, not string)
+
+// Enum-valued keys accept their documented string forms.
+agent.setEphemeralSetting('streaming', 'enabled');
+agent.getEphemeralSetting('streaming'); // → 'enabled'
+
+// An INVALID value is rejected — the Config rule throws and the agent
+// propagates it (never swallowed).
+agent.setEphemeralSetting('streaming', 123); // throws: message contains "must resolve"
+```
+
+### `agent.getEphemeralSettings()`
+
+Returns a **read-only** snapshot of all ephemeral settings. After the same
+mutations, it deep-equals the underlying `Config`'s snapshot:
+
+```ts
+agent.setEphemeralSetting('context-limit', 50000);
+agent.setEphemeralSetting('streaming', 'disabled');
+
+const viaAgent = agent.getEphemeralSettings();
+const viaConfig = agent.getConfig().getEphemeralSettings();
+// viaAgent deep-equals viaConfig (the agent projects the Config's state).
+```
+
+<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
+
+## Current Sequence Model
+
+```ts
+agent.getCurrentSequenceModel(): string | null;
+```
+
+Returns the **bound client's** current model — the model the load-balancer
+sequence has resolved for the active turn. It is **nullable**: before a model is
+bound (or if the runtime has no sequence model), it returns `null`. It
+**reflects rebinds**: after `setModel(...)`, `setProvider(...)`, or a profile
+rebind that rebuilds the loop, `getCurrentSequenceModel()` reports the newly
+bound client's model.
+
+```ts
+const model = agent.getCurrentSequenceModel();
+if (model) {
+  console.log(`Bound to ${model}`);
+} else {
+  console.log('No sequence model bound yet.');
+}
+```
+
+<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
+
+## Public Client Contract
+
+The `AgentClientContract` — the structural interface describing the low-level
+client the agent binds and drives — is a **public, type-only** export:
+
+```ts
+import type { AgentClientContract } from '@vybestack/llxprt-code-agents';
+```
+
+Use it when you need to express the contract shape generically (e.g. for a
+type-level assertion or a generic constraint). It is exported as a **type** from
+the curated public root; the concrete `AgentClient` **class** is **not** part of
+the stable curated surface. It is documented on the
+[`/internals.js`](#power-user-subpath-internalsjs) subpath (and, as a
+power-user convenience, also reachable from the root today) — treat it as an
+unstable internal that may change without notice.
+
+<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
+
+## Runtime Identity
+
+```ts
+agent.getRuntimeId(): string;
+```
+
+Returns the agent's **read-only runtime identity** — a stable, non-empty string
+identifying this runtime instance. It is set at construction time (from
+`AgentConfig.sessionId` if provided, otherwise generated) and does not change
+for the lifetime of the agent. Use it for logging, telemetry, or correlating
+events across the message bus.
+
+```ts
+const agent = await fromConfig({ config });
+const id = agent.getRuntimeId();
+console.log(id); // a non-empty string, e.g. the adopted runtime's id
+```
+
+<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
+
+## Import Boundary for #1595
+
+The eventual #1595 public-API trim narrows the import surface to **only** the
+documented specifiers. When embedding LLxprt, import exclusively from:
+
+1. **`@vybestack/llxprt-code-agents`** — the curated public root (the symbols in
+   this guide: `createAgent`, `fromConfig`, `listProviders`, `listTools`, the
+   `Agent` interface, and the `AgentClientContract` type).
+2. **`@vybestack/llxprt-code-agents/app-service.js`** — durable, no-live-`Agent`
+   functions (`saveCurrentProfile`, `listProfiles`, `addMcpServer`, …). See
+   [Runtime vs App-Service](#runtime-vs-app-service).
+3. **`@vybestack/llxprt-code-agents/internals.js`** — low-level power-user
+   primitives (`AgentClient`, `ChatSession`, `CoreToolScheduler`, …). See
+   [Power-User Subpath: `internals.js`](#power-user-subpath-internalsjs). This
+   subpath is **unstable** and may change without a major-version bump.
+
+**Never import from deep package internals.** In particular, do **not** import
+from any of these package-internal source trees — they are not public and will
+break under #1595:
+
+- `@vybestack/llxprt-code-agents` **followed by a `/src/...` deep path** (e.g.
+  reaching into the agent package's internal source rather than its curated
+  root/subpath exports).
+- `@vybestack/llxprt-code-core/src/...` — the `core` package's source tree is
+  package-internal.
+- `@vybestack/llxprt-code-providers/src/...` — the `providers` package's source
+  tree is package-internal.
+
+The stable contract is the curated root + the two documented subpaths above.
+Anything under a package's internal source tree has no stability guarantee.
+
 ## Runtime vs App-Service
 
 LLxprt distinguishes **runtime** concerns (the live conversation) from

@@ -1,11 +1,15 @@
 /**
  * @plan:PLAN-20260617-COREAPI.P03
  * @requirement:REQ-002, REQ-006, REQ-017
+ * @plan:PLAN-20260621-COREAPIREMED.P06
+ * @requirement:REQ-001
  */
 
+import { z } from 'zod';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type {
   ApprovalMode,
+  Config,
   ConfigParameters,
   MCPServerConfig,
   SandboxConfig,
@@ -17,6 +21,7 @@ import type {
   HookEventName,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 export type {
   ApprovalMode,
@@ -205,3 +210,17 @@ export interface AgentConfig {
    */
   readonly settings?: Readonly<Record<string, unknown>>;
 }
+
+export interface FromConfigOptions {
+  readonly config: Config;
+  readonly messageBus?: MessageBus;
+  readonly onApproval?: ApprovalHandler;
+  readonly onOAuthPrompt?: OAuthPromptHandler;
+  readonly editorCallbacks?: EditorCallbacks;
+  readonly toolSchedulerFactory?: AgentSchedulerFactory;
+  readonly sessionId?: string;
+}
+
+export const FromConfigValidatableSchema = z.object({
+  sessionId: z.string().optional(),
+});

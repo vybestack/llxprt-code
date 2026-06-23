@@ -21,7 +21,7 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getResponseText } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
-import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   switchActiveProvider,
@@ -117,7 +117,7 @@ export class AggregateDisposeError extends Error {
  */
 export interface AgentDeps {
   readonly config: Config;
-  readonly providerManager: ProviderManager;
+  readonly providerManager: RuntimeProviderManager;
   readonly oauthManager: OAuthManager;
   readonly settingsService: SettingsService;
   readonly runtimeId: string;
@@ -203,6 +203,24 @@ export class AgentImpl implements Agent {
   readonly ownership: OwnershipRecord;
 
   /**
+   * The runtime ProviderManager the facade governs. Exposed (mirroring
+   * messageBus/agentClient) so identity probes can assert the adopted manager
+   * is the SAME instance the caller supplied (CRIT-1: no second manager).
+   * @plan:PLAN-20260621-COREAPIREMED.P09
+   * @requirement:REQ-001
+   */
+  readonly providerManager: RuntimeProviderManager;
+
+  /**
+   * The runtimeId the facade was built with. Exposed (mirroring
+   * messageBus/agentClient) so identity probes can assert the deterministic
+   * sessionId-derived runtime id.
+   * @plan:PLAN-20260621-COREAPIREMED.P09
+   * @requirement:REQ-001
+   */
+  readonly runtimeId: string;
+
+  /**
    * The single shared MessageBus createAgent threaded through every surface.
    * Exposed so the T13 disposal probe can read the private emitter's listener
    * tally and assert it reaches zero after dispose() unsubscribes every recorded
@@ -257,6 +275,12 @@ export class AgentImpl implements Agent {
 
   constructor(private readonly deps: AgentDeps) {
     this.ownership = deps.ownership;
+    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001
+    // Expose the providerManager + runtimeId so identity probes can assert the
+    // adopted manager is the SAME instance (CRIT-1) and the runtime id is
+    // deterministic (sessionId-derived).
+    this.providerManager = deps.providerManager;
+    this.runtimeId = deps.runtimeId;
     // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
     // Expose the SAME shared MessageBus + Config-owned AgentClient + injected
     // scheduler/coordinator the facade owns so the T13 disposal probe reads the
@@ -665,8 +689,52 @@ export class AgentImpl implements Agent {
     this.providerState.model = model;
   }
 
+  /**
+   * @plan:PLAN-20260621-COREAPIREMED.P14
+   * @requirement:REQ-003
+   * @pseudocode lines 10-15
+   * Resolves the bound client FRESH on every call (R-CLIENT invariant — never
+   * cache), null-guards a missing client, and delegates to the client's
+   * current sequence model. Returns null when there is no active client or no
+   * active load-balancer sequence model.
+   */
   getCurrentSequenceModel(): string | null {
-    return null;
+    // resolveClient mirrors core Config.getAgentClient, whose declared type is
+    // non-nullable only because its backing field uses a definite-assignment
+    // assertion (agentClient!). At runtime no client exists before
+    // initialization, so widen to the truthful runtime type to keep a genuine
+    // null-guard (the T9c contract: a missing client yields null, never throws).
+    const client = this.deps.resolveClient() as AgentClientContract | undefined;
+    return client?.getCurrentSequenceModel() ?? null;
+  }
+
+  /**
+   * @plan:PLAN-20260621-COREAPIREMED.P18
+   * @requirement:REQ-005
+   * @pseudocode lines 10-12
+   */
+  getRuntimeId(): string {
+    return this.deps.runtimeId;
+  }
+
+  /** @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001 */
+  getConfig(): Config {
+    return this.deps.config;
+  }
+
+  /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
+  getEphemeralSetting(key: string): unknown {
+    return this.deps.config.getEphemeralSetting(key);
+  }
+
+  /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 30-33 */
+  setEphemeralSetting(key: string, value: unknown): void {
+    this.deps.config.setEphemeralSetting(key, value);
+  }
+
+  /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 40-42 */
+  getEphemeralSettings(): Readonly<Record<string, unknown>> {
+    return this.deps.config.getEphemeralSettings();
   }
 
   /**
@@ -1236,15 +1304,25 @@ export class AgentImpl implements Agent {
 
     // @pseudocode dispose.md 60: config.dispose() disposes agentClient
     // (_unsubscribe → undefined) and stops mcpClientManager.
-    await this.safe(errors, () => this.deps.config.dispose());
+    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
+    // SKIP when the Config is caller-owned (fromConfig): the caller retains the
+    // Config lifecycle and disposes it. An agent-owned Config (createAgent) is
+    // torn down here as before.
+    if (ownership.configOwnership !== 'caller') {
+      await this.safe(errors, () => this.deps.config.dispose());
+    }
 
     // @pseudocode dispose.md 70: NET-NEW LSP shutdown wiring. shutdownLspService
     // exists on Config but Config.dispose() does not call it; wire it here and
     // set the completion marker AFTER the await succeeds (T13 observable).
-    await this.safe(errors, async () => {
-      await this.deps.config.shutdownLspService();
-      ownership.lspShutDown = true;
-    });
+    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
+    // SKIP the caller-owned Config's LSP service too (the caller owns it).
+    if (ownership.configOwnership !== 'caller') {
+      await this.safe(errors, async () => {
+        await this.deps.config.shutdownLspService();
+        ownership.lspShutDown = true;
+      });
+    }
 
     // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
     // @pseudocode dispose.md 80: NET-NEW extensions teardown. The pseudocode's

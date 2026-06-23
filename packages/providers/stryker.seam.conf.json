@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "CCF-13 changed-range scope: mutate ONLY the P03-P05 providerManager?/messageBus? seam lines this remediation added to the pre-existing runtimeContextFactory.ts (vs origin/main), per MIN-1 intent (cover the adoption seam, not the whole 527-line legacy file).",
+  "mutate": [
+    "src/runtime/runtimeContextFactory.ts:29-29",
+    "src/runtime/runtimeContextFactory.ts:147-147",
+    "src/runtime/runtimeContextFactory.ts:153-153",
+    "src/runtime/runtimeContextFactory.ts:193-214",
+    "src/runtime/runtimeContextFactory.ts:218-218",
+    "src/runtime/runtimeContextFactory.ts:226-226",
+    "src/runtime/runtimeContextFactory.ts:243-243",
+    "src/runtime/runtimeContextFactory.ts:336-336",
+    "src/runtime/runtimeContextFactory.ts:419-419",
+    "src/runtime/runtimeContextFactory.ts:493-499",
+    "src/runtime/runtimeContextFactory.ts:517-526"
+  ],
+  "testRunner": "vitest",
+  "inPlace": true,
+  "vitest": { "configFile": "vitest.config.ts" },
+  "coverageAnalysis": "perTest",
+  "reporters": ["json", "clear-text", "progress"],
+  "jsonReporter": { "fileName": "reports/mutation/mutation-seam.json" },
+  "thresholds": { "high": 80, "low": 60, "break": 80 }
+}

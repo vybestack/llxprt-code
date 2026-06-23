@@ -27,7 +27,7 @@ import {
   getActiveModelName,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
-import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -198,6 +198,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     onOAuthPrompt,
     editorCallbacks,
     injectedSchedulerHandles,
+    'agent',
   );
 }
 
@@ -205,9 +206,11 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
  * Finalizes the agent after the runtime context is active and authenticated.
  * Builds the runtime state, binds the post-auth client, constructs the initial
  * loop, records ownership, builds the facade, and fires the SessionStart hook.
+ * Exported so {@link fromConfig} reuses the SAME finalize path (CRIT-4:
+ * single source of finalize — no parallel copy).
  * @pseudocode createAgent.md steps 105-166
  */
-async function finalizeAgent(
+export async function finalizeAgent(
   parsed: {
     readonly provider: string;
     readonly model: string;
@@ -219,7 +222,7 @@ async function finalizeAgent(
     readonly baseUrl: string | undefined;
   },
   config: Config,
-  manager: ProviderManager,
+  manager: RuntimeProviderManager,
   oauthManager: OAuthManager,
   sharedSettingsService: SettingsService,
   runtimeId: string,
@@ -229,6 +232,11 @@ async function finalizeAgent(
   onOAuthPrompt: unknown,
   editorCallbacks: EditorCallbacks | undefined,
   injectedSchedulerHandles: AgentSchedulerHandle[],
+  // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001,REQ-006 @requirement:REQ-001.3
+  // Threading the config ownership origin so dispose() can skip tearing down a
+  // caller-owned Config (fromConfig) while still tearing down an agent-owned
+  // Config (createAgent).
+  configOwnership: 'agent' | 'caller',
 ): Promise<Agent> {
   // @pseudocode createAgent.md steps 105-113: runtime state (runtimeId REQUIRED)
   const runtimeState = createAgentRuntimeState({
@@ -287,6 +295,7 @@ async function finalizeAgent(
     editorCallbacks,
     initialAuth: parsed.auth,
     injectedSchedulerHandles,
+    configOwnership,
   });
 }
 
@@ -298,7 +307,7 @@ async function finalizeAgent(
  */
 interface AssembleFacadeDeps {
   readonly config: Config;
-  readonly manager: ProviderManager;
+  readonly manager: RuntimeProviderManager;
   readonly oauthManager: OAuthManager;
   readonly sharedSettingsService: SettingsService;
   readonly runtimeId: string;
@@ -314,6 +323,14 @@ interface AssembleFacadeDeps {
   readonly editorCallbacks: EditorCallbacks | undefined;
   readonly initialAuth: AgentAuth | undefined;
   readonly injectedSchedulerHandles: AgentSchedulerHandle[];
+  /**
+   * The config ownership origin. 'agent' when createAgent constructed the
+   * Config (dispose() tears it down); 'caller' when fromConfig adopted an
+   * external Config (dispose() skips it).
+   * @plan:PLAN-20260621-COREAPIREMED.P09
+   * @requirement:REQ-001.3
+   */
+  readonly configOwnership: 'agent' | 'caller';
 }
 
 /**
@@ -332,6 +349,7 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
     loopHolder: deps.loopHolder,
     runtimeState: deps.runtimeState,
     injectedSchedulerHandles: deps.injectedSchedulerHandles,
+    configOwnership: deps.configOwnership,
   });
   const agent = buildAgent({
     config: deps.config,
@@ -435,7 +453,7 @@ function safeActiveModelName(): string {
  * the isolated manager. Under LLXPRT_FAKE_RESPONSES this registers only
  * FakeProvider and sets it active.
  */
-function registerProvidersOntoManager(
+export function registerProvidersOntoManager(
   isolatedManager: IsolatedRuntimeContextHandle['providerManager'],
   source: {
     settingsService: IsolatedRuntimeContextHandle['settingsService'];
@@ -466,7 +484,14 @@ function registerProvidersOntoManager(
   // Mirror the active provider onto the isolated manager.
   try {
     const active = registered.getActiveProvider();
-    isolatedManager.setActiveProvider(active.name);
+    const activation = isolatedManager.setActiveProvider(active.name);
+    if (activation instanceof Promise) {
+      // setActiveProvider is void | Promise<void>; on the async path a late
+      // rejection would otherwise surface as an unhandled rejection. Mirroring
+      // the active provider is best-effort, so swallow it exactly like the
+      // synchronous catch below ("no active provider — safe to skip").
+      activation.catch(() => undefined);
+    }
   } catch {
     // No active provider — safe to skip.
   }

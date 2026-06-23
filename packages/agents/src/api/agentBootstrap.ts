@@ -263,6 +263,15 @@ export interface OwnershipRecord {
    * @requirement:REQ-016
    */
   sessionLocksReleased?: boolean;
+  /**
+   * The Config ownership origin. 'agent' when createAgent constructed the
+   * Config (Agent.dispose() tears it down); 'caller' when fromConfig adopted
+   * an external Config (Agent.dispose() SKIPS the Config.dispose() +
+   * shutdownLspService() teardown so the caller retains the lifecycle).
+   * @plan:PLAN-20260621-COREAPIREMED.P09
+   * @requirement:REQ-001.3
+   */
+  configOwnership: 'agent' | 'caller';
 }
 
 /**
@@ -277,6 +286,10 @@ export function recordOwnership(deps: {
   runtimeState: AgentRuntimeState;
   injectedSchedulerHandles: AgentSchedulerHandle[];
   sessionLocks?: SessionLock[];
+  // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
+  // Optional for backward compatibility with existing callers that construct
+  // an agent-owned Config (the historical default); defaults to 'agent'.
+  configOwnership?: 'agent' | 'caller';
 }): OwnershipRecord {
   return {
     disposed: false,
@@ -297,6 +310,8 @@ export function recordOwnership(deps: {
     lspShutDown: false,
     extensionsDisposed: false,
     sessionLocksReleased: false,
+    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
+    configOwnership: deps.configOwnership ?? 'agent',
   };
 }
 

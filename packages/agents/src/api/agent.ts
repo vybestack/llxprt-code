@@ -1,6 +1,7 @@
 /**
  * @plan:PLAN-20260617-COREAPI.P05
  * @requirement:REQ-001, REQ-017
+ * @plan:PLAN-20260621-COREAPIREMED.P06
  */
 
 import type { Content } from '@google/genai';
@@ -8,6 +9,7 @@ import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.j
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   ApprovalMode,
+  Config,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -328,6 +330,19 @@ export interface Agent {
   getModel(): string;
   setModel(model: string): Promise<void>;
   getCurrentSequenceModel(): string | null;
+  /**
+   * Returns the bound runtime-context runtimeId (REQ-005.1).
+   * @plan:PLAN-20260621-COREAPIREMED.P18
+   * @requirement:REQ-005
+   */
+  getRuntimeId(): string;
+  getConfig(): Config;
+  /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
+  getEphemeralSetting(key: string): unknown;
+  /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
+  setEphemeralSetting(key: string, value: unknown): void;
+  /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
+  getEphemeralSettings(): Readonly<Record<string, unknown>>;
   getModelParams(): Readonly<Record<string, unknown>>;
   setModelParam(key: string, value: unknown): void;
   clearModelParam(key: string): void;
