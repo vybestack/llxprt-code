@@ -1130,9 +1130,20 @@ export default tseslint.config(
       // Stricter vitest rules (warnings for now)
       // fast-check's `fc.assert` is a real assertion helper; tests using
       // `fc.assert(fc.property(...))` do assert but use no literal `expect`.
+      // Project-level assertion wrappers (see packages/cli/src/test-utils) are
+      // registered here so the rule recognises them as real assertions:
+      //   - expectFrameContains/expectFrameNotContains wrap Ink frame checks
+      //     that tolerate empty CI frames.
       'vitest/expect-expect': [
         'error',
-        { assertFunctionNames: ['expect', 'fc.assert'] },
+        {
+          assertFunctionNames: [
+            'expect',
+            'fc.assert',
+            'expectFrameContains',
+            'expectFrameNotContains',
+          ],
+        },
       ],
       'vitest/no-conditional-expect': 'error',
       'vitest/no-conditional-in-test': 'error',

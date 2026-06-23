@@ -45,6 +45,7 @@ import type { UIState } from '../contexts/UIStateContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 import { assertType } from '../../test-utils/assertions.js';
+import { expectFrameContains } from '../../test-utils/inkFrame.js';
 
 /**
  * Helper to narrow a command argument to the ValueArgument variant.
@@ -343,12 +344,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const output = lastFrame();
       // CI environments may produce empty frames (whitespace only); verify
       // content when present, otherwise just check render success.
-      if (output && output.trim().length > 0) {
-        expect(output).toContain('Session Browser');
-      } else {
-        // Rendering succeeded without throwing - acceptable in CI
-        expect(output).toBeDefined();
-      }
+      expectFrameContains(output, 'Session Browser');
     });
 
     /**
@@ -368,12 +364,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const output = lastFrame();
       // CI environments may produce empty frames (whitespace only); verify
       // content when present, otherwise just check render success.
-      if (output && output.trim().length > 0) {
-        expect(output).toContain('Search:');
-      } else {
-        // Rendering succeeded without throwing - acceptable in CI
-        expect(output).toBeDefined();
-      }
+      expectFrameContains(output, 'Search:');
     });
 
     /**

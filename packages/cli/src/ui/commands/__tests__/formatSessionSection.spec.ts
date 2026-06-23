@@ -244,10 +244,11 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
             // The output should contain the truncated ID
             expect(joinedOutput).toContain(truncated);
 
-            // If the original ID is longer than 12, it should NOT appear in full
-            if (sessionId.length > 12) {
-              expect(joinedOutput).not.toContain(sessionId);
-            }
+            // The full ID should appear only when it was short enough that
+            // truncation is a no-op (length <= 12).
+            expect(joinedOutput.includes(sessionId)).toBe(
+              sessionId.length <= 12,
+            );
           },
         ),
         { numRuns: 50 },
@@ -267,11 +268,10 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
           const result = await formatSessionSection(metadata);
           const joinedOutput = result.join('\n').toLowerCase();
 
-          if (isResumed) {
-            expect(joinedOutput).toMatch(testRegex('resumed:\\s*yes', ''));
-          } else {
-            expect(joinedOutput).toMatch(testRegex('resumed:\\s*no', ''));
-          }
+          const expectedLabel = isResumed ? 'yes' : 'no';
+          expect(joinedOutput).toMatch(
+            testRegex(`resumed:\\s*${expectedLabel}`, ''),
+          );
         }),
         { numRuns: 20 },
       );
