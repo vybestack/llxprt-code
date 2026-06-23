@@ -49,10 +49,15 @@ function buildDelegateResolvedOptions(
   }
 
   // LoadBalancerSubProfile (legacy path)
+  // authToken is intentionally isolated: when the sub-profile omits authToken,
+  // the parent resolved.authToken must NOT leak through, otherwise credentials
+  // from a previously loaded profile contaminate delegates with different auth.
+  const { authToken: _parentAuthToken, ...resolvedWithoutAuth } =
+    options.resolved ?? {};
   const resolvedOptions: GenerateChatOptions = {
     ...options,
     resolved: {
-      ...options.resolved,
+      ...resolvedWithoutAuth,
       ...(typeof subProfile.modelId === 'string' &&
         subProfile.modelId !== '' && { model: subProfile.modelId }),
       ...(typeof subProfile.baseURL === 'string' &&
@@ -114,10 +119,15 @@ function buildResolvedSubProfileOptions(
     'stream',
   );
 
+  // authToken isolation: strip parent resolved.authToken so a sub-profile that
+  // omits authToken does not inherit credentials from the upstream invocation.
+  const { authToken: _parentAuthToken, ...resolvedWithoutAuth } =
+    options.resolved ?? {};
+
   const resolvedOptions: GenerateChatOptions = {
     ...options,
     resolved: {
-      ...options.resolved,
+      ...resolvedWithoutAuth,
       model: subProfile.model,
       ...(typeof subProfile.baseURL === 'string' &&
         subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),

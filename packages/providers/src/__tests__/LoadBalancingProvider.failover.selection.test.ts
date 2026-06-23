@@ -469,10 +469,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       });
     });
 
-    it('should preserve resolved baseURL and authToken when sub-profile omits them', async () => {
+    it('should NOT inherit parent resolved authToken when sub-profile omits it (issue #2132)', async () => {
       const captured: Array<{ baseURL?: string; authToken?: string }> = [];
 
-      const mockProvider: IProvider = {
+      const mockProvider = {
         name: 'test-provider',
         async *generateChatCompletion(
           options: GenerateChatOptions,
@@ -489,10 +489,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         invokeServerTool: async () => ({ content: [] }),
       };
 
-      providerManager.registerProvider(mockProvider);
+      const originalGetProvider =
+        providerManager.getProviderByName.bind(providerManager);
+      providerManager.getProviderByName = () => mockProvider as IProvider;
 
       const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-preserve-resolved',
+        profileName: 'test-no-authtoken-leak',
         strategy: 'failover',
         subProfiles: [
           {
@@ -510,29 +512,34 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         ],
       };
 
-      const provider = new LoadBalancingProvider(lbConfig, providerManager);
-      const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
-        resolved: {
-          model: 'original-model',
-          baseURL: 'https://original.api.com',
-          authToken: 'original-token',
-        },
-      };
+      try {
+        const provider = new LoadBalancingProvider(lbConfig, providerManager);
+        const options: GenerateChatOptions = {
+          prompt: 'test prompt',
+          messages: [{ role: 'user' as const, content: 'test' }],
+          resolved: {
+            model: 'original-model',
+            baseURL: 'https://original.api.com',
+            authToken: 'original-token',
+          },
+        };
 
-      const results: IContent[] = [];
-      for await (const chunk of provider.generateChatCompletion(options)) {
-        results.push(chunk);
+        const results: IContent[] = [];
+        for await (const chunk of provider.generateChatCompletion(options)) {
+          results.push(chunk);
+        }
+
+        expect(results).toHaveLength(1);
+        // baseURL is still inherited (per design), but authToken must NOT leak
+        expect(captured).toStrictEqual([
+          {
+            baseURL: 'https://original.api.com',
+            authToken: undefined,
+          },
+        ]);
+      } finally {
+        providerManager.getProviderByName = originalGetProvider;
       }
-
-      expect(results).toHaveLength(1);
-      expect(captured).toStrictEqual([
-        {
-          baseURL: 'https://original.api.com',
-          authToken: 'original-token',
-        },
-      ]);
     });
 
     it('should override resolved baseURL when sub-profile provides one', async () => {
@@ -563,12 +570,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
             providerName: 'test-provider',
             modelId: 'model1',
             baseURL: 'https://subprofile.api.com',
+            authToken: 'sub-token',
           },
           {
             name: 'second',
             providerName: 'test-provider',
             modelId: 'model2',
             baseURL: 'https://subprofile.api.com',
+            authToken: 'sub-token',
           },
         ],
       };
@@ -651,6 +660,77 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       expect(results).toHaveLength(1);
       expect(captured).toStrictEqual([{ authToken: 'subprofile-token' }]);
+    });
+  });
+
+  describe('AuthToken isolation on failover path (issue #2132)', () => {
+    it('should NOT leak parent authToken to failover delegate when sub-profile omits it', async () => {
+      let callCount = 0;
+      const capturedAuthTokens: Array<string | undefined> = [];
+
+      const mockProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(
+          options: GenerateChatOptions,
+        ): AsyncGenerator<IContent> {
+          callCount++;
+          capturedAuthTokens.push(options.resolved?.authToken);
+          if (callCount === 1) {
+            throw new Error('first backend error');
+          }
+          yield { type: 'text' as const, content: 'success from second' };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      const originalGetProvider =
+        providerManager.getProviderByName.bind(providerManager);
+      providerManager.getProviderByName = () => mockProvider as IProvider;
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-failover-auth-isolation',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'first',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            // authToken intentionally omitted
+          },
+          {
+            name: 'second',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            // authToken intentionally omitted
+          },
+        ],
+      };
+
+      try {
+        const provider = new LoadBalancingProvider(lbConfig, providerManager);
+        const options: GenerateChatOptions = {
+          prompt: 'test prompt',
+          messages: [{ role: 'user' as const, content: 'test' }],
+          resolved: {
+            model: 'parent-model',
+            authToken: 'leaked-opus-token',
+          },
+        };
+
+        const results: IContent[] = [];
+        for await (const chunk of provider.generateChatCompletion(options)) {
+          results.push(chunk);
+        }
+
+        expect(results).toHaveLength(1);
+        // Both delegates must have authToken = undefined, not the leaked parent token
+        expect(capturedAuthTokens).toStrictEqual([undefined, undefined]);
+      } finally {
+        providerManager.getProviderByName = originalGetProvider;
+      }
     });
   });
 });
