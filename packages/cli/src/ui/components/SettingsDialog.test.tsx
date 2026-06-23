@@ -1248,13 +1248,15 @@ describe('SettingsDialog', () => {
      * The snapshots help ensure UI consistency and catch unintended visual changes.
      */
 
+    const noStdinAction = (_stdin: { write: (data: string) => void }) => {};
+
     it.each([
       {
         name: 'default state',
         userSettings: {},
         systemSettings: {},
         workspaceSettings: {},
-        stdinActions: undefined,
+        stdinActions: noStdinAction,
       },
       {
         name: 'various boolean settings enabled',
@@ -1300,7 +1302,7 @@ describe('SettingsDialog', () => {
         },
         systemSettings: {},
         workspaceSettings: {},
-        stdinActions: undefined,
+        stdinActions: noStdinAction,
       },
       {
         name: 'mixed boolean and number settings',
@@ -1327,7 +1329,7 @@ describe('SettingsDialog', () => {
         },
         systemSettings: {},
         workspaceSettings: {},
-        stdinActions: undefined,
+        stdinActions: noStdinAction,
       },
       {
         name: 'focused on scope selector',
@@ -1354,7 +1356,7 @@ describe('SettingsDialog', () => {
         },
         systemSettings: {},
         workspaceSettings: {},
-        stdinActions: undefined,
+        stdinActions: noStdinAction,
       },
       {
         name: 'file filtering settings configured',
@@ -1372,7 +1374,7 @@ describe('SettingsDialog', () => {
         },
         systemSettings: {},
         workspaceSettings: {},
-        stdinActions: undefined,
+        stdinActions: noStdinAction,
       },
       {
         name: 'tools and security settings',
@@ -1396,7 +1398,7 @@ describe('SettingsDialog', () => {
         },
         systemSettings: {},
         workspaceSettings: {},
-        stdinActions: undefined,
+        stdinActions: noStdinAction,
       },
       {
         name: 'all boolean settings disabled',
@@ -1442,7 +1444,7 @@ describe('SettingsDialog', () => {
         },
         systemSettings: {},
         workspaceSettings: {},
-        stdinActions: undefined,
+        stdinActions: noStdinAction,
       },
     ])(
       'should render $name correctly',
@@ -1456,9 +1458,7 @@ describe('SettingsDialog', () => {
 
         const { lastFrame, stdin } = renderDialog(settings, onSelect);
 
-        if (stdinActions) {
-          stdinActions(stdin);
-        }
+        stdinActions(stdin);
 
         expect(lastFrame()).toMatchSnapshot();
       },

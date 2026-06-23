@@ -162,38 +162,43 @@ describe('Footer', () => {
   });
 
   describe('responsive layout', () => {
-    it('should adapt branch truncation length based on breakpoint', () => {
-      const scenarios = [
-        {
-          breakpoint: 'NARROW' as const,
-          width: 70,
-          isNarrow: true,
-          isStandard: false,
-          isWide: false,
-          expectedMaxLength: 15,
-        },
-        {
-          breakpoint: 'STANDARD' as const,
-          width: 100,
-          isNarrow: false,
-          isStandard: true,
-          isWide: false,
-          expectedMaxLength: 35,
-        },
-        {
-          breakpoint: 'WIDE' as const,
-          width: 180,
-          isNarrow: false,
-          isStandard: false,
-          isWide: true,
-          expectedMaxLength: 100,
-        },
-      ];
+    const longBranchName =
+      'feature/very-long-branch-name-that-needs-truncation-handling';
 
-      const longBranchName =
-        'feature/very-long-branch-name-that-needs-truncation-handling';
+    // NARROW/STANDARD breakpoints have a max length shorter than the branch
+    // name, so truncateMiddle must shorten it.
+    const truncatingScenarios = [
+      {
+        breakpoint: 'NARROW' as const,
+        width: 70,
+        isNarrow: true,
+        isStandard: false,
+        isWide: false,
+        expectedMaxLength: 15,
+      },
+      {
+        breakpoint: 'STANDARD' as const,
+        width: 100,
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+        expectedMaxLength: 35,
+      },
+    ];
 
-      scenarios.forEach((scenario) => {
+    // WIDE's max length (100) exceeds the branch name, so it is preserved.
+    const preservingScenario = {
+      breakpoint: 'WIDE' as const,
+      width: 180,
+      isNarrow: false,
+      isStandard: false,
+      isWide: true,
+      expectedMaxLength: 100,
+    };
+
+    it.each(truncatingScenarios)(
+      'truncates the branch name at the $breakpoint breakpoint',
+      (scenario) => {
         mockUseResponsive.mockReturnValue(scenario);
 
         const { container } = render(
@@ -201,16 +206,20 @@ describe('Footer', () => {
         );
         const textContent = container.textContent ?? '';
 
-        if (scenario.breakpoint === 'WIDE') {
-          // WIDE (expectedMaxLength 100) is longer than the branch; full name
-          // must be preserved.
-          expect(textContent).toContain(longBranchName);
-        } else {
-          // NARROW/STANDARD must truncate the name via truncateMiddle.
-          expect(textContent).not.toContain(longBranchName);
-          expect(textContent).toMatch(testRegex('feature\\/.+\\.\\.\\..+', ''));
-        }
-      });
+        expect(textContent).not.toContain(longBranchName);
+        expect(textContent).toMatch(testRegex('feature\\/.+\\.\\.\\..+', ''));
+      },
+    );
+
+    it('preserves the full branch name at the WIDE breakpoint', () => {
+      mockUseResponsive.mockReturnValue(preservingScenario);
+
+      const { container } = render(
+        <Footer {...defaultProps} branchName={longBranchName} />,
+      );
+      const textContent = container.textContent ?? '';
+
+      expect(textContent).toContain(longBranchName);
     });
 
     it('should show different information based on breakpoint', () => {

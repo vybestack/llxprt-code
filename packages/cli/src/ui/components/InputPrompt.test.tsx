@@ -1238,24 +1238,8 @@ describe('InputPrompt', () => {
   });
 
   describe('vim mode', () => {
-    it.each([
-      {
-        name: 'should not call buffer.handleInput when vim handles input',
-        vimHandled: true,
-        expectBufferHandleInput: false,
-      },
-      {
-        name: 'should call buffer.handleInput when vim does not handle input',
-        vimHandled: false,
-        expectBufferHandleInput: true,
-      },
-      {
-        name: 'should call handleInput when vim mode is disabled',
-        vimHandled: false,
-        expectBufferHandleInput: true,
-      },
-    ])('$name', async ({ vimHandled, expectBufferHandleInput }) => {
-      props.vimHandleInput = vi.fn().mockReturnValue(vimHandled);
+    it('should not call buffer.handleInput when vim handles input', async () => {
+      props.vimHandleInput = vi.fn().mockReturnValue(true);
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
       );
@@ -1263,11 +1247,24 @@ describe('InputPrompt', () => {
       await act(async () => stdin.write('i'));
       await waitFor(() => {
         expect(props.vimHandleInput).toHaveBeenCalled();
-        if (expectBufferHandleInput) {
-          expect(mockBuffer.handleInput).toHaveBeenCalled();
-        } else {
-          expect(mockBuffer.handleInput).not.toHaveBeenCalled();
-        }
+        expect(mockBuffer.handleInput).not.toHaveBeenCalled();
+      });
+      unmount();
+    });
+
+    it.each([
+      { name: 'should call buffer.handleInput when vim does not handle input' },
+      { name: 'should call handleInput when vim mode is disabled' },
+    ])('$name', async () => {
+      props.vimHandleInput = vi.fn().mockReturnValue(false);
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+
+      await act(async () => stdin.write('i'));
+      await waitFor(() => {
+        expect(props.vimHandleInput).toHaveBeenCalled();
+        expect(mockBuffer.handleInput).toHaveBeenCalled();
       });
       unmount();
     });
@@ -2324,13 +2321,11 @@ describe('InputPrompt', () => {
         });
 
         await waitFor(() => {
-          if (expectedFocusToggle) {
-            expect(uiActions.setEmbeddedShellFocused).toHaveBeenCalledWith(
-              true,
-            );
-          } else {
-            expect(uiActions.setEmbeddedShellFocused).not.toHaveBeenCalled();
-          }
+          // When focus toggles, the action is invoked exactly once with `true`;
+          // otherwise it must not be called at all.
+          expect(uiActions.setEmbeddedShellFocused.mock.calls).toStrictEqual(
+            expectedFocusToggle ? [[true]] : [],
+          );
 
           expect(mockAccept).toHaveBeenCalledTimes(
             expectedAcceptCall === true ? 1 : 0,
@@ -2643,49 +2638,48 @@ describe('InputPrompt', () => {
         name: 'should prevent slash commands',
         bufferText: '/help',
         shellMode: false,
-        shouldSubmit: false,
         errorMessage: 'Slash commands cannot be queued',
       },
       {
         name: 'should prevent shell commands',
         bufferText: 'ls',
         shellMode: true,
-        shouldSubmit: false,
         errorMessage: 'Shell commands cannot be queued',
       },
-      {
-        name: 'should allow regular messages',
-        bufferText: 'regular message',
-        shellMode: false,
-        shouldSubmit: true,
-        errorMessage: null,
-      },
-    ])(
-      '$name',
-      async ({ bufferText, shellMode, shouldSubmit, errorMessage }) => {
-        props.buffer.text = bufferText;
-        props.shellModeActive = shellMode;
+    ])('$name', async ({ bufferText, shellMode, errorMessage }) => {
+      props.buffer.text = bufferText;
+      props.shellModeActive = shellMode;
 
-        const { stdin, unmount } = renderWithProviders(
-          <InputPrompt {...props} />,
-        );
-        await act(async () => {
-          stdin.write('\r');
-        });
-        await waitFor(() => {
-          if (shouldSubmit) {
-            expect(props.onSubmit).toHaveBeenCalledWith(bufferText);
-            expect(props.setQueueErrorMessage).not.toHaveBeenCalled();
-          } else {
-            expect(props.onSubmit).not.toHaveBeenCalled();
-            expect(props.setQueueErrorMessage).toHaveBeenCalledWith(
-              errorMessage,
-            );
-          }
-        });
-        unmount();
-      },
-    );
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+      await act(async () => {
+        stdin.write('\r');
+      });
+      await waitFor(() => {
+        expect(props.onSubmit).not.toHaveBeenCalled();
+        expect(props.setQueueErrorMessage).toHaveBeenCalledWith(errorMessage);
+      });
+      unmount();
+    });
+
+    it('should allow regular messages', async () => {
+      const bufferText = 'regular message';
+      props.buffer.text = bufferText;
+      props.shellModeActive = false;
+
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+      await act(async () => {
+        stdin.write('\r');
+      });
+      await waitFor(() => {
+        expect(props.onSubmit).toHaveBeenCalledWith(bufferText);
+        expect(props.setQueueErrorMessage).not.toHaveBeenCalled();
+      });
+      unmount();
+    });
   });
 
   describe('shell path completion', () => {
