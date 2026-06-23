@@ -279,8 +279,20 @@ export class ConversationDataRedactor {
       if (segments.includes('.ssh')) return '[REDACTED-SSH-PATH]';
       if (segments.some(isSensitivePathSegment)) return '[REDACTED-ENV-FILE]';
       const normalizedToken = token.split('\\').join('/');
-      if (normalizedToken.startsWith('/home/')) return '[REDACTED-HOME-DIR]';
-      if (normalizedToken.startsWith('/Users/')) return '[REDACTED-USER-DIR]';
+      const homeIndex = normalizedToken.indexOf('/home/');
+      if (
+        homeIndex === 0 ||
+        (homeIndex > 0 && ['=', ':'].includes(normalizedToken[homeIndex - 1]))
+      ) {
+        return '[REDACTED-HOME-DIR]';
+      }
+      const usersIndex = normalizedToken.indexOf('/Users/');
+      if (
+        usersIndex === 0 ||
+        (usersIndex > 0 && ['=', ':'].includes(normalizedToken[usersIndex - 1]))
+      ) {
+        return '[REDACTED-USER-DIR]';
+      }
       return null;
     });
   }

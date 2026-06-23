@@ -466,6 +466,14 @@ describe('Conversation Data Redaction', () => {
       'Paths [REDACTED-SSH-KEY-PATH] and notes/monkey.txt and [REDACTED-ENV-FILE]',
     );
   });
+
+  it('should redact home paths embedded in assignment-style tokens', () => {
+    expect(
+      redactor.redactSensitivePaths(
+        'Deploy --path=/home/alice/project cwd:/Users/bob/app',
+      ),
+    ).toBe('Deploy [REDACTED-HOME-DIR] [REDACTED-USER-DIR]');
+  });
   /**
    * @requirement REDACTION-008: Personal information redaction
    * @scenario Message with personal identifiable information
