@@ -79,7 +79,10 @@ export class GoogleCredentialProvider implements McpAuthProvider {
       token_type: 'Bearer',
     };
 
-    const expiryTime = client.credentials.expiry_date;
+    const credentials = client.credentials as
+      | { expiry_date?: number }
+      | undefined;
+    const expiryTime = credentials?.expiry_date;
     if (expiryTime != null && expiryTime > 0) {
       this.tokenExpiryTime = expiryTime;
       this.cachedToken = newToken;

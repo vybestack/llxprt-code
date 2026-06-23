@@ -148,7 +148,7 @@ export class MCPOAuthTokenStorage implements TokenStorage {
     MCPOAuthTokenStorage.validateToken(credentials.token);
     await this.storage.setCredentials({
       ...credentials,
-      updatedAt: credentials.updatedAt,
+      updatedAt: (credentials.updatedAt as number | undefined) ?? Date.now(),
     });
   }
 
