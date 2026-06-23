@@ -32,6 +32,7 @@ import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { OpenAIResponsesProviderBase } from './OpenAIResponsesProviderBase.js';
 import { buildOpenAIResponsesInput } from './OpenAIResponsesInputBuilder.js';
+import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
 import type {
   OpenAIResponsesRequest,
   ResponsesInputItem,
@@ -505,7 +506,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       options.runtime?.runtimeId;
     if (typeof cacheKey !== 'string' || cacheKey.trim() === '') return;
 
-    request.prompt_cache_key = cacheKey;
+    request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);
     if (!isCodex) request.prompt_cache_retention = '24h';
   }
 
