@@ -584,7 +584,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   }
 
   private postProcessCleanedContent(content: string): string {
-    return content
+    return this.removePartialJsonToolCall(content)
       .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
       .replace(/<\|im_start\|>assistant/g, '')
       .replace(/<\|im_end\|>/g, '')
@@ -595,10 +595,26 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       .replace(/<\/use_[A-Za-z0-9_.-]+>/g, '')
       .replace(/<\/use>/g, '')
       .replace(/<tool_call>\s*\{[^}]*$/gm, '')
-      .replace(/\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm, '')
-      .replace(/✦\s*<think>/g, '')
+      .replace(/\u2726\s*<think>/g, '')
       .replace(/\n{2,}/g, '\n')
       .trim();
+  }
+
+  private removePartialJsonToolCall(content: string): string {
+    return content
+      .split('\n')
+      .map((line) => this.removePartialJsonToolCallLine(line))
+      .join('\n');
+  }
+
+  private removePartialJsonToolCallLine(line: string): string {
+    const nameIndex = line.indexOf('{"name"');
+    const argumentsIndex = line.indexOf('"arguments"', Math.max(nameIndex, 0));
+    if (nameIndex === -1 || argumentsIndex === -1) return line;
+    const argumentObjectStart = line.indexOf('{', argumentsIndex);
+    if (argumentObjectStart === -1) return line;
+    const argumentObjectEnd = line.indexOf('}', argumentObjectStart + 1);
+    return argumentObjectEnd === -1 ? line.slice(0, nameIndex) : line;
   }
 
   private normalizeArguments(

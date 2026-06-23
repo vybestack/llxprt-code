@@ -586,13 +586,13 @@ describe('useShellCommandProcessor', () => {
     });
     // Verify that the temporary file was cleaned up
     expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(
-      expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/),
+      expect.stringContaining('shell_pwd_abcdef.tmp'),
     );
   });
 
   describe('Directory Change Warning', () => {
     it('should show a warning if the working directory changes', async () => {
-      const tmpFile = expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/);
+      const tmpFile = expect.stringContaining('shell_pwd_abcdef.tmp');
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('/test/dir/new'); // A different directory
 

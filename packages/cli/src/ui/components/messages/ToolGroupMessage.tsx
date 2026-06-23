@@ -40,12 +40,18 @@ const extractCountFromText = (text?: string): number | undefined => {
   if (!text) {
     return undefined;
   }
-  // Static regex for extracting counts from text - no dynamic parts
-  const match = text.match(/(\d+)\s+(tasks?|items?)/i);
-  if (!match) {
-    return undefined;
+  const words = text.split(' ').filter((word) => word.length > 0);
+  for (let index = 0; index < words.length - 1; index++) {
+    const count = Number(words[index]);
+    const label = words[index + 1].toLowerCase();
+    if (
+      Number.isInteger(count) &&
+      ['task', 'tasks', 'item', 'items'].includes(label)
+    ) {
+      return count;
+    }
   }
-  return Number(match[1]);
+  return undefined;
 };
 
 const normalizeToolName = (name: string): string =>

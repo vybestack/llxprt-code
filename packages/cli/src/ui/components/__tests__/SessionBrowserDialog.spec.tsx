@@ -416,8 +416,8 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      // Should show count like "1 session found" or similar
-      expect(output).toMatch(/1.*found|found.*1|session/i);
+      expect(output).toContain('1');
+      expect(output?.toLowerCase()).toContain('session');
     });
 
     it('should show "No sessions match" when search yields no results', () => {
@@ -659,7 +659,8 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      expect(output).toMatch(/skipped.*3|3.*skipped/i);
+      expect(output).toContain('3');
+      expect(output?.toLowerCase()).toContain('skipped');
     });
 
     it('should not show skipped notice when skippedCount is 0', () => {
@@ -908,7 +909,13 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      expect(output).toMatch(/page.*1.*of.*2|1\/2/i);
+      expect(output).toContain('1');
+      expect(output).toContain('2');
+      const lowerOutput = output?.toLowerCase();
+      expect(
+        (lowerOutput?.includes('page') ?? false) ||
+          (output?.includes('1/2') ?? false),
+      ).toBe(true);
     });
 
     it('should hide page indicator for single-page lists', () => {
@@ -924,7 +931,8 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Single page should not show page indicator
-      expect(output).not.toMatch(/page.*1.*of.*1/i);
+      expect(output?.toLowerCase()).not.toContain('page 1 of 1');
+      expect(output).not.toContain('1/1');
     });
 
     it('should call handleKeypress when PageDown is pressed', async () => {

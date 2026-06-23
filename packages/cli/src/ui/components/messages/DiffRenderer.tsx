@@ -21,21 +21,43 @@ interface DiffLine {
   content: string;
 }
 
+function parseHunkHeader(
+  line: string,
+): { oldLine: number; newLine: number } | null {
+  if (!line.startsWith('@@ -')) {
+    return null;
+  }
+  const newLineMarker = line.indexOf(' +', 4);
+  if (newLineMarker === -1) {
+    return null;
+  }
+  const headerEnd = line.indexOf(' @@', newLineMarker + 2);
+  if (headerEnd === -1) {
+    return null;
+  }
+  const oldLine = Number(line.slice(4, newLineMarker).split(',', 1)[0]);
+  const newLine = Number(
+    line.slice(newLineMarker + 2, headerEnd).split(',', 1)[0],
+  );
+  if (!Number.isInteger(oldLine) || !Number.isInteger(newLine)) {
+    return null;
+  }
+  return { oldLine, newLine };
+}
+
 function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
   const lines = diffContent.split('\n');
   const result: DiffLine[] = [];
   let currentOldLine = 0;
   let currentNewLine = 0;
   let inHunk = false;
-  // Static regex for unified diff hunk headers - no dynamic parts
-  const hunkHeaderRegex = /^@@ -(\d+),?\d* \+(\d+),?\d* @@/;
 
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const line of lines) {
-    const hunkMatch = line.match(hunkHeaderRegex);
-    if (hunkMatch) {
-      currentOldLine = parseInt(hunkMatch[1], 10);
-      currentNewLine = parseInt(hunkMatch[2], 10);
+    const hunkHeader = parseHunkHeader(line);
+    if (hunkHeader !== null) {
+      currentOldLine = hunkHeader.oldLine;
+      currentNewLine = hunkHeader.newLine;
       inHunk = true;
       result.push({ type: 'hunk', content: line });
       // We need to adjust the starting point because the first line number applies to the *first* actual line change/context,

@@ -150,9 +150,14 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/File size:/i);
+      expect(joinedOutput.toLowerCase()).toContain('file size:');
       // Should contain some byte representation (B, KB, MB, etc.)
-      expect(joinedOutput).toMatch(/\d+.*(?:B|KB|MB|bytes)/i);
+      expect(
+        ['B', 'KB', 'MB', 'bytes'].some((unit) => joinedOutput.includes(unit)),
+      ).toBe(true);
+      expect([...joinedOutput].some((char) => char >= '0' && char <= '9')).toBe(
+        true,
+      );
     });
 
     /**

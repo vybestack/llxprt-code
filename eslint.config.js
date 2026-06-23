@@ -1586,120 +1586,6 @@ export default tseslint.config(
   // End Issue #1581
   // ============================================================================
 
-  // Issue #2081/#2082: Security credential-detection regex patterns.
-  // These are intentionally crafted to scan environment variables for secrets
-  // (credentials in URLs, JWT tokens). The sonarjs/regular-expr rule is a
-  // generic safety heuristic that cannot distinguish "validating untrusted
-  // input" from "scanning for secrets". The patterns are already bounded with
-  // explicit quantifiers to prevent ReDoS.
-  {
-    files: ['packages/core/src/services/environmentSanitization.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2081/#2082 security credential-detection regex
-    },
-  },
-
-  // Issue #2084: Kimi K2 fixed-format tool-call template regexes.
-  // These parse the vendor-specific protocol emitted by HF/vLLM-style Kimi
-  // deployments. Inputs are bounded to model-generated tool-call sections, and
-  // the patterns use explicit delimiters and lazy quantifiers to avoid
-  // unbounded backtracking. sonarjs/regular-expr is a generic heuristic that
-  // cannot distinguish these reviewed, bounded protocol parsers from unsafe
-  // regexes.
-  {
-    files: ['packages/providers/src/openai/OpenAIResponseParser.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2084 Kimi protocol template regex
-    },
-  },
-  // Issue #2087: Static, reviewed regex patterns that parse terminal/command
-  // input at trusted boundaries. The inputs are bounded (single CLI command
-  // lines or local config values, not untrusted network data) and the patterns
-  // are anchored with explicit quantifiers. sonarjs/regular-expr and
-  // sonarjs/slow-regex are generic heuristics that cannot distinguish these
-  // bounded parsing cases from ReDoS-vulnerable network input validation.
-  {
-    files: [
-      'packages/cli/src/ui/utils/secureInputHandler.ts',
-      'packages/cli/src/ui/utils/terminalSetup.ts',
-      'packages/cli/src/utils/privacy/ConversationDataRedactor.ts',
-      'packages/cli/src/utils/sandbox-env.ts',
-      'packages/cli/src/zed-integration/zed-path-resolver.ts',
-    ],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
-    },
-  },
-
-  // Issue #2086: MCP prompt argument parsing regexes. These patterns parse
-  // double-quoted strings with escape sequences (\.) for CLI prompt
-  // arguments. The sonarjs regular-expr/slow-regex heuristics flag the
-  // alternation-with-backreference structure, but the patterns operate on
-  // bounded single-line user input with explicit non-overlapping alternation
-  // branches that prevent catastrophic backtracking.
-  {
-    files: ['packages/cli/src/services/mcpPromptArgParser.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
-    },
-  },
-  // Issue #2086: position/range argument parsing regexes in todoOperations.
-  // These parse user-supplied positional numbers (e.g. "1", "1.2", "2-5")
-  // and are anchored with ^...$; inputs are bounded single-line tokens.
-  {
-    files: ['packages/cli/src/ui/commands/todoOperations.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 position arg parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 position arg parsing
-    },
-  },
-
-  // Issue #2113: keep targeted regex safety rules enabled by default while
-  // disabling false-positive ReDoS/control-character checks only for reviewed,
-  // bounded regex call sites. Tests often assert rendered terminal/markdown
-  // output with regexes and do not provide useful ReDoS signal.
-  {
-    files: ['**/*.{test,spec}.{ts,tsx}'],
-    rules: {
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2113 test assertion regexes
-    },
-  },
-  {
-    files: [
-      'packages/agents/src/core/baseLlmClient.ts',
-      'packages/cli/src/ui/components/messages/DiffRenderer.tsx',
-      'packages/cli/src/ui/components/messages/ToolGroupMessage.tsx',
-      'packages/cli/src/ui/components/messages/ToolMessage.tsx',
-      'packages/cli/src/ui/components/shared/transformations.ts',
-      'packages/cli/src/ui/hooks/useShellHistory.ts',
-      'packages/cli/src/ui/utils/InlineMarkdownRenderer.tsx',
-      'packages/cli/src/ui/utils/MarkdownDisplay.tsx',
-      'packages/cli/src/ui/utils/TableRenderer.tsx',
-      'packages/cli/src/utils/handleAutoUpdate.ts',
-      'packages/core/src/config/endpoints.ts',
-      'packages/core/src/parsers/TextToolCallParser.ts',
-      'packages/core/src/services/loopDetectionService.ts',
-      'packages/providers/src/anthropic/AnthropicModelData.ts',
-    ],
-    rules: {
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2113 reviewed bounded regexes
-    },
-  },
-  {
-    files: [
-      'packages/cli/src/test-utils/customMatchers.ts',
-      'packages/cli/src/ui/themes/color-utils.ts',
-      'packages/cli/src/ui/utils/input.ts',
-      'packages/cli/src/ui/utils/terminalCapabilityManager.ts',
-      'packages/cli/src/utils/windowTitle.ts',
-      'packages/core/src/utils/secure-browser-launcher.ts',
-    ],
-    rules: {
-      'no-control-regex': 'off', // eslint-policy-allow-off: #2113 terminal/control-character regexes
-    },
-  },
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node
@@ -1828,15 +1714,6 @@ export default tseslint.config(
     ],
     rules: {
       'sonarjs/todo-tag': 'off', // eslint-policy-allow-off: #2088 domain vocabulary
-    },
-  },
-  // Issue #2088: EmojiFilter uses inherently complex Unicode emoji range regexes
-  // that are safe but exceed SonarJS regex-complexity heuristics, analogous to
-  // ANSI/terminal control-character parsing.
-  {
-    files: ['packages/tools/src/utils/EmojiFilter.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2088 emoji Unicode ranges
     },
   },
   // Issue #2088: IToolMessageBus is a cross-package bridge interface consumed

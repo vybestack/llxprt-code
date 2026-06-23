@@ -10,8 +10,9 @@ import type { Assertion } from 'vitest';
 import { expect } from 'vitest';
 import type { TextBuffer } from '../ui/components/shared/text-buffer.js';
 
-// RegExp to detect invalid characters: backspace, and ANSI escape codes
-const invalidCharsRegex = /[\b\x1b]/;
+function hasInvalidBufferCharacter(line: string): boolean {
+  return line.includes('\b') || line.includes('\u001b');
+}
 
 function toHaveOnlyValidCharacters(this: Assertion, buffer: TextBuffer) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,7 +27,7 @@ function toHaveOnlyValidCharacters(this: Assertion, buffer: TextBuffer) {
       invalidLines.push({ line: i, content: line });
       break; // Fail fast on newlines
     }
-    if (invalidCharsRegex.test(line)) {
+    if (hasInvalidBufferCharacter(line)) {
       pass = false;
       invalidLines.push({ line: i, content: line });
     }

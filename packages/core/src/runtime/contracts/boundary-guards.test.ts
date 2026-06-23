@@ -22,6 +22,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import stripJsonComments from 'strip-json-comments';
 
 // This test file lives in packages/core/src/runtime/contracts/
 // Resolve paths relative to this file's location
@@ -206,9 +207,7 @@ describe('Core package metadata must not reference providers', () => {
     }
     const content = fs.readFileSync(coreTsconfigPath, 'utf-8');
     // Strip comments before parsing (TypeScript tsconfig can have comments)
-    const strippedContent = content
-      .replace(/\/\/.*$/gm, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const strippedContent = stripJsonComments(content);
     try {
       const tsconfig = JSON.parse(strippedContent);
       const references = tsconfig.references ?? [];

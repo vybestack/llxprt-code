@@ -110,6 +110,15 @@ function tryAcquireLock(): string | null {
 
 const releaseLock = removeLockFile;
 
+function getNodeModulesParent(realPath: string): string | null {
+  const pathParts = realPath.split(path.sep);
+  const nodeModulesIndex = pathParts.lastIndexOf('node_modules');
+  if (nodeModulesIndex <= 0) {
+    return null;
+  }
+  return pathParts.slice(0, nodeModulesIndex).join(path.sep) || path.sep;
+}
+
 function checkForTempDirectories(): string[] {
   const cliPath = process.argv[1];
   if (!cliPath) {
@@ -118,14 +127,12 @@ function checkForTempDirectories(): string[] {
 
   try {
     const realPath = fs.realpathSync(cliPath);
-    // Cross-platform regex for node_modules path
-    const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
+    const nodeModulesParent = getNodeModulesParent(realPath);
 
-    if (!nodeModulesMatch) {
+    if (nodeModulesParent === null) {
       return [];
     }
 
-    const nodeModulesParent = path.dirname(nodeModulesMatch[1]);
     const entries = fs.readdirSync(nodeModulesParent);
 
     return entries.filter((entry) => entry.startsWith('.llxprt-code-'));
@@ -145,11 +152,8 @@ function handleTempDirectoryCleanup(): boolean {
     return true;
   }
   const realPath = fs.realpathSync(cliPath);
-  // Cross-platform regex for node_modules path
-  const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
-  const cleanupPath = nodeModulesMatch
-    ? path.dirname(nodeModulesMatch[1])
-    : 'the parent directory of node_modules';
+  const cleanupPath =
+    getNodeModulesParent(realPath) ?? 'the parent directory of node_modules';
 
   const isWindows = process.platform === 'win32';
   const cleanupCommand = isWindows

@@ -30,6 +30,59 @@ export interface RedactionConfig {
   customPatterns?: RedactionPattern[];
 }
 
+function isTokenBoundary(char: string): boolean {
+  return [' ', '\t', '\n', '\r', '"', "'"].includes(char);
+}
+
+function replacePathTokens(
+  content: string,
+  redactToken: (token: string) => string | null,
+): string {
+  let result = '';
+  let index = 0;
+  while (index < content.length) {
+    if (isTokenBoundary(content[index])) {
+      result += content[index];
+      index += 1;
+      continue;
+    }
+
+    let end = index;
+    while (end < content.length && !isTokenBoundary(content[end])) {
+      end += 1;
+    }
+    const token = content.slice(index, end);
+    result += redactToken(token) ?? token;
+    index = end;
+  }
+  return result;
+}
+
+function isEmailAddress(token: string): boolean {
+  const at = token.indexOf('@');
+  const dot = token.lastIndexOf('.');
+  return at > 0 && dot > at + 1 && dot < token.length - 2;
+}
+
+function redactPhoneAndCardNumbers(content: string): string {
+  return content
+    .split(' ')
+    .map((token) => {
+      const digits = [...token].filter((char) => char >= '0' && char <= '9');
+      if (digits.length === 10 && token.includes('-')) {
+        return '[REDACTED-PHONE]';
+      }
+      if (digits.length === 10 && token.includes('(') && token.includes(')')) {
+        return '[REDACTED-PHONE]';
+      }
+      if (digits.length === 16) {
+        return '[REDACTED-CC-NUMBER]';
+      }
+      return token;
+    })
+    .join(' ');
+}
+
 export class ConversationDataRedactor {
   private redactionConfig: RedactionConfig;
   private redactionPatterns: Map<string, RedactionPattern[]>;
@@ -162,29 +215,14 @@ export class ConversationDataRedactor {
       return content;
     }
 
-    let redacted = content;
-
-    // SSH keys and certificates
-    redacted = redacted.replace(
-      /\/[^"\s]*\.ssh\/[^"\s]*/g,
-      '[REDACTED-SSH-PATH]',
-    );
-    redacted = redacted.replace(
-      /\/[^"\s]*\/id_rsa[^"\s]*/g,
-      '[REDACTED-SSH-KEY-PATH]',
-    );
-
-    // Environment files
-    redacted = redacted.replace(
-      /\/[^"\s]*\.env[^"\s]*/g,
-      '[REDACTED-ENV-FILE]',
-    );
-
-    // Configuration directories
-    redacted = redacted.replace(/\/home\/[^/\s"]+/g, '[REDACTED-HOME-DIR]');
-    redacted = redacted.replace(/\/Users\/[^/\s"]+/g, '[REDACTED-USER-DIR]');
-
-    return redacted;
+    return replacePathTokens(content, (token) => {
+      if (token.includes('.ssh/')) return '[REDACTED-SSH-PATH]';
+      if (token.includes('/id_rsa')) return '[REDACTED-SSH-KEY-PATH]';
+      if (token.includes('.env')) return '[REDACTED-ENV-FILE]';
+      if (token.startsWith('/home/')) return '[REDACTED-HOME-DIR]';
+      if (token.startsWith('/Users/')) return '[REDACTED-USER-DIR]';
+      return null;
+    });
   }
 
   /**
@@ -195,28 +233,12 @@ export class ConversationDataRedactor {
       return content;
     }
 
-    let redacted = content;
+    const emailRedacted = content
+      .split(' ')
+      .map((token) => (isEmailAddress(token) ? '[REDACTED-EMAIL]' : token))
+      .join(' ');
 
-    // Email addresses
-    redacted = redacted.replace(
-      /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-      '[REDACTED-EMAIL]',
-    );
-
-    // Phone numbers (basic patterns)
-    redacted = redacted.replace(/\b\d{3}-\d{3}-\d{4}\b/g, '[REDACTED-PHONE]');
-    redacted = redacted.replace(
-      /\b\(\d{3}\)\s?\d{3}-\d{4}\b/g,
-      '[REDACTED-PHONE]',
-    );
-
-    // Credit card numbers (basic pattern)
-    redacted = redacted.replace(
-      /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
-      '[REDACTED-CC-NUMBER]',
-    );
-
-    return redacted;
+    return redactPhoneAndCardNumbers(emailRedacted);
   }
 
   private shouldRedact(): boolean {
@@ -319,62 +341,35 @@ export class ConversationDataRedactor {
   }
 
   private redactFilePath(path: string): string {
-    // Redact sensitive file paths
-    const sensitivePatterns = [
-      {
-        pattern: /\/home\/[^/]+\/\.ssh\/[^/]+/g,
-        replacement: '[REDACTED-SSH-KEY-PATH]',
-      },
-      {
-        pattern: /\/home\/[^/]+\/\.aws\/[^/]+/g,
-        replacement: '[REDACTED-AWS-CONFIG-PATH]',
-      },
-      {
-        pattern: /\/home\/[^/]+\/\.docker\/[^/]+/g,
-        replacement: '[REDACTED-DOCKER-CONFIG-PATH]',
-      },
-      {
-        pattern: /\/Users\/[^/]+\/\.ssh\/[^/]+/g,
-        replacement: '[REDACTED-SSH-KEY-PATH]',
-      },
-      {
-        pattern: /\/Users\/[^/]+\/\.aws\/[^/]+/g,
-        replacement: '[REDACTED-AWS-CONFIG-PATH]',
-      },
-      { pattern: /.*\.env.*$/g, replacement: '[REDACTED-SENSITIVE-PATH]' },
-      { pattern: /.*secret.*$/gi, replacement: '[REDACTED-SENSITIVE-PATH]' },
-      { pattern: /.*key.*$/gi, replacement: '[REDACTED-SENSITIVE-PATH]' },
-    ];
-
-    let redacted = path;
-    for (const { pattern, replacement } of sensitivePatterns) {
-      redacted = redacted.replace(pattern, replacement);
+    const lowerPath = path.toLowerCase();
+    if (lowerPath.includes('.env')) return '[REDACTED-SENSITIVE-PATH]';
+    if (lowerPath.includes('secret')) return '[REDACTED-SENSITIVE-PATH]';
+    if (lowerPath.includes('key')) return '[REDACTED-SENSITIVE-PATH]';
+    if (path.includes('/.ssh/') && path.includes('/id_rsa')) {
+      return '[REDACTED-SENSITIVE-PATH]';
     }
-
-    return redacted;
+    if (path.includes('/.ssh/')) return '[REDACTED-SSH-PATH]';
+    if (path.includes('/.aws/')) return '[REDACTED-AWS-CONFIG-PATH]';
+    if (path.includes('/.docker/')) return '[REDACTED-DOCKER-CONFIG-PATH]';
+    return path;
   }
 
   private redactShellCommand(command: string): string {
-    // Redact potentially sensitive shell commands
-    let redacted = command;
-
-    // Redact export statements with sensitive values
-    redacted = redacted.replace(
-      /export\s+[A-Z_]+\s*=\s*['"]\s*sk-[a-zA-Z0-9]+\s*['"]/g,
-      'export [REDACTED-API-KEY]',
-    );
-    redacted = redacted.replace(
-      /export\s+[A-Z_]+\s*=\s*['"]\s*[a-zA-Z0-9+/]+=*\s*['"]/g,
-      'export [REDACTED-TOKEN]',
-    );
-
-    // Redact curl commands with authorization headers
-    redacted = redacted.replace(
-      /curl\s+.*-H\s+['"]Authorization:\s*Bearer\s+[^'"]+['"]/g,
-      'curl [REDACTED-AUTH-HEADER]',
-    );
-
-    return redacted;
+    const trimmed = command.trimStart();
+    const lower = trimmed.toLowerCase();
+    if (trimmed.startsWith('export ') && trimmed.includes('=')) {
+      const value = trimmed.slice(trimmed.indexOf('=') + 1).trim();
+      if (value.includes('sk-')) return 'export [REDACTED-API-KEY]';
+      if (value.length > 0) return 'export [REDACTED-TOKEN]';
+    }
+    if (
+      lower.startsWith('curl ') &&
+      lower.includes('authorization:') &&
+      lower.includes('bearer ')
+    ) {
+      return 'curl [REDACTED-AUTH-HEADER]';
+    }
+    return command;
   }
 
   private redactUrl(url: string): string {

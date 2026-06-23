@@ -16,12 +16,53 @@ import { cpLen, cpSlice } from '../../utils/textUtils.js';
 import { LRU_BUFFER_PERF_CACHE_LIMIT } from '../../constants.js';
 import path from 'node:path';
 
-/**
- * Regex pattern for matching image file paths.
- * Matches paths starting with @ followed by image extensions.
- */
-export const imagePathRegex =
-  /@((?:\\.|[^\s\r\n\\])+?\.(?:png|jpg|jpeg|gif|webp|svg|bmp))\b/gi;
+const IMAGE_EXTENSIONS = [
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.svg',
+  '.bmp',
+];
+
+function isWhitespace(char: string | undefined): boolean {
+  return char === ' ' || char === '\t' || char === '\r' || char === '\n';
+}
+
+function isWordChar(char: string | undefined): boolean {
+  if (char === undefined) {
+    return false;
+  }
+  const code = char.charCodeAt(0);
+  const isDigit = code >= 48 && code <= 57;
+  const isUppercaseLetter = code >= 65 && code <= 90;
+  const isLowercaseLetter = code >= 97 && code <= 122;
+  return isDigit || isUppercaseLetter || char === '_' || isLowercaseLetter;
+}
+
+function findImagePathEnd(line: string, start: number): number | null {
+  let index = start + 1;
+  while (index < line.length) {
+    const char = line[index];
+    if (char === '\\' && index + 1 < line.length) {
+      index += 2;
+    } else if (isWhitespace(char)) {
+      break;
+    } else {
+      index += 1;
+    }
+
+    const candidate = line.slice(start + 1, index).toLowerCase();
+    if (
+      IMAGE_EXTENSIONS.some((extension) => candidate.endsWith(extension)) &&
+      !isWordChar(line[index])
+    ) {
+      return index;
+    }
+  }
+  return null;
+}
 
 /**
  * Gets the transformed (collapsed) representation of an image path.
@@ -77,14 +118,17 @@ export function calculateTransformationsForLine(
   }
 
   const transformations: Transformation[] = [];
-  let match: RegExpExecArray | null;
-
-  // Reset regex state to ensure clean matching from start of line
-  imagePathRegex.lastIndex = 0;
-
-  while ((match = imagePathRegex.exec(line)) !== null) {
-    const logicalText = match[0];
-    const logStart = cpLen(line.substring(0, match.index));
+  let searchIndex = 0;
+  let matchIndex = line.indexOf('@', searchIndex);
+  while (matchIndex !== -1) {
+    const matchEnd = findImagePathEnd(line, matchIndex);
+    if (matchEnd === null) {
+      searchIndex = matchIndex + 1;
+      matchIndex = line.indexOf('@', searchIndex);
+      continue;
+    }
+    const logicalText = line.slice(matchIndex, matchEnd);
+    const logStart = cpLen(line.substring(0, matchIndex));
     const logEnd = logStart + cpLen(logicalText);
 
     transformations.push({
@@ -93,6 +137,8 @@ export function calculateTransformationsForLine(
       logicalText,
       collapsedText: getTransformedImagePath(logicalText),
     });
+    searchIndex = matchEnd;
+    matchIndex = line.indexOf('@', searchIndex);
   }
 
   transformationsCache.set(line, transformations);

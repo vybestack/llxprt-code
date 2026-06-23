@@ -28,17 +28,8 @@ export class TerminalCapabilityManager {
   private static readonly DEVICE_ATTRIBUTES_QUERY = '\x1b[c';
   private static readonly MODIFY_OTHER_KEYS_QUERY = '\x1b[>4;?m';
 
-  // Kitty keyboard flags: CSI ? flags u
-  private static readonly KITTY_REGEX = /\x1b\[\?(\d+)u/;
-  // Terminal Name/Version response: DCS > | text ST (or BEL)
-  private static readonly TERMINAL_NAME_REGEX = /\x1bP>\|(.+?)(\x1b\\|\x07)/;
-  // Primary Device Attributes: CSI ? ID ; ... c
-  private static readonly DEVICE_ATTRIBUTES_REGEX = /\x1b\[\?(\d+)(;\d+)*c/;
-  // OSC 11 response: OSC 11 ; rgb:rrrr/gggg/bbbb ST (or BEL)
-  private static readonly OSC_11_REGEX =
-    /\x1b\]11;rgb:([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})(\x1b\\|\x07)?/;
-  // modifyOtherKeys response: CSI > 4 ; level m
-  private static readonly MODIFY_OTHER_KEYS_REGEX = /\x1b\[>4;(\d+)m/;
+  private static readonly ESC = '\x1b';
+  private static readonly BEL = '\x07';
 
   private detectionComplete = false;
   private terminalBackgroundColor: TerminalBackgroundColor;
@@ -176,13 +167,9 @@ export class TerminalCapabilityManager {
 
   private parseBgColor(buffer: string, alreadyReceived: boolean): boolean {
     if (alreadyReceived) return true;
-    const match = buffer.match(TerminalCapabilityManager.OSC_11_REGEX);
-    if (match) {
-      this.terminalBackgroundColor = this.parseColor(
-        match[1],
-        match[2],
-        match[3],
-      );
+    const color = this.readOsc11Color(buffer);
+    if (color !== null) {
+      this.terminalBackgroundColor = this.parseColor(color.r, color.g, color.b);
       return true;
     }
     return false;
@@ -193,7 +180,7 @@ export class TerminalCapabilityManager {
     alreadyReceived: boolean,
   ): boolean {
     if (alreadyReceived) return true;
-    if (TerminalCapabilityManager.KITTY_REGEX.test(buffer)) {
+    if (this.readKittyKeyboardFlags(buffer) !== null) {
       this.kittySupported = true;
       return true;
     }
@@ -205,11 +192,8 @@ export class TerminalCapabilityManager {
     alreadyReceived: boolean,
   ): boolean {
     if (alreadyReceived) return true;
-    const match = buffer.match(
-      TerminalCapabilityManager.MODIFY_OTHER_KEYS_REGEX,
-    );
-    if (match) {
-      const level = parseInt(match[1], 10);
+    const level = this.readModifyOtherKeysLevel(buffer);
+    if (level !== null) {
       this.modifyOtherKeysSupported = level >= 2;
       debugLogger.log(
         `Detected modifyOtherKeys support: ${this.modifyOtherKeysSupported} (level ${level})`,
@@ -221,9 +205,9 @@ export class TerminalCapabilityManager {
 
   private parseTerminalName(buffer: string, alreadyReceived: boolean): boolean {
     if (alreadyReceived) return true;
-    const match = buffer.match(TerminalCapabilityManager.TERMINAL_NAME_REGEX);
-    if (match) {
-      this.terminalName = match[1];
+    const terminalName = this.readTerminalName(buffer);
+    if (terminalName !== null) {
+      this.terminalName = terminalName;
       return true;
     }
     return false;
@@ -235,10 +219,7 @@ export class TerminalCapabilityManager {
     onDone: () => void,
   ): boolean {
     if (alreadyReceived) return true;
-    const match = buffer.match(
-      TerminalCapabilityManager.DEVICE_ATTRIBUTES_REGEX,
-    );
-    if (match) {
+    if (this.readDeviceAttributes(buffer) !== null) {
       this.deviceAttributesSupported = true;
       onDone();
       return true;
@@ -370,6 +351,142 @@ export class TerminalCapabilityManager {
       // Ignore teardown failures in tests.
     }
     this.modifyOtherKeysEnabled = false;
+  }
+
+  private readKittyKeyboardFlags(buffer: string): number | null {
+    const prefix = TerminalCapabilityManager.ESC + '[?';
+    let start = buffer.indexOf(prefix);
+    while (start !== -1) {
+      const digitsStart = start + prefix.length;
+      const digitsEnd = this.readDigitsEnd(buffer, digitsStart);
+      if (digitsEnd !== digitsStart && buffer[digitsEnd] === 'u') {
+        return Number(buffer.slice(digitsStart, digitsEnd));
+      }
+      start = buffer.indexOf(prefix, start + prefix.length);
+    }
+    return null;
+  }
+
+  private readTerminalName(buffer: string): string | null {
+    const prefix = TerminalCapabilityManager.ESC + 'P>|';
+    const start = buffer.indexOf(prefix);
+    if (start === -1) return null;
+    const nameStart = start + prefix.length;
+    const stEnd = buffer.indexOf(
+      TerminalCapabilityManager.ESC + '\\',
+      nameStart,
+    );
+    const belEnd = buffer.indexOf(TerminalCapabilityManager.BEL, nameStart);
+    const nameEnd = this.firstTerminatorIndex(stEnd, belEnd);
+    if (nameEnd === -1) return null;
+    return buffer.slice(nameStart, nameEnd);
+  }
+
+  private readDeviceAttributes(buffer: string): number | null {
+    const prefix = TerminalCapabilityManager.ESC + '[?';
+    let start = buffer.indexOf(prefix);
+    while (start !== -1) {
+      const value = this.readDeviceAttributesAt(buffer, start, prefix.length);
+      if (value !== null) return value;
+      start = buffer.indexOf(prefix, start + prefix.length);
+    }
+    return null;
+  }
+
+  private readDeviceAttributesAt(
+    buffer: string,
+    start: number,
+    prefixLength: number,
+  ): number | null {
+    const digitsStart = start + prefixLength;
+    const digitsEnd = this.readDigitsEnd(buffer, digitsStart);
+    if (digitsEnd === digitsStart) return null;
+    const end = this.readSemicolonSeparatedDigitsEnd(buffer, digitsEnd);
+    if (buffer[end] !== 'c') return null;
+    return Number(buffer.slice(digitsStart, digitsEnd));
+  }
+
+  private readSemicolonSeparatedDigitsEnd(
+    buffer: string,
+    start: number,
+  ): number {
+    let index = start;
+    while (buffer[index] === ';') {
+      index += 1;
+      const nextDigitsEnd = this.readDigitsEnd(buffer, index);
+      if (nextDigitsEnd === index) return index;
+      index = nextDigitsEnd;
+    }
+    return index;
+  }
+
+  private readModifyOtherKeysLevel(buffer: string): number | null {
+    const prefix = TerminalCapabilityManager.ESC + '[>4;';
+    const start = buffer.indexOf(prefix);
+    if (start === -1) return null;
+    const digitsStart = start + prefix.length;
+    const digitsEnd = this.readDigitsEnd(buffer, digitsStart);
+    if (digitsEnd === digitsStart || buffer[digitsEnd] !== 'm') return null;
+    return Number(buffer.slice(digitsStart, digitsEnd));
+  }
+
+  private readOsc11Color(
+    buffer: string,
+  ): { r: string; g: string; b: string } | null {
+    const prefix = TerminalCapabilityManager.ESC + ']11;rgb:';
+    const start = buffer.indexOf(prefix);
+    if (start === -1) return null;
+
+    const firstSlash = buffer.indexOf('/', start + prefix.length);
+    if (firstSlash === -1) return null;
+    const secondSlash = buffer.indexOf('/', firstSlash + 1);
+    if (secondSlash === -1) return null;
+
+    const r = buffer.slice(start + prefix.length, firstSlash);
+    const g = buffer.slice(firstSlash + 1, secondSlash);
+    const bEnd = this.readHexEnd(buffer, secondSlash + 1);
+    const b = buffer.slice(secondSlash + 1, bEnd);
+    if (
+      !this.isRgbComponent(r) ||
+      !this.isRgbComponent(g) ||
+      !this.isRgbComponent(b)
+    ) {
+      return null;
+    }
+    return { r, g, b };
+  }
+
+  private readDigitsEnd(buffer: string, start: number): number {
+    let index = start;
+    while (index < buffer.length) {
+      const code = buffer.charCodeAt(index);
+      if (code < 48 || code > 57) break;
+      index += 1;
+    }
+    return index;
+  }
+
+  private readHexEnd(buffer: string, start: number): number {
+    let index = start;
+    while (index < buffer.length) {
+      const code = buffer.charCodeAt(index);
+      const isDigit = code >= 48 && code <= 57;
+      const isUpperHex = code >= 65 && code <= 70;
+      const isLowerHex = code >= 97 && code <= 102;
+      if (!isDigit && !isUpperHex && !isLowerHex) break;
+      index += 1;
+    }
+    return index;
+  }
+
+  private isRgbComponent(value: string): boolean {
+    return value.length >= 1 && value.length <= 4;
+  }
+
+  private firstTerminatorIndex(first: number, second: number): number {
+    if (first === -1) return second;
+    if (second === -1) return first;
+    return Math.min(first, second);
   }
 
   private parseColor(rHex: string, gHex: string, bHex: string): string {

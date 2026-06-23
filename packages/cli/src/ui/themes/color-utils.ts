@@ -282,6 +282,58 @@ export function getThemeTypeFromBackgroundColor(
   return luminance > 0.5 ? 'light' : 'dark';
 }
 
+const OSC_11_PREFIX = '\u001b]11;rgb:';
+const OSC_ST_TERMINATOR = '\u001b\\';
+const BEL_TERMINATOR = '\u0007';
+
+function readHexComponentEnd(text: string, start: number): number {
+  let index = start;
+  while (index < text.length) {
+    const code = text.charCodeAt(index);
+    const isDigit = code >= 48 && code <= 57;
+    const isUpperHex = code >= 65 && code <= 70;
+    const isLowerHex = code >= 97 && code <= 102;
+    if (!isDigit && !isUpperHex && !isLowerHex) {
+      break;
+    }
+    index += 1;
+  }
+  return index;
+}
+
+function readOsc11Response(
+  response: string,
+): { r: string; g: string; b: string } | undefined {
+  const start = response.indexOf(OSC_11_PREFIX);
+  if (start === -1) {
+    return undefined;
+  }
+
+  const redStart = start + OSC_11_PREFIX.length;
+  const firstSlash = response.indexOf('/', redStart);
+  if (firstSlash === -1) {
+    return undefined;
+  }
+  const secondSlash = response.indexOf('/', firstSlash + 1);
+  if (secondSlash === -1) {
+    return undefined;
+  }
+
+  const blueStart = secondSlash + 1;
+  const blueEnd = readHexComponentEnd(response, blueStart);
+  const hasStTerminator = response.startsWith(OSC_ST_TERMINATOR, blueEnd);
+  const hasBelTerminator = response.startsWith(BEL_TERMINATOR, blueEnd);
+  const r = response.slice(redStart, firstSlash);
+  const g = response.slice(firstSlash + 1, secondSlash);
+  const b = response.slice(blueStart, blueEnd);
+  const hasValidLength = r.length === 4 && g.length === 4 && b.length === 4;
+  const hasTerminator = hasStTerminator || hasBelTerminator;
+  if (!hasValidLength || !hasTerminator) {
+    return undefined;
+  }
+  return { r, g, b };
+}
+
 /**
  * Detects terminal background color using OSC 11 escape sequence
  * Returns hex color string like '#1E1E2E' or undefined if detection fails
@@ -316,26 +368,11 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
       // Accumulate response across multiple data events (handles split chunks)
       response += data.toString();
 
-      // OSC 11 response formats:
-      // ESC ] 11 ; rgb:RRRR/GGGG/BBBB ESC \ (ST terminator - standard)
-      // ESC ] 11 ; rgb:RRRR/GGGG/BBBB BEL   (BEL terminator - legacy terminals)
-      // Match either terminator (case-insensitive hex)
-      // Static regex for OSC 11 response with ST terminator - no dynamic parts
-      const matchST = response.match(
-        /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x1b\\/i,
-      );
-      // Static regex for OSC 11 response with BEL terminator - no dynamic parts
-      const matchBEL = response.match(
-        /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x07/i,
-      );
-
-      const match = matchST ?? matchBEL;
-      if (match) {
-        // Convert 16-bit RGB components to 8-bit hex
-        // Take first 2 hex digits of each 4-digit component (high byte)
-        const r = parseInt(match[1].substring(0, 2), 16);
-        const g = parseInt(match[2].substring(0, 2), 16);
-        const b = parseInt(match[3].substring(0, 2), 16);
+      const osc11Response = readOsc11Response(response);
+      if (osc11Response !== undefined) {
+        const r = parseInt(osc11Response.r.substring(0, 2), 16);
+        const g = parseInt(osc11Response.g.substring(0, 2), 16);
+        const b = parseInt(osc11Response.b.substring(0, 2), 16);
         cleanup();
         const hexColor =
           `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();

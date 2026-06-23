@@ -16,17 +16,19 @@ import type { IModel } from '../IModel.js';
 /**
  * Model token patterns for max output tokens - static configuration only
  */
-export const MODEL_TOKEN_PATTERNS: Array<{ pattern: RegExp; tokens: number }> =
-  [
-    { pattern: /claude-.*opus-4/i, tokens: 32000 },
-    { pattern: /claude-.*sonnet-4/i, tokens: 64000 },
-    { pattern: /claude-.*haiku-4/i, tokens: 200000 }, // Future-proofing for Haiku 4
-    { pattern: /claude-.*3-7.*sonnet/i, tokens: 64000 },
-    { pattern: /claude-.*3-5.*sonnet/i, tokens: 8192 },
-    { pattern: /claude-.*3-5.*haiku/i, tokens: 8192 },
-    { pattern: /claude-.*3.*opus/i, tokens: 4096 },
-    { pattern: /claude-.*3.*haiku/i, tokens: 4096 },
-  ];
+export const MODEL_TOKEN_PATTERNS: Array<{
+  requiredParts: readonly string[];
+  tokens: number;
+}> = [
+  { requiredParts: ['opus', '4'], tokens: 32000 },
+  { requiredParts: ['sonnet', '4'], tokens: 64000 },
+  { requiredParts: ['haiku', '4'], tokens: 200000 }, // Future-proofing for Haiku 4
+  { requiredParts: ['3', '7', 'sonnet'], tokens: 64000 },
+  { requiredParts: ['3', '5', 'sonnet'], tokens: 8192 },
+  { requiredParts: ['3', '5', 'haiku'], tokens: 8192 },
+  { requiredParts: ['3', 'opus'], tokens: 4096 },
+  { requiredParts: ['3', 'haiku'], tokens: 4096 },
+];
 
 /**
  * OAuth-compatible models (without provider field - added by provider class)
@@ -245,9 +247,9 @@ export function getMaxTokensForModel(modelId: string): number {
     return 64000;
   }
 
-  // Try to match model patterns
-  for (const { pattern, tokens } of MODEL_TOKEN_PATTERNS) {
-    if (pattern.test(modelId)) {
+  const normalizedModelId = modelId.toLowerCase();
+  for (const { requiredParts, tokens } of MODEL_TOKEN_PATTERNS) {
+    if (requiredParts.every((part) => normalizedModelId.includes(part))) {
       return tokens;
     }
   }

@@ -6,11 +6,11 @@
 
 import { writeToStdout } from '@vybestack/llxprt-code-core';
 import {
-  SGR_MOUSE_REGEX,
-  X11_MOUSE_REGEX,
   SGR_EVENT_PREFIX,
   X11_EVENT_PREFIX,
   couldBeMouseSequence as inputCouldBeMouseSequence,
+  readSGRMouseSequence,
+  readX11MouseSequence,
 } from './input.js';
 
 export type MouseEventName =
@@ -111,52 +111,45 @@ export function getMouseEventName(
 export function parseSGRMouseEvent(
   buffer: string,
 ): { event: MouseEvent; length: number } | null {
-  const match = buffer.match(SGR_MOUSE_REGEX);
+  const sequence = readSGRMouseSequence(buffer);
+  if (!sequence) return null;
 
-  if (match) {
-    const buttonCode = parseInt(match[1], 10);
-    const col = parseInt(match[2], 10);
-    const row = parseInt(match[3], 10);
-    const action = match[4];
-    const isRelease = action === 'm';
+  const { buttonCode, col, row, action } = sequence;
+  const isRelease = action === 'm';
 
-    const shift = (buttonCode & 4) !== 0;
-    const meta = (buttonCode & 8) !== 0;
-    const ctrl = (buttonCode & 16) !== 0;
+  const shift = (buttonCode & 4) !== 0;
+  const meta = (buttonCode & 8) !== 0;
+  const ctrl = (buttonCode & 16) !== 0;
 
-    const name = getMouseEventName(buttonCode, isRelease);
-    const button = getButtonName(buttonCode);
+  const name = getMouseEventName(buttonCode, isRelease);
+  const button = getButtonName(buttonCode);
 
-    if (name) {
-      return {
-        event: {
-          name,
-          ctrl,
-          meta,
-          shift,
-          col,
-          row,
-          button,
-        },
-        length: match[0].length,
-      };
-    }
-    return null;
+  if (name) {
+    return {
+      event: {
+        name,
+        ctrl,
+        meta,
+        shift,
+        col,
+        row,
+        button,
+      },
+      length: sequence.length,
+    };
   }
-
   return null;
 }
 
 export function parseX11MouseEvent(
   buffer: string,
 ): { event: MouseEvent; length: number } | null {
-  const match = buffer.match(X11_MOUSE_REGEX);
-  if (!match) return null;
+  const sequence = readX11MouseSequence(buffer);
+  if (!sequence) return null;
 
-  // The 3 bytes are in match[1]
-  const b = match[1].charCodeAt(0) - 32;
-  const col = match[1].charCodeAt(1) - 32;
-  const row = match[1].charCodeAt(2) - 32;
+  const b = sequence.bytes.charCodeAt(0) - 32;
+  const col = sequence.bytes.charCodeAt(1) - 32;
+  const row = sequence.bytes.charCodeAt(2) - 32;
 
   const shift = (b & 4) !== 0;
   const meta = (b & 8) !== 0;
@@ -215,7 +208,7 @@ export function parseX11MouseEvent(
   if (name) {
     return {
       event: { name, ctrl, meta, shift, col, row, button },
-      length: match[0].length,
+      length: sequence.length,
     };
   }
   return null;
@@ -242,7 +235,7 @@ export function isIncompleteMouseSequence(buffer: string): boolean {
     // SGR sequences end with 'm' or 'M'.
     // If it doesn't have it yet, it's incomplete.
     // Add a reasonable max length check to fail early on garbage.
-    return !/[mM]/.test(buffer) && buffer.length < 50;
+    return !buffer.includes('m') && !buffer.includes('M') && buffer.length < 50;
   }
 
   // It's a prefix of the prefix (e.g. "ESC" or "ESC [")
