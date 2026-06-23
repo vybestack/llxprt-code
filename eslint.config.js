@@ -1681,7 +1681,6 @@ export default tseslint.config(
       'packages/core/src/config/endpoints.ts',
       'packages/core/src/parsers/TextToolCallParser.ts',
       'packages/core/src/services/loopDetectionService.ts',
-      'packages/core/src/skills/skillLoader.ts',
       'packages/providers/src/anthropic/AnthropicModelData.ts',
     ],
     rules: {

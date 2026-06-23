@@ -35,7 +35,74 @@ export interface SkillDefinition {
   source?: SkillSource;
 }
 
-const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)/;
+interface SkillFrontmatterParts {
+  frontmatter: string;
+  body: string;
+}
+
+function stripTrailingCarriageReturn(line: string): string {
+  return line.endsWith('\r') ? line.slice(0, -1) : line;
+}
+
+function splitSkillFrontmatter(content: string): SkillFrontmatterParts | null {
+  const openingDelimiterEnd = content.indexOf('\n');
+  if (openingDelimiterEnd === -1) {
+    return null;
+  }
+
+  const openingDelimiter = stripTrailingCarriageReturn(
+    content.slice(0, openingDelimiterEnd),
+  );
+  if (openingDelimiter !== '---') {
+    return null;
+  }
+
+  const frontmatterStart = openingDelimiterEnd + 1;
+  let lineStart = frontmatterStart;
+
+  while (lineStart <= content.length) {
+    const nextLineEnd = content.indexOf('\n', lineStart);
+    const lineEnd = nextLineEnd === -1 ? content.length : nextLineEnd;
+    const line = stripTrailingCarriageReturn(content.slice(lineStart, lineEnd));
+
+    if (line === '---') {
+      return {
+        frontmatter: content.slice(frontmatterStart, lineStart),
+        body: nextLineEnd === -1 ? '' : content.slice(nextLineEnd + 1),
+      };
+    }
+
+    if (nextLineEnd === -1) {
+      return null;
+    }
+
+    lineStart = nextLineEnd + 1;
+  }
+
+  return null;
+}
+
+function splitFrontmatterLines(content: string): string[] {
+  return content.replaceAll('\r\n', '\n').split('\n');
+}
+
+function parseSimpleField(line: string, fieldName: string): string | null {
+  const trimmedLine = line.trimStart();
+  const prefix = fieldName + ':';
+  if (!trimmedLine.startsWith(prefix)) {
+    return null;
+  }
+
+  return trimmedLine.slice(prefix.length).trim();
+}
+
+function isIndentedContentLine(line: string): boolean {
+  const firstCharacter = line[0];
+  return (
+    (firstCharacter === ' ' || firstCharacter === '\t') &&
+    line.trim().length > 0
+  );
+}
 
 /**
  * Parses frontmatter content using YAML with a fallback to simple key-value parsing.
@@ -69,7 +136,7 @@ function parseFrontmatter(
 function parseSimpleFrontmatter(
   content: string,
 ): { name: string; description: string } | null {
-  const lines = content.split(/\r?\n/);
+  const lines = splitFrontmatterLines(content);
   let name: string | undefined;
   let description: string | undefined;
 
@@ -78,23 +145,23 @@ function parseSimpleFrontmatter(
     const line = lines[i];
 
     // Match "name:" at the start of the line (optional whitespace)
-    const nameMatch = line.match(/^\s*name:\s*(.*)$/);
-    if (nameMatch) {
-      name = nameMatch[1].trim();
+    const parsedName = parseSimpleField(line, 'name');
+    if (parsedName !== null) {
+      name = parsedName;
       continue;
     }
 
     // Match "description:" at the start of the line (optional whitespace)
-    const descMatch = line.match(/^\s*description:\s*(.*)$/);
-    if (descMatch) {
-      const descLines = [descMatch[1].trim()];
+    const parsedDescription = parseSimpleField(line, 'description');
+    if (parsedDescription !== null) {
+      const descLines = [parsedDescription];
 
       // Check for multi-line description (indented continuation lines)
       while (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
         // If next line is indented, it's a continuation of the description
         // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (nextLine.match(/^[ \t]+\S/)) {
+        if (isIndentedContentLine(nextLine)) {
           descLines.push(nextLine.trim());
           i++;
         } else {
@@ -170,12 +237,12 @@ export async function loadSkillFromFile(
 ): Promise<SkillDefinition | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const match = content.match(FRONTMATTER_REGEX);
-    if (!match) {
+    const parts = splitSkillFrontmatter(content);
+    if (parts === null) {
       return null;
     }
 
-    const frontmatter = parseFrontmatter(match[1]);
+    const frontmatter = parseFrontmatter(parts.frontmatter);
     if (!frontmatter) {
       return null;
     }
@@ -184,7 +251,7 @@ export async function loadSkillFromFile(
       name: frontmatter.name,
       description: frontmatter.description,
       location: filePath,
-      body: match[2].trim(),
+      body: parts.body.trim(),
       source,
     };
   } catch (error) {
@@ -199,12 +266,12 @@ function loadSkillFromFileSync(
 ): SkillDefinition | null {
   try {
     const content = fsSync.readFileSync(filePath, 'utf-8');
-    const match = content.match(FRONTMATTER_REGEX);
-    if (!match) {
+    const parts = splitSkillFrontmatter(content);
+    if (parts === null) {
       return null;
     }
 
-    const frontmatter = yaml.load(match[1]);
+    const frontmatter = yaml.load(parts.frontmatter);
     if (
       frontmatter === null ||
       frontmatter === undefined ||
@@ -222,7 +289,7 @@ function loadSkillFromFileSync(
       name,
       description,
       location: filePath,
-      body: match[2].trim(),
+      body: parts.body.trim(),
       source,
     };
   } catch (error) {
