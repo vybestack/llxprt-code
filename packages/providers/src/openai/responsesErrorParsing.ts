@@ -115,8 +115,7 @@ export function parseErrorResponse(
     return error;
   } catch {
     // For invalid JSON / empty body, include diagnostic body snippet.
-    const errorPrefix =
-      status >= 500 && status < 600 ? 'Server error' : 'API Error';
+    const errorPrefix = resolveErrorPrefix(status);
     const detail = buildDiagnosticMessage(status, body);
     const error = new Error(`${errorPrefix}: ${providerName} - ${detail}`);
     (error as { status?: number }).status = status;
