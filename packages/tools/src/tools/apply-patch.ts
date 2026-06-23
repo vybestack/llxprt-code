@@ -621,14 +621,24 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       }
     }
 
-    const newMatches =
-      newHeader !== '' &&
-      (path.basename(newHeader) === targetName ||
-        newHeader === path.relative(getTargetDirCompat(this.host), filePath));
-    const oldMatches =
-      oldHeader !== '' &&
-      (path.basename(oldHeader) === targetName ||
-        oldHeader === path.relative(getTargetDirCompat(this.host), filePath));
+    const relativePath = path.relative(getTargetDirCompat(this.host), filePath);
+    const headerMatches = (header: string): boolean => {
+      if (header === '') {
+        return false;
+      }
+      // When the header contains a directory separator, the full relative path
+      // must match so that a directory-qualified header (e.g. 'a/src/foo.txt')
+      // cannot validate against an absolute_path ending in a different
+      // directory's same-named file. Only headers without a directory component
+      // fall back to basename comparison.
+      if (header.includes('/') || header.includes(path.sep)) {
+        return header === relativePath;
+      }
+      return path.basename(header) === targetName;
+    };
+
+    const newMatches = headerMatches(newHeader);
+    const oldMatches = headerMatches(oldHeader);
 
     if (newMatches || oldMatches) {
       return null;

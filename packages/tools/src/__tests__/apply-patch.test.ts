@@ -240,6 +240,60 @@ describe('ApplyPatchTool issue #2133 regressions', () => {
     });
   });
 
+  describe('directory-qualified header mismatch rejection', () => {
+    it('rejects a directory-qualified header pointing at a same-named file in a different directory', async () => {
+      const srcDir = join(tempDir, 'src');
+      const testDir = join(tempDir, 'test');
+      mkdirSync(srcDir, { recursive: true });
+      mkdirSync(testDir, { recursive: true });
+
+      const target = join(testDir, 'foo.txt');
+      writeFileSync(target, 'keep-me\n', 'utf-8');
+
+      // Header targets src/foo.txt while absolute_path targets test/foo.txt.
+      // Basenames match, but the directory-qualified header must not validate.
+      const patch = `--- a/src/foo.txt
++++ b/src/foo.txt
+@@ -1,1 +1,1 @@
+-keep-me
++changed
+`;
+
+      const result = await executePatch({
+        absolute_path: target,
+        patch_content: patch,
+      });
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
+      expect(result.llmContent).toContain('src/foo.txt');
+      expect(readFileSync(target, 'utf-8')).toBe('keep-me\n');
+    });
+
+    it('accepts a directory-qualified header matching the absolute_path relative path', async () => {
+      const srcDir = join(tempDir, 'src');
+      mkdirSync(srcDir, { recursive: true });
+
+      const target = join(srcDir, 'foo.txt');
+      writeFileSync(target, 'original\n', 'utf-8');
+
+      const patch = `--- a/src/foo.txt
++++ b/src/foo.txt
+@@ -1,1 +1,1 @@
+-original
++patched
+`;
+
+      const result = await executePatch({
+        absolute_path: target,
+        patch_content: patch,
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(readFileSync(target, 'utf-8')).toContain('patched');
+    });
+  });
+
   describe('empty or malformed patch rejection', () => {
     it('returns an error for an empty patch content and leaves the file unchanged', async () => {
       const target = join(tempDir, 'empty.txt');
