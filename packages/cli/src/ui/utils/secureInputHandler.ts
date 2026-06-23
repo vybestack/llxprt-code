@@ -125,6 +125,21 @@ function splitKeySaveInput(
   return { prefix: text.substring(0, index), value: text.substring(index) };
 }
 
+function splitKeyInput(text: string): { prefix: string; value: string } | null {
+  const command = '/key';
+  if (!text.startsWith(command) || !isWhitespace(text[command.length])) {
+    return null;
+  }
+  let index = command.length;
+  while (isWhitespace(text[index])) {
+    index += 1;
+  }
+  if (index >= text.length) {
+    return null;
+  }
+  return { prefix: text.substring(0, index), value: text.substring(index) };
+}
+
 function isKeySubcommand(text: string): boolean {
   const prefix = '/key';
   if (!text.startsWith(prefix) || !isWhitespace(text[prefix.length])) {
@@ -234,14 +249,15 @@ export class SecureInputHandler {
   }
 
   private maskKeyInput(text: string): string | null {
-    if (!text.startsWith('/key ') || text.length <= '/key '.length) {
+    const keyMatch = splitKeyInput(text);
+    if (keyMatch === null) {
       return null;
     }
-    const keyContent = text.substring('/key '.length);
+    const { prefix, value: keyContent } = keyMatch;
     const { keyToMask, afterLineBreak } = splitAtLineBreak(keyContent);
     const maskedKey = this.maskValue(keyToMask);
     if (afterLineBreak !== '') {
-      const result = `/key ${maskedKey}${afterLineBreak}`;
+      const result = `${prefix}${maskedKey}${afterLineBreak}`;
       if (process.env.DEBUG_SECURE_INPUT) {
         debugLogger.log('[SecureHandler] Output:', JSON.stringify(result));
         debugLogger.log(
@@ -255,7 +271,7 @@ export class SecureInputHandler {
       }
       return result;
     }
-    return `/key ${maskedKey}`;
+    return `${prefix}${maskedKey}`;
   }
 
   /**
@@ -322,8 +338,9 @@ export class SecureInputHandler {
       return command;
     }
 
-    if (command.startsWith('/key ') && command.length > '/key '.length) {
-      return `/key ${this.maskValue(command.substring('/key '.length))}`;
+    const keyMatch = splitKeyInput(command);
+    if (keyMatch !== null) {
+      return `${keyMatch.prefix}${this.maskValue(keyMatch.value)}`;
     }
 
     return command;

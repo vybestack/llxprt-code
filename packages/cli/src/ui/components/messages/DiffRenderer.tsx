@@ -21,6 +21,19 @@ interface DiffLine {
   content: string;
 }
 
+function containsOnlyDigits(value: string): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (code < 48 || code > 57) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function parseHunkHeader(
   line: string,
 ): { oldLine: number; newLine: number } | null {
@@ -35,13 +48,13 @@ function parseHunkHeader(
   if (headerEnd === -1) {
     return null;
   }
-  const oldLine = Number(line.slice(4, newLineMarker).split(',', 1)[0]);
-  const newLine = Number(
-    line.slice(newLineMarker + 2, headerEnd).split(',', 1)[0],
-  );
-  if (!Number.isInteger(oldLine) || !Number.isInteger(newLine)) {
+  const oldLineText = line.slice(4, newLineMarker).split(',', 1)[0];
+  const newLineText = line.slice(newLineMarker + 2, headerEnd).split(',', 1)[0];
+  if (!containsOnlyDigits(oldLineText) || !containsOnlyDigits(newLineText)) {
     return null;
   }
+  const oldLine = Number(oldLineText);
+  const newLine = Number(newLineText);
   return { oldLine, newLine };
 }
 

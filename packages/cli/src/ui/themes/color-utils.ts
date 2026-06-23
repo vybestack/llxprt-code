@@ -301,6 +301,13 @@ function readHexComponentEnd(text: string, start: number): number {
   return index;
 }
 
+function isHexComponent(value: string): boolean {
+  if (value.length !== 4) {
+    return false;
+  }
+  return readHexComponentEnd(value, 0) === value.length;
+}
+
 function readOsc11Response(
   response: string,
 ): { r: string; g: string; b: string } | undefined {
@@ -326,9 +333,13 @@ function readOsc11Response(
   const r = response.slice(redStart, firstSlash);
   const g = response.slice(firstSlash + 1, secondSlash);
   const b = response.slice(blueStart, blueEnd);
-  const hasValidLength = r.length === 4 && g.length === 4 && b.length === 4;
   const hasTerminator = hasStTerminator || hasBelTerminator;
-  if (!hasValidLength || !hasTerminator) {
+  if (
+    !isHexComponent(r) ||
+    !isHexComponent(g) ||
+    !isHexComponent(b) ||
+    !hasTerminator
+  ) {
     return undefined;
   }
   return { r, g, b };

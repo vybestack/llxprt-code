@@ -36,19 +36,44 @@ interface ToolGroupMessageProps {
   embeddedShellFocused?: boolean;
 }
 
+function containsOnlyDigits(value: string): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (code < 48 || code > 57) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function trimLabelPunctuation(label: string): string {
+  let end = label.length;
+  while (end > 0) {
+    const char = label[end - 1];
+    if (char !== ':' && char !== ',' && char !== ';' && char !== '.') {
+      break;
+    }
+    end -= 1;
+  }
+  return label.slice(0, end).toLowerCase();
+}
+
 const extractCountFromText = (text?: string): number | undefined => {
   if (!text) {
     return undefined;
   }
   const words = text.split(' ').filter((word) => word.length > 0);
   for (let index = 0; index < words.length - 1; index++) {
-    const count = Number(words[index]);
-    const label = words[index + 1].toLowerCase();
+    const countText = words[index];
+    const label = trimLabelPunctuation(words[index + 1]);
     if (
-      Number.isInteger(count) &&
+      containsOnlyDigits(countText) &&
       ['task', 'tasks', 'item', 'items'].includes(label)
     ) {
-      return count;
+      return Number(countText);
     }
   }
   return undefined;

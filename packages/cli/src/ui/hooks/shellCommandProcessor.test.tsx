@@ -585,14 +585,12 @@ describe('useShellCommandProcessor', () => {
       text: 'An unexpected error occurred: Synchronous spawn error',
     });
     // Verify that the temporary file was cleaned up
-    expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(
-      expect.stringContaining('shell_pwd_abcdef.tmp'),
-    );
+    const cleanedPath = String(vi.mocked(fs.unlinkSync).mock.calls[0][0]);
+    expect(cleanedPath.endsWith('shell_pwd_abcdef.tmp')).toBe(true);
   });
 
   describe('Directory Change Warning', () => {
     it('should show a warning if the working directory changes', async () => {
-      const tmpFile = expect.stringContaining('shell_pwd_abcdef.tmp');
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('/test/dir/new'); // A different directory
 
@@ -614,7 +612,8 @@ describe('useShellCommandProcessor', () => {
       expect(finalHistoryItem.tools[0].resultDisplay).toContain(
         "WARNING: shell mode is stateless; the directory change to '/test/dir/new' will not persist.",
       );
-      expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(tmpFile);
+      const cleanedPath = String(vi.mocked(fs.unlinkSync).mock.calls[0][0]);
+      expect(cleanedPath.endsWith('shell_pwd_abcdef.tmp')).toBe(true);
     });
 
     it('should NOT show a warning if the directory does not change', async () => {

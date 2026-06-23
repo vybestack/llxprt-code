@@ -64,6 +64,11 @@ function isEmailAddress(token: string): boolean {
   return at > 0 && dot > at + 1 && dot < token.length - 2;
 }
 
+function isSensitivePathSegment(segment: string): boolean {
+  if (segment === '.env' || segment.startsWith('.env.')) return true;
+  return ['secret', 'secrets', 'key', 'keys'].includes(segment);
+}
+
 function redactPhoneAndCardNumbers(content: string): string {
   return content
     .split(' ')
@@ -341,16 +346,19 @@ export class ConversationDataRedactor {
   }
 
   private redactFilePath(path: string): string {
-    const lowerPath = path.toLowerCase();
-    if (lowerPath.includes('.env')) return '[REDACTED-SENSITIVE-PATH]';
-    if (lowerPath.includes('secret')) return '[REDACTED-SENSITIVE-PATH]';
-    if (lowerPath.includes('key')) return '[REDACTED-SENSITIVE-PATH]';
-    if (path.includes('/.ssh/') && path.includes('/id_rsa')) {
+    const segments = path
+      .split(/[/\\]/)
+      .filter((segment) => segment.length > 0)
+      .map((segment) => segment.toLowerCase());
+    if (segments.some(isSensitivePathSegment)) {
       return '[REDACTED-SENSITIVE-PATH]';
     }
-    if (path.includes('/.ssh/')) return '[REDACTED-SSH-PATH]';
-    if (path.includes('/.aws/')) return '[REDACTED-AWS-CONFIG-PATH]';
-    if (path.includes('/.docker/')) return '[REDACTED-DOCKER-CONFIG-PATH]';
+    if (segments.includes('.ssh') && segments.includes('id_rsa')) {
+      return '[REDACTED-SENSITIVE-PATH]';
+    }
+    if (segments.includes('.ssh')) return '[REDACTED-SSH-PATH]';
+    if (segments.includes('.aws')) return '[REDACTED-AWS-CONFIG-PATH]';
+    if (segments.includes('.docker')) return '[REDACTED-DOCKER-CONFIG-PATH]';
     return path;
   }
 

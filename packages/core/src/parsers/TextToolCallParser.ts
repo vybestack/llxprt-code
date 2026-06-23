@@ -586,14 +586,12 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   private postProcessCleanedContent(content: string): string {
     return this.removePartialJsonToolCall(content)
       .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
-      .replace(/<\|im_start\|>assistant/g, '')
-      .replace(/<\|im_end\|>/g, '')
+      .replace(/<\|im_(?:start\|>assistant|end\|>)/g, '')
       .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
       .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '')
       .replace(/<invoke[\s\S]*?<\/invoke>/g, '')
       .replace(/<tool>[\s\S]*?<\/tool>/g, '')
-      .replace(/<\/use_[A-Za-z0-9_.-]+>/g, '')
-      .replace(/<\/use>/g, '')
+      .replace(/<\/use(?:_[A-Za-z0-9_.-]+)?>/g, '')
       .replace(/<tool_call>\s*\{[^}]*$/gm, '')
       .replace(/\u2726\s*<think>/g, '')
       .replace(/\n{2,}/g, '\n')
@@ -601,20 +599,22 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   }
 
   private removePartialJsonToolCall(content: string): string {
-    return content
-      .split('\n')
-      .map((line) => this.removePartialJsonToolCallLine(line))
-      .join('\n');
-  }
+    const toolCallStart = content.indexOf('{"name"');
+    const argumentsIndex = content.indexOf('"arguments"', toolCallStart + 1);
+    if (toolCallStart === -1 || argumentsIndex === -1) return content;
+    const argumentObjectStart = content.indexOf('{', argumentsIndex);
+    if (argumentObjectStart === -1) return content;
 
-  private removePartialJsonToolCallLine(line: string): string {
-    const nameIndex = line.indexOf('{"name"');
-    const argumentsIndex = line.indexOf('"arguments"', Math.max(nameIndex, 0));
-    if (nameIndex === -1 || argumentsIndex === -1) return line;
-    const argumentObjectStart = line.indexOf('{', argumentsIndex);
-    if (argumentObjectStart === -1) return line;
-    const argumentObjectEnd = line.indexOf('}', argumentObjectStart + 1);
-    return argumentObjectEnd === -1 ? line.slice(0, nameIndex) : line;
+    let depth = 0;
+    let inString = false;
+    for (let index = argumentObjectStart; index < content.length; index++) {
+      const char = content[index];
+      const previousEscaped = content[index - 1] === '\\';
+      if (char === '"' && !previousEscaped) inString = !inString;
+      else if (!inString && char === '{') depth += 1;
+      else if (!inString && char === '}' && --depth === 0) return content;
+    }
+    return content.slice(0, toolCallStart);
   }
 
   private normalizeArguments(

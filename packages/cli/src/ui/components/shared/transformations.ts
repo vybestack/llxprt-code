@@ -121,23 +121,24 @@ export function calculateTransformationsForLine(
   let searchIndex = 0;
   let matchIndex = line.indexOf('@', searchIndex);
   while (matchIndex !== -1) {
-    const matchEnd = findImagePathEnd(line, matchIndex);
-    if (matchEnd === null) {
-      searchIndex = matchIndex + 1;
-      matchIndex = line.indexOf('@', searchIndex);
-      continue;
-    }
-    const logicalText = line.slice(matchIndex, matchEnd);
-    const logStart = cpLen(line.substring(0, matchIndex));
-    const logEnd = logStart + cpLen(logicalText);
+    const matchEnd = isWordChar(line[matchIndex - 1])
+      ? null
+      : findImagePathEnd(line, matchIndex);
+    if (matchEnd !== null) {
+      const logicalText = line.slice(matchIndex, matchEnd);
+      const logStart = cpLen(line.substring(0, matchIndex));
+      const logEnd = logStart + cpLen(logicalText);
 
-    transformations.push({
-      logStart,
-      logEnd,
-      logicalText,
-      collapsedText: getTransformedImagePath(logicalText),
-    });
-    searchIndex = matchEnd;
+      transformations.push({
+        logStart,
+        logEnd,
+        logicalText,
+        collapsedText: getTransformedImagePath(logicalText),
+      });
+      searchIndex = matchEnd;
+    } else {
+      searchIndex = matchIndex + 1;
+    }
     matchIndex = line.indexOf('@', searchIndex);
   }
 

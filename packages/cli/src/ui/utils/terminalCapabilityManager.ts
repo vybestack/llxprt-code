@@ -446,10 +446,14 @@ export class TerminalCapabilityManager {
     const g = buffer.slice(firstSlash + 1, secondSlash);
     const bEnd = this.readHexEnd(buffer, secondSlash + 1);
     const b = buffer.slice(secondSlash + 1, bEnd);
+    const hasTerminator =
+      buffer[bEnd] === TerminalCapabilityManager.BEL ||
+      buffer.startsWith(TerminalCapabilityManager.ESC + '\\', bEnd);
     if (
       !this.isRgbComponent(r) ||
       !this.isRgbComponent(g) ||
-      !this.isRgbComponent(b)
+      !this.isRgbComponent(b) ||
+      !hasTerminator
     ) {
       return null;
     }
@@ -480,7 +484,11 @@ export class TerminalCapabilityManager {
   }
 
   private isRgbComponent(value: string): boolean {
-    return value.length >= 1 && value.length <= 4;
+    return (
+      value.length >= 1 &&
+      value.length <= 4 &&
+      this.readHexEnd(value, 0) === value.length
+    );
   }
 
   private firstTerminatorIndex(first: number, second: number): number {
