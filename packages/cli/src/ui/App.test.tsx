@@ -119,7 +119,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
           opts.targetDir != null && opts.targetDir !== ''
             ? opts.targetDir
             : '/test/dir',
-        debugMode: opts.debugMode != null ? opts.debugMode : false,
+        debugMode: opts.debugMode ?? false,
         question: opts.question,
         coreTools: opts.coreTools,
         toolDiscoveryCommand: opts.toolDiscoveryCommand,
@@ -135,8 +135,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
             ? opts.userMemory
             : '',
         geminiMdFileCount: opts.geminiMdFileCount ?? 0,
-        coreMemoryFileCount:
-          opts.coreMemoryFileCount != null ? opts.coreMemoryFileCount : 0,
+        coreMemoryFileCount: opts.coreMemoryFileCount ?? 0,
         approvalMode: opts.approvalMode ?? ApprovalMode.DEFAULT,
         vertexai: opts.vertexai,
         showMemoryUsage: opts.showMemoryUsage ?? false,
@@ -161,9 +160,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
             : '/test/dir',
         ),
         getToolRegistry: vi.fn(() => ({}) as ToolRegistry), // Simple mock
-        getDebugMode: vi.fn(() =>
-          opts.debugMode != null ? opts.debugMode : false,
-        ),
+        getDebugMode: vi.fn(() => opts.debugMode ?? false),
         getQuestion: vi.fn(() => opts.question),
         getCoreTools: vi.fn(() => opts.coreTools),
         getToolDiscoveryCommand: vi.fn(() => opts.toolDiscoveryCommand),
@@ -186,9 +183,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         setUserMemory: vi.fn(),
         getGeminiMdFileCount: vi.fn(() => opts.geminiMdFileCount ?? 0),
         getLlxprtMdFileCount: vi.fn(() => opts.geminiMdFileCount ?? 0),
-        getCoreMemoryFileCount: vi.fn(() =>
-          opts.coreMemoryFileCount != null ? opts.coreMemoryFileCount : 0,
-        ),
+        getCoreMemoryFileCount: vi.fn(() => opts.coreMemoryFileCount ?? 0),
         setGeminiMdFileCount: vi.fn(),
         getApprovalMode: vi.fn(() => opts.approvalMode ?? ApprovalMode.DEFAULT),
         setApprovalMode: vi.fn(),

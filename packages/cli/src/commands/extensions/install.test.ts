@@ -97,10 +97,10 @@ describe('handleInstall', () => {
     },
   ])(
     'should install an extension from a $type',
-    async ({ source, name, needsStat }) => {
-      if (needsStat === true) {
-        mockStat.mockResolvedValue({} as Stats);
-      }
+    async ({ source, name }) => {
+      // Only the local-path case stats the source; resolving the stat mock for
+      // every row is harmless for the remote sources that never call it.
+      mockStat.mockResolvedValue({} as Stats);
       mockInstallOrUpdateExtension.mockResolvedValue(name);
       mockLoadExtensionByName.mockReturnValue({
         name,

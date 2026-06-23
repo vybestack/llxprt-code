@@ -16,6 +16,31 @@ import {
   createTempKeyfile,
 } from './test-utils.js';
 
+/**
+ * Mirror of the auth-key resolution logic in cli.tsx: a direct `auth-key`
+ * takes precedence, otherwise the `auth-keyfile` (with tilde expansion) is
+ * read from disk. Extracted to a helper so tests can assert on its result
+ * without embedding control flow inside the test body.
+ */
+async function resolveAppliedKey(ephemeralSettings: {
+  'auth-key'?: unknown;
+  'auth-keyfile'?: unknown;
+}): Promise<string | undefined> {
+  const authKey = ephemeralSettings['auth-key'] as string | undefined;
+  if (authKey !== undefined && authKey !== '') {
+    return authKey;
+  }
+
+  const authKeyfile = ephemeralSettings['auth-keyfile'] as string | undefined;
+  if (authKeyfile === undefined || authKeyfile === '') {
+    return undefined;
+  }
+
+  const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
+  const keyContent = (await fs.readFile(resolvedPath, 'utf-8')).trim();
+  return keyContent === '' ? undefined : keyContent;
+}
+
 describe('Profile with Keyfile Integration Tests', () => {
   let tempDir: string;
   let profileManager: ProfileManager;
@@ -380,23 +405,8 @@ describe('Profile with Keyfile Integration Tests', () => {
       await profileManager.saveProfile('simulation-test', profile);
       const loaded = await profileManager.loadProfile('simulation-test');
 
-      // Simulate the exact logic from cli.tsx
-      const authKey = loaded.ephemeralSettings['auth-key'] as string;
-      const authKeyfile = loaded.ephemeralSettings['auth-keyfile'] as string;
-
-      let appliedKey: string | undefined;
-
-      if (authKey) {
-        // Direct auth-key takes precedence
-        appliedKey = authKey;
-      } else if (authKeyfile) {
-        // Load API key from file
-        const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
-        const keyContent = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-        if (keyContent) {
-          appliedKey = keyContent;
-        }
-      }
+      // Simulate the exact logic from cli.tsx via the shared helper.
+      const appliedKey = await resolveAppliedKey(loaded.ephemeralSettings);
 
       expect(appliedKey).toBe(apiKey);
     });
