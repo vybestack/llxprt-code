@@ -483,4 +483,79 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     expect(requestBody.prompt_cache_key).toBe('test-runtime-id-123');
     expect(requestBody.prompt_cache_retention).toBe('24h');
   });
+
+  it('should sanitize a long compression-style runtimeId to <=64 chars (issue #2135)', async () => {
+    const provider = new OpenAIResponsesProvider(
+      'test-api-key',
+      'https://api.openai.com/v1',
+    );
+
+    let capturedBody: string | undefined;
+    mockFetch.mockImplementation(
+      async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        if (init?.body != null) {
+          capturedBody =
+            typeof init.body === 'string'
+              ? init.body
+              : await new Response(init.body).text();
+        }
+        return createMockStreamingResponse();
+      },
+    );
+
+    // 69-char compression-profile runtime ID as reported in issue #2135.
+    const longRuntimeId =
+      'cli-isolated-abcdefghij0::compression-profile:compression-profile';
+    expect(longRuntimeId.length).toBeGreaterThan(64);
+
+    const settings = new SettingsService();
+    settings.set('activeProvider', provider.name);
+    settings.setProviderSetting(provider.name, 'model', 'o3-mini');
+
+    const config = createRuntimeConfigStub(settings);
+    const runtime = createProviderRuntimeContext({
+      settingsService: settings,
+      runtimeId: longRuntimeId,
+      config,
+    });
+
+    const invocation = createRuntimeInvocationContext({
+      runtime,
+      settings,
+      providerName: provider.name,
+      ephemeralsSnapshot: { 'prompt-caching': '1h' },
+    });
+
+    const options = createProviderCallOptions({
+      settings,
+      config,
+      runtime,
+      invocation,
+      providerName: provider.name,
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'test message' }] },
+      ],
+      ephemeralSettings: { 'prompt-caching': '1h' },
+    });
+
+    const generator = provider.generateChatCompletion(options);
+    for await (const _content of generator) {
+      // drain
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(capturedBody).toBeDefined();
+    const requestBody = JSON.parse(capturedBody!);
+
+    const cacheKey = requestBody.prompt_cache_key as string;
+    expect(typeof cacheKey).toBe('string');
+    expect(cacheKey.length).toBeLessThanOrEqual(64);
+    // Must not be the raw over-long id
+    expect(cacheKey).not.toBe(longRuntimeId);
+    // non-Codex still gets retention
+    expect(requestBody.prompt_cache_retention).toBe('24h');
+  });
 });
