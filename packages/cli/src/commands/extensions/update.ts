@@ -146,7 +146,9 @@ async function updateAllExtensions(
       globalThis.console.log('No extensions to update.');
       return;
     }
-    globalThis.console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
+    globalThis.console.log(
+      updateInfos.map((info) => updateOutput(info)).join('\n'),
+    );
   } catch (error) {
     globalThis.console.error(getErrorMessage(error));
   }

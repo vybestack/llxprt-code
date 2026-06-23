@@ -137,7 +137,9 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const joinedOutput = result.join('\n');
       expect(joinedOutput).toMatch(testRegex('Started:', 'i'));
       // Should contain some relative time indicator (ago, minutes, etc.)
-      expect(joinedOutput).toMatch(testRegex('ago|just now|minutes?|hours?', 'i'));
+      expect(joinedOutput).toMatch(
+        testRegex('ago|just now|minutes?|hours?', 'i'),
+      );
     });
 
     /**

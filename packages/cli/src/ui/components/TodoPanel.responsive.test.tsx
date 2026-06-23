@@ -283,7 +283,9 @@ describe('TodoPanel Responsive Behavior', () => {
       // This means more of the content should be visible before truncation
 
       // Count visible characters before truncation
-      const contentMatch = output!.match(testRegex('○\\s+([^.]+(?:\\.\\.\\.)?)(?:\\s|$)', ''));
+      const contentMatch = output!.match(
+        testRegex('○\\s+([^.]+(?:\\.\\.\\.)?)(?:\\s|$)', ''),
+      );
       expect(contentMatch).toBeDefined();
       const visibleContent = contentMatch![1];
 
@@ -329,7 +331,9 @@ describe('TodoPanel Responsive Behavior', () => {
         );
 
         const output = lastFrame();
-        const contentMatch = output!.match(testRegex('○\\s+([^.]+(?:\\.\\.\\.)?)(?:\\s|$)', ''));
+        const contentMatch = output!.match(
+          testRegex('○\\s+([^.]+(?:\\.\\.\\.)?)(?:\\s|$)', ''),
+        );
 
         expect(contentMatch).toBeDefined();
         const visibleContent = contentMatch![1];

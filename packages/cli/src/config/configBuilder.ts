@@ -41,6 +41,7 @@ import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
+import { firstNonEmptyString } from '../utils/coalesce.js';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -356,7 +357,13 @@ export function buildConfig(input: ConfigBuildInput): Config {
  * Intentionally uses falsy coalescing (empty string should fall back to env vars).
  */
 function resolveProxy(cliProxy: string | undefined): string | undefined {
-  const httpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy;
-  const httpProxy = process.env.HTTP_PROXY || process.env.http_proxy;
-  return cliProxy || httpsProxy || httpProxy;
+  const httpsProxy = firstNonEmptyString(
+    process.env.HTTPS_PROXY,
+    process.env.https_proxy,
+  );
+  const httpProxy = firstNonEmptyString(
+    process.env.HTTP_PROXY,
+    process.env.http_proxy,
+  );
+  return firstNonEmptyString(cliProxy, httpsProxy, httpProxy);
 }

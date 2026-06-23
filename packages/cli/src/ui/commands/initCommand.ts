@@ -14,15 +14,17 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { PromptService, debugLogger } from '@vybestack/llxprt-code-core';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 /**
  * Get the init command prompt from the prompt service
  */
 async function getInitCommandPrompt(): Promise<string> {
   try {
-    const baseDir =
-      process.env.LLXPRT_PROMPTS_DIR ||
-      path.join(os.homedir(), '.llxprt', 'prompts');
+    const baseDir = firstNonEmptyString(
+      process.env.LLXPRT_PROMPTS_DIR,
+      path.join(os.homedir(), '.llxprt', 'prompts'),
+    );
     const promptService = new PromptService({
       baseDir,
       debugMode: process.env.DEBUG === 'true',

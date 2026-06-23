@@ -180,7 +180,7 @@ function handleDisplayKeys(
     const newValue = !display.showToolDescriptions;
     display.setShowToolDescriptions(newValue);
     const mcpServers = mcp.getMcpServers();
-    if (Object.keys(mcpServers || {}).length > 0) {
+    if (Object.keys(mcpServers ?? {}).length > 0) {
       void display.handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
     }
     return;

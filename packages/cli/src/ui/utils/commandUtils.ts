@@ -132,29 +132,20 @@ const pickTty = (): Promise<TtyTarget> =>
     resolve(getStdioTty());
   });
 
+const hasEnvValue = (...names: string[]): boolean =>
+  names.some((name) => Boolean(process.env[name]));
+
 const inTmux = (): boolean =>
-  Boolean(
-    process.env['TMUX'] || (process.env['TERM'] ?? '').startsWith('tmux'),
-  );
+  hasEnvValue('TMUX') || (process.env['TERM'] ?? '').startsWith('tmux');
 
 const inScreen = (): boolean =>
-  Boolean(
-    process.env['STY'] || (process.env['TERM'] ?? '').startsWith('screen'),
-  );
+  hasEnvValue('STY') || (process.env['TERM'] ?? '').startsWith('screen');
 
 const isSSH = (): boolean =>
-  Boolean(
-    process.env['SSH_TTY'] ||
-      process.env['SSH_CONNECTION'] ||
-      process.env['SSH_CLIENT'],
-  );
+  hasEnvValue('SSH_TTY', 'SSH_CONNECTION', 'SSH_CLIENT');
 
 const isWSL = (): boolean =>
-  Boolean(
-    process.env['WSL_DISTRO_NAME'] ||
-      process.env['WSLENV'] ||
-      process.env['WSL_INTEROP'],
-  );
+  hasEnvValue('WSL_DISTRO_NAME', 'WSLENV', 'WSL_INTEROP');
 
 const isWindowsTerminal = (): boolean =>
   process.platform === 'win32' && Boolean(process.env['WT_SESSION']);

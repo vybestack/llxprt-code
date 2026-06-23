@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React from 'react';
 import { Text } from 'ink';
 import { theme } from '../semantic-colors.js';
@@ -294,8 +293,7 @@ const UNDERSCORE_STRIP_PATTERN = '_(.{0,2000}?)_';
 const STRIKE_STRIP_PATTERN = '~~(.{0,2000}?)~~';
 const CODE_STRIP_PATTERN = '`(.{0,2000}?)`';
 const UNDERLINE_STRIP_PATTERN = '<u>(.{0,2000}?)</u>';
-const LINK_STRIP_PATTERN =
-  '.{0,5000}\\[(.{0,2000}?)\\]\\(.{0,4000}\\)';
+const LINK_STRIP_PATTERN = '.{0,5000}\\[(.{0,2000}?)\\]\\(.{0,4000}\\)';
 const STRIP_MARKDOWN_RULES: ReadonlyArray<{
   regex: RegExp;
   replacement: string;

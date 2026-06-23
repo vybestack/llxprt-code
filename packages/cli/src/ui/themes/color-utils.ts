@@ -20,7 +20,10 @@ const OSC_11_ST_REGEX = new RegExp(
   `${OSC_ESC}${OSC_11_RGB_BODY}${OSC_ESC}\\\\`,
   'i',
 );
-const OSC_11_BEL_REGEX = new RegExp(`${OSC_ESC}${OSC_11_RGB_BODY}${OSC_BEL}`, 'i');
+const OSC_11_BEL_REGEX = new RegExp(
+  `${OSC_ESC}${OSC_11_RGB_BODY}${OSC_BEL}`,
+  'i',
+);
 
 // Mapping from common CSS color names (lowercase) to hex codes (lowercase)
 // Excludes names directly supported by Ink

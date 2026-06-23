@@ -49,7 +49,6 @@ describe('statsCommand', () => {
   });
 
   it('should display general session stats when run with no subcommand', async () => {
-
     await statsCommand.action!(mockContext, '');
 
     const expectedDuration = formatDuration(

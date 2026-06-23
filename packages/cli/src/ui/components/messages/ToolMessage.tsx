@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Box, Text } from 'ink';

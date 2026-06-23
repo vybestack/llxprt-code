@@ -375,7 +375,10 @@ describe('generateDynamicToolSettings', () => {
       try {
         errorConfig.getToolRegistry();
       } catch (error) {
-        globalThis.console.error('Error generating dynamic tool settings:', error);
+        globalThis.console.error(
+          'Error generating dynamic tool settings:',
+          error,
+        );
       }
 
       expect(globalThis.console.error).toHaveBeenCalledWith(

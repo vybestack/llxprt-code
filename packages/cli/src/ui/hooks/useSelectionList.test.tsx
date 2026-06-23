@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';

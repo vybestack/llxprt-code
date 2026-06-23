@@ -256,9 +256,7 @@ const resumeCommand: SlashCommand = {
     // Use LoadHistoryActionReturn to properly sync both UI and client history
     const uiHistory: HistoryItemWithoutId[] = conversation.map((content) => {
       const text =
-        content.parts
-          ?.map((part: Part) => (part.text ? part.text : ''))
-          .join('') || '';
+        content.parts?.map((part: Part) => part.text ?? '').join('') ?? '';
       return {
         type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
         text,
@@ -476,9 +474,7 @@ const restoreHistory = async (
   // Convert to UI history items for display
   const uiHistory: HistoryItemWithoutId[] = newHistory.map((content) => {
     const text =
-      content.parts
-        ?.map((part: Part) => (part.text ? part.text : ''))
-        .join('') || '';
+      content.parts?.map((part: Part) => part.text ?? '').join('') ?? '';
     return {
       type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
       text,

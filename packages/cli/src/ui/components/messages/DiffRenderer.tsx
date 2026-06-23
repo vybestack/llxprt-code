@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import type React from 'react';
 import { Box, Text, useIsScreenReaderEnabled } from 'ink';
 import { Colors, SemanticColors } from '../../colors.js';
@@ -12,6 +11,7 @@ import crypto from 'node:crypto';
 import { colorizeCode, colorizeLine } from '../../utils/CodeColorizer.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import type { Theme } from '../../themes/theme.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 interface DiffLine {
   type: 'add' | 'del' | 'context' | 'hunk' | 'other';
@@ -157,7 +157,8 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
       .map((line) => line.content)
       .join('\n');
     // Attempt to infer language from filename, default to plain text if no filename
-    const fileExtension = filename?.split('.').pop() || null;
+    const fileExtension =
+      firstNonEmptyString(filename?.split('.').pop()) ?? null;
     const language = fileExtension
       ? getLanguageFromExtension(fileExtension)
       : null;
@@ -216,7 +217,7 @@ function prepareDiffRenderContext(
   );
   const gutterWidth = Math.max(1, maxLineNumber.toString().length);
 
-  const fileExtension = filename?.split('.').pop() || null;
+  const fileExtension = firstNonEmptyString(filename?.split('.').pop()) ?? null;
   const language = fileExtension
     ? getLanguageFromExtension(fileExtension)
     : null;
@@ -348,8 +349,7 @@ function renderDiffLineRow(
         backgroundColor={
           line.type === 'add'
             ? Colors.DiffAddedBackground
-            :
-              line.type === 'del'
+            : line.type === 'del'
               ? Colors.DiffRemovedBackground
               : undefined
         }

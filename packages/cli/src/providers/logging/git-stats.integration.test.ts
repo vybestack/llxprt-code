@@ -52,7 +52,8 @@ describe('Git Stats Integration', () => {
 
   it('should track stats during actual file edits', async () => {
     const testFile = join(tempDir, 'test.ts');
-    const initialContent = 'function hello() {\n  globalThis.console.log("Hello");\n}';
+    const initialContent =
+      'function hello() {\n  globalThis.console.log("Hello");\n}';
     const modifiedContent =
       initialContent +
       '\n\n// Added comment\nfunction goodbye() {\n  globalThis.console.log("Goodbye");\n}';

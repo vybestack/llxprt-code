@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 /**
  * @plan:PLAN-20251202-THINKING-UI.P07
  * @requirement:REQ-THINK-UI-001
@@ -116,7 +115,10 @@ const mockSendMessageStream = vi
 const mockStartChat = vi.fn();
 
 const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (this: Record<string, unknown>, _config: unknown) {
+  vi.fn().mockImplementation(function (
+    this: Record<string, unknown>,
+    _config: unknown,
+  ) {
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
     this.addHistory = vi.fn();
@@ -141,7 +143,10 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = (await importOriginal()) as Record<string, unknown>;
+  const actualSchedulerModule = (await importOriginal()) as Record<
+    string,
+    unknown
+  >;
   return {
     ...(actualSchedulerModule ?? {}),
     useReactToolScheduler: vi.fn(),
@@ -255,7 +260,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () => ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
+        () =>
+          ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
@@ -736,13 +742,13 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           await new Promise<void>((resolve) => {
             streamResolvers.push(resolve);
           });
-          yield ({
+          yield {
             type: ServerGeminiEventType.Finished,
             value: { reason: FinishReason.STOP },
           } as unknown as {
             type: ServerGeminiEventType;
             value: { reason: FinishReason };
-          });
+          };
         })(),
       );
 

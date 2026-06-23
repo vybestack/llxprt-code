@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { useStdin } from 'ink';

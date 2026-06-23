@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 /**
  * Manages the Gemini stream, including user input, command processing,
  * API interaction, and tool call lifecycle.

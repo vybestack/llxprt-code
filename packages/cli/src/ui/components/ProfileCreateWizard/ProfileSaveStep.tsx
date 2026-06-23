@@ -21,6 +21,7 @@ import {
   getStepPosition,
 } from './utils.js';
 import type { WizardState } from './types.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 const useExistingProfiles = () => {
   const [existingProfiles, setExistingProfiles] = useState<string[]>([]);
@@ -161,7 +162,7 @@ const executeSave = async (
     setValidationError('Profile name already exists');
     setFocusedComponent('conflict');
   } else {
-    setSaveError(result.error || 'Failed to save profile');
+    setSaveError(firstNonEmptyString(result.error, 'Failed to save profile'));
     setFocusedComponent('input');
   }
 };
@@ -323,7 +324,7 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
   >('input');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [profileNameInput, setProfileNameInput] = useState(
-    state.profileName || '',
+    state.profileName ?? '',
   );
   const [validationError, setValidationError] = useState<string | null>(null);
   const existingProfiles = useExistingProfiles();

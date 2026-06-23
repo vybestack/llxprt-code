@@ -13,6 +13,7 @@ import { StreamingState } from '../types.js';
 import { GeminiRespondingSpinner } from './GeminiRespondingSpinner.js';
 import { formatDuration } from '../utils/formatters.js';
 import { INTERACTIVE_SHELL_WAITING_PHRASE } from '../hooks/usePhraseCycler.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 /**
  * Format timer text for display.
@@ -49,8 +50,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     isShellFocusHint;
   const primaryText = isActionRequired
     ? currentLoadingPhrase
-    :
-      thought?.subject || currentLoadingPhrase;
+    : firstNonEmptyString(thought?.subject, currentLoadingPhrase);
 
   const timerText =
     streamingState === StreamingState.WaitingForConfirmation

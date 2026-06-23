@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import {
   type IContent,
   type TextBlock,
@@ -94,8 +93,7 @@ function processAiContent(
           ? safeToolResultToString(response.result)
           : undefined,
         status: response
-          ?
-            response.error
+          ? response.error
             ? ToolCallStatus.Error
             : ToolCallStatus.Success
           : ToolCallStatus.Pending,

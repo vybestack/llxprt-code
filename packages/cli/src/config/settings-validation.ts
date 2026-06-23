@@ -430,8 +430,7 @@ export function formatValidationError(
       (acc, curr) =>
         typeof curr === 'number'
           ? `${acc}[${curr}]`
-          :
-            `${acc.length > 0 ? acc + '.' : ''}${curr}`,
+          : `${acc.length > 0 ? acc + '.' : ''}${curr}`,
       '',
     );
     lines.push(`Error in: ${path.length > 0 ? path : '(root)'}`);

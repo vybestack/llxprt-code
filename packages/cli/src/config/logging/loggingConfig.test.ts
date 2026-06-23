@@ -155,7 +155,7 @@ class MockExtendedConfig implements ExtendedConfig {
 
   private expandPath(path: string): string {
     if (path.startsWith('~/')) {
-      return path.replace('~', process.env.HOME || '');
+      return path.replace('~', process.env.HOME ?? '');
     }
     return path;
   }
@@ -286,7 +286,7 @@ describe('Conversation Logging Configuration', () => {
       },
     });
 
-    const expectedPath = (process.env.HOME || '') + '/logs/conversations';
+    const expectedPath = (process.env.HOME ?? '') + '/logs/conversations';
     expect(config.getConversationLogPath()).toBe(expectedPath);
   });
 

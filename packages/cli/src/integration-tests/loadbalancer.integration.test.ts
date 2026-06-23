@@ -173,7 +173,10 @@ describe('LoadBalancer Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
-        testRegex('Loaded profile.*lb-profile|Loading profile.*lb-profile', 'i'),
+        testRegex(
+          'Loaded profile.*lb-profile|Loading profile.*lb-profile',
+          'i',
+        ),
       );
     });
 
@@ -218,7 +221,9 @@ describe('LoadBalancer Integration Tests', () => {
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
-      expect(fullOutput).toMatch(testRegex('profile.*not found|failed.*load', 'i'));
+      expect(fullOutput).toMatch(
+        testRegex('profile.*not found|failed.*load', 'i'),
+      );
     });
 
     it('should handle empty profiles list', async () => {
@@ -262,7 +267,10 @@ describe('LoadBalancer Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
-        testRegex('must reference at least one profile|empty.*profiles|no profiles', 'i'),
+        testRegex(
+          'must reference at least one profile|empty.*profiles|no profiles',
+          'i',
+        ),
       );
     });
   });
@@ -405,7 +413,9 @@ describe('LoadBalancer Integration Tests', () => {
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
-      expect(fullOutput).toMatch(testRegex('Loaded profile.*lb-policy|policy-profile1', 'i'));
+      expect(fullOutput).toMatch(
+        testRegex('Loaded profile.*lb-policy|policy-profile1', 'i'),
+      );
     });
   });
 

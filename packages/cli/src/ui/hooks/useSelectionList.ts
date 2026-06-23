@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import { useReducer, useRef, useEffect, useCallback } from 'react';
 import { useKeypress, type Key } from './useKeypress.js';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-core';

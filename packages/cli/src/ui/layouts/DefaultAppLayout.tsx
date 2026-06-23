@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React from 'react';
 import { Box, type DOMElement, Static } from 'ink';
 import type { Config } from '@vybestack/llxprt-code-core';

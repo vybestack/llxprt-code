@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React, { Fragment, useEffect, useId } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
@@ -636,8 +635,7 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
 
   const visibleStyledText =
     hiddenLinesCount > 0
-      ?
-        overflowDirection === 'top'
+      ? overflowDirection === 'top'
         ? laidOutStyledText.slice(hiddenLinesCount, laidOutStyledText.length)
         : laidOutStyledText.slice(0, visibleContentHeight)
       : laidOutStyledText;

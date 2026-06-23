@@ -200,7 +200,9 @@ describe('mcp remove command', () => {
       const updatedContent = fs.readFileSync(settingsPath, 'utf-8');
       expect(updatedContent).toContain('"mcpServers"');
       expect(updatedContent).not.toContain('"only-server"');
-      expect(updatedContent).toMatch(testRegex('"mcpServers"\\s*:\\s*\\{\\s*\\}', ''));
+      expect(updatedContent).toMatch(
+        testRegex('"mcpServers"\\s*:\\s*\\{\\s*\\}', ''),
+      );
 
       consoleSpy.mockRestore();
     });

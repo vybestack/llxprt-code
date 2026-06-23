@@ -128,7 +128,10 @@ const mockSendMessageStream = vi
 const mockStartChat = vi.fn();
 
 const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (this: Record<string, unknown>, _config: unknown) {
+  vi.fn().mockImplementation(function (
+    this: Record<string, unknown>,
+    _config: unknown,
+  ) {
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
     this.addHistory = vi.fn();
@@ -197,7 +200,8 @@ describe('useGeminiStream subagent isolation', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () => ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
+        () =>
+          ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
       ),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       getCheckpointingEnabled: vi.fn(() => false),

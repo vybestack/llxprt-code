@@ -25,9 +25,9 @@ export async function createPolicyEngineConfig(
   // Handle both legacy (settings.allowedTools) and new (settings.tools.allowed) structures
   // to ensure compatibility during the transition period
   const allowedTools =
-    settings.tools?.allowed || settings.allowedTools || undefined;
+    settings.tools?.allowed ?? settings.allowedTools ?? undefined;
   const excludeTools =
-    settings.tools?.exclude || settings.excludeTools || undefined;
+    settings.tools?.exclude ?? settings.excludeTools ?? undefined;
 
   const policySettings: PolicySettings = {
     mcp: settings.mcp,

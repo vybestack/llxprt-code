@@ -37,6 +37,7 @@ import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
 } from './utils/apiErrorFormatting.js';
+import { firstNonEmptyString } from './utils/coalesce.js';
 
 interface RunNonInteractiveParams {
   config: Config;
@@ -83,7 +84,7 @@ function createUserFeedbackHandler(
     ) {
       const errorToLog =
         payload.error instanceof Error
-          ? payload.error.stack || payload.error.message
+          ? firstNonEmptyString(payload.error.stack, payload.error.message)
           : String(payload.error);
       process.stderr.write(`${errorToLog}\n`);
     }

@@ -411,7 +411,10 @@ describe('directoryCommand', () => {
         },
       };
 
-      await addCommand.action!(mockContext, `${trustedPath},${rejectedRawPath}`);
+      await addCommand.action!(
+        mockContext,
+        `${trustedPath},${rejectedRawPath}`,
+      );
 
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledTimes(1);
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(

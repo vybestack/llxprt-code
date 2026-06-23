@@ -184,7 +184,10 @@ describe('ProviderDialog Responsive Behavior', () => {
 
       // Should show full instructions
       expect(output).toMatch(
-        testRegex('select provider.*←\\/→\\/↑\\/↓.*enter to choose.*esc to cancel', 'i'),
+        testRegex(
+          'select provider.*←\\/→\\/↑\\/↓.*enter to choose.*esc to cancel',
+          'i',
+        ),
       );
 
       // Should have optimal multi-column layout

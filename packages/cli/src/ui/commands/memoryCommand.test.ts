@@ -87,7 +87,6 @@ describe('memoryCommand', () => {
     });
 
     it('should display a message if memory is empty', async () => {
-
       mockGetUserMemory.mockReturnValue('');
       mockGetLlxprtMdFileCount.mockReturnValue(0);
 
@@ -103,7 +102,6 @@ describe('memoryCommand', () => {
     });
 
     it('should display the memory content and file count if it exists', async () => {
-
       const memoryContent = 'This is a test memory.';
 
       mockGetUserMemory.mockReturnValue(memoryContent);
@@ -130,7 +128,6 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if no arguments are provided', () => {
-
       const result = addCommand.action!(mockContext, '  ');
       expect(result).toStrictEqual({
         type: 'message',
@@ -143,7 +140,6 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if only scope is provided without text', () => {
-
       const result = addCommand.action!(mockContext, 'global');
       expect(result).toStrictEqual({
         type: 'message',
@@ -156,7 +152,6 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if only "project" is provided without text', () => {
-
       const result = addCommand.action!(mockContext, 'project');
       expect(result).toStrictEqual({
         type: 'message',
@@ -169,7 +164,6 @@ describe('memoryCommand', () => {
     });
 
     it('should default to global scope when no scope keyword is provided', () => {
-
       const fact = 'remember this';
       const result = addCommand.action!(mockContext, `  ${fact}  `);
 
@@ -189,7 +183,6 @@ describe('memoryCommand', () => {
     });
 
     it('should return a tool action with scope "global" when "global" is specified', () => {
-
       const fact = 'remember this globally';
       const result = addCommand.action!(mockContext, `global ${fact}`);
 
@@ -209,7 +202,6 @@ describe('memoryCommand', () => {
     });
 
     it('should return a tool action with scope "project" when "project" is specified', () => {
-
       const fact = 'remember this for the project';
       const result = addCommand.action!(mockContext, `project ${fact}`);
 
@@ -229,7 +221,6 @@ describe('memoryCommand', () => {
     });
 
     it('should handle uppercase scope keywords', () => {
-
       const fact = 'test fact';
       const result = addCommand.action!(mockContext, `PROJECT ${fact}`);
 
@@ -249,7 +240,6 @@ describe('memoryCommand', () => {
     });
 
     it('should handle mixed case scope keywords', () => {
-
       const fact = 'test fact';
       const result = addCommand.action!(mockContext, `Global ${fact}`);
 
@@ -269,7 +259,6 @@ describe('memoryCommand', () => {
     });
 
     it('should treat non-scope first words as part of the fact', () => {
-
       const fact = 'globally important fact';
       const result = addCommand.action!(mockContext, fact);
 
@@ -289,7 +278,6 @@ describe('memoryCommand', () => {
     });
 
     it('should return error when core.project is provided without content', () => {
-
       const result = addCommand.action!(mockContext, 'core.project');
 
       expect(result).toStrictEqual({
@@ -300,7 +288,6 @@ describe('memoryCommand', () => {
     });
 
     it('should return error when core.global is provided without content', () => {
-
       const result = addCommand.action!(mockContext, 'core.global');
 
       expect(result).toStrictEqual({
@@ -311,7 +298,6 @@ describe('memoryCommand', () => {
     });
 
     it('should handle core.project scope and write directly (async)', () => {
-
       mockContext = createMockCommandContext({
         services: {
           config: {
@@ -330,7 +316,6 @@ describe('memoryCommand', () => {
     });
 
     it('should handle core.global scope and write directly (async)', () => {
-
       mockContext = createMockCommandContext({
         services: {
           config: {
@@ -406,7 +391,6 @@ describe('memoryCommand', () => {
     });
 
     it('should display success message when memory is refreshed with content', async () => {
-
       const refreshResult: LoadServerHierarchicalMemoryResponse = {
         memoryContent: 'new memory content',
         fileCount: 2,
@@ -448,7 +432,6 @@ describe('memoryCommand', () => {
     });
 
     it('should display success message when memory is refreshed with no content', async () => {
-
       const refreshResult = { memoryContent: '', fileCount: 0, filePaths: [] };
       mockLoadHierarchicalLlxprtMemory.mockResolvedValue(refreshResult);
 
@@ -469,7 +452,6 @@ describe('memoryCommand', () => {
     });
 
     it('should display an error message if refreshing fails', async () => {
-
       const error = new Error('Failed to read memory files.');
       mockLoadHierarchicalLlxprtMemory.mockRejectedValue(error);
 
@@ -492,7 +474,6 @@ describe('memoryCommand', () => {
     });
 
     it('should not throw if config service is unavailable', async () => {
-
       const nullConfigContext = createMockCommandContext({
         services: { config: null },
       });
@@ -513,7 +494,6 @@ describe('memoryCommand', () => {
     });
 
     it('should use ContextManager.refresh() when JIT context is enabled', async () => {
-
       const mockRefresh = vi.fn().mockResolvedValue(undefined);
       const jitConfig = {
         isJitContextEnabled: () => true,
@@ -571,7 +551,6 @@ describe('memoryCommand', () => {
     });
 
     it('should display a message if no LLXPRT.md files are found', async () => {
-
       mockGetLlxprtMdFilePaths.mockReturnValue([]);
 
       await listCommand.action!(mockContext, '');
@@ -586,7 +565,6 @@ describe('memoryCommand', () => {
     });
 
     it('should display the file count and paths if they exist', async () => {
-
       const filePaths = ['/path/one/LLXPRT.md', '/path/two/LLXPRT.md'];
       mockGetLlxprtMdFilePaths.mockReturnValue(filePaths);
 

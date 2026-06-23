@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Performs session resume - resolves session reference and swaps recording infrastructure.
  * Used by both browser-based resume and direct /continue command.

@@ -55,7 +55,7 @@ export function useMemoryRefreshAction({
           settings.merged,
           config.getExtensions(),
           config.getFolderTrust(),
-          settings.merged.ui.memoryImportFormat || 'tree',
+          settings.merged.ui.memoryImportFormat ?? 'tree',
           config.getFileFilteringOptions(),
         );
 

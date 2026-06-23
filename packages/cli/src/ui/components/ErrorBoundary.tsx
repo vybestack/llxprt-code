@@ -9,6 +9,7 @@ import type React from 'react';
 import { Component } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 interface Props {
   children: ReactNode;
@@ -74,18 +75,25 @@ export class ErrorBoundary extends Component<Props, State> {
       if (isMaxUpdateDepthError) {
         globalThis.console.error('\nThis error typically occurs when:');
         globalThis.console.error('1. setState is called inside render()');
-        globalThis.console.error('2. useEffect has missing or incorrect dependencies');
+        globalThis.console.error(
+          '2. useEffect has missing or incorrect dependencies',
+        );
         globalThis.console.error(
           '3. Props are recreated on every render (objects, arrays, functions)',
         );
-        globalThis.console.error('\nCheck recent changes to hooks and state updates.');
+        globalThis.console.error(
+          '\nCheck recent changes to hooks and state updates.',
+        );
       }
     }
 
     // Log error details
     globalThis.console.error('React Error Boundary caught an error:', error);
     globalThis.console.error('Error Info:', errorInfo);
-    globalThis.console.error('Error count in window:', this.errorTimestamps.length);
+    globalThis.console.error(
+      'Error count in window:',
+      this.errorTimestamps.length,
+    );
 
     // Call custom error handler if provided
     if (this.props.onError) {
@@ -187,7 +195,10 @@ export function withErrorBoundary<P extends object>(
     </ErrorBoundary>
   );
 
-  WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
+  WrappedComponent.displayName = `withErrorBoundary(${firstNonEmptyString(
+    Component.displayName,
+    Component.name,
+  )})`;
 
   return WrappedComponent;
 }

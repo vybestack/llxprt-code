@@ -12,6 +12,7 @@ import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 export interface CapabilityFilters {
   vision: boolean;
@@ -403,7 +404,7 @@ const ModelRows: React.FC<{
           ? SemanticColors.text.accent
           : SemanticColors.text.primary;
 
-        const displayId = model.modelId || model.id;
+        const displayId = firstNonEmptyString(model.modelId, model.id);
 
         return (
           <Box key={`${model.provider}:${model.id}:${i}`}>
@@ -449,10 +450,8 @@ const HelpBar: React.FC<{
     <Text color={SemanticColors.text.secondary}>
       {}
       {isNarrow
-        ?
-          `\u2191/\u2193 Enter${currentProvider ? ' ^A' : ''} Tab Esc`
-        :
-          `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  ^A ${providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
+        ? `\u2191/\u2193 Enter${currentProvider ? ' ^A' : ''} Tab Esc`
+        : `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  ^A ${providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
     </Text>
   </Box>
 );
@@ -563,9 +562,7 @@ function useColumnWidths(
   const maxModelIdLen = useMemo(() => {
     if (filteredModels.length === 0) return 20;
     return Math.max(
-      ...filteredModels.map(
-        (m) => (m.modelId || m.id).length,
-      ),
+      ...filteredModels.map((m) => firstNonEmptyString(m.modelId, m.id).length),
     );
   }, [filteredModels]);
 

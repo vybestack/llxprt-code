@@ -10,7 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-
 import type {
   SlashCommand,
   CommandContext,
@@ -29,6 +28,7 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 type WrappedProvider = IProvider & { wrappedProvider: IProvider };
 
@@ -90,16 +90,19 @@ function buildAliasConfig(
   const unwrapped = unwrapProvider(provider);
   const baseProviderId = resolveBaseProviderId(unwrapped);
 
-  const resolvedBaseUrl =
-    (configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined) ||
-    getProviderBaseUrl(unwrapped);
+  const resolvedBaseUrl = firstNonEmptyString(
+    configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined,
+    getProviderBaseUrl(unwrapped),
+  );
 
   if (!resolvedBaseUrl) {
     return null;
   }
 
-  const defaultModel =
-    unwrapped.getCurrentModel?.() || unwrapped.getDefaultModel();
+  const defaultModel = firstNonEmptyString(
+    unwrapped.getCurrentModel?.(),
+    unwrapped.getDefaultModel(),
+  );
 
   const aliasConfig: ProviderAliasConfig = {
     baseProvider: baseProviderId,
@@ -225,7 +228,7 @@ async function switchProvider(
     };
   }
 
-  const fromProvider = currentProvider || 'none';
+  const fromProvider = firstNonEmptyString(currentProvider, 'none');
 
   let switchResult;
   try {

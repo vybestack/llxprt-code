@@ -70,7 +70,9 @@ describe('TodoContinuationService', () => {
 
         expect(result).toContain('Implement user registration feature');
         expect(result).toMatch(testRegex('continue|proceed|working', 'i'));
-        expect(result).not.toMatch(testRegex('urgent|critical|immediately', 'i'));
+        expect(result).not.toMatch(
+          testRegex('urgent|critical|immediately', 'i'),
+        );
       });
 
       it('includes specific task description in prompt', () => {
@@ -110,7 +112,9 @@ describe('TodoContinuationService', () => {
         const result = service.generateContinuationPrompt(config);
 
         expect(result).toContain('Deploy production hotfix');
-        expect(result).toMatch(testRegex('urgent|critical|immediately|essential', 'i'));
+        expect(result).toMatch(
+          testRegex('urgent|critical|immediately|essential', 'i'),
+        );
         expect(result.length).toBeGreaterThan(50); // YOLO prompts should be more detailed
       });
 
@@ -126,8 +130,12 @@ describe('TodoContinuationService', () => {
         );
 
         expect(standardPrompt).not.toStrictEqual(yoloPrompt);
-        expect(yoloPrompt).toMatch(testRegex('urgent|critical|immediately', 'i'));
-        expect(standardPrompt).not.toMatch(testRegex('urgent|critical|immediately', 'i'));
+        expect(yoloPrompt).toMatch(
+          testRegex('urgent|critical|immediately', 'i'),
+        );
+        expect(standardPrompt).not.toMatch(
+          testRegex('urgent|critical|immediately', 'i'),
+        );
       });
     });
 

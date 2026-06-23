@@ -15,6 +15,7 @@ import { PARAMETER_DEFAULTS } from './constants.js';
 import { PARAM_VALIDATORS } from './validation.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState, AdvancedParams } from './types.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 const getParameterDefaults = (provider: string | null): AdvancedParams => {
   if (provider === null || provider === '') {
@@ -116,8 +117,7 @@ const CustomFieldInput: React.FC<{
       Progress:{' '}
       {currentField === 'temperature'
         ? '1'
-        :
-          currentField === 'maxTokens'
+        : currentField === 'maxTokens'
           ? '2'
           : '3'}
       /3
@@ -202,7 +202,9 @@ const useFieldSubmitHandler = (
 
     const validation = PARAM_VALIDATORS[currentField](numValue);
     if (!validation.valid) {
-      setValidationError(validation.error || 'Invalid value');
+      setValidationError(
+        firstNonEmptyString(validation.error, 'Invalid value'),
+      );
       return;
     }
 

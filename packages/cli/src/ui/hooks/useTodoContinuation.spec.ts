@@ -318,7 +318,9 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       // Then: Should use YOLO-specific prompt
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
-        expect.stringMatching(testRegex('(continue|proceed).*without.*confirmation', 'i')),
+        expect.stringMatching(
+          testRegex('(continue|proceed).*without.*confirmation', 'i'),
+        ),
         expect.any(AbortSignal),
         expect.stringMatching(testRegex('^todo-continuation-', '')),
       );

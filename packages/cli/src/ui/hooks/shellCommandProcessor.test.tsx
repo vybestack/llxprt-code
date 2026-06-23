@@ -161,7 +161,7 @@ describe('useShellCommandProcessor', () => {
   const createMockServiceResult = (
     overrides: Partial<ShellExecutionResult> = {},
   ): ShellExecutionResult => ({
-    rawOutput: Buffer.from(overrides.output || ''),
+    rawOutput: Buffer.from(overrides.output ?? ''),
     output: 'Success',
     exitCode: 0,
     signal: null,
@@ -195,7 +195,10 @@ describe('useShellCommandProcessor', () => {
     });
     expect(mockShellExecutionService).toHaveBeenCalledWith(
       expect.stringMatching(
-        testRegex('^{ ls -l; }; __code=\\$\\?; pwd > ".*shell_pwd_abcdef\\.tmp"; exit \\$__code$', ''),
+        testRegex(
+          '^{ ls -l; }; __code=\\$\\?; pwd > ".*shell_pwd_abcdef\\.tmp"; exit \\$__code$',
+          '',
+        ),
       ),
       '/test/dir',
       expect.any(Function),
@@ -592,7 +595,9 @@ describe('useShellCommandProcessor', () => {
 
   describe('Directory Change Warning', () => {
     it('should show a warning if the working directory changes', async () => {
-      const tmpFile = expect.stringMatching(testRegex('.*shell_pwd_abcdef\\.tmp$', ''));
+      const tmpFile = expect.stringMatching(
+        testRegex('.*shell_pwd_abcdef\\.tmp$', ''),
+      );
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('/test/dir/new'); // A different directory
 

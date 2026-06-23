@@ -78,11 +78,15 @@ async function configureAllSettings(
   const settings = loadExtensionSettingsFromManifest(extensionPath);
 
   if (settings.length === 0) {
-    globalThis.console.log(`Extension "${extensionName}" has no settings to configure.`);
+    globalThis.console.log(
+      `Extension "${extensionName}" has no settings to configure.`,
+    );
     return true;
   }
 
-  globalThis.console.log(`Configuring settings for extension "${extensionName}"...`);
+  globalThis.console.log(
+    `Configuring settings for extension "${extensionName}"...`,
+  );
 
   const currentScopeValues = await getScopedEnvContents(
     extensionName,
@@ -135,7 +139,9 @@ async function configureAllSettings(
 
     if (!success) {
       allSuccess = false;
-      globalThis.console.error(`Failed to configure setting "${setting.name}".`);
+      globalThis.console.error(
+        `Failed to configure setting "${setting.name}".`,
+      );
     }
   }
 
@@ -186,7 +192,9 @@ async function configureInstalledExtension(
       return false;
     }
 
-    globalThis.console.log(`\nConfiguring extension "${extensionConfig.name}"...`);
+    globalThis.console.log(
+      `\nConfiguring extension "${extensionConfig.name}"...`,
+    );
     return await configureAllSettings(
       extensionConfig.name,
       extension.path,

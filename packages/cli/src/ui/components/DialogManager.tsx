@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import { Box, Text } from 'ink';
 import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
@@ -56,6 +55,7 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 // import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // NOTE: Not yet ported from upstream
 
 interface DialogManagerProps {
@@ -329,9 +329,10 @@ function renderOAuthCodeDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
 ) {
-  const provider =
-    (global as unknown as { __oauth_provider?: string }).__oauth_provider ||
-    'unknown';
+  const provider = firstNonEmptyString(
+    (global as unknown as { __oauth_provider?: string }).__oauth_provider,
+    'unknown',
+  );
   return (
     <OAuthCodeDialog
       provider={provider}

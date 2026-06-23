@@ -23,6 +23,7 @@ import {
   rootOptions,
   deprecatedOptions,
 } from './yargsOptions.js';
+import { firstNonEmptyString } from '../utils/coalesce.js';
 
 const logger = new DebugLogger('llxprt:config:cliArgParser');
 
@@ -154,10 +155,10 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     sandboxEngine: result['sandboxEngine'] as string | undefined,
     sandboxProfileLoad: result['sandboxProfileLoad'] as string | undefined,
     debug: result['debug'] as boolean | string | undefined,
-    prompt:
-      (result['prompt'] as string | undefined) ||
-      queryFromPromptWords ||
-      undefined,
+    prompt: firstNonEmptyString(
+      result['prompt'] as string | undefined,
+      queryFromPromptWords,
+    ),
     promptInteractive: result['promptInteractive'] as string | undefined,
     outputFormat: result['outputFormat'] as string | undefined,
     showMemoryUsage: result['showMemoryUsage'] as boolean | undefined,

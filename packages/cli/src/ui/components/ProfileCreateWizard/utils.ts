@@ -186,11 +186,9 @@ export function formatConfigSummary(state: WizardState): string {
   const authDisplay =
     state.config.auth.type === 'apikey'
       ? 'API key (stored in profile)'
-      :
-        state.config.auth.type === 'keyfile'
+      : state.config.auth.type === 'keyfile'
         ? `Key file (${state.config.auth.value})`
-        :
-          state.config.auth.type === 'oauth'
+        : state.config.auth.type === 'oauth'
           ? 'OAuth (lazy authentication)'
           : 'None';
   lines.push(`Auth: ${authDisplay}`);

@@ -129,7 +129,9 @@ describe('Footer Responsive Behavior', () => {
       // Should show full "Memory:" label
       expect(output).toMatch(testRegex('Memory:', ''));
       // Should NOT show percentage details in parens
-      expect(output).not.toMatch(testRegex('Memory: \\d+% \\(\\d+\\.\\d+GB\\/\\d+\\.\\d+GB\\)', ''));
+      expect(output).not.toMatch(
+        testRegex('Memory: \\d+% \\(\\d+\\.\\d+GB\\/\\d+\\.\\d+GB\\)', ''),
+      );
     });
 
     it('should show full context indicator label', () => {
@@ -139,7 +141,9 @@ describe('Footer Responsive Behavior', () => {
       // Should show full "Context:" label
       expect(output).toMatch(testRegex('Context:', ''));
       // Should NOT show fully expanded token counts
-      expect(output).not.toMatch(testRegex('Context: \\d+,\\d+\\/\\d+,\\d+ tokens', ''));
+      expect(output).not.toMatch(
+        testRegex('Context: \\d+,\\d+\\/\\d+,\\d+ tokens', ''),
+      );
     });
 
     it('should show model name at standard width', () => {
@@ -171,7 +175,9 @@ describe('Footer Responsive Behavior', () => {
 
       // Should show detailed memory format (may wrap across lines in two-line layout)
       expect(output).toMatch(testRegex('Memory: \\d+%', ''));
-      expect(output).toMatch(testRegex('\\(\\d+\\.\\d+GB\\/\\d+\\.\\d+GB\\)', ''));
+      expect(output).toMatch(
+        testRegex('\\(\\d+\\.\\d+GB\\/\\d+\\.\\d+GB\\)', ''),
+      );
     });
 
     it('should show detailed context usage with comma-separated numbers', () => {
@@ -290,7 +296,9 @@ describe('Footer Responsive Behavior', () => {
         expect(output).toMatch(testRegex('(Mem:|Memory:)', ''));
         expect(output).toMatch(testRegex('(Ctx:|Context:)', ''));
         // Path check - should contain path elements (may be truncated)
-        expect(output).toMatch(testRegex('(home|user|projects|project-name)', '')); // Path (may be truncated)
+        expect(output).toMatch(
+          testRegex('(home|user|projects|project-name)', ''),
+        ); // Path (may be truncated)
         // Model only shown at standard+ widths
         expect(width < 80 || output.includes('gemini-2.5-pro')).toBe(true);
       });
@@ -308,7 +316,9 @@ describe('Footer Responsive Behavior', () => {
       expect(output).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', '')); // Timestamp (may wrap)
 
       // Should also have path and model displayed
-      expect(output).toMatch(testRegex('home.*user.*projects|long-project-name', ''));
+      expect(output).toMatch(
+        testRegex('home.*user.*projects|long-project-name', ''),
+      );
       expect(output).toContain('gemini-2.5-pro');
     });
 
@@ -319,7 +329,9 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should contain path and model information
-      expect(output).toMatch(testRegex('home.*user.*projects|long-project-name', ''));
+      expect(output).toMatch(
+        testRegex('home.*user.*projects|long-project-name', ''),
+      );
       expect(output).toContain('gemini-2.5-pro');
       expect(output).toContain('feature'); // Branch name (from defaultProps)
 

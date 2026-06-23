@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import type React from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
@@ -68,8 +67,7 @@ const ProfileItem: React.FC<{
   const maxNameLen = colWidth - 6 - indicatorText.length;
   const displayName = isWide
     ? profile.name
-    :
-      profile.name.length > maxNameLen
+    : profile.name.length > maxNameLen
       ? truncateEnd(profile.name, maxNameLen)
       : profile.name;
 
@@ -83,11 +81,9 @@ const ProfileItem: React.FC<{
         color={
           selected
             ? SemanticColors.text.accent
-            :
-              isSearching && !isNarrow
+            : isSearching && !isNarrow
               ? SemanticColors.text.secondary
-              :
-                isActiveProfile
+              : isActiveProfile
                 ? SemanticColors.status.success
                 : SemanticColors.text.primary
         }

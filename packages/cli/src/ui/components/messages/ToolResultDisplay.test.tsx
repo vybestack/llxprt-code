@@ -40,7 +40,7 @@ describe('<ToolResultDisplay />', () => {
       <ToolResultDisplay resultDisplay={undefined} terminalWidth={80} />,
     );
     // Empty or whitespace-only when no display data
-    expect(lastFrame()?.trim() || '').toBe('');
+    expect(lastFrame()?.trim() ?? '').toBe('');
   });
 
   it('renders without crashing for plain text', () => {

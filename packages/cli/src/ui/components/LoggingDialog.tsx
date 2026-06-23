@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import type React from 'react';
 import { useState, useMemo, useEffect } from 'react';
 import { Box, Text } from 'ink';
@@ -12,6 +11,7 @@ import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 interface LogEntry {
   timestamp: string;
@@ -88,22 +88,20 @@ function getEntryMetadata(entry: LogEntry, isNarrow: boolean) {
   const typeIcon =
     entry.type === 'request'
       ? '→'
-      :
-        entry.type === 'tool_call'
+      : entry.type === 'tool_call'
         ? '[TOOL]'
         : '←';
   const typeColor =
     entry.type === 'request'
       ? SemanticColors.text.accent
-      :
-        entry.type === 'tool_call'
+      : entry.type === 'tool_call'
         ? SemanticColors.status.warning
         : SemanticColors.status.success;
   return { timestamp, typeIcon, typeColor };
 }
 
 function buildToolCallContent(entry: LogEntry): string {
-  let toolContent = `${entry.tool || 'Unknown tool'}`;
+  let toolContent = `${firstNonEmptyString(entry.tool, 'Unknown tool')}`;
   if (entry.duration !== undefined && entry.duration > 0) {
     toolContent += ` (${entry.duration}ms)`;
   }

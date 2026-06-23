@@ -142,8 +142,7 @@ async function statusAction(
       status?.state ??
       status?.status ??
       (typeof status?.healthy === 'boolean'
-        ?
-          status.healthy
+        ? status.healthy
           ? 'active'
           : 'broken'
         : 'unavailable');

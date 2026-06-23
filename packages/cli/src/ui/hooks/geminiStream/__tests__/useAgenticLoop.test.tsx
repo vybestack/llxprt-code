@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 /**
  * Behavioral tests for useAgenticLoop — the hook that rewires the CLI to
  * consume the engine-owned AgenticLoop.

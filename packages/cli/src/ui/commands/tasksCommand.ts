@@ -48,11 +48,9 @@ function formatTask(task: AsyncTaskInfo): string {
   const statusIcon =
     task.status === 'running'
       ? '[RUNNING]'
-      :
-        task.status === 'completed'
+      : task.status === 'completed'
         ? '[DONE]'
-        :
-          task.status === 'failed'
+        : task.status === 'failed'
           ? '[FAILED]'
           : '[CANCELLED]';
 

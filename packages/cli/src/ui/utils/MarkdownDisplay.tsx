@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React from 'react';
 import { Text, Box } from 'ink';
 import { theme } from '../semantic-colors.js';
@@ -118,7 +117,8 @@ interface MarkdownRegexes {
 // horizontal-rule, and table-separator patterns use bounded quantifiers to avoid
 // sonarjs/slow-regex while remaining behaviourally identical to the originals.
 const HEADER_PATTERN = '^ *(#{1,4}) +(.*)';
-const CODE_FENCE_PATTERN = '^ {0,40}(`{3,100}|~{3,100}) {0,40}(\\w{0,100}?) {0,40}$';
+const CODE_FENCE_PATTERN =
+  '^ {0,40}(`{3,100}|~{3,100}) {0,40}(\\w{0,100}?) {0,40}$';
 const UL_ITEM_PATTERN = '^([ \\t]*)([-*+]) +(.*)';
 const OL_ITEM_PATTERN = '^([ \\t]*)(\\d+)\\. +(.*)';
 const HR_PATTERN = '^ *([-*_] {0,40}){3,200} *$';

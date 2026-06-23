@@ -6,7 +6,6 @@
 
 /** @vitest-environment jsdom */
 
-
 import type { Mock, MockInstance } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -51,7 +50,10 @@ const mockSendMessageStream = vi
 const mockStartChat = vi.fn();
 
 const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (this: Record<string, unknown>, _config: unknown) {
+  vi.fn().mockImplementation(function (
+    this: Record<string, unknown>,
+    _config: unknown,
+  ) {
     // _config
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
@@ -81,11 +83,12 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = (await importOriginal()) as Record<string, unknown>;
+  const actualSchedulerModule = (await importOriginal()) as Record<
+    string,
+    unknown
+  >;
   return {
-    ...(actualSchedulerModule !== null && actualSchedulerModule !== undefined
-      ? actualSchedulerModule
-      : {}),
+    ...(actualSchedulerModule ?? {}),
     useReactToolScheduler: vi.fn(),
   };
 });
@@ -194,7 +197,8 @@ describe('useGeminiStream', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () => ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
+        () =>
+          ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
@@ -2242,7 +2246,11 @@ describe('useGeminiStream', () => {
   it('should flush pending text rationale before scheduling tool calls to ensure correct history order', async () => {
     const addItemOrder: string[] = [];
     let capturedOnComplete:
-      | ((schedulerId: symbol, tools: unknown[], opts: unknown) => Promise<void>)
+      | ((
+          schedulerId: symbol,
+          tools: unknown[],
+          opts: unknown,
+        ) => Promise<void>)
       | undefined;
 
     const mockScheduleToolCalls = vi.fn(async (requests) => {
@@ -2250,8 +2258,7 @@ describe('useGeminiStream', () => {
       // Simulate tools completing and triggering onComplete immediately.
       // This mimics the behavior that caused the regression where tool results
       // were added to history during the await scheduleToolCalls(...) block.
-      const tools = requests.map(
-        (r: { name: string; callId: string }) => ({
+      const tools = requests.map((r: { name: string; callId: string }) => ({
         request: r,
         status: 'success',
         tool: { displayName: r.name, name: r.name },

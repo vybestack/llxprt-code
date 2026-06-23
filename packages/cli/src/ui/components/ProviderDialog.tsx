@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React, { useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
@@ -107,8 +106,7 @@ function ProviderListItem({
 }) {
   const displayName = isWide
     ? name
-    :
-      name.length > 20
+    : name.length > 20
       ? truncateEnd(name, 20)
       : name;
 
@@ -118,8 +116,7 @@ function ProviderListItem({
         color={
           selected
             ? SemanticColors.text.accent
-            :
-              isSearching && !isNarrow
+            : isSearching && !isNarrow
               ? SemanticColors.text.secondary
               : SemanticColors.text.primary
         }

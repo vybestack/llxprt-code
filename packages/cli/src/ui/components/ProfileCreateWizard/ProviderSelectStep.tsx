@@ -14,6 +14,7 @@ import { useKeypress } from '../../hooks/useKeypress.js';
 import { PROVIDER_OPTIONS } from './constants.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState } from './types.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 const logger = new DebugLogger('llxprt:ui:profilewizard');
 
@@ -51,13 +52,13 @@ export const ProviderSelectStep: React.FC<ProviderSelectStepProps> = ({
   );
 
   // Use available providers from runtime if provided, otherwise fall back to static list
-  const providers = availableProviders || PROVIDER_OPTIONS.map((p) => p.value);
+  const providers = availableProviders ?? PROVIDER_OPTIONS.map((p) => p.value);
 
   // Build items list with labels from PROVIDER_OPTIONS where available
   const providerItems = providers.map((providerValue) => {
     const option = PROVIDER_OPTIONS.find((p) => p.value === providerValue);
     return {
-      label: option?.label || providerValue,
+      label: firstNonEmptyString(option?.label, providerValue),
       value: providerValue,
       key: providerValue,
     };

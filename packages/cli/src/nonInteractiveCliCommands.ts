@@ -19,6 +19,7 @@ import type { CommandContext } from './ui/commands/types.js';
 import { createNonInteractiveUI } from './ui/noninteractive/nonInteractiveUi.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { SessionStatsState } from './ui/contexts/SessionContext.js';
+import { firstNonEmptyString } from './utils/coalesce.js';
 
 /**
  * Processes a slash command in a non-interactive environment.
@@ -51,7 +52,7 @@ export const handleSlashCommand = async (
 
   if (commandToExecute?.action) {
     const sessionStats: SessionStatsState = {
-      sessionId: config?.getSessionId() || 'unknown',
+      sessionId: firstNonEmptyString(config?.getSessionId(), 'unknown'),
       sessionStartTime: new Date(),
       metrics: uiTelemetryService.getMetrics(),
       lastPromptTokenCount: 0,

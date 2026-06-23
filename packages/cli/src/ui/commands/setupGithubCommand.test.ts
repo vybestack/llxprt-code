@@ -275,7 +275,7 @@ describe('updateGitignore', () => {
     expect(content).toBe('.llxprt/\nsome-other-file\n\ngha-creds-*.json\n');
     expect(content).toContain('gha-creds-*.json');
     // Should not duplicate .llxprt/ entry
-    expect((content.match(/\.llxprt\//g) || []).length).toBe(1);
+    expect((content.match(/\.llxprt\//g) ?? []).length).toBe(1);
   });
 
   it('does not get confused by entries in comments or as substrings', async () => {

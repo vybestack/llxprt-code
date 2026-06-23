@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { homedir } from 'node:os';
@@ -12,6 +11,7 @@ import { type Config, debugLogger } from '@vybestack/llxprt-code-core';
 import { LLXPRT_DIR } from '@vybestack/llxprt-code-storage';
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
 import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';
+import { firstNonEmptyString } from './coalesce.js';
 
 // Constants
 export const DEFAULT_MIN_RETENTION = '1d' as string;
@@ -341,7 +341,10 @@ function validateRetentionConfig(
     }
 
     // Enforce minimum retention period
-    const minRetention = retentionConfig.minRetention || DEFAULT_MIN_RETENTION;
+    const minRetention = firstNonEmptyString(
+      retentionConfig.minRetention,
+      DEFAULT_MIN_RETENTION,
+    );
     let minRetentionMs: number;
     try {
       minRetentionMs = parseRetentionPeriod(minRetention);

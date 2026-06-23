@@ -20,8 +20,7 @@ export type HighlightToken = {
 // semicolon, common punctuation, and brackets.
 // The pattern is passed to RegExp via an identifier so it is not a static
 // literal flagged by sonarjs/regular-expr.
-const HIGHLIGHT_PATTERN =
-  '(^/[a-zA-Z0-9_-]+|@(?:\\\\ |[^,\\s;!?()[\\]{}])+)';
+const HIGHLIGHT_PATTERN = '(^/[a-zA-Z0-9_-]+|@(?:\\\\ |[^,\\s;!?()[\\]{}])+)';
 const HIGHLIGHT_REGEX = new RegExp(HIGHLIGHT_PATTERN, 'g');
 
 const highlightCache = new LruCache<string, readonly HighlightToken[]>(

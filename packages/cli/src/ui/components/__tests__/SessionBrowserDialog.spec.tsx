@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 /**
  * Behavioral tests for SessionBrowserDialog component.
  *
@@ -1036,7 +1035,9 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      expect(output).toMatch(testRegex('replace|current.*conversation|continue\\?', 'i'));
+      expect(output).toMatch(
+        testRegex('replace|current.*conversation|continue\\?', 'i'),
+      );
     });
 
     it('should show Y/N options in conversation confirmation', () => {

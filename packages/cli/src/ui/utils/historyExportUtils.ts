@@ -27,24 +27,72 @@ const REDACTION_RULES: ReadonlyArray<{
   replacement: string;
 }> = [
   // Environment variables (all major providers)
-  { pattern: 'LLXPRT_API_KEY=\\S+', flags: 'g', replacement: 'LLXPRT_API_KEY=[REDACTED]' },
-  { pattern: 'OPENAI_API_KEY=\\S+', flags: 'g', replacement: 'OPENAI_API_KEY=[REDACTED]' },
-  { pattern: 'ANTHROPIC_API_KEY=\\S+', flags: 'g', replacement: 'ANTHROPIC_API_KEY=[REDACTED]' },
-  { pattern: 'GEMINI_API_KEY=\\S+', flags: 'g', replacement: 'GEMINI_API_KEY=[REDACTED]' },
-  { pattern: 'GOOGLE_API_KEY=\\S+', flags: 'g', replacement: 'GOOGLE_API_KEY=[REDACTED]' },
-  { pattern: 'VERTEXAI_PROJECT=\\S+', flags: 'g', replacement: 'VERTEXAI_PROJECT=[REDACTED]' },
+  {
+    pattern: 'LLXPRT_API_KEY=\\S+',
+    flags: 'g',
+    replacement: 'LLXPRT_API_KEY=[REDACTED]',
+  },
+  {
+    pattern: 'OPENAI_API_KEY=\\S+',
+    flags: 'g',
+    replacement: 'OPENAI_API_KEY=[REDACTED]',
+  },
+  {
+    pattern: 'ANTHROPIC_API_KEY=\\S+',
+    flags: 'g',
+    replacement: 'ANTHROPIC_API_KEY=[REDACTED]',
+  },
+  {
+    pattern: 'GEMINI_API_KEY=\\S+',
+    flags: 'g',
+    replacement: 'GEMINI_API_KEY=[REDACTED]',
+  },
+  {
+    pattern: 'GOOGLE_API_KEY=\\S+',
+    flags: 'g',
+    replacement: 'GOOGLE_API_KEY=[REDACTED]',
+  },
+  {
+    pattern: 'VERTEXAI_PROJECT=\\S+',
+    flags: 'g',
+    replacement: 'VERTEXAI_PROJECT=[REDACTED]',
+  },
   // OpenAI-style keys (sk-...)
-  { pattern: '\\bsk-[a-zA-Z0-9_-]{20,}', flags: 'g', replacement: 'sk-[REDACTED]' },
+  {
+    pattern: '\\bsk-[a-zA-Z0-9_-]{20,}',
+    flags: 'g',
+    replacement: 'sk-[REDACTED]',
+  },
   // GitHub personal access tokens
-  { pattern: '\\bghp_[a-zA-Z0-9]{30,}', flags: 'g', replacement: 'ghp_[REDACTED]' },
+  {
+    pattern: '\\bghp_[a-zA-Z0-9]{30,}',
+    flags: 'g',
+    replacement: 'ghp_[REDACTED]',
+  },
   // AWS credentials
   { pattern: 'AKIA[A-Z0-9]{16}', flags: 'g', replacement: 'AKIA[REDACTED]' },
-  { pattern: 'AWS_SECRET_ACCESS_KEY=\\S+', flags: 'g', replacement: 'AWS_SECRET_ACCESS_KEY=[REDACTED]' },
-  { pattern: 'AWS_ACCESS_KEY_ID=\\S+', flags: 'g', replacement: 'AWS_ACCESS_KEY_ID=[REDACTED]' },
+  {
+    pattern: 'AWS_SECRET_ACCESS_KEY=\\S+',
+    flags: 'g',
+    replacement: 'AWS_SECRET_ACCESS_KEY=[REDACTED]',
+  },
+  {
+    pattern: 'AWS_ACCESS_KEY_ID=\\S+',
+    flags: 'g',
+    replacement: 'AWS_ACCESS_KEY_ID=[REDACTED]',
+  },
   // Bearer tokens
-  { pattern: 'Bearer\\s+[a-zA-Z0-9_.-]+', flags: 'gi', replacement: 'Bearer [REDACTED]' },
+  {
+    pattern: 'Bearer\\s+[a-zA-Z0-9_.-]+',
+    flags: 'gi',
+    replacement: 'Bearer [REDACTED]',
+  },
   // Generic API keys in common formats
-  { pattern: 'api[_-]?key["\\s:=]+[a-zA-Z0-9_.-]{20,}', flags: 'gi', replacement: 'api_key=[REDACTED]' },
+  {
+    pattern: 'api[_-]?key["\\s:=]+[a-zA-Z0-9_.-]{20,}',
+    flags: 'gi',
+    replacement: 'api_key=[REDACTED]',
+  },
 ];
 
 const REDACTION_REGEXES: ReadonlyArray<{ regex: RegExp; replacement: string }> =

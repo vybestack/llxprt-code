@@ -192,7 +192,7 @@ export class AuthCommandExecutor {
     args?: string,
   ): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages
-    const trimmedArgs = args?.trim() || '';
+    const trimmedArgs = args?.trim() ?? '';
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0); // Remove empty parts
     const provider = parts[0];
     const action = parts[1];
@@ -635,13 +635,11 @@ export class AuthCommandExecutor {
       return statuses.map((status) => {
         const indicator = status.authenticated ? '[✓]' : '[]';
         const authInfo = status.authenticated
-          ?
-            `authenticated${status.expiresIn != null ? ` (expires in ${Math.floor(status.expiresIn / 60)}m)` : ''}`
+          ? `authenticated${status.expiresIn != null ? ` (expires in ${Math.floor(status.expiresIn / 60)}m)` : ''}`
           : 'not authenticated';
         const oauthStatus =
           status.oauthEnabled !== undefined
-            ?
-              ` [OAuth ${status.oauthEnabled ? 'enabled' : 'disabled'}]`
+            ? ` [OAuth ${status.oauthEnabled ? 'enabled' : 'disabled'}]`
             : '';
         return `${indicator} ${status.provider}: ${authInfo}${oauthStatus}`;
       });

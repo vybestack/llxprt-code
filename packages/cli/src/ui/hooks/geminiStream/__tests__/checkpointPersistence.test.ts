@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 /**
  * Unit tests for checkpointPersistence.ts using injected fs/git mocks.
  * No real filesystem or git operations are performed.
@@ -208,8 +207,7 @@ describe('createToolCheckpoint', () => {
 
   it('returns early when file_path is missing', async () => {
     const toolWithNoPath = makeRestorableTool('c1', 'replace', '');
-    (toolWithNoPath.request.args)['file_path'] =
-      undefined;
+    toolWithNoPath.request.args['file_path'] = undefined;
     const gitService = makeGitService();
     const fsOps = makeFsOps();
     const onDebugMessage = vi.fn();

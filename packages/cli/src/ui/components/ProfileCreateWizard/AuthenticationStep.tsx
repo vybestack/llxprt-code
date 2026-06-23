@@ -15,6 +15,7 @@ import { PROVIDER_OPTIONS } from './constants.js';
 import { validateKeyFile } from './validation.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState } from './types.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 const buildAuthOptions = (
   providerOption: { supportsOAuth?: boolean } | undefined,
@@ -152,22 +153,18 @@ const AuthHeaderView: React.FC<{
   <>
     <Text color={Colors.Foreground}>
       {focusedComponent === 'input'
-        ?
-          authMethod === 'apikey'
+        ? authMethod === 'apikey'
           ? 'Enter API Key:'
-          :
-            authMethod === 'keyfile'
+          : authMethod === 'keyfile'
             ? 'Specify Key File:'
             : 'Configure OAuth:'
         : 'Authentication:'}
     </Text>
     <Text color={Colors.Gray}>
       {focusedComponent === 'input'
-        ?
-          authMethod === 'apikey'
+        ? authMethod === 'apikey'
           ? `Enter your ${providerLabel} API key:`
-          :
-            authMethod === 'keyfile'
+          : authMethod === 'keyfile'
             ? 'Enter the path to your API key file:'
             : 'OAuth authentication will be set up when you load this profile'
         : `Choose how to authenticate with ${providerLabel}`}
@@ -205,7 +202,9 @@ const processAuthSubmit = async (
   if (authMethod === 'keyfile') {
     const validation = await validateKeyFile(authInput);
     if (!validation.valid) {
-      setValidationError(validation.error || 'Invalid file path');
+      setValidationError(
+        firstNonEmptyString(validation.error, 'Invalid file path'),
+      );
       return;
     }
     setIsPathValidated(true);
@@ -596,7 +595,8 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
   const authOptions = buildAuthOptions(providerOption);
   const { current, total } = getStepPosition(state);
 
-  const providerLabel = providerOption?.label || state.config.provider;
+  const providerLabel =
+    firstNonEmptyString(providerOption?.label, state.config.provider) ?? null;
 
   return (
     <AuthReturnView

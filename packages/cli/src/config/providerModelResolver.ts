@@ -6,6 +6,7 @@
 
 import { DEFAULT_GEMINI_MODEL, DebugLogger } from '@vybestack/llxprt-code-core';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
+import { firstNonEmptyString } from '../utils/coalesce.js';
 
 const logger = new DebugLogger('llxprt:config:providerModelResolver');
 
@@ -82,10 +83,15 @@ export function resolveProviderAndModel(
   const aliasDefaultModel = getAliasDefaultModel(provider);
 
   const providerDefault =
-    provider === 'gemini' ? DEFAULT_GEMINI_MODEL : aliasDefaultModel || '';
-  const cliOrProfileModel =
-    cliModel || profileModel || settingsModel || envDefaultModel;
-  const model: string = cliOrProfileModel || envGeminiModel || providerDefault;
+    provider === 'gemini' ? DEFAULT_GEMINI_MODEL : (aliasDefaultModel ?? '');
+  const cliOrProfileModel = firstNonEmptyString(
+    cliModel,
+    profileModel,
+    settingsModel,
+    envDefaultModel,
+  );
+  const model: string =
+    firstNonEmptyString(cliOrProfileModel, envGeminiModel) ?? providerDefault;
 
   return { provider, model };
 }

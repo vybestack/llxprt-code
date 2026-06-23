@@ -759,7 +759,9 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
       throw new Error('Expected message action return');
     }
     expect(result.messageType).toBe('error');
-    expect(result.content).toMatch(testRegex('empty.*response|manual mode', 'i'));
+    expect(result.content).toMatch(
+      testRegex('empty.*response|manual mode', 'i'),
+    );
     expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         config: {
@@ -828,7 +830,9 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     // Verify prompt includes instructions
     expect(callArgs.message).toMatch(testRegex('comprehensive', 'i'));
-    expect(callArgs.message).toMatch(testRegex('role.*capabilities.*behavior', 'i'));
+    expect(callArgs.message).toMatch(
+      testRegex('role.*capabilities.*behavior', 'i'),
+    );
     expect(callArgs.message).toMatch(testRegex('output.*only', 'i'));
   });
 });

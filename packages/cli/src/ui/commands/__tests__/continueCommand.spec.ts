@@ -23,10 +23,7 @@ import type {
   ValueArgument,
   LiteralArgument,
 } from '../schema/types.js';
-import {
-  assertDefined,
-  assertType,
-} from '../../../test-utils/assertions.js';
+import { assertDefined, assertType } from '../../../test-utils/assertions.js';
 
 /**
  * Helper to narrow a command argument to the ValueArgument variant.

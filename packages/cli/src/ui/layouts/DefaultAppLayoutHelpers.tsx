@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React from 'react';
 import { Box, Text } from 'ink';
 import type {
@@ -737,14 +736,11 @@ function StatusBarLeft(props: InlineContentProps) {
       {}
       {props.ctrlCPressedOnce ? (
         <Text color={Colors.AccentYellow}>Press Ctrl+C again to exit.</Text>
-      ) :
-      props.ctrlDPressedOnce ? (
+      ) : props.ctrlDPressedOnce ? (
         <Text color={Colors.AccentYellow}>Press Ctrl+D again to exit.</Text>
-      ) :
-      props.showEscapePrompt ? (
+      ) : props.showEscapePrompt ? (
         <Text color={Colors.Gray}>Press Esc again to clear.</Text>
-      ) :
-      !props.hideContextSummary ? (
+      ) : !props.hideContextSummary ? (
         <ContextSummaryDisplay
           ideContext={props.ideContextState}
           llxprtMdFileCount={props.llxprtMdFileCount}

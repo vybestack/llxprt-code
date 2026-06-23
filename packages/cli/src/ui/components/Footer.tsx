@@ -7,7 +7,6 @@
  * @requirement REQ-INT-001.1
  */
 
-
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { Colors, SemanticColors } from '../colors.js';
@@ -28,7 +27,6 @@ import { ThemedGradient } from './ThemedGradient.js';
 const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
 const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
 const heapSizeLimit = rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
-
 
 function areFooterStablePropsEqual(
   prevProps: FooterProps,
@@ -91,56 +89,58 @@ interface ResponsiveMemoryDisplayProps {
   detailed: boolean;
 }
 
-const ResponsiveMemoryDisplay = React.memo(({ compact, detailed }: ResponsiveMemoryDisplayProps) => {
-  const initialUsage = process.memoryUsage().rss;
-  const initialPercentage = Math.round((initialUsage / heapSizeLimit) * 100);
+const ResponsiveMemoryDisplay = React.memo(
+  ({ compact, detailed }: ResponsiveMemoryDisplayProps) => {
+    const initialUsage = process.memoryUsage().rss;
+    const initialPercentage = Math.round((initialUsage / heapSizeLimit) * 100);
 
-  let initialText: string;
-  if (detailed) {
-    const usageGB = (initialUsage / (1024 * 1024 * 1024)).toFixed(1);
-    const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
-    initialText = `Memory: ${initialPercentage}% (${usageGB}GB/${totalGB}GB)`;
-  } else if (compact) {
-    initialText = `Mem: ${initialPercentage}%`;
-  } else {
-    initialText = `Memory: ${initialPercentage}%`;
-  }
+    let initialText: string;
+    if (detailed) {
+      const usageGB = (initialUsage / (1024 * 1024 * 1024)).toFixed(1);
+      const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
+      initialText = `Memory: ${initialPercentage}% (${usageGB}GB/${totalGB}GB)`;
+    } else if (compact) {
+      initialText = `Mem: ${initialPercentage}%`;
+    } else {
+      initialText = `Memory: ${initialPercentage}%`;
+    }
 
-  const [memoryUsage, setMemoryUsage] = useState<string>(initialText);
-  const [memoryUsageColor, setMemoryUsageColor] = useState<string>(
-    initialUsage >= 2 * 1024 * 1024 * 1024
-      ? SemanticColors.status.error
-      : SemanticColors.text.secondary,
-  );
+    const [memoryUsage, setMemoryUsage] = useState<string>(initialText);
+    const [memoryUsageColor, setMemoryUsageColor] = useState<string>(
+      initialUsage >= 2 * 1024 * 1024 * 1024
+        ? SemanticColors.status.error
+        : SemanticColors.text.secondary,
+    );
 
-  useEffect(() => {
-    const updateMemory = () => {
-      const usage = process.memoryUsage().rss;
-      const percentage = Math.round((usage / heapSizeLimit) * 100);
+    useEffect(() => {
+      const updateMemory = () => {
+        const usage = process.memoryUsage().rss;
+        const percentage = Math.round((usage / heapSizeLimit) * 100);
 
-      if (detailed) {
-        const usageGB = (usage / (1024 * 1024 * 1024)).toFixed(1);
-        const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
-        setMemoryUsage(`Memory: ${percentage}% (${usageGB}GB/${totalGB}GB)`);
-      } else if (compact) {
-        setMemoryUsage(`Mem: ${percentage}%`);
-      } else {
-        setMemoryUsage(`Memory: ${percentage}%`);
-      }
+        if (detailed) {
+          const usageGB = (usage / (1024 * 1024 * 1024)).toFixed(1);
+          const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
+          setMemoryUsage(`Memory: ${percentage}% (${usageGB}GB/${totalGB}GB)`);
+        } else if (compact) {
+          setMemoryUsage(`Mem: ${percentage}%`);
+        } else {
+          setMemoryUsage(`Memory: ${percentage}%`);
+        }
 
-      setMemoryUsageColor(
-        usage >= 2 * 1024 * 1024 * 1024
-          ? SemanticColors.status.error
-          : SemanticColors.text.secondary,
-      );
-    };
+        setMemoryUsageColor(
+          usage >= 2 * 1024 * 1024 * 1024
+            ? SemanticColors.status.error
+            : SemanticColors.text.secondary,
+        );
+      };
 
-    const intervalId = setInterval(updateMemory, 2000);
-    return () => clearInterval(intervalId);
-  }, [compact, detailed]);
+      const intervalId = setInterval(updateMemory, 2000);
+      return () => clearInterval(intervalId);
+    }, [compact, detailed]);
 
-  return <Text color={memoryUsageColor}>{memoryUsage}</Text>;
-});
+    return <Text color={memoryUsageColor}>{memoryUsage}</Text>;
+  },
+);
 ResponsiveMemoryDisplay.displayName = 'ResponsiveMemoryDisplay';
 
 // Responsive Context Usage Display - Memoized to prevent re-renders
@@ -152,32 +152,40 @@ interface ResponsiveContextDisplayProps {
   detailed: boolean;
 }
 
-const ResponsiveContextDisplay = React.memo(({ historyTokenCount, model, contextLimit, compact, detailed }: ResponsiveContextDisplayProps) => {
-  const limit = tokenLimit(model, contextLimit);
-  const percentage = historyTokenCount / limit;
-  const remainingPercentage = (1 - percentage) * 100;
+const ResponsiveContextDisplay = React.memo(
+  ({
+    historyTokenCount,
+    model,
+    contextLimit,
+    compact,
+    detailed,
+  }: ResponsiveContextDisplayProps) => {
+    const limit = tokenLimit(model, contextLimit);
+    const percentage = historyTokenCount / limit;
+    const remainingPercentage = (1 - percentage) * 100;
 
-  // Use semantic colors based on how much context is left
-  let color: string;
-  if (remainingPercentage < 10) {
-    color = SemanticColors.status.error;
-  } else if (remainingPercentage < 25) {
-    color = SemanticColors.status.warning;
-  } else {
-    color = SemanticColors.text.secondary;
-  }
+    // Use semantic colors based on how much context is left
+    let color: string;
+    if (remainingPercentage < 10) {
+      color = SemanticColors.status.error;
+    } else if (remainingPercentage < 25) {
+      color = SemanticColors.status.warning;
+    } else {
+      color = SemanticColors.text.secondary;
+    }
 
-  let displayText: string;
-  if (detailed) {
-    displayText = `Context: ${historyTokenCount.toLocaleString()}/${limit.toLocaleString()} tokens`;
-  } else if (compact) {
-    displayText = `Ctx: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
-  } else {
-    displayText = `Context: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
-  }
+    let displayText: string;
+    if (detailed) {
+      displayText = `Context: ${historyTokenCount.toLocaleString()}/${limit.toLocaleString()} tokens`;
+    } else if (compact) {
+      displayText = `Ctx: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
+    } else {
+      displayText = `Context: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
+    }
 
-  return <Text color={color}>{displayText}</Text>;
-});
+    return <Text color={color}>{displayText}</Text>;
+  },
+);
 ResponsiveContextDisplay.displayName = 'ResponsiveContextDisplay';
 
 // Debounced TPM Display - Updates less frequently to reduce flicker
@@ -186,30 +194,32 @@ interface DebouncedTPMDisplayProps {
   themeName?: string;
 }
 
-const DebouncedTPMDisplay = React.memo(({ tokensPerMinute }: DebouncedTPMDisplayProps) => {
-  const [displayTPM, setDisplayTPM] = useState<number | undefined>(
-    tokensPerMinute,
-  );
+const DebouncedTPMDisplay = React.memo(
+  ({ tokensPerMinute }: DebouncedTPMDisplayProps) => {
+    const [displayTPM, setDisplayTPM] = useState<number | undefined>(
+      tokensPerMinute,
+    );
 
-  useEffect(() => {
-    // Debounce TPM updates to reduce flicker
-    const timeoutId = setTimeout(() => {
-      setDisplayTPM(tokensPerMinute);
-    }, 500); // 500ms debounce
+    useEffect(() => {
+      // Debounce TPM updates to reduce flicker
+      const timeoutId = setTimeout(() => {
+        setDisplayTPM(tokensPerMinute);
+      }, 500); // 500ms debounce
 
-    return () => clearTimeout(timeoutId);
-  }, [tokensPerMinute]);
+      return () => clearTimeout(timeoutId);
+    }, [tokensPerMinute]);
 
-  if (displayTPM === undefined) return null;
+    if (displayTPM === undefined) return null;
 
-  return (
-    <Text color={SemanticColors.text.accent}>
-      {displayTPM < 1000
-        ? `TPM: ${displayTPM.toFixed(2)}`
-        : `TPM: ${(displayTPM / 1000).toFixed(2)}k`}
-    </Text>
-  );
-});
+    return (
+      <Text color={SemanticColors.text.accent}>
+        {displayTPM < 1000
+          ? `TPM: ${displayTPM.toFixed(2)}`
+          : `TPM: ${(displayTPM / 1000).toFixed(2)}k`}
+      </Text>
+    );
+  },
+);
 DebouncedTPMDisplay.displayName = 'DebouncedTPMDisplay';
 
 // Debounced Wait Time Display
@@ -218,33 +228,35 @@ interface DebouncedWaitDisplayProps {
   themeName?: string;
 }
 
-const DebouncedWaitDisplay = React.memo(({ throttleWaitTimeMs }: DebouncedWaitDisplayProps) => {
-  const [displayWait, setDisplayWait] = useState<number | undefined>(
-    throttleWaitTimeMs,
-  );
+const DebouncedWaitDisplay = React.memo(
+  ({ throttleWaitTimeMs }: DebouncedWaitDisplayProps) => {
+    const [displayWait, setDisplayWait] = useState<number | undefined>(
+      throttleWaitTimeMs,
+    );
 
-  useEffect(() => {
-    // Debounce wait time updates
-    const timeoutId = setTimeout(() => {
-      setDisplayWait(throttleWaitTimeMs);
-    }, 300); // 300ms debounce
+    useEffect(() => {
+      // Debounce wait time updates
+      const timeoutId = setTimeout(() => {
+        setDisplayWait(throttleWaitTimeMs);
+      }, 300); // 300ms debounce
 
-    return () => clearTimeout(timeoutId);
-  }, [throttleWaitTimeMs]);
+      return () => clearTimeout(timeoutId);
+    }, [throttleWaitTimeMs]);
 
-  if (displayWait === undefined) return null;
+    if (displayWait === undefined) return null;
 
-  let waitText: string;
-  if (displayWait < 1000) {
-    waitText = `Wait: ${displayWait}ms`;
-  } else if (displayWait < 60000) {
-    waitText = `Wait: ${(displayWait / 1000).toFixed(1)}s`;
-  } else {
-    waitText = `Wait: ${(displayWait / 60000).toFixed(1)}m`;
-  }
+    let waitText: string;
+    if (displayWait < 1000) {
+      waitText = `Wait: ${displayWait}ms`;
+    } else if (displayWait < 60000) {
+      waitText = `Wait: ${(displayWait / 1000).toFixed(1)}s`;
+    } else {
+      waitText = `Wait: ${(displayWait / 60000).toFixed(1)}m`;
+    }
 
-  return <Text color={SemanticColors.status.warning}>{waitText}</Text>;
-});
+    return <Text color={SemanticColors.status.warning}>{waitText}</Text>;
+  },
+);
 DebouncedWaitDisplay.displayName = 'DebouncedWaitDisplay';
 
 // Responsive Timestamp Display - Isolated component for clock updates
@@ -275,20 +287,22 @@ interface BranchDisplayProps {
   maxBranchLength: number;
 }
 
-const BranchDisplay = React.memo(({ branchName, nightly, maxBranchLength }: BranchDisplayProps) => {
-  const displayBranch =
-    branchName.length > maxBranchLength
-      ? truncateMiddle(branchName, maxBranchLength)
-      : branchName;
-  if (nightly) {
-    return (
-      <ThemedGradient colors={Colors.GradientColors}>
-        <Text color={Colors.Foreground}>({displayBranch}*)</Text>
-      </ThemedGradient>
-    );
-  }
-  return <Text color={SemanticColors.text.accent}>({displayBranch}*)</Text>;
-});
+const BranchDisplay = React.memo(
+  ({ branchName, nightly, maxBranchLength }: BranchDisplayProps) => {
+    const displayBranch =
+      branchName.length > maxBranchLength
+        ? truncateMiddle(branchName, maxBranchLength)
+        : branchName;
+    if (nightly) {
+      return (
+        <ThemedGradient colors={Colors.GradientColors}>
+          <Text color={Colors.Foreground}>({displayBranch}*)</Text>
+        </ThemedGradient>
+      );
+    }
+    return <Text color={SemanticColors.text.accent}>({displayBranch}*)</Text>;
+  },
+);
 BranchDisplay.displayName = 'BranchDisplay';
 
 // Model name sub-component with load-balancer logic
@@ -298,13 +312,15 @@ interface ModelNameDisplayProps {
   runtime: ReturnType<typeof useRuntimeApi>;
 }
 
-const ModelNameDisplay = React.memo(({ model, showModelName, runtime }: ModelNameDisplayProps) => {
-  if (!showModelName) return null;
-  const providerStatus = runtime.getActiveProviderStatus();
-  const lbDisplay = tryGetLBDisplayName(runtime, providerStatus);
-  if (lbDisplay !== null) return lbDisplay;
-  return <Text color={SemanticColors.text.primary}>{model}</Text>;
-});
+const ModelNameDisplay = React.memo(
+  ({ model, showModelName, runtime }: ModelNameDisplayProps) => {
+    if (!showModelName) return null;
+    const providerStatus = runtime.getActiveProviderStatus();
+    const lbDisplay = tryGetLBDisplayName(runtime, providerStatus);
+    if (lbDisplay !== null) return lbDisplay;
+    return <Text color={SemanticColors.text.primary}>{model}</Text>;
+  },
+);
 ModelNameDisplay.displayName = 'ModelNameDisplay';
 
 function tryGetLBDisplayName(
@@ -356,25 +372,29 @@ interface PaidModeDisplayProps {
   runtime: ReturnType<typeof useRuntimeApi>;
 }
 
-const PaidModeDisplay = React.memo(({ isPaidMode, showModelName, runtime }: PaidModeDisplayProps) => {
-  if (isPaidMode === undefined) return null;
-  const status = runtime.getActiveProviderStatus();
-  if (status.providerName !== 'gemini') return null;
-  return (
-    <>
-      {showModelName && <Text color={SemanticColors.text.secondary}> | </Text>}
-      <Text
-        color={
-          isPaidMode
-            ? SemanticColors.status.warning
-            : SemanticColors.status.success
-        }
-      >
-        {isPaidMode ? 'paid mode' : 'free mode'}
-      </Text>
-    </>
-  );
-});
+const PaidModeDisplay = React.memo(
+  ({ isPaidMode, showModelName, runtime }: PaidModeDisplayProps) => {
+    if (isPaidMode === undefined) return null;
+    const status = runtime.getActiveProviderStatus();
+    if (status.providerName !== 'gemini') return null;
+    return (
+      <>
+        {showModelName && (
+          <Text color={SemanticColors.text.secondary}> | </Text>
+        )}
+        <Text
+          color={
+            isPaidMode
+              ? SemanticColors.status.warning
+              : SemanticColors.status.success
+          }
+        >
+          {isPaidMode ? 'paid mode' : 'free mode'}
+        </Text>
+      </>
+    );
+  },
+);
 PaidModeDisplay.displayName = 'PaidModeDisplay';
 
 // Sandbox status sub-component
@@ -383,37 +403,39 @@ interface SandboxStatusDisplayProps {
   isCompact: boolean;
 }
 
-const SandboxStatusDisplay = React.memo(({ hideSandboxStatus, isCompact }: SandboxStatusDisplayProps) => {
-  if (isCompact || hideSandboxStatus) return null;
+const SandboxStatusDisplay = React.memo(
+  ({ hideSandboxStatus, isCompact }: SandboxStatusDisplayProps) => {
+    if (isCompact || hideSandboxStatus) return null;
 
-  let sandboxStatus: React.ReactNode;
-  if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
-    sandboxStatus = (
-      <Text color={SemanticColors.status.success}>
-        [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
-      </Text>
-    );
-  } else if (process.env.SANDBOX === 'sandbox-exec') {
-    sandboxStatus = (
-      <Text color={SemanticColors.status.warning}>
-        [macOS Seatbelt{' '}
-        <Text color={SemanticColors.text.secondary}>
-          ({process.env.SEATBELT_PROFILE})
+    let sandboxStatus: React.ReactNode;
+    if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
+      sandboxStatus = (
+        <Text color={SemanticColors.status.success}>
+          [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
         </Text>
-        ]
-      </Text>
-    );
-  } else {
-    sandboxStatus = (
-      <Text color={SemanticColors.status.error}>
-        [no sandbox{' '}
-        <Text color={SemanticColors.text.secondary}>(see /docs)</Text>]
-      </Text>
-    );
-  }
+      );
+    } else if (process.env.SANDBOX === 'sandbox-exec') {
+      sandboxStatus = (
+        <Text color={SemanticColors.status.warning}>
+          [macOS Seatbelt{' '}
+          <Text color={SemanticColors.text.secondary}>
+            ({process.env.SEATBELT_PROFILE})
+          </Text>
+          ]
+        </Text>
+      );
+    } else {
+      sandboxStatus = (
+        <Text color={SemanticColors.status.error}>
+          [no sandbox{' '}
+          <Text color={SemanticColors.text.secondary}>(see /docs)</Text>]
+        </Text>
+      );
+    }
 
-  return <Box marginLeft={2}>{sandboxStatus}</Box>;
-});
+    return <Box marginLeft={2}>{sandboxStatus}</Box>;
+  },
+);
 SandboxStatusDisplay.displayName = 'SandboxStatusDisplay';
 
 // Right side: Memory | Context | TPM | Wait Time | Time
@@ -431,7 +453,8 @@ interface FooterMetricsRowProps {
   showTimestamp: boolean;
 }
 
-const FooterMetricsRow = React.memo(({
+const FooterMetricsRow = React.memo(
+  ({
     hideModelInfo,
     showMemoryUsage,
     isCompact,

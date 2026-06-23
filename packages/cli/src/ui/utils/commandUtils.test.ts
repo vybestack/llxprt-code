@@ -286,7 +286,7 @@ describe('commandUtils', () => {
       await copyToClipboard(testText);
 
       const written = tty.write.mock.calls[0][0] as string;
-      const chunkStarts = (written.match(new RegExp(`${ESC}P`, 'g')) || [])
+      const chunkStarts = (written.match(new RegExp(`${ESC}P`, 'g')) ?? [])
         .length;
       const chunkEnds = written.split(ST).length - 1;
 

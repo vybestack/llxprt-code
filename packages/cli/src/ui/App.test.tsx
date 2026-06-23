@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Text } from 'ink';
@@ -135,8 +134,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
           opts.userMemory != null && opts.userMemory !== ''
             ? opts.userMemory
             : '',
-        geminiMdFileCount:
-          opts.geminiMdFileCount != null ? opts.geminiMdFileCount : 0,
+        geminiMdFileCount: opts.geminiMdFileCount ?? 0,
         coreMemoryFileCount:
           opts.coreMemoryFileCount != null ? opts.coreMemoryFileCount : 0,
         approvalMode: opts.approvalMode ?? ApprovalMode.DEFAULT,
@@ -186,12 +184,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
             : '',
         ),
         setUserMemory: vi.fn(),
-        getGeminiMdFileCount: vi.fn(() =>
-          opts.geminiMdFileCount != null ? opts.geminiMdFileCount : 0,
-        ),
-        getLlxprtMdFileCount: vi.fn(() =>
-          opts.geminiMdFileCount != null ? opts.geminiMdFileCount : 0,
-        ),
+        getGeminiMdFileCount: vi.fn(() => opts.geminiMdFileCount ?? 0),
+        getLlxprtMdFileCount: vi.fn(() => opts.geminiMdFileCount ?? 0),
         getCoreMemoryFileCount: vi.fn(() =>
           opts.coreMemoryFileCount != null ? opts.coreMemoryFileCount : 0,
         ),

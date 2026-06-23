@@ -16,6 +16,7 @@ import type {
   HintFn,
 } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 // Mock command context for tests
 const mockContext = createMockCommandContext();
@@ -28,7 +29,7 @@ const literal = (
 ): LiteralArgument => ({
   kind: 'literal',
   value,
-  description: description || `Literal ${value}`,
+  description: firstNonEmptyString(description, `Literal ${value}`),
   next,
 });
 
@@ -43,7 +44,7 @@ const value = (
   kind: 'value',
   name,
   description,
-  options: (options || []).map((opt) =>
+  options: (options ?? []).map((opt) =>
     typeof opt === 'string' ? { value: opt } : opt,
   ),
   completer,

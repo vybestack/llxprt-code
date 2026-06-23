@@ -144,7 +144,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
 
       // Should not have any mount specifically for credential socket
       expect(dockerPath).not.toMatch(
-        testRegex('--volume.*LLXPRT_CREDENTIAL_SOCKET|--volume.*llxprt-cred', ''),
+        testRegex(
+          '--volume.*LLXPRT_CREDENTIAL_SOCKET|--volume.*llxprt-cred',
+          '',
+        ),
       );
     });
   });

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { AsyncFzf } from 'fzf';
@@ -50,6 +49,7 @@ import type { SettingDefinition as _SettingDefinition } from '../../config/setti
 import { generateDynamicToolSettings } from '../../utils/dynamicSettings.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import { debugLogger } from '@vybestack/llxprt-code-core';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 interface FzfResult {
   item: string;
@@ -1133,8 +1133,7 @@ function SettingItemRow({
               color={
                 isActive
                   ? Colors.AccentGreen
-                  :
-                    shouldBeGreyedOut
+                  : shouldBeGreyedOut
                     ? Colors.Gray
                     : Colors.Foreground
               }
@@ -1397,7 +1396,10 @@ function enterSubSettings(
   ctx.setSubSettingsMode({
     isActive: true,
     parentKey: currentSettingKey,
-    parentLabel: currentDefinition?.label || currentSettingKey,
+    parentLabel: firstNonEmptyString(
+      currentDefinition?.label,
+      currentSettingKey,
+    ),
   });
   ctx.setActiveSettingIndex(0);
   ctx.setScrollOffset(0);
@@ -1626,12 +1628,10 @@ function resetToDefaultImmediate(
   const immediateSettings = new Set([currentSetting.value]);
   const toSaveValue =
     currentSetting.type === 'boolean'
-      ?
-        typeof defaultValue === 'boolean'
+      ? typeof defaultValue === 'boolean'
         ? defaultValue
         : false
-      :
-        typeof defaultValue === 'number' || typeof defaultValue === 'string'
+      : typeof defaultValue === 'number' || typeof defaultValue === 'string'
         ? defaultValue
         : undefined;
   const immediateSettingsObject =

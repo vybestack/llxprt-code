@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 /**
  * Extracted stream event handler hooks from useGeminiStream.
  * Contains the per-event handler useCallbacks plus the single-event router

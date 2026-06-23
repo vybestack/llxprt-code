@@ -370,7 +370,9 @@ function handleLoadHistoryResult(
   context: CommandContext,
   result: Extract<ActionResult, { type: 'load_history' }>,
 ): SlashCommandProcessorResult {
-  void context.services.config?.getAgentClient().setHistory(result.clientHistory);
+  void context.services.config
+    ?.getAgentClient()
+    .setHistory(result.clientHistory);
   context.ui.clear();
   result.history.forEach((item, index) => {
     context.ui.addItem(item, index);

@@ -6,7 +6,6 @@
 
 /** @vitest-environment jsdom */
 
-
 /**
  *
  *
@@ -324,7 +323,9 @@ describe('SettingsDialog', () => {
 
       // Wait for the toggled value to appear in the UI to confirm state update
       await waitFor(() => {
-        expect(lastFrame()).toMatch(testRegex('Screen Reader Mode\\s+true\\*', ''));
+        expect(lastFrame()).toMatch(
+          testRegex('Screen Reader Mode\\s+true\\*', ''),
+        );
       });
 
       // Close the dialog with Escape to trigger saveRestartRequiredSettings
@@ -978,7 +979,9 @@ describe('SettingsDialog', () => {
       expect(lastFrame()).toContain('Apply To'); // Scope section
       expect(lastFrame()).toContain('User Settings'); // Scope options (no numbers when settings focused)
       // In nav mode, help text shows navigation help
-      expect(lastFrame()).toMatch(testRegex('Enter.*select.*Tab.*focus.*Esc.*close', ''));
+      expect(lastFrame()).toMatch(
+        testRegex('Enter.*select.*Tab.*focus.*Esc.*close', ''),
+      );
 
       // This test validates the complete UI structure is available for user workflow
       // Individual interactions are tested in focused unit tests

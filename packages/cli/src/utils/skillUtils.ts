@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import { SettingScope } from '../config/settings.js';
 import type { SkillActionResult } from './skillSettings.js';
 import {
@@ -17,6 +16,7 @@ import extract from 'extract-zip';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { firstNonEmptyString } from './coalesce.js';
 
 /**
  * Shared logic for building the core skill action message while allowing the
@@ -34,9 +34,9 @@ export function renderSkillActionFeedback(
   const { skillName, action, status, error } = result;
 
   if (status === 'error') {
-    return (
-      error ||
-      `An error occurred while attempting to ${action} skill "${skillName}".`
+    return firstNonEmptyString(
+      error,
+      `An error occurred while attempting to ${action} skill "${skillName}".`,
     );
   }
 

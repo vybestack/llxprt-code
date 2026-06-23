@@ -48,8 +48,7 @@ export const buildNormalizedToolSet = (value: unknown): Set<string> => {
   const entries =
     Array.isArray(value) && value.length > 0
       ? value
-      :
-        typeof value === 'string' && value.trim().length > 0
+      : typeof value === 'string' && value.trim().length > 0
         ? [value]
         : [];
 

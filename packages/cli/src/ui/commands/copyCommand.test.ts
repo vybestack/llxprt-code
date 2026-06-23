@@ -46,7 +46,6 @@ describe('copyCommand', () => {
   });
 
   it('should return info message when no history is available', async () => {
-
     // Mock no chat initialized
     mockContext = createMockCommandContext({
       services: {
@@ -72,7 +71,6 @@ describe('copyCommand', () => {
   });
 
   it('should return info message when history is empty', async () => {
-
     mockGetHistory.mockReturnValue([]);
 
     const result = await copyCommand.action!(mockContext, '');
@@ -87,7 +85,6 @@ describe('copyCommand', () => {
   });
 
   it('should return info message when no AI messages are found in history', async () => {
-
     const historyWithUserOnly = [
       {
         role: 'user',
@@ -109,7 +106,6 @@ describe('copyCommand', () => {
   });
 
   it('should copy last AI message to clipboard successfully', async () => {
-
     const historyWithAiMessage = [
       {
         role: 'user',
@@ -138,7 +134,6 @@ describe('copyCommand', () => {
   });
 
   it('should handle multiple text parts in AI message', async () => {
-
     const historyWithMultipleParts = [
       {
         role: 'model',
@@ -160,7 +155,6 @@ describe('copyCommand', () => {
   });
 
   it('should filter out non-text parts', async () => {
-
     const historyWithMixedParts = [
       {
         role: 'model',
@@ -186,7 +180,6 @@ describe('copyCommand', () => {
   });
 
   it('should get the last AI message when multiple AI messages exist', async () => {
-
     const historyWithMultipleAiMessages = [
       {
         role: 'model',
@@ -216,7 +209,6 @@ describe('copyCommand', () => {
   });
 
   it('should handle clipboard copy error', async () => {
-
     const historyWithAiMessage = [
       {
         role: 'model',
@@ -238,7 +230,6 @@ describe('copyCommand', () => {
   });
 
   it('should handle non-Error clipboard errors', async () => {
-
     const historyWithAiMessage = [
       {
         role: 'model',
@@ -260,7 +251,6 @@ describe('copyCommand', () => {
   });
 
   it('should return info message when no text parts found in AI message', async () => {
-
     const historyWithEmptyParts = [
       {
         role: 'model',
@@ -282,7 +272,6 @@ describe('copyCommand', () => {
   });
 
   it('should handle unavailable config service', async () => {
-
     const nullConfigContext = createMockCommandContext({
       services: { config: null },
     });

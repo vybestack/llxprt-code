@@ -19,6 +19,7 @@ import {
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
+import { firstNonEmptyString } from '../utils/coalesce.js';
 
 const logger = new DebugLogger('llxprt:config:intermediateConfig');
 
@@ -100,7 +101,8 @@ export async function resolveIntermediateConfig(
   );
 
   const question =
-    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+    firstNonEmptyString(argv.promptInteractive, argv.prompt) ??
+    (argv.promptWords ?? []).join(' ');
 
   return {
     screenReader,
@@ -158,9 +160,9 @@ function resolveAllowedTools(
   settings: Settings,
 ): string[] {
   const profileTools =
-    profileMergedSettings.tools?.allowed || profileMergedSettings.allowedTools;
+    profileMergedSettings.tools?.allowed ?? profileMergedSettings.allowedTools;
 
-  const globalTools = settings.tools?.allowed || settings.allowedTools;
-  const tools = argv.allowedTools || profileTools || globalTools;
+  const globalTools = settings.tools?.allowed ?? settings.allowedTools;
+  const tools = argv.allowedTools ?? profileTools ?? globalTools;
   return [...(tools ?? [])];
 }

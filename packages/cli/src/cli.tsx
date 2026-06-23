@@ -10,7 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-
 const wantWarningSuppression =
   process.env.LLXPRT_SUPPRESS_NODE_WARNINGS !== 'false';
 if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
@@ -29,8 +28,7 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
     const warningCode =
       typeof warning === 'string'
         ? undefined
-        :
-          typeof warning.code === 'string'
+        : typeof warning.code === 'string'
           ? warning.code
           : undefined;
     if (warningCode && suppressedWarningCodes.has(warningCode)) {
@@ -163,6 +161,7 @@ import {
   applyCliArgumentOverrides,
 } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
+import { firstNonEmptyString } from './utils/coalesce.js';
 
 export function formatNonInteractiveError(error: unknown): string {
   const formatted = parseAndFormatApiError(error);
@@ -481,7 +480,8 @@ export async function main() {
   };
 
   const questionFromArgs =
-    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+    firstNonEmptyString(argv.promptInteractive, argv.prompt) ??
+    (argv.promptWords ?? []).join(' ');
 
   await cleanupCheckpoints();
 
