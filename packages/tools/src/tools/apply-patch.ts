@@ -110,17 +110,14 @@ function isNonNullObject(value: unknown): value is object {
   return typeof value === 'object' && value !== null;
 }
 
-const MESSAGE_BUS_KEYS = [
-  'requestConfirmation',
-  'publishPolicyUpdate',
-  'publish',
-  'subscribe',
-] as const;
+// Required keys for duck-typing service shapes. Every key must be present
+// so partial objects are not misclassified as a given service.
+const MESSAGE_BUS_KEYS = ['requestConfirmation'] as const;
 
 const IDE_SERVICE_KEYS = [
   'applyDiff',
-  'openDiff',
   'getConnectionStatus',
+  'openDiff',
 ] as const;
 
 const LSP_SERVICE_KEYS = [
@@ -130,15 +127,15 @@ const LSP_SERVICE_KEYS = [
 ] as const;
 
 function hasMessageBusShape(value: unknown): value is IToolMessageBus {
-  return isNonNullObject(value) && MESSAGE_BUS_KEYS.some((k) => k in value);
+  return isNonNullObject(value) && MESSAGE_BUS_KEYS.every((k) => k in value);
 }
 
 function hasIdeServiceShape(value: unknown): value is IIdeService {
-  return isNonNullObject(value) && IDE_SERVICE_KEYS.some((k) => k in value);
+  return isNonNullObject(value) && IDE_SERVICE_KEYS.every((k) => k in value);
 }
 
 function hasLspServiceShape(value: unknown): value is ILspService {
-  return isNonNullObject(value) && LSP_SERVICE_KEYS.some((k) => k in value);
+  return isNonNullObject(value) && LSP_SERVICE_KEYS.every((k) => k in value);
 }
 
 function getLegacyIdeService(host: IToolHost): IIdeService | undefined {
@@ -364,8 +361,15 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       }
     }
 
-    // Parse and apply patch to get preview
+    // Parse and apply patch to get preview. Use the same validation path as
+    // execute so previews match execution behavior.
     const patches = Diff.parsePatch(this.params.patch_content);
+    if (patches.length === 0) {
+      return false;
+    }
+    if (patches.length > 1) {
+      return false;
+    }
     const newContentResult = Diff.applyPatch(currentContent, patches[0]);
 
     if (typeof newContentResult !== 'string') {
@@ -503,8 +507,9 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   }
 
   private parsePatchContent(): Diff.StructuredPatch[] | ToolResult {
+    let patches: Diff.StructuredPatch[];
     try {
-      return Diff.parsePatch(this.params.patch_content);
+      patches = Diff.parsePatch(this.params.patch_content);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       return {
@@ -516,16 +521,50 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
         },
       };
     }
+
+    if (patches.length === 0) {
+      return {
+        llmContent:
+          'Patch content did not contain any parseable file sections. Provide a valid unified diff with at least one file section.',
+        returnDisplay: 'No parseable patch sections found.',
+        error: {
+          message: 'Patch content did not contain any parseable file sections.',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+      };
+    }
+
+    if (patches.length > 1) {
+      const fileNames = patches
+        .map((p) => p.newFileName || p.oldFileName)
+        .join(', ');
+      return {
+        llmContent: `apply_patch accepts a single target file patch, but the provided patch_content contained ${patches.length} file sections (${fileNames}). Make a separate apply_patch call for each file.`,
+        returnDisplay: `Rejected multi-file patch: ${patches.length} file sections.`,
+        error: {
+          message: `apply_patch accepts a single target file patch, but the patch_content contained ${patches.length} file sections. Use a separate apply_patch call per file.`,
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+      };
+    }
+
+    return patches;
   }
 
   private applyPatch(
     currentContent: string,
     patches: Diff.StructuredPatch[],
   ): string | ToolResult {
+    const [patch] = patches;
+    const targetError = this.validatePatchTarget(patch);
+    if (targetError) {
+      return targetError;
+    }
+
     try {
-      const newContentResult = Diff.applyPatch(currentContent, patches[0]);
+      const newContentResult = Diff.applyPatch(currentContent, patch);
       if (typeof newContentResult !== 'string') {
-        throw new Error('Failed to apply patch: could not apply');
+        throw new Error('Failed to apply patch: context mismatch');
       }
       return newContentResult;
     } catch (error) {
@@ -535,10 +574,75 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
         returnDisplay: `Error applying patch: ${errorMsg}`,
         error: {
           message: `Failed to apply patch: ${errorMsg}`,
-          type: ToolErrorType.EDIT_NO_CHANGE,
+          type: ToolErrorType.PATCH_APPLY_FAILURE,
         },
       };
     }
+  }
+
+  /**
+   * Validates that the parsed patch header targets the same file as the
+   * absolute_path/file_path parameter. Prevents a patch for one file from
+   * being silently applied to a different target.
+   */
+  private validatePatchTarget(patch: Diff.StructuredPatch): ToolResult | null {
+    const filePath = this.getFilePath();
+    const targetName = path.basename(filePath);
+
+    const stripPrefix = (headerPath: string): string => {
+      // Remove a/ or b/ prefixes used in unified diffs.
+      if (headerPath.startsWith('a/') || headerPath.startsWith('b/')) {
+        return headerPath.slice(2);
+      }
+      return headerPath;
+    };
+
+    const newHeader = stripPrefix(patch.newFileName || '');
+    const oldHeader = stripPrefix(patch.oldFileName || '');
+
+    // /dev/null is valid for new-file or delete-style patches.
+    const isNewFileFromNull =
+      oldHeader === '/dev/null' &&
+      newHeader !== '' &&
+      newHeader !== '/dev/null';
+    const isDeleteToNull =
+      newHeader === '/dev/null' &&
+      oldHeader !== '' &&
+      oldHeader !== '/dev/null';
+
+    if (isNewFileFromNull || isDeleteToNull) {
+      // For new-file patches, the new header basename should match target.
+      if (isNewFileFromNull && path.basename(newHeader) === targetName) {
+        return null;
+      }
+      // For delete-style patches, the old header basename should match target.
+      if (isDeleteToNull && path.basename(oldHeader) === targetName) {
+        return null;
+      }
+    }
+
+    const newMatches =
+      newHeader !== '' &&
+      (path.basename(newHeader) === targetName ||
+        newHeader === path.relative(getTargetDirCompat(this.host), filePath));
+    const oldMatches =
+      oldHeader !== '' &&
+      (path.basename(oldHeader) === targetName ||
+        oldHeader === path.relative(getTargetDirCompat(this.host), filePath));
+
+    if (newMatches || oldMatches) {
+      return null;
+    }
+
+    const describedTarget = newHeader || oldHeader || '(unknown)';
+    return {
+      llmContent: `Patch header targets "${describedTarget}" but the absolute_path targets "${targetName}". Ensure the patch header matches the target file, or use a separate apply_patch call for "${describedTarget}".`,
+      returnDisplay: `Rejected patch: header target "${describedTarget}" does not match absolute_path "${targetName}".`,
+      error: {
+        message: `Patch header target "${describedTarget}" does not match absolute_path "${targetName}".`,
+        type: ToolErrorType.INVALID_TOOL_PARAMS,
+      },
+    };
   }
 
   private async writeAndFormatResult(
@@ -653,13 +757,9 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   ): Promise<void> {
     try {
       if (this.lspService !== undefined) {
-        for (const contentFile of classification.contentWriteFiles) {
-          const absoluteFilePath = path.resolve(
-            getTargetDirCompat(this.host),
-            contentFile,
-          );
-          await this.lspService.waitForDiagnostics(absoluteFilePath, 5000);
-        }
+        // Wait for diagnostics on the actual file written by the tool
+        // (absolute_path), not the patch header path which may differ.
+        await this.lspService.waitForDiagnostics(filePath, 5000);
       }
 
       const diagBlock =
