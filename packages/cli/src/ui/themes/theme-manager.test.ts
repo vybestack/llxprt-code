@@ -117,14 +117,9 @@ describe('ThemeManager', () => {
   });
 
   it('should return NoColorTheme if NO_COLOR is set', () => {
-    const original = process.env.NO_COLOR;
-    process.env.NO_COLOR = '1';
+    vi.stubEnv('NO_COLOR', '1');
     expect(themeManager.getActiveTheme().name).toBe('NoColor');
-    if (original === undefined) {
-      delete process.env.NO_COLOR;
-    } else {
-      process.env.NO_COLOR = original;
-    }
+    vi.unstubAllEnvs();
   });
 
   describe('getSemanticColors', () => {

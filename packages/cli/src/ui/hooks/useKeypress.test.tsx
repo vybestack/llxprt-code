@@ -194,9 +194,8 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
         stdin.write('do');
       });
 
-      if (useKitty) {
-        vi.advanceTimersByTime(60); // wait for kitty timeout
-      }
+      // Kitty mode debounces; advance past its timeout (no-op for non-kitty).
+      vi.advanceTimersByTime(useKitty ? 60 : 0);
 
       const sequences = onKeypress.mock.calls.map(([arg]) => arg.sequence);
 
