@@ -68,6 +68,34 @@ const RENAMED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/core/src/providers/providerInterface.compat.test.ts',
     'packages/providers/src/providerInterface.contract.test.ts',
   ],
+  // #2092: the following provider test files were split into smaller,
+  // behavior-focused test files. Each original inventory entry maps to a
+  // representative split file so the move-map validation continues to prove
+  // every inventory entry resolves to an existing destination.
+  [
+    'packages/core/src/providers/__tests__/LoadBalancingProvider.failover.test.ts',
+    'packages/providers/src/__tests__/LoadBalancingProvider.failover.errors.test.ts',
+  ],
+  [
+    'packages/core/src/providers/__tests__/LoadBalancingProvider.test.ts',
+    'packages/providers/src/__tests__/LoadBalancingProvider.delegation.test.ts',
+  ],
+  [
+    'packages/core/src/providers/__tests__/RetryOrchestrator.test.ts',
+    'packages/providers/src/__tests__/RetryOrchestrator.basic.test.ts',
+  ],
+  [
+    'packages/core/src/providers/anthropic/AnthropicProvider.issue1150.toolresult.test.ts',
+    'packages/providers/src/anthropic/AnthropicProvider.issue1150.toolresult.adjacency.test.ts',
+  ],
+  [
+    'packages/core/src/providers/anthropic/AnthropicProvider.test.ts',
+    'packages/providers/src/anthropic/AnthropicProvider.caching.test.ts',
+  ],
+  [
+    'packages/core/src/providers/anthropic/AnthropicProvider.thinking.test.ts',
+    'packages/providers/src/anthropic/AnthropicProvider.thinking.config.test.ts',
+  ],
 ]);
 const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [

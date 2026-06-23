@@ -278,6 +278,32 @@ describe('LSP system integration (P35)', () => {
     vi.clearAllMocks();
   });
 
+  async function withAliveLspService<T>(run: () => Promise<T>): Promise<T> {
+    const { PassThrough } = await import('node:stream');
+    const startSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+      .mockResolvedValue(undefined);
+    const isAliveSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+      .mockReturnValue(true);
+    const getMcpTransportStreamsSpy = vi
+      .spyOn(
+        lspServiceClientModule.LspServiceClient.prototype,
+        'getMcpTransportStreams',
+      )
+      .mockReturnValue({
+        readable: new PassThrough(),
+        writable: new PassThrough(),
+      });
+
+    try {
+      return await run();
+    } finally {
+      startSpy.mockRestore();
+      isAliveSpy.mockRestore();
+      getMcpTransportStreamsSpy.mockRestore();
+    }
+  }
   it('returns undefined client/config when lsp is false', async () => {
     const config = new Config(createBaseConfigParams({ lsp: false }));
     await initializeTestConfig(config);
@@ -357,21 +383,23 @@ describe('LSP system integration (P35)', () => {
     'registers lsp-navigation tools when service is alive and navigationTools is true',
     { retry: 2 },
     async () => {
-      const config = new Config(
-        createBaseConfigParams({
-          lsp: {
-            servers: [],
-            navigationTools: true,
-          },
-        }),
-      );
-      await initializeTestConfig(config);
+      await withAliveLspService(async () => {
+        const config = new Config(
+          createBaseConfigParams({
+            lsp: {
+              servers: [],
+              navigationTools: true,
+            },
+          }),
+        );
+        await initializeTestConfig(config);
 
-      const tools = config.getToolRegistry().getAllTools();
-      const lspNavTools = tools.filter(
-        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-      );
-      expect(lspNavTools.length).toBeGreaterThan(0);
+        const tools = config.getToolRegistry().getAllTools();
+        const lspNavTools = tools.filter(
+          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+        );
+        expect(lspNavTools.length).toBeGreaterThan(0);
+      });
     },
   );
 
@@ -414,24 +442,26 @@ describe('LSP system integration (P35)', () => {
   });
 
   it('shutdownLspService clears service client and removes lsp-navigation tools', async () => {
-    const config = new Config(
-      createBaseConfigParams({
-        lsp: {
-          servers: [],
-          navigationTools: true,
-        },
-      }),
-    );
-    await initializeTestConfig(config);
+    await withAliveLspService(async () => {
+      const config = new Config(
+        createBaseConfigParams({
+          lsp: {
+            servers: [],
+            navigationTools: true,
+          },
+        }),
+      );
+      await initializeTestConfig(config);
 
-    await config.shutdownLspService();
+      await config.shutdownLspService();
 
-    expect(config.getLspServiceClient()).toBeUndefined();
-    const tools = config.getToolRegistry().getAllTools();
-    const lspNavTools = tools.filter(
-      (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-    );
-    expect(lspNavTools).toHaveLength(0);
+      expect(config.getLspServiceClient()).toBeUndefined();
+      const tools = config.getToolRegistry().getAllTools();
+      const lspNavTools = tools.filter(
+        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+      );
+      expect(lspNavTools).toHaveLength(0);
+    });
   });
 
   it('edit and write tools keep LSP integration call sites', () => {

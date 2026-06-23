@@ -49,9 +49,9 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 2 | `packages/core/src/providers/__tests__/baseProvider.stateless.test.ts` | `packages/providers/src/__tests__/baseProvider.stateless.test.ts` | Rule 1 | B |
 | 3 | `packages/core/src/providers/__tests__/errors.test.ts` | `packages/providers/src/__tests__/errors.test.ts` | Rule 1 | F (Provider errors) |
 | 4 | `packages/core/src/providers/__tests__/LoadBalancingProvider.circuitbreaker.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.circuitbreaker.test.ts` | Rule 1 | B |
-| 5 | `packages/core/src/providers/__tests__/LoadBalancingProvider.failover.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.failover.test.ts` | Rule 1 | B |
+| 5 | `packages/core/src/providers/__tests__/LoadBalancingProvider.failover.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.failover.errors.test.ts` | Rule 1 | B |
 | 6 | `packages/core/src/providers/__tests__/LoadBalancingProvider.metrics.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.metrics.test.ts` | Rule 1 | B |
-| 7 | `packages/core/src/providers/__tests__/LoadBalancingProvider.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.test.ts` | Rule 1 | B |
+| 7 | `packages/core/src/providers/__tests__/LoadBalancingProvider.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.delegation.test.ts` | Rule 1 | B |
 | 8 | `packages/core/src/providers/__tests__/LoadBalancingProvider.timeout.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.timeout.test.ts` | Rule 1 | B |
 | 9 | `packages/core/src/providers/__tests__/LoadBalancingProvider.tpm.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.tpm.test.ts` | Rule 1 | B |
 | 10 | `packages/core/src/providers/__tests__/LoadBalancingProvider.types.test.ts` | `packages/providers/src/__tests__/LoadBalancingProvider.types.test.ts` | Rule 1 | B |
@@ -61,7 +61,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 14 | `packages/core/src/providers/__tests__/ProviderManager.sandboxBaseUrl.test.ts` | `packages/providers/src/__tests__/ProviderManager.sandboxBaseUrl.test.ts` | Rule 1 | B |
 | 15 | `packages/core/src/providers/__tests__/ProviderManager.settingsSeparation.test.ts` | `packages/providers/src/__tests__/ProviderManager.settingsSeparation.test.ts` | Rule 1 | B |
 | 16 | `packages/core/src/providers/__tests__/RetryOrchestrator.onAuthError.test.ts` | `packages/providers/src/__tests__/RetryOrchestrator.onAuthError.test.ts` | Rule 1 | B |
-| 17 | `packages/core/src/providers/__tests__/RetryOrchestrator.test.ts` | `packages/providers/src/__tests__/RetryOrchestrator.test.ts` | Rule 1 | B |
+| 17 | `packages/core/src/providers/__tests__/RetryOrchestrator.test.ts` | `packages/providers/src/__tests__/RetryOrchestrator.basic.test.ts` | Rule 1 | B |
 
 ### Top-level provider files (Rule 7/8 — public API + orchestration)
 
@@ -150,13 +150,13 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 63 | `packages/core/src/providers/anthropic/AnthropicProvider.issue1150.shape.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.issue1150.shape.test.ts` | Rule 4 | B |
 | 64 | `packages/core/src/providers/anthropic/AnthropicProvider.issue1150.streaming.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.issue1150.streaming.test.ts` | Rule 4 | B |
 | 65 | `packages/core/src/providers/anthropic/AnthropicProvider.issue1150.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.issue1150.test.ts` | Rule 4 | B |
-| 66 | `packages/core/src/providers/anthropic/AnthropicProvider.issue1150.toolresult.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.issue1150.toolresult.test.ts` | Rule 4 | B |
+| 66 | `packages/core/src/providers/anthropic/AnthropicProvider.issue1150.toolresult.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.issue1150.toolresult.adjacency.test.ts` | Rule 4 | B |
 | 67 | `packages/core/src/providers/anthropic/AnthropicProvider.issue1494.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.issue1494.test.ts` | Rule 4 | B |
 | 68 | `packages/core/src/providers/anthropic/AnthropicProvider.mediaBlock.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.mediaBlock.test.ts` | Rule 4 | B |
 | 69 | `packages/core/src/providers/anthropic/AnthropicProvider.modelParams.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.modelParams.test.ts` | Rule 4 | B |
 | 70 | `packages/core/src/providers/anthropic/AnthropicProvider.stateless.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.stateless.test.ts` | Rule 4 | B |
-| 71 | `packages/core/src/providers/anthropic/AnthropicProvider.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.test.ts` | Rule 4 | B |
-| 72 | `packages/core/src/providers/anthropic/AnthropicProvider.thinking.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.thinking.test.ts` | Rule 4 | B |
+| 71 | `packages/core/src/providers/anthropic/AnthropicProvider.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.caching.test.ts` | Rule 4 | B |
+| 72 | `packages/core/src/providers/anthropic/AnthropicProvider.thinking.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.thinking.config.test.ts` | Rule 4 | B |
 | 73 | `packages/core/src/providers/anthropic/AnthropicProvider.toolFormatDetection.test.ts` | `packages/providers/src/anthropic/AnthropicProvider.toolFormatDetection.test.ts` | Rule 4 | B |
 | 74 | `packages/core/src/providers/anthropic/AnthropicRateLimitHandler.ts` | `packages/providers/src/anthropic/AnthropicRateLimitHandler.ts` | Rule 4 | B |
 | 75 | `packages/core/src/providers/anthropic/AnthropicRateLimitHandler.test.ts` | `packages/providers/src/anthropic/AnthropicRateLimitHandler.test.ts` | Rule 4 | B |
