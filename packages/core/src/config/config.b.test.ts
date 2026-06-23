@@ -7,264 +7,102 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
 import type { Content } from '@google/genai';
-import type { ConfigParameters, SandboxConfig } from './config.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from './config.js';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
-import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
+import {
+  AgentClient,
+  createBaseParams,
+  resetAgentClientMock,
+  sharedConfigTestConstants,
+  type HoistedConfigMocks,
+} from './configTestHarness.js';
+
+const { USER_MEMORY, TARGET_DIR, TELEMETRY_SETTINGS } =
+  sharedConfigTestConstants;
+
+// Hoisted mocks referenced by mock factories below (vitest hoist-safe).
+const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
+  loadJitSubdirectoryMemory: vi.fn(),
+  coreEvents: {
+    emitFeedback: vi.fn(),
+    emitModelChanged: vi.fn(),
+    emitConsoleLog: vi.fn(),
+  },
+  setGlobalProxy: vi.fn(),
+}));
 
 vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    existsSync: vi.fn().mockReturnValue(true),
-    statSync: vi.fn().mockReturnValue({
-      isDirectory: vi.fn().mockReturnValue(true),
-    }),
-    realpathSync: vi.fn((path) => path),
-  };
+  const h = await import('./configTestHarness.js');
+  return h.buildFsMockBody(await importOriginal());
 });
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
 vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
-  const registerToolMock = vi.fn();
-  const ToolRegistryMock = vi.fn().mockImplementation(() => ({
-    registerTool: registerToolMock,
-    unregisterTool: vi.fn(),
-    discoverAllTools: vi.fn(),
-    sortTools: vi.fn(),
-    getAllTools: vi.fn(() => []),
-    getTool: vi.fn(),
-    getFunctionDeclarations: vi.fn(() => []),
-  }));
-  ToolRegistryMock.prototype.registerTool = registerToolMock;
-  ToolRegistryMock.prototype.unregisterTool = vi.fn();
-  ToolRegistryMock.prototype.discoverAllTools = vi.fn();
-  ToolRegistryMock.prototype.sortTools = vi.fn();
-  ToolRegistryMock.prototype.getAllTools = vi.fn(() => []);
-  ToolRegistryMock.prototype.getTool = vi.fn();
-  ToolRegistryMock.prototype.getFunctionDeclarations = vi.fn(() => []);
-  return {
-    ...actual,
-    ToolRegistry: ToolRegistryMock,
-    MemoryTool: vi.fn(),
-    setLlxprtMdFilename: vi.fn(),
-    getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
-    DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
-    LLXPRT_CONFIG_DIR: '.llxprt',
-  };
+  const h = await import('./configTestHarness.js');
+  return h.buildToolsMockBody(
+    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>(),
+  );
 });
 
 // Mock individual tools if their constructors are complex or have side effects
 
 vi.mock('../core/contentGenerator.js', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    createContentGeneratorConfig: vi.fn(),
-  };
+  const h = await import('./configTestHarness.js');
+  return h.buildContentGeneratorMockBody(await importOriginal());
 });
 
-const AgentClient = vi.fn().mockImplementation(() => ({
-  initialize: vi.fn().mockResolvedValue(undefined),
-  isInitialized: vi.fn().mockReturnValue(false),
-  hasChatInitialized: vi.fn().mockReturnValue(false),
-  getHistory: vi.fn().mockReturnValue([]),
-  getHistoryService: vi.fn().mockReturnValue(null),
-  setHistory: vi.fn(),
-  storeHistoryServiceForReuse: vi.fn(),
-  storeHistoryForLaterUse: vi.fn(),
-  dispose: vi.fn(),
-  clearTools: vi.fn(),
-  stripThoughtsFromHistory: vi.fn(),
-}));
-
-class CoreToolScheduler {
-  constructor(_options: ToolSchedulerFactoryOptions) {}
-  schedule = vi.fn().mockResolvedValue(undefined);
-  cancelAll = vi.fn();
-  dispose = vi.fn();
-  setCallbacks = vi.fn();
-  handleConfirmationResponse = vi.fn().mockResolvedValue(undefined);
-}
-
-vi.mock('../telemetry/index.js', () => {
-  // Create a mock StartSessionEvent class to avoid circular dependency issues
-  // when importOriginal tries to load types.ts which imports config.ts
-  class MockStartSessionEvent {
-    'event.name' = 'cli_config';
-    'event.timestamp': string;
-    model = '';
-    embedding_model: string | undefined;
-    sandbox_enabled = false;
-    core_tools_enabled = '';
-    approval_mode = '';
-    api_key_enabled = false;
-    vertex_ai_enabled = false;
-    debug_enabled = false;
-    mcp_servers = '';
-    telemetry_enabled = false;
-    telemetry_log_user_prompts_enabled = false;
-    file_filtering_respect_git_ignore = false;
-
-    constructor() {
-      this['event.timestamp'] = new Date().toISOString();
-    }
-  }
-
-  return {
-    initializeTelemetry: vi.fn(),
-    logCliConfiguration: vi.fn(),
-    StartSessionEvent: MockStartSessionEvent,
-    DEFAULT_TELEMETRY_TARGET: 'local',
-    DEFAULT_OTLP_ENDPOINT: 'http://localhost:4317',
-    TelemetryTarget: { GCP: 'gcp', LOCAL: 'local' },
-  };
+vi.mock('../telemetry/index.js', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildTelemetryMockBody();
 });
 
-vi.mock('../services/gitService.js', () => {
-  const GitServiceMock = vi.fn();
-  GitServiceMock.prototype.initialize = vi.fn();
-  return { GitService: GitServiceMock };
+vi.mock('../services/gitService.js', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildGitServiceMockBody();
 });
 
 vi.mock('@vybestack/llxprt-code-settings', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-settings')
-  >('@vybestack/llxprt-code-settings');
-  const mockSettingsService = {
-    get: vi.fn(),
-    set: vi.fn(),
-    clear: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    emit: vi.fn(),
-    getProviderSettings: vi.fn(() => ({})),
-    getAllGlobalSettings: vi.fn(() => ({})),
-  };
-  return {
-    ...actual,
-    getSettingsService: vi.fn(() => mockSettingsService),
-    resetSettingsService: vi.fn(),
-    registerSettingsService: vi.fn(),
-  };
+  const h = await import('./configTestHarness.js');
+  return h.buildSettingsMockBody();
 });
 
 vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const actual =
+  const h = await import('./configTestHarness.js');
+  return h.buildIdeIntegrationMockBody(
     await importOriginal<
       typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
-  return {
-    ...actual,
-    IdeClient: {
-      getInstance: vi.fn().mockResolvedValue({
-        getConnectionStatus: vi.fn(),
-        initialize: vi.fn(),
-        shutdown: vi.fn(),
-      }),
-    },
-  };
+    >(),
+  );
 });
 
-const mockLoadJitSubdirectoryMemory = vi.hoisted(() => vi.fn());
-
-vi.mock('../utils/memoryDiscovery.js', () => ({
-  loadGlobalMemory: vi.fn().mockResolvedValue({ files: [] }),
-  loadEnvironmentMemory: vi.fn().mockResolvedValue({ files: [] }),
-  loadJitSubdirectoryMemory: mockLoadJitSubdirectoryMemory,
-  loadCoreMemory: vi.fn().mockResolvedValue({ files: [] }),
-  concatenateInstructions: vi.fn().mockReturnValue(''),
-  getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
-  loadServerHierarchicalMemory: vi.fn().mockResolvedValue({
-    memoryContent: '',
-    fileCount: 0,
-    filePaths: [],
-  }),
-}));
-
-const mockCoreEvents = vi.hoisted(() => ({
-  emitFeedback: vi.fn(),
-  emitModelChanged: vi.fn(),
-  emitConsoleLog: vi.fn(),
-}));
-
-const mockSetGlobalProxy = vi.hoisted(() => vi.fn());
+vi.mock('../utils/memoryDiscovery.js', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildMemoryDiscoveryMockBody(hoistedConfigMocks);
+});
 
 vi.mock('../utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    coreEvents: {
-      ...mockCoreEvents,
-      emit: vi.fn(),
-    },
-  };
+  const h = await import('./configTestHarness.js');
+  return h.buildEventsMockBody(await importOriginal(), hoistedConfigMocks);
 });
 
-vi.mock('../utils/fetch.js', () => ({
-  setGlobalProxy: mockSetGlobalProxy,
-}));
+vi.mock('../utils/fetch.js', async () => {
+  const h = await import('./configTestHarness.js');
+  return h.buildFetchMockBody(hoistedConfigMocks);
+});
 
 describe('Server Config (config.ts)', () => {
-  const MODEL = 'gemini-pro';
-  const SANDBOX: SandboxConfig = {
-    command: 'docker',
-    image: 'llxprt-code-sandbox',
-  };
-  const TARGET_DIR = '/path/to/target';
-  const DEBUG_MODE = false;
-  const QUESTION = 'test question';
-
-  const USER_MEMORY = 'Test User Memory';
-  const TELEMETRY_SETTINGS = { enabled: false };
-  const EMBEDDING_MODEL = 'gemini-embedding';
-  const SESSION_ID = 'test-session-id';
-  const sharedSettingsService =
-    getSettingsService() as unknown as SettingsService;
-  const baseParams: ConfigParameters = {
-    cwd: '/tmp',
-    embeddingModel: EMBEDDING_MODEL,
-    sandbox: SANDBOX,
-    targetDir: TARGET_DIR,
-    debugMode: DEBUG_MODE,
-    question: QUESTION,
-
-    userMemory: USER_MEMORY,
-    telemetry: TELEMETRY_SETTINGS,
-    sessionId: SESSION_ID,
-    model: MODEL,
-    settingsService: sharedSettingsService,
-    agentClientFactory: (config, runtimeState) =>
-      new AgentClient(config, runtimeState),
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
-  };
+  const baseParams = createBaseParams(
+    getSettingsService() as unknown as SettingsService,
+  );
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    AgentClient.mockReset();
-    AgentClient.mockImplementation(() => ({
-      initialize: vi.fn().mockResolvedValue(undefined),
-      isInitialized: vi.fn().mockReturnValue(false),
-      hasChatInitialized: vi.fn().mockReturnValue(false),
-      getHistory: vi.fn().mockReturnValue([]),
-      getHistoryService: vi.fn().mockReturnValue(null),
-      setHistory: vi.fn(),
-      storeHistoryServiceForReuse: vi.fn(),
-      storeHistoryForLaterUse: vi.fn(),
-      dispose: vi.fn(),
-      clearTools: vi.fn(),
-      stripThoughtsFromHistory: vi.fn(),
-    }));
+    resetAgentClientMock();
   });
   describe('refreshAuth', () => {
     it('should refresh auth and update config', async () => {
@@ -824,36 +662,6 @@ describe('Server Config (config.ts)', () => {
     };
     const config = new Config(paramsWithFileFiltering);
     expect(config.getFileFilteringRespectGitIgnore()).toBe(false);
-  });
-
-  it('should initialize WorkspaceContext with includeDirectories', () => {
-    // Use real directories that exist for this test
-    const tempDir = os.tmpdir();
-    const resolved = fs.realpathSync(tempDir);
-    // Create test subdirectories
-    const dir1 = path.join(tempDir, `test-include-dir1-${Date.now()}`);
-    const dir2 = path.join(tempDir, `test-include-dir2-${Date.now()}`);
-    fs.mkdirSync(dir1, { recursive: true });
-    fs.mkdirSync(dir2, { recursive: true });
-    try {
-      const paramsWithIncludeDirs: ConfigParameters = {
-        ...baseParams,
-        targetDir: tempDir,
-        includeDirectories: [dir1, dir2],
-      };
-      const config = new Config(paramsWithIncludeDirs);
-      const workspaceContext = config.getWorkspaceContext();
-      const directories = workspaceContext.getDirectories();
-      // Should include the target directory plus the included directories
-      expect(directories).toHaveLength(3);
-      expect(directories).toContain(resolved);
-      expect(directories).toContain(fs.realpathSync(dir1));
-      expect(directories).toContain(fs.realpathSync(dir2));
-    } finally {
-      // Cleanup
-      fs.rmSync(dir1, { recursive: true, force: true });
-      fs.rmSync(dir2, { recursive: true, force: true });
-    }
   });
 
   it('Config constructor should set telemetry to true when provided as true', () => {

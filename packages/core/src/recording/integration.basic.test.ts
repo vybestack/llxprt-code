@@ -472,7 +472,7 @@ describe('integration: full session recording lifecycle', () => {
     // Should be the most recently created session
     expect(result.metadata.sessionId).toBe(sessions[2].sessionId);
     expect(result.history).toHaveLength(2);
-    void result.recording.dispose();
+    await result.recording.dispose();
   });
 
   // =========================================================================

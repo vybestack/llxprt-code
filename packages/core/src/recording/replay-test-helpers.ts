@@ -214,14 +214,22 @@ export async function writeJsonlFile(
  */
 export async function createValidFile(
   chatsDir: string,
-  setup: (svc: SessionRecordingService) => void,
+  setup: (svc: SessionRecordingService) => void | Promise<void>,
   configOverrides: Partial<SessionRecordingServiceConfig> = {},
 ): Promise<string> {
   const config = makeConfig({ chatsDir, ...configOverrides });
   const svc = new SessionRecordingService(config);
-  setup(svc);
-  await svc.flush();
-  const filePath = svc.getFilePath()!;
-  await svc.dispose();
-  return filePath;
+  try {
+    await setup(svc);
+    await svc.flush();
+    const filePath = svc.getFilePath();
+    if (!filePath) {
+      throw new Error(
+        'createValidFile: SessionRecordingService.getFilePath() returned no path',
+      );
+    }
+    return filePath;
+  } finally {
+    await svc.dispose();
+  }
 }

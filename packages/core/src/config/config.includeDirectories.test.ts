@@ -4,21 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Verifies WorkspaceContext includeDirectories handling against the REAL
+ * filesystem. This is intentionally split out from config.b.test.ts, which
+ * installs a global `vi.mock('fs', ...)` that stubs existsSync/statSync/
+ * realpathSync and would mask real filesystem behavior.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Mock } from 'vitest';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
-import { GitService } from '../services/gitService.js';
-import { ResourceRegistry } from '../resources/resource-registry.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../test-utils/config.js';
 import {
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
 } from './configTestHarness.js';
 
-// Hoisted mocks referenced by mock factories below (vitest hoist-safe).
+// NOTE: `fs` is deliberately NOT mocked here so WorkspaceContext resolves real
+// directories/symlinks. Only the non-fs dependencies are mocked, using the same
+// shared harness bodies as the other config test files.
+
 const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
   loadJitSubdirectoryMemory: vi.fn(),
   coreEvents: {
@@ -29,20 +39,12 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
   setGlobalProxy: vi.fn(),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildFsMockBody(await importOriginal());
-});
-
-// Mock dependencies that might be called during Config construction or createServerConfig.
 vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   const h = await import('./configTestHarness.js');
   return h.buildToolsMockBody(
     await importOriginal<typeof import('@vybestack/llxprt-code-tools')>(),
   );
 });
-
-// Mock individual tools if their constructors are complex or have side effects
 
 vi.mock('../core/contentGenerator.js', async (importOriginal) => {
   const h = await import('./configTestHarness.js');
@@ -88,7 +90,7 @@ vi.mock('../utils/fetch.js', async () => {
   return h.buildFetchMockBody(hoistedConfigMocks);
 });
 
-describe('Server Config (config.ts)', () => {
+describe('Server Config includeDirectories (real filesystem)', () => {
   const baseParams = createBaseParams(
     getSettingsService() as unknown as SettingsService,
   );
@@ -97,60 +99,33 @@ describe('Server Config (config.ts)', () => {
     resetAgentClientMock();
   });
 
-  describe('initialize', () => {
-    it('should throw an error if checkpointing is enabled and GitService fails', async () => {
-      const gitError = new Error('Git is not installed');
-      (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
-
-      const config = new Config({
+  it('should initialize WorkspaceContext with includeDirectories', () => {
+    // Use real directories that exist for this test
+    const tempDir = os.tmpdir();
+    const resolved = fs.realpathSync(tempDir);
+    // Create test subdirectories
+    const dir1 = path.join(tempDir, `test-include-dir1-${Date.now()}`);
+    const dir2 = path.join(tempDir, `test-include-dir2-${Date.now()}`);
+    fs.mkdirSync(dir1, { recursive: true });
+    fs.mkdirSync(dir2, { recursive: true });
+    try {
+      const paramsWithIncludeDirs: ConfigParameters = {
         ...baseParams,
-        checkpointing: true,
-      });
-
-      await expect(initializeTestConfig(config)).rejects.toThrow(gitError);
-    });
-
-    it('should not throw an error if checkpointing is disabled and GitService fails', async () => {
-      const gitError = new Error('Git is not installed');
-      (GitService.prototype.initialize as Mock).mockRejectedValue(gitError);
-
-      const config = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
-    });
-
-    it('should throw an error if initialized more than once', async () => {
-      const config = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
-      await expect(initializeTestConfig(config)).rejects.toThrow(
-        'Config was already initialized',
-      );
-    });
-
-    it('should initialize and expose a ResourceRegistry instance', async () => {
-      const config = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      await initializeTestConfig(config);
-
-      const getResourceRegistry = (
-        config as unknown as {
-          getResourceRegistry?: () => unknown;
-        }
-      ).getResourceRegistry;
-      expect(getResourceRegistry).toBeTypeOf('function');
-      expect(getResourceRegistry?.call(config)).toBeInstanceOf(
-        ResourceRegistry,
-      );
-    });
+        targetDir: tempDir,
+        includeDirectories: [dir1, dir2],
+      };
+      const config = new Config(paramsWithIncludeDirs);
+      const workspaceContext = config.getWorkspaceContext();
+      const directories = workspaceContext.getDirectories();
+      // Should include the target directory plus the included directories
+      expect(directories).toHaveLength(3);
+      expect(directories).toContain(resolved);
+      expect(directories).toContain(fs.realpathSync(dir1));
+      expect(directories).toContain(fs.realpathSync(dir2));
+    } finally {
+      // Cleanup
+      fs.rmSync(dir1, { recursive: true, force: true });
+      fs.rmSync(dir2, { recursive: true, force: true });
+    }
   });
 });

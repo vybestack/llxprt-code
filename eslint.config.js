@@ -535,6 +535,8 @@ const completedDirectiveCleanupScopes = [
   'packages/core/src/config/config.b.test.ts', // #2092
   'packages/core/src/config/config.b2.test.ts', // #2092
   'packages/core/src/config/config.d.test.ts', // #2092
+  'packages/core/src/config/config.includeDirectories.test.ts', // #2092
+  'packages/core/src/config/configTestHarness.ts', // #2092
   'packages/core/src/filters/EmojiFilter.basic.test.ts', // #2092
   'packages/core/src/filters/EmojiFilter.tools.test.ts', // #2092
   'packages/core/src/recording/integration.basic.test.ts', // #2092
