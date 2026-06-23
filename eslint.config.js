@@ -850,18 +850,15 @@ export default tseslint.config(
       'sonarjs/no-ignored-exceptions': 'error',
       // Issue #2113: sonarjs/regular-expr is a deprecated, non-recommended
       // blanket review heuristic for ordinary regex usage. Keep targeted regex
-      // correctness rules enabled and disable broad security-sensitive review
-      // heuristics that produced source-level suppression comments instead of
-      // actionable fixes.
+      // correctness and ReDoS rules enabled where they provide actionable
+      // signal rather than source-level suppression comments.
       'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2113 deprecated blanket regex heuristic
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2113 broad regex security review heuristic
+      'sonarjs/slow-regex': 'error',
       'sonarjs/no-invalid-regexp': 'error',
       'sonarjs/stateful-regex': 'error',
       'sonarjs/unicode-aware-regex': 'error',
       'sonarjs/no-regex-spaces': 'error',
-      // Issue #2113: terminal/TUI code intentionally parses ANSI/control
-      // sequences and security boundary code explicitly checks control chars.
-      'no-control-regex': 'off', // eslint-policy-allow-off: #2113 terminal/control-character regexes are intentional
+      'no-control-regex': 'error',
       // Issue #2079: this CLI intentionally invokes user/platform tools such as
       // git, shells, editors, and ripgrep. These rules are not useful signal.
       'sonarjs/os-command': 'off', // eslint-policy-allow-off: #2079
@@ -1659,6 +1656,51 @@ export default tseslint.config(
     },
   },
 
+  // Issue #2113: keep targeted regex safety rules enabled by default while
+  // disabling false-positive ReDoS/control-character checks only for reviewed,
+  // bounded regex call sites. Tests often assert rendered terminal/markdown
+  // output with regexes and do not provide useful ReDoS signal.
+  {
+    files: ['**/*.{test,spec}.{ts,tsx}'],
+    rules: {
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2113 test assertion regexes
+    },
+  },
+  {
+    files: [
+      'packages/agents/src/core/baseLlmClient.ts',
+      'packages/cli/src/ui/components/messages/DiffRenderer.tsx',
+      'packages/cli/src/ui/components/messages/ToolGroupMessage.tsx',
+      'packages/cli/src/ui/components/messages/ToolMessage.tsx',
+      'packages/cli/src/ui/components/shared/transformations.ts',
+      'packages/cli/src/ui/hooks/useShellHistory.ts',
+      'packages/cli/src/ui/utils/InlineMarkdownRenderer.tsx',
+      'packages/cli/src/ui/utils/MarkdownDisplay.tsx',
+      'packages/cli/src/ui/utils/TableRenderer.tsx',
+      'packages/cli/src/utils/handleAutoUpdate.ts',
+      'packages/core/src/config/endpoints.ts',
+      'packages/core/src/parsers/TextToolCallParser.ts',
+      'packages/core/src/services/loopDetectionService.ts',
+      'packages/core/src/skills/skillLoader.ts',
+      'packages/providers/src/anthropic/AnthropicModelData.ts',
+    ],
+    rules: {
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2113 reviewed bounded regexes
+    },
+  },
+  {
+    files: [
+      'packages/cli/src/test-utils/customMatchers.ts',
+      'packages/cli/src/ui/themes/color-utils.ts',
+      'packages/cli/src/ui/utils/input.ts',
+      'packages/cli/src/ui/utils/terminalCapabilityManager.ts',
+      'packages/cli/src/utils/windowTitle.ts',
+      'packages/core/src/utils/secure-browser-launcher.ts',
+    ],
+    rules: {
+      'no-control-regex': 'off', // eslint-policy-allow-off: #2113 terminal/control-character regexes
+    },
+  },
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node
