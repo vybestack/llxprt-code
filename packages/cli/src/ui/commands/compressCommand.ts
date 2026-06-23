@@ -118,7 +118,6 @@ export const compressCommand: SlashCommand = {
       }
       const chat = agentClient.getChat();
       const historyService = chat.getHistoryService();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for test mocks that return null
       if (!historyService) {
         ui.addItem(
           {

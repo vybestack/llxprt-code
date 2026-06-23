@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type React from 'react';
 import { useEffect, useState, useMemo } from 'react';
@@ -440,8 +439,7 @@ function useIdeClientState(config: Config): {
           setIsDiffingEnabled(client.isDiffingEnabled());
         }
       };
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      getIdeClient();
+      void getIdeClient();
     }
     return () => {
       isMounted = false;
@@ -606,7 +604,6 @@ export const ToolConfirmationMessage: React.FC<
       <Box flexShrink={0}>
         <RadioButtonSelect
           items={options}
-          // eslint-disable-next-line react/jsx-no-bind
           onSelect={handleSelect}
           isFocused={isFocused}
         />

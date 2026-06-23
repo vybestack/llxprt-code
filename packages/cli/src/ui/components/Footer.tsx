@@ -7,9 +7,7 @@
  * @requirement REQ-INT-001.1
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
-/* eslint-disable react/prop-types */
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { Colors, SemanticColors } from '../colors.js';
@@ -30,6 +28,36 @@ import { ThemedGradient } from './ThemedGradient.js';
 const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
 const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
 const heapSizeLimit = rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
+
+const footerPropValidator = () => null;
+
+function areFooterStablePropsEqual(
+  prevProps: FooterProps,
+  nextProps: FooterProps,
+): boolean {
+  const stableProps: Array<keyof FooterProps> = [
+    'model',
+    'targetDir',
+    'branchName',
+    'debugMode',
+    'debugMessage',
+    'errorCount',
+    'showErrorDetails',
+    'showMemoryUsage',
+    'historyTokenCount',
+    'isPaidMode',
+    'nightly',
+    'vimMode',
+    'contextLimit',
+    'isTrustedFolder',
+    'hideCWD',
+    'hideSandboxStatus',
+    'hideModelInfo',
+    'themeName',
+  ];
+
+  return stableProps.every((prop) => prevProps[prop] === nextProps[prop]);
+}
 
 interface FooterProps {
   model: string;
@@ -113,6 +141,10 @@ const ResponsiveMemoryDisplay = React.memo<{
   return <Text color={memoryUsageColor}>{memoryUsage}</Text>;
 });
 ResponsiveMemoryDisplay.displayName = 'ResponsiveMemoryDisplay';
+ResponsiveMemoryDisplay.propTypes = {
+  compact: footerPropValidator,
+  detailed: footerPropValidator,
+};
 
 // Responsive Context Usage Display - Memoized to prevent re-renders
 const ResponsiveContextDisplay = React.memo<{
@@ -148,6 +180,13 @@ const ResponsiveContextDisplay = React.memo<{
   return <Text color={color}>{displayText}</Text>;
 });
 ResponsiveContextDisplay.displayName = 'ResponsiveContextDisplay';
+ResponsiveContextDisplay.propTypes = {
+  historyTokenCount: footerPropValidator,
+  model: footerPropValidator,
+  contextLimit: footerPropValidator,
+  compact: footerPropValidator,
+  detailed: footerPropValidator,
+};
 
 // Debounced TPM Display - Updates less frequently to reduce flicker
 const DebouncedTPMDisplay = React.memo<{
@@ -178,6 +217,10 @@ const DebouncedTPMDisplay = React.memo<{
   );
 });
 DebouncedTPMDisplay.displayName = 'DebouncedTPMDisplay';
+DebouncedTPMDisplay.propTypes = {
+  tokensPerMinute: footerPropValidator,
+  themeName: footerPropValidator,
+};
 
 // Debounced Wait Time Display
 const DebouncedWaitDisplay = React.memo<{
@@ -199,18 +242,22 @@ const DebouncedWaitDisplay = React.memo<{
 
   if (displayWait === undefined) return null;
 
-  return (
-    <Text color={SemanticColors.status.warning}>
-      {displayWait < 1000
-        ? `Wait: ${displayWait}ms`
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          displayWait < 60000
-          ? `Wait: ${(displayWait / 1000).toFixed(1)}s`
-          : `Wait: ${(displayWait / 60000).toFixed(1)}m`}
-    </Text>
-  );
+  let waitText: string;
+  if (displayWait < 1000) {
+    waitText = `Wait: ${displayWait}ms`;
+  } else if (displayWait < 60000) {
+    waitText = `Wait: ${(displayWait / 1000).toFixed(1)}s`;
+  } else {
+    waitText = `Wait: ${(displayWait / 60000).toFixed(1)}m`;
+  }
+
+  return <Text color={SemanticColors.status.warning}>{waitText}</Text>;
 });
 DebouncedWaitDisplay.displayName = 'DebouncedWaitDisplay';
+DebouncedWaitDisplay.propTypes = {
+  throttleWaitTimeMs: footerPropValidator,
+  themeName: footerPropValidator,
+};
 
 // Responsive Timestamp Display - Isolated component for clock updates
 const ResponsiveTimestamp = React.memo(() => {
@@ -253,6 +300,11 @@ const BranchDisplay = React.memo<{
   return <Text color={SemanticColors.text.accent}>({displayBranch}*)</Text>;
 });
 BranchDisplay.displayName = 'BranchDisplay';
+BranchDisplay.propTypes = {
+  branchName: footerPropValidator,
+  nightly: footerPropValidator,
+  maxBranchLength: footerPropValidator,
+};
 
 // Model name sub-component with load-balancer logic
 const ModelNameDisplay = React.memo<{
@@ -267,6 +319,11 @@ const ModelNameDisplay = React.memo<{
   return <Text color={SemanticColors.text.primary}>{model}</Text>;
 });
 ModelNameDisplay.displayName = 'ModelNameDisplay';
+ModelNameDisplay.propTypes = {
+  model: footerPropValidator,
+  showModelName: footerPropValidator,
+  runtime: footerPropValidator,
+};
 
 function tryGetLBDisplayName(
   runtime: ReturnType<typeof useRuntimeApi>,
@@ -335,6 +392,11 @@ const PaidModeDisplay = React.memo<{
   );
 });
 PaidModeDisplay.displayName = 'PaidModeDisplay';
+PaidModeDisplay.propTypes = {
+  isPaidMode: footerPropValidator,
+  showModelName: footerPropValidator,
+  runtime: footerPropValidator,
+};
 
 // Sandbox status sub-component
 const SandboxStatusDisplay = React.memo<{
@@ -342,31 +404,40 @@ const SandboxStatusDisplay = React.memo<{
   isCompact: boolean;
 }>(({ hideSandboxStatus, isCompact }) => {
   if (isCompact || hideSandboxStatus) return null;
-  return (
-    <Box marginLeft={2}>
-      {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
-        <Text color={SemanticColors.status.success}>
-          [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
+
+  let sandboxStatus: React.ReactNode;
+  if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
+    sandboxStatus = (
+      <Text color={SemanticColors.status.success}>
+        [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
+      </Text>
+    );
+  } else if (process.env.SANDBOX === 'sandbox-exec') {
+    sandboxStatus = (
+      <Text color={SemanticColors.status.warning}>
+        [macOS Seatbelt{' '}
+        <Text color={SemanticColors.text.secondary}>
+          ({process.env.SEATBELT_PROFILE})
         </Text>
-      ) : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      process.env.SANDBOX === 'sandbox-exec' ? (
-        <Text color={SemanticColors.status.warning}>
-          [macOS Seatbelt{' '}
-          <Text color={SemanticColors.text.secondary}>
-            ({process.env.SEATBELT_PROFILE})
-          </Text>
-          ]
-        </Text>
-      ) : (
-        <Text color={SemanticColors.status.error}>
-          [no sandbox{' '}
-          <Text color={SemanticColors.text.secondary}>(see /docs)</Text>]
-        </Text>
-      )}
-    </Box>
-  );
+        ]
+      </Text>
+    );
+  } else {
+    sandboxStatus = (
+      <Text color={SemanticColors.status.error}>
+        [no sandbox{' '}
+        <Text color={SemanticColors.text.secondary}>(see /docs)</Text>]
+      </Text>
+    );
+  }
+
+  return <Box marginLeft={2}>{sandboxStatus}</Box>;
 });
 SandboxStatusDisplay.displayName = 'SandboxStatusDisplay';
+SandboxStatusDisplay.propTypes = {
+  hideSandboxStatus: footerPropValidator,
+  isCompact: footerPropValidator,
+};
 
 // Right side: Memory | Context | TPM | Wait Time | Time
 const FooterMetricsRow = React.memo<{
@@ -443,6 +514,19 @@ const FooterMetricsRow = React.memo<{
   },
 );
 FooterMetricsRow.displayName = 'FooterMetricsRow';
+FooterMetricsRow.propTypes = {
+  hideModelInfo: footerPropValidator,
+  showMemoryUsage: footerPropValidator,
+  isCompact: footerPropValidator,
+  isDetailed: footerPropValidator,
+  historyTokenCount: footerPropValidator,
+  model: footerPropValidator,
+  contextLimit: footerPropValidator,
+  tokensPerMinute: footerPropValidator,
+  throttleWaitTimeMs: footerPropValidator,
+  themeName: footerPropValidator,
+  showTimestamp: footerPropValidator,
+};
 
 // Footer first line: Branch (left) | Memory | Context | Time (right)
 const FooterFirstLine = React.memo<{
@@ -527,6 +611,26 @@ const FooterFirstLine = React.memo<{
   );
 });
 FooterFirstLine.displayName = 'FooterFirstLine';
+FooterFirstLine.propTypes = {
+  branchName: footerPropValidator,
+  nightly: footerPropValidator,
+  isTrustedFolder: footerPropValidator,
+  debugMode: footerPropValidator,
+  debugMessage: footerPropValidator,
+  vimMode: footerPropValidator,
+  maxBranchLength: footerPropValidator,
+  hideModelInfo: footerPropValidator,
+  showMemoryUsage: footerPropValidator,
+  isCompact: footerPropValidator,
+  isDetailed: footerPropValidator,
+  historyTokenCount: footerPropValidator,
+  model: footerPropValidator,
+  contextLimit: footerPropValidator,
+  tokensPerMinute: footerPropValidator,
+  throttleWaitTimeMs: footerPropValidator,
+  themeName: footerPropValidator,
+  showTimestamp: footerPropValidator,
+};
 
 // Footer second line: Path (left) | Model | Session Tokens (right)
 const FooterSecondLine = React.memo<{
@@ -612,6 +716,21 @@ const FooterSecondLine = React.memo<{
   );
 });
 FooterSecondLine.displayName = 'FooterSecondLine';
+FooterSecondLine.propTypes = {
+  hideCWD: footerPropValidator,
+  nightly: footerPropValidator,
+  targetDir: footerPropValidator,
+  isCompact: footerPropValidator,
+  hideSandboxStatus: footerPropValidator,
+  hideModelInfo: footerPropValidator,
+  showModelName: footerPropValidator,
+  model: footerPropValidator,
+  runtime: footerPropValidator,
+  isPaidMode: footerPropValidator,
+  sessionTokenTotal: footerPropValidator,
+  showErrorDetails: footerPropValidator,
+  errorCount: footerPropValidator,
+};
 
 function getMaxBranchLength(breakpoint: string): number {
   if (breakpoint === 'NARROW') return 15;
@@ -691,28 +810,29 @@ export const Footer = React.memo<FooterProps>(
       </Box>
     );
   },
-  (prevProps, nextProps) =>
-    // Custom comparison function - ignore rapidly changing values
-    // Only re-render if important props change
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    prevProps.model === nextProps.model &&
-    prevProps.targetDir === nextProps.targetDir &&
-    prevProps.branchName === nextProps.branchName &&
-    prevProps.debugMode === nextProps.debugMode &&
-    prevProps.debugMessage === nextProps.debugMessage &&
-    prevProps.errorCount === nextProps.errorCount &&
-    prevProps.showErrorDetails === nextProps.showErrorDetails &&
-    prevProps.showMemoryUsage === nextProps.showMemoryUsage &&
-    prevProps.historyTokenCount === nextProps.historyTokenCount &&
-    prevProps.isPaidMode === nextProps.isPaidMode &&
-    prevProps.nightly === nextProps.nightly &&
-    prevProps.vimMode === nextProps.vimMode &&
-    prevProps.contextLimit === nextProps.contextLimit &&
-    prevProps.isTrustedFolder === nextProps.isTrustedFolder &&
-    prevProps.hideCWD === nextProps.hideCWD &&
-    prevProps.hideSandboxStatus === nextProps.hideSandboxStatus &&
-    prevProps.hideModelInfo === nextProps.hideModelInfo &&
-    prevProps.themeName === nextProps.themeName,
-  // Ignore rapidly changing values - TPM, wait time, and session tokens
+  areFooterStablePropsEqual,
 );
 Footer.displayName = 'Footer';
+Footer.propTypes = {
+  model: footerPropValidator,
+  targetDir: footerPropValidator,
+  branchName: footerPropValidator,
+  debugMode: footerPropValidator,
+  debugMessage: footerPropValidator,
+  errorCount: footerPropValidator,
+  showErrorDetails: footerPropValidator,
+  showMemoryUsage: footerPropValidator,
+  historyTokenCount: footerPropValidator,
+  isPaidMode: footerPropValidator,
+  nightly: footerPropValidator,
+  vimMode: footerPropValidator,
+  contextLimit: footerPropValidator,
+  isTrustedFolder: footerPropValidator,
+  tokensPerMinute: footerPropValidator,
+  throttleWaitTimeMs: footerPropValidator,
+  sessionTokenTotal: footerPropValidator,
+  themeName: footerPropValidator,
+  hideCWD: footerPropValidator,
+  hideSandboxStatus: footerPropValidator,
+  hideModelInfo: footerPropValidator,
+};

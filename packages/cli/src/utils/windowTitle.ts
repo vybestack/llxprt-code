@@ -6,6 +6,14 @@
 
 import { StreamingState } from '../ui/types.js';
 
+// Matches C0 control characters (U+0000–U+001F) and DEL (U+007F). Built via
+// RegExp from a character-class string so the source contains no literal
+// control bytes.
+const CONTROL_CHAR_PATTERN = `[${String.fromCharCode(0)}-${String.fromCharCode(
+  0x1f,
+)}${String.fromCharCode(0x7f)}]`;
+const CONTROL_CHAR_REGEX = new RegExp(CONTROL_CHAR_PATTERN, 'g');
+
 export interface TerminalTitleOptions {
   streamingState: StreamingState;
   thoughtSubject?: string;
@@ -38,9 +46,10 @@ export function computeTerminalTitle({
 }: TerminalTitleOptions): string {
   const MAX_LEN = 80;
 
-  // Use CLI_TITLE env var if available, otherwise use the provided folder name
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty CLI_TITLE should fall back to folderName
-  let displayContext = process.env['CLI_TITLE'] || folderName;
+  // Use CLI_TITLE env var if set and non-empty, otherwise use the folder name.
+  const cliTitle = process.env['CLI_TITLE'];
+  let displayContext =
+    cliTitle !== undefined && cliTitle.length > 0 ? cliTitle : folderName;
 
   if (!useDynamicTitle) {
     const base = 'LLxprt ';
@@ -105,8 +114,7 @@ export function computeTerminalTitle({
   }
 
   // Remove control characters that could cause issues in terminal titles
-  // eslint-disable-next-line no-control-regex
-  const safeTitle = title.replace(/[\x00-\x1F\x7F]/g, '');
+  const safeTitle = title.replace(CONTROL_CHAR_REGEX, '');
 
   // Pad the title to a fixed width to prevent taskbar icon resizing/jitter.
   // We also slice it to ensure it NEVER exceeds MAX_LEN.

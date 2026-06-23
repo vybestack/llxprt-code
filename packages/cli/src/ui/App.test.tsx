@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: behavioral coverage boundary retained while larger decomposition continues. */
 
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -109,7 +108,6 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     .mockImplementation((optionsPassedToConstructor) => {
       const opts = { ...optionsPassedToConstructor }; // Clone
       // Basic mock structure, will be extended by the instance in tests
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- test fixture defaults intentionally use falsy coalescing */
       return {
         apiKey:
           opts.apiKey != null && opts.apiKey !== '' ? opts.apiKey : 'test-key',
@@ -209,7 +207,6 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
           getUserTier: vi.fn(),
         })),
         getCheckpointingEnabled: vi.fn(() => opts.checkpointing ?? true),
-        /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
         getAllGeminiMdFilenames: vi.fn(() => ['GEMINI.md']),
         getSessionId: vi.fn(() => 'test-session-id'),
         getUserTier: vi.fn().mockResolvedValue(undefined),

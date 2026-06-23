@@ -7,6 +7,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 
 const DEFAULT_BASE = process.env.GITHUB_BASE_REF
   ? 'origin/' + process.env.GITHUB_BASE_REF
@@ -122,6 +124,14 @@ function shouldCheckInlineDisable(file) {
   return /\.(?:cjs|mjs|js|jsx|ts|tsx)$/.test(file);
 }
 
+function isCliSourceFile(file) {
+  return /^packages\/cli\/src\/.*\.(?:ts|tsx)$/.test(file);
+}
+
+function containsInlineEslintDirective(content) {
+  return /eslint-(?:disable(?:-next-line|-line)?|enable)\b/.test(content);
+}
+
 function addViolation(violations, file, lineNumber, message, content) {
   violations.push({ file, lineNumber, message, content });
 }
@@ -164,13 +174,23 @@ export function checkDiff(diff) {
 
       if (
         shouldCheckInlineDisable(file) &&
-        /eslint-disable(?:-next-line|-line)?\b/.test(content)
+        containsInlineEslintDirective(content)
       ) {
         addViolation(
           violations,
           file,
           currentLine,
-          'Inline ESLint disable directives are forbidden by #2079/#2080.',
+          'Inline ESLint disable/enable directives are forbidden by #2079/#2080.',
+          content,
+        );
+      }
+
+      if (file === 'eslint.config.js' && content.includes('packages/cli/src')) {
+        addViolation(
+          violations,
+          file,
+          currentLine,
+          'packages/cli directive cleanup scopes are forbidden by #2114; fix CLI code instead.',
           content,
         );
       }
@@ -260,6 +280,54 @@ export function checkDiff(diff) {
   return violations;
 }
 
+function listCliSourceFiles(dir = 'packages/cli/src') {
+  if (!existsSync(dir)) {
+    return [];
+  }
+
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return listCliSourceFiles(file);
+    }
+    return /\.(?:ts|tsx)$/.test(file) ? [file] : [];
+  });
+}
+
+export function checkCliSourcePolicy() {
+  const violations = [];
+
+  for (const file of listCliSourceFiles()) {
+    const content = readFileSync(file, 'utf8');
+    if (containsInlineEslintDirective(content)) {
+      addViolation(
+        violations,
+        file,
+        1,
+        'packages/cli/src must not contain inline ESLint disable/enable directives.',
+        file,
+      );
+    }
+  }
+
+  const eslintConfig = readFileSync('eslint.config.js', 'utf8');
+  const directiveCleanupScopes = [
+    /const legacyDirectiveCleanupScopes = \[[\s\S]*?\];/.exec(eslintConfig)?.[0] ?? '',
+    /const completedDirectiveCleanupScopes = \[[\s\S]*?\];/.exec(eslintConfig)?.[0] ?? '',
+  ].join('\n');
+  if (directiveCleanupScopes.includes('packages/cli/src')) {
+    addViolation(
+      violations,
+      'eslint.config.js',
+      1,
+      'packages/cli/src must not appear in ESLint directive cleanup scopes.',
+      'packages/cli/src',
+    );
+  }
+
+  return violations;
+}
+
 export function formatViolations(violations) {
   return violations
     .map((violation) => {
@@ -274,7 +342,7 @@ export function formatViolations(violations) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const diff = diffFromGit(args.base, args.head);
-  const violations = checkDiff(diff);
+  const violations = [...checkDiff(diff), ...checkCliSourcePolicy()];
 
   if (violations.length === 0) {
     console.log('ESLint policy guard passed.');

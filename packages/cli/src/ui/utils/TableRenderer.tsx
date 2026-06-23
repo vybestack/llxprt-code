@@ -66,13 +66,11 @@ const updateMarkerStack = (
   while (pointer < segment.length) {
     let matched = false;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const marker of SORTED_MARKERS) {
       if (!marker.symmetric && segment.startsWith(marker.close, pointer)) {
         const matchIndex = [...updated]
           .reverse()
           .findIndex((entry) => entry.def === marker);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (matchIndex !== -1) {
           updated.splice(updated.length - matchIndex - 1);
         }
@@ -82,7 +80,6 @@ const updateMarkerStack = (
       }
 
       if (segment.startsWith(marker.open, pointer)) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (marker.symmetric) {
           if (
             updated.length > 0 &&
@@ -214,7 +211,6 @@ const wrapCellContent = (content: string, maxWidth: number): string[] => {
 
     const segmentRaw = remaining.slice(0, breakIndex);
     remaining = remaining.slice(breakIndex).replace(/^\s+/u, '');
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const segment = segmentRaw.replace(/\s+$/u, '');
     const updatedStack = updateMarkerStack(segment, activeStack);
     const closingSequence = getClosingSequence(updatedStack);

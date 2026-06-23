@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Text } from 'ink';
@@ -696,7 +695,6 @@ function useSettingsState(
       if (def?.type === 'boolean' && typeof value === 'boolean') {
         updated = setPendingSettingValue(key, value, updated);
       } else if (
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         (def?.type === 'number' && typeof value === 'number') ||
         (def?.type === 'string' && typeof value === 'string') ||
         (def?.type === 'enum' && typeof value === 'string')
@@ -716,7 +714,6 @@ function useSettingsState(
     // Note: _restartRequiredSettings and modifiedSettings are intentionally excluded
     // from dependencies because they are outputs of this effect, not inputs.
     // Including them would create an infinite loop (issue #607).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedScope, settings, globalPendingChanges]);
 
   return { pendingSettings, setPendingSettings };
@@ -1136,7 +1133,7 @@ function SettingItemRow({
               color={
                 isActive
                   ? Colors.AccentGreen
-                  : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+                  :
                     shouldBeGreyedOut
                     ? Colors.Gray
                     : Colors.Foreground
@@ -1177,7 +1174,6 @@ function handleSearchKeypress(
 
   const ch = stripUnsafeCharacters(key.sequence);
   if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     ch.length === 1 &&
     !key.ctrl &&
     !key.meta &&
@@ -1202,11 +1198,9 @@ function handleEditPaste(
 ): boolean {
   if (key.name !== 'paste' || !key.sequence) return false;
   let pasted = key.sequence;
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   if (type === 'number') {
     pasted = key.sequence.replace(/[^0-9\-+.]/g, '');
   }
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   if (pasted) {
     ctx.setEditBuffer((b) => {
       const before = cpSlice(b, 0, ctx.editCursorPos);
@@ -1228,7 +1222,6 @@ function handleEditDelete(
   },
 ): boolean {
   if (name !== 'backspace' && name !== 'delete') return false;
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   if (name === 'backspace' && ctx.editCursorPos > 0) {
     ctx.setEditBuffer((b) => {
       const before = cpSlice(b, 0, ctx.editCursorPos - 1);
@@ -1404,7 +1397,6 @@ function enterSubSettings(
   ctx.setSubSettingsMode({
     isActive: true,
     parentKey: currentSettingKey,
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (empty string parentKey should fall back to empty string label)
     parentLabel: currentDefinition?.label || currentSettingKey,
   });
   ctx.setActiveSettingIndex(0);
@@ -1505,18 +1497,15 @@ function cycleEnumSetting(
   const path = currentSettingKey.split('.');
   let currentValue = getNestedValue(ctx.pendingSettings, path);
 
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   if (
     currentValue === undefined &&
     ctx.globalPendingChanges.has(currentSettingKey)
   ) {
     currentValue = ctx.globalPendingChanges.get(currentSettingKey);
   }
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   if (currentValue === undefined) {
     currentValue = getNestedValue(ctx.settings.merged, path);
   }
-  // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   if (currentValue === undefined) {
     currentValue = getDefaultValue(currentSettingKey);
   }
@@ -1586,7 +1575,6 @@ function handleResetToDefaultKeypress(
       setPendingSettingValue(currentSetting.value, booleanDefaultValue, prev),
     );
   } else if (defType === 'number' || defType === 'string') {
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (typeof defaultValue === 'number' || typeof defaultValue === 'string') {
       ctx.setPendingSettings((prev) =>
         setPendingSettingValueAny(currentSetting.value, defaultValue, prev),
@@ -1612,7 +1600,6 @@ function handleResetToDefaultKeypress(
   if (!requiresRestart(currentSetting.value)) {
     resetToDefaultImmediate(currentSetting, defaultValue, ctx);
   } else if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     (currentSetting.type === 'boolean' && typeof defaultValue === 'boolean') ||
     (currentSetting.type === 'number' && typeof defaultValue === 'number') ||
     (currentSetting.type === 'string' && typeof defaultValue === 'string')
@@ -1638,13 +1625,12 @@ function resetToDefaultImmediate(
 ): void {
   const immediateSettings = new Set([currentSetting.value]);
   const toSaveValue =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     currentSetting.type === 'boolean'
-      ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      ?
         typeof defaultValue === 'boolean'
         ? defaultValue
         : false
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      :
         typeof defaultValue === 'number' || typeof defaultValue === 'string'
         ? defaultValue
         : undefined;
@@ -1665,7 +1651,6 @@ function resetToDefaultImmediate(
   );
 
   ctx.setGlobalPendingChanges((prev) => {
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (!prev.has(currentSetting.value)) return prev;
     const next = new Map(prev);
     next.delete(currentSetting.value);
@@ -2096,7 +2081,6 @@ function handleSettingsKeypress(key: Key, ctx: KeypressCtx): void {
     return;
   }
   if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     ctx.focusSection === 'settings' &&
     !ctx.editingKey &&
     key.sequence === '/' &&

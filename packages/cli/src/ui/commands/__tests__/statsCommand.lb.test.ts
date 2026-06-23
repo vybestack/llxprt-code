@@ -12,6 +12,7 @@ import { statsCommand } from '../statsCommand.js';
 import { type CommandContext } from '../types.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import { MessageType } from '../../types.js';
+import { assertDefined } from '../../../test-utils/assertions.js';
 
 describe('statsCommand - load balancer stats', () => {
   let mockContext: CommandContext;
@@ -25,11 +26,8 @@ describe('statsCommand - load balancer stats', () => {
       const lbSubCommand = statsCommand.subCommands?.find(
         (sc) => sc.name === 'lb',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!lbSubCommand?.action) throw new Error('lb subcommand has no action');
 
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      lbSubCommand.action(mockContext, '');
+      void lbSubCommand.action!(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -89,17 +87,13 @@ describe('statsCommand - load balancer stats', () => {
         (sc) => sc.name === 'lb',
       );
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!lbSubCommand?.action) {
-        throw new Error('lb subcommand has no action');
-      }
+      assertDefined(lbSubCommand?.action);
 
       // Clear any previous calls
       vi.clearAllMocks();
 
       // Test lb
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      lbSubCommand.action(mockContext, '');
+      void lbSubCommand.action(mockContext, '');
       const lbCall = (mockContext.ui.addItem as ReturnType<typeof vi.fn>).mock
         .calls[0][0];
 

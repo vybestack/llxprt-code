@@ -124,15 +124,15 @@ async function handleList(args: ListArgs): Promise<void> {
   );
 
   if (contents.length === 0) {
-    console.log(`Extension "${args.name}" has no settings.`);
+    globalThis.console.log(`Extension "${args.name}" has no settings.`);
     return;
   }
 
   const scopeLabel =
     scope != null ? ` (${scope} scope)` : ' (merged user + workspace)';
-  console.log(`Settings for extension "${args.name}"${scopeLabel}:`);
+  globalThis.console.log(`Settings for extension "${args.name}"${scopeLabel}:`);
   for (const { name, value } of contents) {
-    console.log(`  ${name}: ${value}`);
+    globalThis.console.log(`  ${name}: ${value}`);
   }
 }
 
@@ -160,7 +160,7 @@ export const setCommand: CommandModule = {
   handler: async (argv) => {
     const settings = loadSettings(process.cwd()).merged;
     if (!(settings.experimental?.extensionConfig ?? false)) {
-      console.error(
+      globalThis.console.error(
         'Extension configuration is currently disabled. Enable it by setting "experimental.extensionConfig" to true.',
       );
       process.exitCode = 1;
@@ -195,7 +195,7 @@ export const listCommand: CommandModule = {
   handler: async (argv) => {
     const settings = loadSettings(process.cwd()).merged;
     if (!(settings.experimental?.extensionConfig ?? false)) {
-      console.error(
+      globalThis.console.error(
         'Extension configuration is currently disabled. Enable it by setting "experimental.extensionConfig" to true.',
       );
       process.exitCode = 1;

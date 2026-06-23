@@ -9,6 +9,7 @@ import { SecureInputHandler } from './secureInputHandler.js';
 import * as os from 'os';
 import * as path from 'path';
 import { writeFileSync } from 'fs';
+import { testRegex } from '../../test-utils/regex.js';
 
 describe('SecureInputHandler', () => {
   let handler: SecureInputHandler;
@@ -297,8 +298,7 @@ describe('SecureInputHandler', () => {
       };
 
       // What does the regex actually match?
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      const match = afterPaste.match(/^\/key\s+([\s\S]*)/);
+      const match = afterPaste.match(testRegex('^\\/key\\s+([\\s\\S]*)', ''));
       const debug3 = {
         matched: !!match,
         groups: match ? match.map((g) => JSON.stringify(g)) : null,

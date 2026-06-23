@@ -458,11 +458,9 @@ function useInputFinish(
     (result: IdeIntegrationNudgeResult) => {
       if (result.userSelection === 'yes') {
         if (result.isExtensionPreInstalled) {
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          handleSlashCommand('/ide enable');
+          void handleSlashCommand('/ide enable');
         } else {
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          handleSlashCommand('/ide install');
+          void handleSlashCommand('/ide install');
         }
         settings.setValue(
           SettingScope.User,
@@ -495,8 +493,7 @@ function useInputFinish(
     addItem: p.addItem,
   });
   const handleSettingsRestart = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    handleSlashCommand('/quit');
+    void handleSlashCommand('/quit');
   }, [handleSlashCommand]);
   const isStreamingIdleOrResponding =
     streamingState === StreamingState.Idle ||

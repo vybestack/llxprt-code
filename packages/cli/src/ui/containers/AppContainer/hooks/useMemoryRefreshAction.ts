@@ -55,7 +55,6 @@ export function useMemoryRefreshAction({
           settings.merged,
           config.getExtensions(),
           config.getFolderTrust(),
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string memoryImportFormat is invalid
           settings.merged.ui.memoryImportFormat || 'tree',
           config.getFileFilteringOptions(),
         );

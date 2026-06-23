@@ -430,7 +430,7 @@ export function formatValidationError(
       (acc, curr) =>
         typeof curr === 'number'
           ? `${acc}[${curr}]`
-          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          :
             `${acc.length > 0 ? acc + '.' : ''}${curr}`,
       '',
     );

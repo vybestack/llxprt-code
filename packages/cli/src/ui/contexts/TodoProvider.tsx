@@ -149,10 +149,8 @@ function useTaskManagement(sessionId: string, agentId: string | undefined) {
 
   // Load initial data
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    state.refreshTodos();
+    void state.refreshTodos();
     // Only run on mount - refreshTodos is stable via useCallback
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

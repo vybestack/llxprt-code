@@ -82,8 +82,7 @@ describe('tasksCommand', () => {
       const listSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'list',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      listSubCommand?.action?.(context, '');
+      void listSubCommand?.action?.(context, '');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -105,8 +104,7 @@ describe('tasksCommand', () => {
       const listSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'list',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      listSubCommand?.action?.(context, '');
+      void listSubCommand?.action?.(context, '');
 
       expect(addItemMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -139,8 +137,7 @@ describe('tasksCommand', () => {
       const listSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'list',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      listSubCommand?.action?.(context, '');
+      void listSubCommand?.action?.(context, '');
 
       expect(addItemMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -168,8 +165,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      endSubCommand?.action?.(context, 'task-789');
+      void endSubCommand?.action?.(context, 'task-789');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -191,8 +187,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      endSubCommand?.action?.(context, 'task-abc');
+      void endSubCommand?.action?.(context, 'task-abc');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -221,8 +216,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      endSubCommand?.action?.(context, 'task-ab');
+      void endSubCommand?.action?.(context, 'task-ab');
 
       expect(addItemMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -242,8 +236,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      endSubCommand?.action?.(context, 'unknown-id');
+      void endSubCommand?.action?.(context, 'unknown-id');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -271,8 +264,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      endSubCommand?.action?.(context, 'task-xyz');
+      void endSubCommand?.action?.(context, 'task-xyz');
 
       // Full task ID shown in error message
       expect(addItemMock).toHaveBeenCalledWith(
@@ -288,8 +280,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      endSubCommand?.action?.(context, '');
+      void endSubCommand?.action?.(context, '');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {

@@ -807,13 +807,11 @@ function useBoundDisplayUpdaters(
     (calls: ToolCall[]) =>
       toolCallUpdaters.replaceToolCallsForScheduler(mainSchedulerId, calls),
     // Deps reference specific methods on the toolCallUpdaters object.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [toolCallUpdaters.replaceToolCallsForScheduler, mainSchedulerId],
   );
   const updateToolOutput = useCallback(
     (toolCallId: string, chunk: string | AnsiOutput) =>
       toolCallUpdaters.updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [toolCallUpdaters.updateToolCallOutput, mainSchedulerId],
   );
   return { replaceToolCalls, updateToolOutput };

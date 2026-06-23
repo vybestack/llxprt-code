@@ -245,8 +245,8 @@ const extensionLoaderDeps = {
   installMetadataFileName: INSTALL_METADATA_FILENAME,
   loadSettings,
   validateName,
-  reportError: (message: string) => console.error(message),
-  reportWarning: (message: string) => console.warn(message),
+  reportError: (message: string) => globalThis.console.error(message),
+  reportWarning: (message: string) => globalThis.console.warn(message),
 };
 
 export function loadExtension(
@@ -396,7 +396,7 @@ async function cloneFromGit(
 export async function requestConsentNonInteractive(
   consentDescription: string,
 ): Promise<boolean> {
-  console.info(consentDescription);
+  globalThis.console.info(consentDescription);
   const result = await promptForConsentNonInteractive(
     'Do you want to continue? [Y/n]: ',
   );
@@ -639,7 +639,7 @@ async function warnMissingExtensionSettings(
   const settingNames = missingSettings
     .map((setting) => setting.name)
     .join(', ');
-  console.warn(
+  globalThis.console.warn(
     `Extension "${extensionConfig.name}" has missing settings: ${settingNames}. Please run "llxprt extensions config ${extensionConfig.name}" to configure them.`,
   );
 }
@@ -757,7 +757,7 @@ export async function loadExtensionConfig(
     );
   }
   if (!fs.existsSync(configFilePath)) {
-    console.warn(
+    globalThis.console.warn(
       `Extension config file not found at ${extensionDir}. Expected ${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK}.`,
     );
     return null;
@@ -766,7 +766,7 @@ export async function loadExtensionConfig(
     const configContent = fs.readFileSync(configFilePath, 'utf-8');
     const rawConfig = JSON.parse(configContent) as ExtensionConfig;
     if (!rawConfig.name || !rawConfig.version) {
-      console.warn(
+      globalThis.console.warn(
         `Invalid extension configuration in ${configFilePath}: missing ${!rawConfig.name ? '"name"' : '"version"'}`,
       );
       return null;
@@ -800,7 +800,7 @@ export async function loadExtensionConfig(
     ) {
       throw e;
     }
-    console.warn(
+    globalThis.console.warn(
       `Failed to load extension config from ${configFilePath}: ${e instanceof Error ? e.message : String(e)}`,
     );
     return null;

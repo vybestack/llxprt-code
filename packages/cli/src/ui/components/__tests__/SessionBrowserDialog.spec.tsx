@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
 
 /**
  * Behavioral tests for SessionBrowserDialog component.
@@ -38,6 +37,7 @@ import type {
   EnrichedSessionSummary,
   PreviewState,
 } from '../../hooks/useSessionBrowser.js';
+import { testRegex } from '../../../test-utils/regex.js';
 
 // Terminal key codes
 enum TerminalKeys {
@@ -308,7 +308,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Should show some time indicator
-      expect(output).toMatch(/ago|hours|minutes|just now/i);
+      expect(output).toMatch(testRegex('ago|hours|minutes|just now', 'i'));
     });
 
     it('should show file size in wide mode', () => {
@@ -323,7 +323,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Should show file size
-      expect(output).toMatch(/KB|bytes|B/i);
+      expect(output).toMatch(testRegex('KB|bytes|B', 'i'));
     });
   });
 
@@ -417,8 +417,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Should show count like "1 session found" or similar
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      expect(output).toMatch(/1.*found|found.*1|session/i);
+      expect(output).toMatch(testRegex('1.*found|found.*1|session', 'i'));
     });
 
     it('should show "No sessions match" when search yields no results', () => {
@@ -430,7 +429,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      expect(output).toMatch(/no.*match|no sessions/i);
+      expect(output).toMatch(testRegex('no.*match|no sessions', 'i'));
     });
 
     it('should display "(Tab to navigate)" hint in search mode', () => {
@@ -534,7 +533,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Should show confirmation prompt
-      expect(output).toMatch(/delete|confirm/i);
+      expect(output).toMatch(testRegex('delete|confirm', 'i'));
     });
 
     it('should show Y/N options in delete confirmation', () => {
@@ -660,8 +659,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      expect(output).toMatch(/skipped.*3|3.*skipped/i);
+      expect(output).toMatch(testRegex('skipped.*3|3.*skipped', 'i'));
     });
 
     it('should not show skipped notice when skippedCount is 0', () => {
@@ -671,7 +669,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      expect(output).not.toMatch(/skipped/i);
+      expect(output).not.toMatch(testRegex('skipped', 'i'));
     });
   });
 
@@ -708,8 +706,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(output).toMatch(/press\s+s|s\s+to\s+cycle/i);
+      expect(output).toMatch(testRegex('press\\s+s|s\\s+to\\s+cycle', 'i'));
     });
 
     it('should display full controls bar in wide mode', () => {
@@ -862,7 +859,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      expect(output).toMatch(/\[newest\]/);
+      expect(output).toMatch(testRegex('\\[newest\\]', ''));
     });
 
     it('should display all sort options (newest, oldest, size)', () => {
@@ -911,8 +908,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      expect(output).toMatch(/page.*1.*of.*2|1\/2/i);
+      expect(output).toMatch(testRegex('page.*1.*of.*2|1\\/2', 'i'));
     });
 
     it('should hide page indicator for single-page lists', () => {
@@ -928,8 +924,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Single page should not show page indicator
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      expect(output).not.toMatch(/page.*1.*of.*1/i);
+      expect(output).not.toMatch(testRegex('page.*1.*of.*1', 'i'));
     });
 
     it('should call handleKeypress when PageDown is pressed', async () => {
@@ -967,7 +962,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      expect(output).toMatch(/PgUp|PgDn|page/i);
+      expect(output).toMatch(testRegex('PgUp|PgDn|page', 'i'));
     });
   });
 
@@ -1041,7 +1036,7 @@ describe('SessionBrowserDialog', () => {
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
-      expect(output).toMatch(/replace|current.*conversation|continue\?/i);
+      expect(output).toMatch(testRegex('replace|current.*conversation|continue\\?', 'i'));
     });
 
     it('should show Y/N options in conversation confirmation', () => {
@@ -1087,7 +1082,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       // Rounded border uses curved characters like ╭ ╮ ╯ ╰
-      expect(output).toMatch(/[╭╮╯╰]/);
+      expect(output).toMatch(testRegex('[╭╮╯╰]', ''));
     });
 
     it('should render borderless in narrow mode', () => {
@@ -1099,7 +1094,7 @@ describe('SessionBrowserDialog', () => {
 
       // Should NOT have box-drawing characters
       // Note: This is hard to assert negatively, so we check it doesn't have standard box borders
-      expect(output).not.toMatch(/[╭╮╯╰]/);
+      expect(output).not.toMatch(testRegex('[╭╮╯╰]', ''));
     });
   });
 

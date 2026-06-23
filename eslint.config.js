@@ -168,7 +168,6 @@ const legacyDirectiveCleanupScopes = [
   'packages/providers/src/utils/toolNameNormalization.ts', // #2084
   'packages/providers/src/utils/toolResponsePayload.ts', // #2084
   'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
-  'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
   // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
@@ -339,51 +338,6 @@ const completedDirectiveCleanupScopes = [
   'packages/providers/src/openai/responsesErrorParsing.ts', // #2084 extracted
   // #2084 extracted shared helpers
   'packages/providers/src/utils/falsyFallback.ts', // #2084
-  // #2087 scope — packages/cli UI hooks, components, utils, state, themes,
-  // and Zed integration are fully compliant: zero inline lint directives.
-  // Locked to error so any new directive fails immediately.
-  'packages/cli/src/ui/components/shared/text-buffer.ts', // #2087
-  'packages/cli/src/ui/hooks/atCommandProcessor.ts', // #2087
-  'packages/cli/src/ui/hooks/keyToAnsi.ts', // #2087
-  'packages/cli/src/ui/hooks/useProfileManagement.ts', // #2087
-  'packages/cli/src/ui/hooks/usePromptCompletion.ts', // #2087
-  'packages/cli/src/ui/hooks/vim.ts', // #2087
-  'packages/cli/src/ui/state/extensions.ts', // #2087
-  'packages/cli/src/ui/themes/theme.ts', // #2087
-  'packages/cli/src/ui/utils/responsive.ts', // #2087
-  'packages/cli/src/ui/utils/secureInputHandler.ts', // #2087
-  'packages/cli/src/ui/utils/terminalSetup.ts', // #2087
-  'packages/cli/src/utils/formatRelativeTime.ts', // #2087
-  'packages/cli/src/utils/privacy/ConversationDataRedactor.ts', // #2087
-  'packages/cli/src/utils/sandbox.ts', // #2087
-  'packages/cli/src/zed-integration/zedIntegration.ts', // #2087
-  // #2086 scope — ten target files and their extracted modules are fully
-  // compliant: zero inline lint directives. Locked to error so any new
-  // directive fails immediately. The broad 'packages/cli/src/**' entry in
-  // legacyDirectiveCleanupScopes is retained for #2087/#2091; this block
-  // overrides it for the completed #2086 files so directives are rejected.
-  'packages/cli/src/config/profileRuntimeApplication.ts', // #2086
-  'packages/cli/src/services/McpPromptLoader.ts', // #2086
-  'packages/cli/src/services/mcpPromptArgParser.ts', // #2086
-  'packages/cli/src/ui/commands/diagnosticsCommand.ts', // #2086
-  'packages/cli/src/ui/commands/diagnosticsTokens.ts', // #2086
-  'packages/cli/src/ui/commands/mcpCommand.ts', // #2086
-  'packages/cli/src/ui/commands/mcpDisplay.ts', // #2086
-  'packages/cli/src/ui/commands/mcpAuth.ts', // #2086
-  'packages/cli/src/ui/commands/memoryCommand.ts', // #2086
-  'packages/cli/src/ui/commands/profileCommand.ts', // #2086
-  'packages/cli/src/ui/commands/profileLoadBalancer.ts', // #2086
-  'packages/cli/src/ui/commands/profileLoad.ts', // #2086
-  'packages/cli/src/ui/commands/profileSchemas.ts', // #2086
-  'packages/cli/src/ui/commands/schema/index.ts', // #2086
-  'packages/cli/src/ui/commands/schema/schemaHelpers.ts', // #2086
-  'packages/cli/src/ui/commands/setCommand.ts', // #2086
-  'packages/cli/src/ui/commands/setCommandSchema.ts', // #2086
-  'packages/cli/src/ui/commands/statsCommand.ts', // #2086
-  'packages/cli/src/ui/commands/statsQuota.ts', // #2086
-  'packages/cli/src/ui/commands/todoCommand.ts', // #2086
-  'packages/cli/src/ui/commands/todoOperations.ts', // #2086
-  'packages/cli/src/ui/commands/todoFormatters.ts', // #2086
   // #2090 packages/agents test cleanup — target files and extracted helpers are
   // fully compliant: zero inline lint directives. Locked to error so any new
   // directive fails immediately while the rest of packages/agents remains in
@@ -497,81 +451,6 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/task.issues.test.ts', // #2090
   'packages/agents/src/tools/task.max-turns.test.ts', // #2090
   'packages/agents/src/tools/task.timeout.test.ts', // #2090
-  // #2091 packages/cli test cleanup — target files (and extracted helpers)
-  // are fully compliant: zero inline lint directives. Locked to error so any
-  // new directive fails immediately while the rest of packages/cli remains in
-  // legacy cleanup scope for #2086/#2087.
-  'packages/cli/src/config/__tests__/profileBootstrap.test.ts', // #2091
-  'packages/cli/src/config/__tests__/profileBootstrap.part2.test.ts', // #2091
-  'packages/cli/src/config/__tests__/profileBootstrap.part3.test.ts', // #2091
-  'packages/cli/src/config/__tests__/profileBootstrap.part4.test.ts', // #2091
-  'packages/cli/src/config/config.test.ts', // #2091
-  'packages/cli/src/config/config.part2.test.ts', // #2091
-  'packages/cli/src/config/config.part3.test.ts', // #2091
-  'packages/cli/src/config/config.part4.test.ts', // #2091
-  'packages/cli/src/config/extension.test.ts', // #2091
-  'packages/cli/src/config/extension.part2.test.ts', // #2091
-  'packages/cli/src/config/extension.part3.test.ts', // #2091
-  'packages/cli/src/config/extension.part4.test.ts', // #2091
-  'packages/cli/src/config/settings.test.ts', // #2091
-  'packages/cli/src/config/settings.part2.test.ts', // #2091
-  'packages/cli/src/config/settings.part3.test.ts', // #2091
-  'packages/cli/src/config/settings.part4.test.ts', // #2091
-  'packages/cli/src/config/settings.part5.test.ts', // #2091
-  'packages/cli/src/config/settings.part6.test.ts', // #2091
-  'packages/cli/src/config/settings.part7.test.ts', // #2091
-  'packages/cli/src/integration-tests/cli-args.integration.test.ts', // #2091
-  'packages/cli/src/integration-tests/cli-args.profile-flag.integration.test.ts', // #2091
-  'packages/cli/src/integration-tests/cli-args-test-helpers.ts', // #2091
-  'packages/cli/src/services/__tests__/performResume.spec.ts', // #2091
-  'packages/cli/src/services/__tests__/performResume.property.spec.ts', // #2091
-  'packages/cli/src/services/__tests__/performResume.swap.spec.ts', // #2091
-  'packages/cli/src/services/__tests__/performResume-test-helpers.ts', // #2091
-  'packages/cli/src/services/FileCommandLoader.test.ts', // #2091
-  'packages/cli/src/services/FileCommandLoader.processors.test.ts', // #2091
-  'packages/cli/src/ui/commands/diagnosticsCommand.spec.ts', // #2091
-  'packages/cli/src/ui/commands/diagnosticsCommand.edges.spec.ts', // #2091
-  'packages/cli/src/ui/commands/diagnosticsCommand-test-helpers.ts', // #2091
-  'packages/cli/src/ui/commands/mcpCommand.test.ts', // #2091
-  'packages/cli/src/ui/commands/mcpCommand.schema-edge.test.ts', // #2091
-  'packages/cli/src/ui/commands/mcpCommand.auth-refresh.test.ts', // #2091
-  'packages/cli/src/ui/commands/todoCommand.test.ts', // #2091
-  'packages/cli/src/ui/commands/todoCommand.disk-set.test.ts', // #2091
-  'packages/cli/src/ui/commands/todoCommand.list-parse-property.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/golden-snapshot.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/text-buffer.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/text-buffer.part2.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/text-buffer.part3.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/text-buffer.part4.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/text-buffer.part5.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/vim-buffer-actions.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/vim-buffer-actions.insert-change.test.ts', // #2091
-  'packages/cli/src/ui/components/shared/vim-buffer-actions-test-helpers.ts', // #2091
-  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.spec.ts', // #2091
-  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part2.spec.ts', // #2091
-  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part3.spec.ts', // #2091
-  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part4.spec.ts', // #2091
-  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part5.spec.ts', // #2091
-  'packages/cli/src/ui/hooks/__tests__/useSessionBrowser.part6.spec.ts', // #2091
-  'packages/cli/src/ui/hooks/atCommandProcessor.test.ts', // #2091
-  'packages/cli/src/ui/hooks/atCommandProcessor.filtering.test.ts', // #2091
-  'packages/cli/src/ui/hooks/atCommandProcessor.punctuation.test.ts', // #2091
-  'packages/cli/src/ui/hooks/atCommandProcessor-test-helpers.ts', // #2091
-  'packages/cli/src/ui/hooks/useAtCompletion.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useAtCompletion.subagent.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useAtCompletion-test-helpers.ts', // #2091
-  'packages/cli/src/ui/hooks/useSlashCompletion.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useSlashCompletion.part2.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useSlashCompletion.part3.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useSlashCompletion.part4.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useToolScheduler.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useToolScheduler.part2.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useToolScheduler.part3.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useToolScheduler.part4.test.ts', // #2091
-  'packages/cli/src/ui/hooks/useToolScheduler.part5.test.ts', // #2091
-  'packages/cli/src/utils/sessionCleanup.test.ts', // #2091
-  'packages/cli/src/utils/sessionCleanup.config.test.ts', // #2091
-  'packages/cli/src/utils/sessionCleanup-test-helpers.ts', // #2091
   'packages/agents/src/agents/executor.ts', // #2085
   'packages/agents/src/compression/HighDensityStrategy.ts', // #2085
   'packages/agents/src/core/bucketFailoverIntegration.ts', // #2085
@@ -712,11 +591,6 @@ export default tseslint.config(
       'eslint.config.js',
       'packages/**/dist/**',
       'bundle/**',
-      'packages/cli/src/test-*.ts',
-      'packages/cli/src/test-*.tsx',
-      'packages/cli/src/debug-*.ts',
-      'packages/cli/src/debug-*.tsx',
-      'packages/cli/src/generated/**',
       'packages/core/src/prompts/*.d.ts',
       'debug-*.js',
       'test-*.js',

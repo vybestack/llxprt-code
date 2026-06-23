@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -21,6 +20,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Config, DiscoveredTool } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
+import type { Settings } from './config/settingsSchema.js';
 import { generateDynamicToolSettings } from './utils/dynamicSettings.js';
 
 // Mock the settings utilities
@@ -43,14 +43,16 @@ vi.mock('./utils/singleSettingSaver.js', async () => {
 });
 
 // Mock console methods to avoid noise in tests
-const originalConsoleError = console.error;
-const originalConsoleLog = console.log;
+const originalConsoleError = globalThis.console.error;
+const originalConsoleLog = globalThis.console.log;
 
 describe('generateDynamicToolSettings', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockConfig: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockToolRegistry: any;
+  let mockConfig: Pick<Config, 'getToolRegistry' | 'getToolRegistryInfo'> &
+    Record<string, ReturnType<typeof vi.fn>>;
+  let mockToolRegistry: { getAllTools: () => DiscoveredTool[] } & Record<
+    string,
+    ReturnType<typeof vi.fn>
+  >;
 
   // Mock tools for testing - create actual tool instances
   const mockCoreTools = [
@@ -104,8 +106,8 @@ describe('generateDynamicToolSettings', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    console.error = vi.fn();
-    console.log = vi.fn();
+    globalThis.console.error = vi.fn();
+    globalThis.console.log = vi.fn();
 
     // Mock tool registry
     mockToolRegistry = {
@@ -154,19 +156,19 @@ describe('generateDynamicToolSettings', () => {
   });
 
   afterEach(() => {
-    console.error = originalConsoleError;
-    console.log = originalConsoleLog;
+    globalThis.console.error = originalConsoleError;
+    globalThis.console.log = originalConsoleLog;
   });
 
   describe('Dynamic tool settings generation', () => {
     it('should filter out non-core tools correctly', () => {
       // Test the actual generateDynamicToolSettings function
-      console.log('Mock config:', mockConfig);
-      console.log('Mock tool registry:', mockToolRegistry);
-      console.log('Mock all tools:', mockAllTools);
+      globalThis.console.log('Mock config:', mockConfig);
+      globalThis.console.log('Mock tool registry:', mockToolRegistry);
+      globalThis.console.log('Mock all tools:', mockAllTools);
 
       const toolSettings = generateDynamicToolSettings(mockConfig);
-      console.log('Generated tool settings:', toolSettings);
+      globalThis.console.log('Generated tool settings:', toolSettings);
 
       // Should include core tools (4 tools) + unregistered tools (Task, ListSubagents)
       // Total should be 6 tools
@@ -343,27 +345,25 @@ describe('generateDynamicToolSettings', () => {
     it('should handle missing config gracefully', () => {
       // Test that the function handles missing config
       // config is always undefined in this test
-      console.error('Config is not available for core tool toggle');
+      globalThis.console.error('Config is not available for core tool toggle');
 
-      expect(console.error).toHaveBeenCalledWith(
+      expect(globalThis.console.error).toHaveBeenCalledWith(
         'Config is not available for core tool toggle',
       );
     });
 
     it('should handle tool not found scenario', () => {
       const toolKey = 'NonExistentTool';
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const actualTool = mockAllTools.find((tool: any) => {
+      const actualTool = mockAllTools.find((tool) => {
         const toolName = tool.name.replace(/\s+/g, '');
         return toolName === toolKey;
       });
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!actualTool) {
-        console.error(`Tool not found for key: ${toolKey}`);
+        globalThis.console.error(`Tool not found for key: ${toolKey}`);
       }
 
-      expect(console.error).toHaveBeenCalledWith(
+      expect(globalThis.console.error).toHaveBeenCalledWith(
         'Tool not found for key: NonExistentTool',
       );
     });
@@ -378,10 +378,10 @@ describe('generateDynamicToolSettings', () => {
       try {
         errorConfig.getToolRegistry();
       } catch (error) {
-        console.error('Error generating dynamic tool settings:', error);
+        globalThis.console.error('Error generating dynamic tool settings:', error);
       }
 
-      expect(console.error).toHaveBeenCalledWith(
+      expect(globalThis.console.error).toHaveBeenCalledWith(
         'Error generating dynamic tool settings:',
         expect.any(Error),
       );
@@ -434,8 +434,7 @@ describe('generateDynamicToolSettings', () => {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
       vi.mocked(getEffectiveValue).mockImplementation(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (key: string, _settings: any, _mergedSettings: any) => {
+        (key: string, _settings: Settings, _mergedSettings: Settings) => {
           if (key === 'excludeTools') return ['Tool1', 'Tool2'];
           if (key === 'allowedTools') return ['Tool3'];
           return undefined;
@@ -453,8 +452,7 @@ describe('generateDynamicToolSettings', () => {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
       vi.mocked(getEffectiveValue).mockImplementation(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (key: string, _settings: any, _mergedSettings: any) => {
+        (key: string, _settings: Settings, _mergedSettings: Settings) => {
           if (key === 'excludeTools') return [];
           if (key === 'allowedTools') return [];
           return undefined;
@@ -472,8 +470,7 @@ describe('generateDynamicToolSettings', () => {
       const { getEffectiveValue } = await import('./utils/settingsUtils.js');
 
       vi.mocked(getEffectiveValue).mockImplementation(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (key: string, _settings: any, _mergedSettings: any) => {
+        (key: string, _settings: Settings, _mergedSettings: Settings) => {
           if (key === 'excludeTools') return undefined;
           if (key === 'allowedTools') return undefined;
           return undefined;

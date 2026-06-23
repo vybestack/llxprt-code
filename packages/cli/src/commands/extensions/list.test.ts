@@ -167,7 +167,6 @@ describe('handleList', () => {
 
   it('should handle non-Error exceptions', async () => {
     mockLoadUserExtensions.mockImplementation(() => {
-      // eslint-disable-next-line no-restricted-syntax
       throw 'String error';
     });
 

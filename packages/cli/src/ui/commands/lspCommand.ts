@@ -139,11 +139,10 @@ async function statusAction(
   const lines = sortedIds.map((serverId: string) => {
     const status = statusMap.get(serverId);
     const rawStatus =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       status?.state ??
       status?.status ??
       (typeof status?.healthy === 'boolean'
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        ?
           status.healthy
           ? 'active'
           : 'broken'

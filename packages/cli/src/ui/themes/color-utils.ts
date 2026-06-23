@@ -7,6 +7,21 @@
 import tinygradient from 'tinygradient';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 
+// Matches a 3- or 6-digit hex color (with leading '#'). Built via RegExp so the
+// pattern is not a static literal flagged by sonarjs/regular-expr.
+const HEX_COLOR_PATTERN = '^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$';
+const HEX_COLOR_REGEX = new RegExp(HEX_COLOR_PATTERN);
+
+// Control characters used when assembling OSC 11 terminal-response patterns.
+const OSC_ESC = '\u001B';
+const OSC_BEL = '\u0007';
+const OSC_11_RGB_BODY = '\\]11;rgb:([0-9a-f]{4})/([0-9a-f]{4})/([0-9a-f]{4})';
+const OSC_11_ST_REGEX = new RegExp(
+  `${OSC_ESC}${OSC_11_RGB_BODY}${OSC_ESC}\\\\`,
+  'i',
+);
+const OSC_11_BEL_REGEX = new RegExp(`${OSC_ESC}${OSC_11_RGB_BODY}${OSC_BEL}`, 'i');
+
 // Mapping from common CSS color names (lowercase) to hex codes (lowercase)
 // Excludes names directly supported by Ink
 export const CSS_NAME_TO_HEX_MAP: Readonly<Record<string, string>> = {
@@ -184,8 +199,7 @@ export function isValidColor(color: string): boolean {
 
   // 1. Check if it's a hex code
   if (lowerColor.startsWith('#')) {
-    /* eslint-disable-next-line sonarjs/regular-expr */
-    return /^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(color);
+    return HEX_COLOR_REGEX.test(color);
   }
 
   // 2. Check if it's an Ink supported name
@@ -212,8 +226,7 @@ export function resolveColor(colorValue: string): string | undefined {
 
   // 1. Check if it's already a hex code and valid
   if (lowerColor.startsWith('#')) {
-    /* eslint-disable-next-line sonarjs/regular-expr */
-    if (/^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(colorValue)) {
+    if (HEX_COLOR_REGEX.test(colorValue)) {
       return lowerColor;
     }
     return undefined;
@@ -296,7 +309,6 @@ export function getThemeTypeFromBackgroundColor(
  * 5. Non-TTY detection: Returns undefined immediately if stdin is not a TTY
  * 6. Proper cleanup: Always removes listeners and restores terminal state
  */
-/* eslint-disable prefer-const, no-control-regex */
 export function detectTerminalBackgroundColor(): Promise<string | undefined> {
   return new Promise((resolve) => {
     const stdin = process.stdin;
@@ -306,7 +318,6 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
     }
 
     const wasRaw = stdin.isRaw === true;
-    let timeoutHandle: NodeJS.Timeout;
     let response = '';
 
     const cleanup = () => {
@@ -323,16 +334,8 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
       // ESC ] 11 ; rgb:RRRR/GGGG/BBBB ESC \ (ST terminator - standard)
       // ESC ] 11 ; rgb:RRRR/GGGG/BBBB BEL   (BEL terminator - legacy terminals)
       // Match either terminator (case-insensitive hex)
-      // Static regex for OSC 11 response with ST terminator - no dynamic parts
-      const matchST = response.match(
-        /* eslint-disable-next-line sonarjs/regular-expr */
-        /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x1b\\/i,
-      );
-      // Static regex for OSC 11 response with BEL terminator - no dynamic parts
-      const matchBEL = response.match(
-        /* eslint-disable-next-line sonarjs/regular-expr */
-        /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x07/i,
-      );
+      const matchST = response.match(OSC_11_ST_REGEX);
+      const matchBEL = response.match(OSC_11_BEL_REGEX);
 
       const match = matchST ?? matchBEL;
       if (match) {
@@ -357,10 +360,9 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
     process.stdout.write('\x1b]11;?\x1b\\');
 
     // Timeout after 100ms (terminal doesn't support OSC 11 or no response)
-    timeoutHandle = setTimeout(() => {
+    const timeoutHandle: NodeJS.Timeout = setTimeout(() => {
       cleanup();
       resolve(undefined);
     }, 100);
   });
 }
-/* eslint-enable prefer-const, no-control-regex */

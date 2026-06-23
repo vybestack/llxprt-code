@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, max-lines, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type React from 'react';
 import { useCallback, useEffect, useState, useRef } from 'react';
@@ -801,13 +800,11 @@ const handleSubmitAndEditKeys = (key: Key, deps: InputHandlerDeps): boolean => {
 
 const handleExternalInputKeys = (key: Key, deps: InputHandlerDeps): boolean => {
   if (keyMatchers[Command.OPEN_EXTERNAL_EDITOR](key)) {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    deps.buffer.openInExternalEditor();
+    void deps.buffer.openInExternalEditor();
     return true;
   }
   if (keyMatchers[Command.PASTE_CLIPBOARD](key)) {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    deps.handleClipboardPaste();
+    void deps.handleClipboardPaste();
     return true;
   }
   return false;
@@ -1104,7 +1101,6 @@ const useSubmitHandlers = (
       resetCompletionState();
       resetReverseSearchCompletionState();
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable and do not need to be in deps
     [
       onSubmit,
       buffer,
@@ -1635,7 +1631,6 @@ const renderPromptPrefix = (
 ): React.ReactNode => (
   <Text color={shellModeActive ? theme.status.warning : theme.text.accent}>
     {shellModeActive ? (
-      // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       reverseSearchActive ? (
         <Text color={theme.text.link} aria-label={SCREEN_READER_USER_PREFIX}>
           (r:){' '}
@@ -1744,8 +1739,7 @@ const useMousePaste = (
     (event: MouseEvent) => {
       if (focus !== true || isEmbeddedShellFocused === true) return;
       if (event.name === 'right-release') {
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        state.handleClipboardPaste();
+        void state.handleClipboardPaste();
       }
     },
     [focus, isEmbeddedShellFocused, state],

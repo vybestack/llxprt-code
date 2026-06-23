@@ -78,7 +78,6 @@ function parseEnvFile(content: string): Record<string, string> {
   const result: Record<string, string> = {};
   const lines = content.split('\n');
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const line of lines) {
     const trimmed = line.trim();
 
@@ -182,7 +181,6 @@ export class ExtensionSettingsStorage {
       for (const setting of sensitiveSettings) {
         const value = values[setting.envVar];
         try {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (value !== undefined) {
             await this.store.set(setting.envVar, value);
           } else {

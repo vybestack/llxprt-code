@@ -190,7 +190,6 @@ describe('ThemeDialog', () => {
       },
       setValue: vi.fn(),
       getEffectiveValue: vi.fn(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
   };
 
@@ -202,15 +201,12 @@ describe('ThemeDialog', () => {
     terminalBackgroundColor,
     terminalWidth: 120,
     terminalHeight: 40,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     config: {} as any,
     settings: mockSettings,
     history: [],
     pendingHistoryItems: [],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     streamingState: { isStreaming: false } as any,
     thought: null,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     buffer: {} as any,
     shellModeActive: false,
     isThemeDialogOpen: true,
@@ -270,7 +266,6 @@ describe('ThemeDialog', () => {
     consoleMessages: [],
     elapsedTime: 0,
     currentLoadingPhrase: undefined,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     showAutoAcceptIndicator: 'off' as any,
     tokenMetrics: {
       tokensPerMinute: 0,
@@ -288,14 +283,12 @@ describe('ThemeDialog', () => {
     rootUiRef: { current: null },
     pendingHistoryItemRef: { current: null },
     slashCommands: undefined,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     commandContext: {} as any,
     shouldShowIdePrompt: false,
     currentIDE: undefined,
     isRestarting: false,
     isTrustedFolder: true,
     isWelcomeDialogOpen: false,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     welcomeState: 'initial' as any,
     welcomeAvailableProviders: [],
     welcomeAvailableModels: [],

@@ -14,6 +14,7 @@ import { todoCommand } from './todoCommand.js';
 import type { CommandContext } from './types.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
+import { assertTrue } from '../../test-utils/assertions.js';
 
 /**
  * Mock context factory
@@ -671,8 +672,7 @@ describe('todoCommand', () => {
 
             await removeSubcommand!.action!(ctx, `${start}-${end}`);
 
-            if (!ctx.todoContext?.updateTodos)
-              throw new Error('unreachable: narrowing failed');
+            assertTrue(ctx.todoContext?.updateTodos);
             const calls = (
               ctx.todoContext.updateTodos as ReturnType<typeof vi.fn>
             ).mock.calls;

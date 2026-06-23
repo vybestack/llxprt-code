@@ -10,7 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type {
   SlashCommand,
@@ -92,7 +91,6 @@ function buildAliasConfig(
   const baseProviderId = resolveBaseProviderId(unwrapped);
 
   const resolvedBaseUrl =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: filter out 'none' and empty string
     (configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined) ||
     getProviderBaseUrl(unwrapped);
 
@@ -101,7 +99,6 @@ function buildAliasConfig(
   }
 
   const defaultModel =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- provider boundary: empty model from runtime should fall back to the provider default
     unwrapped.getCurrentModel?.() || unwrapped.getDefaultModel();
 
   const aliasConfig: ProviderAliasConfig = {
@@ -228,7 +225,6 @@ async function switchProvider(
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: null and empty string should both fall back to 'none'
   const fromProvider = currentProvider || 'none';
 
   let switchResult;

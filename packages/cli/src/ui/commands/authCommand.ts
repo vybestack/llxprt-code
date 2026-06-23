@@ -192,7 +192,6 @@ export class AuthCommandExecutor {
     args?: string,
   ): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string fallback for undefined/whitespace args
     const trimmedArgs = args?.trim() || '';
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0); // Remove empty parts
     const provider = parts[0];
@@ -545,7 +544,6 @@ export class AuthCommandExecutor {
           const now = Date.now() / 1000;
           const isExpired = bucket.expiry <= now;
 
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (isExpired) {
             lines.push(`${marker}- ${bucket.bucket} (expired)`);
           } else {
@@ -637,12 +635,12 @@ export class AuthCommandExecutor {
       return statuses.map((status) => {
         const indicator = status.authenticated ? '[✓]' : '[]';
         const authInfo = status.authenticated
-          ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          ?
             `authenticated${status.expiresIn != null ? ` (expires in ${Math.floor(status.expiresIn / 60)}m)` : ''}`
           : 'not authenticated';
         const oauthStatus =
           status.oauthEnabled !== undefined
-            ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            ?
               ` [OAuth ${status.oauthEnabled ? 'enabled' : 'disabled'}]`
             : '';
         return `${indicator} ${status.provider}: ${authInfo}${oauthStatus}`;

@@ -17,6 +17,5 @@ import type { UIActions } from '../../../contexts/UIActionsContext.js';
  * @strictMode Safe - useMemo deps are stable callbacks
  */
 export function useUIActionsBuilder(params: UIActionsParams): UIActions {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => buildUIActions(params), Object.values(params));
 }

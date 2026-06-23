@@ -407,7 +407,6 @@ export function loadEnvironment(settings: Settings): void {
       const isProjectEnvFile = !envFilePath.includes(LLXPRT_DIR);
 
       for (const key in parsedEnv) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         if (Object.hasOwn(parsedEnv, key)) {
           // If it's a project .env file, skip loading excluded variables.
           if (isProjectEnvFile && excludedVars.includes(key)) {
@@ -446,7 +445,6 @@ function deepMergeWithComments(target: unknown, source: unknown): unknown {
   // Add or update keys from source
   Object.keys(sourceObj).forEach((key) => {
     if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       typeof result[key] === 'object' &&
       result[key] !== null &&
       !Array.isArray(result[key]) &&

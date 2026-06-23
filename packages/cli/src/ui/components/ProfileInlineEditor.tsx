@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type React from 'react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -228,7 +227,6 @@ const ErrorDisplay: React.FC<{
 }> = ({ validationError, externalError, validateJson }) => {
   // intentional falsy coalescing for error display (empty string means no error)
   const error: string | null | undefined =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
     validationError || externalError || validateJson;
   if (error == null) return null;
 

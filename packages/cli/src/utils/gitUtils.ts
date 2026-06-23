@@ -15,7 +15,6 @@ import { debugLogger } from '@vybestack/llxprt-code-core';
  */
 export const isGitHubRepository = (): boolean => {
   try {
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const gitRemoteOutput = execSync('git remote -v', {
       encoding: 'utf-8',
     });
@@ -37,7 +36,6 @@ export const isGitHubRepository = (): boolean => {
  * @throws error if the exec command fails.
  */
 export const getGitRepoRoot = (): string => {
-  // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
   const gitRepoRootOutput = execSync('git rev-parse --show-toplevel', {
     encoding: 'utf-8',
   });
@@ -103,14 +101,12 @@ export const getLatestGitHubRelease = async (
  * @throws error if the exec command fails.
  */
 export function getGitHubRepoInfo(): { owner: string; repo: string } {
-  // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
   const remoteUrl = execSync('git remote get-url origin', {
     encoding: 'utf-8',
   }).trim();
 
   // Matches either https://github.com/owner/repo.git or git@github.com:owner/repo.git
   const match = remoteUrl.match(
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /(?:https?:\/\/|git@)github\.com(?::|\/)([^/]+)\/([^/]+?)(?:\.git)?$/,
   );
 
@@ -135,7 +131,6 @@ export function getGitHubRepoInfo(): { owner: string; repo: string } {
 export function getWorkspaceIdentity(cwd?: string): string {
   const effectiveCwd = cwd ?? process.cwd();
   try {
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const gitRoot = execSync('git rev-parse --show-toplevel', {
       encoding: 'utf-8',
       cwd: effectiveCwd,

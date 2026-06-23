@@ -110,7 +110,6 @@ function dispatchAgentExecutionEvent(
   deps.addItem(
     {
       type: MessageType.INFO,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty system message should fall back to reason
       text: `${prefix}${event.systemMessage?.trim() || event.reason}`,
     },
     userMessageTimestamp,

@@ -72,7 +72,6 @@ describe('usePhraseCycler', () => {
 
   it('should reset to a witty phrase when isActive becomes true after being false (and not waiting)', () => {
     // Ensure there are at least two phrases for this test to be meaningful.
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (LLXPRT_PHRASES.length < 2) {
       return;
     }
@@ -188,7 +187,6 @@ describe('usePhraseCycler', () => {
     act(() => {
       vi.advanceTimersByTime(PHRASE_CHANGE_INTERVAL_MS);
     });
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (LLXPRT_PHRASES.length > 1) {
       // This check is probabilistic with random selection
     }

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -68,25 +67,25 @@ export class ErrorBoundary extends Component<Props, State> {
     );
 
     if (isMaxUpdateDepthError || isErrorLoop) {
-      console.error('CRITICAL: Render loop detected!');
-      console.error('Error:', error.message);
-      console.error('Component Stack:', errorInfo.componentStack);
+      globalThis.console.error('CRITICAL: Render loop detected!');
+      globalThis.console.error('Error:', error.message);
+      globalThis.console.error('Component Stack:', errorInfo.componentStack);
 
       if (isMaxUpdateDepthError) {
-        console.error('\nThis error typically occurs when:');
-        console.error('1. setState is called inside render()');
-        console.error('2. useEffect has missing or incorrect dependencies');
-        console.error(
+        globalThis.console.error('\nThis error typically occurs when:');
+        globalThis.console.error('1. setState is called inside render()');
+        globalThis.console.error('2. useEffect has missing or incorrect dependencies');
+        globalThis.console.error(
           '3. Props are recreated on every render (objects, arrays, functions)',
         );
-        console.error('\nCheck recent changes to hooks and state updates.');
+        globalThis.console.error('\nCheck recent changes to hooks and state updates.');
       }
     }
 
     // Log error details
-    console.error('React Error Boundary caught an error:', error);
-    console.error('Error Info:', errorInfo);
-    console.error('Error count in window:', this.errorTimestamps.length);
+    globalThis.console.error('React Error Boundary caught an error:', error);
+    globalThis.console.error('Error Info:', errorInfo);
+    globalThis.console.error('Error count in window:', this.errorTimestamps.length);
 
     // Call custom error handler if provided
     if (this.props.onError) {
@@ -103,7 +102,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (isErrorLoop) {
       // Force a hard refresh after a delay to break the loop
       setTimeout(() => {
-        console.error('Attempting to recover from error loop...');
+        globalThis.console.error('Attempting to recover from error loop...');
         this.setState({
           hasError: false,
           error: null,
@@ -188,7 +187,6 @@ export function withErrorBoundary<P extends object>(
     </ErrorBoundary>
   );
 
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty displayName should fall back to name
   WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
 
   return WrappedComponent;

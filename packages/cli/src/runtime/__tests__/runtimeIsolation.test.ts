@@ -35,6 +35,7 @@ import {
   cleanupTempDirectory,
   createTempDirectory,
 } from '../../integration-tests/test-utils.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 interface RuntimeFixture {
   id: string;
@@ -49,12 +50,10 @@ interface RuntimeFixture {
 
 const runtimeFixtures: RuntimeFixture[] = [];
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   resetCliProviderInfrastructure();
 });
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(async () => {
   resetCliProviderInfrastructure();
   while (runtimeFixtures.length > 0) {
@@ -369,8 +368,10 @@ describe('CLI runtime isolation', () => {
 
     try {
       await expect(setActiveModel('stateless-model')).rejects.toThrow(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+        testRegex(
+          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'i',
+        ),
       );
     } finally {
       configureCliStatelessHardening(previousPreference);
@@ -391,8 +392,10 @@ describe('CLI runtime isolation', () => {
       // Try to get context with stateless mode enabled but no runtime registered
       // This simulates missing SettingsService scenario
       expect(() => getCliRuntimeContext()).toThrow(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+        testRegex(
+          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'i',
+        ),
       );
     } finally {
       configureCliStatelessHardening(previousPreference);
@@ -412,8 +415,10 @@ describe('CLI runtime isolation', () => {
 
       // Try to get context without any runtime registration
       expect(() => getCliRuntimeContext()).toThrow(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+        testRegex(
+          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'i',
+        ),
       );
     } finally {
       configureCliStatelessHardening(previousPreference);
@@ -469,8 +474,10 @@ describe('CLI runtime isolation', () => {
 
       // Try to ensure ready with no runtime registered - should throw
       expect(() => ensureStatelessProviderReady()).toThrow(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+        testRegex(
+          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'i',
+        ),
       );
     } finally {
       configureCliStatelessHardening(previousPreference);

@@ -23,6 +23,7 @@ import {
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
+import { testRegex } from '../test-utils/regex.js';
 
 const LOWER_LIST_ITEM_LABEL = 'to' + 'do';
 const TITLE_LIST_ITEM_LABEL = 'To' + 'do';
@@ -466,7 +467,7 @@ describe('Task-list Continuation Integration Tests', () => {
         : `Please continue working on the following task: "${prioritizedTodo.content}"`;
 
       expect(continuationPrompt).toContain('Implement authentication');
-      expect(continuationPrompt).toMatch(/please continue working/i);
+      expect(continuationPrompt).toMatch(testRegex('please continue working', 'i'));
 
       // Test YOLO mode prompt
       config.setApprovalMode(ApprovalMode.YOLO);
@@ -475,8 +476,7 @@ describe('Task-list Continuation Integration Tests', () => {
           ? `Continue to proceed with the active task without waiting for confirmation: "${prioritizedTodo.content}"`
           : `Please continue working on the following task: "${prioritizedTodo.content}"`;
 
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(yoloPrompt).toMatch(/(continue|proceed).*without.*confirmation/i);
+      expect(yoloPrompt).toMatch(testRegex('(continue|proceed).*without.*confirmation', 'i'));
 
       // Simulate pause functionality
       const pauseResult = {

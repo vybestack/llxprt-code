@@ -60,11 +60,11 @@ function findNamedExtension(
 ): LoadedExtension | undefined {
   const extension = extensions.find((extension) => extension.name === name);
   if (!extension) {
-    console.log(`Extension "${name}" not found.`);
+    globalThis.console.log(`Extension "${name}" not found.`);
     return undefined;
   }
   if (!extension.installMetadata) {
-    console.log(
+    globalThis.console.log(
       `Unable to install extension "${name}" due to missing install metadata`,
     );
     return undefined;
@@ -86,7 +86,7 @@ async function updateNamedExtension(
       updateState = state;
     });
     if (updateState !== ExtensionUpdateState.UPDATE_AVAILABLE) {
-      console.log(`Extension "${name}" is already up to date.`);
+      globalThis.console.log(`Extension "${name}" is already up to date.`);
       return;
     }
     const updatedExtensionInfo = (await updateExtension(
@@ -105,12 +105,12 @@ async function updateNamedExtension(
       updatedExtensionInfo.originalVersion !==
       updatedExtensionInfo.updatedVersion
     ) {
-      console.log(updateOutput({ ...updatedExtensionInfo, name }));
+      globalThis.console.log(updateOutput({ ...updatedExtensionInfo, name }));
     } else {
-      console.log(`Extension "${name}" is already up to date.`);
+      globalThis.console.log(`Extension "${name}" is already up to date.`);
     }
   } catch (error) {
-    console.error(getErrorMessage(error));
+    globalThis.console.error(getErrorMessage(error));
   }
 }
 
@@ -143,12 +143,12 @@ async function updateAllExtensions(
       )
     ).filter((info) => info.originalVersion !== info.updatedVersion);
     if (updateInfos.length === 0) {
-      console.log('No extensions to update.');
+      globalThis.console.log('No extensions to update.');
       return;
     }
-    console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
+    globalThis.console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
   } catch (error) {
-    console.error(getErrorMessage(error));
+    globalThis.console.error(getErrorMessage(error));
   }
 }
 

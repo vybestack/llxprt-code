@@ -51,7 +51,6 @@ export const handleSlashCommand = async (
 
   if (commandToExecute?.action) {
     const sessionStats: SessionStatsState = {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string sessionId should fall back to 'unknown'
       sessionId: config?.getSessionId() || 'unknown',
       sessionStartTime: new Date(),
       metrics: uiTelemetryService.getMetrics(),

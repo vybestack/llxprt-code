@@ -661,16 +661,22 @@ ${baseProfile.error}`);
   return applyOverridesToProfile(baseProfile, bootstrapArgs);
 }
 
+interface ProfileLookupService {
+  getProfile?(name: string):
+    | { provider?: string; model?: string }
+    | null
+    | undefined;
+}
+
 function createLoadedProfileBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
   runtimeMetadata: RuntimeBootstrapMetadata,
 ): ProfileApplicationResult {
-  const settingsService = runtimeMetadata.settingsService;
+  const settingsService = runtimeMetadata.settingsService as
+    | SettingsService
+    | ProfileLookupService;
   if (settingsService) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const profile = (settingsService as any).getProfile(
-      bootstrapArgs.profileName,
-    );
+    const profile = settingsService.getProfile?.(bootstrapArgs.profileName);
     if (profile !== null && profile !== undefined) {
       return applyOverridesToProfile(
         {

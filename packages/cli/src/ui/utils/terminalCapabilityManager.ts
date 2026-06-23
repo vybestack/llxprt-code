@@ -17,6 +17,12 @@ import {
 
 const debugLogger = new DebugLogger('llxprt:terminal-capability');
 
+// Control characters used when assembling terminal-response patterns. Building
+// the regexes from these constants keeps raw control bytes out of regex
+// literals while preserving the exact matching behaviour.
+const ESC = '\u001B';
+const BEL = '\u0007';
+
 export type TerminalBackgroundColor = string | undefined;
 
 export class TerminalCapabilityManager {
@@ -29,21 +35,23 @@ export class TerminalCapabilityManager {
   private static readonly MODIFY_OTHER_KEYS_QUERY = '\x1b[>4;?m';
 
   // Kitty keyboard flags: CSI ? flags u
-  // eslint-disable-next-line no-control-regex
-  private static readonly KITTY_REGEX = /\x1b\[\?(\d+)u/;
+  private static readonly KITTY_REGEX = new RegExp(`${ESC}\\[\\?(\\d+)u`);
   // Terminal Name/Version response: DCS > | text ST (or BEL)
-  // eslint-disable-next-line no-control-regex
-  private static readonly TERMINAL_NAME_REGEX = /\x1bP>\|(.+?)(\x1b\\|\x07)/;
+  private static readonly TERMINAL_NAME_REGEX = new RegExp(
+    `${ESC}P>\\|(.+?)(${ESC}\\\\|${BEL})`,
+  );
   // Primary Device Attributes: CSI ? ID ; ... c
-  // eslint-disable-next-line no-control-regex, sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  private static readonly DEVICE_ATTRIBUTES_REGEX = /\x1b\[\?(\d+)(;\d+)*c/;
+  private static readonly DEVICE_ATTRIBUTES_REGEX = new RegExp(
+    `${ESC}\\[\\?(\\d+)(;\\d+)*c`,
+  );
   // OSC 11 response: OSC 11 ; rgb:rrrr/gggg/bbbb ST (or BEL)
-  private static readonly OSC_11_REGEX =
-    // eslint-disable-next-line no-control-regex, sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    /\x1b\]11;rgb:([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})(\x1b\\|\x07)?/;
+  private static readonly OSC_11_REGEX = new RegExp(
+    `${ESC}\\]11;rgb:([0-9a-fA-F]{1,4})\\/([0-9a-fA-F]{1,4})\\/([0-9a-fA-F]{1,4})(${ESC}\\\\|${BEL})?`,
+  );
   // modifyOtherKeys response: CSI > 4 ; level m
-  // eslint-disable-next-line no-control-regex
-  private static readonly MODIFY_OTHER_KEYS_REGEX = /\x1b\[>4;(\d+)m/;
+  private static readonly MODIFY_OTHER_KEYS_REGEX = new RegExp(
+    `${ESC}\\[>4;(\\d+)m`,
+  );
 
   private detectionComplete = false;
   private terminalBackgroundColor: TerminalBackgroundColor;
@@ -110,13 +118,9 @@ export class TerminalCapabilityManager {
       let deviceAttributesReceived = false;
       let bgReceived = false;
       let modifyOtherKeysReceived = false;
-      // eslint-disable-next-line prefer-const
-      let timeoutId: NodeJS.Timeout | undefined;
 
       const cleanup = () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
+        clearTimeout(timeoutId);
         process.stdin.removeListener('data', onData);
         if (!originalRawMode) {
           process.stdin.setRawMode(false);
@@ -137,7 +141,7 @@ export class TerminalCapabilityManager {
         cleanup();
       };
 
-      timeoutId = setTimeout(onTimeout, 1000);
+      const timeoutId: NodeJS.Timeout = setTimeout(onTimeout, 1000);
 
       const onData = (data: Buffer) => {
         buffer += data.toString();

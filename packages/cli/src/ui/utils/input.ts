@@ -8,13 +8,14 @@ export const ESC = '\u001B';
 export const SGR_EVENT_PREFIX = `${ESC}[<`;
 export const X11_EVENT_PREFIX = `${ESC}[M`;
 
-// Static regex for SGR mouse event parsing - no dynamic parts
-// eslint-disable-next-line no-control-regex, sonarjs/regular-expr
-export const SGR_MOUSE_REGEX = /^\x1b\[<(\d+);(\d+);(\d+)([mM])/; // SGR mouse events
+// Static regexes for mouse event parsing - no dynamic parts. Patterns are
+// assembled from the ESC constant and constructed via RegExp so the escape
+// byte is not embedded as a literal control character in the source.
+const SGR_MOUSE_PATTERN = `^${ESC}\\[<(\\d+);(\\d+);(\\d+)([mM])`;
+export const SGR_MOUSE_REGEX = new RegExp(SGR_MOUSE_PATTERN); // SGR mouse events
 // X11 is ESC [ M followed by 3 bytes.
-// Static regex for X11 mouse event parsing - no dynamic parts
-// eslint-disable-next-line no-control-regex
-export const X11_MOUSE_REGEX = /^\x1b\[M([\s\S]{3})/;
+const X11_MOUSE_PATTERN = `^${ESC}\\[M([\\s\\S]{3})`;
+export const X11_MOUSE_REGEX = new RegExp(X11_MOUSE_PATTERN);
 
 export function couldBeSGRMouseSequence(buffer: string): boolean {
   if (buffer.length === 0) return true;

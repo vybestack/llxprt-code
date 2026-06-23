@@ -356,9 +356,7 @@ export function buildConfig(input: ConfigBuildInput): Config {
  * Intentionally uses falsy coalescing (empty string should fall back to env vars).
  */
 function resolveProxy(cliProxy: string | undefined): string | undefined {
-  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall back to env vars, and env vars should fall back to next var */
   const httpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy;
   const httpProxy = process.env.HTTP_PROXY || process.env.http_proxy;
   return cliProxy || httpsProxy || httpProxy;
-  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 }

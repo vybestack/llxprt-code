@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { type Direction, type TextBufferAction } from './buffer-types.js';
+import { assertTrue } from '../../../test-utils/assertions.js';
 
 /**
  * Phase 2.1: Buffer Types Tests
@@ -35,12 +36,7 @@ describe('buffer-types', () => {
       const action: TextBufferAction = { type: 'insert', payload: 'hello' };
       expect(action.type).toBe('insert');
       // Intentional test: TypeScript should narrow the discriminated union
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-      /* eslint-disable vitest/no-conditional-in-test */
-      if (action.type !== 'insert')
-        throw new Error('unreachable: narrowing failed');
-      /* eslint-enable vitest/no-conditional-in-test */
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+      assertTrue(action.type === 'insert');
       expect(action.payload).toBe('hello');
     });
 
@@ -51,12 +47,7 @@ describe('buffer-types', () => {
       };
       expect(action.type).toBe('move');
       // Intentional test: TypeScript should narrow the discriminated union
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-      /* eslint-disable vitest/no-conditional-in-test */
-      if (action.type !== 'move')
-        throw new Error('unreachable: narrowing failed');
-      /* eslint-enable vitest/no-conditional-in-test */
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+      assertTrue(action.type === 'move');
       expect(action.payload.dir).toBe('right');
     });
 
@@ -67,12 +58,7 @@ describe('buffer-types', () => {
       };
       expect(action.type).toBe('set_text');
       // Intentional test: TypeScript should narrow the discriminated union
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-      /* eslint-disable vitest/no-conditional-in-test */
-      if (action.type !== 'set_text')
-        throw new Error('unreachable: narrowing failed');
-      /* eslint-enable vitest/no-conditional-in-test */
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+      assertTrue(action.type === 'set_text');
       expect(action.payload).toBe('hello world');
     });
 

@@ -49,6 +49,7 @@ vi.mock('node:v8', () => ({
 }));
 
 import { useResponsive } from '../hooks/useResponsive.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 const mockUseResponsive = vi.mocked(useResponsive);
 
@@ -137,8 +138,7 @@ describe('Footer', () => {
       // render strictly fewer characters of it and include the truncation
       // ellipsis from truncateMiddle.
       expect(textContent).not.toContain(longBranchName);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(textContent).toMatch(/feature\/.+\.\.\..+/);
+      expect(textContent).toMatch(testRegex('feature\\/.+\\.\\.\\..+', ''));
     });
 
     it('should handle missing branch name gracefully', () => {
@@ -204,14 +204,11 @@ describe('Footer', () => {
         if (scenario.breakpoint === 'WIDE') {
           // WIDE (expectedMaxLength 100) is longer than the branch; full name
           // must be preserved.
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(textContent).toContain(longBranchName);
         } else {
           // NARROW/STANDARD must truncate the name via truncateMiddle.
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(textContent).not.toContain(longBranchName);
-          // eslint-disable-next-line vitest/no-conditional-expect, sonarjs/regular-expr -- intentional breakpoint assertion with reviewed static regex.
-          expect(textContent).toMatch(/feature\/.+\.\.\..+/);
+          expect(textContent).toMatch(testRegex('feature\\/.+\\.\\.\\..+', ''));
         }
       });
     });

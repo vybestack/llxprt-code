@@ -78,11 +78,11 @@ async function configureAllSettings(
   const settings = loadExtensionSettingsFromManifest(extensionPath);
 
   if (settings.length === 0) {
-    console.log(`Extension "${extensionName}" has no settings to configure.`);
+    globalThis.console.log(`Extension "${extensionName}" has no settings to configure.`);
     return true;
   }
 
-  console.log(`Configuring settings for extension "${extensionName}"...`);
+  globalThis.console.log(`Configuring settings for extension "${extensionName}"...`);
 
   const currentScopeValues = await getScopedEnvContents(
     extensionName,
@@ -111,7 +111,7 @@ async function configureAllSettings(
 
     // Show advisory if configuring user scope but workspace has a value
     if (scope === ExtensionSettingScope.USER && workspaceValue) {
-      console.log(
+      globalThis.console.log(
         `Note: Setting "${setting.name}" has a workspace value. User scope value will take precedence.`,
       );
     }
@@ -120,7 +120,7 @@ async function configureAllSettings(
     if (currentValue && currentValue !== '[not set]') {
       const shouldOverwrite = await confirmOverwrite(setting.name);
       if (!shouldOverwrite) {
-        console.log(`Skipping "${setting.name}".`);
+        globalThis.console.log(`Skipping "${setting.name}".`);
         continue;
       }
     }
@@ -135,7 +135,7 @@ async function configureAllSettings(
 
     if (!success) {
       allSuccess = false;
-      console.error(`Failed to configure setting "${setting.name}".`);
+      globalThis.console.error(`Failed to configure setting "${setting.name}".`);
     }
   }
 
@@ -180,20 +180,20 @@ async function configureInstalledExtension(
     });
 
     if (!extensionConfig) {
-      console.error(
+      globalThis.console.error(
         `Failed to load configuration for extension "${extension.name}". Skipping.`,
       );
       return false;
     }
 
-    console.log(`\nConfiguring extension "${extensionConfig.name}"...`);
+    globalThis.console.log(`\nConfiguring extension "${extensionConfig.name}"...`);
     return await configureAllSettings(
       extensionConfig.name,
       extension.path,
       scope,
     );
   } catch (error) {
-    console.error(
+    globalThis.console.error(
       `Error configuring extension "${extension.name}":`,
       error instanceof Error ? error.message : String(error),
     );
@@ -205,11 +205,11 @@ async function configureInstalledExtensions(scope: ExtensionSettingScope) {
   const installedExtensions = loadUserExtensions();
 
   if (installedExtensions.length === 0) {
-    console.log('No extensions installed.');
+    globalThis.console.log('No extensions installed.');
     return;
   }
 
-  console.log(
+  globalThis.console.log(
     `Found ${installedExtensions.length} installed extension(s). Starting configuration...`,
   );
 
@@ -223,11 +223,11 @@ async function configureInstalledExtensions(scope: ExtensionSettingScope) {
   }
 
   if (overallSuccess) {
-    console.log('\nAll extensions configured successfully.');
+    globalThis.console.log('\nAll extensions configured successfully.');
     return;
   }
 
-  console.error(
+  globalThis.console.error(
     '\nConfiguration completed with errors. Some extensions may not be fully configured.',
   );
   process.exitCode = 1;
@@ -281,7 +281,7 @@ export const configCommand: CommandModule = {
   handler: async (argv) => {
     const settings = loadSettings(process.cwd()).merged;
     if (!(settings.experimental?.extensionConfig ?? false)) {
-      console.error(
+      globalThis.console.error(
         'Extension configuration is currently disabled. Enable it by setting "experimental.extensionConfig" to true.',
       );
       process.exitCode = 1;

@@ -152,10 +152,10 @@ const AuthHeaderView: React.FC<{
   <>
     <Text color={Colors.Foreground}>
       {focusedComponent === 'input'
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        ?
           authMethod === 'apikey'
           ? 'Enter API Key:'
-          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          :
             authMethod === 'keyfile'
             ? 'Specify Key File:'
             : 'Configure OAuth:'
@@ -163,10 +163,10 @@ const AuthHeaderView: React.FC<{
     </Text>
     <Text color={Colors.Gray}>
       {focusedComponent === 'input'
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        ?
           authMethod === 'apikey'
           ? `Enter your ${providerLabel} API key:`
-          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          :
             authMethod === 'keyfile'
             ? 'Enter the path to your API key file:'
             : 'OAuth authentication will be set up when you load this profile'
@@ -205,7 +205,6 @@ const processAuthSubmit = async (
   if (authMethod === 'keyfile') {
     const validation = await validateKeyFile(authInput);
     if (!validation.valid) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message
       setValidationError(validation.error || 'Invalid file path');
       return;
     }
@@ -455,14 +454,12 @@ const useAuthHandlers = (
         onBack,
       );
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState setters are stable
     [onUpdateAuth, onContinue, onBack],
   );
   const handleAuthInputChange = useCallback((value: string) => {
     setAuthInput(value);
     setValidationError(null);
     setIsPathValidated(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState setters are stable
   }, []);
   const handleAuthInputSubmit = useCallback(() => {
     void (async () => {
@@ -484,7 +481,6 @@ const useAuthHandlers = (
         );
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState setters are stable
   }, [authInput, authMethod, oauthBuckets, onUpdateAuth, onContinue]);
   return { handleAuthSelect, handleAuthInputChange, handleAuthInputSubmit };
 };
@@ -600,7 +596,6 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
   const authOptions = buildAuthOptions(providerOption);
   const { current, total } = getStepPosition(state);
 
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string label fallback
   const providerLabel = providerOption?.label || state.config.provider;
 
   return (

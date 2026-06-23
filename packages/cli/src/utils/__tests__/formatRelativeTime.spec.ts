@@ -14,6 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { formatRelativeTime } from '../formatRelativeTime.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 // Fixed reference time for deterministic tests
 const NOW = new Date('2026-02-16T12:00:00.000Z');
@@ -151,16 +152,14 @@ describe('formatRelativeTime', () => {
       // 46 days ago from 2026-02-16 is 2026-01-01
       const date46 = ago(46 * DAY);
       const result = formatRelativeTime(date46, { mode: 'long', now: NOW });
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+      expect(result).toMatch(testRegex('^[A-Z][a-z]{2} \\d{1,2}, \\d{4}$', ''));
       expect(result).toBe('Jan 1, 2026');
     });
 
     it('returns formatted date for dates over a year ago', () => {
       const date365 = ago(365 * DAY);
       const result = formatRelativeTime(date365, { mode: 'long', now: NOW });
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+      expect(result).toMatch(testRegex('^[A-Z][a-z]{2} \\d{1,2}, \\d{4}$', ''));
       expect(result).toBe('Feb 16, 2025');
     });
   });
@@ -230,8 +229,7 @@ describe('formatRelativeTime', () => {
     it('returns short date "MMM D" for older dates within same year', () => {
       const date46 = ago(46 * DAY);
       const result = formatRelativeTime(date46, { mode: 'short', now: NOW });
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+      expect(result).toMatch(testRegex('^[A-Z][a-z]{2} \\d{1,2}$', ''));
       expect(result).toBe('Jan 1');
     });
 
@@ -241,8 +239,7 @@ describe('formatRelativeTime', () => {
         mode: 'short',
         now: NOW,
       });
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+      expect(result).toMatch(testRegex('^[A-Z][a-z]{2} \\d{1,2}, \\d{4}$', ''));
       expect(result).toBe('Feb 16, 2025');
     });
   });
@@ -286,7 +283,7 @@ describe('formatRelativeTime', () => {
       const fiveMinAgo = new Date(Date.now() - 5 * MINUTE);
       const result = formatRelativeTime(fiveMinAgo);
       // Result should be close to "5 minutes ago" (allowing for test execution time)
-      expect(result).toMatch(/^\d+ minutes? ago$/);
+      expect(result).toMatch(testRegex('^\\d+ minutes? ago$', ''));
     });
   });
 

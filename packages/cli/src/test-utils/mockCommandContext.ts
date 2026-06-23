@@ -7,7 +7,11 @@
 import { vi } from 'vitest';
 import type { CommandContext } from '../ui/commands/types.js';
 import type { LoadedSettings } from '../config/settings.js';
-import type { GitService, Config } from '@vybestack/llxprt-code-core';
+import type {
+  GitService,
+  Config,
+  Logger,
+} from '@vybestack/llxprt-code-core';
 import type { SessionStatsState } from '../ui/contexts/SessionContext.js';
 
 // A utility type to make all properties of an object, and its nested objects, partial.
@@ -47,8 +51,7 @@ export const createMockCommandContext = (
         logMessage: vi.fn(),
         saveCheckpoint: vi.fn(),
         loadCheckpoint: vi.fn().mockResolvedValue([]),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any, // Cast because Logger is a class.
+      } as unknown as Logger, // Cast because Logger is a class.
       // Follow-up (#1569): Add profileManager and subagentManager when CommandContext interface is updated.
       // @plan:PLAN-20250117-SUBAGENTCONFIG.P07
     },
@@ -60,13 +63,17 @@ export const createMockCommandContext = (
       setPendingItem: vi.fn(),
       loadHistory: vi.fn(),
       toggleCorgiMode: vi.fn(),
+      toggleDebugProfiler: vi.fn(),
       toggleVimEnabled: vi.fn(),
+      setGeminiMdFileCount: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
       updateHistoryTokenCount: vi.fn(),
+      reloadCommands: vi.fn(),
       extensionsUpdateState: new Map(),
+      dispatchExtensionStateUpdate: vi.fn(),
+      addConfirmUpdateExtensionRequest: vi.fn(),
       setExtensionsUpdateState: vi.fn(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any,
+    } as unknown as CommandContext['ui'],
     session: {
       sessionShellAllowlist: new Set<string>(),
       stats: {
@@ -88,28 +95,30 @@ export const createMockCommandContext = (
   };
 
   // Deep merge that preserves special objects (Dates, vitest mocks, etc.)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const merge = (target: any, source: any): any => {
-    const output = { ...target };
+  const merge = (target: unknown, source: unknown): CommandContext => {
+    const output = { ...(target as Record<string, unknown>) };
 
-    for (const key in source) {
+    for (const key in source as Record<string, unknown>) {
       if (Object.prototype.hasOwnProperty.call(source, key)) {
-        const sourceValue = source[key];
-        const targetValue = output[key];
+        const sourceValue = (source as Record<string, unknown>)[key];
+        const targetValue = (output as Record<string, unknown>)[key];
 
         if (
           // We only want to recursively merge plain objects
           Object.prototype.toString.call(sourceValue) === '[object Object]' &&
           Object.prototype.toString.call(targetValue) === '[object Object]'
         ) {
-          output[key] = merge(targetValue, sourceValue);
+          (output as Record<string, unknown>)[key] = merge(
+            targetValue,
+            sourceValue,
+          );
         } else {
           // If not, we do a direct assignment. This preserves Date objects, vitest mocks, and others.
-          output[key] = sourceValue;
+          (output as Record<string, unknown>)[key] = sourceValue;
         }
       }
     }
-    return output;
+    return output as unknown as CommandContext;
   };
 
   return merge(defaultMocks, overrides);

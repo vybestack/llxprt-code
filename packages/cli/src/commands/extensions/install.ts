@@ -41,11 +41,11 @@ export async function handleInstall(args: InstallArgs) {
       workspaceDir,
     );
     const extension = loadExtensionByName(extensionName, workspaceDir);
-    console.log(
+    globalThis.console.log(
       `Extension "${extension?.name ?? extensionName}" installed successfully and enabled.`,
     );
   } catch (error) {
-    console.error(getErrorMessage(error));
+    globalThis.console.error(getErrorMessage(error));
     await exitCli(1);
   }
 }
@@ -90,7 +90,7 @@ async function resolveSourceInstallMetadata(
     };
   }
   if (source.startsWith('sso://')) {
-    console.warn(
+    globalThis.console.warn(
       'sso:// URLs require a git-remote-sso helper to be installed. See https://github.com/google/git-remote-sso for more information.',
     );
     return {
@@ -162,7 +162,7 @@ async function resolveLocalPathSource(
       autoUpdate: args.autoUpdate,
     };
   } catch {
-    console.error('Install source not found.');
+    globalThis.console.error('Install source not found.');
     await exitCli(1);
     return undefined;
   }

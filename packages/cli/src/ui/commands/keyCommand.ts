@@ -113,7 +113,6 @@ async function handleSave(
           type: 'confirm_action',
           prompt: `Key '${name}' already exists. Overwrite?`,
           originalInvocation: {
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string raw command fallback
             raw: context.invocation?.raw || `/key save ${name} ***`,
           },
         };
@@ -370,7 +369,6 @@ async function handleDelete(
         type: 'confirm_action',
         prompt: `Delete key '${name}'?`,
         originalInvocation: {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string raw command fallback
           raw: context.invocation?.raw || `/key delete ${name}`,
         },
       };

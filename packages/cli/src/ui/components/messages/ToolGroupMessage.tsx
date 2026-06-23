@@ -41,7 +41,6 @@ const extractCountFromText = (text?: string): number | undefined => {
     return undefined;
   }
   // Static regex for extracting counts from text - no dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   const match = text.match(/(\d+)\s+(tasks?|items?)/i);
   if (!match) {
     return undefined;
@@ -167,7 +166,7 @@ function deriveBorderColors(filteredToolCalls: IndividualToolCallDisplay[]): {
   );
   const borderColor = isShellCommand
     ? theme.ui.symbol
-    : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    :
       hasPending
       ? theme.status.warning
       : theme.border.default;

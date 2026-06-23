@@ -5,8 +5,12 @@
  */
 
 import { useState, useEffect } from 'react';
-import { MessageBusType } from '@vybestack/llxprt-code-core';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
+import {
+  MessageBusType,
+  type MessageBus,
+  type HookExecutionRequest,
+  type HookExecutionResponse,
+} from '@vybestack/llxprt-code-core';
 import type { ActiveHook } from '../types.js';
 
 /**
@@ -29,18 +33,15 @@ export function useHookDisplayState(messageBus?: MessageBus): ActiveHook[] {
 
     const requestSubscription = messageBus.subscribe(
       MessageBusType.HOOK_EXECUTION_REQUEST,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (message: any) => {
-        const payload = message.payload as
-          | { eventName?: string; correlationId?: string }
-          | undefined;
-        if (payload?.eventName) {
+      (message: HookExecutionRequest) => {
+        const { eventName, correlationId } = message.payload;
+        if (eventName) {
           setActiveHooks((prev) => [
             ...prev,
             {
-              name: payload.eventName,
-              eventName: payload.eventName,
-              correlationId: payload.correlationId,
+              name: eventName,
+              eventName,
+              correlationId,
             },
           ]);
         }
@@ -49,12 +50,8 @@ export function useHookDisplayState(messageBus?: MessageBus): ActiveHook[] {
 
     const responseSubscription = messageBus.subscribe(
       MessageBusType.HOOK_EXECUTION_RESPONSE,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (message: any) => {
-        const payload = message.payload as
-          | { correlationId?: string }
-          | undefined;
-        const corrId = payload?.correlationId;
+      (message: HookExecutionResponse) => {
+        const corrId = message.payload.correlationId;
         if (corrId) {
           setActiveHooks((prev) => {
             const idx = prev.findIndex((h) => h.correlationId === corrId);

@@ -259,7 +259,6 @@ export class FileCommandLoader implements ICommandLoader {
     extensionName?: string,
   ): string {
     const defaultDescription = `Custom command from ${path.basename(filePath)}`;
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string description sentinel
     let description = promptDescription || defaultDescription;
     if (extensionName) {
       description = `[${extensionName}] ${description}`;

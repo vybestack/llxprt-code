@@ -116,7 +116,7 @@ const CustomFieldInput: React.FC<{
       Progress:{' '}
       {currentField === 'temperature'
         ? '1'
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        :
           currentField === 'maxTokens'
           ? '2'
           : '3'}
@@ -202,7 +202,6 @@ const useFieldSubmitHandler = (
 
     const validation = PARAM_VALIDATORS[currentField](numValue);
     if (!validation.valid) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message
       setValidationError(validation.error || 'Invalid value');
       return;
     }

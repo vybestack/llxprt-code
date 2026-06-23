@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import React from 'react';
 import { Text } from 'ink';
@@ -113,7 +112,6 @@ function renderInlineCodeNode(
     fullMatch.length > INLINE_CODE_MARKER_LENGTH
   ) {
     // Static regex for inline code matching - no dynamic parts
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
     if (codeMatch?.[2]) {
       return (
@@ -137,7 +135,6 @@ function renderLinkNode(
     fullMatch.endsWith(')')
   ) {
     // Static regex for link matching - no dynamic parts
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const linkMatch = fullMatch.match(/\[(.*?)\]\((.*?)\)/);
     if (linkMatch) {
       const [, linkText, url] = linkMatch;
@@ -225,7 +222,6 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
   let lastIndex = 0;
   // Static regex for inline markdown parsing - no dynamic parts
   const inlineRegex =
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex, sonarjs/regex-complexity -- Static regex reviewed for lint hardening; bounded inputs preserve behavior and existing token order.
     /(\*\*.*?\*\*|\*.*?\*|_.*?_|~~.*?~~|\[.*?\]\(.*?\)|`+.+?`+|<u>.*?<\/u>|https?:\/\/\S+)/g;
   let match;
 
@@ -285,7 +281,6 @@ export const RenderInline = React.memo(RenderInlineInternal);
  */
 export const getPlainTextLength = (text: string): number => {
   // Static regexes for stripping markdown formatting - no dynamic parts
-  /* eslint-disable sonarjs/regular-expr */
   const cleanText = text
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
@@ -293,8 +288,6 @@ export const getPlainTextLength = (text: string): number => {
     .replace(/~~(.*?)~~/g, '$1')
     .replace(/`(.*?)`/g, '$1')
     .replace(/<u>(.*?)<\/u>/g, '$1')
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     .replace(/.*\[(.*?)\]\(.*\)/g, '$1');
-  /* eslint-enable sonarjs/regular-expr */
   return stringWidth(cleanText);
 };

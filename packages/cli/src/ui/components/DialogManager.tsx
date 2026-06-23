@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import { Box, Text } from 'ink';
 import { useCallback, useMemo } from 'react';
@@ -331,7 +330,6 @@ function renderOAuthCodeDialog(
   uiActions: ReturnType<typeof useUIActions>,
 ) {
   const provider =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should fall back to 'unknown'
     (global as unknown as { __oauth_provider?: string }).__oauth_provider ||
     'unknown';
   return (

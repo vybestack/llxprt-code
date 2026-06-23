@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertTruthy } from '../test-utils/assertions.js';
 import fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -79,7 +80,7 @@ describe('Property-based tests #2', () => {
             const result = await performResume('unique-', context);
 
             expect(result.ok).toBe(true);
-            if (!result.ok) throw new Error('unreachable: narrowing failed');
+            assertTruthy(result.ok);
             expect(result.metadata.sessionId).toBe(sessionId);
 
             const newLock = context.recordingCallbacks.getCurrentLockHandle();

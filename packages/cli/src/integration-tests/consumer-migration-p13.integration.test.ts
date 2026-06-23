@@ -767,7 +767,6 @@ describe('Core no-shim and dependency-direction boundary', () => {
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Directory tree scanning requires nested iteration
           scanDir(fullPath);
         } else if (
           entry.isFile() &&
@@ -780,7 +779,6 @@ describe('Core no-shim and dependency-direction boundary', () => {
           for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             // Skip comment lines
-            // eslint-disable-next-line sonarjs/nested-control-flow -- File scanning requires nested iteration for line-by-line analysis
             if (
               line.startsWith('//') ||
               line.startsWith('*') ||
@@ -789,7 +787,6 @@ describe('Core no-shim and dependency-direction boundary', () => {
               continue;
             }
             const currentLine = lines[i] ?? '';
-            // eslint-disable-next-line sonarjs/nested-control-flow -- File scanning requires nested iteration for line-by-line analysis
             if (hasForbiddenProvidersImport(currentLine)) {
               const rel = path.relative(coreSrcDir, fullPath);
               violations.push(`${rel}:${i + 1}: ${currentLine.trim()}`);
@@ -856,7 +853,6 @@ describe('Core no-shim and dependency-direction boundary', () => {
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Directory tree scanning requires nested iteration
           scanForShimFiles(fullPath);
         } else if (entry.isFile() && entry.name.endsWith('.ts')) {
           const basename = entry.name
@@ -864,7 +860,6 @@ describe('Core no-shim and dependency-direction boundary', () => {
             .replace(/\.test$/, '')
             .replace(/\.spec$/, '');
           for (const suffix of forbiddenSuffixes) {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Nested iteration over forbidden suffixes list is cleanest pattern
             if (basename.endsWith(suffix) && /provider/i.test(basename)) {
               violations.push(path.relative(coreSrcDir, fullPath));
             }

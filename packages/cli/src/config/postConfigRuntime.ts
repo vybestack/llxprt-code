@@ -113,7 +113,6 @@ async function setupRuntimeContext(
     | { disabled?: unknown }
     | undefined;
   const disabledHooks =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     (hooksConfig && 'disabled' in hooksConfig ? hooksConfig.disabled : null) ??
     (hooksLegacy && 'disabled' in hooksLegacy ? hooksLegacy.disabled : null);
   if (Array.isArray(disabledHooks)) {
@@ -247,7 +246,6 @@ async function reapplyCliOverrides(
   }
 
   if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     bootstrapArgs.keyOverride ||
     bootstrapArgs.keyfileOverride ||
     bootstrapArgs.baseurlOverride ||

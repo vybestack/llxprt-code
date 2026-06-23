@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
@@ -16,6 +15,7 @@ import {
 import { useKeypress } from './useKeypress.js';
 
 import type { KeypressHandler, Key } from '../contexts/KeypressContext.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 type UseKeypressMockOptions = { isActive: boolean };
 
@@ -314,8 +314,7 @@ describe('useSelectionList', () => {
       );
 
       // Simulate rapid inputs with separate act blocks to allow effects to run
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!activeKeypressHandler) throw new Error('Handler not active');
+      assertDefined(activeKeypressHandler);
 
       const handler = activeKeypressHandler;
 
@@ -364,7 +363,7 @@ describe('useSelectionList', () => {
 
       // Simulate ultra-rapid inputs where all keypresses happen faster than React can re-render
       act(() => {
-        if (!activeKeypressHandler) throw new Error('Handler not active');
+        assertDefined(activeKeypressHandler);
 
         const handler = activeKeypressHandler;
 

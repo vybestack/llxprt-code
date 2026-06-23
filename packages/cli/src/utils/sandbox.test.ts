@@ -295,8 +295,7 @@ describe('container environment variables - GIT_DISCOVERY', () => {
 // --- Fix 3: Git config mounts (R3.1-R3.7) ---
 
 describe('mountGitConfigFiles', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let existsSyncSpy: any;
+  let existsSyncSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     existsSyncSpy = vi.spyOn(fs, 'existsSync');

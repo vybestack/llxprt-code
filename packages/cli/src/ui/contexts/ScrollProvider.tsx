@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type React from 'react';
 import {
@@ -53,7 +52,6 @@ const findScrollableCandidates = (
 ) => {
   const candidates: Array<ScrollableEntry & { area: number }> = [];
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure preserved
   for (const entry of scrollables.values()) {
     if (!entry.ref.current || !entry.hasFocus()) {
       continue;
@@ -340,7 +338,6 @@ function useDragState(
 
   const handleLeftPress = useCallback(
     (mouseEvent: MouseEvent) => {
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure preserved
       for (const entry of scrollablesRef.current.values()) {
         if (!entry.ref.current || !entry.hasFocus()) {
           continue;

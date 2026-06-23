@@ -50,7 +50,6 @@ describe('Session Restore Chat Initialization', () => {
       expect(mockAgentClient.resetChat).not.toHaveBeenCalled();
 
       const agentClient = mockConfig.getAgentClient();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (agentClient) {
         await agentClient.resetChat();
       }
@@ -103,7 +102,6 @@ describe('Session Restore Chat Initialization', () => {
 
       const agentClient = mockConfig.getAgentClient();
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (agentClient) {
         await agentClient.resetChat();
         const historyService = agentClient.getHistoryService();
@@ -135,7 +133,6 @@ describe('Session Restore Chat Initialization', () => {
 
       const agentClient = mockConfig.getAgentClient();
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (agentClient) {
         await agentClient.resetChat().catch(() => {});
         const historyService = agentClient.getHistoryService();

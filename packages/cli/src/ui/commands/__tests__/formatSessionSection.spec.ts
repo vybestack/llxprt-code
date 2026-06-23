@@ -16,6 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { formatSessionSection } from '../formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../../types/SessionRecordingMetadata.js';
+import { testRegex } from '../../../test-utils/regex.js';
 
 describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
   let tempDir: string;
@@ -84,7 +85,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
 
       expect(result.length).toBeGreaterThan(0);
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/Session:/i);
+      expect(joinedOutput).toMatch(testRegex('Session:', 'i'));
     });
 
     /**
@@ -134,9 +135,9 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/Started:/i);
+      expect(joinedOutput).toMatch(testRegex('Started:', 'i'));
       // Should contain some relative time indicator (ago, minutes, etc.)
-      expect(joinedOutput).toMatch(/ago|just now|minutes?|hours?/i);
+      expect(joinedOutput).toMatch(testRegex('ago|just now|minutes?|hours?', 'i'));
     });
 
     /**
@@ -150,10 +151,9 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/File size:/i);
+      expect(joinedOutput).toMatch(testRegex('File size:', 'i'));
       // Should contain some byte representation (B, KB, MB, etc.)
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      expect(joinedOutput).toMatch(/\d+.*(?:B|KB|MB|bytes)/i);
+      expect(joinedOutput).toMatch(testRegex('\\d+.*(?:B|KB|MB|bytes)', 'i'));
     });
 
     /**
@@ -200,7 +200,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/Resumed:\s*yes/i);
+      expect(joinedOutput).toMatch(testRegex('Resumed:\\s*yes', 'i'));
     });
 
     /**
@@ -214,7 +214,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/Resumed:\s*no/i);
+      expect(joinedOutput).toMatch(testRegex('Resumed:\\s*no', 'i'));
     });
   });
 
@@ -244,7 +244,6 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
 
             // If the original ID is longer than 12, it should NOT appear in full
             if (sessionId.length > 12) {
-              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(joinedOutput).not.toContain(sessionId);
             }
           },
@@ -267,11 +266,9 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
           const joinedOutput = result.join('\n').toLowerCase();
 
           if (isResumed) {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect(joinedOutput).toMatch(/resumed:\s*yes/);
+            expect(joinedOutput).toMatch(testRegex('resumed:\\s*yes', ''));
           } else {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect(joinedOutput).toMatch(/resumed:\s*no/);
+            expect(joinedOutput).toMatch(testRegex('resumed:\\s*no', ''));
           }
         }),
         { numRuns: 20 },
@@ -309,7 +306,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
 
           // Should contain Session header
           const joinedOutput = result.join('\n');
-          expect(joinedOutput).toMatch(/Session:/i);
+          expect(joinedOutput).toMatch(testRegex('Session:', 'i'));
         }),
         { numRuns: 30 },
       );

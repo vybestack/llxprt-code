@@ -27,6 +27,7 @@ import {
 import type { StandardProfile } from '@vybestack/llxprt-code-settings';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { OAuthProvider } from '@vybestack/llxprt-code-providers/auth.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -569,12 +570,9 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
 
       expect(token1).not.toBeNull();
       expect(token2).not.toBeNull();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (token1 && token2) {
         const now = Math.floor(Date.now() / 1000);
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(token1.expiry).toBeLessThan(now);
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(token2.expiry).toBeLessThan(now);
       }
 
@@ -964,12 +962,9 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(geminiWork).not.toBeNull();
 
       // Verify expiry is tracked correctly
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (anthropicWork && geminiWork) {
         const now = Math.floor(Date.now() / 1000);
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(anthropicWork.expiry).toBeGreaterThan(now); // Not expired
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(geminiWork.expiry).toBeGreaterThan(now); // Not expired
       }
 
@@ -979,8 +974,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
         'personal-gmail',
       );
       expect(anthropicPersonal).not.toBeNull();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!anthropicPersonal) throw new Error('unreachable: narrowing failed');
+      assertDefined(anthropicPersonal);
       const now = Math.floor(Date.now() / 1000);
       expect(anthropicPersonal.expiry).toBeLessThan(now); // Expired
     });

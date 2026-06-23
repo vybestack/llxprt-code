@@ -141,7 +141,7 @@ describe('LayoutManager', () => {
   });
 
   it('throws error when useLayout is called outside of LayoutManager', () => {
-    // Suppress console.error for this test
+    // Suppress globalThis.console.error for this test
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     expect(() => {

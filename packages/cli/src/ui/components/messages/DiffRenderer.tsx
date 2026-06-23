@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type React from 'react';
 import { Box, Text, useIsScreenReaderEnabled } from 'ink';
@@ -28,10 +27,8 @@ function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
   let currentNewLine = 0;
   let inHunk = false;
   // Static regex for unified diff hunk headers - no dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   const hunkHeaderRegex = /^@@ -(\d+),?\d* \+(\d+),?\d* @@/;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const line of lines) {
     const hunkMatch = line.match(hunkHeaderRegex);
     if (hunkMatch) {
@@ -48,7 +45,6 @@ function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
     if (!inHunk) {
       // Skip standard Git header lines more robustly
       if (
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
         line.startsWith('--- ') ||
         line.startsWith('+++ ') ||
         line.startsWith('diff --git') ||
@@ -142,7 +138,6 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
   // Check if the diff represents a new file (only additions and header lines)
   const isNewFile = parsedLines.every(
     (line) =>
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       line.type === 'add' ||
       line.type === 'hunk' ||
       line.type === 'other' ||
@@ -159,7 +154,6 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
       .map((line) => line.content)
       .join('\n');
     // Attempt to infer language from filename, default to plain text if no filename
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string extension fallback to null
     const fileExtension = filename?.split('.').pop() || null;
     const language = fileExtension
       ? getLanguageFromExtension(fileExtension)
@@ -219,7 +213,6 @@ function prepareDiffRenderContext(
   );
   const gutterWidth = Math.max(1, maxLineNumber.toString().length);
 
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string extension fallback to null
   const fileExtension = filename?.split('.').pop() || null;
   const language = fileExtension
     ? getLanguageFromExtension(fileExtension)
@@ -352,7 +345,7 @@ function renderDiffLineRow(
         backgroundColor={
           line.type === 'add'
             ? Colors.DiffAddedBackground
-            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            :
               line.type === 'del'
               ? Colors.DiffRemovedBackground
               : undefined

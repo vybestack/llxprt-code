@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
 
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
@@ -1266,10 +1265,8 @@ describe('InputPrompt', () => {
       await waitFor(() => {
         expect(props.vimHandleInput).toHaveBeenCalled();
         if (expectBufferHandleInput) {
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(mockBuffer.handleInput).toHaveBeenCalled();
         } else {
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(mockBuffer.handleInput).not.toHaveBeenCalled();
         }
       });
@@ -2329,12 +2326,10 @@ describe('InputPrompt', () => {
 
         await waitFor(() => {
           if (expectedFocusToggle) {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(uiActions.setEmbeddedShellFocused).toHaveBeenCalledWith(
               true,
             );
           } else {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(uiActions.setEmbeddedShellFocused).not.toHaveBeenCalled();
           }
 
@@ -2680,14 +2675,10 @@ describe('InputPrompt', () => {
         });
         await waitFor(() => {
           if (shouldSubmit) {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(props.onSubmit).toHaveBeenCalledWith(bufferText);
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(props.setQueueErrorMessage).not.toHaveBeenCalled();
           } else {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(props.onSubmit).not.toHaveBeenCalled();
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(props.setQueueErrorMessage).toHaveBeenCalledWith(
               errorMessage,
             );

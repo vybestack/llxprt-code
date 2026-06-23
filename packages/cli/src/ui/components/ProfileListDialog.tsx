@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type React from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -69,7 +68,7 @@ const ProfileItem: React.FC<{
   const maxNameLen = colWidth - 6 - indicatorText.length;
   const displayName = isWide
     ? profile.name
-    : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    :
       profile.name.length > maxNameLen
       ? truncateEnd(profile.name, maxNameLen)
       : profile.name;
@@ -82,13 +81,12 @@ const ProfileItem: React.FC<{
     >
       <Text
         color={
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           selected
             ? SemanticColors.text.accent
-            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            :
               isSearching && !isNarrow
               ? SemanticColors.text.secondary
-              : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+              :
                 isActiveProfile
                 ? SemanticColors.status.success
                 : SemanticColors.text.primary
@@ -132,7 +130,6 @@ function handleSearchModeKeys(
     return;
   }
   if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     key.sequence != null &&
     typeof key.sequence === 'string' &&
     key.ctrl !== true &&
@@ -446,7 +443,6 @@ function useListLayout(
   isWide: boolean,
   filteredProfiles: ProfileListItem[],
 ) {
-  // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   const columns = isNarrow ? 1 : isWide ? 3 : 2;
   const longest = filteredProfiles.reduce(
     (len, p) => Math.max(len, p.name.length + 10),

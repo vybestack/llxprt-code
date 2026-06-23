@@ -37,11 +37,10 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 }));
 
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 const dumpcontextAction = dumpcontextCommand.action;
-if (!dumpcontextAction) {
-  throw new Error('dumpcontextCommand must have an action');
-}
+assertDefined(dumpcontextAction);
 
 describe('dumpcontextCommand', () => {
   let mockContext: CommandContext;
@@ -63,10 +62,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!dumpcontextCommand.action) {
-        throw new Error('dumpcontextCommand must have an action');
-      }
+      assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'status');
 
@@ -83,10 +79,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!dumpcontextCommand.action) {
-        throw new Error('dumpcontextCommand must have an action');
-      }
+      assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'status');
 
@@ -103,10 +96,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!dumpcontextCommand.action) {
-        throw new Error('dumpcontextCommand must have an action');
-      }
+      assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, '');
 
@@ -126,10 +116,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!dumpcontextCommand.action) {
-        throw new Error('dumpcontextCommand must have an action');
-      }
+      assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'on');
 
@@ -150,10 +137,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!dumpcontextCommand.action) {
-        throw new Error('dumpcontextCommand must have an action');
-      }
+      assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'error');
 
@@ -177,10 +161,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!dumpcontextCommand.action) {
-        throw new Error('dumpcontextCommand must have an action');
-      }
+      assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'off');
 
@@ -860,10 +841,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!dumpcontextCommand.action) {
-        throw new Error('dumpcontextCommand must have an action');
-      }
+      assertDefined(dumpcontextCommand.action);
 
       const result = await dumpcontextCommand.action(mockContext, 'invalid');
 

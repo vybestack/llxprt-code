@@ -67,6 +67,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { ToolCallStatus } from '../types.js';
 import type { HistoryItemWithoutId } from '../types.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 describe('useShellCommandProcessor', () => {
   let addItemToHistoryMock: Mock;
@@ -160,7 +161,6 @@ describe('useShellCommandProcessor', () => {
   const createMockServiceResult = (
     overrides: Partial<ShellExecutionResult> = {},
   ): ShellExecutionResult => ({
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for output
     rawOutput: Buffer.from(overrides.output || ''),
     output: 'Success',
     exitCode: 0,
@@ -195,8 +195,7 @@ describe('useShellCommandProcessor', () => {
     });
     expect(mockShellExecutionService).toHaveBeenCalledWith(
       expect.stringMatching(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-        /^{ ls -l; }; __code=\$\?; pwd > ".*shell_pwd_abcdef\.tmp"; exit \$__code$/,
+        testRegex('^{ ls -l; }; __code=\\$\\?; pwd > ".*shell_pwd_abcdef\\.tmp"; exit \\$__code$', ''),
       ),
       '/test/dir',
       expect.any(Function),
@@ -587,15 +586,13 @@ describe('useShellCommandProcessor', () => {
     });
     // Verify that the temporary file was cleaned up
     expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(
-      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/),
+      expect.stringMatching(testRegex('.*shell_pwd_abcdef\\.tmp$', '')),
     );
   });
 
   describe('Directory Change Warning', () => {
     it('should show a warning if the working directory changes', async () => {
-      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      const tmpFile = expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/);
+      const tmpFile = expect.stringMatching(testRegex('.*shell_pwd_abcdef\\.tmp$', ''));
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('/test/dir/new'); // A different directory
 

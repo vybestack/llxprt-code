@@ -57,7 +57,6 @@ interface HookEntryProps {
 
 const HookEntry: React.FC<HookEntryProps> = ({ entry, index, eventName }) => {
   const commandName =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing
     entry.config.name || entry.config.command || `${entry.config.type} hook`;
   const statusColor = entry.enabled ? Colors.AccentGreen : Colors.DimComment;
   const statusText = entry.enabled ? 'enabled' : 'disabled';

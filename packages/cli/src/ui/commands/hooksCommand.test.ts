@@ -10,6 +10,7 @@ import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import type { Config, HookRegistryEntry } from '@vybestack/llxprt-code-core';
+import { assertDefined } from '../../test-utils/assertions.js';
 import {
   HookType,
   HookEventName,
@@ -65,9 +66,7 @@ describe('hooksCommand', () => {
     mockSetHookEnabled = vi.fn();
     mockGetHookName = vi.fn().mockImplementation((entry: HookRegistryEntry) => {
       const hookName = entry.config.name;
-      if (!hookName) {
-        throw new Error('Hook must have a name for testing');
-      }
+      assertDefined(hookName);
       return hookName;
     });
 

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable sonarjs/no-nested-incdec, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import {
   type IContent,
@@ -95,7 +94,7 @@ function processAiContent(
           ? safeToolResultToString(response.result)
           : undefined,
         status: response
-          ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+          ?
             response.error
             ? ToolCallStatus.Error
             : ToolCallStatus.Success

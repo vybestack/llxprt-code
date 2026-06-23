@@ -66,7 +66,6 @@ function getHistoryService(
     return null;
   }
   const agentClient = config.getAgentClient();
-  /* eslint-disable @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- callers may return null/undefined at runtime */
   if (
     agentClient === null ||
     agentClient === undefined ||
@@ -74,7 +73,6 @@ function getHistoryService(
   ) {
     return null;
   }
-  /* eslint-enable @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison */
   return agentClient.getHistoryService() as HistoryService | null;
 }
 

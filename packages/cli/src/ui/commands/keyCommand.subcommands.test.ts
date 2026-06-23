@@ -117,7 +117,6 @@ let mockKeyring: KeyringAdapter & { store: Map<string, string> };
 let tempDir: string;
 let context: CommandContext;
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(async () => {
   vi.clearAllMocks();
   mockKeyring = createMockKeyring();
@@ -139,7 +138,6 @@ beforeEach(async () => {
   });
 });
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(async () => {
   await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
 });
@@ -210,15 +208,12 @@ describe('/key — Table-Driven Parsing (R27.2)', () => {
       const result = await runKey(tc.input);
       expect(result.type).toBe('message');
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (tc.expectsSubcommand) {
         // Subcommand stubs return 'not yet implemented' during P14;
         // after P15, they return real results. Either way, dispatched.
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.content).toBeDefined();
       } else if (tc.input.trim().length > 0) {
         // Legacy path: calls runtime.updateActiveProviderApiKey or shows status
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalled();
       }
     });
@@ -271,7 +266,6 @@ describe('/key save (R13)', () => {
     context.services.config = {
       ...context.services.config,
       isInteractive: () => false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
     const result = await runKey('save existing new-key-value');
@@ -480,7 +474,6 @@ describe('/key delete (R17)', () => {
     context.services.config = {
       ...context.services.config,
       isInteractive: () => false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
     const result = await runKey('delete mykey');

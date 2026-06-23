@@ -19,6 +19,7 @@ import type {
   PerformResumeActionReturn,
 } from '../types.js';
 import type { TokenInfo } from '../schema/types.js';
+import { assertDefined, assertTrue } from '../../../test-utils/assertions.js';
 
 /**
  * Helper to create mock TokenInfo for completer tests
@@ -78,10 +79,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      expect(isDialogAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isDialogAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isDialogAction(result));
       expect(result.dialog).toBe('sessionBrowser');
     });
 
@@ -96,10 +94,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      expect(isMessageAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isMessageAction(result));
       expect(result.messageType).toBe('error');
       expect(result.content.toLowerCase()).toContain('interactive');
     });
@@ -109,40 +104,28 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
     it('/continue latest returns perform_resume', async () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('latest');
     });
 
     it('/continue <id> returns perform_resume with ID', async () => {
       const result = await continueCommand.action!(ctx, 'abc123');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('abc123');
     });
 
     it('/continue <number> returns perform_resume with index', async () => {
       const result = await continueCommand.action!(ctx, '3');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('3');
     });
 
     it('/continue <prefix> returns perform_resume with prefix', async () => {
       const result = await continueCommand.action!(ctx, 'abc');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('abc');
     });
   });
@@ -163,10 +146,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       // When active conversation exists, requiresConfirmation should be true
       expect(result.requiresConfirmation).toBe(true);
     });
@@ -186,10 +166,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      expect(isMessageAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isMessageAction(result));
       expect(result.messageType).toBe('error');
       expect(result.content.toLowerCase()).toMatch(/conversation|replace/);
     });
@@ -208,10 +185,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       // No confirmation flag when no active conversation
       expect(result.requiresConfirmation).toBeFalsy();
     });
@@ -230,10 +204,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      expect(isMessageAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isMessageAction(result));
       expect(result.messageType).toBe('error');
       expect(result.content.toLowerCase()).toContain('request');
       expect(result.content.toLowerCase()).toContain('progress');
@@ -245,10 +216,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      expect(isMessageAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isMessageAction(result));
       expect(result.messageType).toBe('error');
       expect(result.content.toLowerCase()).toContain('request');
       expect(result.content.toLowerCase()).toContain('progress');
@@ -260,10 +228,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('latest');
     });
   });
@@ -280,24 +245,17 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       // Schema-based completion
       const schema = continueCommand.schema;
-      expect(schema).toBeDefined();
+      assertDefined(schema);
+      const firstArg = schema[0];
+      assertDefined(firstArg);
+      assertTrue(firstArg.kind === 'value');
+      assertDefined(firstArg.completer);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (schema && schema.length > 0) {
-        const firstArg = schema[0];
-        if (firstArg.kind === 'value' && firstArg.completer) {
-          const completions = await firstArg.completer(
-            ctx,
-            '',
-            mockTokenInfo(),
-          );
-          const values = completions.map((c) =>
-            typeof c === 'string' ? c : c.value,
-          );
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-          expect(values).toContain('latest');
-        }
-      }
+      const completions = await firstArg.completer(ctx, '', mockTokenInfo());
+      const values = completions.map((c) =>
+        typeof c === 'string' ? c : c.value,
+      );
+      expect(values).toContain('latest');
     });
 
     it('completion returns session previews when sessions exist', async () => {
@@ -312,23 +270,14 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       });
 
       const schema = continueCommand.schema;
-      expect(schema).toBeDefined();
+      assertDefined(schema);
+      const firstArg = schema[0];
+      assertDefined(firstArg);
+      assertTrue(firstArg.kind === 'value');
+      assertDefined(firstArg.completer);
 
-      // The completer should be able to return session-related completions
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (schema && schema.length > 0) {
-        const firstArg = schema[0];
-        if (firstArg.kind === 'value' && firstArg.completer) {
-          const completions = await firstArg.completer(
-            ctx,
-            '',
-            mockTokenInfo(),
-          );
-          // Should at minimum return 'latest'
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-          expect(completions.length).toBeGreaterThanOrEqual(1);
-        }
-      }
+      const completions = await firstArg.completer(ctx, '', mockTokenInfo());
+      expect(completions.length).toBeGreaterThanOrEqual(1);
     });
 
     it('completion returns empty for non-interactive mode', async () => {
@@ -340,24 +289,15 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         },
       });
 
-      // When non-interactive, completion may return empty or limited results
       const schema = continueCommand.schema;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (schema && schema.length > 0) {
-        const firstArg = schema[0];
-        if (firstArg.kind === 'value' && firstArg.completer) {
-          const completions = await firstArg.completer(
-            ctx,
-            '',
-            mockTokenInfo(),
-          );
-          // In non-interactive mode, the completer might still return 'latest'
-          // but session discovery requires interactive mode
-          // This test verifies the completer handles non-interactive gracefully
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-          expect(Array.isArray(completions)).toBe(true);
-        }
-      }
+      assertDefined(schema);
+      const firstArg = schema[0];
+      assertDefined(firstArg);
+      assertTrue(firstArg.kind === 'value');
+      assertDefined(firstArg.completer);
+
+      const completions = await firstArg.completer(ctx, '', mockTokenInfo());
+      expect(Array.isArray(completions)).toBe(true);
     });
   });
 
@@ -373,20 +313,14 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const result = await continueCommand.action!(ctx, '   ');
 
-      expect(isDialogAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isDialogAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isDialogAction(result));
       expect(result.dialog).toBe('sessionBrowser');
     });
 
     it('trims whitespace around session ref', async () => {
       const result = await continueCommand.action!(ctx, '  abc123  ');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('abc123');
     });
   });

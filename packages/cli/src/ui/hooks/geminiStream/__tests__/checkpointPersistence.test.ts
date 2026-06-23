@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
  * Unit tests for checkpointPersistence.ts using injected fs/git mocks.
@@ -47,13 +46,13 @@ function makeRestorableTool(
       agentId: 'primary',
     },
     status: 'awaiting_approval',
-    invocation: { getDescription: () => 'test' } as any,
+    invocation: { getDescription: () => 'test' },
     tool: {
       name,
       displayName: name,
       description: 'test',
       build: vi.fn(),
-    } as any,
+    },
   } as unknown as TrackedToolCall;
 }
 
@@ -68,13 +67,13 @@ function makeNonRestorableTool(): TrackedToolCall {
       agentId: 'primary',
     },
     status: 'awaiting_approval',
-    invocation: { getDescription: () => 'test' } as any,
+    invocation: { getDescription: () => 'test' },
     tool: {
       name: 'read_file',
       displayName: 'Read File',
       description: 'test',
       build: vi.fn(),
-    } as any,
+    },
   } as unknown as TrackedToolCall;
 }
 
@@ -209,8 +208,7 @@ describe('createToolCheckpoint', () => {
 
   it('returns early when file_path is missing', async () => {
     const toolWithNoPath = makeRestorableTool('c1', 'replace', '');
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-    (toolWithNoPath.request.args as Record<string, unknown>)['file_path'] =
+    (toolWithNoPath.request.args)['file_path'] =
       undefined;
     const gitService = makeGitService();
     const fsOps = makeFsOps();
@@ -264,7 +262,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           agentClient as unknown as AgentClient,
-          (config as any).storage,
+          config.storage,
           onDebugMessage,
           fsOps,
         ),
@@ -289,7 +287,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeAgentClient() as unknown as AgentClient,
-          (config as any).storage,
+          config.storage,
           vi.fn(),
           fsOps,
         ),
@@ -314,7 +312,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeAgentClient() as unknown as AgentClient,
-          (config as any).storage,
+          config.storage,
           vi.fn(),
           fsOps,
         ),
@@ -339,7 +337,7 @@ describe('useCheckpointPersistence', () => {
           undefined, // no gitService
           mockHistory,
           makeAgentClient() as unknown as AgentClient,
-          (config as any).storage,
+          config.storage,
           onDebugMessage,
           fsOps,
         ),
@@ -371,7 +369,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           agentClient as unknown as AgentClient,
-          (config as any).storage,
+          config.storage,
           onDebugMessage,
           fsOps,
         ),
@@ -401,7 +399,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeAgentClient() as unknown as AgentClient,
-          (config as any).storage,
+          config.storage,
           onDebugMessage,
           fsOps,
         ),
@@ -437,7 +435,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           agentClient as unknown as AgentClient,
-          (config as any).storage,
+          config.storage,
           onDebugMessage,
           fsOps,
         ),
@@ -469,7 +467,7 @@ describe('useCheckpointPersistence', () => {
           makeGitService() as unknown as GitService,
           mockHistory,
           makeAgentClient() as unknown as AgentClient,
-          (config as any).storage,
+          config.storage,
           vi.fn(),
           fsOps,
         ),
@@ -497,7 +495,7 @@ describe('useCheckpointPersistence', () => {
         gitService as unknown as GitService,
         mockHistory,
         agentClient as unknown as AgentClient,
-        (config as any).storage,
+        config.storage,
         onDebugMessage,
         fsOps,
       ),
@@ -535,7 +533,7 @@ describe('useCheckpointPersistence', () => {
         gitService as unknown as GitService,
         mockHistory,
         agentClient as unknown as AgentClient,
-        (config as any).storage,
+        config.storage,
         onDebugMessage,
         fsOps,
       ),

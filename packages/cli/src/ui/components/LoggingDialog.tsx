@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import type React from 'react';
 import { useState, useMemo, useEffect } from 'react';
@@ -89,14 +88,14 @@ function getEntryMetadata(entry: LogEntry, isNarrow: boolean) {
   const typeIcon =
     entry.type === 'request'
       ? '→'
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      :
         entry.type === 'tool_call'
         ? '[TOOL]'
         : '←';
   const typeColor =
     entry.type === 'request'
       ? SemanticColors.text.accent
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      :
         entry.type === 'tool_call'
         ? SemanticColors.status.warning
         : SemanticColors.status.success;
@@ -104,7 +103,6 @@ function getEntryMetadata(entry: LogEntry, isNarrow: boolean) {
 }
 
 function buildToolCallContent(entry: LogEntry): string {
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty tool name should fall back to 'Unknown tool'
   let toolContent = `${entry.tool || 'Unknown tool'}`;
   if (entry.duration !== undefined && entry.duration > 0) {
     toolContent += ` (${entry.duration}ms)`;

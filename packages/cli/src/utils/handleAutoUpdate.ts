@@ -119,7 +119,6 @@ function checkForTempDirectories(): string[] {
   try {
     const realPath = fs.realpathSync(cliPath);
     // Cross-platform regex for node_modules path
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
     const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
 
     if (!nodeModulesMatch) {
@@ -147,7 +146,6 @@ function handleTempDirectoryCleanup(): boolean {
   }
   const realPath = fs.realpathSync(cliPath);
   // Cross-platform regex for node_modules path
-  // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
   const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
   const cleanupPath = nodeModulesMatch
     ? path.dirname(nodeModulesMatch[1])

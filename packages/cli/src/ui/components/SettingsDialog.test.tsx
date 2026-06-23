@@ -6,7 +6,6 @@
 
 /** @vitest-environment jsdom */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
 
 /**
  *
@@ -38,6 +37,7 @@ import {
 import { act } from 'react';
 import { saveModifiedSettings } from '../../utils/settingsUtils.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 // Mock useUIState since we don't wrap in UIStateProvider
 vi.mock('../contexts/UIStateContext.js', () => ({
@@ -236,7 +236,7 @@ describe('SettingsDialog', () => {
 
       // Wait for nav mode (help text changes)
       await waitFor(() => {
-        expect(lastFrame()).toMatch(/Enter.*select/);
+        expect(lastFrame()).toMatch(testRegex('Enter.*select', ''));
       });
 
       // Navigate down from first item (Disable Loading Phrases) to second item
@@ -271,7 +271,7 @@ describe('SettingsDialog', () => {
       await pressEnter(stdin);
 
       await waitFor(() => {
-        expect(lastFrame()).toMatch(/Enter.*select/);
+        expect(lastFrame()).toMatch(testRegex('Enter.*select', ''));
       });
 
       // Try to go up from first item
@@ -307,7 +307,7 @@ describe('SettingsDialog', () => {
 
       // Wait for nav mode to be active
       await waitFor(() => {
-        expect(lastFrame()).toMatch(/Enter.*select/);
+        expect(lastFrame()).toMatch(testRegex('Enter.*select', ''));
       });
 
       // First visible setting is Screen Reader Mode (accessibility.screenReader)
@@ -324,8 +324,7 @@ describe('SettingsDialog', () => {
 
       // Wait for the toggled value to appear in the UI to confirm state update
       await waitFor(() => {
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-        expect(lastFrame()).toMatch(/Screen Reader Mode\s+true\*/);
+        expect(lastFrame()).toMatch(testRegex('Screen Reader Mode\\s+true\\*', ''));
       });
 
       // Close the dialog with Escape to trigger saveRestartRequiredSettings
@@ -492,7 +491,7 @@ describe('SettingsDialog', () => {
 
       // Wait for search mode to exit before sending second Escape
       await waitFor(() => {
-        expect(lastFrame()).toMatch(/Enter.*select/);
+        expect(lastFrame()).toMatch(testRegex('Enter.*select', ''));
       });
 
       // Second Escape closes the dialog
@@ -788,7 +787,7 @@ describe('SettingsDialog', () => {
 
         // Wait for nav mode (help text changes)
         await waitFor(() => {
-          expect(lastFrame()).toMatch(/Enter.*select/);
+          expect(lastFrame()).toMatch(testRegex('Enter.*select', ''));
         });
 
         // First visible setting is Disable Loading Phrases (accessibility.disableLoadingPhrases)
@@ -799,8 +798,7 @@ describe('SettingsDialog', () => {
         // Wait for toggled value to appear to confirm state update
         await waitFor(() => {
           expect(lastFrame()).toMatch(
-            // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-            /Disable Loading Phrases\s+(true\*|false\*)/,
+            testRegex('Disable Loading Phrases\\s+(true\\*|false\\*)', ''),
           );
         });
 
@@ -971,7 +969,7 @@ describe('SettingsDialog', () => {
 
       // Wait for nav mode (help text changes)
       await waitFor(() => {
-        expect(lastFrame()).toMatch(/Enter.*select/);
+        expect(lastFrame()).toMatch(testRegex('Enter.*select', ''));
       });
 
       // Verify the complete UI is rendered with all necessary sections
@@ -980,8 +978,7 @@ describe('SettingsDialog', () => {
       expect(lastFrame()).toContain('Apply To'); // Scope section
       expect(lastFrame()).toContain('User Settings'); // Scope options (no numbers when settings focused)
       // In nav mode, help text shows navigation help
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(lastFrame()).toMatch(/Enter.*select.*Tab.*focus.*Esc.*close/);
+      expect(lastFrame()).toMatch(testRegex('Enter.*select.*Tab.*focus.*Esc.*close', ''));
 
       // This test validates the complete UI structure is available for user workflow
       // Individual interactions are tested in focused unit tests
@@ -1456,7 +1453,6 @@ describe('SettingsDialog', () => {
 
         const { lastFrame, stdin } = renderDialog(settings, onSelect);
 
-        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (stdinActions) {
           stdinActions(stdin);
         }

@@ -24,7 +24,6 @@ function getComposerPlaceholder(
   if (shellModeActive) {
     return '  Type your shell command';
   }
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty placeholder should use default prompt
   return placeholder || '  Type your message or @path/to/file';
 }
 

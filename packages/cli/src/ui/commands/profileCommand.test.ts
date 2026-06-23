@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { profileCommand } from './profileCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext } from './types.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 const runtimeMocks = vi.hoisted(() => ({
   saveProfileSnapshot: vi.fn(),
@@ -274,8 +275,7 @@ describe('profileCommand', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       // Gets usage error since parts.length < 5
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(content).toMatch(/Usage.*roundrobin.*failover/i);
+      expect(content).toMatch(testRegex('Usage.*roundrobin.*failover', 'i'));
     });
 
     it('validates profile names exist', async () => {

@@ -6,9 +6,7 @@
 
 /** @vitest-environment jsdom */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Mock, MockInstance } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -29,6 +27,8 @@ import type {
   Config,
   EditorType,
   AnyToolInvocation,
+  AnyDeclarativeTool,
+  ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import {
   ApprovalMode,
@@ -51,7 +51,7 @@ const mockSendMessageStream = vi
 const mockStartChat = vi.fn();
 
 const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (this: any, _config: any) {
+  vi.fn().mockImplementation(function (this: Record<string, unknown>, _config: unknown) {
     // _config
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
@@ -68,7 +68,7 @@ const MockedUserPromptEvent = vi.hoisted(() =>
 const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCoreModule = (await importOriginal()) as any;
+  const actualCoreModule = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actualCoreModule,
     GitService: vi.fn(),
@@ -81,9 +81,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = (await importOriginal()) as any;
+  const actualSchedulerModule = (await importOriginal()) as Record<string, unknown>;
   return {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty object is valid fallback for module
     ...(actualSchedulerModule !== null && actualSchedulerModule !== undefined
       ? actualSchedulerModule
       : {}),
@@ -195,7 +194,7 @@ describe('useGeminiStream', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () => ({ getToolSchemaList: vi.fn(() => []) }) as any,
+        () => ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
@@ -237,7 +236,7 @@ describe('useGeminiStream', () => {
     // The AgentClient constructor itself is mocked at the module level.
     mockStartChat.mockClear().mockResolvedValue({
       sendMessageStream: mockSendMessageStream,
-    } as unknown as any); // ChatSession -> any
+    } as unknown as Awaited<ReturnType<typeof mockStartChat>>);
     mockSendMessageStream
       .mockClear()
       .mockReturnValue((async function* () {})());
@@ -255,7 +254,7 @@ describe('useGeminiStream', () => {
 
   const renderTestHook = (
     initialToolCalls: TrackedToolCall[] = [],
-    agentClient?: any,
+    agentClient?: unknown,
   ) => {
     const client = agentClient ?? mockConfig.getAgentClient();
 
@@ -299,7 +298,7 @@ describe('useGeminiStream', () => {
                   resultDisplay: 'Request cancelled.',
                 },
                 displayCleared: true, // Cleared from display
-              } as any as TrackedCancelledToolCall;
+              } as unknown as TrackedCancelledToolCall;
             }
             return tc;
           });
@@ -388,7 +387,7 @@ describe('useGeminiStream', () => {
       displayName: toolName,
       description: `${toolName} description`,
       build: vi.fn(),
-    } as any,
+    } as unknown as AnyDeclarativeTool,
     invocation: {
       getDescription: () => 'Mock description',
     } as unknown as AnyToolInvocation,
@@ -463,7 +462,7 @@ describe('useGeminiStream', () => {
           displayName: 'tool1',
           description: 'desc1',
           build: vi.fn(),
-        } as any,
+        } as unknown as AnyDeclarativeTool,
         invocation: {
           getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
@@ -484,7 +483,7 @@ describe('useGeminiStream', () => {
           displayName: 'tool2',
           description: 'desc2',
           build: vi.fn(),
-        } as any,
+        } as unknown as AnyDeclarativeTool,
         invocation: {
           getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
@@ -834,7 +833,7 @@ describe('useGeminiStream', () => {
         displayName: 'toolA',
         description: 'descA',
         build: vi.fn(),
-      } as any,
+      } as unknown as AnyDeclarativeTool,
       invocation: {
         getDescription: () => `Mock description`,
       } as unknown as AnyToolInvocation,
@@ -863,7 +862,7 @@ describe('useGeminiStream', () => {
         displayName: 'toolB',
         description: 'descB',
         build: vi.fn(),
-      } as any,
+      } as unknown as AnyDeclarativeTool,
       invocation: {
         getDescription: () => `Mock description`,
       } as unknown as AnyToolInvocation,
@@ -978,7 +977,7 @@ describe('useGeminiStream', () => {
           displayName: 'tool1',
           description: 'desc',
           build: vi.fn(),
-        } as any,
+        } as unknown as AnyDeclarativeTool,
         invocation: {
           getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
@@ -1094,7 +1093,7 @@ describe('useGeminiStream', () => {
   });
 
   describe('User Cancellation', () => {
-    let keypressCallback: (key: any) => void;
+    let keypressCallback: (key: string) => void;
     const mockUseKeypress = useKeypress as Mock;
 
     beforeEach(() => {
@@ -1307,7 +1306,7 @@ describe('useGeminiStream', () => {
             build: vi.fn().mockImplementation((_) => ({
               getDescription: () => `Mock description`,
             })),
-          } as any,
+          } as unknown as AnyDeclarativeTool,
           invocation: {
             getDescription: () => `Mock description`,
           },
@@ -1347,7 +1346,7 @@ describe('useGeminiStream', () => {
             build: vi.fn().mockImplementation((_) => ({
               getDescription: () => `Mock description`,
             })),
-          } as any,
+          } as unknown as AnyDeclarativeTool,
           invocation: {
             getDescription: () => `Mock description`,
           } as unknown as AnyToolInvocation,
@@ -1594,7 +1593,7 @@ describe('useGeminiStream', () => {
           displayName: 'save_memory',
           description: 'Saves memory',
           build: vi.fn(),
-        } as any,
+        } as unknown as AnyDeclarativeTool,
         invocation: {
           getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
@@ -1837,7 +1836,7 @@ describe('useGeminiStream', () => {
             displayName: 'replace',
             description: 'Replace text',
             build: vi.fn(),
-          } as any,
+          } as unknown as AnyDeclarativeTool,
           invocation: {
             getDescription: () => 'Mock description',
           } as unknown as AnyToolInvocation,
@@ -1881,13 +1880,13 @@ describe('useGeminiStream', () => {
             fileDiff: 'fake diff',
             originalContent: 'old',
             newContent: 'new',
-          } as any,
+          } as unknown as AnyDeclarativeTool,
           tool: {
             name: 'replace',
             displayName: 'replace',
             description: 'Replace text',
             build: vi.fn(),
-          } as any,
+          } as unknown as AnyDeclarativeTool,
           invocation: {
             getDescription: () => 'Mock description',
           } as unknown as AnyToolInvocation,
@@ -1945,7 +1944,7 @@ describe('useGeminiStream', () => {
             displayName: 'replace',
             description: 'Replace text',
             build: vi.fn(),
-          } as any,
+          } as unknown as AnyDeclarativeTool,
           invocation: {
             getDescription: () => 'Mock description',
           } as unknown as AnyToolInvocation,
@@ -1965,7 +1964,7 @@ describe('useGeminiStream', () => {
             displayName: 'write_file',
             description: 'Write file',
             build: vi.fn(),
-          } as any,
+          } as unknown as AnyDeclarativeTool,
           invocation: {
             getDescription: () => 'Mock description',
           } as unknown as AnyToolInvocation,
@@ -2242,14 +2241,17 @@ describe('useGeminiStream', () => {
 
   it('should flush pending text rationale before scheduling tool calls to ensure correct history order', async () => {
     const addItemOrder: string[] = [];
-    let capturedOnComplete: any;
+    let capturedOnComplete:
+      | ((schedulerId: symbol, tools: unknown[], opts: unknown) => Promise<void>)
+      | undefined;
 
     const mockScheduleToolCalls = vi.fn(async (requests) => {
       addItemOrder.push('scheduleToolCalls_START');
       // Simulate tools completing and triggering onComplete immediately.
       // This mimics the behavior that caused the regression where tool results
       // were added to history during the await scheduleToolCalls(...) block.
-      const tools = requests.map((r: any) => ({
+      const tools = requests.map(
+        (r: { name: string; callId: string }) => ({
         request: r,
         status: 'success',
         tool: { displayName: r.name, name: r.name },
@@ -2264,7 +2266,7 @@ describe('useGeminiStream', () => {
       addItemOrder.push('scheduleToolCalls_END');
     });
 
-    mockAddItem.mockImplementation((item: any) => {
+    mockAddItem.mockImplementation((item: { type: string }) => {
       addItemOrder.push(`addItem:${item.type}`);
     });
 
@@ -3185,7 +3187,7 @@ describe('useGeminiStream', () => {
         vertexai: false,
       };
 
-      (mcpMockConfig as any).getContentGeneratorConfig = vi
+      mcpMockConfig.getContentGeneratorConfig = vi
         .fn()
         .mockReturnValue(contentGeneratorConfig);
 
@@ -3321,7 +3323,7 @@ describe('useGeminiStream', () => {
         vertexai: false,
       };
 
-      (noMcpConfig as any).getContentGeneratorConfig = vi
+      noMcpConfig.getContentGeneratorConfig = vi
         .fn()
         .mockReturnValue(contentGeneratorConfig);
 

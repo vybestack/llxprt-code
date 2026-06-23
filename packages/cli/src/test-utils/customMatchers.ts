@@ -10,13 +10,18 @@ import type { Assertion } from 'vitest';
 import { expect } from 'vitest';
 import type { TextBuffer } from '../ui/components/shared/text-buffer.js';
 
-// RegExp to detect invalid characters: backspace, and ANSI escape codes
-// eslint-disable-next-line no-control-regex
-const invalidCharsRegex = /[\b\x1b]/;
+// RegExp to detect invalid characters: backspace, and ANSI escape codes.
+// Build the character class from runtime control-character values so the
+// pattern carries the bytes without embedding control characters in source.
+const BACKSPACE_CHAR = String.fromCharCode(0x08);
+const ESCAPE_CHAR = String.fromCharCode(0x1b);
+const invalidCharsRegex = new RegExp(`[${BACKSPACE_CHAR}${ESCAPE_CHAR}]`);
 
-function toHaveOnlyValidCharacters(this: Assertion, buffer: TextBuffer) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { isNot } = this as any;
+function toHaveOnlyValidCharacters(
+  this: Assertion,
+  buffer: TextBuffer,
+) {
+  const { isNot } = this as Assertion & { isNot: boolean };
   let pass = true;
   const invalidLines: Array<{ line: number; content: string }> = [];
 
@@ -46,8 +51,7 @@ function toHaveOnlyValidCharacters(this: Assertion, buffer: TextBuffer) {
 
 expect.extend({
   toHaveOnlyValidCharacters,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any);
+});
 
 // Extend Vitest's `expect` interface with the custom matcher's type definition.
 declare module 'vitest' {

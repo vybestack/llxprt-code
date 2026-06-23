@@ -82,7 +82,6 @@ function VirtualizedList<T>(
         state.setIsStickingToBottom,
         state.getAnchorForScrollTop,
       ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setScrollAnchor and setIsStickingToBottom are stable React state dispatchers
     [imperativeCtx, state.getAnchorForScrollTop],
   );
 

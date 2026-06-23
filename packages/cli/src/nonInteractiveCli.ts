@@ -81,12 +81,10 @@ function createUserFeedbackHandler(
       payload.error !== null &&
       config.getDebugMode()
     ) {
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty stack should fall back to message */
       const errorToLog =
         payload.error instanceof Error
           ? payload.error.stack || payload.error.message
           : String(payload.error);
-      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       process.stderr.write(`${errorToLog}\n`);
     }
   };

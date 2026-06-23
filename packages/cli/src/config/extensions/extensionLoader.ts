@@ -40,7 +40,6 @@ export function loadInstallMetadataFromDir(
 }
 
 function filterMcpConfig(original: MCPServerConfig): MCPServerConfig {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { trust, ...rest } = original;
   return Object.freeze(rest);
 }

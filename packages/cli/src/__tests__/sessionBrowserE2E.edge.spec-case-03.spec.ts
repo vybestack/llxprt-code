@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertFalse } from '../test-utils/assertions.js';
 import { performResume } from '../services/performResume.js';
 import {
   cleanupSessionBrowserTestState,
@@ -53,8 +54,7 @@ describe('Edge cases #3', () => {
     const result = await performResume('prefix-', context);
 
     expect(result.ok).toBe(false);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (result.ok) throw new Error('unreachable: narrowing failed');
+    assertFalse(result.ok);
     expect(result.error.toLowerCase()).toContain('ambiguous');
   });
 });

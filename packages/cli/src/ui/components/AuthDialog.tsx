@@ -270,7 +270,6 @@ export function AuthDialog({
   const runtime = useRuntimeApi();
   const mountedRef = useMountedRef();
   const [errorMessage, setErrorMessage] = useState<string | null>(
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error message should be treated as null
     initialErrorMessage || null,
   );
   const {

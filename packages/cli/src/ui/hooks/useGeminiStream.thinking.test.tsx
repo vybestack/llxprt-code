@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
 
 /**
  * @plan:PLAN-20251202-THINKING-UI.P07
@@ -12,7 +11,6 @@
  * @requirement:REQ-THINK-UI-003
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
@@ -21,7 +19,11 @@ import * as ReactDOM from 'react-dom';
 import { useGeminiStream } from './geminiStream/index.js';
 import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
-import type { Config, EditorType } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  EditorType,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-core';
 import { GeminiEventType as ServerGeminiEventType } from '@vybestack/llxprt-code-core';
 import { FinishReason } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -114,7 +116,7 @@ const mockSendMessageStream = vi
 const mockStartChat = vi.fn();
 
 const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (this: any, _config: any) {
+  vi.fn().mockImplementation(function (this: Record<string, unknown>, _config: unknown) {
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
     this.addHistory = vi.fn();
@@ -128,7 +130,7 @@ const MockedAgentClientClass = vi.hoisted(() =>
 const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCoreModule = (await importOriginal()) as any;
+  const actualCoreModule = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actualCoreModule,
     GitService: vi.fn(),
@@ -139,7 +141,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = (await importOriginal()) as any;
+  const actualSchedulerModule = (await importOriginal()) as Record<string, unknown>;
   return {
     ...(actualSchedulerModule ?? {}),
     useReactToolScheduler: vi.fn(),
@@ -253,7 +255,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () => ({ getToolSchemaList: vi.fn(() => []) }) as any,
+        () => ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
@@ -302,7 +304,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     mockStartChat.mockClear().mockResolvedValue({
       sendMessageStream: mockSendMessageStream,
-    } as unknown as any);
+    } as unknown as Awaited<ReturnType<typeof mockStartChat>>);
     mockSendMessageStream
       .mockClear()
       .mockReturnValue((async function* () {})());
@@ -319,7 +321,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
   const renderTestHook = (
     initialToolCalls: TrackedToolCall[] = [],
-    agentClient?: any,
+    agentClient?: unknown,
   ) => {
     let currentToolCalls = initialToolCalls;
     const setToolCalls = (newToolCalls: TrackedToolCall[]) => {
@@ -341,12 +343,12 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     const { result, rerender } = renderHook(
       (props: {
-        client: any;
-        history: any[];
+        client: unknown;
+        history: unknown[];
         addItem: UseHistoryManagerReturn['addItem'];
         config: Config;
         onDebugMessage: (message: string) => void;
-        handleSlashCommand: (cmd: any) => Promise<any>;
+        handleSlashCommand: (cmd: unknown) => Promise<unknown>;
         shellModeActive: boolean;
         loadedSettings: LoadedSettings;
         toolCalls?: TrackedToolCall[];
@@ -380,8 +382,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           config: mockConfig,
           onDebugMessage: mockOnDebugMessage,
           handleSlashCommand: mockHandleSlashCommand as unknown as (
-            cmd: any,
-          ) => Promise<any>,
+            cmd: unknown,
+          ) => Promise<unknown>,
           shellModeActive: false,
           loadedSettings: mockLoadedSettings,
           toolCalls: initialToolCalls,
@@ -734,10 +736,13 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           await new Promise<void>((resolve) => {
             streamResolvers.push(resolve);
           });
-          yield {
+          yield ({
             type: ServerGeminiEventType.Finished,
             value: { reason: FinishReason.STOP },
-          } as any;
+          } as unknown as {
+            type: ServerGeminiEventType;
+            value: { reason: FinishReason };
+          });
         })(),
       );
 

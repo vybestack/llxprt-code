@@ -342,8 +342,7 @@ function useDialogsProfiles(p: AppDialogsParams) {
   });
   const openToolsDialog = useCallback(
     (action: 'enable' | 'disable') => {
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      toolsRaw.openDialog(action);
+      void toolsRaw.openDialog(action);
     },
     [toolsRaw],
   );

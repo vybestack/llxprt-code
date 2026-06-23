@@ -36,7 +36,6 @@ async function readHistoryFile(filePath: string): Promise<string[]> {
     let cur = '';
 
     const processLine = (line: string): void => {
-      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
       const m = cur.match(/(\\+)$/);
       const isContinuation = m != null && m[1].length % 2 !== 0;
       if (isContinuation) {

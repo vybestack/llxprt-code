@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -81,7 +80,7 @@ export function handleError(
     providerName,
   );
 
-  console.error(errorMessage);
+  globalThis.console.error(errorMessage);
 
   // If we have a custom error code or the error has an exit code, exit with that code
   if (customErrorCode !== undefined) {
@@ -119,12 +118,12 @@ export function handleToolError(
 
   if (isFatal) {
     const toolExecutionError = new FatalToolExecutionError(errorMessage);
-    console.error(errorMessage);
+    globalThis.console.error(errorMessage);
     process.exit(toolExecutionError.exitCode);
   }
 
   // Non-fatal: log and continue
-  console.error(errorMessage);
+  globalThis.console.error(errorMessage);
 }
 
 /**
@@ -132,7 +131,7 @@ export function handleToolError(
  */
 export function handleCancellationError(_config: Config): never {
   const cancellationError = new FatalCancellationError('Operation cancelled.');
-  console.error(cancellationError.message);
+  globalThis.console.error(cancellationError.message);
   process.exit(cancellationError.exitCode);
 }
 
@@ -144,6 +143,6 @@ export function handleMaxTurnsExceededError(_config: Config): never {
     'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
   );
 
-  console.error(maxTurnsError.message);
+  globalThis.console.error(maxTurnsError.message);
   process.exit(maxTurnsError.exitCode);
 }

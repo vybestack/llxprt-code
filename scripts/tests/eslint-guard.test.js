@@ -5,7 +5,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { checkDiff, formatViolations } from '../check-eslint-guard.js';
+import {
+  checkCliSourcePolicy,
+  checkDiff,
+  formatViolations,
+} from '../check-eslint-guard.js';
 
 function diffFor(file, addedLine) {
   return [
@@ -29,7 +33,7 @@ describe('check-eslint-guard', () => {
 
     expect(violations).toHaveLength(1);
     expect(violations[0].message).toContain(
-      'Inline ESLint disable directives are forbidden',
+      'Inline ESLint disable/enable directives are forbidden',
     );
   });
 
@@ -120,5 +124,27 @@ describe('check-eslint-guard', () => {
 
     expect(violations).toHaveLength(1);
     expect(violations[0].file).toBe('scripts/example.js');
+  });
+
+  it('rejects inline ESLint enable directives', () => {
+    const violations = checkDiff(
+      diffFor('packages/core/src/example.ts', '/* eslint-enable no-console */'),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('disable/enable');
+  });
+
+  it('rejects packages/cli entries added to eslint config', () => {
+    const violations = checkDiff(
+      diffFor('eslint.config.js', "  'packages/cli/src/**/*.{ts,tsx}',"),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('packages/cli directive cleanup scopes');
+  });
+
+  it('keeps the checked-in cli source policy clean', () => {
+    expect(checkCliSourcePolicy()).toEqual([]);
   });
 });

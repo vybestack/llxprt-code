@@ -48,10 +48,10 @@ function formatTask(task: AsyncTaskInfo): string {
   const statusIcon =
     task.status === 'running'
       ? '[RUNNING]'
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+      :
         task.status === 'completed'
         ? '[DONE]'
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        :
           task.status === 'failed'
           ? '[FAILED]'
           : '[CANCELLED]';

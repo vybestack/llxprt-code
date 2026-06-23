@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -15,11 +14,11 @@ interface ConsolePatcherParams {
 }
 
 export class ConsolePatcher {
-  private originalConsoleLog = console.log;
-  private originalConsoleWarn = console.warn;
-  private originalConsoleError = console.error;
-  private originalConsoleDebug = console.debug;
-  private originalConsoleInfo = console.info;
+  private originalConsoleLog = globalThis.console.log;
+  private originalConsoleWarn = globalThis.console.warn;
+  private originalConsoleError = globalThis.console.error;
+  private originalConsoleDebug = globalThis.console.debug;
+  private originalConsoleInfo = globalThis.console.info;
 
   private params: ConsolePatcherParams;
 
@@ -28,19 +27,19 @@ export class ConsolePatcher {
   }
 
   patch() {
-    console.log = this.patchConsoleMethod('log');
-    console.warn = this.patchConsoleMethod('warn');
-    console.error = this.patchConsoleMethod('error');
-    console.debug = this.patchConsoleMethod('debug');
-    console.info = this.patchConsoleMethod('info');
+    globalThis.console.log = this.patchConsoleMethod('log');
+    globalThis.console.warn = this.patchConsoleMethod('warn');
+    globalThis.console.error = this.patchConsoleMethod('error');
+    globalThis.console.debug = this.patchConsoleMethod('debug');
+    globalThis.console.info = this.patchConsoleMethod('info');
   }
 
   cleanup = () => {
-    console.log = this.originalConsoleLog;
-    console.warn = this.originalConsoleWarn;
-    console.error = this.originalConsoleError;
-    console.debug = this.originalConsoleDebug;
-    console.info = this.originalConsoleInfo;
+    globalThis.console.log = this.originalConsoleLog;
+    globalThis.console.warn = this.originalConsoleWarn;
+    globalThis.console.error = this.originalConsoleError;
+    globalThis.console.debug = this.originalConsoleDebug;
+    globalThis.console.info = this.originalConsoleInfo;
   };
 
   private formatArgs = (args: unknown[]): string => util.format(...args);

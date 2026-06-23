@@ -40,6 +40,7 @@ import type {
 import type { UIState } from '../contexts/UIStateContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
+import { assertTrue } from '../../test-utils/assertions.js';
 
 // ---------------------------------------------------------------------------
 // Type Guards
@@ -166,10 +167,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      expect(isDialogAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isDialogAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isDialogAction(result));
       expect(result.dialog).toBe('sessionBrowser');
 
       // Verify the action structure matches what processor expects
@@ -219,10 +217,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       const result = await continueCommand.action!(ctx, 'abc123');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('abc123');
       // The processor will invoke performResume() which updates metadata
     });
@@ -257,9 +252,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(result).not.toBeNull();
       expect(result!.type).toBe('dialog');
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isDialogAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isDialogAction(result));
       // These fields are what slashCommandProcessor checks
       expect(result.dialog).toBe('sessionBrowser');
       // No dialogData expected for sessionBrowser
@@ -282,9 +275,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(result).toBeDefined();
       expect(result!.type).toBe('perform_resume');
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('latest');
       // Processor will call performResume(sessionRef, context)
     });
@@ -311,10 +302,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       const result = await continueCommand.action!(ctx, 'latest');
 
-      expect(isMessageAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isMessageAction(result));
       expect(result.messageType).toBe('error');
       expect(result.content.length).toBeGreaterThan(0);
     });
@@ -342,13 +330,10 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const output = lastFrame();
       // CI environments may produce empty frames (whitespace only); verify
       // content when present, otherwise just check render success.
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (output && output.trim().length > 0) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(output).toContain('Session Browser');
       } else {
         // Rendering succeeded without throwing - acceptable in CI
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(output).toBeDefined();
       }
     });
@@ -370,13 +355,10 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const output = lastFrame();
       // CI environments may produce empty frames (whitespace only); verify
       // content when present, otherwise just check render success.
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (output && output.trim().length > 0) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(output).toContain('Search:');
       } else {
         // Rendering succeeded without throwing - acceptable in CI
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(output).toBeDefined();
       }
     });
@@ -519,9 +501,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const sessionArg = continueCommand.schema![0];
       expect(sessionArg.kind).toBe('value');
       // Type guard for ValueArgument which has 'name' property
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (sessionArg.kind !== 'value')
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(sessionArg.kind === 'value');
       expect(sessionArg.name).toBe('session');
 
       // CLI flags (--continue, --list-sessions) are handled in config.ts
@@ -561,10 +541,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       });
       const errorResult = await continueCommand.action!(nonInteractiveCtx, '');
       expect(errorResult).toBeDefined();
-      expect(isMessageAction(errorResult)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isMessageAction(errorResult))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isMessageAction(errorResult));
       expect(errorResult.messageType).toBe('error');
       expect(errorResult.content.length).toBeGreaterThan(0);
 
@@ -603,10 +580,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
     it('perform_resume action has correct structure', async () => {
       const result = await continueCommand.action!(ctx, 'my-session-123');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('my-session-123');
     });
 
@@ -641,10 +615,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
 
       const result = await continueCommand.action!(ctx, '');
 
-      expect(isDialogAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isDialogAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isDialogAction(result));
       expect(result.dialog).toBe('sessionBrowser');
     });
 
@@ -657,10 +628,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
     it('perform_resume supports "latest" as session ref', async () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
-      expect(isPerformResumeAction(result)).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isPerformResumeAction(result))
-        throw new Error('unreachable: narrowing failed');
+      assertTrue(isPerformResumeAction(result));
       expect(result.sessionRef).toBe('latest');
     });
   });

@@ -53,7 +53,6 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
   const defaultBaseUrl = providerOption?.defaultBaseUrl ?? '';
 
   const [inputValue, setInputValue] = useState(
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (empty string baseUrl means "not set")
     state.config.baseUrl || defaultBaseUrl,
   );
   const [validationError, setValidationError] = useState<string | null>(null);

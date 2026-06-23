@@ -27,8 +27,7 @@ export function findLastIndex<T>(
   predicate: (value: T, index: number, obj: T[]) => unknown,
 ): number {
   for (let i = array.length - 1; i >= 0; i--) {
-    // eslint-disable-next-line no-extra-boolean-cast -- Preserve old JS truthiness for predicate return values
-    if (Boolean(predicate(array[i], i, array))) {
+    if (predicate(array[i], i, array)) {
       return i;
     }
   }
@@ -244,7 +243,6 @@ export function useStickToBottom(
     prevTotalHeight.current = totalHeight;
     prevScrollTop.current = scrollTop;
     prevContainerHeight.current = scrollableContainerHeight;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setScrollAnchor and setIsStickingToBottom are stable React state dispatchers
   }, [
     data.length,
     scrollTop,
@@ -315,7 +313,6 @@ export function useInitialScroll<T>(
       setScrollAnchor(getAnchorForScrollTop(clampedScrollTop, offsets));
       isInitialScrollSet.current = true;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setScrollAnchor and setIsStickingToBottom are stable React state dispatchers
   }, [
     initialScrollIndex,
     initialScrollOffsetInIndex,

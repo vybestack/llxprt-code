@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import React, { useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
@@ -108,7 +107,7 @@ function ProviderListItem({
 }) {
   const displayName = isWide
     ? name
-    : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+    :
       name.length > 20
       ? truncateEnd(name, 20)
       : name;
@@ -119,7 +118,7 @@ function ProviderListItem({
         color={
           selected
             ? SemanticColors.text.accent
-            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+            :
               isSearching && !isNarrow
               ? SemanticColors.text.secondary
               : SemanticColors.text.primary

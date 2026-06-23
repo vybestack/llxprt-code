@@ -127,8 +127,7 @@ function useFinalSubmitHandler({
       todoContinuationRef.current?.clearPause();
       lastSubmittedPromptRef.current = trimmedValue;
       inputHistoryStore.addInput(trimmedValue);
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      submitQuery(trimmedValue);
+      void submitQuery(trimmedValue);
     },
     [
       submitQuery,

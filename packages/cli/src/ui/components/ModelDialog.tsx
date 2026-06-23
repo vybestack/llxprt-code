@@ -119,8 +119,7 @@ function useModelsData(
     };
 
     setIsLoading(true);
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    loadModels();
+    void loadModels();
     return () => {
       cancelled = true;
     };
@@ -148,7 +147,6 @@ function useFilteredModels(
       const term = searchTerm.toLowerCase();
       models = models.filter(
         (m) =>
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           m.id.toLowerCase().includes(term) ||
           m.name.toLowerCase().includes(term) ||
           (m.modelId?.toLowerCase().includes(term) ?? false) ||
@@ -220,7 +218,6 @@ function handleSearchModeKeys(
     return true;
   }
   if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     key.sequence &&
     key.sequence.length === 1 &&
     key.ctrl !== true &&
@@ -406,7 +403,6 @@ const ModelRows: React.FC<{
           ? SemanticColors.text.accent
           : SemanticColors.text.primary;
 
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string modelId fallback to id
         const displayId = model.modelId || model.id;
 
         return (
@@ -451,11 +447,11 @@ const HelpBar: React.FC<{
 }> = ({ isNarrow, currentProvider, providerFilter }) => (
   <Box marginTop={1}>
     <Text color={SemanticColors.text.secondary}>
-      {/* eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice. */}
+      {}
       {isNarrow
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        ?
           `\u2191/\u2193 Enter${currentProvider ? ' ^A' : ''} Tab Esc`
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+        :
           `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  ^A ${providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
     </Text>
   </Box>
@@ -568,7 +564,6 @@ function useColumnWidths(
     if (filteredModels.length === 0) return 20;
     return Math.max(
       ...filteredModels.map(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string modelId fallback to id
         (m) => (m.modelId || m.id).length,
       ),
     );

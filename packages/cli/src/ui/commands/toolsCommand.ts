@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
 
 import {
   type CommandContext,
@@ -284,7 +283,6 @@ export const toolsCommand: SlashCommand = {
 
     const raw = args.trim();
     // Static regex for tokenizing quoted/unquoted args - no dynamic parts
-    // eslint-disable-next-line sonarjs/regular-expr
     const tokens = raw.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
     const rawSubcommand = tokens.shift();
     const subcommand = (rawSubcommand ?? 'list').toLowerCase();

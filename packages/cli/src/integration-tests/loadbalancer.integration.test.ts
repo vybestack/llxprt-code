@@ -17,6 +17,7 @@ import {
   cleanupTempDirectory,
   createTempKeyfile,
 } from './test-utils.js';
+import { testRegex } from '../test-utils/regex.js';
 
 interface CliResult {
   stdout: string;
@@ -32,7 +33,6 @@ async function runCli(
   return new Promise((resolve) => {
     const cliPath = path.join(process.cwd(), 'dist', 'index.js');
 
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const child = spawn('node', [cliPath, ...args], {
       env: {
         ...process.env,
@@ -173,8 +173,7 @@ describe('LoadBalancer Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-        /Loaded profile.*lb-profile|Loading profile.*lb-profile/i,
+        testRegex('Loaded profile.*lb-profile|Loading profile.*lb-profile', 'i'),
       );
     });
 
@@ -219,8 +218,7 @@ describe('LoadBalancer Integration Tests', () => {
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(fullOutput).toMatch(/profile.*not found|failed.*load/i);
+      expect(fullOutput).toMatch(testRegex('profile.*not found|failed.*load', 'i'));
     });
 
     it('should handle empty profiles list', async () => {
@@ -264,7 +262,7 @@ describe('LoadBalancer Integration Tests', () => {
 
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
-        /must reference at least one profile|empty.*profiles|no profiles/i,
+        testRegex('must reference at least one profile|empty.*profiles|no profiles', 'i'),
       );
     });
   });
@@ -347,7 +345,7 @@ describe('LoadBalancer Integration Tests', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toMatch(
-        /Failed to parse inline profile|Invalid JSON/i,
+        testRegex('Failed to parse inline profile|Invalid JSON', 'i'),
       );
     });
 
@@ -407,7 +405,7 @@ describe('LoadBalancer Integration Tests', () => {
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
-      expect(fullOutput).toMatch(/Loaded profile.*lb-policy|policy-profile1/i);
+      expect(fullOutput).toMatch(testRegex('Loaded profile.*lb-policy|policy-profile1', 'i'));
     });
   });
 
@@ -483,7 +481,7 @@ describe('LoadBalancer Integration Tests', () => {
       expect(result.exitCode).not.toBe(-1);
 
       const fullOutput = result.stdout + result.stderr;
-      expect(fullOutput).toMatch(/Loaded profile.*rr-lb/i);
+      expect(fullOutput).toMatch(testRegex('Loaded profile.*rr-lb', 'i'));
     });
   });
 });

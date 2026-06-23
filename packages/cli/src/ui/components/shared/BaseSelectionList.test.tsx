@@ -15,6 +15,7 @@ import {
 } from './BaseSelectionList.js';
 import { useSelectionList } from '../../hooks/useSelectionList.js';
 import { Text } from 'ink';
+import { testRegex } from '../../../test-utils/regex.js';
 
 type Theme = typeof import('../../semantic-colors.js').theme;
 
@@ -100,12 +101,9 @@ describe('BaseSelectionList', () => {
       const output = lastFrame();
 
       // Use regex to assert the structure: Indicator + Whitespace + Number + Label
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(output).toMatch(/●\s+1\.\s+Item A/);
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      expect(output).toMatch(/\s+2\.\s+Item B/);
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      expect(output).toMatch(/\s+3\.\s+Item C/);
+      expect(output).toMatch(testRegex('●\\s+1\\.\\s+Item A', ''));
+      expect(output).toMatch(testRegex('\\s+2\\.\\s+Item B', ''));
+      expect(output).toMatch(testRegex('\\s+3\\.\\s+Item C', ''));
     });
 
     it('should handle an empty list gracefully', () => {

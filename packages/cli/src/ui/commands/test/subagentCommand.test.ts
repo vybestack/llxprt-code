@@ -68,13 +68,13 @@ import type {
 } from '../types.js';
 import type { LoadedSettings } from '../../../config/settings.js';
 import type { SessionStatsState } from '../../contexts/SessionContext.js';
+import { testRegex } from '../../../test-utils/regex.js';
 
 let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
 
 const findSubCommand = (name: string) =>
   subagentCommand.subCommands!.find((cmd) => cmd.name === name)!;
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeAll(async () => {
   // Reset modules to ensure fresh import with mocks
   vi.resetModules();
@@ -281,7 +281,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.messageType).toBe('info');
-      expect(result.content).toMatch(/created successfully/i);
+      expect(result.content).toMatch(testRegex('created successfully', 'i'));
 
       // Verify subagent was saved
       const exists = await subagentManager.subagentExists('testagent');
@@ -305,7 +305,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
           await findSubCommand('save').action!(context, args),
         );
         expect(result.messageType).toBe('error');
-        expect(result.content).toMatch(/usage|syntax/i);
+        expect(result.content).toMatch(testRegex('usage|syntax', 'i'));
       }
     });
 
@@ -323,7 +323,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/service .* unavailable/i);
+      expect(result.content).toMatch(testRegex('service .* unavailable', 'i'));
     });
 
     it('should reject non-existent profile @requirement:REQ-013', async () => {
@@ -333,7 +333,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/profile.*not found/i);
+      expect(result.content).toMatch(testRegex('profile.*not found', 'i'));
     });
 
     it('should prompt for confirmation on overwrite @requirement:REQ-014', async () => {
@@ -373,7 +373,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.messageType).toBe('info');
-      expect(result.content).toMatch(/updated successfully/i);
+      expect(result.content).toMatch(testRegex('updated successfully', 'i'));
 
       // Verify updated
       const loaded = await subagentManager.loadSubagent('testagent');
@@ -408,7 +408,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
         .calls[0];
       const item = call[0] as { type: string; text: string };
       expect(item.type).toBe(MessageType.INFO);
-      expect(item.text).toMatch(/no subagents/i);
+      expect(item.text).toMatch(testRegex('no subagents', 'i'));
     });
 
     it('should display error when subagentManager is unavailable', async () => {
@@ -429,7 +429,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       ).mock.calls[0];
       const item = call[0] as { type: string; text: string };
       expect(item.type).toBe(MessageType.ERROR);
-      expect(item.text).toMatch(/unavailable/i);
+      expect(item.text).toMatch(testRegex('unavailable', 'i'));
     });
   });
 
@@ -456,7 +456,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/not found/i);
+      expect(result.content).toMatch(testRegex('not found', 'i'));
     });
 
     it('should error when name not provided', async () => {
@@ -465,7 +465,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/usage/i);
+      expect(result.content).toMatch(testRegex('usage', 'i'));
     });
   });
 
@@ -493,7 +493,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/not found/i);
+      expect(result.content).toMatch(testRegex('not found', 'i'));
     });
 
     it('should error when name not provided', async () => {
@@ -502,7 +502,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/usage/i);
+      expect(result.content).toMatch(testRegex('usage', 'i'));
     });
   });
 
@@ -568,7 +568,7 @@ describe('editCommand @requirement:REQ-008', () => {
     );
 
     expect(result.messageType).toBe('error');
-    expect(result.content).toMatch(/usage/i);
+    expect(result.content).toMatch(testRegex('usage', 'i'));
   });
 
   it('should error for non-existent subagent', async () => {
@@ -577,7 +577,7 @@ describe('editCommand @requirement:REQ-008', () => {
     );
 
     expect(result.messageType).toBe('error');
-    expect(result.content).toMatch(/not found/i);
+    expect(result.content).toMatch(testRegex('not found', 'i'));
   });
 
   it('should open edit dialog for existing subagent', async () => {
@@ -686,8 +686,8 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     // Verify LLM was called
     expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledTimes(1);
     const callArgs = mockAgentClient.generateDirectMessage.mock.calls[0][0];
-    expect(callArgs.message).toMatch(/expert Python debugger/);
-    expect(callArgs.message).toMatch(/system prompt/i);
+    expect(callArgs.message).toMatch(testRegex('expert Python debugger', ''));
+    expect(callArgs.message).toMatch(testRegex('system prompt', 'i'));
     expect(callArgs.config).toStrictEqual({
       toolConfig: {
         functionCallingConfig: {
@@ -700,12 +700,11 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     // Verify success message type and content
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
     expect(result.messageType).toBe('info');
-    expect(result.content).toMatch(/created successfully/i);
+    expect(result.content).toMatch(testRegex('created successfully', 'i'));
 
     // Verify the subagent was saved with the generated prompt
     const loaded = await subagentManager.loadSubagent('testagent');
@@ -725,12 +724,11 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
     expect(result.messageType).toBe('error');
-    expect(result.content).toMatch(/Network error/);
+    expect(result.content).toMatch(testRegex('Network error', ''));
     expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         config: {
@@ -757,12 +755,11 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
     expect(result.messageType).toBe('error');
-    expect(result.content).toMatch(/empty.*response|manual mode/i);
+    expect(result.content).toMatch(testRegex('empty.*response|manual mode', 'i'));
     expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         config: {
@@ -808,7 +805,6 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     );
     expect(actionResult).toBeDefined();
     expect(actionResult?.type).toBe('message');
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!actionResult || actionResult.type !== 'message') {
       throw new Error('Expected message action return');
     }
@@ -831,9 +827,8 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     expect(callArgs.message).toContain(description);
 
     // Verify prompt includes instructions
-    expect(callArgs.message).toMatch(/comprehensive/i);
-    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-    expect(callArgs.message).toMatch(/role.*capabilities.*behavior/i);
-    expect(callArgs.message).toMatch(/output.*only/i);
+    expect(callArgs.message).toMatch(testRegex('comprehensive', 'i'));
+    expect(callArgs.message).toMatch(testRegex('role.*capabilities.*behavior', 'i'));
+    expect(callArgs.message).toMatch(testRegex('output.*only', 'i'));
   });
 });

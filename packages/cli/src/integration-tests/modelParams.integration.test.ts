@@ -26,6 +26,7 @@ import {
   buildRuntimeProfileSnapshot,
   clearActiveModelParam,
 } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+import { assertDefined } from '../test-utils/assertions.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -71,9 +72,7 @@ describe('CLI model parameter command integration', () => {
   let context: ReturnType<typeof createMockCommandContext>;
 
   const runSetCommand = async (args: string) => {
-    if (!setCommand.action) {
-      throw new Error('setCommand.action is not defined');
-    }
+    assertDefined(setCommand.action);
     return setCommand.action(context, args);
   };
 

@@ -49,7 +49,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     isShellFocusHint;
   const primaryText = isActionRequired
     ? currentLoadingPhrase
-    : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty subject should fall back to loading phrase
+    :
       thought?.subject || currentLoadingPhrase;
 
   const timerText =
@@ -84,7 +84,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
             </Text>
           )}
         </Box>
-        {/* eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve React conditional rendering semantics for ReactNode values. */}
+        {}
         {rightContent ? (
           <Box marginLeft={1} flexShrink={0}>
             {rightContent}

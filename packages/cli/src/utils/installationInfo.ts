@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import { isGitRepository, debugLogger } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
@@ -43,7 +42,6 @@ function checkHomebrewInstall(
 
   try {
     const brewPrefix = childProcess
-      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       .execSync('brew --prefix llxprt-code', {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],

@@ -164,7 +164,6 @@ const useConfigUpdaters = (
         config: { ...prev.config, [key]: value },
       }));
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState is stable from useState
     [],
   );
   const handleUpdateProvider = useCallback((provider: string) => {
@@ -181,11 +180,9 @@ const useConfigUpdaters = (
         stepHistory: [...prev.stepHistory, nextStep],
       };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState is stable from useState
   }, []);
   const handleUpdateProfileName = useCallback((name: string) => {
     setState((prev) => ({ ...prev, profileName: name }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState is stable from useState
   }, []);
   return { updateConfig, handleUpdateProvider, handleUpdateProfileName };
 };

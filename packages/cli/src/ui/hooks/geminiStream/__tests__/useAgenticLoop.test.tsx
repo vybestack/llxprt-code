@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- behavioral coverage of the loop-driven CLI hook. */
 
 /**
  * Behavioral tests for useAgenticLoop — the hook that rewires the CLI to

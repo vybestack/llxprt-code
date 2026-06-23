@@ -43,7 +43,6 @@ vi.mock('node:readline', () => ({
       // Call the mocked confirmOverwrite function and resolve based on its return value
       const promptType = resolvePromptType(prompt);
       const shouldOverwrite = mockConfirmOverwrite(promptType);
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original mock truthiness; tests intentionally pass a Promise here.
       callback(shouldOverwrite ? 'y' : 'n');
     }),
     close: vi.fn(),

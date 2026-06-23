@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable sonarjs/nested-control-flow, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -342,7 +341,6 @@ function validateRetentionConfig(
     }
 
     // Enforce minimum retention period
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string minRetention should fall back to default
     const minRetention = retentionConfig.minRetention || DEFAULT_MIN_RETENTION;
     let minRetentionMs: number;
     try {
