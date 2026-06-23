@@ -293,8 +293,7 @@ export class McpClientManager {
     }
 
     const servers = populateMcpServerCommand(
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default empty object for undefined McpServers
-      this.cliConfig.getMcpServers() || {},
+      this.cliConfig.getMcpServers() ?? {},
       this.cliConfig.getMcpServerCommand(),
     );
 
@@ -406,8 +405,7 @@ export class McpClientManager {
           // Debounce to coalesce multiple rapid updates
           await new Promise((resolve) => setTimeout(resolve, 300));
           await this.cliConfig.refreshMcpContext();
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- refresh flag can be set by concurrent MCP discovery callbacks while awaiting
-        } while (this.refreshRequestedWhilePending);
+        } while (this.isRefreshRequestedWhilePending());
       } catch (error) {
         debugLogger.error(
           `Error refreshing MCP context: ${getErrorMessage(error)}`,
@@ -418,6 +416,10 @@ export class McpClientManager {
     })();
 
     return this.pendingRefreshPromise;
+  }
+
+  private isRefreshRequestedWhilePending(): boolean {
+    return this.refreshRequestedWhilePending;
   }
 
   getMcpServerCount(): number {

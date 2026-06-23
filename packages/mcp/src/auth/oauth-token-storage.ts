@@ -148,8 +148,7 @@ export class MCPOAuthTokenStorage implements TokenStorage {
     MCPOAuthTokenStorage.validateToken(credentials.token);
     await this.storage.setCredentials({
       ...credentials,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Malformed/partial OAuth credential boundary normalization preserves missing updatedAt fallback.
-      updatedAt: credentials.updatedAt ?? Date.now(),
+      updatedAt: credentials.updatedAt,
     });
   }
 

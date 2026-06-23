@@ -171,13 +171,12 @@ const legacyDirectiveCleanupScopes = [
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
-  // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
+  // #2089 scope: the six target packages (auth/settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
   // inline lint directives. Those packages are kept in legacy scope so
   // existing directives do not break lint. The target files and extracted
   // modules are locked in completedDirectiveCleanupScopes below, which
   // overrides this block for those specific files.
-  'packages/mcp/src/**/*.{ts,tsx}', // #2089/#2092 (non-target files)
   'packages/auth/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/settings/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/telemetry/src/**/*.{ts,tsx}', // #2089 (non-target files)
@@ -293,6 +292,10 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
+  // #2118 scope — all remaining mcp source/test files are fully compliant:
+  // zero inline lint directives. Locked to error so any new directive fails
+  // immediately. The broad mcp legacy entry has been removed entirely.
+  'packages/mcp/src/**/*.{ts,tsx}', // #2118
   // #2084 scope — provider implementation files fully compliant: zero inline
   // lint directives. Locked to error so any new directive fails immediately.
   // The broad packages/providers/src/** legacy override above is overridden
