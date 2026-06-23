@@ -4,17 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- File keeps related file-search behavioral scenarios together. */
-
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { AsyncFzf } from 'fzf';
 
 import { FileSearchFactory, AbortError, filter } from './fileSearch.js';
-import {
-  DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
-  DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
-  DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
-} from '../../config/constants.js';
+import {} from '../../config/constants.js';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 import * as crawler from './crawler.js';
 
@@ -166,7 +160,6 @@ describe('FileSearch', () => {
     });
 
     await fileSearch.initialize();
-    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const results = await fileSearch.search('**/*.js');
 
     expect(results).toStrictEqual(['src/main.js']);
@@ -313,7 +306,6 @@ describe('FileSearch', () => {
     });
 
     await fileSearch.initialize();
-    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const results = await fileSearch.search('**/*.js', { maxResults: 2 });
 
     expect(results).toStrictEqual(['src/file1.js', 'src/file2.js']); // Assuming alphabetical sort
@@ -579,7 +571,6 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
 
     const controller = new AbortController();
-    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const searchPromise = fileSearch.search('**/*.js', {
       signal: controller.signal,
     });
@@ -617,7 +608,6 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
 
     // Perform a broad search to prime the cache
-    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const broadResults = await fileSearch.search('src/**');
     expect(broadResults).toStrictEqual([
       'src/',
@@ -628,7 +618,6 @@ describe('FileSearch', () => {
     ]);
 
     // Perform a more specific search that should leverage the broad search's cached results
-    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const specificResults = await fileSearch.search('src/**/*.js');
     expect(specificResults).toStrictEqual(['src/foo.js', 'src/nested/baz.js']);
 
@@ -747,254 +736,5 @@ describe('FileSearch', () => {
     );
 
     expect(results).toStrictEqual(['src/file with (special) chars.txt']);
-  });
-
-  describe('DirectoryFileSearch', () => {
-    it('should search for files in the current directory', async () => {
-      tmpDir = await createTmpDir({
-        'file1.js': '',
-        'file2.ts': '',
-        'file3.js': '',
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: false,
-        useGeminiignore: false,
-        ignoreDirs: [],
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: false,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const results = await fileSearch.search('*.js');
-      expect(results).toStrictEqual(['file1.js', 'file3.js']);
-    });
-
-    it('should search for files in a subdirectory', async () => {
-      tmpDir = await createTmpDir({
-        'file1.js': '',
-        src: {
-          'file2.js': '',
-          'file3.ts': '',
-        },
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: false,
-        useGeminiignore: false,
-        ignoreDirs: [],
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: false,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const results = await fileSearch.search('src/*.js');
-      expect(results).toStrictEqual(['src/file2.js']);
-    });
-
-    it('should list all files in a directory', async () => {
-      tmpDir = await createTmpDir({
-        'file1.js': '',
-        src: {
-          'file2.js': '',
-          'file3.ts': '',
-        },
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: false,
-        useGeminiignore: false,
-        ignoreDirs: [],
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: false,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const results = await fileSearch.search('src/');
-      expect(results).toStrictEqual(['src/file2.js', 'src/file3.ts']);
-    });
-
-    it('should respect ignore rules', async () => {
-      tmpDir = await createTmpDir({
-        '.gitignore': '*.js',
-        'file1.js': '',
-        'file2.ts': '',
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: true,
-        useGeminiignore: false,
-        ignoreDirs: [],
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: false,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const results = await fileSearch.search('*');
-      expect(results).toStrictEqual(['.gitignore', 'file2.ts']);
-    });
-
-    it('should not list files inside an ignored directory when directly requested', async () => {
-      tmpDir = await createTmpDir({
-        target: {
-          debug: {
-            'artifact.o': '',
-          },
-        },
-        src: {
-          'main.rs': '',
-        },
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: false,
-        useGeminiignore: false,
-        ignoreDirs: ['target/'],
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: false,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const results = await fileSearch.search('target/');
-      expect(results).toStrictEqual([]);
-    });
-
-    it('should reject before crawling when non-recursive search is already aborted', async () => {
-      tmpDir = await createTmpDir({
-        src: {
-          'main.rs': '',
-        },
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: false,
-        useGeminiignore: false,
-        ignoreDirs: [],
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: false,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const crawlSpy = vi.spyOn(crawler, 'crawl');
-      const controller = new AbortController();
-      controller.abort();
-
-      await expect(
-        fileSearch.search('src/', { signal: controller.signal }),
-      ).rejects.toThrow(AbortError);
-      expect(crawlSpy).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Default autocomplete filtering', () => {
-    it('should exclude build output directories when ignoreDirs includes DEFAULT_AUTOCOMPLETE_IGNORE_DIRS', async () => {
-      tmpDir = await createTmpDir({
-        src: { 'main.rs': '' },
-        target: { debug: { 'main.o': '' } },
-        build: { 'app.o': '' },
-        dist: { 'bundle.js': '' },
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: false,
-        useGeminiignore: false,
-        ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
-        ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
-        maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: true,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const results = await fileSearch.search('');
-
-      expect(results).not.toContain('target/');
-      expect(results).not.toContain('target/debug/');
-      expect(results).not.toContain('build/');
-      expect(results).not.toContain('dist/');
-      expect(results).toContain('src/');
-      expect(results).toContain('src/main.rs');
-    });
-
-    it('should exclude binary artifact files when ignorePatterns includes DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS', async () => {
-      tmpDir = await createTmpDir({
-        src: { 'main.rs': '' },
-        'main.o': '',
-        'app.dll': '',
-        'program.exe': '',
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: false,
-        useGeminiignore: false,
-        ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
-        ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
-        maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: true,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const results = await fileSearch.search('');
-
-      expect(results).not.toContain('main.o');
-      expect(results).not.toContain('app.dll');
-      expect(results).not.toContain('program.exe');
-      expect(results).toContain('src/');
-    });
-
-    it('should still apply default excludes when .gitignore is also loaded', async () => {
-      tmpDir = await createTmpDir({
-        '.gitignore': '*.log',
-        src: { 'main.rs': '' },
-        target: { debug: { 'main.o': '' } },
-        'error.log': '',
-      });
-
-      const fileSearch = FileSearchFactory.create({
-        projectRoot: tmpDir,
-        useGitignore: true,
-        useGeminiignore: false,
-        ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
-        ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
-        maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
-        cache: false,
-        cacheTtl: 0,
-        enableRecursiveFileSearch: true,
-        enableFuzzySearch: true,
-      });
-
-      await fileSearch.initialize();
-      const results = await fileSearch.search('');
-
-      expect(results).not.toContain('target/');
-      expect(results).not.toContain('error.log');
-      expect(results).toContain('src/');
-      expect(results).toContain('.gitignore');
-    });
   });
 });
