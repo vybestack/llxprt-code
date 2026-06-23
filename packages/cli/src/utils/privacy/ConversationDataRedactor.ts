@@ -34,6 +34,16 @@ function isTokenBoundary(char: string): boolean {
   return [' ', '\t', '\n', '\r', '"', "'"].includes(char);
 }
 
+function isAsciiLetter(char: string): boolean {
+  return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z');
+}
+
+function isWindowsDrivePath(content: string, index: number): boolean {
+  if (index + 2 >= content.length) return false;
+  if (!isAsciiLetter(content[index])) return false;
+  return content[index + 1] === ':' && content[index + 2] === '\\';
+}
+
 function replacePathTokens(
   content: string,
   redactToken: (token: string) => string | null,
@@ -41,14 +51,20 @@ function replacePathTokens(
   let result = '';
   let index = 0;
   while (index < content.length) {
-    if (isTokenBoundary(content[index])) {
+    if (
+      isTokenBoundary(content[index]) &&
+      !isWindowsDrivePath(content, index)
+    ) {
       result += content[index];
       index += 1;
       continue;
     }
 
     let end = index;
-    while (end < content.length && !isTokenBoundary(content[end])) {
+    while (
+      end < content.length &&
+      (!isTokenBoundary(content[end]) || isWindowsDrivePath(content, end))
+    ) {
       end += 1;
     }
     const token = content.slice(index, end);
@@ -67,6 +83,13 @@ function isEmailAddress(token: string): boolean {
 function isSensitivePathSegment(segment: string): boolean {
   if (segment === '.env' || segment.startsWith('.env.')) return true;
   return ['secret', 'secrets', 'key', 'keys'].includes(segment);
+}
+
+function splitPathSegments(path: string): string[] {
+  return path
+    .split(/[/\\]/)
+    .filter((segment) => segment.length > 0)
+    .map((segment) => segment.toLowerCase());
 }
 
 function redactPhoneAndCardNumbers(content: string): string {
@@ -221,11 +244,15 @@ export class ConversationDataRedactor {
     }
 
     return replacePathTokens(content, (token) => {
-      if (token.includes('.ssh/')) return '[REDACTED-SSH-PATH]';
-      if (token.includes('/id_rsa')) return '[REDACTED-SSH-KEY-PATH]';
-      if (token.includes('.env')) return '[REDACTED-ENV-FILE]';
-      if (token.startsWith('/home/')) return '[REDACTED-HOME-DIR]';
-      if (token.startsWith('/Users/')) return '[REDACTED-USER-DIR]';
+      const segments = splitPathSegments(token);
+      if (segments.includes('.ssh') && segments.includes('id_rsa')) {
+        return '[REDACTED-SSH-KEY-PATH]';
+      }
+      if (segments.includes('.ssh')) return '[REDACTED-SSH-PATH]';
+      if (segments.some(isSensitivePathSegment)) return '[REDACTED-ENV-FILE]';
+      const normalizedToken = token.split('\\').join('/');
+      if (normalizedToken.startsWith('/home/')) return '[REDACTED-HOME-DIR]';
+      if (normalizedToken.startsWith('/Users/')) return '[REDACTED-USER-DIR]';
       return null;
     });
   }
@@ -239,9 +266,9 @@ export class ConversationDataRedactor {
     }
 
     const emailRedacted = content
-      .split(' ')
+      .split(/(\s+)/)
       .map((token) => (isEmailAddress(token) ? '[REDACTED-EMAIL]' : token))
-      .join(' ');
+      .join('');
 
     return redactPhoneAndCardNumbers(emailRedacted);
   }
@@ -346,10 +373,7 @@ export class ConversationDataRedactor {
   }
 
   private redactFilePath(path: string): string {
-    const segments = path
-      .split(/[/\\]/)
-      .filter((segment) => segment.length > 0)
-      .map((segment) => segment.toLowerCase());
+    const segments = splitPathSegments(path);
     if (segments.some(isSensitivePathSegment)) {
       return '[REDACTED-SENSITIVE-PATH]';
     }

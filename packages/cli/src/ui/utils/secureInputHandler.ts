@@ -27,6 +27,20 @@ function isSecureCommand(trimmed: string): boolean {
   );
 }
 
+function findCommandStart(text: string, command: string): number | null {
+  let commandStart = 0;
+  while (commandStart < text.length && isWhitespace(text[commandStart])) {
+    commandStart += 1;
+  }
+  if (
+    !text.startsWith(command, commandStart) ||
+    !isWhitespace(text[commandStart + command.length])
+  ) {
+    return null;
+  }
+  return commandStart;
+}
+
 interface MaskSegment {
   keyToMask: string;
   afterLineBreak: string;
@@ -55,11 +69,12 @@ function splitAfterTokens(
   command: string,
   tokenCount: number,
 ): { prefix: string; value: string } | null {
-  if (!text.startsWith(command) || !isWhitespace(text[command.length])) {
+  const commandStart = findCommandStart(text, command);
+  if (commandStart === null) {
     return null;
   }
 
-  let index = command.length;
+  let index = commandStart + command.length;
   for (let token = 0; token < tokenCount; token++) {
     if (!isWhitespace(text[index])) {
       return null;
@@ -92,11 +107,12 @@ function splitKeySaveInput(
   text: string,
 ): { prefix: string; value: string } | null {
   const command = '/key';
-  if (!text.startsWith(command) || !isWhitespace(text[command.length])) {
+  const commandStart = findCommandStart(text, command);
+  if (commandStart === null) {
     return null;
   }
 
-  let index = command.length;
+  let index = commandStart + command.length;
   while (isWhitespace(text[index])) {
     index += 1;
   }
@@ -127,10 +143,11 @@ function splitKeySaveInput(
 
 function splitKeyInput(text: string): { prefix: string; value: string } | null {
   const command = '/key';
-  if (!text.startsWith(command) || !isWhitespace(text[command.length])) {
+  const commandStart = findCommandStart(text, command);
+  if (commandStart === null) {
     return null;
   }
-  let index = command.length;
+  let index = commandStart + command.length;
   while (isWhitespace(text[index])) {
     index += 1;
   }
@@ -142,10 +159,11 @@ function splitKeyInput(text: string): { prefix: string; value: string } | null {
 
 function isKeySubcommand(text: string): boolean {
   const prefix = '/key';
-  if (!text.startsWith(prefix) || !isWhitespace(text[prefix.length])) {
+  const commandStart = findCommandStart(text, prefix);
+  if (commandStart === null) {
     return false;
   }
-  let index = prefix.length;
+  let index = commandStart + prefix.length;
   while (isWhitespace(text[index])) {
     index += 1;
   }

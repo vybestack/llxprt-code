@@ -605,16 +605,13 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const argumentObjectStart = content.indexOf('{', argumentsIndex);
     if (argumentObjectStart === -1) return content;
 
-    let depth = 0;
-    let inString = false;
-    for (let index = argumentObjectStart; index < content.length; index++) {
-      const char = content[index];
-      const previousEscaped = content[index - 1] === '\\';
-      if (char === '"' && !previousEscaped) inString = !inString;
-      else if (!inString && char === '{') depth += 1;
-      else if (!inString && char === '}' && --depth === 0) return content;
-    }
-    return content.slice(0, toolCallStart);
+    const argumentObject = this.extractBalancedSegment(
+      content,
+      argumentObjectStart,
+      '{',
+      '}',
+    );
+    return argumentObject === null ? content.slice(0, toolCallStart) : content;
   }
 
   private normalizeArguments(

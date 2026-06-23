@@ -66,6 +66,31 @@ describe('GemmaToolCallParser', () => {
     });
   });
 
+  it('should remove multiline partial JSON tool calls without truncating escaped complete calls', () => {
+    const partialContent = `Before
+{"name": "write_file", "arguments": {
+  "path": "/tmp/file.txt",
+  "content": "unfinished`;
+
+    const partialResult = parser.parse(partialContent);
+
+    expect(partialResult.cleanedContent).toBe('Before');
+    expect(partialResult.toolCalls).toHaveLength(0);
+
+    const completeJson = JSON.stringify({
+      name: 'write_file',
+      arguments: { content: 'ends with \\\\' },
+    });
+    const completeResult = parser.parse(
+      `Done ${completeJson} [END_TOOL_REQUEST]`,
+    );
+
+    expect(completeResult.cleanedContent).toBe('Done');
+    expect(completeResult.toolCalls).toHaveLength(1);
+    expect(completeResult.toolCalls[0].arguments).toStrictEqual({
+      content: 'ends with \\\\',
+    });
+  });
   describe('Hermes format', () => {
     it('should parse single Hermes tool call', () => {
       const content = `<|im_start|>assistant

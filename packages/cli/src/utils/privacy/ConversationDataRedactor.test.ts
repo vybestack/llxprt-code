@@ -457,6 +457,15 @@ describe('Conversation Data Redaction', () => {
     );
   });
 
+  it('should redact sensitive path tokens by segment across path separators', () => {
+    expect(
+      redactor.redactSensitivePaths(
+        'Paths C:\\Users\\bob\\.ssh\\id_rsa and notes/monkey.txt and /tmp/.env.local',
+      ),
+    ).toBe(
+      'Paths [REDACTED-SSH-KEY-PATH] and notes/monkey.txt and [REDACTED-ENV-FILE]',
+    );
+  });
   /**
    * @requirement REDACTION-008: Personal information redaction
    * @scenario Message with personal identifiable information
@@ -487,6 +496,16 @@ describe('Conversation Data Redaction', () => {
     // So phone numbers and credit cards are not currently redacted in message content
     expect(textBlock.text).toContain('555-123-4567'); // Not redacted
     expect(textBlock.text).toContain('4111-1111-1111-1111'); // Not redacted
+  });
+
+  it('should redact emails separated by any whitespace in personal info scanning', () => {
+    const redacted = redactor.redactPersonalInfo(
+      'Contacts john.doe@example.com\tjane@example.org\nadmin@example.net',
+    );
+
+    expect(redacted).toBe(
+      'Contacts [REDACTED-EMAIL]\t[REDACTED-EMAIL]\n[REDACTED-EMAIL]',
+    );
   });
 
   /**

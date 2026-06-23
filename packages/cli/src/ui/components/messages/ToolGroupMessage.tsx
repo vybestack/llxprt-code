@@ -65,7 +65,7 @@ const extractCountFromText = (text?: string): number | undefined => {
   if (!text) {
     return undefined;
   }
-  const words = text.split(' ').filter((word) => word.length > 0);
+  const words = text.split(/\s+/).filter((word) => word.length > 0);
   for (let index = 0; index < words.length - 1; index++) {
     const countText = words[index];
     const label = trimLabelPunctuation(words[index + 1]);
