@@ -10,10 +10,10 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   checkDiff,
@@ -23,39 +23,65 @@ import {
   scanCoreDirectives,
 } from '../check-eslint-guard.js';
 
-const repoRoot = resolve(
-  join(fileURLToPath(new URL('.', import.meta.url)), '..', '..'),
-);
+const repoRoot = process.cwd();
 
 function listTsFiles(dir) {
-  const results = [];
-  const entries = readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (
-      entry.isDirectory() &&
-      entry.name !== 'node_modules' &&
-      entry.name !== 'dist'
-    ) {
-      results.push(...listTsFiles(fullPath));
-    } else if (
-      entry.isFile() &&
-      (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
-    ) {
-      results.push(fullPath);
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      out.push(...listTsFiles(full));
+    } else if (/\.(?:ts|tsx)$/.test(entry)) {
+      out.push(full);
     }
   }
-  return results;
+  return out;
 }
 
-function extractScopeArray(keyName) {
-  const configPath = join(repoRoot, 'eslint.config.js');
-  const source = readFileSync(configPath, 'utf8');
-  const match = source.match(
-    new RegExp(String.raw`const\s+${keyName}\s*=\s*\[([\s\S]*?)\]`),
-  );
-  if (!match) return [];
-  return [...match[1].matchAll(/['"`]([^'"`]+)['"`]/g)].map((m) => m[1]);
+const eslintConfigSource = readFileSync(
+  join(repoRoot, 'eslint.config.js'),
+  'utf8',
+);
+
+function extractScopeArray(name) {
+  const start = eslintConfigSource.indexOf('const ' + name + ' = [');
+  if (start === -1) {
+    throw new Error(
+      'Could not find scope const declaration for "' +
+        name +
+        '" in eslint.config.js',
+    );
+  }
+  const arrayStart = eslintConfigSource.indexOf('[', start);
+  let depth = 0;
+  let end = -1;
+  for (let i = arrayStart; i < eslintConfigSource.length; i++) {
+    const ch = eslintConfigSource[i];
+    if (ch === '[') {
+      depth += 1;
+    } else if (ch === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end === -1) {
+    throw new Error(
+      'Could not parse closing bracket for scope const "' +
+        name +
+        '" in eslint.config.js',
+    );
+  }
+  const body = eslintConfigSource.slice(arrayStart + 1, end);
+  const entries = [];
+  const re = /'([^']+)'/g;
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    entries.push(m[1]);
+  }
+  return entries;
 }
 
 function diffFor(file, addedLine) {
@@ -403,6 +429,40 @@ describe('check-eslint-guard', () => {
 
       expect(checkCoreCentralBypassesInConfig(config)).toEqual([]);
     });
+  });
+});
+
+describe('packages/storage directive cleanup (#2119)', () => {
+  const storageSrcDir = join(repoRoot, 'packages', 'storage', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const directiveRe = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
+    const offenders = [];
+    for (const file of listTsFiles(storageSrcDir)) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, idx) => {
+        if (directiveRe.test(line)) {
+          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
+        }
+      });
+    }
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/storage/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const storageEntries = legacy.filter((e) =>
+      e.startsWith('packages/storage'),
+    );
+    expect(
+      storageEntries,
+      'Legacy storage entries: ' + storageEntries.join(', '),
+    ).toEqual([]);
   });
 });
 
