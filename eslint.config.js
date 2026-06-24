@@ -34,7 +34,7 @@ const legacyDirectiveCleanupScopes = [
   // #2116: provider module entries removed after directive cleanup.
   // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
-  'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
+  // packages/policy/src is locked in completedDirectiveCleanupScopes (#2122).
   'packages/storage/src/**/*.{ts,tsx}', // #2092
   // #2089 scope: the five target packages (settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
@@ -249,6 +249,9 @@ const completedDirectiveCleanupScopes = [
   // #2121 — all packages/auth/src files are now fully compliant: zero inline
   // lint directives. Locked to error so any new directive fails immediately.
   'packages/auth/src/**/*.{ts,tsx}', // #2121
+  // #2122 — all packages/policy/src files are now fully compliant: zero inline
+  // lint directives. Locked to error so any new directive fails immediately.
+  'packages/policy/src/**/*.{ts,tsx}', // #2122
   // #2091 packages/cli test cleanup — target files (and extracted helpers)
   // are fully compliant: zero inline lint directives. Locked to error so any
   // new directive fails immediately while the rest of packages/cli remains in

@@ -5,16 +5,65 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  existsSync,
+} from 'node:fs';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import {
   checkDiff,
   checkCoreCentralBypassesInConfig,
   checkCoreDirectiveScopesInConfig,
+  checkModuleCentralBypassesInConfig,
+  checkModuleDirectiveScopesInConfig,
   formatViolations,
   scanCoreDirectives,
+  scanModuleDirectives,
 } from '../check-eslint-guard.js';
+
+const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+
+function listTsFiles(dir) {
+  const results = [];
+  if (!existsSync(dir)) {
+    return results;
+  }
+  for (const entry of readdirSync(dir)) {
+    const fullPath = join(dir, entry);
+    if (statSync(fullPath).isDirectory()) {
+      results.push(...listTsFiles(fullPath));
+    } else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+function extractScopeArray(scopeName) {
+  const configPath = join(repoRoot, 'eslint.config.js');
+  const source = readFileSync(configPath, 'utf8');
+  const match = new RegExp(scopeName + String.raw`\s*=\s*\[([\s\S]*?)\];`).exec(
+    source,
+  );
+  if (!match) {
+    return [];
+  }
+  const body = match[1];
+  const entries = [];
+  const lineRegex = /'([^']+)'/g;
+  let lineMatch;
+  while ((lineMatch = lineRegex.exec(body)) !== null) {
+    entries.push(lineMatch[1]);
+  }
+  return entries;
+}
 
 function diffFor(file, addedLine) {
   return [
@@ -392,6 +441,261 @@ describe('packages/auth directive cleanup (#2121)', () => {
     expect(
       authEntries,
       'Legacy auth entries: ' + authEntries.join(', '),
+    ).toEqual([]);
+  });
+});
+
+describe('packages/policy directive cleanup (#2122)', () => {
+  const policySrcDir = join(repoRoot, 'packages', 'policy', 'src');
+
+  describe('scanModuleDirectives', () => {
+    it('reports violations when packages/policy files contain directives', () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-policy-'));
+      const subDir = join(tmpDir, 'src');
+      mkdirSync(subDir, { recursive: true });
+      writeFileSync(
+        join(subDir, 'example.ts'),
+        [
+          'export const x = 1;',
+          '// eslint-disable-next-line sonarjs/expression-complexity',
+          'export const y = (a && b) || (c && d) ? e : f;',
+        ].join('\n'),
+      );
+
+      const violations = scanModuleDirectives(
+        'packages/policy',
+        '2122',
+        tmpDir,
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('#2122');
+      expect(violations[0].message).toContain('packages/policy');
+      expect(violations[0].lineNumber).toBe(2);
+    });
+
+    it('passes when packages/policy files contain no directives', () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-policy-clean-'));
+      writeFileSync(
+        join(tmpDir, 'clean.ts'),
+        ['export const x = 1;', 'export const y = 2;'].join('\n'),
+      );
+
+      expect(scanModuleDirectives('packages/policy', '2122', tmpDir)).toEqual(
+        [],
+      );
+    });
+  });
+
+  describe('checkModuleDirectiveScopesInConfig', () => {
+    it('flags packages/policy entries left in legacyDirectiveCleanupScopes', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/policy/src/**/*.{ts,tsx}', // remaining policy cleanup",
+        "  'packages/cli/src/foo.ts',",
+        '];',
+      ].join('\n');
+
+      const violations = checkModuleDirectiveScopesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].file).toBe('eslint.config.js');
+      expect(violations[0].message).toContain('#2122');
+      expect(violations[0].message).toContain('legacyDirectiveCleanupScopes');
+    });
+
+    it('passes when directive cleanup scopes have no packages/policy entries', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/cli/src/foo.ts',",
+        '];',
+        'const completedDirectiveCleanupScopes = [',
+        "  'packages/core/src/**/*.{ts,tsx}',",
+        '];',
+      ].join('\n');
+
+      expect(
+        checkModuleDirectiveScopesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
+
+    it('allows packages/policy in completedDirectiveCleanupScopes (lock)', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/cli/src/foo.ts',",
+        '];',
+        'const completedDirectiveCleanupScopes = [',
+        "  'packages/policy/src/**/*.{ts,tsx}', // #2122",
+        '];',
+      ].join('\n');
+
+      // With checkCompletedScopes=false (default for policy), the completed
+      // scope entry is allowed as the durable lock.
+      expect(
+        checkModuleDirectiveScopesInConfig(
+          config,
+          'packages/policy',
+          '2122',
+          false,
+        ),
+      ).toEqual([]);
+    });
+  });
+
+  describe('checkModuleCentralBypassesInConfig', () => {
+    it('flags packages/policy central rule-off blocks', () => {
+      const config = [
+        '{',
+        "  files: ['packages/policy/src/example.ts'],",
+        '  rules: {',
+        "    'sonarjs/expression-complexity': 'off',",
+        '  },',
+        '}',
+      ].join('\n');
+
+      const violations = checkModuleCentralBypassesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('rule-off');
+      expect(violations[0].message).toContain('#2122');
+    });
+
+    it('flags packages/policy scoped ignores', () => {
+      const config = [
+        '{',
+        "  files: ['packages/policy/src/**/*.ts'],",
+        "  ignores: ['**/*.test.ts'],",
+        '  rules: {},',
+        '}',
+      ].join('\n');
+
+      const violations = checkModuleCentralBypassesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('scoped ignore');
+    });
+
+    it('allows packages/policy positive enforcement blocks', () => {
+      const config = [
+        '{',
+        "  files: ['packages/policy/src/example.ts'],",
+        '  rules: {',
+        "    'max-lines': ['error', { max: 800 }],",
+        '  },',
+        '}',
+      ].join('\n');
+
+      expect(
+        checkModuleCentralBypassesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
+
+    it('flags packages/policy multi-line files arrays with rule-off', () => {
+      const config = [
+        '{',
+        '  files: [',
+        "    'packages/policy/src/**/*.ts',",
+        '  ],',
+        '  rules: {',
+        "    'sonarjs/expression-complexity': 'off',",
+        '  },',
+        '}',
+      ].join('\n');
+
+      const violations = checkModuleCentralBypassesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('rule-off');
+      expect(violations[0].message).toContain('#2122');
+    });
+
+    it('flags packages/policy multi-line files arrays with scoped ignores', () => {
+      const config = [
+        '{',
+        '  files: [',
+        "    'packages/policy/src/**/*.ts',",
+        '  ],',
+        "  ignores: ['**/*.test.ts'],",
+        '  rules: {},',
+        '}',
+      ].join('\n');
+
+      const violations = checkModuleCentralBypassesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('scoped ignore');
+    });
+
+    it('does not flag completedDirectiveCleanupScopes entries as central bypasses', () => {
+      const config = [
+        'const completedDirectiveCleanupScopes = [',
+        "  'packages/policy/src/**/*.{ts,tsx}', // #2122",
+        '];',
+      ].join('\n');
+
+      expect(
+        checkModuleCentralBypassesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
+
+    it('does not flag legacyDirectiveCleanupScopes entries as central bypasses', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/policy/src/**/*.ts',",
+        '];',
+      ].join('\n');
+
+      expect(
+        checkModuleCentralBypassesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
+  });
+
+  it('has zero inline ESLint disable/enable directives in source', () => {
+    const directiveRe = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
+    const offenders = [];
+    for (const file of listTsFiles(policySrcDir)) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, idx) => {
+        if (directiveRe.test(line)) {
+          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
+        }
+      });
+    }
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/policy/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const policyEntries = legacy.filter((e) => e.startsWith('packages/policy'));
+    expect(
+      policyEntries,
+      'Legacy policy entries: ' + policyEntries.join(', '),
     ).toEqual([]);
   });
 });
