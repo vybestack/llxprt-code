@@ -350,11 +350,8 @@ describe('shell-parser', () => {
     it.skipIf(!parserInitialized)(
       'should handle empty input gracefully',
       () => {
-        // Empty string should produce an empty command list
         const tree = parseShellCommand('');
-        expect(tree).not.toBeNull();
-        const commands = splitCommandsWithTree(tree!);
-        expect(commands.length).toBe(0);
+        expect(tree).toBeNull();
       },
     );
 

@@ -112,27 +112,55 @@ async function registerAvailableNavigationTools(
   if (streams === undefined || streams === null) {
     return;
   }
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => {
+    abortController.abort(new Error('MCP navigation registration timeout'));
+  }, MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS);
   try {
-    await Promise.race([
-      registerMcpNavigationTools(state, host, streams),
-      new Promise<void>((_, reject) => {
-        const signal = AbortSignal.timeout(
-          MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS,
-        );
-        signal.addEventListener(
-          'abort',
-          () =>
-            reject(
-              signal.reason ?? new Error('MCP navigation registration timeout'),
-            ),
-          { once: true },
-        );
-      }),
-    ]);
+    await registerMcpNavigationTools(
+      state,
+      host,
+      streams,
+      abortController.signal,
+    );
   } catch {
-    state.lspMcpClient = undefined;
-    state.lspMcpTransport = undefined;
+    await cleanupLspMcpResources(state, host.getToolRegistry());
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+function throwIfNavigationRegistrationAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new Error('MCP navigation registration aborted');
+  }
+}
+
+async function cleanupLspMcpResources(
+  state: LspState,
+  registry: ToolRegistry,
+): Promise<void> {
+  registry.removeMcpToolsByServer('lsp-navigation');
+
+  if (state.lspMcpClient) {
+    try {
+      await state.lspMcpClient.close();
+    } catch {
+      // Close errors are non-fatal during cleanup.
+    }
+  }
+  state.lspMcpClient = undefined;
+
+  if (state.lspMcpTransport) {
+    try {
+      await state.lspMcpTransport.close();
+    } catch {
+      // Close errors are non-fatal during cleanup.
+    }
+  }
+  state.lspMcpTransport = undefined;
 }
 
 const LSP_NAVIGATION_REQUEST_TIMEOUT_MS = 250;
@@ -145,6 +173,7 @@ function createStreamTransport(streams: {
   let started = false;
   const transport: Transport = {
     onclose: undefined,
+
     onerror: undefined,
     onmessage: undefined,
     start: async () => {
@@ -352,50 +381,34 @@ async function registerMcpNavigationTools(
     readable: Readable;
     writable: Writable;
   },
+  signal: AbortSignal,
 ): Promise<void> {
   const registry = host.getToolRegistry();
-
-  const cleanup = async () => {
-    registry.removeMcpToolsByServer('lsp-navigation');
-
-    if (state.lspMcpClient) {
-      try {
-        await state.lspMcpClient.close();
-      } catch {
-        // Close errors are non-fatal during cleanup.
-      }
-    }
-    state.lspMcpClient = undefined;
-
-    if (state.lspMcpTransport) {
-      try {
-        await state.lspMcpTransport.close();
-      } catch {
-        // Close errors are non-fatal during cleanup.
-      }
-    }
-    state.lspMcpTransport = undefined;
-  };
 
   try {
     const transport = createStreamTransport(streams);
     state.lspMcpTransport = transport;
+    throwIfNavigationRegistrationAborted(signal);
 
     const client = await connectLspMcpClient(state, transport);
+    throwIfNavigationRegistrationAborted(signal);
     if (!client) {
-      await cleanup();
+      await cleanupLspMcpResources(state, registry);
       return;
     }
 
     const toolDefs = await fetchLspToolDefs(client);
+    throwIfNavigationRegistrationAborted(signal);
     if (toolDefs.length === 0) {
-      await cleanup();
+      await cleanupLspMcpResources(state, registry);
       return;
     }
 
     await registerDiscoveredTools(client, toolDefs, registry, host);
+    throwIfNavigationRegistrationAborted(signal);
   } catch {
-    await cleanup();
+    await cleanupLspMcpResources(state, registry);
+    throw new Error('MCP navigation registration failed');
   }
 }
 

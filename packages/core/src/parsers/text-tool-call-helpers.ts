@@ -101,7 +101,7 @@ export function stripTrailingOpenToolCall(content: string): string {
   if (content[objectStart] !== '{') {
     return content;
   }
-  if (content.indexOf('}', objectStart + 1) !== -1) {
+  if (hasBalancedObjectClose(content, objectStart)) {
     return content;
   }
   return content.substring(0, tagIdx);
@@ -155,7 +155,7 @@ function isOpenJsonToolCallFragment(
   if (content[argumentsStart] !== '{') {
     return false;
   }
-  return !hasBalancedObjectClose(content, argumentsStart);
+  return !hasBalancedObjectClose(content, markerIdx);
 }
 
 function hasBalancedObjectClose(content: string, objectStart: number): boolean {
@@ -245,6 +245,7 @@ const TOOL_CALL_MARKERS = [
   '<invoke',
   '<tool>',
   '<use ',
+  '<use_',
 ];
 
 export function hasAnyToolCallMarker(content: string): boolean {

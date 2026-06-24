@@ -79,26 +79,42 @@ const PROVIDER_IMPORT_SUBSTRINGS = [
 function detectProviderImport(content: string): string | null {
   const lines = content.split('\n');
   let inBlockComment = false;
+  let statement = '';
   for (const line of lines) {
     const { processed, blockComment } = stripCommentsFromLine(
       line,
       inBlockComment,
     );
     inBlockComment = blockComment;
-    const result = checkLineForProviderImport(processed);
+    statement = collectImportExportStatement(statement, processed);
+    const result = checkLineForProviderImport(statement);
     if (result !== null) {
       return result;
+    }
+    if (statement.trimEnd().endsWith(';')) {
+      statement = '';
     }
   }
   return null;
 }
 
+function collectImportExportStatement(current: string, line: string): string {
+  const trimmed = line.trim();
+  if (current.length > 0) {
+    return `${current} ${trimmed}`;
+  }
+  if (!trimmed.startsWith('import') && !trimmed.startsWith('export')) {
+    return '';
+  }
+  return trimmed;
+}
+
 function checkLineForProviderImport(line: string): string | null {
   const trimmed = line.trim();
-  if (trimmed.startsWith('//') || trimmed.startsWith('*')) {
+  if (trimmed.length === 0 || trimmed.startsWith('*')) {
     return null;
   }
-  if (!trimmed.startsWith('import') && !trimmed.includes('export')) {
+  if (!trimmed.startsWith('import') && !trimmed.startsWith('export')) {
     return null;
   }
   for (const substring of PROVIDER_IMPORT_SUBSTRINGS) {

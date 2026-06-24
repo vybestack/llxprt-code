@@ -132,8 +132,16 @@ export class SessionLockManager {
     }
     try {
       await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
-    } catch {
-      throw new Error('Session is in use by another process');
+    } catch (writeErr: unknown) {
+      const code = (writeErr as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') {
+        throw new Error('Session is in use by another process');
+      }
+      if (code === 'ENOENT') {
+        await SessionLockManager.createLockAfterMkdir(lockPath, lockContent);
+        return;
+      }
+      throw writeErr;
     }
   }
 

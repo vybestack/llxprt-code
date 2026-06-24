@@ -350,6 +350,8 @@ export function checkCoreDirectiveScopesInConfig(configSource) {
   const violations = [];
   const lines = configSource.split('\n');
   let currentScope = null;
+  let currentStatement = '';
+  let currentStartLine = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const scopeMatch =
@@ -358,22 +360,23 @@ export function checkCoreDirectiveScopesInConfig(configSource) {
       );
     if (scopeMatch) {
       currentScope = scopeMatch[1];
-      continue;
+      currentStatement = line;
+      currentStartLine = i + 1;
+    } else if (currentScope !== null) {
+      currentStatement += '\n' + line;
     }
-    if (currentScope !== null) {
-      if (/^\s*\];/.test(line)) {
-        currentScope = null;
-        continue;
-      }
-      const match = /^\s*['"]([^'"]+)['"]/.exec(line);
-      if (match && match[1].includes('packages/core')) {
+
+    if (currentScope !== null && /;\s*(?:\/\/.*)?$/.test(line)) {
+      if (currentStatement.includes('packages/core')) {
         violations.push({
           file: 'eslint.config.js',
-          lineNumber: i + 1,
+          lineNumber: currentStartLine,
           message: `packages/core must not remain in ${currentScope} (#2115).`,
-          content: line,
+          content: currentStatement,
         });
       }
+      currentScope = null;
+      currentStatement = '';
     }
   }
   return violations;
@@ -394,6 +397,22 @@ function extractArrayStart(line) {
 
 function isCorePathLine(line) {
   return !isCommentOnlyLine(line) && line.includes('packages/core');
+}
+
+function hasCoreCentralBypassOnSingleLine(line) {
+  if (!isCorePathLine(line)) {
+    return null;
+  }
+  if (/\bignores\s*:/.test(line)) {
+    return 'scoped ignore';
+  }
+  if (
+    /\brules\s*:/.test(line) &&
+    (isNewOffRule(line) || isStandaloneOffRuleValue(line))
+  ) {
+    return 'rule-off';
+  }
+  return null;
 }
 
 function coreCentralBypassMessage(kind) {
@@ -499,6 +518,16 @@ export function checkCoreCentralBypassesInConfig(configSource) {
 
     if (currentArray !== null && /^\s*\]/.test(line)) {
       currentArray = null;
+    }
+
+    const singleLineBypass = hasCoreCentralBypassOnSingleLine(line);
+    if (singleLineBypass !== null) {
+      violations.push({
+        file: 'eslint.config.js',
+        lineNumber,
+        message: coreCentralBypassMessage(singleLineBypass),
+        content: line,
+      });
     }
 
     if (isCorePathLine(line)) {

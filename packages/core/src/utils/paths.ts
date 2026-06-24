@@ -53,8 +53,13 @@ export const SHELL_SPECIAL_CHARS = {
   get source(): string {
     return `[${shellSpecialCharSource()}]`;
   },
-  test(char: string): boolean {
-    return isShellSpecialChar(char);
+  test(value: string): boolean {
+    for (const char of value) {
+      if (isShellSpecialChar(char)) {
+        return true;
+      }
+    }
+    return false;
   },
 };
 /**

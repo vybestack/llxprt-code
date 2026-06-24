@@ -68,6 +68,28 @@ interface MatchCandidate {
   fullMatch: string;
 }
 
+function removeTrailingNumberedLinePrefix(value: string): string {
+  const lastNewline = value.lastIndexOf('\n');
+  if (lastNewline === -1) {
+    return value;
+  }
+  let cursor = lastNewline + 1;
+  while (cursor < value.length && isWhitespaceChar(value[cursor])) {
+    cursor++;
+  }
+  const digitStart = cursor;
+  while (cursor < value.length && isDigitChar(value[cursor])) {
+    cursor++;
+  }
+  if (cursor === digitStart) {
+    return value;
+  }
+  while (cursor < value.length && isWhitespaceChar(value[cursor])) {
+    cursor++;
+  }
+  return cursor === value.length ? value.slice(0, lastNewline + 1) : value;
+}
+
 export class GemmaToolCallParser implements ITextToolCallParser {
   parse(content: string): {
     cleanedContent: string;
@@ -302,7 +324,17 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         truthyJsonValueOrEmptyObject(parsed.arguments),
       );
       const endMarkerIndex = content.indexOf(endMarker, jsonSegment.endIndex);
-      if (toolName && endMarkerIndex !== -1) {
+      const markerGap =
+        endMarkerIndex === -1
+          ? ''
+          : content.slice(jsonSegment.endIndex, endMarkerIndex);
+      const markerGapWithoutLinePrefix =
+        removeTrailingNumberedLinePrefix(markerGap);
+      if (
+        toolName &&
+        endMarkerIndex !== -1 &&
+        markerGapWithoutLinePrefix.trim().length === 0
+      ) {
         const fullEnd = endMarkerIndex + endMarker.length;
         return {
           match: {

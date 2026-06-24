@@ -207,6 +207,16 @@ describe('check-eslint-guard', () => {
       );
     });
 
+    it('flags single-line packages/core cleanup scope entries', () => {
+      const config =
+        "const legacyDirectiveCleanupScopes = ['packages/core/src/example.ts'];";
+
+      const violations = checkCoreDirectiveScopesInConfig(config);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('legacyDirectiveCleanupScopes');
+    });
+
     it('passes when directive cleanup scopes have no packages/core entries', () => {
       const config = [
         'const legacyDirectiveCleanupScopes = [',
@@ -289,6 +299,7 @@ describe('check-eslint-guard', () => {
         '{',
         "  files: ['packages/core/src/**/*.ts'],",
         "  ignores: ['**/*.test.ts'],",
+
         '  rules: {},',
         '}',
       ].join('\n');
@@ -297,6 +308,19 @@ describe('check-eslint-guard', () => {
 
       expect(violations).toHaveLength(1);
       expect(violations[0].message).toContain('scoped ignore');
+    });
+
+    it('flags single-line packages/core scoped rule-off and ignores', () => {
+      const config = [
+        "{ files: ['packages/core/src/example.ts'], rules: { 'no-console': 'off' } },",
+        "{ files: ['packages/core/src/example.ts'], ignores: ['**/*.test.ts'] },",
+      ].join('\n');
+
+      const violations = checkCoreCentralBypassesInConfig(config);
+
+      expect(violations).toHaveLength(2);
+      expect(formatViolations(violations)).toContain('rule-off');
+      expect(formatViolations(violations)).toContain('scoped ignore');
     });
 
     it('flags packages/core global ignores and allow-list entries', () => {

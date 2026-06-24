@@ -257,11 +257,11 @@ function isIsoDate(value: unknown): boolean {
   }
   // Verify the date actually exists on the calendar (catches 2024-02-31, etc.)
   const yearNum = Number(year);
-  const constructed = new Date(yearNum, monthNum - 1, dayNum);
+  const constructed = new Date(Date.UTC(yearNum, monthNum - 1, dayNum));
   return (
-    constructed.getFullYear() === yearNum &&
-    constructed.getMonth() === monthNum - 1 &&
-    constructed.getDate() === dayNum
+    constructed.getUTCFullYear() === yearNum &&
+    constructed.getUTCMonth() === monthNum - 1 &&
+    constructed.getUTCDate() === dayNum
   );
 }
 

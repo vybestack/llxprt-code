@@ -188,15 +188,18 @@ function handleContent(
   }
 }
 
-/** Narrow an unknown value into an IContent with a truthy speaker field. */
+/** Narrow an unknown value into an IContent with the required shape. */
 function isSpeakerContent(value: unknown): value is IContent {
   if (value === null || value === undefined || typeof value !== 'object') {
     return false;
   }
-  if (!('speaker' in value)) {
-    return false;
-  }
-  return Boolean((value as IContent).speaker);
+  const content = value as Record<string, unknown>;
+  return (
+    (content.speaker === 'human' ||
+      content.speaker === 'ai' ||
+      content.speaker === 'tool') &&
+    Array.isArray(content.blocks)
+  );
 }
 
 /** @pseudocode line 88-98: compressed — reset history to [summary] or record malformed. */
@@ -325,7 +328,19 @@ function applyParsedEvent(
 
   // @pseudocode line 54: Dispatch by event type
   const eventType = parsed.type as string;
-  const payload = parsed.payload as Record<string, unknown>;
+  const payloadRaw = parsed.payload;
+  if (
+    payloadRaw === null ||
+    payloadRaw === undefined ||
+    typeof payloadRaw !== 'object'
+  ) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${acc.lineNumber}: malformed ${String(eventType)} event, skipping`,
+    );
+    return undefined;
+  }
+  const payload = payloadRaw as Record<string, unknown>;
 
   return dispatchEvent(
     eventType,

@@ -136,16 +136,22 @@ export async function reportError(
 }
 
 function logContextFallback(context: unknown): void {
+  const contextText = formatContextFallback(context);
+  if (contextText === undefined) {
+    reportToStderr('Original context could not be logged or stringified.');
+    return;
+  }
+  reportToStderr('Original context:', contextText);
+}
+
+function formatContextFallback(context: unknown): string | undefined {
   try {
-    reportToStderr('Original context:', context);
+    return JSON.stringify(context).substring(0, 1000);
   } catch {
     try {
-      reportToStderr(
-        'Original context (stringified, truncated):',
-        JSON.stringify(context).substring(0, 1000),
-      );
+      return String(context).substring(0, 1000);
     } catch {
-      reportToStderr('Original context could not be logged or stringified.');
+      return undefined;
     }
   }
 }

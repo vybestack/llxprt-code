@@ -167,8 +167,7 @@ function applyToolSpecificNormalizations(
   args: Record<string, unknown>,
   toolName: string,
 ): Record<string, unknown> {
-  const normalizedTool =
-    typeof toolName === 'string' ? toolName.trim().toLowerCase() : '';
+  const normalizedTool = toolName.trim().toLowerCase();
   if (normalizedTool === 'todo_write') {
     const todos = args['todos'];
     if (Array.isArray(todos)) {

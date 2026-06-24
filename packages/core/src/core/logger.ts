@@ -493,5 +493,8 @@ function filterPartText(part: Part, emojiFilter: EmojiFilter): Part {
     return part;
   }
   const filterResult = emojiFilter.filterText(part.text);
-  return { ...part, text: filterResult.filtered as string };
+  if (typeof filterResult.filtered !== 'string') {
+    return part;
+  }
+  return { ...part, text: filterResult.filtered };
 }

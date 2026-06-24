@@ -20,15 +20,13 @@ const KEYCHAIN_SERVICE_NAME = 'llxprt-code-oauth';
 const MAIN_ACCOUNT_KEY = 'main-account';
 
 /**
- * Normalizes a credential field that may arrive as null/undefined/'' from an
- * external library into `undefined` when absent. The Credentials type from
- * google-auth-library declares these as optional strings, but runtime data can
- * still surface as null, so we widen to unknown for the boundary check.
+ * Normalizes a credential field that crosses the legacy JSON boundary.
  */
 function normalizeOptionalString(value: unknown): string | undefined {
-  return value === null || value === undefined || value === ''
-    ? undefined
-    : (value as string);
+  if (typeof value !== 'string' || value === '') {
+    return undefined;
+  }
+  return value;
 }
 
 function getLegacyCredentialPaths(): string[] {
@@ -102,18 +100,8 @@ export class OAuthCredentialStorage {
       serverName: MAIN_ACCOUNT_KEY,
       token: {
         accessToken: credentials.access_token,
-        refreshToken:
-          credentials.refresh_token === undefined ||
-          credentials.refresh_token === null ||
-          credentials.refresh_token === ''
-            ? undefined
-            : credentials.refresh_token,
-        tokenType:
-          credentials.token_type === undefined ||
-          credentials.token_type === null ||
-          credentials.token_type === ''
-            ? 'Bearer'
-            : credentials.token_type,
+        refreshToken: normalizeOptionalString(credentials.refresh_token),
+        tokenType: normalizeOptionalString(credentials.token_type) ?? 'Bearer',
         scope: normalizeOptionalString(credentials.scope),
         // Preserve JS falsy behavior: 0/null/undefined expiry_date means "no expiration"
         expiresAt:

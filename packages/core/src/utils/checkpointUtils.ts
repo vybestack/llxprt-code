@@ -178,7 +178,7 @@ export async function processRestorableToolCalls<HistoryType>(
       );
       toolCallToCheckpointMap.set(
         toolCall.callId,
-        result.checkpointFileName.replace('.json', ''),
+        result.checkpointFileName.replace(/\.json$/, ''),
       );
     }
   }

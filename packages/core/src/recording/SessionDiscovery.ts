@@ -123,11 +123,8 @@ export class SessionDiscovery {
 
     const summaries: SessionSummary[] = [];
     for (const fileName of sessionFiles) {
-      const summary = await readSessionSummary(
-        path.join(chatsDir, fileName),
-        projectHash,
-      );
-      if (summary) {
+      const summary = await readSessionSummary(path.join(chatsDir, fileName));
+      if (summary?.projectHash === projectHash) {
         summaries.push(summary);
       }
     }
@@ -226,10 +223,10 @@ export class SessionDiscovery {
 
     for (const fileName of sessionFiles) {
       const filePath = path.join(chatsDir, fileName);
-      const summary = await readSessionSummary(filePath, projectHash);
-      if (summary) {
+      const summary = await readSessionSummary(filePath);
+      if (summary?.projectHash === projectHash) {
         summaries.push(summary);
-      } else {
+      } else if (summary === null) {
         skippedCount++;
       }
     }
@@ -291,7 +288,6 @@ export class SessionDiscovery {
 
 async function readSessionSummary(
   filePath: string,
-  projectHash: string,
 ): Promise<SessionSummary | null> {
   let stat: Awaited<ReturnType<typeof fs.stat>>;
   try {
@@ -301,7 +297,7 @@ async function readSessionSummary(
   }
 
   const header = await readFirstLineFromFile(filePath);
-  if (header === null || header.projectHash !== projectHash) {
+  if (header === null) {
     return null;
   }
 

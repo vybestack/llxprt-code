@@ -51,7 +51,12 @@ function stripFrontmatter(content: string): string {
   // Verify the `---` close delimiter is standalone (followed by newline or EOF),
   // not part of text like `---foo`.
   const afterClose = closeMarker + FRONTMATTER_CLOSE.length;
-  if (afterClose < content.length && content[afterClose] !== NEWLINE) {
+  const closeTerminator = content[afterClose];
+  if (
+    afterClose < content.length &&
+    closeTerminator !== NEWLINE &&
+    closeTerminator !== '\r'
+  ) {
     // Not a standalone delimiter — treat as no valid frontmatter close.
     return content;
   }

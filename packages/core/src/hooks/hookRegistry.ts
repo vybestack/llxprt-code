@@ -191,7 +191,9 @@ export class HookRegistry {
     const untrusted = trustManager.getUntrustedHooks(allProjectHooks);
 
     if (untrusted.length > 0) {
-      const hookNames = untrusted.map((h) => h.name ?? h.command).join(', ');
+      const hookNames = untrusted
+        .map((h) => this.getHookName({ config: h }))
+        .join(', ');
       const warning = `WARNING: Project defines ${untrusted.length} untrusted hook(s): ${hookNames}. Review these hooks before trusting them.
 `;
 

@@ -20,10 +20,7 @@ import {
   stripShellWrapper,
 } from './shell-utils.js';
 import { isShellInvocationAllowlisted } from './tool-utils.js';
-import {
-  initializeParser as initializeShellParsers,
-  isParserAvailable,
-} from './shell-parser.js';
+import { initializeParser as initializeShellParsers } from './shell-parser.js';
 import type { Config } from '../config/config.js';
 import type { AnyToolInvocation } from '../index.js';
 
@@ -45,6 +42,7 @@ vi.mock('shell-quote', () => ({
 
 let config: Config;
 const isWindowsRuntime = process.platform === 'win32';
+const parserInitialized = await initializeShellParsers();
 
 describe('shell-utils', () => {
   beforeAll(async () => {
@@ -159,7 +157,7 @@ describe('shell-utils', () => {
       );
     });
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block a command that redefines an allowed function to run an unlisted command',
       () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
@@ -174,7 +172,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block a multi-line function body that runs an unlisted command',
       () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
@@ -191,7 +189,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block a function keyword declaration that runs an unlisted command',
       () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
@@ -206,7 +204,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block command substitution that invokes an unlisted command',
       () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
@@ -236,7 +234,7 @@ describe('shell-utils', () => {
       );
     });
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block command substitution inside a here-document when the inner command is unlisted',
       () => {
         config.getCoreTools = () => [
@@ -256,7 +254,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block backtick substitution that invokes an unlisted command',
       () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
@@ -268,7 +266,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block process substitution using <() when the inner command is unlisted',
       () => {
         config.getCoreTools = () => [
@@ -286,7 +284,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block process substitution using >() when the inner command is unlisted',
       () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
@@ -301,7 +299,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block commands containing prompt transformations',
       () => {
         const result = isCommandAllowed(
@@ -315,7 +313,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block simple prompt transformation expansions',
       () => {
         const result = isCommandAllowed('echo ${foo@P}', config);
@@ -360,7 +358,7 @@ describe('shell-utils', () => {
         expect(result.allowed).toBe(true);
       });
 
-      it.skipIf(!isParserAvailable())(
+      it.skipIf(!parserInitialized)(
         'should block a command when parsing fails',
         () => {
           const result = isCommandAllowed('ls &&', config);
@@ -383,7 +381,7 @@ describe('shell-utils', () => {
         });
       });
 
-      it.skipIf(!isParserAvailable())(
+      it.skipIf(!parserInitialized)(
         'should block commands that cannot be parsed safely',
         () => {
           const result = checkCommandPermissions('ls &&', config);
@@ -519,7 +517,7 @@ describe('shell-utils', () => {
       expect(result).toStrictEqual(['echo', 'git']);
     });
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should include nested command substitutions',
       () => {
         const result = getCommandRoots('echo $(badCommand --danger)');
@@ -527,7 +525,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should include process substitutions',
       () => {
         const result = getCommandRoots('diff <(ls) <(ls -a)');
@@ -535,7 +533,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should include backtick substitutions',
       () => {
         const result = getCommandRoots('echo `badCommand --danger`');
@@ -543,7 +541,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should treat parameter expansions with prompt transformations as unsafe',
       () => {
         const roots = getCommandRoots(
@@ -553,7 +551,7 @@ describe('shell-utils', () => {
       },
     );
 
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should not return roots for prompt transformation expansions',
       () => {
         const roots = getCommandRoots('echo ${foo@P}');
@@ -582,7 +580,7 @@ describe('shell-utils', () => {
       expect(roots.length).toBeGreaterThan(0);
       expect(roots).toContain('Get-ChildItem');
     });
-    it.skipIf(!isParserAvailable())(
+    it.skipIf(!parserInitialized)(
       'should block commands when PowerShell parser reports errors',
       () => {
         const { allowed, reason } = isCommandAllowed('Get-ChildItem |', config);
