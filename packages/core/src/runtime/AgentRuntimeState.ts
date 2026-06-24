@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { debugLogger } from '../utils/debugLogger.js';
 /**
  * @license
@@ -233,7 +235,7 @@ export function createAgentRuntimeState(
   const sessionId =
     params.sessionId !== undefined && params.sessionId !== ''
       ? params.sessionId
-      : `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      : `session-${randomUUID()}`;
 
   // Create frozen state object (lines 92-103)
   const state: AgentRuntimeState = Object.freeze({
@@ -439,7 +441,7 @@ export function subscribeToAgentRuntimeState(
   }
 
   // Generate unique subscription ID (line 297)
-  const subscriptionId = `sub-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  const subscriptionId = `sub-${randomUUID()}`;
 
   // Store subscription (lines 298-302)
   subscribers.set(subscriptionId, {
