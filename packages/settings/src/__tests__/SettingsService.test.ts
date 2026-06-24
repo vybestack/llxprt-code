@@ -274,3 +274,83 @@ describe('SettingsService — getSettings / updateSettings', () => {
     expect(svc.get('temperature')).toBe(0.5);
   });
 });
+
+describe('SettingsService — empty-string activeProvider fallback', () => {
+  it('exportForProfile falls back to openai when imported activeProvider is empty', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: '',
+      providers: {},
+      tools: { allowed: [], disabled: [] },
+    });
+    const exported = (await svc.exportForProfile()) as {
+      defaultProvider: string;
+    };
+    expect(exported.defaultProvider).toBe('openai');
+  });
+
+  it('exportForProfile uses a non-empty imported activeProvider', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: 'anthropic',
+      providers: {},
+      tools: { allowed: [], disabled: [] },
+    });
+    const exported = (await svc.exportForProfile()) as {
+      defaultProvider: string;
+    };
+    expect(exported.defaultProvider).toBe('anthropic');
+  });
+
+  it('exportForProfile falls back to openai when switchProvider sets empty string', async () => {
+    const svc = new SettingsService();
+    svc.setProviderSetting('openai', 'model', 'gpt-4');
+    await svc.switchProvider('');
+    const exported = (await svc.exportForProfile()) as {
+      defaultProvider: string;
+    };
+    expect(exported.defaultProvider).toBe('openai');
+  });
+
+  it('getDiagnosticsData falls back to openai when imported activeProvider is empty', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: '',
+      providers: {},
+      tools: { allowed: [], disabled: [] },
+    });
+    const diag = (await svc.getDiagnosticsData()) as {
+      provider: string;
+    };
+    expect(diag.provider).toBe('openai');
+  });
+
+  it('getDiagnosticsData uses a non-empty imported activeProvider', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: 'anthropic',
+      providers: {},
+      tools: { allowed: [], disabled: [] },
+    });
+    const diag = (await svc.getDiagnosticsData()) as {
+      provider: string;
+    };
+    expect(diag.provider).toBe('anthropic');
+  });
+
+  it('exportForProfile defaults to openai with no provider set at all', async () => {
+    const svc = new SettingsService();
+    const exported = (await svc.exportForProfile()) as {
+      defaultProvider: string;
+    };
+    expect(exported.defaultProvider).toBe('openai');
+  });
+
+  it('getDiagnosticsData defaults to openai with no provider set at all', async () => {
+    const svc = new SettingsService();
+    const diag = (await svc.getDiagnosticsData()) as {
+      provider: string;
+    };
+    expect(diag.provider).toBe('openai');
+  });
+});

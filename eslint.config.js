@@ -289,10 +289,6 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-1.ts', // #2089
   'packages/settings/src/settings/registry/registry-entries-2.ts', // #2089
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
-  // #2120 — all packages/settings/src files are now fully compliant: zero
-  // inline lint directives. The broad glob below supersedes the individual
-  // #2089 entries above. Locked to error so any new directive fails
-  // immediately.
   'packages/settings/src/**/*.{ts,tsx}', // #2120
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089

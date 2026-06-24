@@ -82,6 +82,11 @@ function validateLoadBalancerShape(
     );
   }
   const record = profile;
+  if (record.type !== 'loadbalancer') {
+    throw new Error(
+      `LoadBalancer profile '${name}' must reference at least one profile`,
+    );
+  }
   if (record.version !== 1) {
     throw new Error('unsupported profile version');
   }
@@ -124,13 +129,10 @@ function hasStandardProfileFields(record: Record<string, unknown>): boolean {
   if (typeof model !== 'string' || model === '') {
     return false;
   }
-  if (record.modelParams === null || record.modelParams === undefined) {
+  if (!isPlainObject(record.modelParams)) {
     return false;
   }
-  if (
-    record.ephemeralSettings === null ||
-    record.ephemeralSettings === undefined
-  ) {
+  if (!isPlainObject(record.ephemeralSettings)) {
     return false;
   }
   return true;

@@ -17,7 +17,6 @@ interface EphemeralSettings {
     apiKeys?: Record<string, string>;
     apiKeyFiles?: Record<string, string>;
   };
-  n?: unknown;
 }
 
 interface SettingsChangeEvent {
@@ -284,7 +283,10 @@ export class SettingsService extends EventEmitter {
     let activeProvider: string;
     if (typeof globalActive === 'string' && globalActive !== '') {
       activeProvider = globalActive;
-    } else if (this.settings.activeProvider !== null) {
+    } else if (
+      typeof this.settings.activeProvider === 'string' &&
+      this.settings.activeProvider !== ''
+    ) {
       activeProvider = this.settings.activeProvider;
     } else {
       activeProvider = 'openai';
@@ -379,10 +381,15 @@ export class SettingsService extends EventEmitter {
 
   getDiagnosticsData(): Promise<Record<string, unknown>> {
     const globalActiveProvider = this.settings.global.activeProvider;
+    const fallbackActiveProvider =
+      typeof this.settings.activeProvider === 'string' &&
+      this.settings.activeProvider !== ''
+        ? this.settings.activeProvider
+        : 'openai';
     const activeProvider =
       typeof globalActiveProvider === 'string' && globalActiveProvider !== ''
         ? globalActiveProvider
-        : (this.settings.activeProvider ?? 'openai');
+        : fallbackActiveProvider;
     const providerSettings = this.getProviderSettings(activeProvider);
 
     const model = (providerSettings.model as string) || 'unknown';

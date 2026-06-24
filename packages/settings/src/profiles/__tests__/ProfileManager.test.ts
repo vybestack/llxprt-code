@@ -480,3 +480,216 @@ describe('ProfileManager — malformed loadbalancer profile shapes', () => {
     );
   });
 });
+
+describe('ProfileManager — malformed standard profile modelParams/ephemeralSettings', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('rejects a standard profile with primitive modelParams', async () => {
+    const filePath = path.join(tempDir, 'primitive-modelparams.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: 'not-an-object',
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('primitive-modelparams')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with array modelParams', async () => {
+    const filePath = path.join(tempDir, 'array-modelparams.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: [],
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('array-modelparams')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with null modelParams', async () => {
+    const filePath = path.join(tempDir, 'null-modelparams.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: null,
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('null-modelparams')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with primitive ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'primitive-ephemeral.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: 42,
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('primitive-ephemeral')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with array ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'array-ephemeral.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: ['not', 'an', 'object'],
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('array-ephemeral')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with null ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'null-ephemeral.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: null,
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('null-ephemeral')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('accepts a well-formed standard profile with object modelParams and ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'valid-profile.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: { temperature: 0.7 },
+        ephemeralSettings: { 'base-url': 'https://api.openai.com' },
+      }),
+      'utf8',
+    );
+
+    const loaded = await pm.loadProfile('valid-profile');
+    expect(loaded.provider).toBe('openai');
+    expect(loaded.model).toBe('gpt-4');
+  });
+});
+
+describe('ProfileManager — saveLoadBalancerProfile type discriminant validation', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('rejects a runtime-shaped value with missing type', async () => {
+    const profile = {
+      version: 1,
+      policy: 'roundrobin',
+      profiles: ['p1'],
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {},
+    } as unknown as Parameters<typeof pm.saveLoadBalancerProfile>[1];
+
+    await expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('rejects a runtime-shaped value with wrong type', async () => {
+    const profile = {
+      version: 1,
+      type: 'standard',
+      policy: 'roundrobin',
+      profiles: ['p1'],
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {},
+    } as unknown as Parameters<typeof pm.saveLoadBalancerProfile>[1];
+
+    await expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('does not write a file when the type discriminant is missing', async () => {
+    const profile = {
+      version: 1,
+      policy: 'roundrobin',
+      profiles: ['p1'],
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {},
+    } as unknown as Parameters<typeof pm.saveLoadBalancerProfile>[1];
+
+    await expect(
+      pm.saveLoadBalancerProfile('no-write', profile),
+    ).rejects.toThrow('must reference at least one profile');
+
+    const filePath = path.join(tempDir, 'no-write.json');
+    await expect(fs.access(filePath)).rejects.toThrow('ENOENT');
+  });
+});

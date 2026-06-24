@@ -115,11 +115,97 @@ function isNewOffRule(line) {
   );
 }
 
-function shouldCheckInlineDisable(file) {
+function shouldCheckInlineDirective(file) {
   if (isGeneratedGuardFixture(file)) {
     return false;
   }
   return /\.(?:cjs|mjs|js|jsx|ts|tsx)$/.test(file);
+}
+
+function previousCodeChar(line, index) {
+  for (let i = index - 1; i >= 0; i--) {
+    const ch = line[i];
+    if (!/\s/.test(ch)) {
+      return ch;
+    }
+  }
+  return '';
+}
+
+function canStartRegex(line, index) {
+  const previous = previousCodeChar(line, index);
+  return previous === '' || /[({[=,:;!&|?+\-*%^~<>]/.test(previous);
+}
+
+function skipQuoted(line, start, quote) {
+  for (let i = start + 1; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === quote) {
+      return i;
+    }
+  }
+  return line.length;
+}
+
+function skipRegex(line, start) {
+  let inCharacterClass = false;
+  for (let i = start + 1; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '[') {
+      inCharacterClass = true;
+      continue;
+    }
+    if (ch === ']') {
+      inCharacterClass = false;
+      continue;
+    }
+    if (ch === '/' && !inCharacterClass) {
+      return i;
+    }
+  }
+  return line.length;
+}
+
+export function hasInlineEslintDirective(line) {
+  const directiveRe = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"' || ch === "'" || ch === '`') {
+      i = skipQuoted(line, i, ch);
+      continue;
+    }
+    if (ch !== '/') {
+      continue;
+    }
+    const next = line[i + 1];
+    if (next === '/') {
+      return directiveRe.test(line.slice(i + 2));
+    }
+    if (next === '*') {
+      const end = line.indexOf('*/', i + 2);
+      const comment = line.slice(i + 2, end === -1 ? undefined : end);
+      if (directiveRe.test(comment)) {
+        return true;
+      }
+      if (end === -1) {
+        return false;
+      }
+      i = end + 1;
+      continue;
+    }
+    if (canStartRegex(line, i)) {
+      i = skipRegex(line, i);
+    }
+  }
+  return false;
 }
 
 function addViolation(violations, file, lineNumber, message, content) {
@@ -163,14 +249,14 @@ export function checkDiff(diff) {
       const currentLine = newLine;
 
       if (
-        shouldCheckInlineDisable(file) &&
-        /eslint-disable(?:-next-line|-line)?\b/.test(content)
+        shouldCheckInlineDirective(file) &&
+        hasInlineEslintDirective(content)
       ) {
         addViolation(
           violations,
           file,
           currentLine,
-          'Inline ESLint disable directives are forbidden by #2079/#2080.',
+          'Inline ESLint disable/enable directives are forbidden by #2079/#2080.',
           content,
         );
       }
