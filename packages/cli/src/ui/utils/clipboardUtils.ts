@@ -253,12 +253,15 @@ export async function cleanupOldClipboardImages(
 
     for (const file of files) {
       const ext = path.extname(file).toLowerCase();
-      if (file.startsWith('clipboard-') && IMAGE_EXTENSIONS.includes(ext)) {
-        const filePath = path.join(tempDir, file);
-        const stats = await fs.stat(filePath);
-        if (stats.mtimeMs < oneHourAgo) {
-          await fs.unlink(filePath);
-        }
+      const isClipboardImage =
+        file.startsWith('clipboard-') && IMAGE_EXTENSIONS.includes(ext);
+      if (!isClipboardImage) {
+        continue;
+      }
+      const filePath = path.join(tempDir, file);
+      const stats = await fs.stat(filePath);
+      if (stats.mtimeMs < oneHourAgo) {
+        await fs.unlink(filePath);
       }
     }
   } catch {

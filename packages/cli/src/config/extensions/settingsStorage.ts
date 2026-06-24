@@ -74,35 +74,45 @@ export function getKeychainServiceName(
 /**
  * Parses a .env file content into a key-value record.
  */
+/**
+ * Parses a single .env line into a [key, value] pair, or returns null for
+ * blank lines, comments, and lines without an `=` separator.
+ */
+function parseEnvLine(line: string): [string, string] | null {
+  const trimmed = line.trim();
+
+  // Skip empty lines and comments
+  if (!trimmed || trimmed.startsWith('#')) {
+    return null;
+  }
+
+  const equalIndex = trimmed.indexOf('=');
+  if (equalIndex === -1) {
+    return null;
+  }
+
+  const key = trimmed.substring(0, equalIndex).trim();
+  let value = trimmed.substring(equalIndex + 1).trim();
+
+  // Remove surrounding quotes if present
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.substring(1, value.length - 1);
+  }
+
+  return [key, value];
+}
+
 function parseEnvFile(content: string): Record<string, string> {
   const result: Record<string, string> = {};
-  const lines = content.split('\n');
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    // Skip empty lines and comments
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
+  for (const line of content.split('\n')) {
+    const parsed = parseEnvLine(line);
+    if (parsed) {
+      result[parsed[0]] = parsed[1];
     }
-
-    const equalIndex = trimmed.indexOf('=');
-    if (equalIndex === -1) {
-      continue;
-    }
-
-    const key = trimmed.substring(0, equalIndex).trim();
-    let value = trimmed.substring(equalIndex + 1).trim();
-
-    // Remove surrounding quotes if present
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.substring(1, value.length - 1);
-    }
-
-    result[key] = value;
   }
 
   return result;
@@ -177,22 +187,29 @@ export class ExtensionSettingsStorage {
     }
 
     // Write sensitive settings to SecureStore (delete removed ones)
-    if (sensitiveSettings.length > 0) {
-      for (const setting of sensitiveSettings) {
-        const value = values[setting.envVar];
-        try {
-          if (value !== undefined) {
-            await this.store.set(setting.envVar, value);
-          } else {
-            await this.store.delete(setting.envVar);
-          }
-        } catch (error) {
-          debugLogger.error(
-            `Failed to persist sensitive setting ${setting.envVar} in keychain:`,
-            error,
-          );
-        }
+    for (const setting of sensitiveSettings) {
+      await this.persistSensitiveSetting(
+        setting.envVar,
+        values[setting.envVar],
+      );
+    }
+  }
+
+  private async persistSensitiveSetting(
+    envVar: string,
+    value: string | undefined,
+  ): Promise<void> {
+    try {
+      if (value !== undefined) {
+        await this.store.set(envVar, value);
+      } else {
+        await this.store.delete(envVar);
       }
+    } catch (error) {
+      debugLogger.error(
+        `Failed to persist sensitive setting ${envVar} in keychain:`,
+        error,
+      );
     }
   }
 

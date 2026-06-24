@@ -116,19 +116,19 @@ async function deleteSingleSession(
     }
     result.deleted++;
 
-    if (sessionToDelete.sessionInfo !== null) {
-      const debugLogsDeleted = await cleanupDebugLogsForSession(
-        sessionToDelete.sessionInfo.id,
+    const sessionInfo = sessionToDelete.sessionInfo;
+    if (sessionInfo === null) {
+      return;
+    }
+    const debugLogsDeleted = await cleanupDebugLogsForSession(sessionInfo.id);
+    if (debugLogsDeleted <= 0) {
+      return;
+    }
+    result.debugLogsDeleted = (result.debugLogsDeleted ?? 0) + debugLogsDeleted;
+    if (config.getDebugMode()) {
+      debugLogger.debug(
+        `Deleted ${debugLogsDeleted} debug log file(s) for session ${sessionInfo.id}`,
       );
-      if (debugLogsDeleted > 0) {
-        result.debugLogsDeleted =
-          (result.debugLogsDeleted ?? 0) + debugLogsDeleted;
-        if (config.getDebugMode()) {
-          debugLogger.debug(
-            `Deleted ${debugLogsDeleted} debug log file(s) for session ${sessionToDelete.sessionInfo.id}`,
-          );
-        }
-      }
     }
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
