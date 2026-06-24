@@ -122,12 +122,33 @@ const CORE_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   ],
 ]);
 
+function unwrapBacktickCell(cell: string): string | null {
+  const hasLeadingBacktick = cell.startsWith('`');
+  const hasTrailingBacktick = cell.endsWith('`');
+  if (hasLeadingBacktick !== hasTrailingBacktick) return null;
+  return hasLeadingBacktick ? cell.slice(1, -1) : cell;
+}
+
 /**
- * Regex to parse move-map markdown table rows.
- * Matches lines like: | 42 | `packages/core/src/providers/types/IProviderConfig.ts` | `packages/providers/src/types/IProviderConfig.ts` | Rule 7 sub | H (config types) |
- * Captures: row number, source path (without backticks), destination path (without backticks).
+ * Parse a move-map markdown table row using string operations.
+ * Row format: | 42 | `packages/.../file.ts` | `packages/.../file.ts` | ... |
+ * Returns { rowNum, sourcePath, destPath } or null if the line is not a valid row.
  */
-const MOVE_MAP_ROW_REGEX = /^\|\s*(\d+)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|/;
+function parseMoveMapRow(
+  line: string,
+): { rowNum: number; sourcePath: string; destPath: string } | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|')) return null;
+  const cells = trimmed.split('|').map((c) => c.trim());
+  // cells[0] is '' (before first |), cells[1] = row number, cells[2] = source, cells[3] = dest
+  if (cells.length < 4) return null;
+  if (!/^\d+$/.test(cells[1])) return null;
+  const rowNum = Number(cells[1]);
+  const sourcePath = unwrapBacktickCell(cells[2]);
+  const destPath = unwrapBacktickCell(cells[3]);
+  if (!sourcePath || !destPath) return null;
+  return { rowNum, sourcePath, destPath };
+}
 
 /**
  * Parse all table rows from the move-map markdown and return an array of
@@ -140,13 +161,9 @@ function parseMoveMapRows(
     [];
   const lines = content.split(String.fromCharCode(10));
   for (const line of lines) {
-    const match = MOVE_MAP_ROW_REGEX.exec(line);
-    if (match) {
-      rows.push({
-        rowNum: parseInt(match[1], 10),
-        sourcePath: match[2],
-        destPath: match[3],
-      });
+    const parsed = parseMoveMapRow(line);
+    if (parsed) {
+      rows.push(parsed);
     }
   }
   return rows;

@@ -77,19 +77,32 @@ export function isLocalEndpoint(url: string | undefined): boolean {
 }
 
 /**
+ * Parse an IPv4 address string into 4 octets.
+ * Returns null if the input is not a valid IPv4 address.
+ */
+function parseIPv4Octets(ip: string): [number, number, number, number] | null {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  const octets: number[] = [];
+  for (const part of parts) {
+    if (part.length === 0 || part.length > 3) return null;
+    for (let i = 0; i < part.length; i++) {
+      if (part.charCodeAt(i) < 48 || part.charCodeAt(i) > 57) return null;
+    }
+    const num = Number(part);
+    if (num < 0 || num > 255) return null;
+    octets.push(num);
+  }
+  return [octets[0], octets[1], octets[2], octets[3]];
+}
+
+/**
  * Checks if an IPv4 address is in the loopback range (127.0.0.0/8).
  * The entire 127.x.x.x range is reserved for loopback (RFC 1122).
  */
 function isIPv4LoopbackRange(ip: string): boolean {
-  const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!ipv4Match) {
-    return false;
-  }
-
-  const octets = ipv4Match.slice(1).map(Number);
-
-  // Validate octets are in valid range (consistent with isPrivateIPv4)
-  if (octets.some((octet) => octet < 0 || octet > 255)) {
+  const octets = parseIPv4Octets(ip);
+  if (octets === null) {
     return false;
   }
 
@@ -105,16 +118,8 @@ function isIPv4LoopbackRange(ip: string): boolean {
  * - 192.168.0.0/16 (192.168.0.0 - 192.168.255.255)
  */
 function isPrivateIPv4(ip: string): boolean {
-  // Match IPv4 pattern
-  const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!ipv4Match) {
-    return false;
-  }
-
-  const octets = ipv4Match.slice(1).map(Number);
-
-  // Validate octets are in valid range
-  if (octets.some((octet) => octet < 0 || octet > 255)) {
+  const octets = parseIPv4Octets(ip);
+  if (octets === null) {
     return false;
   }
 

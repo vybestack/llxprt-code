@@ -168,6 +168,27 @@ export function getCliRuntimeServices(): CliRuntimeServices {
   return { settingsService, config, providerManager, profileManager };
 }
 
+function registerAddItemCallback(
+  oauthManager: unknown,
+  addItem: OAuthUICallback,
+): void {
+  const providersMap = (
+    oauthManager as {
+      providers?: Map<string, unknown>;
+    }
+  ).providers;
+  if (!(providersMap instanceof Map)) return;
+  for (const provider of providersMap.values()) {
+    const p = provider as {
+      name?: string;
+      setAddItem?: (callback: OAuthUICallback) => void;
+    };
+    if (p.name && typeof p.setAddItem === 'function') {
+      p.setAddItem(addItem);
+    }
+  }
+}
+
 export function getCliProviderManager(
   options: {
     allowBrowserEnvironment?: boolean;
@@ -181,23 +202,7 @@ export function getCliProviderManager(
   const oauthManager = entry.oauthManager;
 
   if (options.addItem && oauthManager) {
-    const providersMap = (
-      oauthManager as unknown as {
-        providers?: Map<string, unknown>;
-      }
-    ).providers;
-    if (providersMap instanceof Map) {
-      for (const provider of providersMap.values()) {
-        const p = provider as {
-          name?: string;
-          setAddItem?: (callback: OAuthUICallback) => void;
-        };
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (p.name && p.setAddItem) {
-          p.setAddItem(options.addItem);
-        }
-      }
-    }
+    registerAddItemCallback(oauthManager, options.addItem);
   }
   return services.providerManager;
 }
@@ -441,12 +446,14 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
   } catch {
     const providerName =
       resolveActiveProviderName(settingsService, config) ?? null;
-    const fallbackLabel = providerName
-      ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        modelName
-        ? `${providerName}:${modelName}`
-        : providerName
-      : (modelName ?? 'unknown');
+    let fallbackLabel: string;
+    if (providerName && modelName) {
+      fallbackLabel = `${providerName}:${modelName}`;
+    } else if (providerName) {
+      fallbackLabel = providerName;
+    } else {
+      fallbackLabel = modelName ?? 'unknown';
+    }
     return {
       providerName,
       modelName,

@@ -9,12 +9,11 @@
  * Attempts numeric, boolean, and JSON decoding before falling back to raw string.
  */
 export function parseModelParamValue(value: string): unknown {
-  // Static regex for numeric validation - no dynamic parts
-  if (/^-?\d+(\.\d+)?$/.test(value)) {
-    const num = Number(value);
-    if (!Number.isNaN(num)) {
-      return num;
-    }
+  // Numeric validation without regex: check if the string represents a valid number
+  const trimmed = value.trim();
+  const num = Number(trimmed);
+  if (trimmed !== '' && Number.isFinite(num)) {
+    return num;
   }
 
   const lower = value.toLowerCase();

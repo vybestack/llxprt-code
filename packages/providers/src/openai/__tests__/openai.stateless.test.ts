@@ -111,24 +111,22 @@ function buildCallOptions(
   });
 }
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  FakeOpenAIClass.reset();
-  // Set up default runtime context for tests
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-      runtimeId: 'openai-stateless-test',
-    }),
-  );
-});
-
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-afterEach(() => {
-  clearActiveProviderRuntimeContext();
-});
-
 describe('OpenAI provider stateless contract tests', () => {
+  beforeEach(() => {
+    FakeOpenAIClass.reset();
+    // Set up default runtime context for tests
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: 'openai-stateless-test',
+      }),
+    );
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
   it('creates client per runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P08 @requirement:REQ-SP2-001 @pseudocode openai-responses-stateless.md lines 1-4', async () => {
     const provider = new TestOpenAIProvider(
       'token-A',

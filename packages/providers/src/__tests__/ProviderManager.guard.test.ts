@@ -528,11 +528,10 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const providerConfigRef = provider as unknown as {
       baseProviderConfig?: { baseURL?: string };
     };
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (providerConfigRef.baseProviderConfig) {
-      providerConfigRef.baseProviderConfig.baseURL =
-        'https://provider-config.example.com';
-    }
+    providerConfigRef.baseProviderConfig = {
+      ...(providerConfigRef.baseProviderConfig ?? {}),
+      baseURL: 'https://provider-config.example.com',
+    };
     manager.registerProvider(provider);
 
     settingsService.set('activeProvider', provider.name);

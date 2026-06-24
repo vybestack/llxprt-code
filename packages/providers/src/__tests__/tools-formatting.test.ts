@@ -195,22 +195,24 @@ describe('Provider Formatting Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10
 
     it('processToolParameters produces correct output for fixture inputs', () => {
       const procCase = TOOL_FORMATTER_FIXTURES.doubleEscapeCases[2];
-      if ('processed_openai' in procCase) {
-        const resultOpenai = processToolParameters(
-          procCase.input,
-          'test_tool',
-          'openai',
-        );
-        expect(resultOpenai).toEqual(procCase.processed_openai);
-      }
-      if ('processed_qwen' in procCase) {
-        const resultQwen = processToolParameters(
-          procCase.input,
-          'test_tool',
-          'qwen',
-        );
-        expect(resultQwen).toEqual(procCase.processed_qwen);
-      }
+      const resultOpenai = processToolParameters(
+        procCase.input,
+        'test_tool',
+        'openai',
+      );
+      expect(procCase).toHaveProperty('processed_openai');
+      const expectedOpenai = (procCase as { processed_openai?: unknown })
+        .processed_openai;
+      expect(resultOpenai).toStrictEqual(expectedOpenai);
+      const resultQwen = processToolParameters(
+        procCase.input,
+        'test_tool',
+        'qwen',
+      );
+      expect(procCase).toHaveProperty('processed_qwen');
+      const expectedQwen = (procCase as { processed_qwen?: unknown })
+        .processed_qwen;
+      expect(resultQwen).toStrictEqual(expectedQwen);
     });
   });
 });

@@ -2,9 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { normalizeToolName } from './toolNameNormalization.js';
 
 describe('normalizeToolName', () => {
-  it('strips "functions" prefix from Kimi-style names', () => {
-    expect(normalizeToolName('functionslist_directory')).toBe('list_directory');
-    expect(normalizeToolName('functionssearch')).toBe('search');
+  it('strips "functions" prefix from Kimi-style names with numeric suffixes', () => {
+    expect(normalizeToolName('functionslist_directory6')).toBe(
+      'list_directory',
+    );
+    expect(normalizeToolName('functionssearch7')).toBe('search');
+  });
+
+  it('preserves legitimate names that start with functions but lack numeric suffixes', () => {
+    expect(normalizeToolName('functions_list')).toBe('functions_list');
+    expect(normalizeToolName('functionslist_directory')).toBe(
+      'functionslist_directory',
+    );
   });
 
   it('strips "call_functions" prefix from Kimi-style names', () => {

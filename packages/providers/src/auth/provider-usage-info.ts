@@ -57,6 +57,75 @@ export async function getAnthropicUsageInfo(
   }
 }
 
+async function fetchAndStoreAnthropicUsage(
+  bucket: string,
+  accessToken: string,
+  fetchFn: (
+    token: string,
+  ) => Promise<Record<string, unknown> | null | undefined>,
+  result: Map<string, Record<string, unknown>>,
+  logger: DebugLogger,
+): Promise<void> {
+  try {
+    const usageInfo = await fetchFn(accessToken);
+    if (usageInfo) {
+      result.set(bucket, usageInfo);
+    }
+  } catch (error) {
+    logger.debug(
+      `Error fetching Anthropic usage info for bucket ${bucket}:`,
+      error,
+    );
+  }
+}
+
+async function fetchAndStoreCodexUsage(
+  bucket: string,
+  accessToken: string,
+  accountId: string,
+  codexBaseUrl: string | undefined,
+  fetchFn: (
+    token: string,
+    accountId: string,
+    baseUrl?: string,
+  ) => Promise<Record<string, unknown> | null | undefined>,
+  result: Map<string, Record<string, unknown>>,
+  logger: DebugLogger,
+): Promise<void> {
+  try {
+    const usageInfo = await fetchFn(accessToken, accountId, codexBaseUrl);
+    if (usageInfo) {
+      result.set(bucket, usageInfo);
+    }
+  } catch (error) {
+    logger.debug(
+      `Error fetching Codex usage info for bucket ${bucket}:`,
+      error,
+    );
+  }
+}
+
+function isUsageRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function fetchAndStoreGeminiQuota(
+  bucket: string,
+  accessToken: string,
+  fetchFn: (token: string) => Promise<unknown>,
+  result: Map<string, Record<string, unknown>>,
+  logger: DebugLogger,
+): Promise<void> {
+  try {
+    const quotaInfo = await fetchFn(accessToken);
+    if (isUsageRecord(quotaInfo)) {
+      result.set(bucket, quotaInfo);
+    }
+  } catch (error) {
+    logger.debug(`Error fetching Gemini quota for bucket ${bucket}:`, error);
+  }
+}
+
 /**
  * Get Anthropic usage information for all authenticated buckets.
  * Returns a map of bucket name to usage info for all buckets that have
@@ -76,7 +145,6 @@ export async function getAllAnthropicUsageInfo(
     '@vybestack/llxprt-code-providers'
   );
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('anthropic', bucket);
     if (!token) {
@@ -84,23 +152,16 @@ export async function getAllAnthropicUsageInfo(
     }
 
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    if (token.expiry <= nowInSeconds) {
-      continue;
-    }
-
-    if (!token.access_token.startsWith('sk-ant-oat01-')) {
-      continue;
-    }
-
-    try {
-      const usageInfo = await fetchAnthropicUsage(token.access_token);
-      if (usageInfo) {
-        result.set(bucket, usageInfo);
-      }
-    } catch (error) {
-      logger.debug(
-        `Error fetching Anthropic usage info for bucket ${bucket}:`,
-        error,
+    if (
+      token.expiry > nowInSeconds &&
+      token.access_token.startsWith('sk-ant-oat01-')
+    ) {
+      await fetchAndStoreAnthropicUsage(
+        bucket,
+        token.access_token,
+        fetchAnthropicUsage,
+        result,
+        logger,
       );
     }
   }
@@ -127,7 +188,6 @@ export async function getAllCodexUsageInfo(
 
   const { fetchCodexUsage } = await import('@vybestack/llxprt-code-providers');
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('codex', bucket);
     if (!token) {
@@ -135,41 +195,26 @@ export async function getAllCodexUsageInfo(
     }
 
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    if (token.expiry <= nowInSeconds) {
-      continue;
-    }
-
     const tokenObj = token as Record<string, unknown>;
     const accountId =
       typeof tokenObj['account_id'] === 'string'
         ? tokenObj['account_id']
         : undefined;
-    if (!accountId) {
-      logger.debug(
-        `Codex token for bucket ${bucket} does not have account_id, skipping`,
-      );
-      continue;
-    }
 
-    try {
+    if (token.expiry > nowInSeconds && accountId) {
       const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
       const codexBaseUrl =
         typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
           ? runtimeBaseUrl
           : undefined;
-
-      const usageInfo = await fetchCodexUsage(
+      await fetchAndStoreCodexUsage(
+        bucket,
         token.access_token,
         accountId,
         codexBaseUrl,
-      );
-      if (usageInfo) {
-        result.set(bucket, usageInfo);
-      }
-    } catch (error) {
-      logger.debug(
-        `Error fetching Codex usage info for bucket ${bucket}:`,
-        error,
+        fetchCodexUsage,
+        result,
+        logger,
       );
     }
   }
@@ -194,7 +239,6 @@ export async function getAllGeminiUsageInfo(
 
   const { fetchGeminiQuota } = await import('@vybestack/llxprt-code-providers');
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('gemini', bucket);
     if (!token) {
@@ -202,17 +246,14 @@ export async function getAllGeminiUsageInfo(
     }
 
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    if (token.expiry <= nowInSeconds) {
-      continue;
-    }
-
-    try {
-      const quotaInfo = await fetchGeminiQuota(token.access_token);
-      if (quotaInfo) {
-        result.set(bucket, quotaInfo as unknown as Record<string, unknown>);
-      }
-    } catch (error) {
-      logger.debug(`Error fetching Gemini quota for bucket ${bucket}:`, error);
+    if (token.expiry > nowInSeconds) {
+      await fetchAndStoreGeminiQuota(
+        bucket,
+        token.access_token,
+        fetchGeminiQuota,
+        result,
+        logger,
+      );
     }
   }
 

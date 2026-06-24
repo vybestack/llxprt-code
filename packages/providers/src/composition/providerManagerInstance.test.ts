@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
@@ -13,8 +11,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  debugLogger,
   sanitizeForByteString,
-  needsSanitization,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
@@ -39,17 +37,14 @@ vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 
-// Mock the sanitizeApiKey function using the core utilities
 function sanitizeApiKey(key: string): string {
   const sanitized = sanitizeForByteString(key);
-
-  if (needsSanitization(key)) {
-    console.warn(
+  if (sanitized !== key) {
+    debugLogger.warn(
       '[ProviderManager] API key contained non-ASCII or control characters that were removed. ' +
         'Please check your API key file encoding (should be UTF-8 without BOM).',
     );
   }
-
   return sanitized;
 }
 
@@ -102,32 +97,29 @@ describe('API key sanitization regression tests', () => {
 
     // Simulate BOM removal and sanitization
     let content = bomString;
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (content.charCodeAt(0) === 0xfeff) {
-      content = content.slice(1);
-    }
+    content = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
     const sanitizedKey = sanitizeApiKey(content);
 
     expect(sanitizedKey).toBe('sk-validapikey123');
   });
 
   it('should warn when sanitization removes characters', () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => {});
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
 
-    const apiKeyWithIssues = 'sk-abc\uFFFDdef';
-    mockFileSystem.setMockFile('/home/user/.openai_key', apiKeyWithIssues);
+    try {
+      const apiKeyWithIssues = 'sk-abc\uFFFDdef';
+      mockFileSystem.setMockFile('/home/user/.openai_key', apiKeyWithIssues);
 
-    sanitizeApiKey(apiKeyWithIssues);
+      sanitizeApiKey(apiKeyWithIssues);
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'API key contained non-ASCII or control characters',
-      ),
-    );
-
-    consoleWarnSpy.mockRestore();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'API key contained non-ASCII or control characters',
+        ),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('should apply sanitization to all providers consistently', () => {
