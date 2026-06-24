@@ -167,7 +167,7 @@ const legacyDirectiveCleanupScopes = [
   'packages/providers/src/utils/localEndpoint.ts', // #2084
   'packages/providers/src/utils/toolNameNormalization.ts', // #2084
   'packages/providers/src/utils/toolResponsePayload.ts', // #2084
-  'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
+  // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
@@ -497,6 +497,10 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/task.issues.test.ts', // #2090
   'packages/agents/src/tools/task.max-turns.test.ts', // #2090
   'packages/agents/src/tools/task.timeout.test.ts', // #2090
+  // #2117 — all packages/agents/src files are now fully compliant: zero inline
+  // lint directives. The broad glob below supersedes the individual #2090
+  // entries above. Locked to error so any new directive fails immediately.
+  'packages/agents/src/**/*.{ts,tsx}', // #2117
   // #2091 packages/cli test cleanup — target files (and extracted helpers)
   // are fully compliant: zero inline lint directives. Locked to error so any
   // new directive fails immediately while the rest of packages/cli remains in

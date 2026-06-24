@@ -5,7 +5,57 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { checkDiff, formatViolations } from '../check-eslint-guard.js';
+
+const repoRoot = resolve(__dirname, '..', '..');
+
+function listTsFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      out.push(...listTsFiles(full));
+    } else if (/\.(?:ts|tsx)$/.test(entry)) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+const eslintConfigPath = join(repoRoot, 'eslint.config.js');
+const eslintConfigSource = readFileSync(eslintConfigPath, 'utf8');
+
+function extractScopeArray(name) {
+  const start = eslintConfigSource.indexOf('const ' + name + ' = [');
+  if (start === -1) {
+    return [];
+  }
+  const arrayStart = eslintConfigSource.indexOf('[', start);
+  let depth = 0;
+  let end = arrayStart;
+  for (let i = arrayStart; i < eslintConfigSource.length; i++) {
+    const ch = eslintConfigSource[i];
+    if (ch === '[') {
+      depth += 1;
+    } else if (ch === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  const body = eslintConfigSource.slice(arrayStart + 1, end);
+  const entries = [];
+  const re = /'([^']+)'/g;
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    entries.push(m[1]);
+  }
+  return entries;
+}
 
 function diffFor(file, addedLine) {
   return [
@@ -134,5 +184,37 @@ describe('check-eslint-guard', () => {
     expect(violations[0].message).toContain(
       'Inline ESLint disable directives are forbidden',
     );
+  });
+});
+
+describe('packages/agents directive cleanup (#2117)', () => {
+  const agentsSrcDir = join(repoRoot, 'packages', 'agents', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const directiveRe = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
+    const offenders = [];
+    for (const file of listTsFiles(agentsSrcDir)) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, idx) => {
+        if (directiveRe.test(line)) {
+          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
+        }
+      });
+    }
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/agents/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const agentsEntries = legacy.filter((e) => e.startsWith('packages/agents'));
+    expect(
+      agentsEntries,
+      'Legacy agents entries: ' + agentsEntries.join(', '),
+    ).toEqual([]);
   });
 });

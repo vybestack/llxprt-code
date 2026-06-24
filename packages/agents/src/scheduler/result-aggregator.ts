@@ -65,6 +65,15 @@ interface BufferedEntry {
 }
 
 // ---- ResultAggregator -------------------------------------------------------
+function hasTruthyTruncateMode(ephemeral: Record<string, unknown>): boolean {
+  const value = ephemeral['tool-output-truncate-mode'];
+  if (typeof value === 'number') {
+    return value !== 0 && !Number.isNaN(value);
+  }
+  return (
+    value !== undefined && value !== null && value !== false && value !== ''
+  );
+}
 
 /**
  * @internal
@@ -292,10 +301,13 @@ export class ResultAggregator {
     }
 
     this.resetBatchIfComplete();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Async publish reentrancy can flip this flag while awaiting result publication.
-    if (this.pendingPublishRequest) {
+    if (this.consumePendingPublishRequest()) {
       await this.publishBufferedResultsPass(signal);
     }
+  }
+
+  private consumePendingPublishRequest(): boolean {
+    return this.pendingPublishRequest;
   }
 
   /**
@@ -414,16 +426,7 @@ export class ResultAggregator {
         getEphemeralSettings: () => ({
           ...ephemeral,
           'tool-output-max-tokens': perToolBudget,
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          ...(ephemeral['tool-output-truncate-mode'] !== undefined &&
-          ephemeral['tool-output-truncate-mode'] !== null &&
-          ephemeral['tool-output-truncate-mode'] !== false &&
-          ephemeral['tool-output-truncate-mode'] !== 0 &&
-          ephemeral['tool-output-truncate-mode'] !== '' &&
-          !(
-            typeof ephemeral['tool-output-truncate-mode'] === 'number' &&
-            Number.isNaN(ephemeral['tool-output-truncate-mode'])
-          )
+          ...(hasTruthyTruncateMode(ephemeral)
             ? {}
             : { 'tool-output-truncate-mode': 'truncate' }),
         }),

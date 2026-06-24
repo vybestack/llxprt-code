@@ -39,6 +39,7 @@ import {
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import {
   MessageBusType,
   type ToolConfirmationRequest,
@@ -159,6 +160,36 @@ interface StreamCollectionResult {
  * {@link AgenticLoopOptions} and iterate `run(message, signal)` to receive a
  * flat {@link AgenticLoopEvent} stream.
  */
+function createCompletionController(): {
+  resolveCompletion: (calls: CompletedToolCall[]) => void;
+  completionPromise: Promise<CompletedToolCall[]>;
+} {
+  let resolver: ((calls: CompletedToolCall[]) => void) | null = null;
+  let resolved = false;
+  return {
+    resolveCompletion(calls: CompletedToolCall[]) {
+      if (resolved) return;
+      resolved = true;
+      resolver?.(calls);
+    },
+    completionPromise: new Promise<CompletedToolCall[]>((resolve) => {
+      resolver = resolve;
+    }),
+  };
+}
+
+function wrapCompletionTask(
+  completionPromise: Promise<CompletedToolCall[]>,
+  state: { completionSettled: boolean },
+): Promise<CompletedToolCall[] | null> {
+  return completionPromise
+    .then((c) => c)
+    .catch(() => null)
+    .finally(() => {
+      state.completionSettled = true;
+    });
+}
+
 export class AgenticLoop {
   private readonly agentClient: AgenticLoopOptions['agentClient'];
   private readonly config: AgenticLoopOptions['config'];
@@ -404,110 +435,40 @@ export class AgenticLoop {
    * completion resolve, handles abort-driven cancellation, and disposes the
    * scheduler. Returns the completed tool calls (or null on abort/empty).
    */
-  // eslint-disable-next-line max-lines-per-function -- This generator keeps scheduler lifecycle, live event draining, and teardown in one atomic control flow.
   private async *scheduleAndAwait(
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
   ): AsyncGenerator<AgenticLoopEvent, TurnToolResult> {
     const queue = new EventQueue();
-    // Use this loop's isolated scheduler key (NOT config.getSessionId()) so the
-    // transient per-turn scheduler never clobbers the CLI main scheduler's
-    // callbacks. See the `schedulerSessionId` field doc.
     const sessionId = this.schedulerSessionId;
 
-    let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
-      null;
+    const { resolveCompletion, completionPromise } =
+      createCompletionController();
+
     let acceptedToolUpdateSeen = false;
-    let completionResolved = false;
-    const resolveCompletion = (calls: CompletedToolCall[]) => {
-      if (completionResolved) {
-        return;
-      }
-      completionResolved = true;
-      completionResolver?.(calls);
-    };
-    const completionPromise = new Promise<CompletedToolCall[]>((resolve) => {
-      completionResolver = resolve;
-    });
+    const forwardingState = { active: true };
 
-    const display = this.displayCallbacks;
-    let forwardingActive = true;
-
-    const scheduler = await this.config.getOrCreateScheduler(
+    const scheduler = await this.createSchedulerWithCallbacks(
       sessionId,
-      {
-        outputUpdateHandler: (callId, chunk) => {
-          if (!forwardingActive) {
-            return;
-          }
-          if (typeof chunk === 'string') {
-            queue.push({ kind: 'tool_output', callId, chunk });
-          }
-          display?.outputUpdateHandler?.(callId, chunk);
-        },
-        onToolCallsUpdate: (toolCalls) => {
-          if (!forwardingActive) {
-            return;
-          }
-          if (toolCalls.length > 0) {
-            acceptedToolUpdateSeen = true;
-          }
-          queue.push({ kind: 'tool_update', toolCalls });
-          if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
-            queue.push({ kind: 'awaiting_approval', toolCalls });
-          }
-          display?.onToolCallsUpdate?.(toolCalls);
-        },
-        onAllToolCallsComplete: async (completed) => {
-          // CoreToolScheduler clears its internal toolCalls and notifies after
-          // this callback returns. The loop resolves completion from this
-          // callback, so mirror the final empty update first to keep display
-          // state from racing behind continuation.
-          if (forwardingActive) {
-            queue.push({ kind: 'tool_update', toolCalls: [] });
-            display?.onToolCallsUpdate?.([]);
-          }
-          resolveCompletion(completed);
-        },
-        getPreferredEditor: display?.getPreferredEditor ?? (() => undefined),
-        onEditorOpen: display?.onEditorOpen ?? (() => {}),
-        onEditorClose: display?.onEditorClose ?? (() => {}),
+      queue,
+      resolveCompletion,
+      forwardingState,
+      () => {
+        acceptedToolUpdateSeen = true;
       },
-      { interactiveMode: this.interactiveMode },
-      { messageBus: this.messageBus },
     );
 
     const state: TurnState = { completionSettled: false };
-    const completionTask: Promise<CompletedToolCall[] | null> =
-      completionPromise
-        .then((c) => c)
-        .catch(() => null)
-        .finally(() => {
-          state.completionSettled = true;
-        });
+    const completionTask = wrapCompletionTask(completionPromise, state);
 
-    // Resolves promptly when the signal aborts so the loop never blocks on a
-    // completion that may never arrive — e.g. an abort before any tool
-    // registers, where `cancelAll()` does not fire `onAllToolCallsComplete`.
-    // `cleanupAbortListener` always points at a callable (a no-op when the
-    // signal was already aborted) so teardown is unconditional.
     let cleanupAbortListener: () => void = () => {};
-    const abortPromise = new Promise<null>((resolve) => {
-      if (signal.aborted) {
-        resolve(null);
-        return;
-      }
-      const onAbort = () => resolve(null);
-      signal.addEventListener('abort', onAbort, { once: true });
-      cleanupAbortListener = () => signal.removeEventListener('abort', onAbort);
-    });
+    const abortPromise = this.createAbortPromise(
+      signal,
+      (cleanup: () => void) => {
+        cleanupAbortListener = cleanup;
+      },
+    );
 
-    // If scheduling returns without accepting work (e.g. validation filters all
-    // calls) or rejects before any tool registers, `onAllToolCallsComplete` will
-    // not fire. Resolve completion with an empty batch so the loop terminates
-    // gracefully instead of hanging. CoreToolScheduler awaits its final
-    // completion notification before schedule() resolves, so this fallback only
-    // wins for no-op/error scheduling paths.
     const scheduleTask = scheduler
       .schedule(requests, signal)
       .then(() => {
@@ -529,7 +490,6 @@ export class AgenticLoop {
     try {
       yield* this.drainWhileRunning(completionTask, state, queue, signal);
 
-      // On abort during scheduling/execution, cancel in-flight tools.
       if (signal.aborted) {
         scheduler.cancelAll();
         await Promise.race([scheduleTask, completionTask, abortPromise]);
@@ -546,11 +506,76 @@ export class AgenticLoop {
         scheduler.cancelAll();
         await Promise.race([scheduleTask, completionTask, abortPromise]);
       }
-      forwardingActive = false;
+      forwardingState.active = false;
       queue.close();
       cleanupAbortListener();
       this.config.disposeScheduler(sessionId);
     }
+  }
+
+  private createAbortPromise(
+    signal: AbortSignal,
+    registerCleanup: (cleanup: () => void) => void,
+  ): Promise<null> {
+    return new Promise<null>((resolve) => {
+      if (signal.aborted) {
+        resolve(null);
+        return;
+      }
+      const onAbort = () => resolve(null);
+      signal.addEventListener('abort', onAbort, { once: true });
+      registerCleanup(() => signal.removeEventListener('abort', onAbort));
+    });
+  }
+
+  private async createSchedulerWithCallbacks(
+    sessionId: string,
+    queue: EventQueue,
+    resolveCompletion: (calls: CompletedToolCall[]) => void,
+    forwardingState: { active: boolean },
+    markAcceptedUpdate: () => void,
+  ): Promise<ToolSchedulerContract> {
+    const display = this.displayCallbacks;
+
+    return this.config.getOrCreateScheduler(
+      sessionId,
+      {
+        outputUpdateHandler: (callId, chunk) => {
+          if (!forwardingState.active) {
+            return;
+          }
+          if (typeof chunk === 'string') {
+            queue.push({ kind: 'tool_output', callId, chunk });
+          }
+          display?.outputUpdateHandler?.(callId, chunk);
+        },
+        onToolCallsUpdate: (toolCalls) => {
+          if (!forwardingState.active) {
+            return;
+          }
+          if (toolCalls.length > 0) {
+            markAcceptedUpdate();
+          }
+          queue.push({ kind: 'tool_update', toolCalls });
+          if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
+            queue.push({ kind: 'awaiting_approval', toolCalls });
+          }
+          display?.onToolCallsUpdate?.(toolCalls);
+        },
+        onAllToolCallsComplete: async (completed) => {
+          if (forwardingState.active) {
+            queue.push({ kind: 'tool_update', toolCalls: [] });
+            display?.onToolCallsUpdate?.([]);
+          }
+          resolveCompletion(completed);
+        },
+        getPreferredEditor: display?.getPreferredEditor ?? (() => undefined),
+        onEditorOpen: display?.onEditorOpen ?? (() => {}),
+        onEditorClose: display?.onEditorClose ?? (() => {}),
+      },
+      { interactiveMode: this.interactiveMode },
+      { messageBus: this.messageBus },
+    );
   }
 
   /**

@@ -70,6 +70,17 @@ export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
 
 const TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE =
   'Stream idle timeout: no response received within the allowed time.';
+/**
+ * Safely checks if an AbortSignal (or runtime-nullish value) has been aborted.
+ * Runtime payloads can pass null/undefined despite declared types.
+ */
+function isAbortSignalActive(signal: unknown): boolean {
+  return (
+    signal != null &&
+    typeof signal === 'object' &&
+    (signal as { aborted?: unknown }).aborted === true
+  );
+}
 
 function createSafeJsonReplacer(): (key: string, value: unknown) => unknown {
   const seen = new WeakSet<object>();
@@ -390,8 +401,7 @@ export class Turn {
     idleFlag: { timedOut: boolean },
   ): AsyncGenerator<ServerGeminiStreamEvent> {
     let cumulativeOutcome = this.createEmptyResponseOutcome();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Turn events cross provider/runtime boundaries despite declared types.
-    while (true) {
+    for (;;) {
       // Use watchdog if timeout > 0, otherwise call iterator.next() directly
       let result: IteratorResult<StreamEvent>;
       if (effectiveTimeoutMs > 0) {
@@ -418,55 +428,77 @@ export class Turn {
       }
 
       const streamEvent = result.value;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
-      if (signal?.aborted) {
+      if (isAbortSignalActive(signal)) {
         yield { type: GeminiEventType.UserCancelled };
         return;
       }
 
-      // Handle the RETRY event
-      if (streamEvent.type === StreamEventType.RETRY) {
-        cumulativeOutcome = this.createEmptyResponseOutcome();
-        yield { type: GeminiEventType.Retry };
-        continue;
-      }
-
-      // Handle AGENT_EXECUTION_STOPPED event
-      if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
-        yield {
-          type: GeminiEventType.AgentExecutionStopped,
-          reason: streamEvent.reason,
-          systemMessage: streamEvent.systemMessage,
-          contextCleared: streamEvent.contextCleared,
-        };
-        return;
-      }
-
-      // Handle AGENT_EXECUTION_BLOCKED event
-      if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
-        yield {
-          type: GeminiEventType.AgentExecutionBlocked,
-          reason: streamEvent.reason,
-          systemMessage: streamEvent.systemMessage,
-          contextCleared: streamEvent.contextCleared,
-        };
-        continue;
-      }
-
-      // Narrow to CHUNK — the only other variant in the discriminated union
-      const resp = streamEvent.value;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
-      if (resp === null || resp === undefined) continue;
-
-      cumulativeOutcome = this.mergeResponseOutcome(cumulativeOutcome, resp);
-
-      const traceId = resp.responseId ?? undefined;
-      yield* this.processStreamChunk(
-        resp,
-        traceId as string,
+      const dispatch = yield* this.dispatchStreamEvent(
+        streamEvent,
         cumulativeOutcome,
       );
+      cumulativeOutcome = dispatch.outcome;
+      if (dispatch.action === 'return') {
+        return;
+      }
+      if (dispatch.action === 'process' && dispatch.resp != null) {
+        cumulativeOutcome = this.mergeResponseOutcome(
+          cumulativeOutcome,
+          dispatch.resp,
+        );
+        const traceId = dispatch.resp.responseId ?? undefined;
+        yield* this.processStreamChunk(
+          dispatch.resp,
+          traceId as string,
+          cumulativeOutcome,
+        );
+      }
     }
+  }
+
+  private async *dispatchStreamEvent(
+    streamEvent: StreamEvent,
+    cumulativeOutcome: ResponseOutcome,
+  ): AsyncGenerator<
+    ServerGeminiStreamEvent,
+    {
+      action: 'continue' | 'process' | 'return';
+      outcome: ResponseOutcome;
+      resp: GenerateContentResponse | null;
+    }
+  > {
+    // Handle the RETRY event
+    if (streamEvent.type === StreamEventType.RETRY) {
+      const outcome = this.createEmptyResponseOutcome();
+      yield { type: GeminiEventType.Retry };
+      return { action: 'continue', outcome, resp: null };
+    }
+
+    // Handle AGENT_EXECUTION_STOPPED event
+    if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
+      yield {
+        type: GeminiEventType.AgentExecutionStopped,
+        reason: streamEvent.reason,
+        systemMessage: streamEvent.systemMessage,
+        contextCleared: streamEvent.contextCleared,
+      };
+      return { action: 'return', outcome: cumulativeOutcome, resp: null };
+    }
+
+    // Handle AGENT_EXECUTION_BLOCKED event
+    if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
+      yield {
+        type: GeminiEventType.AgentExecutionBlocked,
+        reason: streamEvent.reason,
+        systemMessage: streamEvent.systemMessage,
+        contextCleared: streamEvent.contextCleared,
+      };
+      return { action: 'continue', outcome: cumulativeOutcome, resp: null };
+    }
+
+    // Narrow to CHUNK — the only other variant in the discriminated union
+    const resp = streamEvent.value as GenerateContentResponse | null;
+    return { action: 'process', outcome: cumulativeOutcome, resp };
   }
 
   private mergeResponseOutcome(
@@ -506,13 +538,11 @@ export class Turn {
   }
 
   private extractErrorStatus(error: unknown): number | undefined {
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    return typeof error === 'object' &&
-      error !== null &&
-      'status' in error &&
-      typeof (error as { status: unknown }).status === 'number'
-      ? (error as { status: number }).status
-      : undefined;
+    if (typeof error !== 'object' || error === null || !('status' in error)) {
+      return undefined;
+    }
+    const status = (error as { status: unknown }).status;
+    return typeof status === 'number' ? status : undefined;
   }
 
   private async *handleRunError(
@@ -655,8 +685,7 @@ export class Turn {
       args,
       isClientInitiated: false,
       prompt_id: this.prompt_id,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
-      agentId: this.agentId ?? DEFAULT_AGENT_ID,
+      agentId: (this.agentId as string | undefined) ?? DEFAULT_AGENT_ID,
       ...(allowedTools !== undefined
         ? { hookRestrictedAllowedTools: allowedTools }
         : {}),

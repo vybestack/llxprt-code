@@ -393,11 +393,10 @@ describe('Issue #1150: Thinking blocks in history', () => {
         }),
       };
 
-      // Attach thinking blocks
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (thoughtBlocks.length > 0) {
-        outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
-      }
+      outputIContent.blocks = [
+        ...(thoughtBlocks.length > 0 ? thoughtBlocks : []),
+        ...outputIContent.blocks,
+      ];
 
       // CRITICAL ASSERTIONS
       // 1. thoughtBlocks were extracted

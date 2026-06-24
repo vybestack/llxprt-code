@@ -83,7 +83,6 @@ export class OneShotStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
-  // eslint-disable-next-line max-lines-per-function -- Strategy orchestration remains linear for readability.
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history } = context;
 
@@ -91,17 +90,12 @@ export class OneShotStrategy implements CompressionStrategy {
       return this.noCompressionResult(history);
     }
 
-    // Compute the split: everything above the preserved tail gets compressed
     const { toCompress, toKeep } = this.computeSplit(context);
 
     if (toCompress.length < MINIMUM_COMPRESS_MESSAGES) {
       return this.noCompressionResult(history);
     }
 
-    // Resolve the compression prompt
-    const prompt = this.resolvePrompt(context);
-
-    // Resolve the provider (compression profile may be undefined)
     const compressionProfile =
       context.runtimeContext.ephemerals.compressionProfile();
     const {
@@ -114,25 +108,11 @@ export class OneShotStrategy implements CompressionStrategy {
       await context.resolveProvider(compressionProfile),
     );
 
-    // Build the LLM request
-    // @plan PLAN-20260211-HIGHDENSITY.P23
-    // @requirement REQ-HD-011.3, REQ-HD-012.2
-    const triggerInstruction = buildTriggerInstruction(toCompress);
-    const compressionRequest: IContent[] = [
-      COMPRESSION_SECURITY_PREAMBLE,
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: prompt }],
-      },
-      ...sanitizeHistoryForCompression(toCompress),
-      ...this.buildContextInjections(context),
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: triggerInstruction }],
-      },
-    ];
+    const compressionRequest = this.buildCompressionRequest(
+      context,
+      toCompress,
+    );
 
-    // Call the provider and aggregate the streamed response
     const { text: summary, usage: capturedUsage } = await this.callProvider(
       provider,
       compressionRequest,
@@ -147,21 +127,75 @@ export class OneShotStrategy implements CompressionStrategy {
       throw new EmptySummaryError('one-shot');
     }
 
-    // Optional verification pass — gated by compressionVerification flag (default off)
-    let finalSummary = summary;
-    if (context.compressionVerification === true) {
-      finalSummary = await runVerificationPass(
-        provider,
-        summary,
-        context,
-        resolvedRuntime,
-        resolvedConfig,
-        resolvedOptions,
-        invocation,
-      );
-    }
+    const finalSummary = await this.maybeVerifySummary(
+      context,
+      provider,
+      summary,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    );
 
-    // Assemble result: summary + continuation directive + preserved tail
+    return this.assembleResult(
+      history,
+      toKeep,
+      toCompress,
+      finalSummary,
+      capturedUsage,
+      context.activeTodos,
+    );
+  }
+
+  private buildCompressionRequest(
+    context: CompressionContext,
+    toCompress: IContent[],
+  ): IContent[] {
+    const prompt = this.resolvePrompt(context);
+    const triggerInstruction = buildTriggerInstruction(toCompress);
+    return [
+      COMPRESSION_SECURITY_PREAMBLE,
+      { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
+      ...sanitizeHistoryForCompression(toCompress),
+      ...this.buildContextInjections(context),
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: triggerInstruction }],
+      },
+    ];
+  }
+
+  private async maybeVerifySummary(
+    context: CompressionContext,
+    provider: IProvider,
+    summary: string,
+    resolvedRuntime: ProviderRuntimeContext,
+    resolvedConfig: Config | undefined,
+    resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
+    invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
+  ): Promise<string> {
+    if (context.compressionVerification !== true) {
+      return summary;
+    }
+    return runVerificationPass(
+      provider,
+      summary,
+      context,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    );
+  }
+
+  private assembleResult(
+    history: readonly IContent[],
+    toKeep: IContent[],
+    toCompress: IContent[],
+    finalSummary: string,
+    capturedUsage: UsageStats | undefined,
+    activeTodos: string | undefined,
+  ): CompressionResult {
     const summaryEntry: IContent = {
       speaker: 'human' as const,
       blocks: [{ type: 'text' as const, text: finalSummary }],
@@ -175,7 +209,7 @@ export class OneShotStrategy implements CompressionStrategy {
         blocks: [
           {
             type: 'text' as const,
-            text: buildContinuationDirective(context.activeTodos),
+            text: buildContinuationDirective(activeTodos),
           },
         ],
       },

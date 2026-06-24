@@ -15,6 +15,7 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
+import { expectSuccessful } from './coreToolScheduler-test-helpers.js';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -317,11 +318,9 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
         .calls[0][0] as ToolCall[];
       const successCall = completedCalls[0];
       expect(successCall.status).toBe('success');
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (successCall.status !== 'success')
-        throw new Error('unreachable: narrowing failed');
-      expect(successCall.response).toBeDefined();
-      expect(successCall.response.responseParts).toBeDefined();
+      const successResponse = expectSuccessful(successCall).response;
+      expect(successResponse).toBeDefined();
+      expect(successResponse.responseParts).toBeDefined();
     });
   });
 

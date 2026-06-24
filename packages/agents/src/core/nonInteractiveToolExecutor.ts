@@ -155,8 +155,10 @@ export async function executeToolCall(
 
     const completed = completedCalls[0];
 
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string agentId falls through to default
-    if (!completed.response.agentId) {
+    if (
+      completed.response.agentId === undefined ||
+      completed.response.agentId === ''
+    ) {
       completed.response.agentId = agentId;
     }
 
