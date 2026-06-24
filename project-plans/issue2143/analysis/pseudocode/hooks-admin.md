@@ -69,9 +69,9 @@ methods resolve the live hook system from that Config per call.
 9:   FOR EACH entry IN entries
 10:    SET info = {
 11:      name: registry.getHookName(entry),                 // hookRegistry.ts:118
-12:      eventName: entry.eventName,
+12:      eventName: String(entry.eventName),                // HookEventName enum → string
 13:      enabled: entry.enabled,                             // hookRegistry.ts:41
-14:      source: String(entry.source),
+14:      source: entry.source IS undefined ? undefined : String(entry.source),  // optional; never the literal "undefined"
 15:    }
 16:    APPEND info TO out
 17:  END FOR

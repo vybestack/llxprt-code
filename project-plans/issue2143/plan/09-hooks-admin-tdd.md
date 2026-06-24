@@ -48,14 +48,46 @@ members (`onHookExecution`/`triggerSessionStart`/`triggerSessionEnd`/`clear`) EX
      hit the REAL `Config.setDisabledHooks` (configBase.ts:132) + `getDisabledHooks` (config.ts:734).
   2. **Undefined-safe `listHooks()` (T12a)** — a plain agent with hooks disabled → `getHookSystem()`
      returns `undefined` → `agent.hooks.listHooks()` is `[]`. (No initialise call.)
-  3. **Populated `listHooks()` (T12b)** — `buildAgent('plain-text.jsonl', { hooks: <one real hook def> })`
-     (mirror `fakeSessionHookDefinitions` shape in `helpers/fakeHook.ts`; ensure the enabling field is
-     set so `getHookSystem()` is defined). Then `await agent.hooks.triggerSessionStart()` to initialise
-     the registry (it calls `hookSystem.initialize()` → `registry.initialize()` which loads the seeded
-     hooks). Then assert `agent.hooks.listHooks()` reflects the seeded entry (length ≥ 1; `name`/
-     `eventName`/`enabled` mirror the registry entry). If the harness path does not enable hooks,
-     fall back to the BLESSED direct-construction precedent (`new HookControl(realDeps)` — `.behavior.test.ts`
-     is T17-exempt) over a real `Config` with hooks enabled+initialised.
+  3. **Populated `listHooks()` (T12b)** — MUST use the BLESSED direct-construction precedent
+     (`new HookControl(realDeps)`); the `buildAgent` harness path provably CANNOT populate the
+     registry and is FORBIDDEN for this case. Proven reasons (verified against source):
+       - The `AgentConfig`→`ConfigParameters` adapter maps only `hooks` (agentConfig.adapter.ts:175-176);
+         it never maps `enableHooks`, and `config.enableHooks = params.enableHooks ?? false`
+         (configConstructor.ts:474) ⇒ a harness agent's `getHookSystem()` returns `undefined`.
+       - `triggerSessionStartHook` gates on `config.getEnableHooks()` FIRST and returns early
+         (lifecycleHookTriggers.ts:47-50) ⇒ it never reaches `hookSystem.initialize()`, so the
+         registry is never loaded. (`triggerSessionStart()` still emits a SYNTHETIC lifecycle pair
+         to observers, so do NOT assert on that path for registry population — it would be vacuous.)
+     - Proven recipe for T12b (`.behavior.test.ts` is T17-exempt → deep imports allowed):
+       1. `import { Config } from '@vybestack/llxprt-code-core/config/config.js'`,
+          `import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js'`,
+          `import { HookEventName } from '@vybestack/llxprt-code-core/hooks/types.js'`,
+          `import { HookControl } from '../control/hooks.js'`.
+       2. Build a REAL Config with hooks ENABLED + a structurally-valid seeded def (mirror
+          `fakeSessionHookDefinitions` shape; `isTrustedFolder()` defaults `true` via
+          `this.trustedFolder ?? true` at config.ts:511 so the seeded `hooks` load):
+          ```ts
+          const config = new Config({
+            cwd: '/tmp', targetDir: '/tmp', debugMode: false,
+            sessionId: 'hooks-admin-test', model: 'gemini-2.0-flash',
+            usageStatisticsEnabled: false,
+            enableHooks: true,
+            hooks: {
+              [HookEventName.SessionStart]: [
+                { hooks: [{ type: 'command' as never, command: 'true', name: 'fake-session-start' }] },
+              ],
+            },
+          });
+          ```
+       3. Initialise the registry directly (use a guard, NOT a non-null `!` assertion):
+          ```ts
+          const system = config.getHookSystem();
+          if (!system) throw new Error('expected hook system (enableHooks:true)');
+          await system.initialize(); // loads the seeded hook; isInitialized() now true
+          ```
+       4. `const control = new HookControl({ config, messageBus: new MessageBus(), sessionId: () => 'hooks-admin-test', cwd: () => '/tmp' });`
+       5. Assert `control.listHooks()` has length ≥ 1 and the entry's `name === 'fake-session-start'`,
+          `eventName === HookEventName.SessionStart` (or its string value), and `enabled === true`.
 
   - Markers `@plan:PLAN-20260622-COREAPIGAP.P09`, `@requirement:REQ-004`.
 
