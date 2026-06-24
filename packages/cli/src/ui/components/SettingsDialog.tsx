@@ -107,6 +107,60 @@ const maxItemsToShow = 8;
 
 type PendingValue = boolean | number | string | string[];
 
+type SettingValueType = _SettingDefinition['type'];
+
+/**
+ * True when the pending `value` matches a non-boolean setting `type` that is
+ * persisted via setPendingSettingValueAny (number/string/enum scalars and
+ * arrays). Boolean settings are handled by a dedicated branch.
+ */
+function isTypedScalarOrArraySetting(
+  type: SettingValueType | undefined,
+  value: PendingValue,
+): boolean {
+  if (type === 'number') {
+    return typeof value === 'number';
+  }
+  if (type === 'string' || type === 'enum') {
+    return typeof value === 'string';
+  }
+  if (type === 'array') {
+    return Array.isArray(value);
+  }
+  return false;
+}
+
+/**
+ * Resolve the value to persist immediately when resetting a non-restart
+ * setting to its default: booleans fall back to false, number/string pass
+ * through, anything else yields undefined (no immediate save).
+ */
+function resolveImmediateSaveValue(
+  type: string | undefined,
+  defaultValue: unknown,
+): boolean | number | string | undefined {
+  if (type === 'boolean') {
+    return typeof defaultValue === 'boolean' ? defaultValue : false;
+  }
+  if (typeof defaultValue === 'number' || typeof defaultValue === 'string') {
+    return defaultValue;
+  }
+  return undefined;
+}
+
+function settingValueColor(
+  isActive: boolean,
+  shouldBeGreyedOut: boolean,
+): string {
+  if (isActive) {
+    return Colors.AccentGreen;
+  }
+  if (shouldBeGreyedOut) {
+    return Colors.Gray;
+  }
+  return Colors.Foreground;
+}
+
 /**
  * Get current state of a tool based on excludeTools settings
  */
@@ -694,13 +748,7 @@ function useSettingsState(
       const def = getSettingDefinition(key);
       if (def?.type === 'boolean' && typeof value === 'boolean') {
         updated = setPendingSettingValue(key, value, updated);
-      } else if (
-        (def?.type === 'number' && typeof value === 'number') ||
-        (def?.type === 'string' && typeof value === 'string') ||
-        (def?.type === 'enum' && typeof value === 'string')
-      ) {
-        updated = setPendingSettingValueAny(key, value, updated);
-      } else if (def?.type === 'array' && Array.isArray(value)) {
+      } else if (isTypedScalarOrArraySetting(def?.type, value)) {
         updated = setPendingSettingValueAny(key, value, updated);
       }
       newModified.add(key);
@@ -1129,15 +1177,7 @@ function SettingItemRow({
           </Box>
           <Box minWidth={3} />
           <Box flexShrink={0}>
-            <Text
-              color={
-                isActive
-                  ? Colors.AccentGreen
-                  : shouldBeGreyedOut
-                    ? Colors.Gray
-                    : Colors.Foreground
-              }
-            >
+            <Text color={settingValueColor(isActive, shouldBeGreyedOut)}>
               {displayValue}
             </Text>
           </Box>
@@ -1172,18 +1212,22 @@ function handleSearchKeypress(
   }
 
   const ch = stripUnsafeCharacters(key.sequence);
-  if (
-    ch.length === 1 &&
-    !key.ctrl &&
-    !key.meta &&
-    !keyMatchers[Command.DIALOG_NAVIGATION_UP](key) &&
-    !keyMatchers[Command.DIALOG_NAVIGATION_DOWN](key)
-  ) {
+  if (isPrintableSearchChar(ch, key)) {
     ctx.setSearchQuery((prev) => prev + ch);
     return true;
   }
 
   return true; // consume all keys while searching
+}
+
+function isPrintableSearchChar(ch: string, key: Key): boolean {
+  if (ch.length !== 1 || key.ctrl || key.meta) {
+    return false;
+  }
+  const isNavigation =
+    keyMatchers[Command.DIALOG_NAVIGATION_UP](key) ||
+    keyMatchers[Command.DIALOG_NAVIGATION_DOWN](key);
+  return !isNavigation;
 }
 
 function handleEditPaste(
@@ -1601,17 +1645,33 @@ function handleResetToDefaultKeypress(
 
   if (!requiresRestart(currentSetting.value)) {
     resetToDefaultImmediate(currentSetting, defaultValue, ctx);
-  } else if (
-    (currentSetting.type === 'boolean' && typeof defaultValue === 'boolean') ||
-    (currentSetting.type === 'number' && typeof defaultValue === 'number') ||
-    (currentSetting.type === 'string' && typeof defaultValue === 'string')
-  ) {
+  } else if (matchesScalarSettingType(currentSetting.type, defaultValue)) {
     ctx.setGlobalPendingChanges((prev) => {
       const next = new Map(prev);
       next.set(currentSetting.value, defaultValue as PendingValue);
       return next;
     });
   }
+}
+
+/**
+ * True when `value` is a primitive whose runtime typeof matches the declared
+ * scalar setting `type` (boolean/number/string).
+ */
+function matchesScalarSettingType(
+  type: SettingItem['type'],
+  value: unknown,
+): boolean {
+  if (type === 'boolean') {
+    return typeof value === 'boolean';
+  }
+  if (type === 'number') {
+    return typeof value === 'number';
+  }
+  if (type === 'string') {
+    return typeof value === 'string';
+  }
+  return false;
 }
 
 function resetToDefaultImmediate(
@@ -1626,14 +1686,10 @@ function resetToDefaultImmediate(
   },
 ): void {
   const immediateSettings = new Set([currentSetting.value]);
-  const toSaveValue =
-    currentSetting.type === 'boolean'
-      ? typeof defaultValue === 'boolean'
-        ? defaultValue
-        : false
-      : typeof defaultValue === 'number' || typeof defaultValue === 'string'
-        ? defaultValue
-        : undefined;
+  const toSaveValue = resolveImmediateSaveValue(
+    currentSetting.type,
+    defaultValue,
+  );
   const immediateSettingsObject =
     toSaveValue !== undefined
       ? setPendingSettingValueAny(
@@ -2080,13 +2136,9 @@ function handleSettingsKeypress(key: Key, ctx: KeypressCtx): void {
     });
     return;
   }
-  if (
-    ctx.focusSection === 'settings' &&
-    !ctx.editingKey &&
-    key.sequence === '/' &&
-    !key.ctrl &&
-    !key.meta
-  ) {
+  const isSearchTrigger =
+    key.sequence === '/' && !key.ctrl && !key.meta && !ctx.editingKey;
+  if (ctx.focusSection === 'settings' && isSearchTrigger) {
     ctx.setIsSearching(true);
     return;
   }
