@@ -4,24 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-// Module references populated at runtime via dynamic import in beforeAll.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let ContextState: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let SubagentTerminateMode: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let templateString: any;
+import {
+  ContextState,
+  SubagentTerminateMode,
+  templateString,
+} from './subagentTypes.js';
 
 describe('subagentTypes', () => {
-  beforeAll(async () => {
-    const mod = await import('./subagentTypes.js');
-    ContextState = mod.ContextState;
-    SubagentTerminateMode = mod.SubagentTerminateMode;
-    templateString = mod.templateString;
-  });
-
   describe('ContextState', () => {
     it('should set and get values correctly', () => {
       const context = new ContextState();

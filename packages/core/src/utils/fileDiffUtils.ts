@@ -15,24 +15,27 @@ import type { FileDiff } from '@vybestack/llxprt-code-tools';
 export function getFileDiffFromResultDisplay(
   resultDisplay: unknown,
 ): FileDiff | undefined {
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    resultDisplay != null &&
-    resultDisplay !== false &&
-    resultDisplay !== 0 &&
-    resultDisplay !== '' &&
-    !Number.isNaN(resultDisplay) &&
-    typeof resultDisplay === 'object' &&
-    'diffStat' in resultDisplay &&
-    typeof resultDisplay.diffStat === 'object' &&
-    resultDisplay.diffStat !== null
-  ) {
-    const diffStat = resultDisplay.diffStat as FileDiff['diffStat'];
-    if (diffStat) {
-      return resultDisplay as FileDiff;
-    }
+  if (!isTruthyObjectWithDiffStat(resultDisplay)) {
+    return undefined;
+  }
+  const diffStat = resultDisplay.diffStat as FileDiff['diffStat'];
+  if (diffStat) {
+    return resultDisplay as FileDiff;
   }
   return undefined;
+}
+
+function isTruthyObjectWithDiffStat(
+  value: unknown,
+): value is { diffStat: unknown } {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return false;
+  }
+  if (!('diffStat' in value)) {
+    return false;
+  }
+  const stat = (value as { diffStat: unknown }).diffStat;
+  return stat !== null && typeof stat === 'object';
 }
 
 export function computeAddedAndRemovedLines(

@@ -12,6 +12,14 @@ import { PromptLoader } from './prompt-loader.js';
 // Helper to check if we're on Windows
 const isWindows = (): boolean => os.platform() === 'win32';
 
+function restoreEnvVar(key: string, originalValue: string | undefined): void {
+  if (originalValue === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = originalValue;
+  }
+}
+
 describe('PromptLoader', () => {
   let tempDir: string;
   let loader: PromptLoader;
@@ -369,12 +377,7 @@ describe('PromptLoader', () => {
       expect(env.isSandboxed).toBe(true);
 
       // Restore original value
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (originalSandbox === undefined) {
-        delete process.env.SANDBOX;
-      } else {
-        process.env.SANDBOX = originalSandbox;
-      }
+      restoreEnvVar('SANDBOX', originalSandbox);
     });
 
     it('should detect container environment', () => {
@@ -386,12 +389,7 @@ describe('PromptLoader', () => {
       expect(env.isSandboxed).toBe(true);
 
       // Restore original value
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (originalContainer === undefined) {
-        delete process.env.CONTAINER;
-      } else {
-        process.env.CONTAINER = originalContainer;
-      }
+      restoreEnvVar('CONTAINER', originalContainer);
     });
 
     it('should detect IDE companion from environment', () => {
@@ -403,12 +401,7 @@ describe('PromptLoader', () => {
       expect(env.hasIdeCompanion).toBe(true);
 
       // Restore original value
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (originalIDE === undefined) {
-        delete process.env.IDE_COMPANION;
-      } else {
-        process.env.IDE_COMPANION = originalIDE;
-      }
+      restoreEnvVar('IDE_COMPANION', originalIDE);
     });
 
     it('should detect IDE companion from .vscode directory', async () => {

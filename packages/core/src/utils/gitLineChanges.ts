@@ -41,7 +41,6 @@ function runGit(
   options?: { timeoutMs?: number },
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const child = spawn('git', args, {
       cwd,
       windowsHide: true,
@@ -110,6 +109,88 @@ async function fileExistsInHead(
   }
 }
 
+interface HunkHeader {
+  oldStart: number;
+  oldCount?: number;
+  newStart: number;
+  newCount?: number;
+}
+
+/**
+ * Parses a git diff hunk header line (`@@ -oldStart,oldCount +newStart,newCount @@`)
+ * using string operations instead of a regex.
+ */
+function parseHunkHeader(line: string): HunkHeader | null {
+  const prefix = '@@';
+  if (!line.startsWith(prefix)) {
+    return null;
+  }
+  let pos = prefix.length;
+  // Skip whitespace
+  while (pos < line.length && line[pos] === ' ') {
+    pos++;
+  }
+  // Expect "-oldStart[,oldCount]"
+  if (line[pos] !== '-') {
+    return null;
+  }
+  pos++;
+  const oldPart = readHunkRange(line, pos);
+  if (oldPart === null) {
+    return null;
+  }
+  pos = oldPart.next;
+  // Skip whitespace
+  while (pos < line.length && line[pos] === ' ') {
+    pos++;
+  }
+  // Expect "+newStart[,newCount]"
+  if (line[pos] !== '+') {
+    return null;
+  }
+  pos++;
+  const newPart = readHunkRange(line, pos);
+  if (newPart === null) {
+    return null;
+  }
+  // Skip trailing whitespace and @@
+  return {
+    oldStart: oldPart.start,
+    oldCount: oldPart.count,
+    newStart: newPart.start,
+    newCount: newPart.count,
+  };
+}
+
+function readHunkRange(
+  line: string,
+  start: number,
+): { start: number; count?: number; next: number } | null {
+  let pos = start;
+  let numStr = '';
+  while (pos < line.length && line[pos] >= '0' && line[pos] <= '9') {
+    numStr += line[pos];
+    pos++;
+  }
+  if (numStr.length === 0) {
+    return null;
+  }
+  const startNum = Number(numStr);
+  if (line[pos] === ',') {
+    pos++;
+    let countStr = '';
+    while (pos < line.length && line[pos] >= '0' && line[pos] <= '9') {
+      countStr += line[pos];
+      pos++;
+    }
+    if (countStr.length === 0) {
+      return null;
+    }
+    return { start: startNum, count: Number(countStr), next: pos };
+  }
+  return { start: startNum, next: pos };
+}
+
 function parseUnifiedZeroDiff(diffText: string): {
   markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>>;
   deletionAfterLines: Set<number>;
@@ -119,54 +200,46 @@ function parseUnifiedZeroDiff(diffText: string): {
 
   const lines = diffText.split(/\r?\n/);
 
-  // We only need hunk headers. With --unified=0, a hunk header looks like:
-  // @@ -oldStart,oldCount +newStart,newCount @@
-  const hunkHeaderRe = /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/;
-
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const line of lines) {
-    const m = hunkHeaderRe.exec(line);
-    if (!m) continue;
-
-    const oldCount = m[2] ? Number(m[2]) : 1;
-    const newStart = Number(m[3]);
-    const newCount = m[4] ? Number(m[4]) : 1;
-
-    // With --unified=0, an insertion hunk can be encoded as "-oldStart,0 +newStart" (newCount omitted => 1)
-    // or "-oldStart,0 +newStart,newCount".
-    if (oldCount === 0) {
-      for (let i = 0; i < newCount; i++) {
-        markersByLine.set(newStart + i, 'N');
-      }
-      continue;
-    }
-
-    // Pure deletion hunk.
-    if (newCount === 0 && oldCount > 0) {
-      const oldStart = Number(m[1]);
-
-      // Mark "D" after the previous working-tree line.
-      // For pure deletions, `newStart` can point at the line before the deleted block (git chooses
-      // an anchor), so using oldStart is more stable.
-      // Special case: oldStart===1 means "before first line".
-      deletionAfterLines.add(Math.max(0, oldStart - 1));
-      continue;
-    }
-
-    if (oldCount > 0 && newCount > 0) {
-      // Replacement. Mark the new lines as modified.
-      for (let i = 0; i < newCount; i++) {
-        markersByLine.set(newStart + i, 'M');
-      }
-
-      // If replacement shrinks the block, there are deletions too.
-      if (oldCount > newCount) {
-        deletionAfterLines.add(newStart + newCount - 1);
-      }
+    const m = parseHunkHeader(line);
+    if (m) {
+      processHunkForMarkers(m, markersByLine, deletionAfterLines);
     }
   }
 
   return { markersByLine, deletionAfterLines };
+}
+
+function processHunkForMarkers(
+  m: HunkHeader,
+  markersByLine: Map<number, string>,
+  deletionAfterLines: Set<number>,
+): void {
+  const oldCount = m.oldCount ?? 1;
+  const newStart = m.newStart;
+  const newCount = m.newCount ?? 1;
+
+  if (oldCount === 0) {
+    for (let i = 0; i < newCount; i++) {
+      markersByLine.set(newStart + i, 'N');
+    }
+    return;
+  }
+
+  if (newCount === 0 && oldCount > 0) {
+    const oldStart = m.oldStart;
+    deletionAfterLines.add(Math.max(0, oldStart - 1));
+    return;
+  }
+
+  if (oldCount > 0 && newCount > 0) {
+    for (let i = 0; i < newCount; i++) {
+      markersByLine.set(newStart + i, 'M');
+    }
+    if (oldCount > newCount) {
+      deletionAfterLines.add(newStart + newCount - 1);
+    }
+  }
 }
 
 /**

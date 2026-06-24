@@ -71,32 +71,7 @@ export async function initializeLsp(
       state.lspServiceClient.isAlive() &&
       state.lspConfig.navigationTools !== false
     ) {
-      const streams = state.lspServiceClient.getMcpTransportStreams();
-      if (streams) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        try {
-          await Promise.race([
-            registerMcpNavigationTools(state, host, streams),
-            new Promise<void>((_, reject) => {
-              const signal = AbortSignal.timeout(
-                MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS,
-              );
-              signal.addEventListener(
-                'abort',
-                () =>
-                  reject(
-                    signal.reason ??
-                      new Error('MCP navigation registration timeout'),
-                  ),
-                { once: true },
-              );
-            }),
-          ]);
-        } catch {
-          state.lspMcpClient = undefined;
-          state.lspMcpTransport = undefined;
-        }
-      }
+      await registerAvailableNavigationTools(state, host);
     }
   } catch {
     // LSP service initialization failed - continue without LSP
@@ -117,8 +92,75 @@ export function parseLspConfig(
   if (lsp === true) {
     return { servers: [] };
   }
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
-  return lsp.servers === undefined ? { ...lsp, servers: [] } : lsp;
+  return normalizeLspConfig(lsp);
+}
+
+/**
+ * Normalize an externally-supplied LspConfig to ensure `servers` is present.
+ * JSON-parsed configs may omit the field despite the declared type requiring it.
+ */
+function normalizeLspConfig(lsp: LspConfig): LspConfig {
+  const raw = lsp as Partial<LspConfig>;
+  return Array.isArray(raw.servers) ? lsp : { ...lsp, servers: [] };
+}
+
+async function registerAvailableNavigationTools(
+  state: LspState,
+  host: LspHost,
+): Promise<void> {
+  const streams = state.lspServiceClient?.getMcpTransportStreams();
+  if (streams === undefined || streams === null) {
+    return;
+  }
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => {
+    abortController.abort(new Error('MCP navigation registration timeout'));
+  }, MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS);
+  try {
+    await registerMcpNavigationTools(
+      state,
+      host,
+      streams,
+      abortController.signal,
+    );
+  } catch {
+    await cleanupLspMcpResources(state, host.getToolRegistry());
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function throwIfNavigationRegistrationAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new Error('MCP navigation registration aborted');
+  }
+}
+
+async function cleanupLspMcpResources(
+  state: LspState,
+  registry: ToolRegistry,
+): Promise<void> {
+  registry.removeMcpToolsByServer('lsp-navigation');
+
+  if (state.lspMcpClient) {
+    try {
+      await state.lspMcpClient.close();
+    } catch {
+      // Close errors are non-fatal during cleanup.
+    }
+  }
+  state.lspMcpClient = undefined;
+
+  if (state.lspMcpTransport) {
+    try {
+      await state.lspMcpTransport.close();
+    } catch {
+      // Close errors are non-fatal during cleanup.
+    }
+  }
+  state.lspMcpTransport = undefined;
 }
 
 const LSP_NAVIGATION_REQUEST_TIMEOUT_MS = 250;
@@ -129,9 +171,9 @@ function createStreamTransport(streams: {
 }): Transport {
   let readBuffer = '';
   let started = false;
-
   const transport: Transport = {
     onclose: undefined,
+
     onerror: undefined,
     onmessage: undefined,
     start: async () => {
@@ -144,25 +186,19 @@ function createStreamTransport(streams: {
         const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
         readBuffer += text;
 
-        // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop, @typescript-eslint/no-unnecessary-condition -- Existing loop intentionally parses streamed LSP output across external server boundaries.
-        while (true) {
-          const newlineIndex = readBuffer.indexOf('\n');
-          if (newlineIndex === -1) {
-            break;
-          }
-
+        let newlineIndex = readBuffer.indexOf('\n');
+        while (newlineIndex !== -1) {
           const line = readBuffer.slice(0, newlineIndex).trim();
           readBuffer = readBuffer.slice(newlineIndex + 1);
-          if (!line) {
-            continue;
+          if (line) {
+            try {
+              const message = JSON.parse(line) as JSONRPCMessage;
+              transport.onmessage?.(message);
+            } catch {
+              // Ignore malformed transport messages.
+            }
           }
-
-          try {
-            const message = JSON.parse(line) as JSONRPCMessage;
-            transport.onmessage?.(message);
-          } catch {
-            // Ignore malformed transport messages.
-          }
+          newlineIndex = readBuffer.indexOf('\n');
         }
       };
 
@@ -223,9 +259,8 @@ async function connectLspMcpClient(
     timeout: LSP_NAVIGATION_REQUEST_TIMEOUT_MS,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
-  const capabilities = client.getServerCapabilities?.();
-  if (!capabilities?.tools) {
+  const capabilities = client.getServerCapabilities();
+  if (capabilities?.tools === undefined) {
     return null;
   }
   return client;
@@ -239,8 +274,20 @@ async function fetchLspToolDefs(
   const toolsResponse = await client.listTools(undefined, {
     timeout: LSP_NAVIGATION_REQUEST_TIMEOUT_MS,
   });
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
-  return toolsResponse.tools ?? [];
+  return extractToolDefs(toolsResponse);
+}
+
+function extractToolDefs(response: {
+  tools?: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+}): Array<{ name: string; description?: string; inputSchema?: unknown }> {
+  const tools = (
+    response as {
+      tools:
+        | Array<{ name: string; description?: string; inputSchema?: unknown }>
+        | undefined;
+    }
+  ).tools;
+  return tools ?? [];
 }
 
 class LspNavigationCallableTool implements CallableTool {
@@ -310,7 +357,6 @@ async function registerDiscoveredTools(
       'lsp-navigation',
       toolDef.name,
       toolDef.description ?? '',
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
       toolDef.inputSchema ?? { type: 'object', properties: {} },
       true,
       undefined,
@@ -335,50 +381,34 @@ async function registerMcpNavigationTools(
     readable: Readable;
     writable: Writable;
   },
+  signal: AbortSignal,
 ): Promise<void> {
   const registry = host.getToolRegistry();
-
-  const cleanup = async () => {
-    registry.removeMcpToolsByServer('lsp-navigation');
-
-    if (state.lspMcpClient) {
-      try {
-        await state.lspMcpClient.close();
-      } catch {
-        // Close errors are non-fatal during cleanup.
-      }
-    }
-    state.lspMcpClient = undefined;
-
-    if (state.lspMcpTransport) {
-      try {
-        await state.lspMcpTransport.close();
-      } catch {
-        // Close errors are non-fatal during cleanup.
-      }
-    }
-    state.lspMcpTransport = undefined;
-  };
 
   try {
     const transport = createStreamTransport(streams);
     state.lspMcpTransport = transport;
+    throwIfNavigationRegistrationAborted(signal);
 
     const client = await connectLspMcpClient(state, transport);
+    throwIfNavigationRegistrationAborted(signal);
     if (!client) {
-      await cleanup();
+      await cleanupLspMcpResources(state, registry);
       return;
     }
 
     const toolDefs = await fetchLspToolDefs(client);
+    throwIfNavigationRegistrationAborted(signal);
     if (toolDefs.length === 0) {
-      await cleanup();
+      await cleanupLspMcpResources(state, registry);
       return;
     }
 
     await registerDiscoveredTools(client, toolDefs, registry, host);
+    throwIfNavigationRegistrationAborted(signal);
   } catch {
-    await cleanup();
+    await cleanupLspMcpResources(state, registry);
+    throw new Error('MCP navigation registration failed');
   }
 }
 

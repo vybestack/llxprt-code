@@ -129,14 +129,12 @@ describe('checkpointUtils', () => {
 
       const result = schema.safeParse(dataWithExtra);
       expect(result.success).toBe(true);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.success) throw new Error('unreachable: narrowing failed');
-      expect(
-        (result.data as unknown as { extraField: string }).extraField,
-      ).toBe('should be preserved');
-      expect(
-        (result.data as unknown as { anotherExtra: number }).anotherExtra,
-      ).toBe(42);
+      const parsed = result as unknown as {
+        success: true;
+        data: Record<string, unknown>;
+      };
+      expect(parsed.data.extraField).toBe('should be preserved');
+      expect(parsed.data.anotherExtra).toBe(42);
     });
 
     it('validates optional fields when present', () => {

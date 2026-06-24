@@ -35,73 +35,87 @@ export interface SkillDefinition {
   source?: SkillSource;
 }
 
-interface SkillFrontmatterParts {
-  frontmatter: string;
-  body: string;
-}
-
-function stripTrailingCarriageReturn(line: string): string {
-  return line.endsWith('\r') ? line.slice(0, -1) : line;
-}
-
-function splitSkillFrontmatter(content: string): SkillFrontmatterParts | null {
-  const openingDelimiterEnd = content.indexOf('\n');
-  if (openingDelimiterEnd === -1) {
+/**
+ * Extracts frontmatter (between `---` delimiters) and body from skill content.
+ * Returns [frontmatter, body] or null if no frontmatter block is found.
+ */
+function extractFrontmatter(content: string): [string, string] | null {
+  // Must start with ---\n (or ---\r\n)
+  if (!content.startsWith('---\n') && !content.startsWith('---\r\n')) {
     return null;
   }
+  const firstLineEnd = content.indexOf('\n') + 1;
+  let searchStart = firstLineEnd;
 
-  const openingDelimiter = stripTrailingCarriageReturn(
-    content.slice(0, openingDelimiterEnd),
-  );
-  if (openingDelimiter !== '---') {
-    return null;
-  }
-
-  const frontmatterStart = openingDelimiterEnd + 1;
-  let lineStart = frontmatterStart;
-
-  while (lineStart <= content.length) {
-    const nextLineEnd = content.indexOf('\n', lineStart);
-    const lineEnd = nextLineEnd === -1 ? content.length : nextLineEnd;
-    const line = stripTrailingCarriageReturn(content.slice(lineStart, lineEnd));
-
-    if (line === '---') {
-      return {
-        frontmatter: content.slice(frontmatterStart, lineStart),
-        body: nextLineEnd === -1 ? '' : content.slice(nextLineEnd + 1),
-      };
-    }
-
-    if (nextLineEnd === -1) {
+  while (searchStart < content.length) {
+    const closeMarker = content.indexOf('\n---', searchStart);
+    if (closeMarker === -1) {
       return null;
     }
 
-    lineStart = nextLineEnd + 1;
+    const markerEnd = closeMarker + '\n---'.length;
+    const nextChar = content[markerEnd];
+    if (nextChar === '\n') {
+      return [
+        content.slice(firstLineEnd, closeMarker + 1),
+        content.slice(markerEnd + 1),
+      ];
+    }
+    if (nextChar === '\r' && content[markerEnd + 1] === '\n') {
+      return [
+        content.slice(firstLineEnd, closeMarker + 1),
+        content.slice(markerEnd + 2),
+      ];
+    }
+
+    searchStart = markerEnd;
   }
 
   return null;
 }
 
-function splitFrontmatterLines(content: string): string[] {
-  return content.replaceAll('\r\n', '\n').split('\n');
-}
-
-function parseSimpleField(line: string, fieldName: string): string | null {
-  const trimmedLine = line.trimStart();
-  const prefix = fieldName + ':';
-  if (!trimmedLine.startsWith(prefix)) {
-    return null;
+/**
+ * Matches a "key:" prefix at the start of a line (with optional leading
+ * whitespace) and returns the remainder, or undefined if the line does not
+ * start with `key:`.
+ */
+function matchPrefixedField(line: string, field: string): string | undefined {
+  const trimmed = line.trimStart();
+  const prefix = field + ':';
+  if (trimmed.startsWith(prefix)) {
+    return trimmed.slice(prefix.length);
   }
-
-  return trimmedLine.slice(prefix.length).trim();
+  return undefined;
 }
 
-function isIndentedContentLine(line: string): boolean {
-  const firstCharacter = line[0];
-  return (
-    (firstCharacter === ' ' || firstCharacter === '\t') &&
-    line.trim().length > 0
-  );
+/**
+ * Returns true if the line starts with whitespace and contains at least one
+ * non-whitespace character (used to detect indented continuation lines).
+ */
+function isIndentedNonEmptyLine(line: string): boolean {
+  if (line.length === 0) {
+    return false;
+  }
+  const first = line[0];
+  if (first !== ' ' && first !== '\t') {
+    return false;
+  }
+  return line.trim().length > 0;
+}
+
+function collectMultilineDescription(
+  lines: string[],
+  startIndex: number,
+  firstLine: string,
+): string {
+  const descLines = [firstLine];
+  for (let j = startIndex + 1; j < lines.length; j++) {
+    if (!isIndentedNonEmptyLine(lines[j])) {
+      break;
+    }
+    descLines.push(lines[j].trim());
+  }
+  return descLines.filter(Boolean).join(' ');
 }
 
 /**
@@ -136,41 +150,23 @@ function parseFrontmatter(
 function parseSimpleFrontmatter(
   content: string,
 ): { name: string; description: string } | null {
-  const lines = splitFrontmatterLines(content);
+  const lines = content.split(/\r?\n/);
   let name: string | undefined;
   let description: string | undefined;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // Match "name:" at the start of the line (optional whitespace)
-    const parsedName = parseSimpleField(line, 'name');
-    if (parsedName !== null) {
-      name = parsedName;
-      continue;
-    }
-
-    // Match "description:" at the start of the line (optional whitespace)
-    const parsedDescription = parseSimpleField(line, 'description');
-    if (parsedDescription !== null) {
-      const descLines = [parsedDescription];
-
-      // Check for multi-line description (indented continuation lines)
-      while (i + 1 < lines.length) {
-        const nextLine = lines[i + 1];
-        // If next line is indented, it's a continuation of the description
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (isIndentedContentLine(nextLine)) {
-          descLines.push(nextLine.trim());
-          i++;
-        } else {
-          break;
-        }
+    const nameMatch = matchPrefixedField(line, 'name');
+    if (nameMatch !== undefined) {
+      name = nameMatch.trim();
+    } else {
+      const descResult = tryExtractDescription(lines, i);
+      if (descResult) {
+        description = descResult.description;
+        i = descResult.nextIndex;
       }
-
-      description = descLines.filter(Boolean).join(' ');
-      continue;
     }
   }
 
@@ -178,6 +174,24 @@ function parseSimpleFrontmatter(
     return { name, description };
   }
   return null;
+}
+
+function tryExtractDescription(
+  lines: string[],
+  i: number,
+): { description: string; nextIndex: number } | null {
+  const line = lines[i];
+  const descMatch = matchPrefixedField(line, 'description');
+  if (descMatch === undefined) {
+    return null;
+  }
+  const description = collectMultilineDescription(lines, i, descMatch.trim());
+  let skip = i + 1;
+  while (skip < lines.length && isIndentedNonEmptyLine(lines[skip])) {
+    i = skip;
+    skip++;
+  }
+  return { description, nextIndex: i };
 }
 
 /**
@@ -237,12 +251,12 @@ export async function loadSkillFromFile(
 ): Promise<SkillDefinition | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const parts = splitSkillFrontmatter(content);
-    if (parts === null) {
+    const parts = extractFrontmatter(content);
+    if (!parts) {
       return null;
     }
 
-    const frontmatter = parseFrontmatter(parts.frontmatter);
+    const frontmatter = parseFrontmatter(parts[0]);
     if (!frontmatter) {
       return null;
     }
@@ -251,7 +265,7 @@ export async function loadSkillFromFile(
       name: frontmatter.name,
       description: frontmatter.description,
       location: filePath,
-      body: parts.body.trim(),
+      body: parts[1].trim(),
       source,
     };
   } catch (error) {
@@ -266,12 +280,12 @@ function loadSkillFromFileSync(
 ): SkillDefinition | null {
   try {
     const content = fsSync.readFileSync(filePath, 'utf-8');
-    const parts = splitSkillFrontmatter(content);
-    if (parts === null) {
+    const parts = extractFrontmatter(content);
+    if (!parts) {
       return null;
     }
 
-    const frontmatter = yaml.load(parts.frontmatter);
+    const frontmatter = yaml.load(parts[0]);
     if (
       frontmatter === null ||
       frontmatter === undefined ||
@@ -289,7 +303,7 @@ function loadSkillFromFileSync(
       name,
       description,
       location: filePath,
-      body: parts.body.trim(),
+      body: parts[1].trim(),
       source,
     };
   } catch (error) {
@@ -316,16 +330,15 @@ export function loadSkillsFromDirSync(
     const entries = fsSync.readdirSync(absoluteSearchPath, {
       withFileTypes: true,
     });
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const entry of entries) {
       if (!entry.isDirectory()) {
         continue;
       }
-      const skillFile = path.join(absoluteSearchPath, entry.name, 'SKILL.md');
-      if (!fsSync.existsSync(skillFile)) {
-        continue;
-      }
-      const skill = loadSkillFromFileSync(skillFile, source);
+      const skill = loadSkillFromDirEntry(
+        absoluteSearchPath,
+        entry.name,
+        source,
+      );
       if (skill) {
         discoveredSkills.push(skill);
       }
@@ -345,4 +358,16 @@ export function getBuiltinSkillsDir(): string {
   // The built-in skills directory is located at packages/core/src/skills/builtin
   // At runtime, this will be resolved relative to this file's location
   return path.join(path.dirname(new URL(import.meta.url).pathname), 'builtin');
+}
+
+function loadSkillFromDirEntry(
+  searchPath: string,
+  dirName: string,
+  source?: SkillSource,
+): SkillDefinition | null {
+  const skillFile = path.join(searchPath, dirName, 'SKILL.md');
+  if (!fsSync.existsSync(skillFile)) {
+    return null;
+  }
+  return loadSkillFromFileSync(skillFile, source);
 }

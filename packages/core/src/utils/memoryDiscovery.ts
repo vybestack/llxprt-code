@@ -25,14 +25,11 @@ import { debugLogger } from './debugLogger.js';
 // Simple console logger, similar to the one previously in CLI's config.ts
 // Follow-up (#1569): Integrate with a more robust server-side logger if available/appropriate.
 const logger = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  debug: (...args: any[]) =>
+  debug: (...args: unknown[]) =>
     debugLogger.debug('[DEBUG] [MemoryDiscovery]', ...args),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  warn: (...args: any[]) =>
+  warn: (...args: unknown[]) =>
     debugLogger.warn('[WARN] [MemoryDiscovery]', ...args),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  error: (...args: any[]) =>
+  error: (...args: unknown[]) =>
     debugLogger.error('[ERROR] [MemoryDiscovery]', ...args),
 };
 
@@ -43,8 +40,8 @@ interface GeminiFileContent {
 
 async function findProjectRoot(startDir: string): Promise<string | null> {
   let currentDir = path.resolve(startDir);
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Project-root discovery intentionally walks until filesystem root.
-  while (true) {
+  // Walk up the directory tree until we reach the filesystem root.
+  for (;;) {
     const gitPath = path.join(currentDir, '.git');
     try {
       const stats = await fs.lstat(gitPath);
@@ -67,17 +64,7 @@ async function findProjectRoot(startDir: string): Promise<string | null> {
         process.env['VITEST'] !== undefined;
 
       if (isENOENT === false && isTestEnv === false) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (typeof error === 'object' && error !== null && 'code' in error) {
-          const fsError = error as { code: string; message: string };
-          logger.warn(
-            `Error checking for .git directory at ${gitPath}: ${fsError.message}`,
-          );
-        } else {
-          logger.warn(
-            `Non-standard error checking for .git directory at ${gitPath}: ${String(error)}`,
-          );
-        }
+        logGitDirectoryError(error, gitPath);
       }
     }
     const parentDir = path.dirname(currentDir);
@@ -159,15 +146,12 @@ async function searchUpwardForGeminiMd(
     ? path.dirname(projectRoot)
     : path.dirname(resolvedHome);
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  while (currentDir && currentDir !== path.dirname(currentDir)) {
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    if (currentDir === path.join(resolvedHome, GEMINI_DIR)) {
-      break;
-    }
-
+  while (
+    currentDir &&
+    currentDir !== path.dirname(currentDir) &&
+    currentDir !== path.join(resolvedHome, GEMINI_DIR)
+  ) {
     const potentialPath = path.join(currentDir, geminiMdFilename);
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     try {
       await fs.access(potentialPath, fsSync.constants.R_OK);
       if (potentialPath !== globalMemoryPath) {
@@ -178,7 +162,6 @@ async function searchUpwardForGeminiMd(
     }
 
     const llxprtDirPath = path.join(currentDir, GEMINI_DIR, geminiMdFilename);
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     try {
       await fs.access(llxprtDirPath, fsSync.constants.R_OK);
       if (llxprtDirPath !== globalMemoryPath) {
@@ -188,7 +171,6 @@ async function searchUpwardForGeminiMd(
       // Not found, continue.
     }
 
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (currentDir === ultimateStopDir) {
       break;
     }
@@ -454,12 +436,8 @@ async function findUpwardGeminiFiles(
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/too-many-break-or-continue-in-loop -- Upward memory search terminates on explicit directory/root checks.
-  while (true) {
-    if (currentDir === globalGeminiDir) {
-      break;
-    }
-
+  let done = false;
+  while (!done && currentDir !== globalGeminiDir) {
     const accessChecks = geminiMdFilenames.map(async (filename) => {
       const checks: Array<Promise<string | null>> = [];
 
@@ -504,9 +482,10 @@ async function findUpwardGeminiFiles(
       currentDir === resolvedStopDir ||
       currentDir === path.dirname(currentDir)
     ) {
-      break;
+      done = true;
+    } else {
+      currentDir = path.dirname(currentDir);
     }
-    currentDir = path.dirname(currentDir);
   }
   return upwardPaths;
 }
@@ -660,8 +639,7 @@ export async function loadServerHierarchicalMemory(
     debugMode,
     fileService,
     folderTrust,
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: FileFilteringOptions default object when undefined
-    fileFilteringOptions || DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+    fileFilteringOptions ?? DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
     maxDirs,
     maxDepth,
   );
@@ -774,4 +752,17 @@ export async function loadJitSubdirectoryMemory(
         content: item.content as string,
       })),
   };
+}
+
+function logGitDirectoryError(error: unknown, gitPath: string): void {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const fsError = error as { code: string; message: string };
+    logger.warn(
+      `Error checking for .git directory at ${gitPath}: ${fsError.message}`,
+    );
+  } else {
+    logger.warn(
+      `Non-standard error checking for .git directory at ${gitPath}: ${String(error)}`,
+    );
+  }
 }

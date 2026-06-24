@@ -35,13 +35,12 @@ function validateUrl(url: string): void {
     );
   }
 
-  if (
-    [...url].some((char) => {
-      const code = char.charCodeAt(0);
-      return code <= 0x1f;
-    })
-  ) {
-    throw new Error('URL contains invalid characters');
+  // Additional validation: ensure no newlines or control characters
+  for (const ch of url) {
+    const code = ch.charCodeAt(0);
+    if (code === 0x0d || code === 0x0a || (code >= 0x00 && code <= 0x1f)) {
+      throw new Error('URL contains invalid characters');
+    }
   }
 }
 
@@ -127,15 +126,13 @@ export async function openBrowserSecurely(url: string): Promise<void> {
         'google-chrome',
       ];
 
-      for (const fallbackCommand of fallbackCommands) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        try {
-          await execFileAsync(fallbackCommand, [url], options);
-          return; // Success!
-        } catch {
-          // Try next command
-          continue;
-        }
+      const succeeded = await tryFallbackBrowserCommands(
+        fallbackCommands,
+        url,
+        options,
+      );
+      if (succeeded) {
+        return;
       }
     }
 
@@ -197,4 +194,20 @@ export function shouldLaunchBrowser(
   // For non-Linux OSes, we generally assume a GUI is available
   // unless other signals (like SSH) suggest otherwise.
   return true;
+}
+
+async function tryFallbackBrowserCommands(
+  fallbackCommands: string[],
+  url: string,
+  options: Record<string, unknown>,
+): Promise<boolean> {
+  for (const fallbackCommand of fallbackCommands) {
+    try {
+      await execFileAsync(fallbackCommand, [url], options);
+      return true;
+    } catch {
+      // Try next command
+    }
+  }
+  return false;
 }

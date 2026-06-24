@@ -69,7 +69,9 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
   const posixCrawlDirectory = toPosixPath(options.crawlDirectory);
   const maxFiles = options.maxFiles ?? Infinity;
   let fileCount = 0;
-  let truncated = false;
+  // Boxed so TypeScript does not narrow the flag across the callback closures
+  // below (the closures set it, but TS control-flow analysis cannot see that).
+  const state = { truncated: false };
 
   let results: string[];
   try {
@@ -84,7 +86,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
         if (!isDirectory) {
           fileCount++;
           if (fileCount > maxFiles) {
-            truncated = true;
+            state.truncated = true;
             return false;
           }
         }
@@ -94,7 +96,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
         throwIfAborted(options.signal);
 
         if (fileCount > maxFiles) {
-          truncated = true;
+          state.truncated = true;
           return true;
         }
         const relativePath = path.posix.relative(posixCrawlDirectory, dirPath);
@@ -121,8 +123,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
     path.posix.join(relativeToCrawlDir, p),
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- fdir callbacks mutate this as a runtime traversal boundary; never cache partial results when maxFiles truncates traversal.
-  if (options.cache && !truncated) {
+  if (options.cache && !state.truncated) {
     const cacheKey = cache.getCacheKey(
       options.crawlDirectory,
       options.ignore.getFingerprint(),

@@ -463,10 +463,7 @@ describe('SessionDiscovery extensions', () => {
     const isRootUser =
       typeof process.getuid === 'function' && process.getuid() === 0;
 
-    const runUnreadableFileTest =
-      process.platform === 'win32' || isRootUser ? it.skip : it;
-
-    runUnreadableFileTest(
+    it.skipIf(process.platform === 'win32' || isRootUser)(
       'returns null for file I/O error (unreadable file)',
       async () => {
         const filePath = path.join(tempDir, 'unreadable.jsonl');
@@ -474,7 +471,6 @@ describe('SessionDiscovery extensions', () => {
         try {
           await fs.chmod(filePath, 0o000);
           const result = await SessionDiscovery.readFirstUserMessage(filePath);
-          // eslint-disable-next-line vitest/no-standalone-expect -- runUnreadableFileTest is an aliased `it`/`it.skip` test block
           expect(result).toBeNull();
         } finally {
           // Restore permissions for cleanup
@@ -664,10 +660,7 @@ describe('SessionDiscovery extensions', () => {
               120,
             );
 
-            if (result !== null) {
-              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-              expect(result.length).toBeLessThanOrEqual(120);
-            }
+            expect(result === null || result.length <= 120).toBe(true);
           },
         ),
         { numRuns: 25 },
@@ -745,10 +738,7 @@ describe('SessionDiscovery extensions', () => {
               await SessionDiscovery.readFirstUserMessage(filePath);
 
             // Result should either be the original (if short enough) or truncated
-            if (result !== null) {
-              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-              expect(typeof result).toBe('string');
-            }
+            expect(result === null || typeof result === 'string').toBe(true);
           },
         ),
         { numRuns: 15 },

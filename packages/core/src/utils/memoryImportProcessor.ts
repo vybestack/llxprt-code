@@ -12,14 +12,11 @@ import { debugLogger } from './debugLogger.js';
 
 // Simple console logger for import processing
 const logger = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  debug: (...args: any[]) =>
+  debug: (...args: unknown[]) =>
     debugLogger.debug('[DEBUG] [ImportProcessor]', ...args),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  warn: (...args: any[]) =>
+  warn: (...args: unknown[]) =>
     debugLogger.warn('[WARN] [ImportProcessor]', ...args),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  error: (...args: any[]) =>
+  error: (...args: unknown[]) =>
     debugLogger.error('[ERROR] [ImportProcessor]', ...args),
 };
 
@@ -31,6 +28,10 @@ interface ImportState {
   maxDepth: number;
   currentDepth: number;
   currentFile?: string; // Track the current file being processed
+}
+
+function nonEmptyPath(value: string | undefined, fallback: string): string {
+  return typeof value === 'string' && value.length > 0 ? value : fallback;
 }
 
 /**
@@ -52,8 +53,7 @@ export interface ProcessImportsResult {
 // Helper to find the project root (looks for .git directory)
 async function findProjectRoot(startDir: string): Promise<string> {
   let currentDir = path.resolve(startDir);
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Project-root discovery intentionally walks until filesystem root.
-  while (true) {
+  for (;;) {
     const gitPath = path.join(currentDir, '.git');
     try {
       const stats = await fs.lstat(gitPath);
@@ -96,47 +96,47 @@ function findImports(
   let i = 0;
   const len = content.length;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   while (i < len) {
     // Find next @ symbol
     i = content.indexOf('@', i);
-    if (i === -1) break;
+    if (i === -1) {
+      break;
+    }
 
-    // Check if it's a word boundary (not part of another word)
+    // Advance past @ symbols that are part of another word
     if (i > 0 && !isWhitespace(content[i - 1])) {
       i++;
-      continue;
+    } else {
+      // Find the end of the import path (whitespace or newline)
+      let j = i + 1;
+      while (
+        j < len &&
+        !isWhitespace(content[j]) &&
+        content[j] !== '\n' &&
+        content[j] !== '\r'
+      ) {
+        j++;
+      }
+
+      // Extract the path (everything after @)
+      const importPath = content.slice(i + 1, j);
+
+      // Basic validation (starts with ./ or / or letter)
+      if (
+        importPath.length > 0 &&
+        (importPath[0] === '.' ||
+          importPath[0] === '/' ||
+          isLetter(importPath[0]))
+      ) {
+        imports.push({
+          start: i,
+          _end: j,
+          path: importPath,
+        });
+      }
+
+      i = j + 1;
     }
-
-    // Find the end of the import path (whitespace or newline)
-    let j = i + 1;
-    while (
-      j < len &&
-      !isWhitespace(content[j]) &&
-      content[j] !== '\n' &&
-      content[j] !== '\r'
-    ) {
-      j++;
-    }
-
-    // Extract the path (everything after @)
-    const importPath = content.slice(i + 1, j);
-
-    // Basic validation (starts with ./ or / or letter)
-    if (
-      importPath.length > 0 &&
-      (importPath[0] === '.' ||
-        importPath[0] === '/' ||
-        isLetter(importPath[0]))
-    ) {
-      imports.push({
-        start: i,
-        _end: j,
-        path: importPath,
-      });
-    }
-
-    i = j + 1;
   }
 
   return imports;
@@ -221,8 +221,7 @@ export async function processImports(
     }
     return {
       content,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string currentFile should fall through to 'unknown'
-      importTree: { path: importState.currentFile || 'unknown' },
+      importTree: { path: nonEmptyPath(importState.currentFile, 'unknown') },
     };
   }
 
@@ -275,26 +274,22 @@ async function processFlat(
   const codeRegions = findCodeRegions(fileContent);
   const imports = findImports(fileContent);
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = imports.length - 1; i >= 0; i--) {
     const { start, path: importPath } = imports[i];
 
-    if (
-      codeRegions.some(
-        ([regionStart, regionEnd]) => start >= regionStart && start < regionEnd,
-      )
-    ) {
-      continue;
-    }
-
-    if (!validateImportPath(importPath, fileBasePath, [projectRoot ?? ''])) {
-      continue;
-    }
-
+    const inCodeRegion = codeRegions.some(
+      ([regionStart, regionEnd]) => start >= regionStart && start < regionEnd,
+    );
+    const isValid = validateImportPath(importPath, fileBasePath, [
+      projectRoot ?? '',
+    ]);
     const fullPath = path.resolve(fileBasePath, importPath);
     const normalizedFullPath = path.normalize(fullPath);
 
-    if (processedFiles.has(normalizedFullPath)) continue;
+    const alreadyProcessed = processedFiles.has(normalizedFullPath);
+    if (inCodeRegion || !isValid || alreadyProcessed) {
+      continue;
+    }
 
     try {
       await fs.access(fullPath);
@@ -312,7 +307,6 @@ async function processFlat(
     } catch (error) {
       const errorMessage = hasMessage(error) ? error.message : 'Unknown error';
 
-      // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       if (debugMode || !errorMessage.includes('ENOENT')) {
         logger.warn(`Failed to import ${fullPath}: ${errorMessage}`);
       }
@@ -331,8 +325,7 @@ async function processImportsFlat(
   const processedFiles = new Set<string>();
 
   const rootPath = path.normalize(
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string currentFile should fall through to resolved basePath
-    importState.currentFile || path.resolve(basePath),
+    nonEmptyPath(importState.currentFile, path.resolve(basePath)),
   );
   await processFlat(
     content,
@@ -367,24 +360,24 @@ async function processImportsTree(
   const imports: MemoryFile[] = [];
   const importsList = findImports(content);
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const { start, _end, path: importPath } of importsList) {
     result += content.substring(lastIndex, start);
     lastIndex = _end;
 
-    if (codeRegions.some(([s, e]) => start >= s && start < e)) {
-      result += `@${importPath}`;
+    const skipped = resolveSkippedImport(
+      start,
+      importPath,
+      codeRegions,
+      basePath,
+      projectRoot,
+      importState,
+    );
+    if (skipped !== null) {
+      result += skipped;
       continue;
     }
-    if (!validateImportPath(importPath, basePath, [projectRoot ?? ''])) {
-      result += `<!-- Import failed: ${importPath} - Path traversal attempt -->`;
-      continue;
-    }
+
     const fullPath = path.resolve(basePath, importPath);
-    if (importState.processedFiles.has(fullPath)) {
-      result += `<!-- File already processed: ${importPath} -->`;
-      continue;
-    }
     try {
       await fs.access(fullPath);
       const fileContent = await fs.readFile(fullPath, 'utf-8');
@@ -425,8 +418,7 @@ async function processImportsTree(
   return {
     content: result,
     importTree: {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string currentFile should fall through to 'unknown'
-      path: importState.currentFile || 'unknown',
+      path: nonEmptyPath(importState.currentFile, 'unknown'),
       imports: imports.length > 0 ? imports : undefined,
     },
   };
@@ -447,4 +439,25 @@ export function validateImportPath(
   return allowedDirectories.some((allowedDir) =>
     isSubpath(allowedDir, resolvedPath),
   );
+}
+
+function resolveSkippedImport(
+  start: number,
+  importPath: string,
+  codeRegions: Array<[number, number]>,
+  basePath: string,
+  projectRoot: string | undefined,
+  importState: ImportState,
+): string | null {
+  if (codeRegions.some(([s, e]) => start >= s && start < e)) {
+    return `@${importPath}`;
+  }
+  if (!validateImportPath(importPath, basePath, [projectRoot ?? ''])) {
+    return `<!-- Import failed: ${importPath} - Path traversal attempt -->`;
+  }
+  const fullPath = path.resolve(basePath, importPath);
+  if (importState.processedFiles.has(fullPath)) {
+    return `<!-- File already processed: ${importPath} -->`;
+  }
+  return null;
 }

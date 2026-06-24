@@ -13,58 +13,138 @@ import type { Config } from '../config/config.js';
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 5000;
 
+/** Returns true for space or tab (markdown list/heading separators). */
+function isMarkdownWhitespace(ch: string | undefined): boolean {
+  return ch === ' ' || ch === '	';
+}
+
 // Default threshold values (used when config is undefined)
 const DEFAULT_TOOL_CALL_LOOP_THRESHOLD = 50;
 const DEFAULT_CONTENT_LOOP_THRESHOLD = 50;
 
-function countOccurrences(content: string, needle: string): number {
+/**
+ * Counts non-overlapping occurrences of a literal substring.
+ */
+function countOccurrences(haystack: string, needle: string): number {
+  if (needle.length === 0) {
+    return 0;
+  }
   let count = 0;
-  let index = content.indexOf(needle);
-  while (index !== -1) {
-    count += 1;
-    index = content.indexOf(needle, index + needle.length);
+  let pos = 0;
+  while ((pos = haystack.indexOf(needle, pos)) !== -1) {
+    count++;
+    pos += needle.length;
   }
   return count;
 }
 
-function hasLineStartingWith(
-  content: string,
-  predicate: (line: string) => boolean,
-): boolean {
-  return content.split('\n').some(predicate);
-}
-
-function isMarkdownTableLine(line: string): boolean {
-  const trimmed = line.trimStart();
-  return (
-    trimmed.length > 0 &&
-    ((trimmed.startsWith('|') && trimmed.includes('|', 1)) ||
-      [...trimmed].every((char) => ['|', '+', '-'].includes(char)))
-  );
-}
-
-function isMarkdownListItem(line: string): boolean {
-  const trimmed = line.trimStart();
-  if (trimmed.length < 2) return false;
-  if (['*', '-', '+'].includes(trimmed[0]) && trimmed[1] === ' ') {
-    return true;
+/**
+ * Checks whether any line in the content, after optional leading whitespace,
+ * starts with a markdown table row (`|…|`) or a run of three-or-more table
+ * delimiter characters (`|`, `+`, `-`).
+ */
+function detectMarkdownTable(content: string): boolean {
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+    if (trimmed.length === 0) {
+      continue;
+    }
+    if (
+      trimmed.length >= 2 &&
+      trimmed.startsWith('|') &&
+      trimmed.endsWith('|')
+    ) {
+      return true;
+    }
+    let delimiterCount = 0;
+    for (const ch of trimmed) {
+      if (ch === '|' || ch === '+' || ch === '-') {
+        delimiterCount++;
+      } else {
+        break;
+      }
+    }
+    if (delimiterCount >= 3) {
+      return true;
+    }
   }
-  const dotIndex = trimmed.indexOf('.');
-  if (dotIndex <= 0 || trimmed[dotIndex + 1] !== ' ') {
-    return false;
+  return false;
+}
+
+/**
+ * Checks whether any line starts with an unordered list marker (`*`, `-`, `+`
+ * followed by whitespace) or an ordered list marker (digits followed by `.`
+ * and whitespace).
+ */
+function detectMarkdownListItem(content: string): boolean {
+  const lines = content.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trimStart();
+    if (line.length < 2) {
+      continue;
+    }
+    const first = line[0];
+    const second = line[1];
+    if (
+      (first === '*' || first === '-' || first === '+') &&
+      isMarkdownWhitespace(second)
+    ) {
+      return true;
+    }
+    // Ordered list: one or more digits, then '.', then whitespace
+    let i = 0;
+    while (i < line.length && line[i] >= '0' && line[i] <= '9') {
+      i++;
+    }
+    if (
+      i > 0 &&
+      i + 1 < line.length &&
+      line[i] === '.' &&
+      isMarkdownWhitespace(line[i + 1])
+    ) {
+      return true;
+    }
   }
-  return [...trimmed.slice(0, dotIndex)].every(
-    (char) => char >= '0' && char <= '9',
-  );
+  return false;
 }
 
-function isMarkdownHeading(line: string): boolean {
-  const trimmed = line.trimStart();
-  return trimmed.startsWith('#') && trimmed.includes(' ');
+/**
+ * Checks whether any line starts with one or more `#` characters followed by
+ * whitespace (markdown heading).
+ */
+function detectMarkdownHeading(content: string): boolean {
+  const lines = content.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trimStart();
+    let hashCount = 0;
+    while (hashCount < line.length && line[hashCount] === '#') {
+      hashCount++;
+    }
+    if (
+      hashCount > 0 &&
+      hashCount < line.length &&
+      isMarkdownWhitespace(line[hashCount])
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
-function isMarkdownBlockquote(line: string): boolean {
-  return line.trimStart().startsWith('> ');
+/**
+ * Checks whether any line starts with `>` followed by whitespace (markdown
+ * blockquote).
+ */
+function detectMarkdownBlockquote(content: string): boolean {
+  const lines = content.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trimStart();
+    if (line.length >= 2 && line[0] === '>' && line[1] === ' ') {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -107,9 +187,9 @@ export class LoopDetectionService {
   addAndCheck(event: ServerGeminiStreamEvent): boolean {
     // Check if loop detection is disabled
     const loopDetectionEnabled =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('loopDetectionEnabled') as boolean) ??
-      true;
+      (this.config.getEphemeralSetting('loopDetectionEnabled') as
+        | boolean
+        | undefined) ?? true;
     if (!loopDetectionEnabled) {
       return false;
     }
@@ -146,9 +226,9 @@ export class LoopDetectionService {
   async turnStarted(_signal: AbortSignal) {
     // Check if loop detection is disabled (master switch)
     const loopDetectionEnabled =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('loopDetectionEnabled') as boolean) ??
-      true;
+      (this.config.getEphemeralSetting('loopDetectionEnabled') as
+        | boolean
+        | undefined) ?? true;
     if (!loopDetectionEnabled) {
       return false;
     }
@@ -157,8 +237,9 @@ export class LoopDetectionService {
 
     // Check if max turns per prompt is configured and exceeded
     const maxTurnsPerPrompt =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as number) ?? -1;
+      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as
+        | number
+        | undefined) ?? -1;
     if (
       maxTurnsPerPrompt > 0 &&
       this.turnsInCurrentPrompt >= maxTurnsPerPrompt
@@ -175,9 +256,9 @@ export class LoopDetectionService {
 
   private checkToolCallLoop(toolCall: { name: string; args: object }): boolean {
     const threshold =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('toolCallLoopThreshold') as number) ??
-      DEFAULT_TOOL_CALL_LOOP_THRESHOLD;
+      (this.config.getEphemeralSetting('toolCallLoopThreshold') as
+        | number
+        | undefined) ?? DEFAULT_TOOL_CALL_LOOP_THRESHOLD;
     if (threshold === -1) {
       return false; // Disabled
     }
@@ -217,29 +298,22 @@ export class LoopDetectionService {
     // To avoid false positives, we detect when we encounter different content types and
     // reset tracking to avoid analyzing content that spans across different element boundaries.
     const numFences = countOccurrences(content, '```');
-    const hasTable = hasLineStartingWith(content, isMarkdownTableLine);
-    const hasListItem = hasLineStartingWith(content, isMarkdownListItem);
-    const hasHeading = hasLineStartingWith(content, isMarkdownHeading);
-    const hasBlockquote = hasLineStartingWith(content, isMarkdownBlockquote);
+    const hasTable = detectMarkdownTable(content);
+    const hasListItem = detectMarkdownListItem(content);
+    const hasHeading = detectMarkdownHeading(content);
+    const hasBlockquote = detectMarkdownBlockquote(content);
     const isDivider =
       content.length > 0 &&
-      [...content].every((char) =>
-        [
-          char === '*',
-          char >= '+' && char <= '_',
-          char >= '─' && char <= '╿',
-        ].some(Boolean),
-      );
+      [...content].every((char) => {
+        const isAsterisk = char === '*';
+        const isDividerChar = '+-=_.'.includes(char);
+        const isBoxDrawing = char >= '─' && char <= '╿';
+        return isAsterisk || isDividerChar || isBoxDrawing;
+      });
 
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      numFences > 0 ||
-      hasTable ||
-      hasListItem ||
-      hasHeading ||
-      hasBlockquote ||
-      isDivider
-    ) {
+    const hasStructuralElement = numFences > 0 || hasTable || hasListItem;
+    const hasMarkdownElement = hasStructuralElement || hasHeading;
+    if (hasMarkdownElement || hasBlockquote || isDivider) {
       // Reset tracking when different content elements are detected to avoid analyzing content
       // that spans across different element boundaries.
       this.resetContentTracking();
@@ -346,9 +420,9 @@ export class LoopDetectionService {
    */
   private isLoopDetectedForChunk(chunk: string, hash: string): boolean {
     const threshold =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('contentLoopThreshold') as number) ??
-      DEFAULT_CONTENT_LOOP_THRESHOLD;
+      (this.config.getEphemeralSetting('contentLoopThreshold') as
+        | number
+        | undefined) ?? DEFAULT_CONTENT_LOOP_THRESHOLD;
     if (threshold === -1) {
       return false; // Disabled
     }

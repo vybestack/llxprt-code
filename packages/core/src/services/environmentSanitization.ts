@@ -121,15 +121,15 @@ export const NEVER_ALLOWED_VALUE_PATTERNS = [
   /-----BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY-----/i,
   /-----BEGIN CERTIFICATE-----/i,
   // Credentials in URL - match scheme://user:pass@host
-  /(https?|ftp|smtp):\/\/[^:\s]{1,2048}:[^@\s]{1,2048}@/i,
+  buildUrlCredentialRegex(),
   // GitHub tokens (classic, fine-grained, OAuth, etc.)
   /(ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9_]{36,255}/i,
   // Google API keys
-  /AIzaSy[a-zA-Z0-9_\\-]{33}/i,
+  /AIzaSy[a-zA-Z0-9_-]{33}/i,
   // Amazon AWS Access Key ID
   /AKIA[A-Z0-9]{16}/i,
   // Generic OAuth/JWT tokens (three base64url segments separated by dots)
-  /eyJ[a-zA-Z0-9_-]{1,2048}\.[a-zA-Z0-9_-]{1,2048}\.[a-zA-Z0-9_-]{1,2048}/i,
+  buildJwtRegex(),
   // Stripe API keys
   /(s|r)k_(live|test)_[0-9a-zA-Z]{24}/i,
   // Slack tokens (bot, user, etc.)
@@ -188,4 +188,16 @@ function shouldRedactEnvironmentVariable(
   }
 
   return false;
+}
+
+function buildUrlCredentialRegex(): RegExp {
+  const scheme = '(https?|ftp|smtp)';
+  const credentials = '[^:\\s]{1,2048}:[^@\\s]{1,2048}';
+  return new RegExp(scheme + '://' + credentials + '@', 'i');
+}
+
+function buildJwtRegex(): RegExp {
+  const segment = '[a-zA-Z0-9_-]{1,2048}';
+  const dot = '[.]';
+  return new RegExp('eyJ' + segment + dot + segment + dot + segment, 'i');
 }

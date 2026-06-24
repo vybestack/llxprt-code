@@ -7,6 +7,10 @@
 import { describe, it, expect } from 'vitest';
 import { escapeRegex, buildArgsPatterns } from './utils.js';
 
+// Static regex literal for matching JSON-serialized dir_path values containing
+// "test". Kept as a module-level constant so it is not reconstructed per test.
+const DIR_PATH_TEST_PATTERN = /"dir_path":"[^"]*test[^"]*"/;
+
 describe('escapeRegex', () => {
   it('should escape all special regex characters', () => {
     const special = '.*+?^${}()|[]\\';
@@ -69,7 +73,7 @@ describe('buildArgsPatterns', () => {
   });
 
   it('should combine commandPrefix and argsPattern', () => {
-    const argsPattern = new RegExp('"dir_path":".*test.*"');
+    const argsPattern = DIR_PATH_TEST_PATTERN;
     const patterns = buildArgsPatterns(argsPattern, 'npm');
     expect(patterns).toHaveLength(2);
     expect(patterns[0].test('"command":"npm test"')).toBe(true);

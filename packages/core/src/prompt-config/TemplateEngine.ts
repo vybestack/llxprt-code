@@ -26,22 +26,16 @@ export class TemplateEngine {
    * @returns Processed content with variables substituted
    */
   processTemplate(
-    content: string,
-    variables: TemplateVariables,
+    content: string | null | undefined,
+    variables: TemplateVariables | null | undefined,
     options?: TemplateProcessingOptions,
   ): string {
-    // Step 1: Validate inputs
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
+    // Step 1: Validate inputs - public API boundary may receive null/undefined
     if (content === null || content === undefined) {
       return '';
     }
 
-    if (typeof content !== 'string') {
-      return content;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
-    const vars = variables ?? {};
+    const vars: Record<string, unknown> = variables ?? {};
 
     // Step 2: Initialize processing state
     let result = '';
@@ -99,7 +93,7 @@ export class TemplateEngine {
    */
   private processVariable(
     variableName: string,
-    vars: TemplateVariables,
+    vars: Record<string, unknown>,
     content: string,
     openBracketPos: number,
     closeBracketPos: number,
@@ -146,11 +140,10 @@ export class TemplateEngine {
    * @returns Map of variable names to values
    */
   createVariablesFromContext(
-    context: PromptContext,
+    context: PromptContext | null | undefined,
     currentTool: string | null = null,
   ): TemplateVariables {
     // Validate context - return minimal valid object if no context
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     if (context === undefined || context === null) {
       return {
         MODEL: '',
@@ -170,10 +163,7 @@ export class TemplateEngine {
     }
 
     // Add environment variables
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
-    if (context.environment !== undefined && context.environment !== null) {
-      this.addEnvironmentVariables(variables, context.environment);
-    }
+    this.addEnvironmentVariables(variables, context.environment);
 
     // Add derived variables
     this.addDerivedVariables(variables, context);
@@ -221,8 +211,7 @@ export class TemplateEngine {
     env: PromptEnvironment,
   ): void {
     const workspaceName =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceName is optional string, empty string should fall through to basename
-      env.workspaceName ||
+      env.workspaceName ??
       (env.workingDirectory ? path.basename(env.workingDirectory) : '');
     if (workspaceName) {
       variables['WORKSPACE_NAME'] = workspaceName;
@@ -230,10 +219,7 @@ export class TemplateEngine {
       variables['WORKSPACE_NAME'] = 'unknown';
     }
 
-    const workspaceRoot =
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceRoot is optional string, empty string should fall through */
-      env.workspaceRoot || env.workingDirectory;
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    const workspaceRoot = env.workspaceRoot ?? env.workingDirectory;
     if (workspaceRoot) {
       variables['WORKSPACE_ROOT'] = workspaceRoot;
     } else {
@@ -241,10 +227,8 @@ export class TemplateEngine {
     }
 
     const workspaceDirectories =
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceDirectories is optional string[], empty array should fall through */
-      env.workspaceDirectories ||
+      env.workspaceDirectories ??
       (env.workingDirectory ? [env.workingDirectory] : []);
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
     if (workspaceDirectories.length > 0) {
       variables['WORKSPACE_DIRECTORIES'] = workspaceDirectories.join(', ');
     } else {
@@ -280,8 +264,7 @@ export class TemplateEngine {
     variables['CURRENT_TIME'] = now.toLocaleTimeString();
     variables['CURRENT_DATETIME'] = now.toLocaleString();
     const sessionStartedAt =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
-      context.environment?.sessionStartedAt &&
+      context.environment.sessionStartedAt &&
       context.environment.sessionStartedAt.trim() !== ''
         ? context.environment.sessionStartedAt
         : undefined;
@@ -295,8 +278,7 @@ export class TemplateEngine {
     variables: TemplateVariables,
     context: PromptContext,
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
-    const enabledTools = context.enabledTools ?? [];
+    const enabledTools = context.enabledTools;
     const hasTaskTool =
       enabledTools.includes('Task') || enabledTools.includes('task');
     const hasListSubagentsTool =
@@ -341,10 +323,7 @@ export class TemplateEngine {
     context: PromptContext,
   ): void {
     const interactionMode =
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: interactionMode is optional string, empty string should fall through to default */
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
-      context.environment?.interactionMode || 'interactive';
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+      context.environment.interactionMode ?? 'interactive';
     variables['INTERACTION_MODE'] = interactionMode;
 
     this.addInteractionModeLabel(variables, interactionMode);
@@ -360,7 +339,6 @@ export class TemplateEngine {
       variables['INTERACTION_MODE_LABEL'] = 'an interactive';
     } else if (interactionMode === 'non-interactive') {
       variables['INTERACTION_MODE_LABEL'] = 'a non-interactive';
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     } else if (interactionMode === 'subagent') {
       variables['INTERACTION_MODE_LABEL'] = 'a subagent';
     }

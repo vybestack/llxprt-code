@@ -87,8 +87,10 @@ export async function summarizeToolOutput(
       abortSignal,
       DEFAULT_GEMINI_FLASH_LITE_MODEL,
     )) as unknown as GenerateContentResponse;
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getResponseText returns string | null, null falls back to original text
-    return getResponseText(parsedResponse) || textToSummarize;
+    const responseText = getResponseText(parsedResponse);
+    return responseText === undefined || responseText === ''
+      ? textToSummarize
+      : responseText;
   } catch (error) {
     debugLogger.error('Failed to summarize tool output.', error);
     return textToSummarize;
