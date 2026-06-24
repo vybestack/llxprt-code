@@ -39,7 +39,6 @@ import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageIns
 import {
   InvalidStreamError,
   isThoughtPart,
-  type UsageMetadataWithCache,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
@@ -150,11 +149,8 @@ export function accumulateChunkMetadata(
   });
 
   if (chunk.usageMetadata?.promptTokenCount !== undefined) {
-    const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
     compressionHandler.lastPromptTokenCount =
-      chunk.usageMetadata.promptTokenCount +
-      (chunkUsage.cache_read_input_tokens ?? 0) +
-      (chunkUsage.cache_creation_input_tokens ?? 0);
+      chunk.usageMetadata.promptTokenCount;
   }
   acc.allChunks.push(chunk);
 }

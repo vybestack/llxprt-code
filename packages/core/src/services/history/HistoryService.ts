@@ -441,7 +441,7 @@ export class HistoryService
   async recalculateTotalTokens(modelName?: string): Promise<void> {
     this.tokenizerLock = this.tokenizerLock.then(async () => {
       let newTotal = 0;
-      const model = modelName ?? 'gpt-4.1';
+      const model = modelName && modelName.length > 0 ? modelName : 'gpt-4.1';
 
       for (const entry of this.history) {
         const entryTokens = await this.estimateContentTokens(entry, model);
