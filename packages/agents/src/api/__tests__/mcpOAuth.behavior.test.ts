@@ -319,7 +319,7 @@ describe('agent.mcp OAuth + refresh parity + details @plan:PLAN-20260622-COREAPI
         alpha: fakeServerConfig({}),
       },
       prompts: {
-        alpha: [{ name: 'p1', description: 'desc1' }],
+        alpha: [{ name: 'p1', description: 'desc1' }, { name: 'p2' }],
       },
       resources: [
         { serverName: 'alpha', name: 'r1', uri: 'file:///r1' },
@@ -329,8 +329,12 @@ describe('agent.mcp OAuth + refresh parity + details @plan:PLAN-20260622-COREAPI
     const control = new McpControl(deps);
     const withPrompts = await control.details({ includePrompts: true });
     const alphaP = withPrompts.servers[0];
+    // p1 carries a description; p2 has none — the projection must OMIT the
+    // `description` key entirely when undefined (conditional spread), not emit
+    // `description: undefined`.
     expect(alphaP.prompts).toStrictEqual([
       { name: 'p1', description: 'desc1' },
+      { name: 'p2' },
     ]);
     expect(alphaP.resources).toBeUndefined();
 

@@ -153,9 +153,7 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
   it('PROP enable∘disable inverse: for a generated name + base set, disable(name) then enable(name) yields a set WITHOUT name; returned arrays are always fresh copies @requirement:REQ-004 @scenario:property-enable-disable-inverse @given:a real agent, a generated name, and a base unique string[] not containing the name @when:disable(name) then enable(name) @then:getDisabledHooks() does not contain name AND mutating a returned array does not affect a subsequent read; MIN-2 distinct cases exercised by the generator', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc
-          .string({ minLength: 1 })
-          .filter((s) => !s.includes(' ') && s !== 'name-prop'),
+        fc.string({ minLength: 1 }).filter((s) => !s.includes(' ')),
         fc.uniqueArray(
           fc.string({ minLength: 1 }).filter((s) => !s.includes(' ')),
           { minLength: 0, maxLength: 5 },

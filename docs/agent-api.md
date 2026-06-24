@@ -253,7 +253,7 @@ instance-scoped discovery helpers.
 
 ### Sub-surfaces
 
-All seven are exposed as `readonly` properties on the `Agent`:
+All nine are exposed as `readonly` properties on the `Agent`:
 
 #### `agent.profiles` — `AgentProfileControl`
 
@@ -365,7 +365,7 @@ for (const server of detail.servers) {
 > (or all servers when called with no argument) **and** re-publishes its tool
 > declarations (`setTools` parity), so the live tool list tracks server
 > restarts without a separate manual publish step.
-
+>
 > **Runtime-only.** `agent.mcp` reflects the _live_ connection set. Durable
 > MCP server add/remove is **not** here — it lives on the
 > [`app-service.js`](#runtime-vs-app-service) subpath (`addMcpServer`,
@@ -1037,9 +1037,9 @@ These decisions shaped the public surface and are recorded here for posterity:
 - **Entry wording (B11):** the public API ships from
   `@vybestack/llxprt-code-agents`, never `-core` — avoiding a `core → agents`
   cycle.
-- **Control-plane scope:** the seven sub-surfaces (`profiles`, `tools`, `mcp`,
-  `auth`, `ide`, `session`, `hooks`) are part of the public contract, alongside
-  the top-level turn/provider/model methods.
+- **Control-plane scope:** the nine sub-surfaces (`profiles`, `tools`, `mcp`,
+  `auth`, `ide`, `session`, `hooks`, `policy`, `tasks`) are part of the public
+  contract, alongside the top-level turn/provider/model/approval-mode methods.
 - **Confirmation handling (B7):** a **wired** approval handler that
   rejects/throws is **safely denied** (`Cancel`) by `AgenticLoop` so the loop
   never hangs. When **no** handler is wired, the agent neither silently proceeds

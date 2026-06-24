@@ -392,7 +392,7 @@ export class McpControl implements AgentMcpControl {
         this.deps?.getPromptRegistry?.()?.getPromptsByServer(name) ?? [];
       detail.prompts = prompts.map((p) => ({
         name: p.name,
-        description: p.description,
+        ...(p.description !== undefined ? { description: p.description } : {}),
       }));
     }
     if (includeResources) {

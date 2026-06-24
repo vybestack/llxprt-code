@@ -7,7 +7,7 @@
 // @plan:PLAN-20260622-COREAPIGAP.P11
 // @requirement:REQ-005
 //
-// Behavioral RED suite for the masked auth-detail surface on AgentAuthControl
+// Behavioral suite for the masked auth-detail surface on AgentAuthControl
 // (detailedStatus / getHigherPriorityAuth / listBucketStatuses). Drives a REAL
 // OAuthManager over an in-memory TokenStore with a REAL registered provider —
 // NO mock theater. The control is constructed directly over the live manager
@@ -15,10 +15,9 @@
 // McpControl), so the masked OAuth detail path is exercised through real
 // delegation, not spies/stubs.
 //
-// At RED time AuthControlDeps does not yet carry `getOAuthManager`, so the
-// single construction site casts through `unknown` (the RED-note) so the file
-// parses and the positive assertions fail at runtime with a missing-method
-// TypeError (behavioral RED). P12 removes the cast by adding the dep.
+// `AuthControlDeps` carries `getOAuthManager` (see `makeDeps`), and `makeControl`
+// instantiates `new AuthControl(deps)` directly with no cast — the masked
+// detail methods delegate live to the real manager.
 
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
