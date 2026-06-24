@@ -507,6 +507,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
 
         // Verify the intervals are at least close to 5 seconds (allowing some variance)
         const intervals = timestamps.slice(1).map((t, i) => t - timestamps[i]);
+        expect(intervals).not.toHaveLength(0);
         const minimumInterval = Math.min(...intervals);
         expect(minimumInterval).toBeGreaterThanOrEqual(4000); // Allow some variance
       },
