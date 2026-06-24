@@ -502,7 +502,7 @@ function resolveConfigAccessors(
   const getEphemeralSettings =
     typeof toolExecutorContext.getEphemeralSettings === 'function'
       ? () => ({ ...toolExecutorContext.getEphemeralSettings() })
-      : () => foregroundConfig.getEphemeralSettings();
+      : () => ({ ...(defensiveConfig.getEphemeralSettings?.() ?? {}) });
 
   const getEphemeralSetting = (key: string): unknown =>
     getEphemeralSettings()[key];

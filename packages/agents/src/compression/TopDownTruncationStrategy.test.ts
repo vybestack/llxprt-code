@@ -216,7 +216,7 @@ function firstSpeakerIsNotTool(result: CompressionResult): boolean {
   );
 }
 
-function assertNoOrphanedToolResponses(result: CompressionResult): void {
+function assertNoOrphanedToolCalls(result: CompressionResult): void {
   for (const msg of result.newHistory) {
     if (msg.speaker !== 'ai') {
       continue;
@@ -239,7 +239,7 @@ function assertNoOrphanedToolResponses(result: CompressionResult): void {
   }
 }
 
-function assertNoOrphanedToolCalls(result: CompressionResult): void {
+function assertNoOrphanedToolResponses(result: CompressionResult): void {
   for (const msg of result.newHistory) {
     const responseBlock =
       msg.speaker === 'tool'

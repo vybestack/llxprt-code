@@ -30,11 +30,15 @@ const eslintConfigSource = readFileSync(eslintConfigPath, 'utf8');
 function extractScopeArray(name) {
   const start = eslintConfigSource.indexOf('const ' + name + ' = [');
   if (start === -1) {
-    return [];
+    throw new Error(
+      'Could not find scope const declaration for "' +
+        name +
+        '" in eslint.config.js',
+    );
   }
   const arrayStart = eslintConfigSource.indexOf('[', start);
   let depth = 0;
-  let end = arrayStart;
+  let end = -1;
   for (let i = arrayStart; i < eslintConfigSource.length; i++) {
     const ch = eslintConfigSource[i];
     if (ch === '[') {
@@ -46,6 +50,13 @@ function extractScopeArray(name) {
         break;
       }
     }
+  }
+  if (end === -1) {
+    throw new Error(
+      'Could not parse closing bracket for scope const "' +
+        name +
+        '" in eslint.config.js',
+    );
   }
   const body = eslintConfigSource.slice(arrayStart + 1, end);
   const entries = [];

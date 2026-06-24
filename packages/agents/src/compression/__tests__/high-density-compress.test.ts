@@ -262,12 +262,11 @@ function createStrategy(): HighDensityStrategy {
   return new HighDensityStrategy();
 }
 
-function collectToolResponses(result: CompressionResult): string[] {
+function collectToolResponses(result: CompressionResult): ToolResponseBlock[] {
   return result.newHistory
     .filter((e) => e.speaker === 'tool')
     .flatMap((e) => e.blocks)
-    .filter((b): b is ToolResponseBlock => b.type === 'tool_response')
-    .map((b) => String(b.result));
+    .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
 }
 
 function assertToolCallsHaveResponses(result: CompressionResult): void {
@@ -295,7 +294,8 @@ function assertSummarizedToolResponsesUnderLimit(
   bigContent: string,
 ): void {
   const responses = collectToolResponses(result);
-  for (const resultStr of responses) {
+  for (const block of responses) {
+    const resultStr = String(block.result);
     expect(resultStr === bigContent || resultStr.length < 200).toBe(true);
   }
 }
@@ -305,7 +305,8 @@ function assertToolResponseMentionsSummary(
   keywords: string[],
 ): void {
   const responses = collectToolResponses(result);
-  for (const resultStr of responses) {
+  for (const block of responses) {
+    const resultStr = String(block.result);
     expect(keywords.some((kw) => resultStr.includes(kw))).toBe(true);
   }
 }
@@ -326,12 +327,14 @@ function assertNonTailToolResponsesAreStrings(
   result: CompressionResult,
   tailSize: number,
 ): void {
+  const nonTailHistory =
+    tailSize === 0 ? result.newHistory : result.newHistory.slice(0, -tailSize);
   const responses = collectToolResponses({
     ...result,
-    newHistory: result.newHistory.slice(0, -tailSize),
+    newHistory: nonTailHistory,
   });
-  for (const resultStr of responses) {
-    expect(typeof resultStr).toBe('string');
+  for (const response of responses) {
+    expect(typeof response.result).toBe('string');
   }
 }
 

@@ -499,7 +499,7 @@ export class AgenticLoop {
       }
 
       const completed = await Promise.race([completionTask, abortPromise]);
-      normalExit = true;
+      normalExit = completed !== null && !signal.aborted;
       return { completed };
     } finally {
       if (!normalExit) {

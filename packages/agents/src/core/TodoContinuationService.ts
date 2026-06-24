@@ -67,10 +67,16 @@ function normalizeTodoForComparison(todo: Todo): {
   content: string;
 } {
   const raw = todo as Partial<Todo>;
+  const rawStatus = raw.status;
+  const status =
+    typeof rawStatus === 'string' && rawStatus.length > 0
+      ? rawStatus.toLowerCase()
+      : 'pending';
+  const content = typeof raw.content === 'string' ? raw.content : '';
   return {
     id: `${raw.id ?? ''}`,
-    status: (raw.status ?? 'pending').toLowerCase(),
-    content: raw.content ?? '',
+    status,
+    content,
   };
 }
 

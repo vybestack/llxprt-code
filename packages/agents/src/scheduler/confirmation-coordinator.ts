@@ -133,7 +133,9 @@ function isConfirmationDetails(
     | null
     | undefined,
 ): value is ToolCallConfirmationDetails {
-  return value !== false && value != null;
+  return (
+    value !== false && value != null && isInteractiveConfirmationDetails(value)
+  );
 }
 
 /**
