@@ -35,15 +35,29 @@ npx vitest run packages/agents/src/api/__tests__/ > /tmp/p22a_api.log 2>&1 || { 
 echo "agents api suite green"
 
 # 3. Mutation evidence exists and is ≥80% AND non-vacuous for the NEW controls.
+# Stryker JSON schemaVersion 1.0 stores raw mutants[].status (Killed/Timeout/
+# Survived/NoCoverage) — there is NO precomputed .mutationScore field, so the
+# score MUST be computed: detected=(Killed+Timeout),
+# valid=(detected+Survived+NoCoverage), score=detected/valid*100.
 M=packages/agents/reports/mutation/mutation.json
 test -f "$M" || { echo "FAIL: no mutation report (P22 must run Stryker)"; exit 1; }
-OVERALL=$(jq -r '.. | objects | .mutationScore? // empty' "$M" | tail -1)
+OVERALL=$(jq -r '
+  [ .files[].mutants[].status ] as $all
+  | ($all | map(select(. == "Killed" or . == "Timeout")) | length) as $d
+  | ($all | map(select(. == "Killed" or . == "Timeout" or . == "Survived" or . == "NoCoverage")) | length) as $v
+  | if $v == 0 then 0 else ($d * 100 / $v) end
+' "$M")
 echo "overall api mutation: $OVERALL"
 awk -v s="$OVERALL" 'BEGIN{ if (s+0 < 80) { print "FAIL: overall < 80%"; exit 1 } }'
 # Non-vacuity: each new control file must have a NON-ZERO mutant count and per-file score >=80.
 for C in policyControl tasksControl toolKeysControl; do
   KEY="src/api/control/$C.ts"
-  FSCORE=$(jq -r --arg k "$KEY" '.files | to_entries[] | select(.key|endswith($k)) | .value.mutationScore' "$M" 2>/dev/null | head -1)
+  FSCORE=$(jq -r --arg k "$KEY" '
+    (.files | to_entries[] | select(.key|endswith($k)) | .value.mutants) as $m
+    | ($m | map(select(.status == "Killed" or .status == "Timeout")) | length) as $d
+    | ($m | map(select(.status == "Killed" or .status == "Timeout" or .status == "Survived" or .status == "NoCoverage")) | length) as $v
+    | if $v == 0 then 0 else ($d * 100 / $v) end
+  ' "$M" 2>/dev/null | head -1)
   MUTS=$(jq -r --arg k "$KEY" '.files | to_entries[] | select(.key|endswith($k)) | (.value.mutants|length)' "$M" 2>/dev/null | head -1)
   echo "$C: score=$FSCORE mutants=$MUTS"
   [ -n "$MUTS" ] && [ "$MUTS" -gt 0 ] || { echo "FAIL: $C has zero mutants (vacuous)"; exit 1; }

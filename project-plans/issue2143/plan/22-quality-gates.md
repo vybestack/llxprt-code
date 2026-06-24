@@ -57,8 +57,21 @@ The agents Stryker config already scopes `src/api/**`. Run it and assert ≥80%:
 
 ```bash
 cd packages/agents
+# Stryker's own break:80 already fails this run (non-zero exit) if the overall
+# mutation score < 80%, so under set -e the run itself is the primary gate.
 npm run test:mutation:api
-SCORE=$(jq -r '.thresholds.high as $h | (.systemUnderTestMetrics?.metrics?.mutationScore // .files | length)' reports/mutation/mutation.json >/dev/null 2>&1; jq -r '.. | objects | .mutationScore? // empty' reports/mutation/mutation.json | tail -1)
+M=reports/mutation/mutation.json
+test -f "$M" || { echo "FAIL: no mutation report"; exit 1; }
+# Stryker JSON schemaVersion 1.0 stores raw mutants[].status (Killed/Timeout/
+# Survived/NoCoverage) — there is NO precomputed .mutationScore field. Compute
+# the score the way Stryker does: detected=(Killed+Timeout),
+# valid=(detected+Survived+NoCoverage), score=detected/valid*100.
+SCORE=$(jq -r '
+  [ .files[].mutants[].status ] as $all
+  | ($all | map(select(. == "Killed" or . == "Timeout")) | length) as $detected
+  | ($all | map(select(. == "Killed" or . == "Timeout" or . == "Survived" or . == "NoCoverage")) | length) as $valid
+  | if $valid == 0 then 0 else ($detected * 100 / $valid) end
+' "$M")
 echo "agents api mutation score: $SCORE"
 awk -v s="$SCORE" 'BEGIN{ if (s+0 < 80) { print "FAIL: agents api mutation < 80%"; exit 1 } }'
 cd ../..

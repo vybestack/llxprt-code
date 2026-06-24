@@ -145,6 +145,26 @@ describe('agent.tools.keys — built-in tool-key control (REQ-007)', () => {
     expect(await keys.getKeyFile('exa')).toBe(null);
   });
 
+  // T20 — status() carries keyFile ALONGSIDE a masked key (the hasKey:TRUE
+  // + keyFile branch at toolKeysControl.ts L79). T18d sets a keyFile but NO
+  // key, so it exercises only the hasKey:FALSE branch (L85). This block sets
+  // BOTH a real key AND a keyFile so the L79 spread `...(keyFile !== null ?
+  // { keyFile } : {})` is covered, and asserts the { keyFile } ObjectLiteral
+  // is non-vacuous (no raw key leak through either field).
+  it('status() carries keyFile alongside a masked key (hasKey:true branch)', async () => {
+    const { keys, dir: d } = await makeKeys();
+    dir = d;
+    await keys.save('exa', 'abcd1234efgh');
+    await keys.setKeyFile('exa', '/tmp/exa-combined.key');
+    const status = await keys.status('exa');
+    expect(status.hasKey).toBe(true);
+    expect(status.maskedKey).toBe('ab********gh');
+    expect(status.keyFile).toBe('/tmp/exa-combined.key');
+    expect('keyFile' in status).toBe(true);
+    // No raw key material leaks through EITHER field.
+    expect(JSON.stringify(status)).not.toContain('abcd1234efgh');
+  });
+
   // T19 — the PUBLIC agent exposes agent.tools.keys DISTINCT from agent.auth.keys.
   it('agent.tools.keys is exposed on the public agent and distinct from agent.auth.keys', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');

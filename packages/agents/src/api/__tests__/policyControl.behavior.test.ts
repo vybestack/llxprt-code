@@ -126,6 +126,48 @@ describe('agent.policy read-only control @plan:PLAN-20260622-COREAPIGAP.P05 @req
     }
   });
 
+  it('T7 source-omission projection: a rule seeded WITHOUT a source projects to a view that OMITS the source key (and argsPattern key); a rule WITH a source carries it @requirement:REQ-002 @scenario:source-omission @given:an engine seeded with TWO rules — one WITHOUT source/argsPattern (unique toolName "omit-source-probe") and one WITH source "present-probe" (unique toolName "present-source-probe") @when:agent.policy.getRules() is called and each rule is located by its unique toolName @then:the no-source view has NO source key (Object.keys omits it, "source" in view === false) AND no argsPattern key; the present-source view HAS source === "present-probe" AND "source" in view === true', async () => {
+    const policy: PolicyEngineConfig = {
+      rules: [
+        // NO source field, NO argsPattern field.
+        {
+          toolName: 'omit-source-probe',
+          decision: PolicyDecision.DENY,
+        },
+        // WITH a unique source marker (pins the always-true direction).
+        {
+          toolName: 'present-source-probe',
+          decision: PolicyDecision.ALLOW,
+          source: 'present-probe',
+        },
+      ],
+    };
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      policy,
+    });
+    try {
+      const rules = agent.policy.getRules();
+      // Locate by the unique toolName markers (the confirmation-seam injects
+      // its own rule, so positional indices are not stable — but these
+      // toolNames are unique to this test).
+      const omitted = rules.find((r) => r.toolName === 'omit-source-probe');
+      const present = rules.find((r) => r.toolName === 'present-source-probe');
+      // The no-source rule's view OMITS the source key entirely.
+      expect(omitted).toBeDefined();
+      expect('source' in omitted!).toBe(false);
+      expect(Object.keys(omitted!)).not.toContain('source');
+      // Belt-and-suspenders: argsPattern key also absent (no argsPattern seeded).
+      expect('argsPattern' in omitted!).toBe(false);
+      expect(Object.keys(omitted!)).not.toContain('argsPattern');
+      // The present-source rule's view CARRIES source with the seeded value.
+      expect(present).toBeDefined();
+      expect(present!.source).toBe('present-probe');
+      expect('source' in present!).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('PROP argsPattern round-trip: for any valid regex source string, seeding a rule with new RegExp(src) yields a view whose argsPattern === the original src @requirement:REQ-002 @scenario:property-argsPattern-round-trip @given:a valid regex source string src and an engine seeded with a rule whose argsPattern is new RegExp(src) and a unique source marker @when:agent.policy.getRules() @then:the seeded view.argsPattern === src (RegExp.source round-trip)', async () => {
     // MIN-2 distinct cases are exercised by the generator (constant strings).
     await fc.assert(
