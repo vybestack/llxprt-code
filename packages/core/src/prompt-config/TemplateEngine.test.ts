@@ -1,6 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TemplateEngine } from './TemplateEngine.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import {
+  GrepTool,
+  GlobTool,
+  LSTool,
+  ReadFileTool,
+  ReadManyFilesTool,
+  EditTool,
+  WriteFileTool,
+  ShellTool,
+  ApplyPatchTool,
+} from '@vybestack/llxprt-code-tools';
 import type {
   TemplateVariables,
   TemplateProcessingOptions,
@@ -299,6 +310,124 @@ More content`;
       expect(result).toContain('Core content.');
       expect(result).not.toContain('Subagent Delegation');
       expect(result).toContain('More content');
+      expect(result).not.toContain('{{SUBAGENT_DELEGATION}}');
+    });
+  });
+
+  describe('tool name variables (issue #2109)', () => {
+    const baseContext: PromptContext = {
+      provider: 'openai',
+      model: 'qwen3-coder',
+      enabledTools: [],
+      environment: {
+        isGitRepository: false,
+        isSandboxed: false,
+        hasIdeCompanion: false,
+      },
+    };
+
+    it('exposes each tool-name variable using the canonical tool class Name', () => {
+      const vars = engine.createVariablesFromContext(baseContext);
+
+      expect(vars['GrepTool.Name']).toBe(GrepTool.Name);
+      expect(vars['GlobTool.Name']).toBe(GlobTool.Name);
+      expect(vars['LSTool.Name']).toBe(LSTool.Name);
+      expect(vars['ReadFileTool.Name']).toBe(ReadFileTool.Name);
+      expect(vars['ReadManyFilesTool.Name']).toBe(ReadManyFilesTool.Name);
+      expect(vars['EditTool.Name']).toBe(EditTool.Name);
+      expect(vars['WriteFileTool.Name']).toBe(WriteFileTool.Name);
+      expect(vars['ShellTool.Name']).toBe(ShellTool.Name);
+      expect(vars['ApplyPatchTool.Name']).toBe(ApplyPatchTool.Name);
+    });
+
+    it('substitutes tool-name tokens with the canonical tool names', () => {
+      const template =
+        'Use {{GrepTool.Name}} and {{GlobTool.Name}} to search, ' +
+        '{{ReadFileTool.Name}} and {{ReadManyFilesTool.Name}} to read, ' +
+        '{{EditTool.Name}}, {{WriteFileTool.Name}}, {{ShellTool.Name}}, ' +
+        '{{LSTool.Name}}, {{ApplyPatchTool.Name}}.';
+
+      const vars = engine.createVariablesFromContext(baseContext);
+      const result = engine.processTemplate(template, vars);
+
+      expect(result).toBe(
+        `Use ${GrepTool.Name} and ${GlobTool.Name} to search, ` +
+          `${ReadFileTool.Name} and ${ReadManyFilesTool.Name} to read, ` +
+          `${EditTool.Name}, ${WriteFileTool.Name}, ${ShellTool.Name}, ` +
+          `${LSTool.Name}, ${ApplyPatchTool.Name}.`,
+      );
+    });
+
+    it('leaves no unresolved tool-name token in substituted output', () => {
+      const template =
+        '{{GrepTool.Name}} {{GlobTool.Name}} {{LSTool.Name}} ' +
+        '{{ReadFileTool.Name}} {{ReadManyFilesTool.Name}} {{EditTool.Name}} ' +
+        '{{WriteFileTool.Name}} {{ShellTool.Name}} {{ApplyPatchTool.Name}}';
+
+      const vars = engine.createVariablesFromContext(baseContext);
+      const result = engine.processTemplate(template, vars);
+
+      expect(result).not.toContain('{{');
+      expect(result).not.toContain('Tool.Name');
+    });
+  });
+
+  describe('nested async guidance inside subagent delegation (issue #2109)', () => {
+    const contextWithDelegation = (
+      overrides: Partial<PromptContext> = {},
+    ): PromptContext => ({
+      provider: 'openai',
+      model: 'gpt-4',
+      enabledTools: ['Task', 'ListSubagents', 'ReadFile'],
+      includeSubagentDelegation: true,
+      environment: {
+        isGitRepository: false,
+        isSandboxed: false,
+        hasIdeCompanion: false,
+      },
+      ...overrides,
+    });
+
+    it('bakes async guidance into SUBAGENT_DELEGATION when async is enabled', () => {
+      const vars = engine.createVariablesFromContext(contextWithDelegation());
+      const delegation = String(vars.SUBAGENT_DELEGATION);
+
+      expect(delegation).toContain('Subagent Delegation');
+      expect(delegation).toContain('Async Subagents');
+      expect(delegation).not.toContain('{{ASYNC_SUBAGENT_GUIDANCE}}');
+    });
+
+    it('removes the async guidance token when async is disabled globally', () => {
+      const vars = engine.createVariablesFromContext(
+        contextWithDelegation({ asyncSubagentsEnabled: false }),
+      );
+      const delegation = String(vars.SUBAGENT_DELEGATION);
+
+      expect(delegation).toContain('Subagent Delegation');
+      expect(delegation).not.toContain('Async Subagents');
+      expect(delegation).not.toContain('{{ASYNC_SUBAGENT_GUIDANCE}}');
+    });
+
+    it('removes the async guidance token when async is disabled for the profile', () => {
+      const vars = engine.createVariablesFromContext(
+        contextWithDelegation({ profileAsyncEnabled: false }),
+      );
+      const delegation = String(vars.SUBAGENT_DELEGATION);
+
+      expect(delegation).toContain('Subagent Delegation');
+      expect(delegation).not.toContain('Async Subagents');
+      expect(delegation).not.toContain('{{ASYNC_SUBAGENT_GUIDANCE}}');
+    });
+
+    it('produces no raw async token after the delegation block is substituted into a template', () => {
+      const template = 'Intro.\n\n{{SUBAGENT_DELEGATION}}\n\nOutro.';
+      const vars = engine.createVariablesFromContext(contextWithDelegation());
+      const result = engine.processTemplate(template, vars);
+
+      expect(result).toContain('Intro.');
+      expect(result).toContain('Outro.');
+      expect(result).toContain('Async Subagents');
+      expect(result).not.toContain('{{ASYNC_SUBAGENT_GUIDANCE}}');
       expect(result).not.toContain('{{SUBAGENT_DELEGATION}}');
     });
   });

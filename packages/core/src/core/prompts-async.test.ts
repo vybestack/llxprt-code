@@ -20,6 +20,12 @@ import {
   compactFolderStructureSnapshot,
   type CoreSystemPromptOptions,
 } from './prompts.js';
+import {
+  GrepTool,
+  GlobTool,
+  ReadFileTool,
+  ReadManyFilesTool,
+} from '@vybestack/llxprt-code-tools';
 import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -163,15 +169,25 @@ describe('prompts async integration', () => {
   });
 
   describe('prompt content validation', () => {
-    it('should include all required tool references', async () => {
+    it('should include all required tool references by canonical name', async () => {
       const prompt = await callPrompt();
 
-      // Check for tool references that are substituted in core.md template
-      // core.md only mentions: ${GrepTool.Name}, ${GlobTool.Name}, ${ReadFileTool.Name}, ${ReadManyFilesTool.Name}
-      expect(prompt).toContain('Glob');
-      expect(prompt).toContain('Grep');
-      expect(prompt).toContain('ReadFile');
-      expect(prompt).toContain('ReadManyFiles');
+      // core.md references the workflow tools via template variables that
+      // must resolve to the canonical tool names the model can actually call.
+      expect(prompt).toContain(GrepTool.Name);
+      expect(prompt).toContain(GlobTool.Name);
+      expect(prompt).toContain(ReadFileTool.Name);
+      expect(prompt).toContain(ReadManyFilesTool.Name);
+    });
+
+    it('should not leak unresolved template tokens into the system prompt (issue #2109)', async () => {
+      const prompt = await callPrompt();
+
+      // No JS-style placeholders (e.g. ${GrepTool.Name}) and no unresolved
+      // handlebars-style variables (e.g. {{ASYNC_SUBAGENT_GUIDANCE}}).
+      expect(prompt).not.toContain('${');
+      expect(prompt).not.toContain('{{');
+      expect(prompt).not.toContain('Tool.Name');
     });
 
     it('should properly format user memory with separator', async () => {
@@ -280,6 +296,36 @@ describe('prompts async integration', () => {
       });
 
       expect(prompt).not.toContain('{{SUBAGENT_DELEGATION}}');
+    });
+
+    it('bakes async subagent guidance into the delegation block and leaves no raw token (issue #2109)', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: true,
+        asyncSubagentsEnabled: true,
+        profileAsyncEnabled: true,
+      });
+
+      expect(prompt).toContain('Subagent Delegation');
+      expect(prompt).toContain('Async Subagents');
+      expect(prompt).not.toContain('{{ASYNC_SUBAGENT_GUIDANCE}}');
+      expect(prompt).not.toContain('{{SUBAGENT_DELEGATION}}');
+    });
+
+    it('omits async guidance but keeps delegation when async is disabled (issue #2109)', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: true,
+        asyncSubagentsEnabled: false,
+      });
+
+      expect(prompt).toContain('Subagent Delegation');
+      expect(prompt).not.toContain('Async Subagents');
+      expect(prompt).not.toContain('{{ASYNC_SUBAGENT_GUIDANCE}}');
     });
   });
 
