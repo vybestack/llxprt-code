@@ -19,6 +19,7 @@ import {
   thinkingToReasoningField,
   estimateThinkingTokens,
   removeThinkingFromContent,
+  extractKimiToolCallsFromText,
 } from './reasoningUtils.js';
 
 // Test Fixtures
@@ -112,6 +113,65 @@ describe('extractThinkingBlocks', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].thought).toBe('Only thought');
+  });
+});
+describe('extractKimiToolCallsFromText', () => {
+  it('extracts tool names from documented single-dot Kimi tool IDs', () => {
+    const raw = [
+      '<|tool_calls_section_begin|>',
+      '<|tool_call_begin|>functions.read_file:0<|tool_call_argument_begin|>{"path":"README.md"}<|tool_call_end|>',
+      '<|tool_call_begin|>browser.search:1<|tool_call_argument_begin|>{"query":"llxprt"}<|tool_call_end|>',
+      '<|tool_calls_section_end|>',
+    ].join('');
+
+    const result = extractKimiToolCallsFromText(raw);
+
+    expect(result.toolCalls.map((toolCall) => toolCall.name)).toStrictEqual([
+      'read_file',
+      'search',
+    ]);
+  });
+
+  it('preserves one-line fenced tool arguments', () => {
+    const raw = [
+      '<|tool_calls_section_begin|>',
+      '<|tool_call_begin|>functions.read_file:0<|tool_call_argument_begin|>```json {"path":"README.md"}```<|tool_call_end|>',
+      '<|tool_call_begin|>functions.search_file_content:1<|tool_call_argument_begin|>```{"pattern":"llxprt"}```<|tool_call_end|>',
+      '<|tool_calls_section_end|>',
+    ].join('');
+
+    const result = extractKimiToolCallsFromText(raw);
+
+    expect(
+      result.toolCalls.map((toolCall) => toolCall.parameters),
+    ).toStrictEqual([{ path: 'README.md' }, { pattern: 'llxprt' }]);
+  });
+
+  it('preserves inline fenced JSON followed by a newline before the closing fence', () => {
+    const raw = [
+      '<|tool_calls_section_begin|>',
+      '<|tool_call_begin|>functions.read_file:0<|tool_call_argument_begin|>```json {"path":"README.md"}\n```<|tool_call_end|>',
+      '<|tool_calls_section_end|>',
+    ].join('');
+
+    const result = extractKimiToolCallsFromText(raw);
+
+    expect(
+      result.toolCalls.map((toolCall) => toolCall.parameters),
+    ).toStrictEqual([{ path: 'README.md' }]);
+  });
+  it('preserves spaces inside one-line fenced JSON without a language tag', () => {
+    const raw = [
+      '<|tool_calls_section_begin|>',
+      '<|tool_call_begin|>functions.read_file:0<|tool_call_argument_begin|>```{"a": 1}```<|tool_call_end|>',
+      '<|tool_calls_section_end|>',
+    ].join('');
+
+    const result = extractKimiToolCallsFromText(raw);
+
+    expect(
+      result.toolCalls.map((toolCall) => toolCall.parameters),
+    ).toStrictEqual([{ a: 1 }]);
   });
 });
 

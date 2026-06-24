@@ -21,8 +21,19 @@ import {
   type ToolCallBlock,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+type MessageToolCallWithOptionalFunction = Omit<
+  OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
+  'function'
+> & {
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+};
+
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type ToolCallPipeline } from './ToolCallPipeline.js';
+import { firstTruthyString } from '../utils/falsyFallback.js';
 import { type GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
@@ -345,8 +356,11 @@ function processDeltaToolCalls(
   choice: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
   deps: StreamProcessorDeps,
 ): void {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const deltaToolCalls = choice.delta?.tool_calls;
+  // Cast to allow for runtime undefined delta (external API boundary)
+  const delta = choice.delta as
+    | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
+    | undefined;
+  const deltaToolCalls = delta?.tool_calls;
   if (deltaToolCalls && deltaToolCalls.length > 0) {
     for (const deltaToolCall of deltaToolCalls) {
       const deltaToolCallIndex = deltaToolCall.index as number | undefined;
@@ -363,30 +377,23 @@ function processDeltaToolCalls(
   const choiceMessage = (
     choice as {
       message?: {
-        tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+        tool_calls?: MessageToolCallWithOptionalFunction[];
       };
     }
   ).message;
   const messageToolCalls = choiceMessage?.tool_calls;
   if (messageToolCalls && messageToolCalls.length > 0) {
-    messageToolCalls.forEach(
-      (
-        toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
-        index: number,
-      ) => {
-        if (toolCall.type !== 'function') {
-          return;
-        }
+    messageToolCalls.forEach((toolCall, index) => {
+      if (toolCall.type !== 'function') {
+        return;
+      }
 
-        deps.toolCallPipeline.addFragment(index, {
-          id: toolCall.id,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          name: toolCall.function?.name,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-          args: toolCall.function?.arguments,
-        });
-      },
-    );
+      deps.toolCallPipeline.addFragment(index, {
+        id: toolCall.id,
+        name: toolCall.function?.name,
+        args: toolCall.function?.arguments,
+      });
+    });
   }
 }
 
@@ -416,10 +423,12 @@ async function* processStreamingChunk(
     state.streamingUsage = chunk.usage;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  const choice = chunk.choices?.[0];
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-  if (choice == null) return;
+  // External API data may not conform to types at runtime
+  const chunkChoices = (
+    chunk as { choices?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice[] }
+  ).choices;
+  const choice = chunkChoices?.[0];
+  if (choice === undefined) return;
 
   processReasoningDelta(choice, state, deps);
 
@@ -446,9 +455,11 @@ async function* processStreamingChunk(
   }
 
   // Handle text content
+  const delta = choice.delta as
+    | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
+    | undefined;
   const rawDeltaContent = coerceMessageContentToString(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    choice.delta?.content as unknown,
+    delta?.content as unknown,
   );
   if (rawDeltaContent) {
     const deltaContent = sanitizeProviderText(rawDeltaContent);
@@ -535,8 +546,7 @@ function buildPipelineToolCallBlocks(
       blocks.push({
         type: 'tool_call',
         id: normalizeToHistoryToolId(
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string ID should use fallback
-          normalizedCall.id || `call_${normalizedCall.index}`,
+          firstTruthyString(normalizedCall.id, `call_${normalizedCall.index}`),
         ),
         name: normalizedCall.name,
         parameters: processedParameters,

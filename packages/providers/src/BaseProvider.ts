@@ -16,6 +16,7 @@ import {
 } from './IProvider.js';
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { firstTruthyString } from './utils/falsyFallback.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
@@ -36,7 +37,6 @@ import {
   resolveRuntimeSettingsService,
   setSettingsProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import { MissingProviderRuntimeError } from './errors.js';
 import {
   assertProviderRuntimeContext,
   normalizeProviderGenerateChatOptions,
@@ -142,8 +142,7 @@ export abstract class BaseProvider implements IProvider {
 
     const precedenceConfig: AuthPrecedenceConfig = {
       apiKey: config.apiKey,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: array default for optional config property
-      envKeyNames: config.envKeyNames || [],
+      envKeyNames: config.envKeyNames ?? [],
       isOAuthEnabled: config.isOAuthEnabled ?? false,
       // Use supportsOAuth from config if provided (for cases where method can't be used in constructor)
       supportsOAuth: config.supportsOAuth ?? this.supportsOAuth(),
@@ -195,20 +194,7 @@ export abstract class BaseProvider implements IProvider {
       return activeOptions.settings;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (this.defaultSettingsService !== undefined) {
-      return this.defaultSettingsService;
-    }
-
-    throw new MissingProviderRuntimeError({
-      providerKey: `BaseProvider.${this.name}`,
-      missingFields: ['settings'],
-      stage: 'resolveSettingsService',
-      metadata: {
-        requirement: 'REQ-SP4-001',
-        hint: 'Provider runtime guard expects ProviderManager to set runtime settings.',
-      },
-    });
+    return this.defaultSettingsService;
   }
 
   /**
@@ -289,9 +275,11 @@ export abstract class BaseProvider implements IProvider {
       }
     }
 
-    const providerSettings = settingsService.getProviderSettings(this.name);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    const providerBaseUrl = normalizeBaseUrl(providerSettings?.['base-url']);
+    const providerSettings =
+      (settingsService.getProviderSettings(this.name) as
+        | ProviderSettings
+        | undefined) ?? ({} as ProviderSettings);
+    const providerBaseUrl = normalizeBaseUrl(providerSettings['base-url']);
     if (providerBaseUrl) {
       return providerBaseUrl;
     }
@@ -315,9 +303,11 @@ export abstract class BaseProvider implements IProvider {
       return ephemeralModel;
     }
 
-    const providerSettings = settingsService.getProviderSettings(this.name);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    const providerModel = providerSettings?.model as string | undefined;
+    const providerSettings =
+      (settingsService.getProviderSettings(this.name) as
+        | ProviderSettings
+        | undefined) ?? ({} as ProviderSettings);
+    const providerModel = providerSettings.model;
     if (providerModel) {
       return providerModel;
     }
@@ -402,9 +392,10 @@ export abstract class BaseProvider implements IProvider {
         manager.isOAuthEnabled &&
         typeof manager.isOAuthEnabled === 'function'
       ) {
-        const oauthProvider =
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to this.name
-          this.baseProviderConfig.oauthProvider || this.name;
+        const oauthProvider = firstTruthyString(
+          this.baseProviderConfig.oauthProvider,
+          this.name,
+        );
         return manager.isOAuthEnabled(oauthProvider);
       }
       // Fall back to local config
@@ -511,14 +502,7 @@ export abstract class BaseProvider implements IProvider {
    * @requirement Issue #975 - OAuth logout cache invalidation
    */
   clearAuthCache(): void {
-    // Invalidate cached tokens in the auth resolver
-    if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      this.authResolver !== undefined &&
-      typeof this.authResolver.invalidateCache === 'function'
-    ) {
-      this.authResolver.invalidateCache();
-    }
+    this.authResolver.invalidateCache();
   }
 
   /**

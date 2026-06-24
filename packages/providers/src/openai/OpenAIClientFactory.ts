@@ -111,12 +111,10 @@ export function createHttpAgents(
 export function extractModelParamsFromOptions(
   options: NormalizedGenerateChatOptions,
 ): Record<string, unknown> | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI client options cross provider/runtime boundaries despite declared types.
-  const modelParams = { ...(options.invocation?.modelParams ?? {}) };
+  const modelParams = { ...options.invocation.modelParams };
 
   // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI client options cross provider/runtime boundaries despite declared types.
-  const rawMaxOutput = options.settings?.get('maxOutputTokens');
+  const rawMaxOutput = options.settings.get('maxOutputTokens');
   const genericMaxOutput =
     typeof rawMaxOutput === 'number' &&
     Number.isFinite(rawMaxOutput) &&
@@ -145,8 +143,7 @@ export function resolveRuntimeKey(
     return options.runtime.runtimeId;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI client options cross provider/runtime boundaries despite declared types.
-  const metadataRuntimeId = options.metadata?.runtimeId;
+  const metadataRuntimeId = options.metadata.runtimeId as string | undefined;
   if (typeof metadataRuntimeId === 'string' && metadataRuntimeId.trim()) {
     return metadataRuntimeId.trim();
   }

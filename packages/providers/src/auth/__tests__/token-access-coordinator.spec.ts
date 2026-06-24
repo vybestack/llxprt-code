@@ -206,6 +206,25 @@ describe('TokenAccessCoordinator', () => {
     });
   });
 
+  it('treats an empty session bucket as unset for implicit bucket resolution', async () => {
+    const provider = createMockProvider('anthropic');
+    const { coordinator, tokenStore, facade } = makeCoordinator({ provider });
+    coordinator.setGetProfileBucketsDelegate(async () => ['default']);
+    vi.mocked(facade.getSessionBucket).mockReturnValue('');
+    vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
+    vi.mocked(tokenStore.getToken).mockResolvedValue(null);
+
+    await expect(coordinator.getToken('anthropic')).rejects.toThrow(
+      'authenticator not wired',
+    );
+
+    expect(tokenStore.acquireRefreshLock).toHaveBeenCalledWith('anthropic', {
+      waitMs: 5000,
+      staleMs: 30000,
+      bucket: 'default',
+    });
+  });
+
   // --------------------------------------------------------------------------
   // B) getOAuthToken refresh-lock parameters
   // --------------------------------------------------------------------------

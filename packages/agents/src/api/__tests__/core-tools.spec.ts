@@ -322,7 +322,7 @@ describe('Core tools @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006 @requi
             const resultForCall = resultEvents.find(
               (r) => r.result.id === call.call.id,
             );
-            return resultForCall
+            return resultForCall !== undefined
               ? events.indexOf(resultForCall) - callIdx
               : Number.POSITIVE_INFINITY;
           })

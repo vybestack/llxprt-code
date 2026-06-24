@@ -132,13 +132,15 @@ const FakeAnthropicClass = Anthropic as unknown as {
   reset(): void;
 };
 
+const ANTHROPIC_CONSTRUCTOR_OPTS = {
+  getEphemeralSettings: () => ({ streaming: 'disabled' }),
+};
+
 class TestAnthropicProvider extends AnthropicProvider {
   private nextAuthToken = 'token-A';
 
   constructor() {
-    super(undefined, 'https://api.anthropic.com', {
-      getEphemeralSettings: () => ({ streaming: 'disabled' }),
-    });
+    super(undefined, 'https://api.anthropic.com', ANTHROPIC_CONSTRUCTOR_OPTS);
   }
 
   setAuthToken(token: string): void {
@@ -155,11 +157,8 @@ class TestAnthropicProvider extends AnthropicProvider {
 }
 
 class TestAnthropicProviderOAuth extends AnthropicProvider {
-  // eslint-disable-next-line sonarjs/no-identical-functions -- Constructor intentionally matches TestAnthropicProvider for test consistency; getAuthToken/getAuthTokenForPrompt implementations differ.
   constructor() {
-    super(undefined, 'https://api.anthropic.com', {
-      getEphemeralSettings: () => ({ streaming: 'disabled' }),
-    });
+    super(undefined, 'https://api.anthropic.com', ANTHROPIC_CONSTRUCTOR_OPTS);
   }
 
   protected override async getAuthToken(): Promise<string> {
@@ -189,24 +188,22 @@ function buildCallOptions(
   });
 }
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  FakeAnthropicClass.reset();
-  // Set up default runtime context for tests
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-      runtimeId: 'anthropic-stateless-test',
-    }),
-  );
-});
-
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-afterEach(() => {
-  clearActiveProviderRuntimeContext();
-});
-
 describe('Anthropic provider stateless contract tests', () => {
+  beforeEach(() => {
+    FakeAnthropicClass.reset();
+    // Set up default runtime context for tests
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: 'anthropic-stateless-test',
+      }),
+    );
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
   it('scopes client cache by runtime id @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 1-3', async () => {
     const provider = new TestAnthropicProvider();
     const baselineInstances = FakeAnthropicClass.created.length;

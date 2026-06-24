@@ -18,7 +18,6 @@
  * `undefined`.
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.unmock('./providerAliases.js');
@@ -86,7 +85,7 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
     setFileSystem(new MockFileSystem());
     resetProviderManager();
 
-    const activeContext: any = { scope: 'test' };
+    const activeContext: Record<string, unknown> = { scope: 'test' };
     createProviderManager(activeContext, {
       config: undefined,
       allowBrowserEnvironment: false,
@@ -125,7 +124,7 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
     setFileSystem(fs);
     resetProviderManager();
 
-    const activeContext: any = { scope: 'test' };
+    const activeContext: Record<string, unknown> = { scope: 'test' };
     createProviderManager(activeContext, {
       config: undefined,
       allowBrowserEnvironment: false,

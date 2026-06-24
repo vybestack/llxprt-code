@@ -40,10 +40,7 @@ describe('BucketFailoverHandlerImpl #25', () => {
     const refreshedToken = makeToken('refreshed-b');
     const provider = oauthManager.getProvider('anthropic');
     expect(provider).toBeDefined();
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (provider) {
-      provider.refreshToken = vi.fn(async () => refreshedToken);
-    }
+    provider!.refreshToken = vi.fn(async () => refreshedToken);
 
     const handler = new BucketFailoverHandlerImpl(
       ['bucket-a', 'bucket-b', 'bucket-c'],

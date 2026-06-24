@@ -145,9 +145,9 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
       expect(detail?.authKeyName).toBe('prod-key');
       // deep-copy isolation: original value preserved, no leaked key
       expect(detail?.modelParams?.temperature).toBe(0.7);
-      expect(detail?.modelParams && 'injected' in detail.modelParams).toBe(
-        false,
-      );
+      expect(
+        detail?.modelParams !== undefined && 'injected' in detail.modelParams,
+      ).toBe(false);
 
       // a minimal create omits absent optional keys entirely
       await agent.profiles.create('minimal', {
