@@ -43,6 +43,7 @@ import {
   resolveGenerateChatSettings,
 } from './BaseProviderNormalization.js';
 import { getProviderCustomHeaders } from './customHeaders.js';
+import { MissingProviderRuntimeError } from './errors.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -108,7 +109,7 @@ export abstract class BaseProvider implements IProvider {
    * @requirement REQ-SP-001
    * @pseudocode provider-invocation.md lines 8-15
    */
-  private defaultSettingsService: SettingsService;
+  private defaultSettingsService: SettingsService | undefined;
   private defaultConfig?: Config;
   private readonly activeCallContext =
     new AsyncLocalStorage<NormalizedGenerateChatOptions>();
@@ -194,7 +195,20 @@ export abstract class BaseProvider implements IProvider {
       return activeOptions.settings;
     }
 
-    return this.defaultSettingsService;
+    const settings = this.defaultSettingsService;
+    if (settings) {
+      return settings;
+    }
+
+    throw new MissingProviderRuntimeError({
+      providerKey: `BaseProvider.${this.name}`,
+      missingFields: ['settings'],
+      stage: 'resolveSettingsService',
+      metadata: {
+        requirement: 'REQ-SP4-001',
+        hint: 'Provider runtime guard expects ProviderManager to set runtime settings.',
+      },
+    });
   }
 
   /**

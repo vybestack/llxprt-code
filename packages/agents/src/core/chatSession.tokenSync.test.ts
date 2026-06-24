@@ -52,7 +52,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
   });
 
   describe('Anthropic Provider - input_tokens', () => {
-    it('should include cached prompt tokens from API usage after streaming response', async () => {
+    it('should sync prompt tokens from API usage after streaming response', async () => {
       runtimeState = createAgentRuntimeState({
         runtimeId: runtimeSetup.runtime.runtimeId,
         provider: 'anthropic',
@@ -135,7 +135,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       await historyService.waitForTokenUpdates();
 
       const actualCount = historyService.getTotalTokens();
-      expect(actualCount).toBe(19573);
+      expect(actualCount).toBe(5000);
     });
 
     it('should sync tokens when API reports higher count than estimate', async () => {

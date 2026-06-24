@@ -345,6 +345,11 @@ export async function createChatSession(
     model,
   );
 
+  if (reused) {
+    historyService.resetTokenAccounting();
+    await historyService.recalculateTotalTokens(model);
+  }
+
   await applySystemPromptTokenOffset(
     historyService,
     systemInstruction,

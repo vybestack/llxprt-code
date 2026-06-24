@@ -151,8 +151,9 @@ describe('Token Tracking Integration Tests', () => {
     });
 
     it('should accumulate session tokens correctly', () => {
+      // input includes cache tokens (total-including-cache invariant)
       const usage = {
-        input: 100,
+        input: 110,
         output: 50,
         cache: 10,
         tool: 5,
@@ -162,7 +163,8 @@ describe('Token Tracking Integration Tests', () => {
       providerManager.accumulateSessionTokens('openai', usage);
       const sessionUsage = providerManager.getSessionTokenUsage();
 
-      expect(sessionUsage.input).toBe(100);
+      // input includes cache tokens (total-including-cache invariant)
+      expect(sessionUsage.input).toBe(110);
       expect(sessionUsage.output).toBe(50);
       expect(sessionUsage.cache).toBe(10);
       expect(sessionUsage.tool).toBe(5);

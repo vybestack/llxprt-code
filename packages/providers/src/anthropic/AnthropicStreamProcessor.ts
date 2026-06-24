@@ -239,9 +239,13 @@ function* handleMessageStart(
       blocks: [],
       metadata: {
         usage: {
-          promptTokens: usage.input_tokens ?? 0,
+          promptTokens: (usage.input_tokens ?? 0) + cacheRead + cacheCreation,
           completionTokens: usage.output_tokens ?? 0,
-          totalTokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+          totalTokens:
+            (usage.input_tokens ?? 0) +
+            (usage.output_tokens ?? 0) +
+            cacheRead +
+            cacheCreation,
           cache_read_input_tokens: cacheRead,
           cache_creation_input_tokens: cacheCreation,
         },
@@ -534,8 +538,9 @@ function* handleMessageDelta(
 
   const rawInputTokens = usage.input_tokens as number | null | undefined;
   const rawOutputTokens = usage.output_tokens as number | null | undefined;
-  const promptTokens = sanitizeTokenCount(rawInputTokens);
+  const basePromptTokens = sanitizeTokenCount(rawInputTokens);
   const completionTokens = sanitizeTokenCount(rawOutputTokens);
+  const promptTokens = basePromptTokens + cacheRead + cacheCreation;
 
   logger.debug(
     () =>

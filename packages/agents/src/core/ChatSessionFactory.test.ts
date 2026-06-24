@@ -55,6 +55,8 @@ vi.mock(
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
+      resetTokenAccounting: vi.fn(),
+      recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
     })),
   }),
 );
@@ -431,6 +433,8 @@ describe('createChatSession', () => {
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
+      resetTokenAccounting: vi.fn(),
+      recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
     };
     vi.mocked(HistoryService).mockImplementationOnce(
       () => mockHistoryInstance as unknown as HistoryService,
