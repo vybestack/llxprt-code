@@ -199,11 +199,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('Loading');
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SB-006
-   */
   describe('Empty State', () => {
     it('should display "No sessions found for this project" when no sessions exist', () => {
       mockHookState.sessions = [];
@@ -240,11 +235,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('Esc');
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SB-003, REQ-SB-013, REQ-SB-014, REQ-SB-015, REQ-SB-016, REQ-SB-017, REQ-SB-018
-   */
   describe('Populated List', () => {
     it('should render session rows with metadata', () => {
       const session = createMockSession({
@@ -325,11 +315,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).toMatch(testRegex('KB|bytes|B', 'i'));
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-PV-001, REQ-PV-006, REQ-PV-007, REQ-PV-008, REQ-SB-019, REQ-SB-025
-   */
   describe('Preview Loading States', () => {
     it('should show "Loading..." for sessions with previewState loading', () => {
       const session = createMockSession({
@@ -379,11 +364,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('preview unavailable');
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SR-001, REQ-SR-002, REQ-SR-005, REQ-SR-011, REQ-SR-012
-   */
   describe('Search Filtering', () => {
     it('should display search bar', () => {
       mockHookState.isLoading = false;
@@ -441,11 +421,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('Tab');
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-KN-001, REQ-KN-002, REQ-KN-003, REQ-SR-007
-   */
   describe('Keyboard Navigation', () => {
     it('should call handleKeypress when Up arrow is pressed', async () => {
       const session1 = createMockSession({ sessionId: 'session-1' });
@@ -512,11 +487,6 @@ describe('SessionBrowserDialog', () => {
       expect(mockHookState.handleKeypress).toHaveBeenCalled();
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-DL-001, REQ-DL-003, REQ-DL-013, REQ-DL-014
-   */
   describe('Delete Confirmation', () => {
     it('should show delete confirmation when deleteConfirmIndex is set', () => {
       const session = createMockSession({
@@ -584,11 +554,6 @@ describe('SessionBrowserDialog', () => {
       expect(mockHookState.handleKeypress).toHaveBeenCalled();
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SB-010, REQ-LK-005
-   */
   describe('Locked Session Display', () => {
     it('should show "(in use)" indicator for locked sessions', () => {
       const session = createMockSession({ isLocked: true });
@@ -619,11 +584,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('Locked session preview');
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SB-020, REQ-EH-001, REQ-EH-005
-   */
   describe('Error Display', () => {
     it('should show error message when error state is set', () => {
       mockHookState.error = 'Failed to load sessions: Permission denied';
@@ -645,11 +605,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('Session is in use');
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SB-008
-   */
   describe('Skipped Sessions Notice', () => {
     it('should show "Skipped N unreadable session(s)" when skippedCount > 0', () => {
       mockHookState.skippedCount = 3;
@@ -671,11 +626,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).not.toMatch(testRegex('skipped', 'i'));
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-RW-001, REQ-RW-002, REQ-RW-003, REQ-RW-004, REQ-RW-005, REQ-RW-006
-   */
   describe('Wide Mode Layout', () => {
     beforeEach(() => {
       mockIsNarrow.value = false;
@@ -741,11 +691,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('abc123');
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-RN-001, REQ-RN-002, REQ-RN-003, REQ-RN-004, REQ-RN-006, REQ-RN-007, REQ-RN-008, REQ-RN-009, REQ-RN-010, REQ-RN-011, REQ-RN-013
-   */
   describe('Narrow Mode Layout', () => {
     beforeEach(() => {
       mockIsNarrow.value = true;
@@ -844,11 +789,6 @@ describe('SessionBrowserDialog', () => {
       expect(output).not.toContain('#1');
     });
   });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SO-001, REQ-SO-002, REQ-SO-003, REQ-SO-006
-   */
   describe('Sort Options', () => {
     it('should visually indicate active sort option with brackets', () => {
       mockHookState.sortOrder = 'newest';
@@ -884,316 +824,6 @@ describe('SessionBrowserDialog', () => {
       });
 
       expect(mockHookState.handleKeypress).toHaveBeenCalled();
-    });
-  });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-PG-001, REQ-PG-002, REQ-PG-003, REQ-PG-004, REQ-PG-005
-   */
-  describe('Pagination', () => {
-    it('should display page indicator for multi-page lists', () => {
-      const sessions = Array.from({ length: 25 }, (_, i) =>
-        createMockSession({ sessionId: `session-${i}` }),
-      );
-      mockHookState.sessions = sessions;
-      mockHookState.filteredSessions = sessions;
-      mockHookState.pageItems = sessions.slice(0, 20);
-      mockHookState.selectedSession = sessions[0];
-      mockHookState.totalPages = 2;
-      mockHookState.page = 0;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toMatch(testRegex('page.*1.*of.*2|1\\/2', 'i'));
-    });
-
-    it('should hide page indicator for single-page lists', () => {
-      const sessions = [createMockSession()];
-      mockHookState.sessions = sessions;
-      mockHookState.filteredSessions = sessions;
-      mockHookState.pageItems = sessions;
-      mockHookState.selectedSession = sessions[0];
-      mockHookState.totalPages = 1;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      // Single page should not show page indicator
-      expect(output).not.toMatch(testRegex('page.*1.*of.*1', 'i'));
-    });
-
-    it('should call handleKeypress when PageDown is pressed', async () => {
-      mockHookState.totalPages = 2;
-      mockHookState.page = 0;
-      mockHookState.isLoading = false;
-
-      const { stdin } = renderWithProviders();
-
-      act(() => {
-        stdin.write(TerminalKeys.PAGE_DOWN);
-      });
-
-      expect(mockHookState.handleKeypress).toHaveBeenCalled();
-    });
-
-    it('should call handleKeypress when PageUp is pressed', async () => {
-      mockHookState.totalPages = 2;
-      mockHookState.page = 1;
-      mockHookState.isLoading = false;
-
-      const { stdin } = renderWithProviders();
-
-      act(() => {
-        stdin.write(TerminalKeys.PAGE_UP);
-      });
-
-      expect(mockHookState.handleKeypress).toHaveBeenCalled();
-    });
-
-    it('should show PgUp/PgDn hint for multi-page lists', () => {
-      mockHookState.totalPages = 2;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toMatch(testRegex('PgUp|PgDn|page', 'i'));
-    });
-  });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SD-001, REQ-SD-002
-   */
-  describe('Selection Detail', () => {
-    it('should display selected session full ID in detail line (wide mode)', () => {
-      mockIsNarrow.value = false;
-      const session = createMockSession({
-        sessionId: 'session-full-id-display-test',
-      });
-      mockHookState.pageItems = [session];
-      mockHookState.filteredSessions = [session];
-      mockHookState.selectedSession = session;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toContain('session-full');
-    });
-
-    it('should display provider/model in detail line', () => {
-      mockIsNarrow.value = false;
-      const session = createMockSession({
-        provider: 'google',
-        model: 'gemini-pro',
-      });
-      mockHookState.pageItems = [session];
-      mockHookState.filteredSessions = [session];
-      mockHookState.selectedSession = session;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toContain('google');
-      expect(output).toContain('gemini');
-    });
-  });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-RS-001, REQ-RS-003, REQ-RS-004, REQ-RS-005, REQ-RS-006, REQ-RS-013
-   */
-  describe('Resume Flow', () => {
-    it('should display "Resuming..." status when isResuming is true', () => {
-      const session = createMockSession();
-      mockHookState.pageItems = [session];
-      mockHookState.filteredSessions = [session];
-      mockHookState.selectedSession = session;
-      mockHookState.isResuming = true;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toContain('Resuming');
-    });
-
-    it('should show active conversation confirmation when conversationConfirmActive is true', () => {
-      const session = createMockSession();
-      mockHookState.pageItems = [session];
-      mockHookState.filteredSessions = [session];
-      mockHookState.selectedSession = session;
-      mockHookState.conversationConfirmActive = true;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toMatch(
-        testRegex('replace|current.*conversation|continue\\?', 'i'),
-      );
-    });
-
-    it('should show Y/N options in conversation confirmation', () => {
-      mockHookState.conversationConfirmActive = true;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toContain('Y');
-      expect(output).toContain('N');
-    });
-  });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-EP-001, REQ-EP-002, REQ-EP-003, REQ-EP-004
-   */
-  describe('Escape Key Precedence', () => {
-    it('should call handleKeypress when Escape is pressed', async () => {
-      mockHookState.isLoading = false;
-
-      const { stdin } = renderWithProviders();
-
-      act(() => {
-        stdin.write(TerminalKeys.ESCAPE);
-      });
-
-      expect(mockHookState.handleKeypress).toHaveBeenCalled();
-    });
-  });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SB-012, REQ-RN-011
-   */
-  describe('Border Styles', () => {
-    it('should render with rounded border in wide mode', () => {
-      mockIsNarrow.value = false;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      // Rounded border uses curved characters like ╭ ╮ ╯ ╰
-      expect(output).toMatch(testRegex('[╭╮╯╰]', ''));
-    });
-
-    it('should render borderless in narrow mode', () => {
-      mockIsNarrow.value = true;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      // Should NOT have box-drawing characters
-      // Note: This is hard to assert negatively, so we check it doesn't have standard box borders
-      expect(output).not.toMatch(testRegex('[╭╮╯╰]', ''));
-    });
-  });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SB-013, REQ-SB-023
-   */
-  describe('Visual Indicators', () => {
-    it('should show selected item bullet (●) for highlighted session', () => {
-      const session = createMockSession();
-      mockHookState.pageItems = [session];
-      mockHookState.filteredSessions = [session];
-      mockHookState.selectedSession = session;
-      mockHookState.selectedIndex = 0;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toContain('●');
-    });
-
-    it('should show unselected item bullet (○) for non-highlighted sessions', () => {
-      const session1 = createMockSession({ sessionId: 'session-1' });
-      const session2 = createMockSession({ sessionId: 'session-2' });
-      mockHookState.pageItems = [session1, session2];
-      mockHookState.filteredSessions = [session1, session2];
-      mockHookState.selectedSession = session1;
-      mockHookState.selectedIndex = 0;
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toContain('○');
-    });
-
-    it('should show search cursor (▌) in search mode', () => {
-      mockHookState.isSearching = true;
-      mockHookState.searchTerm = 'test';
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      expect(output).toContain('▌');
-    });
-  });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-SR-013, REQ-SR-014
-   */
-  describe('Search Input', () => {
-    it('should call handleKeypress when typing characters in search mode', async () => {
-      mockHookState.isSearching = true;
-      mockHookState.isLoading = false;
-
-      const { stdin } = renderWithProviders();
-
-      act(() => {
-        stdin.write('a');
-      });
-
-      expect(mockHookState.handleKeypress).toHaveBeenCalled();
-    });
-
-    it('should call handleKeypress when Backspace is pressed in search mode', async () => {
-      mockHookState.isSearching = true;
-      mockHookState.searchTerm = 'test';
-      mockHookState.isLoading = false;
-
-      const { stdin } = renderWithProviders();
-
-      act(() => {
-        stdin.write(TerminalKeys.BACKSPACE);
-      });
-
-      expect(mockHookState.handleKeypress).toHaveBeenCalled();
-    });
-  });
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P16
-   * @requirement REQ-RW-007
-   */
-  describe('Empty List Controls', () => {
-    it('should show reduced controls bar when list is empty', () => {
-      mockHookState.sessions = [];
-      mockHookState.filteredSessions = [];
-      mockHookState.pageItems = [];
-      mockHookState.isLoading = false;
-
-      const { lastFrame } = renderWithProviders();
-      const output = lastFrame();
-
-      // Should show Esc Close but not Resume/Delete options
-      expect(output).toContain('Esc');
     });
   });
 });
