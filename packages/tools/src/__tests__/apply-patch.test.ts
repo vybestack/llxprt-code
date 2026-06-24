@@ -86,16 +86,9 @@ describe('ApplyPatchTool issue #2133 regressions', () => {
       undefined,
       options?.lsp,
     );
-    try {
-      return await tool.build(params).execute(new AbortController().signal);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        llmContent: '',
-        returnDisplay: '',
-        error: { message },
-      };
-    }
+    // Use validateBuildAndExecute so validation and execution errors surface
+    // with their real ToolErrorType, matching the production call path.
+    return tool.validateBuildAndExecute(params, new AbortController().signal);
   }
 
   describe('single-file patch success', () => {
@@ -306,6 +299,7 @@ describe('ApplyPatchTool issue #2133 regressions', () => {
 
       expect(result.error).toBeDefined();
       // Empty patch_content is rejected by parameter validation before parsing.
+      expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
       expect(result.error?.message).toContain('patch_content');
       expect(readFileSync(target, 'utf-8')).toBe('unchanged\n');
     });
@@ -321,6 +315,7 @@ describe('ApplyPatchTool issue #2133 regressions', () => {
 
       expect(result.error).toBeDefined();
       expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
+      expect(readFileSync(target, 'utf-8')).toBe('unchanged\n');
     });
   });
 

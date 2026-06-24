@@ -621,7 +621,13 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       }
     }
 
-    const relativePath = path.relative(getTargetDirCompat(this.host), filePath);
+    // Unified-diff headers always use forward slashes, but path.relative returns
+    // OS-native separators (backslashes on Windows). Normalize both sides to
+    // forward slashes so directory-qualified header matching works cross-platform.
+    const toPosix = (p: string): string => p.split(path.sep).join('/');
+    const relativePath = toPosix(
+      path.relative(getTargetDirCompat(this.host), filePath),
+    );
     const headerMatches = (header: string): boolean => {
       if (header === '') {
         return false;
@@ -632,7 +638,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       // directory's same-named file. Only headers without a directory component
       // fall back to basename comparison.
       if (header.includes('/') || header.includes(path.sep)) {
-        return header === relativePath;
+        return toPosix(header) === relativePath;
       }
       return path.basename(header) === targetName;
     };
