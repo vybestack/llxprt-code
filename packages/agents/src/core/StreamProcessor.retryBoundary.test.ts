@@ -426,18 +426,28 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
 
       expect(capturedRetryFetchErrors).toBe(true);
       expect(capturedShouldRetryOnError).toBeDefined();
+      // "fetch failed" is now classified as a network-transient condition
+      // centrally (issue #2161), so it is always retryable regardless of the
+      // retryFetchErrors flag.
       expect(
         capturedShouldRetryOnError?.(
           new Error('fetch failed sending request'),
           false,
         ),
-      ).toBe(false);
+      ).toBe(true);
       expect(
         capturedShouldRetryOnError?.(
           new Error('fetch failed sending request'),
           true,
         ),
       ).toBe(true);
+      // A genuinely non-transient error is still not retryable.
+      expect(
+        capturedShouldRetryOnError?.(
+          new Error('totally unrelated error'),
+          true,
+        ),
+      ).toBe(false);
     });
   });
 

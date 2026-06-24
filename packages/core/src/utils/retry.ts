@@ -69,6 +69,7 @@ const TRANSIENT_ERROR_PHRASES = [
   'stream prematurely closed',
   'read econnreset',
   'write econnreset',
+  'fetch failed',
 ];
 
 const TRANSIENT_ERROR_REGEXES = [
@@ -226,21 +227,22 @@ export function isNetworkTransientError(error: unknown): boolean {
  * @requirement REQ-R13-002 isRetryableError exported for reuse
  *
  * Decision precedence (CRITICAL - do not reorder):
- * 1. Network error codes (ETIMEDOUT, ECONNRESET, etc.) → ALWAYS retry (regardless of retryFetchErrors)
+ * 1. Network transient conditions (ETIMEDOUT, ECONNRESET, "fetch failed", etc.) → ALWAYS retry
+ *    (centralized in isNetworkTransientError; regardless of retryFetchErrors)
  * 2. RetryableQuotaError → retry
  * 3. Anthropic body-level errors (overloaded_error, rate_limit_error, api_error, no HTTP status) → retry
- * 4. retryFetchErrors=true + generic "fetch failed" message → retry
- * 5. ApiError with status 400 → NEVER retry; ApiError 401/403/429/5xx → retry
- * 6. Generic status 401/403/429 or 5xx → retry
- * 7. All others → do not retry
+ * 4. ApiError with status 400 → NEVER retry; ApiError 401/403/429/5xx → retry
+ * 5. Generic status 401/403/429 or 5xx → retry
+ * 6. All others → do not retry
  *
  * @param error The error object.
- * @param retryFetchErrors Whether to retry generic fetch failures (default: false).
+ * @param retryFetchErrors Retained for type-contract compatibility; "fetch failed"
+ *   is now handled centrally by isNetworkTransientError (PRIORITY 1).
  * @returns True if the error is retryable, false otherwise.
  */
 export function isRetryableError(
   error: Error | unknown,
-  retryFetchErrors?: boolean,
+  _retryFetchErrors?: boolean,
 ): boolean {
   // PRIORITY 1: Network error codes are ALWAYS retryable (transient infrastructure failures)
   // This check MUST come before retryFetchErrors to ensure network errors retry unconditionally
@@ -260,21 +262,13 @@ export function isRetryableError(
     return true;
   }
 
-  // PRIORITY 4: Generic "fetch failed" messages only retry when explicitly enabled
-  if (retryFetchErrors === true) {
-    const { messages } = collectErrorDetails(error);
-    if (messages.some((msg) => msg.toLowerCase().includes('fetch failed'))) {
-      return true;
-    }
-  }
-
-  // PRIORITY 5: ApiError with deterministic 400 is NEVER retryable
+  // PRIORITY 4: ApiError with deterministic 400 is NEVER retryable
   if (error instanceof ApiError) {
     if (error.status === 400) return false;
     return isRetryableStatus(error.status);
   }
 
-  // PRIORITY 6: Generic status-based retry (handles non-ApiError shapes)
+  // PRIORITY 5: Generic status-based retry (handles non-ApiError shapes)
   const status = getErrorStatus(error);
   if (status !== undefined) {
     return isRetryableStatus(status);

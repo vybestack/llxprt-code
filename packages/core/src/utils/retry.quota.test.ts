@@ -9,7 +9,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ApiError } from '@google/genai';
-import { retryWithBackoff, isRetryableError } from './retry.js';
+import {
+  retryWithBackoff,
+  isRetryableError,
+  isNetworkTransientError,
+} from './retry.js';
 import { setSimulate429 } from './testUtils.js';
 import { RetryableQuotaError } from './googleQuotaErrors.js';
 import type { GoogleApiError } from './googleErrors.js';
@@ -42,9 +46,9 @@ describe('isRetryableError', () => {
     expect(isRetryableError(outerError, false)).toBe(true);
   });
 
-  it('should NOT retry generic "fetch failed" when retryFetchErrors=false', () => {
+  it('should retry generic "fetch failed" even when retryFetchErrors=false (centralized transient detection)', () => {
     const error = new Error('fetch failed');
-    expect(isRetryableError(error, false)).toBe(false);
+    expect(isRetryableError(error, false)).toBe(true);
   });
 
   it('should retry generic "fetch failed" when retryFetchErrors=true', () => {
@@ -115,6 +119,26 @@ describe('isRetryableError', () => {
     );
     expect(isRetryableError(error, false)).toBe(true);
     expect(isRetryableError(error, true)).toBe(true);
+  });
+});
+
+describe('isNetworkTransientError', () => {
+  it('returns true for a bare TypeError("fetch failed") with no cause', () => {
+    const error = new TypeError('fetch failed');
+    expect(isNetworkTransientError(error)).toBe(true);
+  });
+
+  it('returns true for a TypeError("fetch failed") with an undici cause (UND_ERR_SOCKET)', () => {
+    const cause = Object.assign(new Error('Socket error'), {
+      code: 'UND_ERR_SOCKET',
+    });
+    const error = new TypeError('fetch failed', { cause });
+    expect(isNetworkTransientError(error)).toBe(true);
+  });
+
+  it('returns false for a non-transient error', () => {
+    const error = new Error('some random error');
+    expect(isNetworkTransientError(error)).toBe(false);
   });
 });
 
