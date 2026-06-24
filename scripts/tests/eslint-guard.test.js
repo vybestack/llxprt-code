@@ -607,6 +607,20 @@ describe('packages/policy directive cleanup (#2122)', () => {
       expect(violations[0].message).toContain('scoped ignore');
     });
 
+    it('ignores packages/policy references in trailing comments', () => {
+      const config = [
+        '{',
+        "  files: ['packages/cli/src/example.ts'], // not packages/policy",
+        '  rules: {',
+        "    'sonarjs/expression-complexity': 'off',",
+        '  },',
+        '}',
+      ].join('\n');
+
+      expect(
+        checkModuleCentralBypassesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
     it('does not flag completedDirectiveCleanupScopes entries as central bypasses', () => {
       const config = [
         'const completedDirectiveCleanupScopes = [',

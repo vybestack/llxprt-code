@@ -559,7 +559,8 @@ function extractArrayStart(line) {
 }
 
 function isModulePathLine(line, modulePath) {
-  return !isCommentOnlyLine(line) && line.includes(modulePath);
+  const code = stripInlineComment(line);
+  return !isCommentOnlyLine(code) && code.includes(modulePath);
 }
 
 const SCOPE_DECLARATION_ARRAYS = new Set([
