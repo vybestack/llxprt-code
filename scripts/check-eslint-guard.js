@@ -292,7 +292,7 @@ function isScannableTextFile(fileName) {
   return !BINARY_EXTENSIONS.has(extname(fileName).toLowerCase());
 }
 
-function scanDirectoryForDirectives(rootDir) {
+function scanDirectoryForDirectives(rootDir, modulePath, issueNumber) {
   const violations = [];
   const entries = readdirSync(rootDir, { withFileTypes: true });
   for (const entry of entries) {
@@ -301,15 +301,19 @@ function scanDirectoryForDirectives(rootDir) {
     }
     const fullPath = join(rootDir, entry.name);
     if (entry.isDirectory()) {
-      violations.push(...scanDirectoryForDirectives(fullPath));
+      violations.push(
+        ...scanDirectoryForDirectives(fullPath, modulePath, issueNumber),
+      );
     } else if (entry.isFile() && isScannableTextFile(entry.name)) {
-      violations.push(...scanFileForDirectives(fullPath));
+      violations.push(
+        ...scanFileForDirectives(fullPath, modulePath, issueNumber),
+      );
     }
   }
   return violations;
 }
 
-function scanFileForDirectives(filePath) {
+function scanFileForDirectives(filePath, modulePath, issueNumber) {
   const violations = [];
   const contents = readFileSync(filePath, 'utf8');
   const lines = contents.split('\n');
@@ -319,8 +323,7 @@ function scanFileForDirectives(filePath) {
       violations.push({
         file: relative(process.cwd(), filePath),
         lineNumber: i + 1,
-        message:
-          'Inline ESLint disable/enable directives are forbidden in packages/core by #2115.',
+        message: `Inline ESLint disable/enable directives are forbidden in ${modulePath} by #${issueNumber}.`,
         content: line,
       });
     }
@@ -329,16 +332,29 @@ function scanFileForDirectives(filePath) {
 }
 
 /**
+ * Scans a named package directory for any inline ESLint disable/enable
+ * directives. Returns a list of violations; an empty array means the policy is
+ * satisfied. The modulePath (e.g. "packages/core") and issueNumber are used to
+ * build descriptive violation messages.
+ */
+export function scanModuleDirectives(modulePath, issueNumber, baseDir) {
+  const target = baseDir || join(process.cwd(), ...modulePath.split('/'));
+  if (!existsSync(target)) {
+    return [];
+  }
+  return scanDirectoryForDirectives(target, modulePath, issueNumber);
+}
+
+/**
  * Scans the packages/core directory for any inline ESLint disable/enable
  * directives. Returns a list of violations; an empty array means the policy is
  * satisfied. Issue #2115 requires zero such directives in packages/core.
  */
 export function scanCoreDirectives(coreDir) {
-  const target = coreDir || join(process.cwd(), 'packages', 'core');
-  if (!existsSync(target)) {
-    return [];
+  if (coreDir) {
+    return scanDirectoryForDirectives(coreDir, 'packages/core', '2115');
   }
-  return scanDirectoryForDirectives(target);
+  return scanModuleDirectives('packages/core', '2115');
 }
 
 /**
@@ -429,14 +445,23 @@ export function extractScopeArray(scopeName, configSource) {
 
 /**
  * Inspects eslint.config.js source text and returns any directive cleanup scope
- * entries that reference packages/core. Issue #2115 requires packages/core to
- * be removed from both temporary and completed central directive lists.
+ * entries that reference the given module path. By default both
+ * legacyDirectiveCleanupScopes and completedDirectiveCleanupScopes are checked.
+ * When checkCompletedScopes is false, only legacyDirectiveCleanupScopes is
+ * checked — this is used when a module is intentionally locked in
+ * completedDirectiveCleanupScopes as its durable enforcement.
  */
-export function checkCoreDirectiveScopesInConfig(configSource) {
+export function checkModuleDirectiveScopesInConfig(
+  configSource,
+  modulePath,
+  issueNumber,
+  checkCompletedScopes = true,
+) {
   const violations = [];
   const lines = configSource.split('\n');
   let currentScope = null;
   let currentStatement = '';
+  let currentCode = '';
   let currentStartLine = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -447,29 +472,81 @@ export function checkCoreDirectiveScopesInConfig(configSource) {
     if (scopeMatch) {
       currentScope = scopeMatch[1];
       currentStatement = line;
+      currentCode = stripInlineComment(line);
       currentStartLine = i + 1;
     } else if (currentScope !== null) {
       currentStatement += '\n' + line;
+      currentCode += '\n' + stripInlineComment(line);
     }
 
     if (currentScope !== null && /;\s*(?:\/\/.*)?$/.test(line)) {
-      if (currentStatement.includes('packages/core')) {
+      const shouldFlag =
+        currentScope === 'legacyDirectiveCleanupScopes' ||
+        (checkCompletedScopes &&
+          currentScope === 'completedDirectiveCleanupScopes');
+      if (shouldFlag && currentCode.includes(modulePath)) {
         violations.push({
           file: 'eslint.config.js',
           lineNumber: currentStartLine,
-          message: `packages/core must not remain in ${currentScope} (#2115).`,
+          message: `${modulePath} must not remain in ${currentScope} (#${issueNumber}).`,
           content: currentStatement,
         });
       }
       currentScope = null;
       currentStatement = '';
+      currentCode = '';
     }
   }
   return violations;
 }
 
+/**
+ * Inspects eslint.config.js source text and returns any directive cleanup scope
+ * entries that reference packages/core. Issue #2115 requires packages/core to
+ * be removed from both temporary and completed central directive lists.
+ */
+export function checkCoreDirectiveScopesInConfig(configSource) {
+  return checkModuleDirectiveScopesInConfig(
+    configSource,
+    'packages/core',
+    '2115',
+  );
+}
+
 function isCommentOnlyLine(line) {
   return line.trim().startsWith('//');
+}
+
+/**
+ * Strips trailing // comments from a line, respecting string literals so that
+ * // inside quotes is not mistaken for a comment start.
+ */
+function stripInlineComment(line) {
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const next = line[i + 1];
+    if (quote === null && char === '/' && next === '/') {
+      return line.slice(0, i);
+    }
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (quote !== null) {
+      if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+    }
+  }
+  return line;
 }
 
 function extractArrayStart(line) {
@@ -481,12 +558,52 @@ function extractArrayStart(line) {
   return allowMatch === null ? null : 'allow';
 }
 
-function isCorePathLine(line) {
-  return !isCommentOnlyLine(line) && line.includes('packages/core');
+function isModulePathLine(line, modulePath) {
+  const code = stripInlineComment(line);
+  return !isCommentOnlyLine(code) && code.includes(modulePath);
 }
 
-function hasCoreCentralBypassOnSingleLine(line) {
-  if (!isCorePathLine(line)) {
+const SCOPE_DECLARATION_ARRAYS = new Set([
+  'legacyDirectiveCleanupScopes',
+  'completedDirectiveCleanupScopes',
+]);
+
+/**
+ * Returns true if the line is a bare quoted string literal entry (e.g.
+ * a glob like 'packages/policy/src/...'). These appear as individual entries
+ * inside arrays.
+ */
+function isBareStringEntry(line) {
+  return /^\s*['"`]/.test(line);
+}
+
+/**
+ * Returns true if the line is a file-pattern reference inside an ESLint config
+ * block (i.e. mentions the module path) that should set the object-depth
+ * tracker for central-bypass analysis.
+ *
+ * Bare quoted string literals are excluded only when they appear inside a
+ * top-level scope-declaration array (legacyDirectiveCleanupScopes /
+ * completedDirectiveCleanupScopes), so those entries are not mistaken for
+ * config-block file patterns. Inside config objects, bare quoted strings in a
+ * files array are legitimate module references and must be tracked.
+ */
+function isModuleFilesLine(line, modulePath, currentArray) {
+  if (!isModulePathLine(line, modulePath)) {
+    return false;
+  }
+  if (
+    isBareStringEntry(line) &&
+    currentArray !== null &&
+    SCOPE_DECLARATION_ARRAYS.has(currentArray)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function hasModuleCentralBypassOnSingleLine(line, modulePath) {
+  if (!isModulePathLine(line, modulePath)) {
     return null;
   }
   if (/\bignores\s*:/.test(line)) {
@@ -501,8 +618,8 @@ function hasCoreCentralBypassOnSingleLine(line) {
   return null;
 }
 
-function coreCentralBypassMessage(kind) {
-  return `packages/core must not be covered by central ESLint ${kind} entries (#2115).`;
+function moduleCentralBypassMessage(modulePath, kind, issueNumber) {
+  return `${modulePath} must not be covered by central ESLint ${kind} entries (#${issueNumber}).`;
 }
 
 function countBraceDelta(line) {
@@ -573,25 +690,29 @@ function countOpeningBraces(line) {
   return count;
 }
 
-function enclosingObjectDepth(line, braceDepth) {
-  const coreIndex = line.indexOf('packages/core');
+function enclosingObjectDepth(line, braceDepth, modulePath) {
+  const moduleIndex = line.indexOf(modulePath);
   const openIndex = line.indexOf('{');
-  if (openIndex !== -1 && openIndex < coreIndex) {
+  if (openIndex !== -1 && openIndex < moduleIndex) {
     return braceDepth + 1;
   }
   return braceDepth;
 }
 
 /**
- * Inspects eslint.config.js source text for packages/core central bypasses that
+ * Inspects eslint.config.js source text for module-path central bypasses that
  * would reintroduce the old suppression pattern outside source files.
  */
-export function checkCoreCentralBypassesInConfig(configSource) {
+export function checkModuleCentralBypassesInConfig(
+  configSource,
+  modulePath,
+  issueNumber,
+) {
   const violations = [];
   const lines = configSource.split('\n');
   let currentArray = null;
   let braceDepth = 0;
-  let coreObjectDepth = null;
+  let moduleObjectDepth = null;
   let rulesObjectDepth = null;
 
   for (let i = 0; i < lines.length; i++) {
@@ -606,43 +727,66 @@ export function checkCoreCentralBypassesInConfig(configSource) {
       currentArray = null;
     }
 
-    const singleLineBypass = hasCoreCentralBypassOnSingleLine(line);
+    const singleLineBypass = hasModuleCentralBypassOnSingleLine(
+      line,
+      modulePath,
+    );
     if (singleLineBypass !== null) {
       violations.push({
         file: 'eslint.config.js',
         lineNumber,
-        message: coreCentralBypassMessage(singleLineBypass),
+        message: moduleCentralBypassMessage(
+          modulePath,
+          singleLineBypass,
+          issueNumber,
+        ),
         content: line,
       });
     }
 
-    if (isCorePathLine(line)) {
+    if (isModulePathLine(line, modulePath)) {
       if (currentArray === 'ignores') {
         violations.push({
           file: 'eslint.config.js',
           lineNumber,
-          message: coreCentralBypassMessage('ignore'),
+          message: moduleCentralBypassMessage(
+            modulePath,
+            'ignore',
+            issueNumber,
+          ),
           content: line,
         });
       } else if (currentArray === 'allow') {
         violations.push({
           file: 'eslint.config.js',
           lineNumber,
-          message: coreCentralBypassMessage('allow-list'),
+          message: moduleCentralBypassMessage(
+            modulePath,
+            'allow-list',
+            issueNumber,
+          ),
           content: line,
         });
       }
-      coreObjectDepth = enclosingObjectDepth(line, braceDepth);
+      // Only set the object-depth tracker for file-pattern lines inside config
+      // blocks, not bare scope-declaration-array string literals.
+      if (isModuleFilesLine(line, modulePath, currentArray)) {
+        moduleObjectDepth = enclosingObjectDepth(line, braceDepth, modulePath);
+      }
     }
 
-    const inCoreObject =
-      coreObjectDepth !== null && braceDepth >= coreObjectDepth;
-    if (inCoreObject) {
+    const inModuleObject =
+      moduleObjectDepth !== null && braceDepth >= moduleObjectDepth;
+    if (inModuleObject) {
       if (/^\s*ignores\s*:/.test(line)) {
         violations.push({
           file: 'eslint.config.js',
           lineNumber,
-          message: coreCentralBypassMessage('scoped ignore'),
+          message: moduleCentralBypassMessage(
+            modulePath,
+            'scoped ignore',
+            issueNumber,
+          ),
           content: line,
         });
       }
@@ -656,7 +800,11 @@ export function checkCoreCentralBypassesInConfig(configSource) {
         violations.push({
           file: 'eslint.config.js',
           lineNumber,
-          message: coreCentralBypassMessage('rule-off'),
+          message: moduleCentralBypassMessage(
+            modulePath,
+            'rule-off',
+            issueNumber,
+          ),
           content: line,
         });
       }
@@ -666,13 +814,25 @@ export function checkCoreCentralBypassesInConfig(configSource) {
     if (rulesObjectDepth !== null && braceDepth < rulesObjectDepth) {
       rulesObjectDepth = null;
     }
-    if (coreObjectDepth !== null && braceDepth < coreObjectDepth) {
-      coreObjectDepth = null;
+    if (moduleObjectDepth !== null && braceDepth < moduleObjectDepth) {
+      moduleObjectDepth = null;
       rulesObjectDepth = null;
     }
   }
 
   return violations;
+}
+
+/**
+ * Inspects eslint.config.js source text for packages/core central bypasses that
+ * would reintroduce the old suppression pattern outside source files.
+ */
+export function checkCoreCentralBypassesInConfig(configSource) {
+  return checkModuleCentralBypassesInConfig(
+    configSource,
+    'packages/core',
+    '2115',
+  );
 }
 
 export function formatViolations(violations) {
@@ -694,14 +854,33 @@ function main() {
   // Issue #2115 durable guard: packages/core must contain zero inline ESLint
   // disable/enable directives and must not be present in central directive
   // cleanup scope lists.
-  const coreDirectiveViolations = scanCoreDirectives();
-  violations.push(...coreDirectiveViolations);
+  violations.push(...scanCoreDirectives());
+
+  // Issue #2122 durable guard: packages/policy must contain zero inline ESLint
+  // disable/enable directives and must not be present in central directive
+  // cleanup scope lists.
+  violations.push(...scanModuleDirectives('packages/policy', '2122'));
 
   const configPath = join(process.cwd(), 'eslint.config.js');
   if (existsSync(configPath)) {
     const configSource = readFileSync(configPath, 'utf8');
     violations.push(...checkCoreDirectiveScopesInConfig(configSource));
     violations.push(...checkCoreCentralBypassesInConfig(configSource));
+    violations.push(
+      ...checkModuleDirectiveScopesInConfig(
+        configSource,
+        'packages/policy',
+        '2122',
+        false,
+      ),
+    );
+    violations.push(
+      ...checkModuleCentralBypassesInConfig(
+        configSource,
+        'packages/policy',
+        '2122',
+      ),
+    );
   }
 
   if (violations.length === 0) {

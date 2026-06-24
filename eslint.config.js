@@ -34,7 +34,7 @@ const legacyDirectiveCleanupScopes = [
   // #2116: provider module entries removed after directive cleanup.
   // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
-  'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
+  // packages/policy/src is locked in completedDirectiveCleanupScopes (#2122).
   // packages/storage/src is locked in completedDirectiveCleanupScopes (#2119).
   // packages/auth/src is locked in completedDirectiveCleanupScopes (#2121).
   // packages/a2a-server/src is locked in completedDirectiveCleanupScopes (#2123).
@@ -249,6 +249,9 @@ const completedDirectiveCleanupScopes = [
   // #2121 — all packages/auth/src files are now fully compliant: zero inline
   // lint directives. Locked to error so any new directive fails immediately.
   'packages/auth/src/**/*.{ts,tsx}', // #2121
+  // #2122 — all packages/policy/src files are now fully compliant: zero inline
+  // lint directives. Locked to error so any new directive fails immediately.
+  'packages/policy/src/**/*.{ts,tsx}', // #2122
   // #2123 — all packages/a2a-server/src files are now fully compliant: zero
   // inline lint directives. The broad glob below supersedes the individual
   // #2089 a2a-server entries above. Locked to error so any new directive
