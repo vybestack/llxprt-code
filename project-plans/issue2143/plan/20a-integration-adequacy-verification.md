@@ -33,13 +33,20 @@ if grep -nE "internals(\.js)?'|/dist/" "$F"; then echo "FAIL: internals/dist imp
 if grep -nE "from '[^']*(/src/|core/|providers/|tools/|auth/|settings/|ide-integration/|policy/)" "$F" \
    | grep -vE "from '@vybestack/llxprt-code-agents'"; then echo "FAIL: deep import"; exit 1; fi
 # Only public root + node/vitest/fast-check + ./helpers/agentHarness.js may be imported.
-BAD=$(grep -nE "^import|from '" "$F" | grep -vE "@vybestack/llxprt-code-agents'|node:|'vitest'|'fast-check'|'\./helpers/agentHarness\.js'" || true)
+# Key off the `from '<specifier>'` clause (NOT a bare `^import`, which false-positives on the
+# prettier-mandated multi-line `import type {` opener whose specifier is on a later line).
+BAD=$(grep -nE "from '" "$F" | grep -vE "from '(@vybestack/llxprt-code-agents|node:[^']*|vitest|fast-check|\./helpers/agentHarness\.js)'" || true)
 [ -z "$BAD" ] || { echo "FAIL: unexpected import on the public-consumer path:"; echo "$BAD"; exit 1; }
 
 # 2. Behavioral, not a sham: it must CALL each capability and assert on REAL results (await + expect),
 #    not merely `typeof`. Require real-call evidence per capability.
-grep -qE "await agent\.auth\.detailedStatus\(" "$F" || { echo "FAIL: auth.detailedStatus not actually called"; exit 1; }
-grep -qE "await agent\.mcp\.details\(" "$F" || { echo "FAIL: mcp.details not actually called"; exit 1; }
+# NOTE: these two async checks keep the `await ` prefix (it distinguishes a REAL invocation from a
+# bare `typeof agent.mcp.details` reference) but are receiver-agnostic — the harness returns
+# `built`, so the natural call site is `await built.agent.mcp.details(`. Pinning a bare `agent`
+# receiver would brittly false-fail on the legitimate `built.agent.` form (the other five capability
+# checks below are already receiver-agnostic substring matches).
+grep -qE "await [A-Za-z_.]*auth\.detailedStatus\(" "$F" || { echo "FAIL: auth.detailedStatus not actually called"; exit 1; }
+grep -qE "await [A-Za-z_.]*mcp\.details\(" "$F" || { echo "FAIL: mcp.details not actually called"; exit 1; }
 grep -qE "agent\.tasks\.(list|cancelAllRunning)\(" "$F" || { echo "FAIL: tasks not actually called"; exit 1; }
 grep -qE "agent\.policy\.getRules\(" "$F" || { echo "FAIL: policy.getRules not actually called"; exit 1; }
 grep -qE "agent\.hooks\.setDisabledHooks\(" "$F" || { echo "FAIL: hooks round-trip not actually driven"; exit 1; }
