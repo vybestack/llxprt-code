@@ -37,7 +37,7 @@ npm run lint
 # 4. Delegation present, no try/catch around the set (BLOCKING).
 grep -qE "config\.getApprovalMode\(\)" packages/agents/src/api/agentImpl.ts || { echo "FAIL: not delegating getApprovalMode"; exit 1; }
 grep -qE "config\.setApprovalMode\(mode\)" packages/agents/src/api/agentImpl.ts || { echo "FAIL: not delegating setApprovalMode"; exit 1; }
-if awk '/setApprovalMode\(mode: ApprovalMode\): void \{/{f=1} f{print} /^\s*\}/{if(f)exit}' packages/agents/src/api/agentImpl.ts | grep -qE "\btry\b|\bcatch\b"; then
+if awk '/setApprovalMode\(mode: ApprovalMode\): void \{/{f=1} f{print} f&&/^[[:space:]]*\}/{exit}' packages/agents/src/api/agentImpl.ts | grep -qE "\btry\b|\bcatch\b"; then
   echo "FAIL: setApprovalMode wraps try/catch"; exit 1
 fi
 

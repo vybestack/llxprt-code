@@ -21,7 +21,7 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getResponseText } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { ApprovalMode, RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   switchActiveProvider,
@@ -735,6 +735,24 @@ export class AgentImpl implements Agent {
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 40-42 */
   getEphemeralSettings(): Readonly<Record<string, unknown>> {
     return this.deps.config.getEphemeralSettings();
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   * @pseudocode lines 1-4
+   */
+  getApprovalMode(): ApprovalMode {
+    return this.deps.config.getApprovalMode();
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   * @pseudocode lines 10-17
+   */
+  setApprovalMode(mode: ApprovalMode): void {
+    this.deps.config.setApprovalMode(mode);
   }
 
   /**

@@ -331,6 +331,19 @@ export interface Agent {
   setModel(model: string): Promise<void>;
   getCurrentSequenceModel(): string | null;
   /**
+   * Reads the live approval mode from the bound Config (no caching).
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   */
+  getApprovalMode(): ApprovalMode;
+  /**
+   * Sets the approval mode via the bound Config. Delegates directly: the
+   * untrusted-folder guard throw (config.ts:404) propagates unchanged.
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   */
+  setApprovalMode(mode: ApprovalMode): void;
+  /**
    * Returns the bound runtime-context runtimeId (REQ-005.1).
    * @plan:PLAN-20260621-COREAPIREMED.P18
    * @requirement:REQ-005

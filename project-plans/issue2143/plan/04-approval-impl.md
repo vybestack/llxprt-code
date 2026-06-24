@@ -102,7 +102,7 @@ grep -qE "config\.setApprovalMode\(mode\)" packages/agents/src/api/agentImpl.ts 
 
 # No try/catch wrapping the set delegation (BLOCKING — the throw must propagate).
 # Extract the setApprovalMode method body and ensure it has no try/catch.
-if awk '/setApprovalMode\(mode: ApprovalMode\): void \{/{f=1} f{print} /^\s*\}/{if(f)exit}' packages/agents/src/api/agentImpl.ts | grep -qE "\btry\b|\bcatch\b"; then
+if awk '/setApprovalMode\(mode: ApprovalMode\): void \{/{f=1} f{print} f&&/^[[:space:]]*\}/{exit}' packages/agents/src/api/agentImpl.ts | grep -qE "\btry\b|\bcatch\b"; then
   echo "FAIL: setApprovalMode wraps a try/catch — the untrusted throw must propagate unchanged"; exit 1
 fi
 
