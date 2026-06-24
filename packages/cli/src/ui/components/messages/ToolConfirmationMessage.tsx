@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
@@ -528,6 +528,33 @@ export interface ToolConfirmationMessageProps {
   terminalWidth: number;
 }
 
+/**
+ * Resolves the confirmation outcome, including IDE diff resolution when
+ * applicable, then delegates to the caller's onConfirm callback.
+ */
+async function performConfirm(
+  outcome: ToolConfirmationOutcome,
+  confirmationDetails: ToolCallConfirmationDetails,
+  config: Config,
+  ideClient: IdeClient | null,
+  isDiffingEnabled: boolean | null,
+  onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>,
+): Promise<void> {
+  if (
+    confirmationDetails.type === 'edit' &&
+    config.getIdeMode() &&
+    isDiffingEnabled === true
+  ) {
+    const cliOutcome =
+      outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
+    await ideClient?.resolveDiffFromCli(
+      confirmationDetails.filePath,
+      cliOutcome,
+    );
+  }
+  await onConfirm(outcome);
+}
+
 export const ToolConfirmationMessage: React.FC<
   ToolConfirmationMessageProps
 > = ({
@@ -540,27 +567,28 @@ export const ToolConfirmationMessage: React.FC<
   const { onConfirm } = confirmationDetails;
   const { ideClient, isDiffingEnabled } = useIdeClientState(config);
 
-  const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
-    if (
-      confirmationDetails.type === 'edit' &&
-      config.getIdeMode() &&
-      isDiffingEnabled === true
-    ) {
-      const cliOutcome =
-        outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
-      await ideClient?.resolveDiffFromCli(
-        confirmationDetails.filePath,
-        cliOutcome,
+  const handleConfirm = useCallback(
+    async (outcome: ToolConfirmationOutcome) => {
+      await performConfirm(
+        outcome,
+        confirmationDetails,
+        config,
+        ideClient,
+        isDiffingEnabled,
+        onConfirm,
       );
-    }
-    await onConfirm(outcome);
-  };
+    },
+    [confirmationDetails, config, ideClient, isDiffingEnabled, onConfirm],
+  );
 
   useCancelKeypress(isFocused, handleConfirm);
 
-  const handleSelect = (item: ToolConfirmationOutcome) => {
-    void handleConfirm(item);
-  };
+  const handleSelect = useCallback(
+    (item: ToolConfirmationOutcome) => {
+      void handleConfirm(item);
+    },
+    [handleConfirm],
+  );
 
   const { question, bodyContent, options } = useConfirmationContent(
     confirmationDetails,

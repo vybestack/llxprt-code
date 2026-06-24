@@ -53,7 +53,7 @@ import { SessionBrowserDialog } from './SessionBrowserDialog.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
-import type { LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 // import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // NOTE: Not yet ported from upstream
@@ -309,15 +309,13 @@ function renderThemeDialog(
 
 function renderAuthDialog(
   uiState: ReturnType<typeof useUIState>,
-  uiActions: ReturnType<typeof useUIActions>,
   settings: LoadedSettings,
+  handleAuthSelect: (method: string | undefined, scope: SettingScope) => void,
 ) {
   return (
     <Box flexDirection="column">
       <AuthDialog
-        onSelect={(method, scope) => {
-          void uiActions.handleAuthSelect(method, scope);
-        }}
+        onSelect={handleAuthSelect}
         settings={settings}
         initialErrorMessage={uiState.authError}
       />
@@ -328,6 +326,7 @@ function renderAuthDialog(
 function renderOAuthCodeDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  handleOAuthCodeSubmit: (code: string) => void,
 ) {
   const provider = firstNonEmptyString(
     (global as unknown as { __oauth_provider?: string }).__oauth_provider,
@@ -337,9 +336,7 @@ function renderOAuthCodeDialog(
     <OAuthCodeDialog
       provider={provider}
       onClose={uiActions.handleOAuthCodeDialogClose}
-      onSubmit={(code) => {
-        void uiActions.handleOAuthCodeSubmit(code);
-      }}
+      onSubmit={handleOAuthCodeSubmit}
     />
   );
 }
@@ -368,15 +365,14 @@ function renderEditorDialog(
 function renderProviderDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  handleProviderSelect: (provider: string) => void,
 ) {
   return (
     <Box flexDirection="column">
       <ProviderDialog
         providers={uiState.providerOptions}
         currentProvider={uiState.selectedProvider}
-        onSelect={(provider) => {
-          void uiActions.handleProviderSelect(provider);
-        }}
+        onSelect={handleProviderSelect}
         onClose={uiActions.exitProviderDialog}
       />
     </Box>
@@ -629,6 +625,27 @@ function useDialogManagerState(
     uiActions.handlePrivacyNoticeExit();
   }, [uiActions]);
 
+  const handleAuthSelect = useCallback(
+    (method: string | undefined, scope: SettingScope) => {
+      void uiActions.handleAuthSelect(method, scope);
+    },
+    [uiActions],
+  );
+
+  const handleOAuthCodeSubmit = useCallback(
+    (code: string) => {
+      void uiActions.handleOAuthCodeSubmit(code);
+    },
+    [uiActions],
+  );
+
+  const handleProviderSelect = useCallback(
+    (provider: string) => {
+      void uiActions.handleProviderSelect(provider);
+    },
+    [uiActions],
+  );
+
   const handleModelsDialogSelect = useModelDialogHandler(
     runtime,
     addItem,
@@ -652,6 +669,9 @@ function useDialogManagerState(
     staticExtraHeight,
     currentProvider,
     handlePrivacyNoticeExit,
+    handleAuthSelect,
+    handleOAuthCodeSubmit,
+    handleProviderSelect,
     handleModelsDialogSelect,
     handleSessionBrowserSelect,
   };
@@ -688,16 +708,20 @@ function renderDialogBodyFirstHalf(
     );
   }
   if (uiState.isAuthDialogOpen) {
-    return renderAuthDialog(uiState, uiActions, settings);
+    return renderAuthDialog(uiState, settings, state.handleAuthSelect);
   }
   if (uiState.isOAuthCodeDialogOpen) {
-    return renderOAuthCodeDialog(uiState, uiActions);
+    return renderOAuthCodeDialog(
+      uiState,
+      uiActions,
+      state.handleOAuthCodeSubmit,
+    );
   }
   if (uiState.isEditorDialogOpen) {
     return renderEditorDialog(uiState, uiActions, settings);
   }
   if (uiState.isProviderDialogOpen) {
-    return renderProviderDialog(uiState, uiActions);
+    return renderProviderDialog(uiState, uiActions, state.handleProviderSelect);
   }
   return undefined;
 }

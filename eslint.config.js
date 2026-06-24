@@ -1033,12 +1033,6 @@ export default tseslint.config(
   // before lint:ci started using --max-warnings 0 and are assigned to existing
   // cleanup areas instead of being left as warnings.
   {
-    files: ['packages/cli/src/ui/**/*.{ts,tsx}'],
-    rules: {
-      'react/jsx-no-bind': 'off', // eslint-policy-allow-off: #2079 temporary #2087
-    },
-  },
-  {
     files: [
       'packages/core/src/config/subagentManager.ts',
       'packages/core/src/skills/skillManager.ts',

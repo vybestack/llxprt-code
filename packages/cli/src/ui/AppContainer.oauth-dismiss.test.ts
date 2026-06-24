@@ -27,8 +27,7 @@ const oauthGlobal = global as GlobalOAuthState;
  */
 function computeShouldAutoDismiss(isOAuthCodeDialogOpen: boolean): boolean {
   return (
-    isOAuthCodeDialogOpen &&
-    oauthGlobal.__oauth_browser_auth_complete === true
+    isOAuthCodeDialogOpen && oauthGlobal.__oauth_browser_auth_complete === true
   );
 }
 

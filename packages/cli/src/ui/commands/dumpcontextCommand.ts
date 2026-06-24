@@ -65,11 +65,21 @@ function getHistoryService(
   if (!hasCallableGetAgentClient(config)) {
     return null;
   }
-  const agentClient = config.getAgentClient();
-  if (typeof agentClient.getHistoryService !== 'function') {
+  // The real Config type declares a non-null return, but at runtime the agent
+  // client may be absent before a session starts. Re-type the result honestly
+  // so the nullish guard below is meaningful rather than a no-op.
+  const agentClient = config.getAgentClient() as
+    | AgentClientWithHistory
+    | null
+    | undefined;
+  if (
+    agentClient === null ||
+    agentClient === undefined ||
+    typeof agentClient.getHistoryService !== 'function'
+  ) {
     return null;
   }
-  return agentClient.getHistoryService() as HistoryService | null;
+  return agentClient.getHistoryService();
 }
 
 function getProviderDumpMetadata(

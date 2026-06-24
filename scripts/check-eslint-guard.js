@@ -109,6 +109,15 @@ function isAllowedPolicyOff(line) {
   return line.includes('eslint-policy-allow-off:');
 }
 
+function isCommentLine(line) {
+  const trimmed = line.trim();
+  return (
+    trimmed.startsWith('//') ||
+    trimmed.startsWith('*') ||
+    trimmed.startsWith('/*')
+  );
+}
+
 function isNewOffRule(line) {
   return (
     /:\s*['"]off['"]/.test(line) ||
@@ -122,10 +131,6 @@ function shouldCheckInlineDisable(file) {
     return false;
   }
   return /\.(?:cjs|mjs|js|jsx|ts|tsx)$/.test(file);
-}
-
-function isCliSourceFile(file) {
-  return /^packages\/cli\/src\/.*\.(?:ts|tsx)$/.test(file);
 }
 
 function containsInlineEslintDirective(content) {
@@ -185,7 +190,11 @@ export function checkDiff(diff) {
         );
       }
 
-      if (file === 'eslint.config.js' && content.includes('packages/cli/src')) {
+      if (
+        file === 'eslint.config.js' &&
+        content.includes('packages/cli/src') &&
+        !isCommentLine(content)
+      ) {
         addViolation(
           violations,
           file,
@@ -312,8 +321,12 @@ export function checkCliSourcePolicy() {
 
   const eslintConfig = readFileSync('eslint.config.js', 'utf8');
   const directiveCleanupScopes = [
-    /const legacyDirectiveCleanupScopes = \[[\s\S]*?\];/.exec(eslintConfig)?.[0] ?? '',
-    /const completedDirectiveCleanupScopes = \[[\s\S]*?\];/.exec(eslintConfig)?.[0] ?? '',
+    /const legacyDirectiveCleanupScopes = \[[\s\S]*?\];/.exec(
+      eslintConfig,
+    )?.[0] ?? '',
+    /const completedDirectiveCleanupScopes = \[[\s\S]*?\];/.exec(
+      eslintConfig,
+    )?.[0] ?? '',
   ].join('\n');
   if (directiveCleanupScopes.includes('packages/cli/src')) {
     addViolation(

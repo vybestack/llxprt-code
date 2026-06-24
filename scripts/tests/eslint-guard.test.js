@@ -141,7 +141,20 @@ describe('check-eslint-guard', () => {
     );
 
     expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain('packages/cli directive cleanup scopes');
+    expect(violations[0].message).toContain(
+      'packages/cli directive cleanup scopes',
+    );
+  });
+
+  it('allows packages/cli/src references inside config comments', () => {
+    const violations = checkDiff(
+      diffFor(
+        'eslint.config.js',
+        '      // Project-level assertion wrappers (see packages/cli/src/test-utils)',
+      ),
+    );
+
+    expect(violations).toHaveLength(0);
   });
 
   it('keeps the checked-in cli source policy clean', () => {
