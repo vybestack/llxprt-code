@@ -444,3 +444,91 @@ describe('SecureInputHandler', () => {
     });
   });
 });
+
+// Issue #2114: characterization tests locking in exact masking outputs of the
+// hoist-and-bound regexes. Guards against behavior changes in secure input
+// masking (a behavior change would leak secrets to history).
+describe('issue #2114 regex characterization', () => {
+  it('masks a /key value exactly (first2 + stars + last2)', () => {
+    const h = new SecureInputHandler();
+    expect(h.processInput('/key sk-secret-1234567890')).toBe(
+      '/key sk****************90',
+    );
+  });
+
+  it('passes through /key save with only a subcommand token (no value to mask)', () => {
+    const h = new SecureInputHandler();
+    expect(h.processInput('/key save sk-secret-1234567890')).toBe(
+      '/key save sk-secret-1234567890',
+    );
+  });
+
+  it('masks a /toolkey value exactly (provider + PAT)', () => {
+    const h = new SecureInputHandler();
+    const out = h.processInput('/toolkey exa sk-secret-1234567890');
+    expect(out).toBe('/toolkey exa sk****************90');
+  });
+
+  it('preserves a trailing newline after the masked key', () => {
+    const h = new SecureInputHandler();
+    expect(h.processInput('/key sk-secret-1234567890\n')).toBe(
+      '/key sk****************90\n',
+    );
+  });
+
+  it('sanitizeForHistory masks the /key value identically', () => {
+    const h = new SecureInputHandler();
+    expect(h.sanitizeForHistory('/key sk-secret-1234567890')).toBe(
+      '/key sk****************90',
+    );
+  });
+
+  it('sanitizeForHistory masks the /toolkey value identically', () => {
+    const h = new SecureInputHandler();
+    const out = h.sanitizeForHistory('/toolkey exa sk-secret-1234567890');
+    expect(out).toBe('/toolkey exa sk****************90');
+  });
+
+  it('sanitizeForHistory masks /key values longer than the previous regex bound', () => {
+    const h = new SecureInputHandler();
+    const secret = `sk-${'a'.repeat(8193)}`;
+    const out = h.sanitizeForHistory(`/key ${secret}`);
+    expect(out).not.toContain(secret);
+    expect(out.startsWith('/key sk')).toBe(true);
+    expect(out.endsWith('aa')).toBe(true);
+  });
+
+  it('sanitizeForHistory masks /toolkey values longer than the previous regex bound', () => {
+    const h = new SecureInputHandler();
+    const secret = `sk-${'b'.repeat(8193)}`;
+    const out = h.sanitizeForHistory(`/toolkey exa ${secret}`);
+    expect(out).not.toContain(secret);
+    expect(out.startsWith('/toolkey exa sk')).toBe(true);
+    expect(out.endsWith('bb')).toBe(true);
+  });
+
+  it('sanitizeForHistory masks /key save values longer than the previous regex bound', () => {
+    const h = new SecureInputHandler();
+    const secret = `sk-${'c'.repeat(8193)}`;
+    const out = h.sanitizeForHistory(`/key save provider ${secret}`);
+    expect(out).not.toContain(secret);
+    expect(out.startsWith('/key save provider sk')).toBe(true);
+    expect(out.endsWith('cc')).toBe(true);
+  });
+
+  it('sanitizeForHistory masks only the first line of multiline /key values', () => {
+    const h = new SecureInputHandler();
+    const out = h.sanitizeForHistory('/key sk-secret-1234567890\nnext line');
+    expect(out).toBe('/key sk****************90\nnext line');
+    expect(out).not.toContain('sk-secret-1234567890');
+  });
+
+  it('sanitizeForHistory masks only the first line of multiline /toolkey values', () => {
+    const h = new SecureInputHandler();
+    const out = h.sanitizeForHistory(
+      '/toolkey exa sk-secret-1234567890\nnext line',
+    );
+    expect(out).toBe('/toolkey exa sk****************90\nnext line');
+    expect(out).not.toContain('sk-secret-1234567890');
+  });
+});

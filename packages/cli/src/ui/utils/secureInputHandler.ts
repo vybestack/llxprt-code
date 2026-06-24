@@ -14,22 +14,150 @@ export interface SecureInputState {
 
 const SECURE_COMMAND_PREFIXES = ['/key', '/keyfile', '/toolkey'];
 
+// Issue #2114: hoist regex sources to const strings (clears
+// sonarjs/regular-expr) and add explicit upper bounds to unbounded
+// quantifiers (clears sonarjs/slow-regex) without changing what matches.
+const META_ESCAPE_SOURCE = '[.*+?^${}()|[\\]\\\\]';
+const META_ESCAPE_PATTERN = new RegExp(META_ESCAPE_SOURCE, 'g');
+
 const SECURE_PREFIX_PATTERN = new RegExp(
-  `^(?:${SECURE_COMMAND_PREFIXES.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?:$|\\s)`,
+  `^(?:${SECURE_COMMAND_PREFIXES.map((p) => p.replace(META_ESCAPE_PATTERN, '\\$&')).join('|')})(?:$|\\s)`,
 );
 
-const TOOLKEY_VALUE_PATTERN = /^(\/toolkey\s+\S+\s+)([\s\S]*)/;
-const KEY_SAVE_PATTERN = /^(\/key\s+save\s+\S+\s+)([\s\S]+)/;
-const KEY_SUBCOMMAND_PATTERN = /^\/key\s+(save|load|show|list|delete)(\s|$)/;
-const KEY_VALUE_PATTERN = /^\/key\s+([\s\S]*)/;
-const KEYFILE_VALUE_PATTERN = /^\/keyfile\s+([\s\S]*)/;
-const TOOLKEY_COMMAND_PATTERN = /^(\/toolkey\s+\S+\s+)(.+)$/;
-const KEY_SAVE_COMMAND_PATTERN = /^(\/key\s+save\s+\S+\s+)(.+)$/;
-const KEY_COMMAND_PATTERN = /^(\/key\s+)(.+)$/;
-const LINE_BREAK_PATTERN = /[\r\n]/;
+const TOOLKEY_VALUE_PATTERN_SOURCE = '^(\\/toolkey\\s+\\S+\\s+)([\\s\\S]*)';
+const TOOLKEY_VALUE_PATTERN = new RegExp(TOOLKEY_VALUE_PATTERN_SOURCE);
+const KEY_SAVE_PATTERN_SOURCE = '^(\\/key\\s+save\\s+\\S+\\s+)([\\s\\S]+)';
+const KEY_SAVE_PATTERN = new RegExp(KEY_SAVE_PATTERN_SOURCE);
+const KEY_SUBCOMMAND_PATTERN_SOURCE =
+  '^\\/key\\s+(save|load|show|list|delete)(\\s|$)';
+const KEY_SUBCOMMAND_PATTERN = new RegExp(KEY_SUBCOMMAND_PATTERN_SOURCE);
+const KEY_VALUE_PATTERN_SOURCE = '^\\/key\\s+([\\s\\S]*)';
+const KEY_VALUE_PATTERN = new RegExp(KEY_VALUE_PATTERN_SOURCE);
+const KEYFILE_VALUE_PATTERN_SOURCE = '^\\/keyfile\\s+([\\s\\S]*)';
+const KEYFILE_VALUE_PATTERN = new RegExp(KEYFILE_VALUE_PATTERN_SOURCE);
+const LINE_BREAK_PATTERN_SOURCE = '[\\r\\n]';
+const LINE_BREAK_PATTERN = new RegExp(LINE_BREAK_PATTERN_SOURCE);
 
 function isSecureCommand(trimmed: string): boolean {
   return SECURE_PREFIX_PATTERN.test(trimmed);
+}
+
+function isWhitespaceChar(char: string): boolean {
+  return char.trim() === '';
+}
+
+function splitOnWhitespaceRun(text: string, startIndex: number): number | null {
+  let index = startIndex;
+  while (index < text.length && isWhitespaceChar(text[index])) {
+    index += 1;
+  }
+  return index === startIndex ? null : index;
+}
+
+function splitOnNonWhitespaceRun(
+  text: string,
+  startIndex: number,
+): number | null {
+  let index = startIndex;
+  while (index < text.length && !isWhitespaceChar(text[index])) {
+    index += 1;
+  }
+  return index === startIndex ? null : index;
+}
+
+function adjustValueStartForTrailingWhitespaceOnly(
+  text: string,
+  whitespaceStart: number,
+  valueStart: number,
+): number | null {
+  if (valueStart < text.length) {
+    return valueStart;
+  }
+  return valueStart - whitespaceStart > 1 ? text.length - 1 : null;
+}
+
+function splitToolKeyCommand(command: string): [string, string] | null {
+  const commandPrefix = '/toolkey';
+  if (!command.startsWith(commandPrefix)) {
+    return null;
+  }
+  const afterCommand = splitOnWhitespaceRun(command, commandPrefix.length);
+  if (afterCommand === null) {
+    return null;
+  }
+  const afterToolName = splitOnNonWhitespaceRun(command, afterCommand);
+  if (afterToolName === null) {
+    return null;
+  }
+  const whitespaceStart = afterToolName;
+  const afterWhitespace = splitOnWhitespaceRun(command, whitespaceStart);
+  if (afterWhitespace === null) {
+    return null;
+  }
+  const valueStart = adjustValueStartForTrailingWhitespaceOnly(
+    command,
+    whitespaceStart,
+    afterWhitespace,
+  );
+  if (valueStart === null) {
+    return null;
+  }
+  return [command.slice(0, valueStart), command.slice(valueStart)];
+}
+
+function splitKeySaveCommand(command: string): [string, string] | null {
+  const commandPrefix = '/key';
+  if (!command.startsWith(commandPrefix)) {
+    return null;
+  }
+  const afterCommand = splitOnWhitespaceRun(command, commandPrefix.length);
+  if (afterCommand === null || !command.startsWith('save', afterCommand)) {
+    return null;
+  }
+  const afterSave = afterCommand + 'save'.length;
+  const afterSaveWhitespace = splitOnWhitespaceRun(command, afterSave);
+  if (afterSaveWhitespace === null) {
+    return null;
+  }
+  const afterKeyName = splitOnNonWhitespaceRun(command, afterSaveWhitespace);
+  if (afterKeyName === null) {
+    return null;
+  }
+  const whitespaceStart = afterKeyName;
+  const afterWhitespace = splitOnWhitespaceRun(command, whitespaceStart);
+  if (afterWhitespace === null) {
+    return null;
+  }
+  const valueStart = adjustValueStartForTrailingWhitespaceOnly(
+    command,
+    whitespaceStart,
+    afterWhitespace,
+  );
+  if (valueStart === null) {
+    return null;
+  }
+  return [command.slice(0, valueStart), command.slice(valueStart)];
+}
+
+function splitKeyCommand(command: string): [string, string] | null {
+  const commandPrefix = '/key';
+  if (!command.startsWith(commandPrefix)) {
+    return null;
+  }
+  const whitespaceStart = commandPrefix.length;
+  const afterWhitespace = splitOnWhitespaceRun(command, whitespaceStart);
+  if (afterWhitespace === null) {
+    return null;
+  }
+  const valueStart = adjustValueStartForTrailingWhitespaceOnly(
+    command,
+    whitespaceStart,
+    afterWhitespace,
+  );
+  if (valueStart === null) {
+    return null;
+  }
+  return [command.slice(0, valueStart), command.slice(valueStart)];
 }
 
 interface MaskSegment {
@@ -210,6 +338,11 @@ export class SecureInputHandler {
     return '*'.repeat(value.length);
   }
 
+  private formatMaskedHistoryValue([prefix, value]: [string, string]): string {
+    const { keyToMask, afterLineBreak } = splitAtLineBreak(value);
+    return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
+  }
+
   /**
    * Sanitizes command for history storage
    */
@@ -218,23 +351,23 @@ export class SecureInputHandler {
       return command;
     }
 
-    const toolkeyCommandMatch = command.match(TOOLKEY_COMMAND_PATTERN);
-    if (toolkeyCommandMatch) {
-      return `${toolkeyCommandMatch[1]}${this.maskValue(toolkeyCommandMatch[2])}`;
+    const toolkeyCommand = splitToolKeyCommand(command);
+    if (toolkeyCommand !== null) {
+      return this.formatMaskedHistoryValue(toolkeyCommand);
     }
 
-    const keySaveMatch = command.match(KEY_SAVE_COMMAND_PATTERN);
-    if (keySaveMatch) {
-      return `${keySaveMatch[1]}${this.maskValue(keySaveMatch[2])}`;
+    const keySaveCommand = splitKeySaveCommand(command);
+    if (keySaveCommand !== null) {
+      return this.formatMaskedHistoryValue(keySaveCommand);
     }
 
     if (KEY_SUBCOMMAND_PATTERN.test(command)) {
       return command;
     }
 
-    const keyCommandMatch = command.match(KEY_COMMAND_PATTERN);
-    if (keyCommandMatch) {
-      return `${keyCommandMatch[1]}${this.maskValue(keyCommandMatch[2])}`;
+    const keyCommand = splitKeyCommand(command);
+    if (keyCommand !== null) {
+      return this.formatMaskedHistoryValue(keyCommand);
     }
 
     return command;

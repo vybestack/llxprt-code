@@ -1571,50 +1571,6 @@ export default tseslint.config(
       'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2084 Kimi protocol template regex
     },
   },
-  // Issue #2087: Static, reviewed regex patterns that parse terminal/command
-  // input at trusted boundaries. The inputs are bounded (single CLI command
-  // lines or local config values, not untrusted network data) and the patterns
-  // are anchored with explicit quantifiers. sonarjs/regular-expr and
-  // sonarjs/slow-regex are generic heuristics that cannot distinguish these
-  // bounded parsing cases from ReDoS-vulnerable network input validation.
-  {
-    files: [
-      'packages/cli/src/ui/utils/secureInputHandler.ts',
-      'packages/cli/src/ui/utils/terminalSetup.ts',
-      'packages/cli/src/utils/privacy/ConversationDataRedactor.ts',
-      'packages/cli/src/utils/sandbox-env.ts',
-      'packages/cli/src/zed-integration/zed-path-resolver.ts',
-    ],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
-    },
-  },
-
-  // Issue #2086: MCP prompt argument parsing regexes. These patterns parse
-  // double-quoted strings with escape sequences (\.) for CLI prompt
-  // arguments. The sonarjs regular-expr/slow-regex heuristics flag the
-  // alternation-with-backreference structure, but the patterns operate on
-  // bounded single-line user input with explicit non-overlapping alternation
-  // branches that prevent catastrophic backtracking.
-  {
-    files: ['packages/cli/src/services/mcpPromptArgParser.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
-    },
-  },
-  // Issue #2086: position/range argument parsing regexes in todoOperations.
-  // These parse user-supplied positional numbers (e.g. "1", "1.2", "2-5")
-  // and are anchored with ^...$; inputs are bounded single-line tokens.
-  {
-    files: ['packages/cli/src/ui/commands/todoOperations.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 position arg parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 position arg parsing
-    },
-  },
-
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node

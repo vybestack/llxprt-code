@@ -157,3 +157,36 @@ describe('parsePromptArgs', () => {
     });
   });
 });
+
+// Issue #2114: characterization tests locking in the exact parsing outputs of
+// the hoist-and-bound regexes. These guard against behavior changes when the
+// regex sources are edited.
+describe('issue #2114 regex characterization', () => {
+  it('extracts a long bare named value within the bounded range', () => {
+    const value = 'a'.repeat(100);
+    const { argValues } = extractNamedArgs(`--key=${value}`);
+    expect(argValues.get('key')).toBe(value);
+  });
+
+  it('extracts a quoted value containing escaped quotes', () => {
+    const { argValues } = extractNamedArgs('--k="hello \\"world\\""');
+    expect(argValues.get('k')).toBe('hello "world"');
+  });
+
+  it('captures trailing positional text after a named argument', () => {
+    const { positionalTokens } = extractNamedArgs('--a=1 trailing bare');
+    expect(positionalTokens).toStrictEqual([' trailing bare']);
+  });
+
+  it('tokenizes mixed quoted and bare positional tokens', () => {
+    expect(parsePositionalTokens('"q1 q2" bare "q3"')).toStrictEqual([
+      'q1 q2',
+      'bare',
+      'q3',
+    ]);
+  });
+
+  it('returns an empty positional array for whitespace-only input', () => {
+    expect(parsePositionalTokens('   ')).toStrictEqual([]);
+  });
+});

@@ -26,9 +26,14 @@ export function extractNamedArgs(userArgs: string): ExtractedArgs {
   const argValues = new Map<string, string>();
   const positionalParts: string[] = [];
 
-  // Matches --key="quoted value" or --key=bare-value. The quoted branch
-  // allows escaped characters (\\. ) and non-quote/non-backslash chars.
-  const namedArgRegex = /--([^=]+)=(?:"((?:\\.|[^"\\])*)"|([^ ]+))/g;
+  // Issue #2114: hoist to a const source (clears sonarjs/regular-expr) and
+  // add explicit upper bounds to unbounded quantifiers (clears
+  // sonarjs/slow-regex) keeping the SAME character classes. Matches
+  // --key="quoted value" or --key=bare-value; the quoted branch allows
+  // escaped characters (\\.) and non-quote/non-backslash chars.
+  const NAMED_ARG_REGEX_SOURCE =
+    '--([^=]{1,4096})=(?:"((?:\\\\.|[^"\\\\]){0,8192})"|([^ ]{1,4096}))';
+  const namedArgRegex = new RegExp(NAMED_ARG_REGEX_SOURCE, 'g');
   let match;
   let lastIndex = 0;
 
@@ -57,8 +62,10 @@ export function extractNamedArgs(userArgs: string): ExtractedArgs {
  */
 export function parsePositionalTokens(text: string): string[] {
   const positionalArgs: string[] = [];
+  // Issue #2114: hoist to a const source (clears sonarjs/regular-expr).
   // Matches either a double-quoted string (with escapes) or a bare token.
-  const positionalArgRegex = /(?:"((?:\\.|[^"\\])*)"|([^ ]+))/g;
+  const POSITIONAL_ARG_REGEX_SOURCE = '(?:"((?:\\\\.|[^"\\\\])*)"|([^ ]+))';
+  const positionalArgRegex = new RegExp(POSITIONAL_ARG_REGEX_SOURCE, 'g');
   let match;
   while ((match = positionalArgRegex.exec(text)) !== null) {
     positionalArgs.push(

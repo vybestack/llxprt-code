@@ -589,3 +589,107 @@ describe('Conversation Data Redaction', () => {
     expect(redactedEmptyTool.function.parameters).toStrictEqual({});
   });
 });
+
+// Issue #2114: characterization tests locking in exact redaction outputs of
+// the hoist-and-bound regexes. A behavior change here is a security bug
+// (secrets/PII would leak), so these pin the exact replacement strings.
+describe('issue #2114 regex characterization', () => {
+  const fullRedactor = new ConversationDataRedactor({
+    redactApiKeys: true,
+    redactCredentials: true,
+    redactFilePaths: true,
+    redactUrls: true,
+    redactEmails: true,
+    redactPersonalInfo: true,
+  });
+
+  it('redacts an ssh path containing .ssh', () => {
+    expect(fullRedactor.redactSensitivePaths('/home/u/.ssh/id_rsa')).toBe(
+      '[REDACTED-SSH-PATH]',
+    );
+  });
+
+  it('redacts an id_rsa path', () => {
+    expect(fullRedactor.redactSensitivePaths('/etc/config/id_rsa_backup')).toBe(
+      '[REDACTED-SSH-KEY-PATH]',
+    );
+  });
+
+  it('redacts a .env file path', () => {
+    expect(fullRedactor.redactSensitivePaths('/app/.env.local')).toBe(
+      '[REDACTED-ENV-FILE]',
+    );
+  });
+
+  it('redacts a /home user directory (stops at the next slash)', () => {
+    expect(fullRedactor.redactSensitivePaths('/home/alice/projects')).toBe(
+      '[REDACTED-HOME-DIR]/projects',
+    );
+  });
+
+  it('redacts an email address', () => {
+    expect(
+      fullRedactor.redactPersonalInfo('contact john.doe@example.com now'),
+    ).toBe('contact [REDACTED-EMAIL] now');
+  });
+
+  it('redacts a dash-separated phone number', () => {
+    expect(fullRedactor.redactPersonalInfo('call 123-456-7890')).toBe(
+      'call [REDACTED-PHONE]',
+    );
+  });
+
+  it('redacts a credit card number', () => {
+    expect(fullRedactor.redactPersonalInfo('card 4111 1111 1111 1111')).toBe(
+      'card [REDACTED-CC-NUMBER]',
+    );
+  });
+
+  it('redacts an OpenAI API key via redactResponseContent', () => {
+    const key = 'sk-' + 'a'.repeat(40);
+    expect(fullRedactor.redactResponseContent(`key=${key}`, 'openai')).toBe(
+      'key=[REDACTED-OPENAI-KEY]',
+    );
+  });
+
+  it('redacts a global sk- API key via redactResponseContent', () => {
+    const key = 'sk-' + 'a'.repeat(40);
+    expect(fullRedactor.redactResponseContent(`token ${key}`, 'global')).toBe(
+      'token [REDACTED-API-KEY]',
+    );
+  });
+
+  it('fully redacts global sk- API keys longer than the previous regex bound', () => {
+    const key = 'sk-' + 'a'.repeat(5000);
+    const out = fullRedactor.redactResponseContent(`token ${key}`, 'global');
+    expect(out).toBe('token [REDACTED-API-KEY]');
+    expect(out).not.toContain('a'.repeat(100));
+  });
+
+  it('fully redacts generic API key values longer than the previous regex bound', () => {
+    const key = 'A'.repeat(5000);
+    const out = fullRedactor.redactResponseContent(
+      `api_key="${key}"`,
+      'global',
+    );
+    expect(out).toBe('api_key: "[REDACTED-API-KEY]""');
+    expect(out).not.toContain('A'.repeat(100));
+  });
+
+  it('fully redacts long password values', () => {
+    const secret = 'p'.repeat(9000);
+    const out = fullRedactor.redactResponseContent(
+      `password=${secret}`,
+      'global',
+    );
+    expect(out).toBe('password=[REDACTED]');
+    expect(out).not.toContain('p'.repeat(100));
+  });
+
+  it('fully redacts OpenAI API keys longer than the provider-specific length', () => {
+    const key = 'sk-' + 'a'.repeat(5000);
+    const out = fullRedactor.redactResponseContent(`key=${key}`, 'openai');
+    expect(out).toBe('key=[REDACTED-OPENAI-KEY]');
+    expect(out).not.toContain('a'.repeat(100));
+  });
+});
