@@ -117,6 +117,15 @@ export function buildProfileJSON(state: WizardState): Record<string, unknown> {
   return profile;
 }
 
+function isExistingFileError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'EEXIST'
+  );
+}
+
 export async function saveProfile(
   name: string,
   config: Record<string, unknown>,
@@ -144,13 +153,7 @@ export async function saveProfile(
 
     return { success: true, path: profilePath };
   } catch (error) {
-    if (
-      error !== null &&
-      error !== undefined &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'EEXIST'
-    ) {
+    if (isExistingFileError(error)) {
       return {
         success: false,
         alreadyExists: true,
@@ -161,6 +164,19 @@ export async function saveProfile(
       success: false,
       error: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+function formatAuthDisplay(auth: WizardState['config']['auth']): string {
+  switch (auth.type) {
+    case 'apikey':
+      return 'API key (stored in profile)';
+    case 'keyfile':
+      return `Key file (${auth.value})`;
+    case 'oauth':
+      return 'OAuth (lazy authentication)';
+    default:
+      return 'None';
   }
 }
 
@@ -183,15 +199,7 @@ export function formatConfigSummary(state: WizardState): string {
   lines.push(`Model: ${state.config.model}`);
 
   // Auth
-  const authDisplay =
-    state.config.auth.type === 'apikey'
-      ? 'API key (stored in profile)'
-      : state.config.auth.type === 'keyfile'
-        ? `Key file (${state.config.auth.value})`
-        : state.config.auth.type === 'oauth'
-          ? 'OAuth (lazy authentication)'
-          : 'None';
-  lines.push(`Auth: ${authDisplay}`);
+  lines.push(`Auth: ${formatAuthDisplay(state.config.auth)}`);
 
   // Parameters (if configured)
   if (state.config.params) {

@@ -425,14 +425,16 @@ export function formatValidationError(
   const MAX_ERRORS_TO_DISPLAY = 5;
   const displayedIssues = error.issues.slice(0, MAX_ERRORS_TO_DISPLAY);
 
+  const appendPathSegment = (acc: string, curr: string | number): string => {
+    if (typeof curr === 'number') {
+      return `${acc}[${curr}]`;
+    }
+    const separator = acc.length > 0 ? '.' : '';
+    return `${acc}${separator}${curr}`;
+  };
+
   for (const issue of displayedIssues) {
-    const path = issue.path.reduce<string>(
-      (acc, curr) =>
-        typeof curr === 'number'
-          ? `${acc}[${curr}]`
-          : `${acc.length > 0 ? acc + '.' : ''}${curr}`,
-      '',
-    );
+    const path = issue.path.reduce<string>(appendPathSegment, '');
     lines.push(`Error in: ${path.length > 0 ? path : '(root)'}`);
     lines.push(`    ${issue.message}`);
 

@@ -633,12 +633,15 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
     };
   }, [id, totalHiddenLines, addOverflowingId, removeOverflowingId]);
 
-  const visibleStyledText =
-    hiddenLinesCount > 0
-      ? overflowDirection === 'top'
-        ? laidOutStyledText.slice(hiddenLinesCount, laidOutStyledText.length)
-        : laidOutStyledText.slice(0, visibleContentHeight)
-      : laidOutStyledText;
+  const getVisibleStyledText = () => {
+    if (hiddenLinesCount <= 0) {
+      return laidOutStyledText;
+    }
+    return overflowDirection === 'top'
+      ? laidOutStyledText.slice(hiddenLinesCount, laidOutStyledText.length)
+      : laidOutStyledText.slice(0, visibleContentHeight);
+  };
+  const visibleStyledText = getVisibleStyledText();
 
   const visibleLines = visibleStyledText.map((line, index) => (
     <Box key={index}>

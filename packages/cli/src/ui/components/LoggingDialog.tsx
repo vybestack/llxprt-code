@@ -83,20 +83,25 @@ const formatTokenCount = (tokens?: {
   return parts.length > 0 ? `[${parts.join(' ')}]` : '';
 };
 
+const ENTRY_TYPE_ICONS: Record<string, string> = {
+  request: '→',
+  tool_call: '[TOOL]',
+};
+
+const getEntryTypeColor = (type: LogEntry['type']) => {
+  if (type === 'request') {
+    return SemanticColors.text.accent;
+  }
+  if (type === 'tool_call') {
+    return SemanticColors.status.warning;
+  }
+  return SemanticColors.status.success;
+};
+
 function getEntryMetadata(entry: LogEntry, isNarrow: boolean) {
   const timestamp = formatTimestamp(entry.timestamp, isNarrow);
-  const typeIcon =
-    entry.type === 'request'
-      ? '→'
-      : entry.type === 'tool_call'
-        ? '[TOOL]'
-        : '←';
-  const typeColor =
-    entry.type === 'request'
-      ? SemanticColors.text.accent
-      : entry.type === 'tool_call'
-        ? SemanticColors.status.warning
-        : SemanticColors.status.success;
+  const typeIcon = ENTRY_TYPE_ICONS[entry.type] ?? '←';
+  const typeColor = getEntryTypeColor(entry.type);
   return { timestamp, typeIcon, typeColor };
 }
 

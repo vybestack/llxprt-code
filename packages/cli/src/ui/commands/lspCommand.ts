@@ -136,16 +136,17 @@ async function statusAction(
   );
   const sortedIds = [...universe].sort((a, b) => a.localeCompare(b));
 
+  const healthFallback = (healthy: boolean | undefined): string => {
+    if (typeof healthy !== 'boolean') {
+      return 'unavailable';
+    }
+    return healthy ? 'active' : 'broken';
+  };
+
   const lines = sortedIds.map((serverId: string) => {
     const status = statusMap.get(serverId);
     const rawStatus =
-      status?.state ??
-      status?.status ??
-      (typeof status?.healthy === 'boolean'
-        ? status.healthy
-          ? 'active'
-          : 'broken'
-        : 'unavailable');
+      status?.state ?? status?.status ?? healthFallback(status?.healthy);
     const normalized = normalizeStatus(rawStatus);
     return `  ${serverId}: ${normalized}`;
   });

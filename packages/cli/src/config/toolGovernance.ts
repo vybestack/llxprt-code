@@ -39,18 +39,23 @@ export const EDIT_TOOL_NAME = 'replace';
 export const normalizeToolNameForPolicy = (name: string): string =>
   name.trim().toLowerCase();
 
+const toEntryList = (value: unknown): unknown[] => {
+  if (Array.isArray(value) && value.length > 0) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return [value];
+  }
+  return [];
+};
+
 export const buildNormalizedToolSet = (value: unknown): Set<string> => {
   const normalized = new Set<string>();
   if (value === null || value === undefined) {
     return normalized;
   }
 
-  const entries =
-    Array.isArray(value) && value.length > 0
-      ? value
-      : typeof value === 'string' && value.trim().length > 0
-        ? [value]
-        : [];
+  const entries = toEntryList(value);
 
   for (const entry of entries) {
     if (typeof entry === 'string' && entry.trim().length > 0) {

@@ -27,6 +27,15 @@ function safeToolResultToString(result: unknown): string {
   }
 }
 
+function toToolCallStatus(
+  response: { result: unknown; error?: string } | undefined,
+): ToolCallStatus {
+  if (!response) {
+    return ToolCallStatus.Pending;
+  }
+  return response.error ? ToolCallStatus.Error : ToolCallStatus.Success;
+}
+
 function buildResponseMap(
   contents: IContent[],
 ): Map<string, { result: unknown; error?: string }> {
@@ -92,11 +101,7 @@ function processAiContent(
         resultDisplay: response
           ? safeToolResultToString(response.result)
           : undefined,
-        status: response
-          ? response.error
-            ? ToolCallStatus.Error
-            : ToolCallStatus.Success
-          : ToolCallStatus.Pending,
+        status: toToolCallStatus(response),
         confirmationDetails: undefined,
       };
     });

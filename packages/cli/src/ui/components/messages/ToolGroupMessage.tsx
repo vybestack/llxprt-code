@@ -167,11 +167,13 @@ function deriveBorderColors(filteredToolCalls: IndividualToolCallDisplay[]): {
   const isShellCommand = filteredToolCalls.some(
     (t) => t.name === SHELL_COMMAND_NAME || t.name === SHELL_NAME,
   );
-  const borderColor = isShellCommand
-    ? theme.ui.symbol
-    : hasPending
-      ? theme.status.warning
-      : theme.border.default;
+  const getBorderColor = () => {
+    if (isShellCommand) {
+      return theme.ui.symbol;
+    }
+    return hasPending ? theme.status.warning : theme.border.default;
+  };
+  const borderColor = getBorderColor();
   const borderDimColor = hasPending && !isShellCommand;
 
   return { borderColor, borderDimColor, isShellCommand };

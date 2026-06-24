@@ -42,6 +42,12 @@ const FIELD_HELP = {
   contextLimit: 'Maximum context window size',
 } as const;
 
+const FIELD_PROGRESS = {
+  temperature: '1',
+  maxTokens: '2',
+  contextLimit: '3',
+} as const;
+
 type ParamField = 'temperature' | 'maxTokens' | 'contextLimit';
 
 const advanceField = (
@@ -113,15 +119,7 @@ const CustomFieldInput: React.FC<{
     <Text color={Colors.Gray}>
       Press Enter to set value or leave empty to skip
     </Text>
-    <Text color={Colors.Gray}>
-      Progress:{' '}
-      {currentField === 'temperature'
-        ? '1'
-        : currentField === 'maxTokens'
-          ? '2'
-          : '3'}
-      /3
-    </Text>
+    <Text color={Colors.Gray}>Progress: {FIELD_PROGRESS[currentField]}/3</Text>
     <Text color={Colors.Foreground}> </Text>
     <Text color={Colors.Gray}>Enter Continue Esc Back to menu</Text>
   </>

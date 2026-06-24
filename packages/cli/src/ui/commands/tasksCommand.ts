@@ -44,15 +44,14 @@ function formatDuration(startTime: number, endTime?: number): string {
  * Uses the full task ID (which is the agentId like "hardproblemcoder-cmh7yw")
  * to ensure uniqueness and allow users to reference specific tasks.
  */
+const STATUS_ICONS: Record<string, string> = {
+  running: '[RUNNING]',
+  completed: '[DONE]',
+  failed: '[FAILED]',
+};
+
 function formatTask(task: AsyncTaskInfo): string {
-  const statusIcon =
-    task.status === 'running'
-      ? '[RUNNING]'
-      : task.status === 'completed'
-        ? '[DONE]'
-        : task.status === 'failed'
-          ? '[FAILED]'
-          : '[CANCELLED]';
+  const statusIcon = STATUS_ICONS[task.status] ?? '[CANCELLED]';
 
   const duration = formatDuration(task.launchedAt, task.completedAt);
   const goalPreview =

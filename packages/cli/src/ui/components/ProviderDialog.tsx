@@ -104,23 +104,27 @@ function ProviderListItem({
   isWide: boolean;
   colWidth: number;
 }) {
-  const displayName = isWide
-    ? name
-    : name.length > 20
-      ? truncateEnd(name, 20)
-      : name;
+  const getDisplayName = () => {
+    if (isWide) {
+      return name;
+    }
+    return name.length > 20 ? truncateEnd(name, 20) : name;
+  };
+  const displayName = getDisplayName();
+
+  const getTextColor = () => {
+    if (selected) {
+      return SemanticColors.text.accent;
+    }
+    if (isSearching && !isNarrow) {
+      return SemanticColors.text.secondary;
+    }
+    return SemanticColors.text.primary;
+  };
 
   return (
     <Box key={name} width={isWide ? undefined : colWidth} marginRight={2}>
-      <Text
-        color={
-          selected
-            ? SemanticColors.text.accent
-            : isSearching && !isNarrow
-              ? SemanticColors.text.secondary
-              : SemanticColors.text.primary
-        }
-      >
+      <Text color={getTextColor()}>
         {selected ? '● ' : '○ '}
         {displayName}
       </Text>
