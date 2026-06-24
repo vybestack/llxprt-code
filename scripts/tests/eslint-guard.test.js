@@ -368,6 +368,33 @@ describe('check-eslint-guard', () => {
   });
 });
 
+describe('packages/storage directive cleanup (#2119)', () => {
+  const storageSrcDir = join(repoRoot, 'packages', 'storage', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const offenders = scanPackageDirectives(storageSrcDir, '2119').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/storage/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const storageEntries = legacy.filter((e) =>
+      e.startsWith('packages/storage'),
+    );
+    expect(
+      storageEntries,
+      'Legacy storage entries: ' + storageEntries.join(', '),
+    ).toEqual([]);
+  });
+});
+
 describe('packages/auth directive cleanup (#2121)', () => {
   const authSrcDir = join(repoRoot, 'packages', 'auth', 'src');
 
