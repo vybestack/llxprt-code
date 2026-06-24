@@ -628,6 +628,52 @@ describe('ProfileManager — malformed standard profile modelParams/ephemeralSet
   });
 });
 
+describe('ProfileManager — parse boundary rejects unsafe object shapes', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('rejects prototype-pollution keys in standard profile modelParams', async () => {
+    const filePath = path.join(tempDir, 'polluted-modelparams.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: { constructor: { prototype: { polluted: true } } },
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('polluted-modelparams')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects prototype-pollution keys in standard profile ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'polluted-ephemeral.json');
+    await fs.writeFile(
+      filePath,
+      '{"version":1,"provider":"openai","model":"gpt-4","modelParams":{},"ephemeralSettings":{"__proto__":{"polluted":true}}}',
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('polluted-ephemeral')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+});
+
 describe('ProfileManager — saveLoadBalancerProfile type discriminant validation', () => {
   let tempDir: string;
   let pm: ProfileManager;
@@ -650,7 +696,7 @@ describe('ProfileManager — saveLoadBalancerProfile type discriminant validatio
       model: 'gpt-4',
       modelParams: {},
       ephemeralSettings: {},
-    } as unknown as Parameters<typeof pm.saveLoadBalancerProfile>[1];
+    };
 
     await expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
       /must reference at least one profile/,
@@ -667,7 +713,7 @@ describe('ProfileManager — saveLoadBalancerProfile type discriminant validatio
       model: 'gpt-4',
       modelParams: {},
       ephemeralSettings: {},
-    } as unknown as Parameters<typeof pm.saveLoadBalancerProfile>[1];
+    };
 
     await expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
       /must reference at least one profile/,
@@ -683,7 +729,7 @@ describe('ProfileManager — saveLoadBalancerProfile type discriminant validatio
       model: 'gpt-4',
       modelParams: {},
       ephemeralSettings: {},
-    } as unknown as Parameters<typeof pm.saveLoadBalancerProfile>[1];
+    };
 
     await expect(
       pm.saveLoadBalancerProfile('no-write', profile),

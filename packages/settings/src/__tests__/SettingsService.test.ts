@@ -354,3 +354,60 @@ describe('SettingsService — empty-string activeProvider fallback', () => {
     expect(diag.provider).toBe('openai');
   });
 });
+
+describe('SettingsService — provider trust boundary', () => {
+  it('does not allow dotted provider root writes to store non-record values', () => {
+    const svc = new SettingsService();
+
+    svc.set('providers.openai', 'not-a-record');
+
+    expect(svc.get('providers.openai')).toBeUndefined();
+    expect(svc.getProviderSettings('openai')).toStrictEqual({});
+  });
+
+  it('routes dotted provider leaf writes through provider settings storage', () => {
+    const svc = new SettingsService();
+
+    svc.set('providers.openai.model', 'gpt-4');
+
+    expect(svc.getProviderSettings('openai')).toStrictEqual({ model: 'gpt-4' });
+    expect(svc.get('providers.openai.model')).toBe('gpt-4');
+  });
+
+  it('rejects dangerous provider path segments before writing', () => {
+    const svc = new SettingsService();
+
+    expect(() => svc.set('providers.__proto__.model', 'polluted')).toThrow(
+      'Cannot set dangerous property: __proto__',
+    );
+    expect(svc.getProviderSettings('__proto__')).toStrictEqual({});
+  });
+
+  it('allows provider setting keys that would be dangerous path segments', () => {
+    const svc = new SettingsService();
+
+    svc.setProviderSetting('openai', '__proto__', false);
+    svc.setProviderSetting('openai', 'constructor', 'safe-value');
+
+    const settings = svc.getProviderSettings('openai');
+    expect(settings['__proto__']).toBe(false);
+    expect(settings.constructor).toBe('safe-value');
+  });
+  it('imports only record-shaped provider entries from profile data', async () => {
+    const svc = new SettingsService();
+
+    await svc.importFromProfile({
+      defaultProvider: 'openai',
+      providers: {
+        openai: { model: 'gpt-4' },
+        broken: 'not-a-record',
+      },
+      tools: { allowed: ['read_file'], disabled: ['shell'] },
+    });
+
+    expect(svc.getProviderSettings('openai')).toStrictEqual({ model: 'gpt-4' });
+    expect(svc.getProviderSettings('broken')).toStrictEqual({});
+    expect(svc.get('tools.allowed')).toStrictEqual(['read_file']);
+    expect(svc.get('tools.disabled')).toStrictEqual(['shell']);
+  });
+});

@@ -6,9 +6,18 @@
  */
 
 import { EventEmitter } from 'events';
+import {
+  createTrustedProviderRecord,
+  isDangerousPropertyKey,
+  isPlainObject,
+  parseProfileImport,
+  parseProviderSettingsRecord,
+  type TrustedProviderRecord,
+  type TrustedProvidersMap,
+} from './validation.js';
 
 interface EphemeralSettings {
-  providers: Record<string, Record<string, unknown>>;
+  providers: TrustedProvidersMap;
   global: Record<string, unknown>;
   activeProvider: string | null;
   tools?: {
@@ -35,22 +44,7 @@ type SettingsEventListener =
   | (() => void)
   | ((...args: unknown[]) => void);
 
-function isProviderSettingsRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  if (value === null || value === undefined) {
-    return false;
-  }
-  if (typeof value !== 'object') {
-    return false;
-  }
-  if (Array.isArray(value)) {
-    return false;
-  }
-  return true;
-}
-
-function asStringArray(value: unknown): string[] {
+function copyStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((name) => String(name)) : [];
 }
 
@@ -70,7 +64,7 @@ export class SettingsService extends EventEmitter {
 
   get(key: string): unknown {
     if (key.includes('.')) {
-      return this.getNestedValue(this.settings, key);
+      return this.getNestedValue(key);
     }
     return this.settings.global[key];
   }
@@ -79,24 +73,7 @@ export class SettingsService extends EventEmitter {
     const oldValue = this.get(key);
 
     if (key.includes('.')) {
-      const settingsRecord = this.settings as unknown as Record<
-        string,
-        unknown
-      >;
-
-      this.setNestedValue(settingsRecord, key, value);
-
-      const [root, ...rest] = key.split('.');
-      if (root && root !== 'providers') {
-        const rootValue = settingsRecord[root];
-        if (rootValue !== undefined) {
-          this.settings.global[root] = rootValue;
-        }
-
-        if (rest.length === 0) {
-          this.settings.global[root] = rootValue;
-        }
-      }
+      this.setNestedValue(key, value);
     } else {
       this.settings.global[key] = value;
     }
@@ -109,21 +86,19 @@ export class SettingsService extends EventEmitter {
   }
 
   getProviderSettings(provider: string): Record<string, unknown> {
-    const entry = this.settings.providers[provider] as unknown;
-    if (isProviderSettingsRecord(entry)) {
-      return entry;
-    }
-    return {};
+    return this.settings.providers[provider] ?? {};
   }
 
   setProviderSetting(provider: string, key: string, value: unknown): void {
-    const entry = this.settings.providers[provider] as unknown;
-    if (!isProviderSettingsRecord(entry)) {
-      this.settings.providers[provider] = {};
-    }
-
-    const oldValue = this.settings.providers[provider][key];
-    this.settings.providers[provider][key] = value;
+    this.assertSafePath([provider]);
+    const entry = this.getOrCreateProvider(provider);
+    const oldValue = entry[key];
+    Object.defineProperty(entry, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
 
     this.eventEmitter.emit('provider-change', {
       provider,
@@ -162,47 +137,119 @@ export class SettingsService extends EventEmitter {
     return snapshot;
   }
 
-  private getNestedValue(obj: unknown, key: string): unknown {
+  private getNestedValue(key: string): unknown {
     const keys = key.split('.');
-    let current: unknown = obj;
+    if (keys[0] === 'providers') {
+      return this.getProviderPathValue(keys);
+    }
 
-    for (const k of keys) {
-      if (isProviderSettingsRecord(current) && k in current) {
-        current = current[k];
+    let current: unknown = this.settings.global;
+    for (const part of keys) {
+      if (isPlainObject(current) && part in current) {
+        current = current[part];
       } else {
         return undefined;
       }
     }
-
     return current;
   }
 
-  private setNestedValue(
-    obj: Record<string, unknown>,
-    key: string,
-    value: unknown,
-  ): void {
+  private getProviderPathValue(keys: string[]): unknown {
+    if (keys.length === 1) {
+      return this.settings.providers;
+    }
+    const provider = keys[1];
+    const providerSettings = this.settings.providers[provider];
+    if (providerSettings === undefined) {
+      return undefined;
+    }
+    if (keys.length === 2) {
+      return providerSettings;
+    }
+    let current: unknown = providerSettings;
+    for (const part of keys.slice(2)) {
+      if (isPlainObject(current) && part in current) {
+        current = current[part];
+      } else {
+        return undefined;
+      }
+    }
+    return current;
+  }
+
+  private setNestedValue(key: string, value: unknown): void {
     const keys = key.split('.');
+    this.assertSafePath(keys);
 
-    const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
-    for (const k of keys) {
-      if (dangerousKeys.includes(k)) {
-        throw new Error(`Cannot set dangerous property: ${k}`);
-      }
+    if (keys[0] === 'providers') {
+      this.setProviderPathValue(keys, value);
+      return;
     }
 
-    let current = obj;
-
-    for (let i = 0; i < keys.length - 1; i++) {
-      const k = keys[i];
-      const next = current[k];
-      if (!isProviderSettingsRecord(next)) {
-        current[k] = {};
-      }
-      current = current[k] as Record<string, unknown>;
+    let current = this.settings.global;
+    for (const part of keys.slice(0, -1)) {
+      current = this.getObjectChild(current, part);
     }
 
-    current[keys[keys.length - 1]] = value;
+    const finalKey = keys[keys.length - 1];
+    Object.defineProperty(current, finalKey, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  private getObjectChild(
+    container: Record<string, unknown>,
+    key: string,
+  ): Record<string, unknown> {
+    const next = container[key];
+    if (isPlainObject(next)) {
+      return next;
+    }
+    const child: Record<string, unknown> = {};
+    container[key] = child;
+    return child;
+  }
+
+  private setProviderPathValue(keys: string[], value: unknown): void {
+    if (keys.length <= 2) {
+      return;
+    }
+    const provider = keys[1];
+
+    const entry = this.getOrCreateProvider(provider);
+    let current: Record<string, unknown> = entry;
+    for (const part of keys.slice(2, -1)) {
+      current = this.getObjectChild(current, part);
+    }
+
+    const finalKey = keys[keys.length - 1];
+    Object.defineProperty(current, finalKey, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  private getOrCreateProvider(provider: string): TrustedProviderRecord {
+    const existing = this.settings.providers[provider];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = createTrustedProviderRecord();
+    this.settings.providers[provider] = created;
+    return created;
+  }
+
+  private assertSafePath(keys: string[]): void {
+    for (const key of keys) {
+      if (isDangerousPropertyKey(key)) {
+        throw new Error(`Cannot set dangerous property: ${key}`);
+      }
+    }
   }
 
   override on(
@@ -258,15 +305,14 @@ export class SettingsService extends EventEmitter {
   ): Promise<void>;
   updateSettings(providerOrChanges: unknown, changes?: unknown): Promise<void> {
     if (typeof providerOrChanges === 'string') {
-      if (isProviderSettingsRecord(changes)) {
-        const runtimeChanges: Record<string, unknown> = changes;
-        for (const [key, value] of Object.entries(runtimeChanges)) {
+      const providerChanges = parseProviderSettingsRecord(changes);
+      if (providerChanges !== undefined) {
+        for (const [key, value] of Object.entries(providerChanges)) {
           this.setProviderSetting(providerOrChanges, key, value);
         }
       }
-    } else if (isProviderSettingsRecord(providerOrChanges)) {
-      const globalChanges: Record<string, unknown> = providerOrChanges;
-      for (const [key, value] of Object.entries(globalChanges)) {
+    } else if (isPlainObject(providerOrChanges)) {
+      for (const [key, value] of Object.entries(providerOrChanges)) {
         this.set(key, value);
       }
     }
@@ -296,22 +342,29 @@ export class SettingsService extends EventEmitter {
     const disabledValue = this.get('tools.disabled');
     const legacyDisabled = this.get('disabled-tools');
 
-    const allowedTools = Array.isArray(allowedValue)
-      ? (allowedValue as string[]).slice()
-      : [];
+    const allowedTools = copyStringArray(allowedValue);
 
     let disabledTools: string[];
     if (Array.isArray(disabledValue)) {
-      disabledTools = (disabledValue as string[]).slice();
+      disabledTools = copyStringArray(disabledValue);
     } else if (Array.isArray(legacyDisabled)) {
-      disabledTools = (legacyDisabled as string[]).slice();
+      disabledTools = copyStringArray(legacyDisabled);
     } else {
       disabledTools = [];
     }
 
+    const providers: Record<string, Record<string, unknown>> = {};
+    for (const [provider, settings] of Object.entries(
+      this.settings.providers,
+    )) {
+      if (settings !== undefined) {
+        providers[provider] = settings;
+      }
+    }
+
     return Promise.resolve({
       defaultProvider: activeProvider,
-      providers: { ...this.settings.providers },
+      providers,
       tools: {
         allowed: allowedTools,
         disabled: disabledTools,
@@ -322,33 +375,21 @@ export class SettingsService extends EventEmitter {
   importFromProfile(profileData: unknown) {
     this.settings.providers = {};
 
-    if (isProviderSettingsRecord(profileData)) {
-      const data = profileData as {
-        defaultProvider?: string;
-        providers?: Record<string, Record<string, unknown>>;
-        tools?: {
-          allowed?: unknown;
-          disabled?: unknown;
-        };
-      };
-
-      if (data.defaultProvider) {
+    const data = parseProfileImport(profileData);
+    if (data !== null) {
+      if (data.defaultProvider !== undefined) {
         this.set('activeProvider', data.defaultProvider);
         this.settings.activeProvider = data.defaultProvider;
       }
 
-      if (data.providers) {
-        this.importProviderEntries(data.providers);
-      }
+      this.settings.providers = data.providers;
 
-      const toolsAllowed = asStringArray(data.tools?.allowed);
-      const toolsDisabled = asStringArray(data.tools?.disabled);
+      const toolsAllowed = data.tools.allowed;
+      const toolsDisabled = data.tools.disabled;
 
       this.settings.tools = this.settings.tools ?? {};
-      (this.settings.tools as Record<string, unknown>)['allowed'] =
-        toolsAllowed;
-      (this.settings.tools as Record<string, unknown>)['disabled'] =
-        toolsDisabled;
+      this.settings.tools.allowed = toolsAllowed;
+      this.settings.tools.disabled = toolsDisabled;
       this.settings.global['tools'] = {
         allowed: toolsAllowed,
         disabled: toolsDisabled,
@@ -357,17 +398,6 @@ export class SettingsService extends EventEmitter {
     }
 
     return Promise.resolve();
-  }
-
-  private importProviderEntries(providers: Record<string, unknown>): void {
-    for (const [provider, settings] of Object.entries(providers)) {
-      if (isProviderSettingsRecord(settings)) {
-        const providerSettings: Record<string, unknown> = settings;
-        for (const [key, value] of Object.entries(providerSettings)) {
-          this.setProviderSetting(provider, key, value);
-        }
-      }
-    }
   }
 
   setCurrentProfileName(profileName: string | null): void {

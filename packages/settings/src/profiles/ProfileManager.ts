@@ -15,6 +15,12 @@ import type {
   ModelParams,
 } from './types.js';
 import { isLoadBalancerProfile } from './types.js';
+import {
+  isPlainObject,
+  parseLoadBalancerProfile,
+  parseProfile,
+  parsePromptCaching,
+} from '../settings/validation.js';
 
 import fs from 'fs/promises';
 import os from 'os';
@@ -58,84 +64,8 @@ function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-const PROMPT_CACHING_VALUES = new Set(['off', '5m', '1h', '24h']);
-
-function optionalPromptCaching(
-  value: unknown,
-): EphemeralSettings['prompt-caching'] {
-  return typeof value === 'string' && PROMPT_CACHING_VALUES.has(value)
-    ? (value as EphemeralSettings['prompt-caching'])
-    : undefined;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function validateLoadBalancerShape(
-  name: string,
-  profile: unknown,
-): LoadBalancerProfile {
-  if (!isPlainObject(profile)) {
-    throw new Error(
-      `LoadBalancer profile '${name}' must reference at least one profile`,
-    );
-  }
-  const record = profile;
-  if (record.type !== 'loadbalancer') {
-    throw new Error(
-      `LoadBalancer profile '${name}' must reference at least one profile`,
-    );
-  }
-  if (record.version !== 1) {
-    throw new Error('unsupported profile version');
-  }
-  const profilesField = record.profiles;
-  if (
-    profilesField === null ||
-    profilesField === undefined ||
-    !Array.isArray(profilesField) ||
-    profilesField.length === 0
-  ) {
-    throw new Error(
-      `LoadBalancer profile '${name}' must reference at least one profile`,
-    );
-  }
-  return profile as unknown as LoadBalancerProfile;
-}
-
-function isMissingVersion(version: unknown): boolean {
-  if (version === null || version === undefined) {
-    return true;
-  }
-  if (version === 0 || version === false) {
-    return true;
-  }
-  if (typeof version === 'number' && Number.isNaN(version)) {
-    return true;
-  }
-  return false;
-}
-
-function hasStandardProfileFields(record: Record<string, unknown>): boolean {
-  if (isMissingVersion(record.version)) {
-    return false;
-  }
-  const provider = record.provider;
-  if (typeof provider !== 'string' || provider === '') {
-    return false;
-  }
-  const model = record.model;
-  if (typeof model !== 'string' || model === '') {
-    return false;
-  }
-  if (!isPlainObject(record.modelParams)) {
-    return false;
-  }
-  if (!isPlainObject(record.ephemeralSettings)) {
-    return false;
-  }
-  return true;
+function referencedProfileIsLoadBalancer(profile: unknown): boolean {
+  return isPlainObject(profile) && profile.type === 'loadbalancer';
 }
 
 /**
@@ -171,15 +101,12 @@ export class ProfileManager {
     await fs.writeFile(filePath, JSON.stringify(profile, null, 2), 'utf8');
   }
 
-  async saveLoadBalancerProfile(
-    name: string,
-    profile: LoadBalancerProfile,
-  ): Promise<void> {
-    validateLoadBalancerShape(name, profile);
+  async saveLoadBalancerProfile(name: string, profile: unknown): Promise<void> {
+    const loadBalancerProfile = parseLoadBalancerProfile(name, profile);
 
     const availableProfiles = await this.listProfiles();
 
-    for (const referencedProfile of profile.profiles) {
+    for (const referencedProfile of loadBalancerProfile.profiles) {
       if (!availableProfiles.includes(referencedProfile)) {
         throw new Error(
           `LoadBalancer profile '${name}' references non-existent profile '${referencedProfile}'`,
@@ -194,9 +121,9 @@ export class ProfileManager {
         referencedProfilePath,
         'utf8',
       );
-      const referencedProfileData = JSON.parse(referencedContent) as Profile;
+      const referencedProfileData: unknown = JSON.parse(referencedContent);
 
-      if (isLoadBalancerProfile(referencedProfileData)) {
+      if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(
           `LoadBalancer profile '${name}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
         );
@@ -207,7 +134,11 @@ export class ProfileManager {
 
     const filePath = path.join(this.profilesDir, `${name}.json`);
 
-    await fs.writeFile(filePath, JSON.stringify(profile, null, 2), 'utf8');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify(loadBalancerProfile, null, 2),
+      'utf8',
+    );
   }
 
   /**
@@ -218,11 +149,11 @@ export class ProfileManager {
     profileName: string,
     profile: LoadBalancerProfile,
   ): Promise<void> {
-    validateLoadBalancerShape(profileName, profile);
+    const loadBalancerProfile = parseLoadBalancerProfile(profileName, profile);
 
     const availableProfiles = await this.listProfiles();
 
-    for (const referencedProfile of profile.profiles) {
+    for (const referencedProfile of loadBalancerProfile.profiles) {
       if (!availableProfiles.includes(referencedProfile)) {
         throw new Error(
           `LoadBalancer profile '${profileName}' references non-existent profile '${referencedProfile}'`,
@@ -237,9 +168,9 @@ export class ProfileManager {
         referencedProfilePath,
         'utf8',
       );
-      const referencedProfileData = JSON.parse(referencedContent) as Profile;
+      const referencedProfileData: unknown = JSON.parse(referencedContent);
 
-      if (isLoadBalancerProfile(referencedProfileData)) {
+      if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(
           `LoadBalancer profile '${profileName}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
         );
@@ -259,34 +190,16 @@ export class ProfileManager {
       const content = await fs.readFile(filePath, 'utf8');
 
       const parsed: unknown = JSON.parse(content);
+      const profile =
+        isPlainObject(parsed) && parsed.type === 'loadbalancer'
+          ? parseLoadBalancerProfile(profileName, parsed)
+          : parseProfile(parsed);
 
-      if (
-        parsed === null ||
-        typeof parsed !== 'object' ||
-        Array.isArray(parsed)
-      ) {
-        throw new Error('missing required fields');
+      if (isLoadBalancerProfile(profile)) {
+        await this.validateLoadBalancerReferences(profileName, profile);
       }
 
-      const profileRecord = parsed as Record<string, unknown>;
-
-      if (profileRecord.type === 'loadbalancer') {
-        await this.validateLoadBalancerReferences(
-          profileName,
-          parsed as LoadBalancerProfile,
-        );
-        return parsed as Profile;
-      }
-
-      if (!hasStandardProfileFields(profileRecord)) {
-        throw new Error('missing required fields');
-      }
-
-      if (profileRecord.version !== 1) {
-        throw new Error('unsupported profile version');
-      }
-
-      return parsed as Profile;
+      return profile;
     } catch (error) {
       if (error instanceof Error && error.message.includes('ENOENT')) {
         throw new Error(`Profile '${profileName}' not found`);
@@ -386,7 +299,7 @@ export class ProfileManager {
         'base-url': optionalString(providerSettings['base-url']),
         'auth-key': optionalString(providerSettings['auth-key']),
         'auth-keyfile': optionalString(providerSettings['auth-keyfile']),
-        'prompt-caching': optionalPromptCaching(
+        'prompt-caching': parsePromptCaching(
           providerSettings['prompt-caching'],
         ),
         'include-folder-structure': optionalBoolean(
@@ -419,23 +332,16 @@ export class ProfileManager {
     providers: Record<string, unknown>;
     tools: { allowed: unknown[]; disabled: unknown[] };
   } {
-    const ephemeral = profile.ephemeralSettings as unknown as Record<
-      string,
-      unknown
-    >;
+    const allowedValue = profile.ephemeralSettings['tools.allowed'];
+    const allowedTools = Array.isArray(allowedValue) ? [...allowedValue] : [];
 
-    const allowedValue = ephemeral['tools.allowed'];
-    const allowedTools = Array.isArray(allowedValue)
-      ? [...(allowedValue as unknown[])]
-      : [];
-
-    const disabledValue = ephemeral['tools.disabled'];
-    const legacyDisabled = ephemeral['disabled-tools'];
+    const disabledValue = profile.ephemeralSettings['tools.disabled'];
+    const legacyDisabled = profile.ephemeralSettings['disabled-tools'];
     let disabledTools: unknown[];
     if (Array.isArray(disabledValue)) {
-      disabledTools = [...(disabledValue as unknown[])];
+      disabledTools = [...disabledValue];
     } else if (Array.isArray(legacyDisabled)) {
-      disabledTools = [...(legacyDisabled as unknown[])];
+      disabledTools = [...legacyDisabled];
     } else {
       disabledTools = [];
     }
@@ -487,11 +393,6 @@ export class ProfileManager {
     profile: Profile,
     settingsService: ProfileSettingsServiceLike,
   ): void {
-    const reasoningSettings = profile.ephemeralSettings as unknown as Record<
-      string,
-      unknown
-    >;
-
     const reasoningKeys = [
       'reasoning.enabled',
       'reasoning.includeInContext',
@@ -503,8 +404,8 @@ export class ProfileManager {
     ] as const;
 
     for (const key of reasoningKeys) {
-      if (reasoningSettings[key] !== undefined && settingsService.set) {
-        settingsService.set(key, reasoningSettings[key]);
+      if (profile.ephemeralSettings[key] !== undefined && settingsService.set) {
+        settingsService.set(key, profile.ephemeralSettings[key]);
       }
     }
   }

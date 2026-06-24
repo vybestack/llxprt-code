@@ -183,38 +183,14 @@ export class GitIgnoreParser implements GitIgnoreFilter {
 
       for (const dir of dirsToVisit) {
         const relativeDir = path.relative(this.projectRoot, dir);
-        if (relativeDir) {
-          const normalizedRelativeDir = relativeDir.replace(/\\/g, '/');
-          const igPlusExtras = ignore()
-            .add(ig)
-            .add(this.processedExtraPatterns);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (igPlusExtras.ignores(normalizedRelativeDir)) {
-            // This directory is ignored by an ancestor's .gitignore.
-            // According to git behavior, we don't need to process this
-            // directory's .gitignore, as nothing inside it can be
-            // un-ignored.
-            break;
-          }
+        if (relativeDir && this.isDirIgnoredByAncestor(relativeDir, ig)) {
+          // According to git behavior, we don't need to process this
+          // directory's .gitignore, as nothing inside it can be
+          // un-ignored.
+          break;
         }
 
-        if (this.cache.has(dir)) {
-          const patterns = this.cache.get(dir);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (patterns) {
-            ig.add(patterns);
-          }
-        } else {
-          const gitignorePath = path.join(dir, '.gitignore');
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (fs.existsSync(gitignorePath)) {
-            const patterns = this.loadPatternsForFile(gitignorePath);
-            this.cache.set(dir, patterns);
-            ig.add(patterns);
-          } else {
-            this.cache.set(dir, ignore()); // Cache miss
-          }
-        }
+        this.applyDirGitignore(dir, ig);
       }
 
       // Apply extra patterns (e.g. from .geminiignore) last for precedence
@@ -224,6 +200,29 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     } catch {
       // Path resolution failed; not ignored.
       return false;
+    }
+  }
+
+  private isDirIgnoredByAncestor(relativeDir: string, ig: Ignore): boolean {
+    const normalizedRelativeDir = relativeDir.replace(/\\/g, '/');
+    const igPlusExtras = ignore().add(ig).add(this.processedExtraPatterns);
+    return igPlusExtras.ignores(normalizedRelativeDir);
+  }
+
+  private applyDirGitignore(dir: string, ig: Ignore): void {
+    const cached = this.cache.get(dir);
+    if (cached) {
+      ig.add(cached);
+      return;
+    }
+
+    const gitignorePath = path.join(dir, '.gitignore');
+    if (fs.existsSync(gitignorePath)) {
+      const patterns = this.loadPatternsForFile(gitignorePath);
+      this.cache.set(dir, patterns);
+      ig.add(patterns);
+    } else {
+      this.cache.set(dir, ignore());
     }
   }
 

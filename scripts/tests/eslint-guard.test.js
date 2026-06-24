@@ -567,6 +567,39 @@ describe('packages/agents directive cleanup (#2117)', () => {
   });
 });
 
+describe('packages/storage directive cleanup (#2119)', () => {
+  const storageSrcDir = join(repoRoot, 'packages', 'storage', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const offenders = [];
+    for (const file of listTsFiles(storageSrcDir)) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, idx) => {
+        if (hasInlineEslintDirective(line)) {
+          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
+        }
+      });
+    }
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/storage/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const storageEntries = legacy.filter((e) =>
+      e.startsWith('packages/storage'),
+    );
+    expect(
+      storageEntries,
+      'Legacy storage entries: ' + storageEntries.join(', '),
+    ).toEqual([]);
+  });
+});
+
 describe('packages/auth directive cleanup (#2121)', () => {
   const authSrcDir = join(repoRoot, 'packages', 'auth', 'src');
 
