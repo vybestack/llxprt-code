@@ -36,6 +36,31 @@ async function createTempDir(prefix = 'cfw-test-'): Promise<string> {
   return fsp.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
+function restoreEnvValue(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
+async function withTempHome<T>(
+  action: (tmpHome: string) => Promise<T>,
+): Promise<T> {
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
+  const tmpHome = await createTempDir('cfw-home-');
+  process.env.HOME = tmpHome;
+  process.env.USERPROFILE = tmpHome;
+  try {
+    return await action(tmpHome);
+  } finally {
+    restoreEnvValue('HOME', originalHome);
+    restoreEnvValue('USERPROFILE', originalUserProfile);
+    await fsp.rm(tmpHome, { recursive: true, force: true });
+  }
+}
+
 /**
  * Creates a real StorageLogger that records calls to observable arrays.
  * NOT vi.fn() mock theater.
@@ -259,10 +284,7 @@ describe('ConversationFileWriter — Singleton Reuse', () => {
 
 describe('ConversationFileWriter — Zero-Arg Backward Compat', () => {
   it('constructs without error and writes to the default .llxprt conversations path', async () => {
-    const originalHome = process.env.HOME;
-    const tmpHome = await createTempDir('cfw-home-');
-    process.env.HOME = tmpHome;
-    try {
+    await withTempHome(async (tmpHome) => {
       const writer = new ConversationFileWriter();
       writer.writeEntry({ type: 'probe' });
 
@@ -270,17 +292,11 @@ describe('ConversationFileWriter — Zero-Arg Backward Compat', () => {
         path.join(tmpHome, '.llxprt', 'conversations'),
       );
       expect(lines[0].type).toBe('probe');
-    } finally {
-      process.env.HOME = originalHome;
-      await fsp.rm(tmpHome, { recursive: true, force: true });
-    }
+    });
   });
 
   it('treats an empty log path as a request for the default path', async () => {
-    const originalHome = process.env.HOME;
-    const tmpHome = await createTempDir('cfw-home-');
-    process.env.HOME = tmpHome;
-    try {
+    await withTempHome(async (tmpHome) => {
       const writer = new ConversationFileWriter('');
       writer.writeEntry({ type: 'empty-path-probe' });
 
@@ -288,10 +304,7 @@ describe('ConversationFileWriter — Zero-Arg Backward Compat', () => {
         path.join(tmpHome, '.llxprt', 'conversations'),
       );
       expect(lines[0].type).toBe('empty-path-probe');
-    } finally {
-      process.env.HOME = originalHome;
-      await fsp.rm(tmpHome, { recursive: true, force: true });
-    }
+    });
   });
 });
 
