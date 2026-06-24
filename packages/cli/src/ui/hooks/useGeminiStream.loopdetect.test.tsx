@@ -15,20 +15,19 @@ import { useGeminiStream } from './geminiStream/index.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
   TrackedToolCall,
-  TrackedCompletedToolCall,
-  TrackedExecutingToolCall,
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
   Config,
   EditorType,
-  AnyToolInvocation,
-  AnyDeclarativeTool,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
-import { ApprovalMode, ToolErrorType } from '@vybestack/llxprt-code-core';
-import type { Part, PartListUnion } from '@google/genai';
+import {
+  ApprovalMode,
+  GeminiEventType as ServerGeminiEventType,
+} from '@vybestack/llxprt-code-core';
+import type { PartListUnion } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -341,294 +340,315 @@ describe('useGeminiStream', () => {
 
   // Helper to render hook with default parameters - reduces boilerplate
 
-  it('should not submit tool responses if not all tool calls are completed', () => {
-    const toolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call1',
-          name: 'tool1',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-1',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'call1',
-          responseParts: [{ text: 'tool 1 response' }],
-          error: undefined,
-          errorType: undefined, // FIX: Added missing property
-          resultDisplay: 'Tool 1 success display',
-        },
-        tool: {
-          name: 'tool1',
-          displayName: 'tool1',
-          description: 'desc1',
-          build: vi.fn(),
-        } as unknown as AnyDeclarativeTool,
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-        startTime: Date.now(),
-        endTime: Date.now(),
-      } as TrackedCompletedToolCall,
-      {
-        request: {
-          callId: 'call2',
-          name: 'tool2',
-          args: {},
-          prompt_id: 'prompt-id-1',
-        },
-        status: 'executing',
-        displayCleared: false,
-        tool: {
-          name: 'tool2',
-          displayName: 'tool2',
-          description: 'desc2',
-          build: vi.fn(),
-        } as unknown as AnyDeclarativeTool,
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-        startTime: Date.now(),
-        liveOutput: '...',
-      } as TrackedExecutingToolCall,
-    ];
-
-    const { mockMarkToolsAsDisplayCleared, mockSendMessageStream } =
-      renderTestHook(toolCalls);
-
-    // Effect for submitting tool responses depends on toolCalls and isResponding
-    // isResponding is initially false, so the effect should run.
-
-    expect(mockMarkToolsAsDisplayCleared).not.toHaveBeenCalled();
-    expect(mockSendMessageStream).not.toHaveBeenCalled(); // submitQuery uses this
-  });
-
-  it('should submit tool responses when all tool calls are completed and ready', async () => {
-    const toolCall1ResponseParts: Part[] = [{ text: 'tool 1 final response' }];
-    const toolCall2ResponseParts: Part[] = [{ text: 'tool 2 final response' }];
-    const completedToolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call1',
-          name: 'tool1',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-2',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'call1',
-          responseParts: toolCall1ResponseParts,
-          errorType: undefined, // FIX: Added missing property
-        },
-        tool: {
-          displayName: 'MockTool',
-        },
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-      } as TrackedCompletedToolCall,
-      {
-        request: {
-          callId: 'call2',
-          name: 'tool2',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-2',
-        },
-        status: 'error',
-        displayCleared: false,
-        response: {
-          callId: 'call2',
-          responseParts: toolCall2ResponseParts,
-          errorType: ToolErrorType.UNHANDLED_EXCEPTION, // FIX: Added missing property
-        },
-      } as TrackedCompletedToolCall, // Treat error as a form of completion for submission
-    ];
-
-    // Capture the onComplete callback
-    let capturedOnComplete:
-      | ((
-          schedulerId: symbol,
-          completedTools: TrackedToolCall[],
-          metadata: { isPrimary: boolean },
-        ) => Promise<void>)
-      | null = null;
-
-    mockUseReactToolScheduler.mockImplementation((onComplete) => {
-      capturedOnComplete = onComplete;
-      return [
-        [],
-        mockScheduleToolCalls,
-        mockMarkToolsAsDisplayCleared,
-        mockCancelAllToolCalls,
-        0,
-        true,
-      ];
+  describe('Loop Detection Confirmation', () => {
+    beforeEach(() => {
+      // Add mock for getLoopDetectionService to the config
+      const mockLoopDetectionService = {
+        disableForSession: vi.fn(),
+      };
+      mockConfig.getAgentClient = vi.fn().mockReturnValue({
+        ...new MockedAgentClientClass(mockConfig),
+        getLoopDetectionService: () => mockLoopDetectionService,
+      });
     });
 
-    renderHook(() =>
-      useGeminiStream(
-        new MockedAgentClientClass(mockConfig),
-        [],
-        mockAddItem,
-        mockConfig,
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        false,
-        () => {},
-        () => {},
-        () => {},
-        80,
-        24,
-      ),
-    );
+    it('should set loopDetectionConfirmationRequest when LoopDetected event is received', async () => {
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.Content,
+            value: 'Some content',
+          };
+          yield {
+            type: ServerGeminiEventType.LoopDetected,
+          };
+        })(),
+      );
 
-    // Trigger the onComplete callback with completed tools
-    await act(async () => {
-      if (capturedOnComplete) {
-        await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
-          isPrimary: true,
+      const { result } = renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('test query');
+      });
+
+      await waitFor(() => {
+        expect(result.current.loopDetectionConfirmationRequest).not.toBeNull();
+        expect(
+          typeof result.current.loopDetectionConfirmationRequest?.onComplete,
+        ).toBe('function');
+      });
+    });
+
+    it('should disable loop detection and show message when user selects "disable"', async () => {
+      const mockLoopDetectionService = {
+        disableForSession: vi.fn(),
+      };
+      const mockClient = {
+        ...new MockedAgentClientClass(mockConfig),
+        getLoopDetectionService: () => mockLoopDetectionService,
+      };
+      mockConfig.getAgentClient = vi.fn().mockReturnValue(mockClient);
+
+      // Mock for the initial request
+      mockSendMessageStream.mockReturnValueOnce(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.LoopDetected,
+          };
+        })(),
+      );
+
+      // Mock for the retry request
+      mockSendMessageStream.mockReturnValueOnce(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.Content,
+            value: 'Retry successful',
+          };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('test query');
+      });
+
+      // Wait for confirmation request to be set
+      await waitFor(() => {
+        expect(result.current.loopDetectionConfirmationRequest).not.toBeNull();
+      });
+
+      // Simulate user selecting "disable"
+      await act(async () => {
+        result.current.loopDetectionConfirmationRequest?.onComplete({
+          userSelection: 'disable',
         });
-      }
-    });
+      });
 
-    await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
-    });
+      // Verify loop detection was disabled
+      expect(mockLoopDetectionService.disableForSession).toHaveBeenCalledTimes(
+        1,
+      );
 
-    const expectedMergedResponse = [
-      ...toolCall1ResponseParts,
-      ...toolCall2ResponseParts,
-    ];
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      expectedMergedResponse,
-      expect.any(AbortSignal),
-      'prompt-id-2',
-    );
-  });
+      // Verify confirmation request was cleared
+      expect(result.current.loopDetectionConfirmationRequest).toBeNull();
 
-  it('should filter out functionCall parts when submitting tool responses', async () => {
-    const toolCallResponseParts: Part[] = [
-      {
-        functionCall: {
-          id: 'call-filter',
-          name: 'toolFilter',
-          args: {},
-        },
-      },
-      {
-        functionResponse: {
-          id: 'call-filter',
-          name: 'toolFilter',
-          response: { ok: true },
-        },
-      },
-      { text: 'filtered response' },
-    ];
-    const completedToolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call-filter',
-          name: 'toolFilter',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-filter',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'call-filter',
-          responseParts: toolCallResponseParts,
-          errorType: undefined,
-        },
-        tool: {
-          displayName: 'MockTool',
-        },
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-      } as TrackedCompletedToolCall,
-    ];
-
-    let capturedOnComplete:
-      | ((
-          schedulerId: symbol,
-          completedTools: TrackedToolCall[],
-          metadata: { isPrimary: boolean },
-        ) => Promise<void>)
-      | null = null;
-
-    mockUseReactToolScheduler.mockImplementation((onComplete) => {
-      capturedOnComplete = onComplete;
-      return [
-        [],
-        mockScheduleToolCalls,
-        mockMarkToolsAsDisplayCleared,
-        mockCancelAllToolCalls,
-        0,
-        true,
-      ];
-    });
-
-    renderHook(() =>
-      useGeminiStream(
-        new MockedAgentClientClass(mockConfig),
-        [],
-        mockAddItem,
-        mockConfig,
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        false,
-        () => {},
-        () => {},
-        () => {},
-      ),
-    );
-
-    await act(async () => {
-      if (capturedOnComplete) {
-        await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
-          isPrimary: true,
-        });
-      }
-    });
-
-    await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
-    });
-
-    // functionCall parts should be filtered out - they're already in history
-    // from the original assistant turn
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      [
+      // Verify appropriate message was added
+      expect(mockAddItem).toHaveBeenCalledWith(
         {
-          functionResponse: {
-            id: 'call-filter',
-            name: 'toolFilter',
-            response: { ok: true },
-          },
+          type: 'info',
+          text: 'Loop detection has been disabled for this session. Retrying request...',
         },
-        { text: 'filtered response' },
-      ],
-      expect.any(AbortSignal),
-      'prompt-id-filter',
-    );
+        expect.any(Number),
+      );
+
+      // Verify that the request was retried
+      await waitFor(() => {
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
+        expect(mockSendMessageStream).toHaveBeenNthCalledWith(
+          2,
+          'test query',
+          expect.any(AbortSignal),
+          expect.any(String),
+        );
+      });
+    });
+
+    it('should keep loop detection enabled and show message when user selects "keep"', async () => {
+      const mockLoopDetectionService = {
+        disableForSession: vi.fn(),
+      };
+      const mockClient = {
+        ...new MockedAgentClientClass(mockConfig),
+        getLoopDetectionService: () => mockLoopDetectionService,
+      };
+      mockConfig.getAgentClient = vi.fn().mockReturnValue(mockClient);
+
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.LoopDetected,
+          };
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('test query');
+      });
+
+      // Wait for confirmation request to be set
+      await waitFor(() => {
+        expect(result.current.loopDetectionConfirmationRequest).not.toBeNull();
+      });
+
+      // Simulate user selecting "keep"
+      await act(async () => {
+        result.current.loopDetectionConfirmationRequest?.onComplete({
+          userSelection: 'keep',
+        });
+      });
+
+      // Verify loop detection was NOT disabled
+      expect(mockLoopDetectionService.disableForSession).not.toHaveBeenCalled();
+
+      // Verify confirmation request was cleared
+      expect(result.current.loopDetectionConfirmationRequest).toBeNull();
+
+      // Verify appropriate message was added
+      expect(mockAddItem).toHaveBeenCalledWith(
+        {
+          type: 'info',
+          text: 'A potential loop was detected. This can happen due to repetitive tool calls or other model behavior. The request has been halted.',
+        },
+        expect.any(Number),
+      );
+
+      // Verify that the request was NOT retried
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle multiple loop detection events properly', async () => {
+      const { result } = renderTestHook();
+
+      // First loop detection - set up fresh mock for first call
+      mockSendMessageStream.mockReturnValueOnce(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.LoopDetected,
+          };
+        })(),
+      );
+
+      // First loop detection
+      await act(async () => {
+        await result.current.submitQuery('first query');
+      });
+
+      await waitFor(() => {
+        expect(result.current.loopDetectionConfirmationRequest).not.toBeNull();
+      });
+
+      // Simulate user selecting "keep" for first request
+      await act(async () => {
+        result.current.loopDetectionConfirmationRequest?.onComplete({
+          userSelection: 'keep',
+        });
+      });
+
+      expect(result.current.loopDetectionConfirmationRequest).toBeNull();
+
+      // Verify first message was added
+      expect(mockAddItem).toHaveBeenCalledWith(
+        {
+          type: 'info',
+          text: 'A potential loop was detected. This can happen due to repetitive tool calls or other model behavior. The request has been halted.',
+        },
+        expect.any(Number),
+      );
+
+      // Second loop detection - set up fresh mock for second call
+      mockSendMessageStream.mockReturnValueOnce(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.LoopDetected,
+          };
+        })(),
+      );
+
+      // Mock for the retry request
+      mockSendMessageStream.mockReturnValueOnce(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.Content,
+            value: 'Retry successful',
+          };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })(),
+      );
+
+      // Second loop detection
+      await act(async () => {
+        await result.current.submitQuery('second query');
+      });
+
+      await waitFor(() => {
+        expect(result.current.loopDetectionConfirmationRequest).not.toBeNull();
+      });
+
+      // Simulate user selecting "disable" for second request
+      await act(async () => {
+        result.current.loopDetectionConfirmationRequest?.onComplete({
+          userSelection: 'disable',
+        });
+      });
+
+      expect(result.current.loopDetectionConfirmationRequest).toBeNull();
+
+      // Verify second message was added
+      expect(mockAddItem).toHaveBeenCalledWith(
+        {
+          type: 'info',
+          text: 'Loop detection has been disabled for this session. Retrying request...',
+        },
+        expect.any(Number),
+      );
+
+      // Verify that the request was retried
+      await waitFor(() => {
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(3); // 1st query, 2nd query, retry of 2nd query
+        expect(mockSendMessageStream).toHaveBeenNthCalledWith(
+          3,
+          'second query',
+          expect.any(AbortSignal),
+          expect.any(String),
+        );
+      });
+    });
+
+    it('should process LoopDetected event after moving pending history to history', async () => {
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.Content,
+            value: 'Some response content',
+          };
+          yield {
+            type: ServerGeminiEventType.LoopDetected,
+          };
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('test query');
+      });
+
+      // Verify that the content was added to history before the loop detection dialog
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'gemini',
+            text: 'Some response content',
+          }),
+          expect.any(Number),
+        );
+      });
+
+      // Then verify loop detection confirmation request was set
+      await waitFor(() => {
+        expect(result.current.loopDetectionConfirmationRequest).not.toBeNull();
+      });
+    });
   });
 });

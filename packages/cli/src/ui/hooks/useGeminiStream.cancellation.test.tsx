@@ -27,10 +27,9 @@ import type {
   AnyDeclarativeTool,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
-import { ApprovalMode, ToolErrorType } from '@vybestack/llxprt-code-core';
-import type { Part, PartListUnion } from '@google/genai';
-import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import type { SlashCommandProcessorResult } from '../types.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import type { PartListUnion } from '@google/genai';
+import { StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 // --- MOCKS ---
@@ -242,212 +241,36 @@ describe('useGeminiStream', () => {
     setValue: vi.fn(),
   } as unknown as LoadedSettings;
 
-  const renderTestHook = (
-    initialToolCalls: TrackedToolCall[] = [],
-    agentClient?: unknown,
-  ) => {
-    const client = agentClient ?? mockConfig.getAgentClient();
-
-    const initialProps = {
-      client,
-      history: [],
-      addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-      config: mockConfig,
-      onDebugMessage: mockOnDebugMessage,
-      handleSlashCommand: mockHandleSlashCommand as unknown as (
-        cmd: PartListUnion,
-      ) => Promise<SlashCommandProcessorResult | false>,
-      shellModeActive: false,
-      loadedSettings: mockLoadedSettings,
-      toolCalls: initialToolCalls,
-    };
-
-    const { result, rerender } = renderHook(
-      (props: typeof initialProps) => {
-        // Create a stateful mock for cancellation that updates the toolCalls state.
-        const statefulCancelAllToolCalls = vi.fn((...args) => {
-          // Call the original spy so `toHaveBeenCalled` checks still work.
-          mockCancelAllToolCalls(...args);
-
-          const newToolCalls = props.toolCalls.map((tc) => {
-            // Only cancel tools that are in a cancellable state.
-            if (
-              tc.status === 'awaiting_approval' ||
-              tc.status === 'executing' ||
-              tc.status === 'scheduled' ||
-              tc.status === 'validating'
-            ) {
-              // A real cancelled tool call has a response object.
-              // We need to simulate this to avoid type errors downstream.
-              return {
-                ...tc,
-                status: 'cancelled',
-                response: {
-                  callId: tc.request.callId,
-                  responseParts: [],
-                  resultDisplay: 'Request cancelled.',
-                },
-                displayCleared: true, // Cleared from display
-              } as unknown as TrackedCancelledToolCall;
-            }
-            return tc;
-          });
-          rerender({ ...props, toolCalls: newToolCalls });
-        });
-
-        mockUseReactToolScheduler.mockImplementation(() => [
-          props.toolCalls,
-          mockScheduleToolCalls,
-          mockMarkToolsAsDisplayCleared,
-          statefulCancelAllToolCalls, // Use the stateful mock
-          0,
-          true,
-        ]);
-
-        return useGeminiStream(
-          props.client,
-          props.history,
-          props.addItem,
-          props.config,
-          props.loadedSettings,
-          props.onDebugMessage,
-          props.handleSlashCommand,
-          props.shellModeActive,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          false,
-          () => {},
-          () => {},
-          () => {},
-          80,
-          24,
-        );
-      },
-      {
-        initialProps,
-      },
-    );
-    return {
-      result,
-      rerender,
-      mockMarkToolsAsDisplayCleared,
-      mockSendMessageStream,
-      client,
-    };
-  };
-
   // Helper to create mock tool calls - reduces boilerplate
 
   // Helper to render hook with default parameters - reduces boilerplate
 
-  it('should not submit tool responses if not all tool calls are completed', () => {
-    const toolCalls: TrackedToolCall[] = [
+  it('should handle all tool calls being cancelled', async () => {
+    const cancelledToolCalls: TrackedToolCall[] = [
       {
         request: {
-          callId: 'call1',
-          name: 'tool1',
+          callId: '1',
+          name: 'testTool',
           args: {},
           isClientInitiated: false,
-          prompt_id: 'prompt-id-1',
+          prompt_id: 'prompt-id-3',
         },
-        status: 'success',
-        displayCleared: false,
+        status: 'cancelled',
         response: {
-          callId: 'call1',
-          responseParts: [{ text: 'tool 1 response' }],
-          error: undefined,
-          errorType: undefined, // FIX: Added missing property
-          resultDisplay: 'Tool 1 success display',
-        },
-        tool: {
-          name: 'tool1',
-          displayName: 'tool1',
-          description: 'desc1',
-          build: vi.fn(),
-        } as unknown as AnyDeclarativeTool,
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-        startTime: Date.now(),
-        endTime: Date.now(),
-      } as TrackedCompletedToolCall,
-      {
-        request: {
-          callId: 'call2',
-          name: 'tool2',
-          args: {},
-          prompt_id: 'prompt-id-1',
-        },
-        status: 'executing',
-        displayCleared: false,
-        tool: {
-          name: 'tool2',
-          displayName: 'tool2',
-          description: 'desc2',
-          build: vi.fn(),
-        } as unknown as AnyDeclarativeTool,
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-        startTime: Date.now(),
-        liveOutput: '...',
-      } as TrackedExecutingToolCall,
-    ];
-
-    const { mockMarkToolsAsDisplayCleared, mockSendMessageStream } =
-      renderTestHook(toolCalls);
-
-    // Effect for submitting tool responses depends on toolCalls and isResponding
-    // isResponding is initially false, so the effect should run.
-
-    expect(mockMarkToolsAsDisplayCleared).not.toHaveBeenCalled();
-    expect(mockSendMessageStream).not.toHaveBeenCalled(); // submitQuery uses this
-  });
-
-  it('should submit tool responses when all tool calls are completed and ready', async () => {
-    const toolCall1ResponseParts: Part[] = [{ text: 'tool 1 final response' }];
-    const toolCall2ResponseParts: Part[] = [{ text: 'tool 2 final response' }];
-    const completedToolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call1',
-          name: 'tool1',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-2',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'call1',
-          responseParts: toolCall1ResponseParts,
+          callId: '1',
+          responseParts: [{ text: 'cancelled' }],
           errorType: undefined, // FIX: Added missing property
         },
+        displayCleared: false,
         tool: {
-          displayName: 'MockTool',
+          displayName: 'mock tool',
         },
         invocation: {
           getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
-      } as TrackedCompletedToolCall,
-      {
-        request: {
-          callId: 'call2',
-          name: 'tool2',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-2',
-        },
-        status: 'error',
-        displayCleared: false,
-        response: {
-          callId: 'call2',
-          responseParts: toolCall2ResponseParts,
-          errorType: ToolErrorType.UNHANDLED_EXCEPTION, // FIX: Added missing property
-        },
-      } as TrackedCompletedToolCall, // Treat error as a form of completion for submission
+      } as TrackedCancelledToolCall,
     ];
+    const client = new MockedAgentClientClass(mockConfig);
 
     // Capture the onComplete callback
     let capturedOnComplete:
@@ -472,7 +295,7 @@ describe('useGeminiStream', () => {
 
     renderHook(() =>
       useGeminiStream(
-        new MockedAgentClientClass(mockConfig),
+        client,
         [],
         mockAddItem,
         mockConfig,
@@ -492,73 +315,87 @@ describe('useGeminiStream', () => {
       ),
     );
 
-    // Trigger the onComplete callback with completed tools
+    // Trigger the onComplete callback with cancelled tools
     await act(async () => {
       if (capturedOnComplete) {
-        await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
+        await capturedOnComplete(Symbol('test-scheduler'), cancelledToolCalls, {
           isPrimary: true,
         });
       }
     });
 
     await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledWith(['1']);
+      expect(client.addHistory).toHaveBeenCalledWith({
+        role: 'user',
+        parts: [{ text: 'cancelled' }],
+      });
+      // Ensure we do NOT call back to the API
+      expect(mockSendMessageStream).not.toHaveBeenCalled();
     });
-
-    const expectedMergedResponse = [
-      ...toolCall1ResponseParts,
-      ...toolCall2ResponseParts,
-    ];
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      expectedMergedResponse,
-      expect.any(AbortSignal),
-      'prompt-id-2',
-    );
   });
 
-  it('should filter out functionCall parts when submitting tool responses', async () => {
-    const toolCallResponseParts: Part[] = [
-      {
-        functionCall: {
-          id: 'call-filter',
-          name: 'toolFilter',
-          args: {},
-        },
+  it('should group multiple cancelled tool call responses into a single history entry', async () => {
+    const cancelledToolCall1: TrackedCancelledToolCall = {
+      request: {
+        callId: 'cancel-1',
+        name: 'toolA',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-id-7',
       },
-      {
-        functionResponse: {
-          id: 'call-filter',
-          name: 'toolFilter',
-          response: { ok: true },
-        },
+      tool: {
+        name: 'toolA',
+        displayName: 'toolA',
+        description: 'descA',
+        build: vi.fn(),
+      } as unknown as AnyDeclarativeTool,
+      invocation: {
+        getDescription: () => `Mock description`,
+      } as unknown as AnyToolInvocation,
+      status: 'cancelled',
+      response: {
+        callId: 'cancel-1',
+        responseParts: [
+          { functionResponse: { name: 'toolA', id: 'cancel-1' } },
+        ],
+        resultDisplay: undefined,
+        error: undefined,
+        errorType: undefined, // FIX: Added missing property
       },
-      { text: 'filtered response' },
-    ];
-    const completedToolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call-filter',
-          name: 'toolFilter',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-filter',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'call-filter',
-          responseParts: toolCallResponseParts,
-          errorType: undefined,
-        },
-        tool: {
-          displayName: 'MockTool',
-        },
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-      } as TrackedCompletedToolCall,
-    ];
+      displayCleared: false,
+    };
+    const cancelledToolCall2: TrackedCancelledToolCall = {
+      request: {
+        callId: 'cancel-2',
+        name: 'toolB',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-id-8',
+      },
+      tool: {
+        name: 'toolB',
+        displayName: 'toolB',
+        description: 'descB',
+        build: vi.fn(),
+      } as unknown as AnyDeclarativeTool,
+      invocation: {
+        getDescription: () => `Mock description`,
+      } as unknown as AnyToolInvocation,
+      status: 'cancelled',
+      response: {
+        callId: 'cancel-2',
+        responseParts: [
+          { functionResponse: { name: 'toolB', id: 'cancel-2' } },
+        ],
+        resultDisplay: undefined,
+        error: undefined,
+        errorType: undefined, // FIX: Added missing property
+      },
+      displayCleared: false,
+    };
+    const allCancelledTools = [cancelledToolCall1, cancelledToolCall2];
+    const client = new MockedAgentClientClass(mockConfig);
 
     let capturedOnComplete:
       | ((
@@ -582,6 +419,127 @@ describe('useGeminiStream', () => {
 
     renderHook(() =>
       useGeminiStream(
+        client,
+        [],
+        mockAddItem,
+        mockConfig,
+        mockLoadedSettings,
+        mockOnDebugMessage,
+        mockHandleSlashCommand,
+        false,
+        () => 'vscode' as EditorType,
+        () => {},
+        () => Promise.resolve(),
+        false,
+        () => {},
+        () => {},
+        () => {},
+        80,
+        24,
+      ),
+    );
+
+    // Trigger the onComplete callback with multiple cancelled tools
+    await act(async () => {
+      if (capturedOnComplete) {
+        await capturedOnComplete(Symbol('test-scheduler'), allCancelledTools, {
+          isPrimary: true,
+        });
+      }
+    });
+
+    await waitFor(() => {
+      // The tools should be marked as display-cleared locally
+      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledWith([
+        'cancel-1',
+        'cancel-2',
+      ]);
+
+      // Crucially, addHistory should be called only ONCE
+      expect(client.addHistory).toHaveBeenCalledTimes(1);
+
+      // And that single call should contain BOTH function responses
+      expect(client.addHistory).toHaveBeenCalledWith({
+        role: 'user',
+        parts: [
+          ...cancelledToolCall1.response.responseParts,
+          ...cancelledToolCall2.response.responseParts,
+        ],
+      });
+
+      // No message should be sent back to the API for a turn with only cancellations
+      expect(mockSendMessageStream).not.toHaveBeenCalled();
+    });
+  });
+
+  it('should not flicker streaming state to Idle between tool completion and submission', async () => {
+    const toolCallResponseParts: PartListUnion = [
+      { text: 'tool 1 final response' },
+    ];
+
+    const initialToolCalls: TrackedToolCall[] = [
+      {
+        request: {
+          callId: 'call1',
+          name: 'tool1',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-id-4',
+        },
+        status: 'executing',
+        displayCleared: false,
+        tool: {
+          name: 'tool1',
+          displayName: 'tool1',
+          description: 'desc',
+          build: vi.fn(),
+        } as unknown as AnyDeclarativeTool,
+        invocation: {
+          getDescription: () => `Mock description`,
+        } as unknown as AnyToolInvocation,
+        startTime: Date.now(),
+      } as TrackedExecutingToolCall,
+    ];
+
+    const completedToolCalls: TrackedToolCall[] = [
+      {
+        ...(initialToolCalls[0] as TrackedExecutingToolCall),
+        status: 'success',
+        response: {
+          callId: 'call1',
+          responseParts: toolCallResponseParts,
+          error: undefined,
+          errorType: undefined, // FIX: Added missing property
+          resultDisplay: 'Tool 1 success display',
+        },
+        endTime: Date.now(),
+      } as TrackedCompletedToolCall,
+    ];
+
+    // Capture the onComplete callback
+    let capturedOnComplete:
+      | ((
+          schedulerId: symbol,
+          completedTools: TrackedToolCall[],
+          metadata: { isPrimary: boolean },
+        ) => Promise<void>)
+      | null = null;
+    let currentToolCalls = initialToolCalls;
+
+    mockUseReactToolScheduler.mockImplementation((onComplete) => {
+      capturedOnComplete = onComplete;
+      return [
+        currentToolCalls,
+        mockScheduleToolCalls,
+        mockMarkToolsAsDisplayCleared,
+        mockCancelAllToolCalls,
+        0,
+        true,
+      ];
+    });
+
+    const { result, rerender } = renderHook(() =>
+      useGeminiStream(
         new MockedAgentClientClass(mockConfig),
         [],
         mockAddItem,
@@ -593,14 +551,42 @@ describe('useGeminiStream', () => {
         () => 'vscode' as EditorType,
         () => {},
         () => Promise.resolve(),
-        () => {},
         false,
         () => {},
         () => {},
         () => {},
+        80,
+        24,
       ),
     );
 
+    // 1. Initial state should be Responding because a tool is executing.
+    expect(result.current.streamingState).toBe(StreamingState.Responding);
+
+    // 2. Update the tool calls to completed state and rerender
+    currentToolCalls = completedToolCalls;
+    mockUseReactToolScheduler.mockImplementation((onComplete) => {
+      capturedOnComplete = onComplete;
+      return [
+        completedToolCalls,
+        mockScheduleToolCalls,
+        mockMarkToolsAsDisplayCleared,
+        mockCancelAllToolCalls,
+        0,
+        true,
+      ];
+    });
+
+    act(() => {
+      rerender();
+    });
+
+    // 3. The state should *still* be Responding, not Idle.
+    // This is because the completed tool has not yet been cleared from the
+    // display (displayCleared is still false), so it remains outstanding.
+    expect(result.current.streamingState).toBe(StreamingState.Responding);
+
+    // 4. Trigger the onComplete callback to simulate tool completion
     await act(async () => {
       if (capturedOnComplete) {
         await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
@@ -609,26 +595,16 @@ describe('useGeminiStream', () => {
       }
     });
 
+    // 5. Wait for submitQuery to be called
     await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockSendMessageStream).toHaveBeenCalledWith(
+        toolCallResponseParts,
+        expect.any(AbortSignal),
+        'prompt-id-4',
+      );
     });
 
-    // functionCall parts should be filtered out - they're already in history
-    // from the original assistant turn
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      [
-        {
-          functionResponse: {
-            id: 'call-filter',
-            name: 'toolFilter',
-            response: { ok: true },
-          },
-        },
-        { text: 'filtered response' },
-      ],
-      expect.any(AbortSignal),
-      'prompt-id-filter',
-    );
+    // 6. After submission, the state should remain Responding until the stream completes.
+    expect(result.current.streamingState).toBe(StreamingState.Responding);
   });
 });

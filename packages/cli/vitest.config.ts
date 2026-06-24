@@ -211,6 +211,20 @@ const baseExcludePatterns = [
   '**/ui/hooks/useReverseSearchCompletion.test.tsx',
   '**/ui/hooks/useGeminiStream.integration.test.tsx',
   '**/ui/hooks/useGeminiStream.test.tsx',
+  // useGeminiStream.test.tsx split into cohesive shards (issue #2114,
+  // max-lines); all share the same React 19 setup and remain lint-only like
+  // the parent. Exact paths so the runnable dedup/subagent/thinking/ordering
+  // siblings are not matched.
+  '**/ui/hooks/useGeminiStream.cancellation.test.tsx',
+  '**/ui/hooks/useGeminiStream.usercancel.test.tsx',
+  '**/ui/hooks/useGeminiStream.commands.test.tsx',
+  '**/ui/hooks/useGeminiStream.approval.test.tsx',
+  '**/ui/hooks/useGeminiStream.finished.test.tsx',
+  '**/ui/hooks/useGeminiStream.include.test.tsx',
+  '**/ui/hooks/useGeminiStream.thought.test.tsx',
+  '**/ui/hooks/useGeminiStream.loopdetect.test.tsx',
+  '**/ui/hooks/useGeminiStream.hooks.test.tsx',
+  '**/ui/hooks/useGeminiStream.mcp.test.tsx',
   '**/ui/hooks/useKeypress.test.tsx',
   '**/ui/hooks/usePermissionsModifyTrust.test.tsx',
   '**/ui/privacy/**/*.test.tsx',

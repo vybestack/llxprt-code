@@ -12,12 +12,13 @@ import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useGeminiStream } from './geminiStream/index.js';
+import { useKeypress } from './useKeypress.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
   TrackedToolCall,
-  TrackedCompletedToolCall,
   TrackedExecutingToolCall,
   TrackedCancelledToolCall,
+  TrackedWaitingToolCall,
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
@@ -27,10 +28,11 @@ import type {
   AnyDeclarativeTool,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
-import { ApprovalMode, ToolErrorType } from '@vybestack/llxprt-code-core';
-import type { Part, PartListUnion } from '@google/genai';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import type { PartListUnion } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
+import { MessageType, StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 // --- MOCKS ---
@@ -341,294 +343,302 @@ describe('useGeminiStream', () => {
 
   // Helper to render hook with default parameters - reduces boilerplate
 
-  it('should not submit tool responses if not all tool calls are completed', () => {
-    const toolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call1',
-          name: 'tool1',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-1',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'call1',
-          responseParts: [{ text: 'tool 1 response' }],
-          error: undefined,
-          errorType: undefined, // FIX: Added missing property
-          resultDisplay: 'Tool 1 success display',
-        },
-        tool: {
-          name: 'tool1',
-          displayName: 'tool1',
-          description: 'desc1',
-          build: vi.fn(),
-        } as unknown as AnyDeclarativeTool,
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-        startTime: Date.now(),
-        endTime: Date.now(),
-      } as TrackedCompletedToolCall,
-      {
-        request: {
-          callId: 'call2',
-          name: 'tool2',
-          args: {},
-          prompt_id: 'prompt-id-1',
-        },
-        status: 'executing',
-        displayCleared: false,
-        tool: {
-          name: 'tool2',
-          displayName: 'tool2',
-          description: 'desc2',
-          build: vi.fn(),
-        } as unknown as AnyDeclarativeTool,
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-        startTime: Date.now(),
-        liveOutput: '...',
-      } as TrackedExecutingToolCall,
-    ];
+  describe('User Cancellation', () => {
+    let keypressCallback: (key: string) => void;
+    const mockUseKeypress = useKeypress as Mock;
 
-    const { mockMarkToolsAsDisplayCleared, mockSendMessageStream } =
-      renderTestHook(toolCalls);
-
-    // Effect for submitting tool responses depends on toolCalls and isResponding
-    // isResponding is initially false, so the effect should run.
-
-    expect(mockMarkToolsAsDisplayCleared).not.toHaveBeenCalled();
-    expect(mockSendMessageStream).not.toHaveBeenCalled(); // submitQuery uses this
-  });
-
-  it('should submit tool responses when all tool calls are completed and ready', async () => {
-    const toolCall1ResponseParts: Part[] = [{ text: 'tool 1 final response' }];
-    const toolCall2ResponseParts: Part[] = [{ text: 'tool 2 final response' }];
-    const completedToolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call1',
-          name: 'tool1',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-2',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'call1',
-          responseParts: toolCall1ResponseParts,
-          errorType: undefined, // FIX: Added missing property
-        },
-        tool: {
-          displayName: 'MockTool',
-        },
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-      } as TrackedCompletedToolCall,
-      {
-        request: {
-          callId: 'call2',
-          name: 'tool2',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-2',
-        },
-        status: 'error',
-        displayCleared: false,
-        response: {
-          callId: 'call2',
-          responseParts: toolCall2ResponseParts,
-          errorType: ToolErrorType.UNHANDLED_EXCEPTION, // FIX: Added missing property
-        },
-      } as TrackedCompletedToolCall, // Treat error as a form of completion for submission
-    ];
-
-    // Capture the onComplete callback
-    let capturedOnComplete:
-      | ((
-          schedulerId: symbol,
-          completedTools: TrackedToolCall[],
-          metadata: { isPrimary: boolean },
-        ) => Promise<void>)
-      | null = null;
-
-    mockUseReactToolScheduler.mockImplementation((onComplete) => {
-      capturedOnComplete = onComplete;
-      return [
-        [],
-        mockScheduleToolCalls,
-        mockMarkToolsAsDisplayCleared,
-        mockCancelAllToolCalls,
-        0,
-        true,
-      ];
+    beforeEach(() => {
+      // Capture the callback passed to useKeypress
+      mockUseKeypress.mockImplementation((callback, options) => {
+        if (options.isActive === true) {
+          keypressCallback = callback;
+        } else {
+          keypressCallback = () => {};
+        }
+      });
     });
 
-    renderHook(() =>
-      useGeminiStream(
-        new MockedAgentClientClass(mockConfig),
-        [],
-        mockAddItem,
-        mockConfig,
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        false,
-        () => {},
-        () => {},
-        () => {},
-        80,
-        24,
-      ),
-    );
+    const simulateEscapeKeyPress = () => {
+      act(() => {
+        keypressCallback({ name: 'escape' });
+      });
+    };
 
-    // Trigger the onComplete callback with completed tools
-    await act(async () => {
-      if (capturedOnComplete) {
-        await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
-          isPrimary: true,
-        });
-      }
-    });
+    it('should cancel an in-progress stream when escape is pressed', async () => {
+      const mockStream = (async function* () {
+        yield { type: 'content', value: 'Part 1' };
+        // Keep the stream open
+        await new Promise(() => {});
+      })();
+      mockSendMessageStream.mockReturnValue(mockStream);
 
-    await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
-    });
+      const { result } = renderTestHook();
 
-    const expectedMergedResponse = [
-      ...toolCall1ResponseParts,
-      ...toolCall2ResponseParts,
-    ];
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      expectedMergedResponse,
-      expect.any(AbortSignal),
-      'prompt-id-2',
-    );
-  });
+      // Start a query
+      await act(async () => {
+        await result.current.submitQuery('test query');
+      });
 
-  it('should filter out functionCall parts when submitting tool responses', async () => {
-    const toolCallResponseParts: Part[] = [
-      {
-        functionCall: {
-          id: 'call-filter',
-          name: 'toolFilter',
-          args: {},
-        },
-      },
-      {
-        functionResponse: {
-          id: 'call-filter',
-          name: 'toolFilter',
-          response: { ok: true },
-        },
-      },
-      { text: 'filtered response' },
-    ];
-    const completedToolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call-filter',
-          name: 'toolFilter',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-filter',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'call-filter',
-          responseParts: toolCallResponseParts,
-          errorType: undefined,
-        },
-        tool: {
-          displayName: 'MockTool',
-        },
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-      } as TrackedCompletedToolCall,
-    ];
+      // Wait for the first part of the response
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Responding);
+      });
 
-    let capturedOnComplete:
-      | ((
-          schedulerId: symbol,
-          completedTools: TrackedToolCall[],
-          metadata: { isPrimary: boolean },
-        ) => Promise<void>)
-      | null = null;
+      // Simulate escape key press
+      simulateEscapeKeyPress();
 
-    mockUseReactToolScheduler.mockImplementation((onComplete) => {
-      capturedOnComplete = onComplete;
-      return [
-        [],
-        mockScheduleToolCalls,
-        mockMarkToolsAsDisplayCleared,
-        mockCancelAllToolCalls,
-        0,
-        true,
-      ];
-    });
-
-    renderHook(() =>
-      useGeminiStream(
-        new MockedAgentClientClass(mockConfig),
-        [],
-        mockAddItem,
-        mockConfig,
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        false,
-        () => {},
-        () => {},
-        () => {},
-      ),
-    );
-
-    await act(async () => {
-      if (capturedOnComplete) {
-        await capturedOnComplete(Symbol('test-scheduler'), completedToolCalls, {
-          isPrimary: true,
-        });
-      }
-    });
-
-    await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
-    });
-
-    // functionCall parts should be filtered out - they're already in history
-    // from the original assistant turn
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      [
-        {
-          functionResponse: {
-            id: 'call-filter',
-            name: 'toolFilter',
-            response: { ok: true },
+      // Verify cancellation message is added
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledWith(
+          {
+            type: MessageType.INFO,
+            text: 'Request cancelled.',
           },
-        },
-        { text: 'filtered response' },
-      ],
-      expect.any(AbortSignal),
-      'prompt-id-filter',
-    );
+          expect.any(Number),
+        );
+      });
+
+      // Verify state is reset
+      expect(result.current.streamingState).toBe(StreamingState.Idle);
+    });
+
+    it('should call onCancelSubmit handler when escape is pressed', async () => {
+      const cancelSubmitSpy = vi.fn();
+      const mockStream = (async function* () {
+        yield { type: 'content', value: 'Part 1' };
+        // Keep the stream open
+        await new Promise(() => {});
+      })();
+      mockSendMessageStream.mockReturnValue(mockStream);
+
+      const { result } = renderHook(() =>
+        useGeminiStream(
+          mockConfig.getAgentClient(),
+          [],
+          mockAddItem,
+          mockConfig,
+          mockLoadedSettings,
+          mockOnDebugMessage,
+          mockHandleSlashCommand,
+          false,
+          () => 'vscode' as EditorType,
+          () => {},
+          () => Promise.resolve(),
+          false,
+          () => {},
+          cancelSubmitSpy,
+          () => {},
+          80,
+          24,
+        ),
+      );
+
+      // Start a query
+      await act(async () => {
+        await result.current.submitQuery('test query');
+      });
+
+      simulateEscapeKeyPress();
+
+      expect(cancelSubmitSpy).toHaveBeenCalled();
+      // Normal cancel should NOT request prompt restoration
+      expect(cancelSubmitSpy).not.toHaveBeenCalledWith(true);
+    });
+
+    it('should call setShellInputFocused(false) when escape is pressed', async () => {
+      const setShellInputFocusedSpy = vi.fn();
+      const mockStream = (async function* () {
+        yield { type: 'content', value: 'Part 1' };
+        await new Promise(() => {}); // Keep stream open
+      })();
+      mockSendMessageStream.mockReturnValue(mockStream);
+
+      const { result } = renderHook(() =>
+        useGeminiStream(
+          mockConfig.getAgentClient(),
+          [],
+          mockAddItem,
+          mockConfig,
+          mockLoadedSettings,
+          mockOnDebugMessage,
+          mockHandleSlashCommand,
+          false,
+          () => 'vscode' as EditorType,
+          () => {},
+          () => Promise.resolve(),
+          false,
+          () => {},
+          vi.fn(),
+          setShellInputFocusedSpy, // Pass the spy here
+          80,
+          24,
+        ),
+      );
+
+      // Start a query
+      await act(async () => {
+        await result.current.submitQuery('test query');
+      });
+
+      simulateEscapeKeyPress();
+
+      expect(setShellInputFocusedSpy).toHaveBeenCalledWith(false);
+    });
+
+    it('should not do anything if escape is pressed when not responding', () => {
+      const { result } = renderTestHook();
+
+      expect(result.current.streamingState).toBe(StreamingState.Idle);
+
+      // Simulate escape key press
+      simulateEscapeKeyPress();
+
+      // No change should happen, no cancellation message
+      expect(mockAddItem).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'Request cancelled.',
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should prevent further processing after cancellation', async () => {
+      let continueStream: () => void;
+      const streamPromise = new Promise<void>((resolve) => {
+        continueStream = resolve;
+      });
+
+      const mockStream = (async function* () {
+        yield { type: 'content', value: 'Initial' };
+        await streamPromise; // Wait until we manually continue
+        yield { type: 'content', value: ' Canceled' };
+      })();
+      mockSendMessageStream.mockReturnValue(mockStream);
+
+      const { result } = renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('long running query');
+      });
+
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Responding);
+      });
+
+      // Cancel the request
+      simulateEscapeKeyPress();
+
+      // Allow the stream to continue
+      await act(async () => {
+        continueStream();
+        // Wait a bit to see if the second part is processed
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      // The text should not have been updated with " Canceled"
+      const lastCall = mockAddItem.mock.calls.find(
+        (call) => call[0].type === 'gemini',
+      );
+      expect(lastCall?.[0].text).toBe('Initial');
+
+      // The final state should be idle after cancellation
+      expect(result.current.streamingState).toBe(StreamingState.Idle);
+    });
+
+    it('should cancel if a tool call is in progress', async () => {
+      const toolCalls: TrackedToolCall[] = [
+        {
+          request: { callId: 'call1', name: 'tool1', args: {} },
+          status: 'executing',
+          displayCleared: false,
+          tool: {
+            name: 'tool1',
+            description: 'desc1',
+            build: vi.fn().mockImplementation((_) => ({
+              getDescription: () => `Mock description`,
+            })),
+          } as unknown as AnyDeclarativeTool,
+          invocation: {
+            getDescription: () => `Mock description`,
+          },
+          startTime: Date.now(),
+          liveOutput: '...',
+        } as TrackedExecutingToolCall,
+      ];
+
+      const { result } = renderTestHook(toolCalls);
+
+      // State is `Responding` because a tool is running
+      expect(result.current.streamingState).toBe(StreamingState.Responding);
+
+      // Try to cancel
+      simulateEscapeKeyPress();
+
+      // The cancel function should be called
+      expect(mockCancelAllToolCalls).toHaveBeenCalled();
+    });
+
+    it('should cancel a request when a tool is awaiting confirmation', async () => {
+      const mockOnConfirm = vi.fn().mockResolvedValue(undefined);
+      const toolCalls: TrackedToolCall[] = [
+        {
+          request: {
+            callId: 'confirm-call',
+            name: 'some_tool',
+            args: {},
+            isClientInitiated: false,
+            prompt_id: 'prompt-id-1',
+          },
+          status: 'awaiting_approval',
+          displayCleared: false,
+          tool: {
+            name: 'some_tool',
+            description: 'a tool',
+            build: vi.fn().mockImplementation((_) => ({
+              getDescription: () => `Mock description`,
+            })),
+          } as unknown as AnyDeclarativeTool,
+          invocation: {
+            getDescription: () => `Mock description`,
+          } as unknown as AnyToolInvocation,
+          confirmationDetails: {
+            type: 'edit',
+            title: 'Confirm Edit',
+            onConfirm: mockOnConfirm,
+            fileName: 'file.txt',
+            filePath: '/test/file.txt',
+            fileDiff: 'fake diff',
+            originalContent: 'old',
+            newContent: 'new',
+          },
+        } as TrackedWaitingToolCall,
+      ];
+
+      const { result } = renderTestHook(toolCalls);
+
+      // State is `WaitingForConfirmation` because a tool is awaiting approval
+      expect(result.current.streamingState).toBe(
+        StreamingState.WaitingForConfirmation,
+      );
+
+      // Try to cancel
+      simulateEscapeKeyPress();
+
+      // The imperative cancel function should be called on the scheduler
+      expect(mockCancelAllToolCalls).toHaveBeenCalled();
+
+      // A cancellation message should be added to history
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledWith(
+          expect.objectContaining({
+            text: 'Request cancelled.',
+          }),
+          expect.any(Number),
+        );
+      });
+
+      // The final state should be idle
+      expect(result.current.streamingState).toBe(StreamingState.Idle);
+    });
   });
 });
