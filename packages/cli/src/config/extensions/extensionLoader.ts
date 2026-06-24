@@ -40,7 +40,7 @@ export function loadInstallMetadataFromDir(
 }
 
 function filterMcpConfig(original: MCPServerConfig): MCPServerConfig {
-  const { trust, ...rest } = original;
+  const { trust: _trust, ...rest } = original;
   return Object.freeze(rest);
 }
 

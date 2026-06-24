@@ -530,7 +530,8 @@ describe('git extension helpers', () => {
     statusCode: number,
     headers: Record<string, string> = {},
   ) {
-    const events: Record<string, (...args: unknown[]) => void> = {};
+    const events: Record<string, ((...args: unknown[]) => void) | undefined> =
+      {};
     const response = {
       statusCode,
       headers,
@@ -665,7 +666,7 @@ describe('git extension helpers', () => {
 
       // Mock https.get to return a response that errors mid-stream
       mockHttpsGet.mockImplementation((_url, _options, callback) => {
-        const events: Record<string, (error: Error) => void> = {};
+        const events: Record<string, ((error: Error) => void) | undefined> = {};
         const response = {
           statusCode: 200,
           headers: {},

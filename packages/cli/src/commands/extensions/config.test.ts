@@ -42,7 +42,7 @@ vi.mock('node:readline', () => ({
     question: vi.fn((prompt: string, callback: (answer: string) => void) => {
       // Call the mocked confirmOverwrite function and resolve based on its return value
       const promptType = resolvePromptType(prompt);
-      const shouldOverwrite = mockConfirmOverwrite(promptType);
+      const shouldOverwrite = Boolean(mockConfirmOverwrite(promptType));
       callback(shouldOverwrite ? 'y' : 'n');
     }),
     close: vi.fn(),

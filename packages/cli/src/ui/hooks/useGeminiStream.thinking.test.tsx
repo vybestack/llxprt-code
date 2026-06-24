@@ -132,7 +132,7 @@ const MockedAgentClientClass = vi.hoisted(() =>
 const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCoreModule = (await importOriginal()) as Record<string, unknown>;
+  const actualCoreModule = await importOriginal<Record<string, unknown>>();
   return {
     ...actualCoreModule,
     GitService: vi.fn(),
@@ -143,12 +143,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = (await importOriginal()) as Record<
-    string,
-    unknown
-  >;
+  const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
   return {
-    ...(actualSchedulerModule ?? {}),
+    ...actualSchedulerModule,
     useReactToolScheduler: vi.fn(),
   };
 });

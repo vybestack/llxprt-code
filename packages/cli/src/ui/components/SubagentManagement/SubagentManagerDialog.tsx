@@ -223,7 +223,7 @@ function useCreateHandler(
         throw new Error('SubagentManager not available');
       let finalPrompt = systemPrompt;
       if (mode === 'auto') {
-        const config = runtimeCommandContext?.services?.config;
+        const config = runtimeCommandContext?.services.config;
         if (config === null || config === undefined)
           throw new Error(
             'Configuration service unavailable. Set up the CLI before using auto mode.',

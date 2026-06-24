@@ -128,8 +128,9 @@ describe('handleDisable', () => {
   });
 
   it('should handle non-Error exceptions', async () => {
+    const nonErrorValue: unknown = 'String error';
     mockDisableExtension.mockImplementation(() => {
-      throw 'String error';
+      throw nonErrorValue;
     });
 
     await expect(handleDisable({ name: 'test-ext' })).rejects.toThrow(

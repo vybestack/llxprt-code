@@ -66,11 +66,7 @@ function getHistoryService(
     return null;
   }
   const agentClient = config.getAgentClient();
-  if (
-    agentClient === null ||
-    agentClient === undefined ||
-    typeof agentClient.getHistoryService !== 'function'
-  ) {
+  if (typeof agentClient.getHistoryService !== 'function') {
     return null;
   }
   return agentClient.getHistoryService() as HistoryService | null;

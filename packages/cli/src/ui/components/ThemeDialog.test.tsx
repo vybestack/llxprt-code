@@ -190,7 +190,7 @@ describe('ThemeDialog', () => {
       },
       setValue: vi.fn(),
       getEffectiveValue: vi.fn(),
-    } as any;
+    } as unknown as LoadedSettings;
   };
 
   const mockSettings = createMockSettings();
@@ -201,13 +201,15 @@ describe('ThemeDialog', () => {
     terminalBackgroundColor,
     terminalWidth: 120,
     terminalHeight: 40,
-    config: {} as any,
+    config: {} as unknown as UIState['config'],
     settings: mockSettings,
     history: [],
     pendingHistoryItems: [],
-    streamingState: { isStreaming: false } as any,
+    streamingState: {
+      isStreaming: false,
+    } as unknown as UIState['streamingState'],
     thought: null,
-    buffer: {} as any,
+    buffer: {} as unknown as UIState['buffer'],
     shellModeActive: false,
     isThemeDialogOpen: true,
     isSettingsDialogOpen: false,
@@ -266,7 +268,8 @@ describe('ThemeDialog', () => {
     consoleMessages: [],
     elapsedTime: 0,
     currentLoadingPhrase: undefined,
-    showAutoAcceptIndicator: 'off' as any,
+    showAutoAcceptIndicator:
+      'off' as unknown as UIState['showAutoAcceptIndicator'],
     tokenMetrics: {
       tokensPerMinute: 0,
       throttleWaitTimeMs: 0,
@@ -283,13 +286,13 @@ describe('ThemeDialog', () => {
     rootUiRef: { current: null },
     pendingHistoryItemRef: { current: null },
     slashCommands: undefined,
-    commandContext: {} as any,
+    commandContext: {} as unknown as UIState['commandContext'],
     shouldShowIdePrompt: false,
     currentIDE: undefined,
     isRestarting: false,
     isTrustedFolder: true,
     isWelcomeDialogOpen: false,
-    welcomeState: 'initial' as any,
+    welcomeState: 'initial' as unknown as UIState['welcomeState'],
     welcomeAvailableProviders: [],
     welcomeAvailableModels: [],
     inputHistory: [],

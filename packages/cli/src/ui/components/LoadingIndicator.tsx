@@ -43,6 +43,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     return null;
   }
 
+  const hasRightContent = Boolean(rightContent);
   const isShellFocusHint =
     currentLoadingPhrase === INTERACTIVE_SHELL_WAITING_PHRASE;
   const isActionRequired =
@@ -85,7 +86,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
           )}
         </Box>
         {}
-        {rightContent ? (
+        {hasRightContent ? (
           <Box marginLeft={1} flexShrink={0}>
             {rightContent}
           </Box>

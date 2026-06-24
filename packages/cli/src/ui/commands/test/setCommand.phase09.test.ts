@@ -53,14 +53,6 @@ const commandSchema = setCommand.schema;
 
 assertDefined(commandSchema);
 
-/**
- * Test utility function to set fuzzy filtering mode
- */
-// @ts-expect-error - Utility function for future use
-function setFuzzyFiltering(ctx: CommandContext, enabled: boolean): void {
-  ctx.services.settings.merged.enableFuzzyFiltering = enabled;
-}
-
 describe('setCommand schema integration', () => {
   // Mock context for testing
   const mockContext: CommandContext = createMockCommandContext({

@@ -77,7 +77,8 @@ export const ExtensionsList: React.FC<ExtensionsListProps> = ({
                   <Text color={Colors.DimComment}>settings:</Text>
                   {ext.resolvedSettings.map(
                     (setting: Record<string, unknown>) => {
-                      const source = setting.source
+                      const hasSource = Boolean(setting.source);
+                      const source = hasSource
                         ? ` (${String(setting.source)})`
                         : '';
                       return (

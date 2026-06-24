@@ -135,8 +135,9 @@ describe('handleEnable', () => {
   });
 
   it('should handle non-Error exceptions', async () => {
+    const nonErrorValue: unknown = 'String error';
     mockEnableExtension.mockImplementation(() => {
-      throw 'String error';
+      throw nonErrorValue;
     });
 
     await expect(handleEnable({ name: 'test-ext' })).rejects.toThrow(

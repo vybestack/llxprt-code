@@ -347,7 +347,7 @@ export function getNextStep(
 
 export function getPreviousStep(state: WizardState): WizardStep {
   // Pop from step history
-  const prevStep = state.stepHistory[state.stepHistory.length - 2];
+  const prevStep = state.stepHistory.at(-2);
   return prevStep ?? WizardStep.PROVIDER_SELECT;
 }
 

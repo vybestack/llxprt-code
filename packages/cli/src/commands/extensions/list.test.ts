@@ -166,8 +166,9 @@ describe('handleList', () => {
   });
 
   it('should handle non-Error exceptions', async () => {
+    const nonErrorValue: unknown = 'String error';
     mockLoadUserExtensions.mockImplementation(() => {
-      throw 'String error';
+      throw nonErrorValue;
     });
 
     await handleList();

@@ -27,7 +27,8 @@ export function findLastIndex<T>(
   predicate: (value: T, index: number, obj: T[]) => unknown,
 ): number {
   for (let i = array.length - 1; i >= 0; i--) {
-    if (predicate(array[i], i, array)) {
+    const matches = Boolean(predicate(array[i], i, array));
+    if (matches) {
       return i;
     }
   }
