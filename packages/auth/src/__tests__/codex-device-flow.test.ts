@@ -310,6 +310,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
    */
   it(
     'should refresh token using refresh grant type with Zod validation',
+    { timeout: 10000 },
     async () => {
       const refreshToken = 'old-refresh-token';
       const mockTokenResponse = {
@@ -363,7 +364,6 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
 
       global.fetch = originalFetch;
     },
-    { timeout: 10000 },
   );
 
   // NOTE: Token expiry buffer test removed per dev-docs/RULES.md
