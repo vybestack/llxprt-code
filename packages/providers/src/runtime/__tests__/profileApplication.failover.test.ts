@@ -202,60 +202,6 @@ function wrapRegisterProviderToCaptureLB(): {
   };
 }
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  configStub.model = undefined;
-  configStub.ephemerals.clear();
-  settingsServiceStub.currentProfile = null;
-  settingsServiceStub.providerSettings.clear();
-  providerManagerStub.providers.clear();
-  providerManagerStub.activeProviderName = null;
-  providerManagerStub.registerProvider = originalRegisterProvider;
-
-  providerManagerStub.registerProvider({
-    name: 'gemini',
-    getDefaultModel: () => 'gemini-2.0-flash-exp',
-  });
-  providerManagerStub.registerProvider({
-    name: 'openai',
-    getDefaultModel: () => 'gpt-4o-mini',
-  });
-
-  switchActiveProviderMock.mockImplementation(async (providerName: string) => {
-    providerManagerStub.switchProvider(providerName);
-    return {
-      infoMessages: [],
-      changed: true,
-    };
-  });
-  setActiveModelMock.mockResolvedValue({ nextModel: 'test-model' });
-  updateActiveProviderBaseUrlMock.mockResolvedValue({
-    message: 'Base URL set',
-  });
-  updateActiveProviderApiKeyMock.mockResolvedValue({ message: 'API key set' });
-  setActiveModelParamMock.mockClear();
-  clearActiveModelParamMock.mockClear();
-  getActiveModelParamsMock.mockReturnValue({});
-  setEphemeralSettingMock.mockImplementation((key, value) => {
-    configStub.setEphemeralSetting(key, value);
-  });
-
-  getCliRuntimeServicesMock.mockReturnValue({
-    config: configStub,
-    settingsService: settingsServiceStub,
-    providerManager: providerManagerStub,
-    profileManager: profileManagerStub,
-  });
-  getActiveProviderOrThrowMock.mockReturnValue({ name: 'gemini' });
-  isCliStatelessProviderModeEnabledMock.mockReturnValue(true);
-  isCliRuntimeStatelessReadyMock.mockReturnValue(true);
-});
-
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-afterEach(() => {
-  vi.clearAllMocks();
-});
-
 vi.mock('../runtimeSettings.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
@@ -274,6 +220,62 @@ vi.mock('../runtimeSettings.js', () => ({
 const { applyProfileWithGuards } = await import('../profileApplication.js');
 
 describe('profileApplication - Failover Policy Mapping', () => {
+  beforeEach(() => {
+    configStub.model = undefined;
+    configStub.ephemerals.clear();
+    settingsServiceStub.currentProfile = null;
+    settingsServiceStub.providerSettings.clear();
+    providerManagerStub.providers.clear();
+    providerManagerStub.activeProviderName = null;
+    providerManagerStub.registerProvider = originalRegisterProvider;
+
+    providerManagerStub.registerProvider({
+      name: 'gemini',
+      getDefaultModel: () => 'gemini-2.0-flash-exp',
+    });
+    providerManagerStub.registerProvider({
+      name: 'openai',
+      getDefaultModel: () => 'gpt-4o-mini',
+    });
+
+    switchActiveProviderMock.mockImplementation(
+      async (providerName: string) => {
+        providerManagerStub.switchProvider(providerName);
+        return {
+          infoMessages: [],
+          changed: true,
+        };
+      },
+    );
+    setActiveModelMock.mockResolvedValue({ nextModel: 'test-model' });
+    updateActiveProviderBaseUrlMock.mockResolvedValue({
+      message: 'Base URL set',
+    });
+    updateActiveProviderApiKeyMock.mockResolvedValue({
+      message: 'API key set',
+    });
+    setActiveModelParamMock.mockClear();
+    clearActiveModelParamMock.mockClear();
+    getActiveModelParamsMock.mockReturnValue({});
+    setEphemeralSettingMock.mockImplementation((key, value) => {
+      configStub.setEphemeralSetting(key, value);
+    });
+
+    getCliRuntimeServicesMock.mockReturnValue({
+      config: configStub,
+      settingsService: settingsServiceStub,
+      providerManager: providerManagerStub,
+      profileManager: profileManagerStub,
+    });
+    getActiveProviderOrThrowMock.mockReturnValue({ name: 'gemini' });
+    isCliStatelessProviderModeEnabledMock.mockReturnValue(true);
+    isCliRuntimeStatelessReadyMock.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('Policy to strategy mapping', () => {
     it('should map policy "failover" to strategy "failover"', async () => {
       const lbProfile: LoadBalancerProfile = {

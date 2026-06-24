@@ -29,6 +29,8 @@ describe('OpenAIProvider tool format detection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.settings = { providers: { openai: {} } };
+    mockSettingsService.getProviderSettings.mockReturnValue({});
+    mockSettingsService.get.mockReturnValue(undefined);
     provider = new OpenAIProvider('test-key');
   });
 

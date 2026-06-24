@@ -175,29 +175,27 @@ const collectResults = async (
   return results;
 };
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  googleGenAIState.instances.length = 0;
-  googleGenAIState.streamCalls.length = 0;
-  googleGenAIState.nonStreamCalls.length = 0;
-  googleGenAIState.streamPlans.length = 0;
-  codeAssistState.streamCalls.length = 0;
-  codeAssistState.streamPlans.length = 0;
-  vi.mocked(createCodeAssistContentGenerator).mockClear();
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-      runtimeId: 'gemini-thinkingLevel-test',
-    }),
-  );
-});
-
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-afterEach(() => {
-  clearActiveProviderRuntimeContext();
-});
-
 describe('Gemini provider thinkingLevel tests', () => {
+  beforeEach(() => {
+    googleGenAIState.instances.length = 0;
+    googleGenAIState.streamCalls.length = 0;
+    googleGenAIState.nonStreamCalls.length = 0;
+    googleGenAIState.streamPlans.length = 0;
+    codeAssistState.streamCalls.length = 0;
+    codeAssistState.streamPlans.length = 0;
+    vi.mocked(createCodeAssistContentGenerator).mockClear();
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: 'gemini-thinkingLevel-test',
+      }),
+    );
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
   it('Gemini 2.x model uses thinkingBudget when reasoning enabled', async () => {
     queueGoogleStream([
       {

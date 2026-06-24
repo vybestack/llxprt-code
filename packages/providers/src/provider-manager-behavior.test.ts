@@ -46,6 +46,7 @@ import {
 
 // Import SettingsService for proper ProviderManager construction
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P10
@@ -91,7 +92,7 @@ function createTestConfig(settingsService: SettingsService) {
     setProviderManager: () => {},
     getEphemeralSettings: () => ({}),
     getModel: () => 'fake-model',
-  } as any; // eslint-disable-line @typescript-eslint/no-explicit-any -- test stub
+  } as unknown as Config;
 }
 
 /**

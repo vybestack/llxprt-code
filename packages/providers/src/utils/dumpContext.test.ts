@@ -10,6 +10,28 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { dumpContext, redactSensitiveData, shouldDump } from './dumpContext.js';
 
+function matchesDumpBaseIdFormat(baseId: string, provider: string): boolean {
+  const parts = baseId.split('-');
+  if (parts.length < 4) return false;
+  const datePart = parts[0];
+  const timePart = parts[1];
+  const providerPart = parts[2];
+  const trailingId = parts.slice(3).join('-');
+  if (
+    datePart.length !== 8 ||
+    !datePart.split('').every((c) => c >= '0' && c <= '9')
+  )
+    return false;
+  if (
+    timePart.length !== 6 ||
+    !timePart.split('').every((c) => c >= '0' && c <= '9')
+  )
+    return false;
+  if (trailingId.length === 0) return false;
+  if (trailingId.endsWith('.json')) return false;
+  return providerPart === provider;
+}
+
 describe('dumpContext', () => {
   const testDumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
   const createdFiles: string[] = [];
@@ -180,8 +202,8 @@ describe('dumpContext', () => {
       const responseFilename = `${baseId}-response.json`;
       createdFiles.push(requestFilename, responseFilename);
       // dumpContext returns a dump base id, not a generated filename.
-      expect(baseId).not.toMatch(/\.json$/);
-      expect(baseId).toMatch(/^\d{8}-\d{6}-openai-\w+$/);
+      expect(baseId.endsWith('.json')).toBe(false);
+      expect(matchesDumpBaseIdFormat(baseId, 'openai')).toBe(true);
 
       const filepath = path.join(testDumpDir, requestFilename);
       const content = await fs.readFile(filepath, 'utf-8');
@@ -238,7 +260,7 @@ describe('dumpContext', () => {
       const requestFilename = `${baseId}-request.json`;
       const responseFilename = `${baseId}-response.json`;
       createdFiles.push(requestFilename, responseFilename);
-      expect(baseId).toMatch(/^\d{8}-\d{6}-anthropic-\w+$/);
+      expect(matchesDumpBaseIdFormat(baseId, 'anthropic')).toBe(true);
 
       const filepath = path.join(testDumpDir, requestFilename);
       const content = await fs.readFile(filepath, 'utf-8');
@@ -291,7 +313,7 @@ describe('dumpContext', () => {
       const requestFilename = `${baseId}-request.json`;
       const responseFilename = `${baseId}-response.json`;
       createdFiles.push(requestFilename, responseFilename);
-      expect(baseId).toMatch(/^\d{8}-\d{6}-gemini-\w+$/);
+      expect(matchesDumpBaseIdFormat(baseId, 'gemini')).toBe(true);
 
       const filepath = path.join(testDumpDir, requestFilename);
       const content = await fs.readFile(filepath, 'utf-8');

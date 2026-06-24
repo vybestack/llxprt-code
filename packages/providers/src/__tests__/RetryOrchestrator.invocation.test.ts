@@ -185,9 +185,10 @@ describe('RetryOrchestrator invocation safety', () => {
 
     const provider: IProvider = {
       name: 'abort-legacy-provider',
-      // eslint-disable-next-line require-yield -- intentionally throw-only generator to trigger retry/abort path
       async *generateChatCompletion(_options: GenerateChatOptions) {
         providerCalls++;
+        void _options;
+        yield* [];
         throw Object.assign(new Error('Transient failure'), { status: 500 });
       },
       async getModels(): Promise<IModel[]> {

@@ -12,6 +12,7 @@
  */
 
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
+import { orUndefined } from '../utils/falsyFallback.js';
 import {
   OAuthErrorFactory,
   GracefulErrorHandler,
@@ -382,12 +383,10 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
     const token: OAuthToken = {
       access_token: creds.access_token,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
-      refresh_token: creds.refresh_token || undefined,
+      refresh_token: orUndefined(creds.refresh_token),
       expiry,
       token_type: 'Bearer' as const,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
-      scope: creds.scope || undefined,
+      scope: orUndefined(creds.scope),
     };
 
     // Add id_token if available (some tests expect this)

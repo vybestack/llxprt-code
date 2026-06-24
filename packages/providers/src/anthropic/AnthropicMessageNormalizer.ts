@@ -195,6 +195,62 @@ function mergeThinkingOnlyChain(
     endIndex,
   };
 }
+function markConsumedRange(
+  consumed: Set<number>,
+  start: number,
+  end: number,
+): void {
+  for (let j = start; j <= end; j++) {
+    consumed.add(j);
+  }
+}
+
+function tryMergeThinkingOnlyContents(
+  contents: IContent[],
+  i: number,
+  blocks: IContent['blocks'],
+): {
+  merged: IContent;
+  endIndex: number;
+  debugMessage: () => string;
+} | null {
+  const currentThinking = blocks.filter(
+    (b) => b.type === 'thinking' && b.sourceField === 'thinking',
+  );
+  const currentOther = blocks.filter(
+    (b) => b.type !== 'thinking' || b.sourceField !== 'thinking',
+  );
+  return tryMergeThinkingOnly(contents, i, currentThinking, currentOther);
+}
+
+function tryMergeThinkingOnly(
+  contents: IContent[],
+  i: number,
+  currentThinking: IContent['blocks'],
+  currentOther: IContent['blocks'],
+): {
+  merged: IContent;
+  endIndex: number;
+  debugMessage: () => string;
+} | null {
+  if (currentThinking.length === 0 || currentOther.length > 0) {
+    return null;
+  }
+  const { merged, endIndex } = mergeThinkingOnlyChain(
+    contents,
+    i,
+    currentThinking,
+  );
+  if (endIndex <= i) {
+    return null;
+  }
+  return {
+    merged,
+    endIndex,
+    debugMessage: () =>
+      `Merging ${endIndex - i + 1} consecutive AI messages (thinking-only followed by ${endIndex - i} message(s))`,
+  };
+}
 
 function mergeConsecutiveAIMessages(
   contents: IContent[],
@@ -204,7 +260,6 @@ function mergeConsecutiveAIMessages(
   const result: IContent[] = [];
   const consumedIndices = new Set<number>();
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < contents.length; i++) {
     if (consumedIndices.has(i)) {
       continue;
@@ -212,40 +267,19 @@ function mergeConsecutiveAIMessages(
 
     const current = contents[i];
 
-    if (reasoningEnabled && current.speaker === 'ai') {
-      const currentThinking = current.blocks.filter(
-        (b) => b.type === 'thinking' && b.sourceField === 'thinking',
-      );
-      const currentOther = current.blocks.filter(
-        (b) => b.type !== 'thinking' || b.sourceField !== 'thinking',
-      );
+    const mergedResult =
+      reasoningEnabled && current.speaker === 'ai'
+        ? tryMergeThinkingOnlyContents(contents, i, current.blocks)
+        : null;
 
-      if (currentThinking.length > 0 && currentOther.length === 0) {
-        const { merged, endIndex } = mergeThinkingOnlyChain(
-          contents,
-          i,
-          currentThinking,
-        );
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (endIndex > i) {
-          for (let j = i + 1; j <= endIndex; j++) {
-            consumedIndices.add(j);
-          }
-
-          logger.debug(
-            () =>
-              `Merging ${endIndex - i + 1} consecutive AI messages (thinking-only followed by ${endIndex - i} message(s))`,
-          );
-
-          result.push(merged);
-          consumedIndices.add(i);
-          continue;
-        }
-      }
+    if (mergedResult !== null) {
+      markConsumedRange(consumedIndices, i + 1, mergedResult.endIndex);
+      consumedIndices.add(i);
+      logger.debug(mergedResult.debugMessage);
+      result.push(mergedResult.merged);
+    } else {
+      result.push(current);
     }
-
-    result.push(current);
   }
 
   return result;
@@ -441,6 +475,16 @@ function flushPendingToolResults(
   return [];
 }
 
+function pushHumanMessageIfPresent(
+  messages: AnthropicMessage[],
+  c: IContent,
+): void {
+  const message = processHumanContent(c, c.blocks);
+  if (message) {
+    messages.push(message);
+  }
+}
+
 function convertContentToMessages(
   contents: IContent[],
   redactedIndices: Set<number>,
@@ -455,7 +499,6 @@ function convertContentToMessages(
   const messages: AnthropicMessage[] = [];
   let pendingToolResults: AnthropicToolResultBlock[] = [];
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let contentIndex = 0; contentIndex < contents.length; contentIndex++) {
     const c = contents[contentIndex];
     const speaker: string = c.speaker;
@@ -482,19 +525,13 @@ function convertContentToMessages(
     }
 
     if (speaker === 'human') {
-      const skipHumanMessage = onlyToolResponseContent;
       pendingToolResults = flushPendingToolResults(
         messages,
         pendingToolResults,
       );
 
-      if (skipHumanMessage) {
-        continue;
-      }
-
-      const message = processHumanContent(c, c.blocks);
-      if (message) {
-        messages.push(message);
+      if (!onlyToolResponseContent) {
+        pushHumanMessageIfPresent(messages, c);
       }
     } else if (speaker === 'ai') {
       pendingToolResults = flushPendingToolResults(
@@ -508,9 +545,6 @@ function convertContentToMessages(
       }
       if (toolResponseBlocks.length === 0) {
         throw new Error('Tool content must have a tool_response block');
-      }
-      if (onlyToolResponseContent) {
-        continue;
       }
     }
   }
@@ -655,6 +689,68 @@ function convertThinkingBlockToAnthropic(
   };
 }
 
+type AnthropicContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string };
+
+function convertBlockToAnthropicPart(
+  block: ContentBlock,
+  contentIndex: number,
+  shouldRedact: boolean,
+  options: {
+    isOAuth: boolean;
+    unprefixToolName: (name: string, isOAuth: boolean) => string;
+    logger: { debug: (fn: () => string) => void };
+  },
+): AnthropicContentPart | null {
+  if (block.type === 'thinking') {
+    return (
+      convertThinkingBlockToAnthropic(
+        block,
+        contentIndex,
+        shouldRedact,
+        options,
+      ) ?? null
+    );
+  }
+  if (block.type === 'text') {
+    return { type: 'text', text: block.text };
+  }
+  if (block.type === 'code') {
+    const language = block.language ?? '';
+    return {
+      type: 'text',
+      text: `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`,
+    };
+  }
+  if (block.type === 'tool_call') {
+    let parametersObj: unknown = block.parameters;
+    if (typeof parametersObj === 'string') {
+      try {
+        parametersObj = JSON.parse(parametersObj);
+      } catch {
+        parametersObj = {};
+      }
+    }
+    if (
+      parametersObj === null ||
+      typeof parametersObj !== 'object' ||
+      Array.isArray(parametersObj)
+    ) {
+      parametersObj = {};
+    }
+    return {
+      type: 'tool_use',
+      id: normalizeToAnthropicToolId(block.id),
+      name: options.unprefixToolName(block.name, options.isOAuth),
+      input: parametersObj,
+    };
+  }
+  return null;
+}
+
 function buildAIMessageContent(
   blocks: ContentBlock[],
   contentIndex: number,
@@ -679,50 +775,15 @@ function buildAIMessageContent(
 
   const shouldRedactThinkingBase = redactedIndices.has(contentIndex);
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const block of blocks) {
-    if (block.type === 'thinking') {
-      const converted = convertThinkingBlockToAnthropic(
-        block,
-        contentIndex,
-        shouldRedactThinkingBase,
-        options,
-      );
-      if (converted) {
-        contentArray.push(converted);
-      }
-      continue;
-    }
-
-    if (block.type === 'text') {
-      contentArray.push({ type: 'text', text: block.text });
-      continue;
-    }
-
-    if (block.type === 'code') {
-      const language = block.language ?? '';
-      const codeText = `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`;
-      contentArray.push({ type: 'text', text: codeText });
-      continue;
-    }
-
-    if (block.type === 'tool_call') {
-      let parametersObj = block.parameters;
-      if (typeof parametersObj === 'string') {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        try {
-          parametersObj = JSON.parse(parametersObj);
-        } catch {
-          parametersObj = {};
-        }
-      }
-      contentArray.push({
-        type: 'tool_use',
-        id: normalizeToAnthropicToolId(block.id),
-        name: options.unprefixToolName(block.name, options.isOAuth),
-        input: parametersObj,
-      });
-      continue;
+    const part = convertBlockToAnthropicPart(
+      block,
+      contentIndex,
+      shouldRedactThinkingBase,
+      options,
+    );
+    if (part !== null) {
+      contentArray.push(part);
     }
   }
 

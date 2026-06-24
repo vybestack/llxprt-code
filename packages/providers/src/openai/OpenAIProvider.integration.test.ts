@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,8 +18,15 @@ const realProviderOptIn = process.env.LLXPRT_RUN_REAL_PROVIDER_TESTS === 'true';
 const skipRealApiTests = runningInCI && !realProviderOptIn;
 const skipTests = skipRealApiTests || !OPENAI_API_KEY;
 
+function log(...parts: unknown[]): void {
+  const message = parts
+    .map((part) => (typeof part === 'string' ? part : JSON.stringify(part)))
+    .join(' ');
+  process.stdout.write(message + '\n');
+}
+
 if (skipRealApiTests) {
-  console.log(
+  log(
     '\nINFO: Skipping OpenAIProvider Integration Tests in CI. Set LLXPRT_RUN_REAL_PROVIDER_TESTS=true to enable.',
   );
 }
@@ -69,8 +75,6 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should fetch real models from OpenAI API', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!provider) return; // Skip if no API key
     const models = await provider.getModels();
 
     // Verify we got models back
@@ -94,12 +98,10 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
       !defaultModel || modelIds.includes(defaultModel);
     expect(isDefaultModelValid).toBe(true);
 
-    console.log(`Found ${models.length} OpenAI models`);
+    log(`Found ${models.length} OpenAI models`);
   });
 
   it('should generate real chat completion', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!provider) return; // Skip if no API key
     const messages: IContent[] = [
       {
         speaker: 'human',
@@ -116,7 +118,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     const generator = provider.generateChatCompletion(messages);
 
     for await (const message of generator) {
-      console.log('Received message:', JSON.stringify(message));
+      log('Received message:', JSON.stringify(message));
       responses.push(message);
     }
 
@@ -139,12 +141,10 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(aiMessages.length).toBeGreaterThan(0);
 
     // Note: The exact content may vary based on the model's response
-    console.log('Received full response:', fullContent);
+    log('Received full response:', fullContent);
   });
 
   it('should handle tool calls', { timeout: 10000 }, async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!provider) return; // Skip if no API key
     const messages: IContent[] = [
       {
         speaker: 'human',
@@ -180,7 +180,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     const generator = provider.generateChatCompletion(messages, tools);
 
     for await (const message of generator) {
-      console.log('Tool message:', JSON.stringify(message));
+      log('Tool message:', JSON.stringify(message));
       responses.push(message);
     }
 
@@ -212,6 +212,6 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(typeof location).toBe('string');
     expect((location as string).toLowerCase()).toContain('san francisco');
 
-    console.log('Tool call received:', toolCall);
+    log('Tool call received:', toolCall);
   });
 });

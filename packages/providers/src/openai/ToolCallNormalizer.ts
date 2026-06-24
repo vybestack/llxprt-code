@@ -97,19 +97,16 @@ export class ToolCallNormalizer {
    * - "call_functionssearch_file_content9" -> "search_file_content"
    */
   private normalizeToolName(name: string): string {
-    let normalized = name.trim();
+    const normalized = name.trim();
 
     // Strip Kimi-K2 style prefixes where model concatenates "functions" or "call_functions"
     // with the actual tool name (e.g., "functionslist_directory" -> "list_directory")
-    // Pattern: (call_)?functions<actual_tool_name><optional_number>
-    const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
-      normalized,
-    );
-    if (kimiPrefixMatch) {
-      normalized = kimiPrefixMatch[1];
+    const kimiStripped = stripKimiPrefixFromToolName(normalized);
+    if (kimiStripped !== normalized) {
       logger.debug(
-        `Stripped Kimi-style prefix from tool name: "${name}" -> "${normalized}"`,
+        `Stripped Kimi-style prefix from tool name: "${name}" -> "${kimiStripped}"`,
       );
+      return kimiStripped.toLowerCase();
     }
 
     return normalized.toLowerCase();
@@ -153,4 +150,37 @@ export class ToolCallNormalizer {
 
     return true;
   }
+}
+
+/**
+ * Strip Kimi-K2 style "functions" or "call_functions" prefix from tool names.
+ * Uses string operations to avoid regex ReDoS concerns.
+ */
+function stripKimiPrefixFromToolName(name: string): string {
+  const lower = name.toLowerCase();
+  let rest: string | null = null;
+  if (lower.startsWith('call_functions')) {
+    rest = getConcatenatedKimiRest(name, 'call_functions');
+  } else if (lower.startsWith('functions')) {
+    rest = getConcatenatedKimiRest(name, 'functions');
+  }
+  if (rest === null || rest.length === 0) return name;
+  let end = rest.length;
+  while (
+    end > 0 &&
+    rest.charCodeAt(end - 1) >= 48 &&
+    rest.charCodeAt(end - 1) <= 57
+  ) {
+    end--;
+  }
+  const trimmed = rest.slice(0, end);
+  return trimmed.length > 0 ? trimmed : name;
+}
+
+function getConcatenatedKimiRest(name: string, prefix: string): string | null {
+  const rest = name.slice(prefix.length);
+  if (rest.length === 0 || rest.startsWith('_') || rest.startsWith('-')) {
+    return null;
+  }
+  return rest;
 }

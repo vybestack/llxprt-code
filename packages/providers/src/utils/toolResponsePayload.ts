@@ -11,6 +11,7 @@ import {
   ensureJsonSafe,
   hasJsonUnsafeCharacters,
 } from '@vybestack/llxprt-code-core/utils/unicodeUtils.js';
+import { firstTruthyString } from './falsyFallback.js';
 
 export function formatToolResponseText(params: {
   status: 'success' | 'error';
@@ -207,9 +208,11 @@ function limitToolPayload(
   }
 
   const limited = limitOutputTokens(serializedResult, config, block.toolName);
-  const candidate =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty content should fall through to message, then placeholder
-    limited.content || limited.message || EMPTY_TOOL_RESULT_PLACEHOLDER;
+  const candidate = firstTruthyString(
+    limited.content,
+    limited.message,
+    EMPTY_TOOL_RESULT_PLACEHOLDER,
+  );
   const sanitized = sanitizeUnicode(candidate);
   return {
     text: sanitized,
