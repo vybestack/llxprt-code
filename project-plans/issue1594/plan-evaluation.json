@@ -1,0 +1,17 @@
+{
+  "compliant": true,
+  "has_integration_plan": true,
+  "builds_in_isolation": false,
+  "pseudocode_used": true,
+  "reverse_testing_found": false,
+  "mock_theater_found": false,
+  "mutation_testing": true,
+  "mutation_score_pct": 88.5,
+  "mutation_command_exit": 0,
+  "property_testing": true,
+  "property_pct": 37.04,
+  "property_command_exit": 0,
+  "all_t_rows_covered": true,
+  "event_variants_covered": 21,
+  "violations": []
+}

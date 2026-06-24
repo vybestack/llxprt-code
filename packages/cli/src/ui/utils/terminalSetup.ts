@@ -40,7 +40,10 @@ const execAsync = promisify(exec);
  * VS Code style JSON files that may contain comments.
  */
 function stripJsonComments(content: string): string {
-  return content.replace(/^\s*\/\/.*$/gm, '');
+  return content
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('//'))
+    .join('\n');
 }
 
 export interface TerminalSetupResult {

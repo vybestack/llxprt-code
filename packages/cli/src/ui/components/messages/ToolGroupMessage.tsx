@@ -36,17 +36,47 @@ interface ToolGroupMessageProps {
   embeddedShellFocused?: boolean;
 }
 
+function containsOnlyDigits(value: string): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (code < 48 || code > 57) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function trimLabelPunctuation(label: string): string {
+  let end = label.length;
+  while (end > 0) {
+    const char = label[end - 1];
+    if (char !== ':' && char !== ',' && char !== ';' && char !== '.') {
+      break;
+    }
+    end -= 1;
+  }
+  return label.slice(0, end).toLowerCase();
+}
+
 const extractCountFromText = (text?: string): number | undefined => {
   if (!text) {
     return undefined;
   }
-  // Static regex for extracting counts from text - no dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-  const match = text.match(/(\d+)\s+(tasks?|items?)/i);
-  if (!match) {
-    return undefined;
+  const words = text.split(/\s+/).filter((word) => word.length > 0);
+  for (let index = 0; index < words.length - 1; index++) {
+    const countText = words[index];
+    const label = trimLabelPunctuation(words[index + 1]);
+    if (
+      containsOnlyDigits(countText) &&
+      ['task', 'tasks', 'item', 'items'].includes(label)
+    ) {
+      return Number(countText);
+    }
   }
-  return Number(match[1]);
+  return undefined;
 };
 
 const normalizeToolName = (name: string): string =>

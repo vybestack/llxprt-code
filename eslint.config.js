@@ -51,17 +51,16 @@ const legacyDirectiveCleanupScopes = [
   'packages/providers/src/utils/localEndpoint.ts', // #2084
   'packages/providers/src/utils/toolNameNormalization.ts', // #2084
   'packages/providers/src/utils/toolResponsePayload.ts', // #2084
-  'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
+  // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
-  // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
+  // #2089 scope: the six target packages (auth/settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
   // inline lint directives. Those packages are kept in legacy scope so
   // existing directives do not break lint. The target files and extracted
   // modules are locked in completedDirectiveCleanupScopes below, which
   // overrides this block for those specific files.
-  'packages/mcp/src/**/*.{ts,tsx}', // #2089/#2092 (non-target files)
   'packages/auth/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/settings/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/telemetry/src/**/*.{ts,tsx}', // #2089 (non-target files)
@@ -125,6 +124,10 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
+  // #2118 scope — all remaining mcp source/test files are fully compliant:
+  // zero inline lint directives. Locked to error so any new directive fails
+  // immediately. The broad mcp legacy entry has been removed entirely.
+  'packages/mcp/src/**/*.{ts,tsx}', // #2118
   // #2084 scope — provider implementation files fully compliant: zero inline
   // lint directives. Locked to error so any new directive fails immediately.
   // The broad packages/providers/src/** legacy override above is overridden
@@ -329,6 +332,10 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/task.issues.test.ts', // #2090
   'packages/agents/src/tools/task.max-turns.test.ts', // #2090
   'packages/agents/src/tools/task.timeout.test.ts', // #2090
+  // #2117 — all packages/agents/src files are now fully compliant: zero inline
+  // lint directives. The broad glob below supersedes the individual #2090
+  // entries above. Locked to error so any new directive fails immediately.
+  'packages/agents/src/**/*.{ts,tsx}', // #2117
   // #2091 packages/cli test cleanup — target files (and extracted helpers)
   // are fully compliant: zero inline lint directives. Locked to error so any
   // new directive fails immediately while the rest of packages/cli remains in
@@ -737,8 +744,17 @@ export default tseslint.config(
       'sonarjs/cognitive-complexity': ['error', 30],
       'sonarjs/todo-tag': 'error',
       'sonarjs/no-ignored-exceptions': 'error',
-      'sonarjs/regular-expr': 'error',
+      // Issue #2113: sonarjs/regular-expr is a deprecated, non-recommended
+      // blanket review heuristic for ordinary regex usage. Keep targeted regex
+      // correctness and ReDoS rules enabled where they provide actionable
+      // signal rather than source-level suppression comments.
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2113 deprecated blanket regex heuristic
       'sonarjs/slow-regex': 'error',
+      'sonarjs/no-invalid-regexp': 'error',
+      'sonarjs/stateful-regex': 'error',
+      'sonarjs/unicode-aware-regex': 'error',
+      'sonarjs/no-regex-spaces': 'error',
+      'no-control-regex': 'error',
       // Issue #2079: this CLI intentionally invokes user/platform tools such as
       // git, shells, editors, and ripgrep. These rules are not useful signal.
       'sonarjs/os-command': 'off', // eslint-policy-allow-off: #2079
@@ -1236,6 +1252,17 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  // extra settings for scripts that we run directly with node
+  {
+    files: ['packages/agents/scripts/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        process: 'readonly',
+        console: 'readonly',
+      },
+    },
+  },
   // ============================================================================
   // Issue #1577: text-buffer.ts decomposition - Architecture Enforcement
   // ============================================================================
@@ -1464,64 +1491,6 @@ export default tseslint.config(
   // End Issue #1581
   // ============================================================================
 
-
-  // Issue #2084: Kimi K2 fixed-format tool-call template regexes.
-  // These parse the vendor-specific protocol emitted by HF/vLLM-style Kimi
-  // deployments. Inputs are bounded to model-generated tool-call sections, and
-  // the patterns use explicit delimiters and lazy quantifiers to avoid
-  // unbounded backtracking. sonarjs/regular-expr is a generic heuristic that
-  // cannot distinguish these reviewed, bounded protocol parsers from unsafe
-  // regexes.
-  {
-    files: ['packages/providers/src/openai/OpenAIResponseParser.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2084 Kimi protocol template regex
-    },
-  },
-  // Issue #2087: Static, reviewed regex patterns that parse terminal/command
-  // input at trusted boundaries. The inputs are bounded (single CLI command
-  // lines or local config values, not untrusted network data) and the patterns
-  // are anchored with explicit quantifiers. sonarjs/regular-expr and
-  // sonarjs/slow-regex are generic heuristics that cannot distinguish these
-  // bounded parsing cases from ReDoS-vulnerable network input validation.
-  {
-    files: [
-      'packages/cli/src/ui/utils/secureInputHandler.ts',
-      'packages/cli/src/ui/utils/terminalSetup.ts',
-      'packages/cli/src/utils/privacy/ConversationDataRedactor.ts',
-      'packages/cli/src/utils/sandbox-env.ts',
-      'packages/cli/src/zed-integration/zed-path-resolver.ts',
-    ],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
-    },
-  },
-
-  // Issue #2086: MCP prompt argument parsing regexes. These patterns parse
-  // double-quoted strings with escape sequences (\.) for CLI prompt
-  // arguments. The sonarjs regular-expr/slow-regex heuristics flag the
-  // alternation-with-backreference structure, but the patterns operate on
-  // bounded single-line user input with explicit non-overlapping alternation
-  // branches that prevent catastrophic backtracking.
-  {
-    files: ['packages/cli/src/services/mcpPromptArgParser.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
-    },
-  },
-  // Issue #2086: position/range argument parsing regexes in todoOperations.
-  // These parse user-supplied positional numbers (e.g. "1", "1.2", "2-5")
-  // and are anchored with ^...$; inputs are bounded single-line tokens.
-  {
-    files: ['packages/cli/src/ui/commands/todoOperations.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 position arg parsing
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 position arg parsing
-    },
-  },
-
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node
@@ -1609,15 +1578,6 @@ export default tseslint.config(
     ],
     rules: {
       'sonarjs/todo-tag': 'off', // eslint-policy-allow-off: #2088 domain vocabulary
-    },
-  },
-  // Issue #2088: EmojiFilter uses inherently complex Unicode emoji range regexes
-  // that are safe but exceed SonarJS regex-complexity heuristics, analogous to
-  // ANSI/terminal control-character parsing.
-  {
-    files: ['packages/tools/src/utils/EmojiFilter.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2088 emoji Unicode ranges
     },
   },
   // Issue #2088: IToolMessageBus is a cross-package bridge interface consumed

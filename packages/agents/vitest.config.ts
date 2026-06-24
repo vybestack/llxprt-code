@@ -11,7 +11,7 @@
 
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 
 const isWindows = process.platform === 'win32';
 const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
@@ -147,6 +147,13 @@ export default defineConfig({
   plugins: [workspaceAliasPlugin],
   test: {
     passWithNoTests: false,
+    // Never discover test files inside Stryker's sandbox/backup tree. The B8
+    // mutation gate runs with `inPlace: true`, which keeps a pristine copy of
+    // the project under `.stryker-tmp/backup-<id>/`. Without this exclude both
+    // normal runs (if a backup is left behind) and Stryker's own dry run would
+    // pick up DUPLICATE/stale spec copies from that tree, double-counting tests
+    // and corrupting coverage attribution.
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
     reporters: ['default', 'junit'],
     testTimeout: 30000,
     teardownTimeout: 120000,

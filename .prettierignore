@@ -50,3 +50,7 @@ eslint.config.js
 gha-creds-*.json
 junit.xml
 .pytest_cache
+
+# Intentionally-malformed test fixture (must stay unparseable to exercise the
+# unparseable-profile dir-scan rejection path in profiles T19a).
+packages/agents/src/api/__tests__/fixtures/profile-invalid-malformed.json

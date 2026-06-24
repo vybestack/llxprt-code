@@ -86,9 +86,8 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    // Check for the marker and content pattern in the rendered output
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    expect(output).toMatch(/✔.*Completed task/);
+    expect(output).toContain('\u2714');
+    expect(output).toContain('Completed task');
 
     // Verify the output contains the task text - exact color testing is hard with ink
     // but we can verify the component renders correctly
@@ -113,8 +112,9 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    expect(output).toMatch(/→.*Current task.*← current/);
+    expect(output).toContain('\u2192');
+    expect(output).toContain('Current task');
+    expect(output).toContain('← current');
   });
 
   it('should use semantic secondary color for pending todos', () => {
@@ -135,8 +135,8 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    expect(output).toMatch(/○.*Pending task/);
+    expect(output).toContain('\u25cb');
+    expect(output).toContain('Pending task');
   });
 
   it('should adapt colors when theme changes', () => {
@@ -159,8 +159,8 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const darkOutput = darkFrame();
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    expect(darkOutput).toMatch(/✔.*Test task/);
+    expect(darkOutput).toContain('\u2714');
+    expect(darkOutput).toContain('Test task');
 
     // Test with light theme
     themeManager.setActiveTheme(DefaultLight.name);
@@ -173,8 +173,8 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const lightOutput = lightFrame();
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    expect(lightOutput).toMatch(/✔.*Test task/);
+    expect(lightOutput).toContain('\u2714');
+    expect(lightOutput).toContain('Test task');
 
     // Both should render correctly even though colors might be different
     expect(darkOutput).toBeTruthy();
@@ -217,11 +217,12 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    expect(output).toMatch(/→.*Main task.*← current/);
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    expect(output).toMatch(/•.*Subtask 1/);
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    expect(output).toMatch(/•.*Subtask 2/);
+    expect(output).toContain('\u2192');
+    expect(output).toContain('Main task');
+    expect(output).toContain('← current');
+    expect(output).toContain('\u2022');
+    expect(output).toContain('Subtask 1');
+    expect(output).toContain('\u2022');
+    expect(output).toContain('Subtask 2');
   });
 });

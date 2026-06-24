@@ -1,6 +1,13 @@
 /**
- * @plan:PLAN-20260610-ISSUE1592.P02
- * @requirement:REQ-PKG-001
+ * @plan:PLAN-20260617-COREAPI.P07
+ * @requirement:REQ-018
+ *
+ * Non-breaking top-level barrel (additive only; #1595 owns the final trim).
+ *
+ * Low-level symbols are re-exported from './internals.js' (single source) so
+ * the top-level and the `./internals.js` subpath stay in sync. The new public
+ * Agent API is re-exported from './api/index.js'. No existing top-level symbol
+ * was removed — verified against HEAD.
  */
 
 /**
@@ -16,36 +23,15 @@ import type {
 } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import { TaskTool } from './tools/task.js';
 
-export { AgentClient, PostTurnAction } from './core/client.js';
-export {
-  ChatSession,
-  StreamEventType,
-  InvalidStreamError,
-  type StreamEvent,
-} from './core/chatSession.js';
-export * from './core/ChatSessionFactory.js';
-export { CoreToolScheduler } from './core/coreToolScheduler.js';
-export { executeToolCall } from './core/nonInteractiveToolExecutor.js';
-export { SubagentOrchestrator } from './core/subagentOrchestrator.js';
-export { TaskTool } from './tools/task.js';
-export type { TaskToolDependencies, TaskToolParams } from './tools/task.js';
-export * from './core/turn.js';
-export * from './core/subagent.js';
-export * from './core/subagentExecution.js';
-export * from './core/subagentRuntimeSetup.js';
-export * from './core/subagentToolProcessing.js';
-export * from './core/subagentScheduler.js';
-export {
-  buildToolGovernance,
-  isToolBlocked,
-  type ToolGovernance,
-  type ToolGovernanceConfig,
-} from './core/toolGovernance.js';
-export * from './compression/index.js';
-export * from './agents/types.js';
-export * from './agents/invocation.js';
-export * from './agents/executor.js';
-export * from './core/agenticLoop/index.js';
+export * from './internals.js';
+export * from './api/index.js';
+// Disambiguate names that exist in BOTH barrels with different meanings.
+// Explicit named re-exports take precedence over ambiguous `export *` merges,
+// preserving the existing low-level top-level definitions (non-breaking).
+// ApprovalHandler: low-level (agenticLoop) vs api (config-types callback)
+export type { ApprovalHandler } from './core/agenticLoop/types.js';
+// CompressionResult: low-level (core compression types) vs api (agent.ts)
+export type { CompressionResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 
 /**
  * @plan PLAN-20260610-ISSUE1592.P03

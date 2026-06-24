@@ -120,6 +120,27 @@ function getConfirmationCorrelationId(
  * - Confirmation prompt setup and MessageBus subscription
  * - Handling all confirmation outcomes (ProceedOnce, ProceedAlways, Cancel,
  *   ModifyWithEditor, SuggestEdit, inline modify)
+/**
+ * Type guard: narrows the `shouldConfirmExecute` return value to genuine
+ * confirmation details. Scheduler plugin boundaries can return malformed
+ * nullish values at runtime even when the declared type excludes them.
+ */
+function isConfirmationDetails(
+  value:
+    | ToolCallConfirmationDetails
+    | SerializableConfirmationDetails
+    | false
+    | null
+    | undefined,
+): value is ToolCallConfirmationDetails {
+  return (
+    value !== false && value != null && isInteractiveConfirmationDetails(value)
+  );
+}
+
+/**
+ * ConfirmationCoordinator manages the lifecycle of tool-call confirmation
+ * flows, including:
  * - Auto-approving compatible pending tools after ProceedAlways
  * - Stale correlation ID grace-period management
  */
@@ -273,11 +294,7 @@ export class ConfirmationCoordinator {
     // PolicyDecision.ASK — check shouldConfirmExecute
     const confirmationDetails = await invocation.shouldConfirmExecute(signal);
 
-    if (
-      confirmationDetails === false ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Scheduler plugin boundary can return malformed nullish values at runtime.
-      confirmationDetails == null
-    ) {
+    if (!isConfirmationDetails(confirmationDetails)) {
       this.approveInternal(reqInfo.callId);
       return;
     }
@@ -474,15 +491,15 @@ export class ConfirmationCoordinator {
   private deriveOutcome(
     response: ToolConfirmationResponse,
   ): ToolConfirmationOutcome {
-    return (
-      response.outcome ??
-      (response.confirmed !== undefined
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          response.confirmed
-          ? ToolConfirmationOutcome.ProceedOnce
-          : ToolConfirmationOutcome.Cancel
-        : ToolConfirmationOutcome.Cancel)
-    );
+    if (response.outcome !== undefined) {
+      return response.outcome;
+    }
+    if (response.confirmed === undefined) {
+      return ToolConfirmationOutcome.Cancel;
+    }
+    return response.confirmed
+      ? ToolConfirmationOutcome.ProceedOnce
+      : ToolConfirmationOutcome.Cancel;
   }
 
   // ── Main confirmation dispatcher ──────────────────────────────────────────
@@ -603,7 +620,6 @@ export class ConfirmationCoordinator {
     await this.schedulerAccessor.attemptExecution(signal);
   }
 
-  // eslint-disable-next-line max-lines-per-function -- Editor modification must retain a single transactional confirmation flow.
   private async handleModifyWithEditor(
     callId: string,
     waitingToolCall: WaitingToolCall,
@@ -646,6 +662,17 @@ export class ConfirmationCoordinator {
 
     this.statusMutator.setArgs(callId, updatedParams);
 
+    if (isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)) {
+      this.rePublishConfirmation(callId, waitingToolCall, updatedDiff, signal);
+    }
+  }
+
+  private rePublishConfirmation(
+    callId: string,
+    waitingToolCall: WaitingToolCall,
+    updatedDiff: string | undefined,
+    signal: AbortSignal,
+  ): void {
     if (
       !isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)
     ) {
@@ -754,11 +781,7 @@ export class ConfirmationCoordinator {
         const stillNeedsConfirmation =
           await pendingTool.invocation.shouldConfirmExecute(signal);
 
-        if (
-          stillNeedsConfirmation === false ||
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Scheduler plugin boundary can return malformed nullish values at runtime.
-          stillNeedsConfirmation == null
-        ) {
+        if (!isConfirmationDetails(stillNeedsConfirmation)) {
           this.statusMutator.setOutcome(
             pendingTool.request.callId,
             ToolConfirmationOutcome.ProceedAlways,

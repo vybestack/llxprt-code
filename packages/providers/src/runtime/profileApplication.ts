@@ -537,6 +537,7 @@ function clearProfileEphemerals(
     ...previousEphemeralKeys.filter((key) => key !== 'activeProvider'),
     ...Object.keys(sanitizedEphemeralSettings),
     'auth-key',
+    'auth-key-name',
     'auth-keyfile',
     'base-url',
   ]);

@@ -224,7 +224,6 @@ function sanitizeToolArgumentsString(raw: unknown): string {
 
   // Strip fenced code blocks like ```json { ... } ```.
   if (text.startsWith('```')) {
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     text = text.replace(/^```[a-zA-Z0-9_-]*\s*/m, '');
     text = text.replace(/```$/m, '');
     text = text.trim();
@@ -337,9 +336,7 @@ function extractKimiToolCallsFromSection(
  */
 function inferToolNameFromId(rawId: string): string {
   const match =
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ??
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
   if (match) {
     return match[1];

@@ -426,10 +426,18 @@ export class StreamProcessor {
     return { requestPayload, baseRuntimeContext, runtimeContext };
   }
 
+  // @plan:PLAN-20260617-COREAPI.P15
+  // @requirement:REQ-001
   private _buildRuntimeContext(
     baseRuntimeContext: ProviderRuntimeContext,
     params: SendMessageParameters,
   ): ProviderRuntimeContext {
+    // The runtime context's `config` MUST stay the live llxprt `Config`
+    // class instance so provider-side resolution (ProviderManager
+    // .resolveModelField -> config.getModel()) keeps working. buildRuntimeContext
+    // only layers the per-request abortSignal onto metadata, leaving the Config
+    // slot untouched (genai config and tools reach the provider via dedicated
+    // channels: requestPayload.tools, metadata.abortSignal, params.config reads).
     return buildRuntimeContext(baseRuntimeContext, params);
   }
 

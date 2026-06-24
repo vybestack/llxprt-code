@@ -40,6 +40,12 @@ function copyFilesRecursive(source, target) {
     const targetPath = path.join(target, item.name);
 
     if (item.isDirectory()) {
+      // Test directories are excluded from the published bundle; their
+      // fixtures (some intentionally malformed) are only consumed by the
+      // test runner from src, never at runtime from dist.
+      if (item.name === '__tests__') {
+        continue;
+      }
       copyFilesRecursive(sourcePath, targetPath);
     } else if (extensionsToCopy.includes(path.extname(item.name))) {
       fs.copyFileSync(sourcePath, targetPath);

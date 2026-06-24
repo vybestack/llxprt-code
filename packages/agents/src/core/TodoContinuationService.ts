@@ -18,6 +18,68 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
 
+/**
+ * Narrows a runtime `Part` to a text-bearing part. Runtime payloads from
+ * providers can include null or malformed entries despite declared types.
+ */
+function asTextPart(part: Part): { text: string } | undefined {
+  const candidate = part as unknown;
+  if (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    'text' in candidate &&
+    typeof (candidate as { text: unknown }).text === 'string'
+  ) {
+    return candidate as { text: string };
+  }
+  return undefined;
+}
+
+/**
+ * Extracts the function-response name from a Part if present. Runtime
+ * payloads can include null or malformed entries despite declared types.
+ */
+function getFunctionResponseName(part: Part): string | undefined {
+  const candidate = part as unknown;
+  if (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    'functionResponse' in candidate
+  ) {
+    const fr = (candidate as { functionResponse: unknown }).functionResponse;
+    if (fr !== null && typeof fr === 'object') {
+      const name = (fr as { name?: unknown }).name;
+      if (typeof name === 'string') {
+        return name;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Normalizes a task-list entry for snapshot comparison. Runtime payloads may
+ * omit or null out fields despite the declared type.
+ */
+function normalizeTodoForComparison(todo: Todo): {
+  id: string;
+  status: string;
+  content: string;
+} {
+  const raw = todo as Partial<Todo>;
+  const rawStatus = raw.status;
+  const status =
+    typeof rawStatus === 'string' && rawStatus.length > 0
+      ? rawStatus.toLowerCase()
+      : 'pending';
+  const content = typeof raw.content === 'string' ? raw.content : '';
+  return {
+    id: `${raw.id ?? ''}`,
+    status,
+    content,
+  };
+}
+
 function toPartArray(request: PartListUnion): Part[] {
   if (Array.isArray(request)) {
     return [...request] as Part[];
@@ -81,8 +143,7 @@ export class TodoContinuationService {
   ): void {
     const normalizedNames = new Set(
       declarations
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
-        .map((decl) => decl?.name)
+        .map((decl) => (decl as { name?: string } | null)?.name)
         .filter((name): name is string => typeof name === 'string')
         .map((name) => name.toLowerCase()),
     );
@@ -156,16 +217,10 @@ export class TodoContinuationService {
   appendTodoSuffixToRequest(request: PartListUnion): PartListUnion {
     const parts = toPartArray(request);
 
-    const suffixAlreadyPresent = parts.some(
-      (part) =>
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        typeof part === 'object' &&
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
-        part !== null &&
-        'text' in part &&
-        typeof part.text === 'string' &&
-        part.text.includes(TODO_PROMPT_SUFFIX),
-    );
+    const suffixAlreadyPresent = parts.some((part) => {
+      const textPart = asTextPart(part);
+      return textPart?.text.includes(TODO_PROMPT_SUFFIX) ?? false;
+    });
 
     if (suffixAlreadyPresent) {
       return parts;
@@ -238,14 +293,7 @@ export class TodoContinuationService {
     }
     const normalize = (todos: readonly Todo[]) =>
       todos
-        .map((todo) => ({
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
-          id: `${todo.id ?? ''}`,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
-          status: (todo.status ?? 'pending').toLowerCase(),
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
-          content: todo.content ?? '',
-        }))
+        .map((todo) => normalizeTodoForComparison(todo))
         .sort((left, right) => left.id.localeCompare(right.id));
     const normalizedA = normalize(a);
     const normalizedB = normalize(b);
@@ -294,14 +342,7 @@ export class TodoContinuationService {
   ): PartListUnion {
     const parts = toPartArray(request);
     const alreadyPresent = parts.some(
-      (part) =>
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        typeof part === 'object' &&
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
-        part !== null &&
-        'text' in part &&
-        typeof part.text === 'string' &&
-        part.text === reminderText,
+      (part) => asTextPart(part)?.text === reminderText,
     );
     if (!alreadyPresent) {
       parts.push({ text: reminderText } as Part);
@@ -322,19 +363,8 @@ export class TodoContinuationService {
       return false;
     }
     return response.responseParts.some((part) => {
-      if (
-        /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads */
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        typeof part === 'object' &&
-        part !== null &&
-        'functionResponse' in part &&
-        part.functionResponse !== null &&
-        typeof part.functionResponse === 'object'
-      ) {
-        const name = (part.functionResponse as { name?: unknown }).name;
-        return typeof name === 'string' && name.toLowerCase() === 'todo_pause';
-      }
-      return false;
+      const name = getFunctionResponseName(part);
+      return name !== undefined && name.toLowerCase() === 'todo_pause';
     });
   }
 
@@ -354,7 +384,7 @@ export class TodoContinuationService {
       return PostTurnAction.Finish;
     }
 
-    if (hadThinking && !hadContent && !hadToolCalls) {
+    if (hadThinking && !hadContent) {
       if (retryCount >= maxRetries) {
         return PostTurnAction.Finish;
       }

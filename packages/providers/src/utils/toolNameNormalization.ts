@@ -26,7 +26,6 @@
 export function normalizeToolName(name: string): string {
   let normalized = (name || '').trim();
 
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
     normalized,
   );

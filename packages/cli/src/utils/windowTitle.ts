@@ -104,9 +104,12 @@ export function computeTerminalTitle({
     title = `  ${displayStatus}${activeSuffix}`;
   }
 
-  // Remove control characters that could cause issues in terminal titles
-  // eslint-disable-next-line no-control-regex
-  const safeTitle = title.replace(/[\x00-\x1F\x7F]/g, '');
+  const safeTitle = [...title]
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code > 0x1f && code !== 0x7f;
+    })
+    .join('');
 
   // Pad the title to a fixed width to prevent taskbar icon resizing/jitter.
   // We also slice it to ensure it NEVER exceeds MAX_LEN.

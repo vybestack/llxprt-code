@@ -791,7 +791,6 @@ function parseFileContentPart(
   absoluteToRelativePathMap: Map<string, string>,
   config: Config,
 ): { displayPath: string; content: string } | undefined {
-  // eslint-disable-next-line sonarjs/regular-expr -- Preserves the legacy static file-content marker parser.
   const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
 
   const match = fileContentRegex.exec(part);

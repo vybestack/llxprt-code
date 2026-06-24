@@ -213,9 +213,8 @@ const wrapCellContent = (content: string, maxWidth: number): string[] => {
     }
 
     const segmentRaw = remaining.slice(0, breakIndex);
-    remaining = remaining.slice(breakIndex).replace(/^\s+/u, '');
-    // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const segment = segmentRaw.replace(/\s+$/u, '');
+    remaining = remaining.slice(breakIndex).trimStart();
+    const segment = segmentRaw.trimEnd();
     const updatedStack = updateMarkerStack(segment, activeStack);
     const closingSequence = getClosingSequence(updatedStack);
 

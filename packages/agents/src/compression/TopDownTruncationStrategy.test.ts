@@ -20,6 +20,7 @@
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { CompressionResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -194,6 +195,71 @@ function generateHistory(count: number): IContent[] {
   return messages;
 }
 
+function assertNoSummaryOrAcknowledgment(result: CompressionResult): void {
+  for (const msg of result.newHistory) {
+    for (const block of msg.blocks) {
+      if (block.type !== 'text' || !('text' in block)) {
+        continue;
+      }
+      const text = (block as { text: string }).text;
+      expect(text).not.toContain('state_snapshot');
+      expect(text).not.toContain(
+        'Understood. Continuing with the current task.',
+      );
+    }
+  }
+}
+
+function firstSpeakerIsNotTool(result: CompressionResult): boolean {
+  return (
+    result.newHistory.length === 0 || result.newHistory[0].speaker !== 'tool'
+  );
+}
+
+function assertNoOrphanedToolCalls(result: CompressionResult): void {
+  for (const msg of result.newHistory) {
+    if (msg.speaker !== 'ai') {
+      continue;
+    }
+    const toolCalls = msg.blocks.filter((b) => b.type === 'tool_call');
+    for (const call of toolCalls) {
+      const callId = (call as { id: string }).id;
+      const hasResponse = result.newHistory.some(
+        (m) =>
+          m.speaker === 'tool' &&
+          m.blocks.some(
+            (b) =>
+              b.type === 'tool_response' &&
+              'callId' in b &&
+              b.callId === callId,
+          ),
+      );
+      expect(hasResponse).toBe(true);
+    }
+  }
+}
+
+function assertNoOrphanedToolResponses(result: CompressionResult): void {
+  for (const msg of result.newHistory) {
+    const responseBlock =
+      msg.speaker === 'tool'
+        ? msg.blocks.find((b) => b.type === 'tool_response')
+        : undefined;
+    if (responseBlock === undefined || !('callId' in responseBlock)) {
+      continue;
+    }
+    const callId = responseBlock.callId;
+    const hasCall = result.newHistory.some(
+      (m) =>
+        m.speaker === 'ai' &&
+        m.blocks.some(
+          (b) => b.type === 'tool_call' && 'id' in b && b.id === callId,
+        ),
+    );
+    expect(hasCall).toBe(true);
+  }
+}
+
 // ===========================================================================
 // Tests
 // ===========================================================================
@@ -356,20 +422,7 @@ describe('TopDownTruncationStrategy', () => {
       }
 
       // No message should be a summary or acknowledgment
-      for (const msg of result.newHistory) {
-        for (const block of msg.blocks) {
-          if (block.type === 'text' && 'text' in block) {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect((block as { text: string }).text).not.toContain(
-              'state_snapshot',
-            );
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect((block as { text: string }).text).not.toContain(
-              'Understood. Continuing with the current task.',
-            );
-          }
-        }
-      }
+      assertNoSummaryOrAcknowledgment(result);
     });
 
     it('surviving messages are contiguous from end of history', async () => {
@@ -491,35 +544,9 @@ describe('TopDownTruncationStrategy', () => {
       const strategy = new TopDownTruncationStrategy();
       const result = await strategy.compress(ctx);
 
-      // Verify no orphaned tool responses: first message should not be a tool response
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (result.newHistory.length > 0) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(result.newHistory[0].speaker).not.toBe('tool');
-      }
+      expect(firstSpeakerIsNotTool(result)).toBe(true);
 
-      // If an AI message with tool calls is in the result, its responses must also be there
-      for (let i = 0; i < result.newHistory.length; i++) {
-        const msg = result.newHistory[i];
-        if (msg.speaker === 'ai') {
-          const toolCalls = msg.blocks.filter((b) => b.type === 'tool_call');
-          for (const call of toolCalls) {
-            const callId = (call as { id: string }).id;
-            const hasResponse = result.newHistory.some(
-              (m) =>
-                m.speaker === 'tool' &&
-                m.blocks.some(
-                  (b) =>
-                    b.type === 'tool_response' &&
-                    'callId' in b &&
-                    b.callId === callId,
-                ),
-            );
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect(hasResponse).toBe(true);
-          }
-        }
-      }
+      assertNoOrphanedToolResponses(result);
     });
 
     it('adjusts boundary past consecutive tool responses', async () => {
@@ -555,26 +582,8 @@ describe('TopDownTruncationStrategy', () => {
       const strategy = new TopDownTruncationStrategy();
       const result = await strategy.compress(ctx);
 
-      // No tool responses should appear without their corresponding tool calls
-      for (const msg of result.newHistory) {
-        if (msg.speaker === 'tool') {
-          const responseBlock = msg.blocks.find(
-            (b) => b.type === 'tool_response',
-          );
-          if (responseBlock && 'callId' in responseBlock) {
-            const callId = responseBlock.callId;
-            const hasCall = result.newHistory.some(
-              (m) =>
-                m.speaker === 'ai' &&
-                m.blocks.some(
-                  (b) => b.type === 'tool_call' && 'id' in b && b.id === callId,
-                ),
-            );
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect(hasCall).toBe(true);
-          }
-        }
-      }
+      expect(result.newHistory.length).toBeLessThan(history.length);
+      assertNoOrphanedToolCalls(result);
     });
   });
 

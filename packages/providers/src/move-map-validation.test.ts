@@ -127,7 +127,7 @@ const CORE_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
  * Matches lines like: | 42 | `packages/core/src/providers/types/IProviderConfig.ts` | `packages/providers/src/types/IProviderConfig.ts` | Rule 7 sub | H (config types) |
  * Captures: row number, source path (without backticks), destination path (without backticks).
  */
-const MOVE_MAP_ROW_REGEX = /^\|\s*(\d+)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|/; // eslint-disable-line sonarjs/regular-expr -- regex is safe: bounded backticks, no catastrophic backtracking
+const MOVE_MAP_ROW_REGEX = /^\|\s*(\d+)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|/;
 
 /**
  * Parse all table rows from the move-map markdown and return an array of

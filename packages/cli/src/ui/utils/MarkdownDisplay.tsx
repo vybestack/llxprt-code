@@ -104,63 +104,149 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
 
 // Helper functions (adapted from static methods of MarkdownRenderer)
 
-interface MarkdownRegexes {
-  headerRegex: RegExp;
-  codeFenceRegex: RegExp;
-  ulItemRegex: RegExp;
-  olItemRegex: RegExp;
-  hrRegex: RegExp;
-  tableRowRegex: RegExp;
-  tableSeparatorRegex: RegExp;
+interface CodeFenceMatch extends Array<string> {
+  0: string;
+  1: string;
+  2: string;
 }
 
-function buildMarkdownRegexes(): MarkdownRegexes {
-  // Static regexes for markdown parsing - no dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr
-  const headerRegex = /^ *(#{1,4}) +(.*)/;
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-  const codeFenceRegex = /^ *(`{3,}|~{3,}) *(\w*?) *$/;
-  // eslint-disable-next-line sonarjs/regular-expr
-  const ulItemRegex = /^([ \t]*)([-*+]) +(.*)/;
-  // eslint-disable-next-line sonarjs/regular-expr
-  const olItemRegex = /^([ \t]*)(\d+)\. +(.*)/;
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-  const hrRegex = /^ *([-*_] *){3,} *$/;
-  // eslint-disable-next-line sonarjs/regular-expr
-  const tableRowRegex = /^\s*\|(.+)\|\s*$/;
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-  const tableSeparatorRegex = /^\s*\|?\s*(:?-+:?)\s*(\|\s*(:?-+:?)\s*)+\|?\s*$/;
+interface HeaderMatch extends Array<string> {
+  0: string;
+  1: string;
+  2: string;
+}
 
-  return {
-    headerRegex,
-    codeFenceRegex,
-    ulItemRegex,
-    olItemRegex,
-    hrRegex,
-    tableRowRegex,
-    tableSeparatorRegex,
-  };
+interface ListMatch extends Array<string> {
+  0: string;
+  1: string;
+  2: string;
+  3: string;
+}
+
+interface SingleValueMatch extends Array<string> {
+  0: string;
+  1: string;
+}
+
+function buildMarkdownRegexes(): null {
+  return null;
 }
 
 interface LineMatchResult {
-  codeFenceMatch: RegExpMatchArray | null;
-  headerMatch: RegExpMatchArray | null;
-  ulMatch: RegExpMatchArray | null;
-  olMatch: RegExpMatchArray | null;
-  hrMatch: RegExpMatchArray | null;
-  tableRowMatch: RegExpMatchArray | null;
-  tableSeparatorMatch: RegExpMatchArray | null;
+  codeFenceMatch: CodeFenceMatch | null;
+  headerMatch: HeaderMatch | null;
+  ulMatch: ListMatch | null;
+  olMatch: ListMatch | null;
+  hrMatch: boolean;
+  tableRowMatch: SingleValueMatch | null;
+  tableSeparatorMatch: boolean;
 }
 
-function matchLine(line: string, regexes: MarkdownRegexes): LineMatchResult {
+function countLeadingSpacesAndTabs(line: string): number {
+  let index = 0;
+  while (line[index] === ' ' || line[index] === '\t') {
+    index += 1;
+  }
+  return index;
+}
+
+function parseCodeFence(line: string): CodeFenceMatch | null {
+  const trimmed = line.trim();
+  const marker = trimmed[0];
+  if (marker !== '`' && marker !== '~') return null;
+  let markerLength = 0;
+  while (trimmed[markerLength] === marker) markerLength += 1;
+  if (markerLength < 3) return null;
+  const fence = trimmed.slice(0, markerLength);
+  const lang = trimmed.slice(markerLength).trim();
+  if (lang.includes(' ')) return null;
+  return [trimmed, fence, lang];
+}
+
+function parseHeader(line: string): HeaderMatch | null {
+  const trimmed = line.trimStart();
+  let level = 0;
+  while (trimmed[level] === '#' && level < 4) level += 1;
+  if (level === 0 || trimmed[level] !== ' ') return null;
+  const hashes = trimmed.slice(0, level);
+  return [trimmed, hashes, trimmed.slice(level + 1)];
+}
+
+function parseUnorderedList(line: string): ListMatch | null {
+  const indentEnd = countLeadingSpacesAndTabs(line);
+  const marker = line[indentEnd];
+  if (!['-', '*', '+'].includes(marker) || line[indentEnd + 1] !== ' ') {
+    return null;
+  }
+  return [line, line.slice(0, indentEnd), marker, line.slice(indentEnd + 2)];
+}
+
+function parseOrderedList(line: string): ListMatch | null {
+  const indentEnd = countLeadingSpacesAndTabs(line);
+  const dotIndex = line.indexOf('.', indentEnd);
+  if (dotIndex === -1 || line[dotIndex + 1] !== ' ') return null;
+  const marker = line.slice(indentEnd, dotIndex);
+  if (
+    marker.length === 0 ||
+    ![...marker].every((char) => char >= '0' && char <= '9')
+  ) {
+    return null;
+  }
+  return [line, line.slice(0, indentEnd), marker, line.slice(dotIndex + 2)];
+}
+
+function isHorizontalRule(line: string): boolean {
+  const compact = line.trim().split(' ').join('');
+  if (compact.length < 3) return false;
+  return ['-', '*', '_'].some((marker) =>
+    [...compact].every((char) => char === marker),
+  );
+}
+
+function parseTableRow(line: string): SingleValueMatch | null {
+  const trimmed = line.trim();
+  if (
+    !trimmed.startsWith('|') ||
+    !trimmed.endsWith('|') ||
+    trimmed.length < 3
+  ) {
+    return null;
+  }
+  return [line, trimmed.slice(1, -1)];
+}
+
+function isTableSeparatorCell(cell: string): boolean {
+  const trimmed = cell.trim();
+  const content = trimmed.startsWith(':') ? trimmed.slice(1) : trimmed;
+  const withoutTrailingColon = content.endsWith(':')
+    ? content.slice(0, -1)
+    : content;
+  return (
+    withoutTrailingColon.length > 0 &&
+    [...withoutTrailingColon].every((char) => char === '-')
+  );
+}
+
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|')) return false;
+  const withoutLeading = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
+  const withoutEdges = withoutLeading.endsWith('|')
+    ? withoutLeading.slice(0, -1)
+    : withoutLeading;
+  const cells = withoutEdges.split('|');
+  return cells.length > 1 && cells.every(isTableSeparatorCell);
+}
+
+function matchLine(line: string, _regexes: null): LineMatchResult {
   return {
-    codeFenceMatch: line.match(regexes.codeFenceRegex),
-    headerMatch: line.match(regexes.headerRegex),
-    ulMatch: line.match(regexes.ulItemRegex),
-    olMatch: line.match(regexes.olItemRegex),
-    hrMatch: line.match(regexes.hrRegex),
-    tableRowMatch: line.match(regexes.tableRowRegex),
-    tableSeparatorMatch: line.match(regexes.tableSeparatorRegex),
+    codeFenceMatch: parseCodeFence(line),
+    headerMatch: parseHeader(line),
+    ulMatch: parseUnorderedList(line),
+    olMatch: parseOrderedList(line),
+    hrMatch: isHorizontalRule(line),
+    tableRowMatch: parseTableRow(line),
+    tableSeparatorMatch: isTableSeparator(line),
   };
 }
 
@@ -176,7 +262,7 @@ function handleCodeBlockLine(
   line: string,
   key: string,
   codeBlockFence: string,
-  regexes: MarkdownRegexes,
+  regexes: null,
   isPending: boolean,
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
@@ -184,7 +270,7 @@ function handleCodeBlockLine(
   codeBlockLang: string | null,
   addContentBlock: (block: React.ReactNode) => void,
 ): CodeBlockState {
-  const fenceMatch = line.match(regexes.codeFenceRegex);
+  const fenceMatch = parseCodeFence(line);
   if (
     fenceMatch !== null &&
     fenceMatch[1].startsWith(codeBlockFence[0]) &&
@@ -226,7 +312,7 @@ function processLineEntry(
   line: string,
   index: number,
   lines: string[],
-  regexes: MarkdownRegexes,
+  regexes: null,
   isPending: boolean,
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
@@ -284,7 +370,7 @@ function processLineEntry(
 
 function processLines(
   lines: string[],
-  regexes: MarkdownRegexes,
+  regexes: null,
   isPending: boolean,
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
@@ -568,14 +654,11 @@ function processLine(
   currentInTable: boolean,
   currentTableHeaders: string[],
   currentTableRows: string[][],
-  regexes: MarkdownRegexes,
+  regexes: null,
   responseColor: string,
 ): LineProcessResult {
   if (matches.tableRowMatch && !currentInTable) {
-    if (
-      index + 1 < lines.length &&
-      lines[index + 1].match(regexes.tableSeparatorRegex)
-    ) {
+    if (index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
       return processTableLine(
         line,
         key,

@@ -83,14 +83,25 @@ export interface GenerateContentOptions {
  * @returns The extracted JSON string or the original text if no markdown found
  */
 function extractJsonFromMarkdown(text: string): string {
-  // Try to match ```json ... ``` or ``` ... ```
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-  const markdownMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (markdownMatch?.[1]) {
-    return markdownMatch[1].trim();
+  const openingFence = text.indexOf('```');
+  if (openingFence === -1) {
+    return text.trim();
   }
 
-  // If no markdown found, return trimmed original text
+  const afterOpeningFence = openingFence + '```'.length;
+  const lineEnd = text.indexOf('\n', afterOpeningFence);
+  const openingLineEnd = lineEnd === -1 ? text.length : lineEnd;
+  const infoString = text.slice(afterOpeningFence, openingLineEnd).trim();
+  if (infoString !== '' && infoString.toLowerCase() !== 'json') {
+    return text.trim();
+  }
+
+  const contentStart = lineEnd === -1 ? openingLineEnd : lineEnd + 1;
+  const closingFence = text.indexOf('```', contentStart);
+  if (closingFence !== -1) {
+    return text.slice(contentStart, closingFence).trim();
+  }
+
   return text.trim();
 }
 

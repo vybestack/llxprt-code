@@ -117,10 +117,9 @@ function addUserCommandToHistory(
   deps: SlashCommandHandlerDeps,
   trimmed: string,
 ): void {
-  const sanitizedCommand =
-    trimmed.startsWith('/key ') || trimmed.startsWith('/toolkey ')
-      ? secureInputHandler.sanitizeForHistory(trimmed)
-      : trimmed;
+  const sanitizedCommand = secureInputHandler.shouldUseSecureMode(trimmed)
+    ? secureInputHandler.sanitizeForHistory(trimmed)
+    : trimmed;
   deps.addItem({ type: MessageType.USER, text: sanitizedCommand }, Date.now());
 }
 

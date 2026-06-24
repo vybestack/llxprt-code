@@ -23,6 +23,11 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part, GenerateContentResponse } from '@google/genai';
 
+function extractParts(response: GenerateContentResponse): Part[] {
+  const content = response.candidates?.[0]?.content;
+  return content?.parts ?? [];
+}
+
 describe('Issue #1150: ChatSession thinking block integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -127,19 +132,8 @@ describe('Issue #1150: ChatSession thinking block integration', () => {
 
       // Simulate processStreamResponse accumulation
       const modelResponseParts: Part[] = [];
-      // Process thinking chunk
-      const content1 = thinkingChunk.candidates?.[0]?.content;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (content1?.parts) {
-        modelResponseParts.push(...content1.parts);
-      }
-
-      // Process tool call chunk
-      const content2 = toolCallChunk.candidates?.[0]?.content;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (content2?.parts) {
-        modelResponseParts.push(...content2.parts);
-      }
+      modelResponseParts.push(...extractParts(thinkingChunk));
+      modelResponseParts.push(...extractParts(toolCallChunk));
 
       // CRITICAL ASSERTION: Thinking part MUST be in modelResponseParts
       const thoughtParts = modelResponseParts.filter(

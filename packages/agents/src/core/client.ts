@@ -436,11 +436,11 @@ export class AgentClient implements AgentClientContract {
           const newContent = { ...content };
           if (newContent.parts) {
             newContent.parts = newContent.parts.map((part) => {
+              const candidate = part as unknown;
               if (
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Client runtime state crosses provider/session boundaries despite declared types.
-                part != null &&
-                typeof part === 'object' &&
-                'thoughtSignature' in part
+                candidate != null &&
+                typeof candidate === 'object' &&
+                'thoughtSignature' in candidate
               ) {
                 const newPart = { ...part };
                 delete (newPart as { thoughtSignature?: string })
@@ -491,8 +491,10 @@ export class AgentClient implements AgentClientContract {
   }
 
   async setTools(): Promise<void> {
-    const toolRegistry = this.config.getToolRegistry();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Client runtime state crosses provider/session boundaries despite declared types.
+    const toolRegistry = this.config.getToolRegistry() as unknown as
+      | ReturnType<Config['getToolRegistry']>
+      | null
+      | undefined;
     if (toolRegistry == null) {
       return;
     }
@@ -552,8 +554,10 @@ export class AgentClient implements AgentClientContract {
   async resetChat(): Promise<void> {
     // If chat exists, clear its history service
     if (this.chat) {
-      const historyService = this.chat.getHistoryService();
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Client runtime state crosses provider/session boundaries despite declared types.
+      const historyService = this.chat.getHistoryService() as
+        | HistoryService
+        | null
+        | undefined;
       if (historyService != null) {
         // Clear the history service directly
         historyService.clear();

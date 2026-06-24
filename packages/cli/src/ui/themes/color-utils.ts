@@ -184,7 +184,6 @@ export function isValidColor(color: string): boolean {
 
   // 1. Check if it's a hex code
   if (lowerColor.startsWith('#')) {
-    /* eslint-disable-next-line sonarjs/regular-expr */
     return /^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(color);
   }
 
@@ -212,7 +211,6 @@ export function resolveColor(colorValue: string): string | undefined {
 
   // 1. Check if it's already a hex code and valid
   if (lowerColor.startsWith('#')) {
-    /* eslint-disable-next-line sonarjs/regular-expr */
     if (/^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(colorValue)) {
       return lowerColor;
     }
@@ -284,6 +282,69 @@ export function getThemeTypeFromBackgroundColor(
   return luminance > 0.5 ? 'light' : 'dark';
 }
 
+const OSC_11_PREFIX = '\u001b]11;rgb:';
+const OSC_ST_TERMINATOR = '\u001b\\';
+const BEL_TERMINATOR = '\u0007';
+
+function readHexComponentEnd(text: string, start: number): number {
+  let index = start;
+  while (index < text.length) {
+    const code = text.charCodeAt(index);
+    const isDigit = code >= 48 && code <= 57;
+    const isUpperHex = code >= 65 && code <= 70;
+    const isLowerHex = code >= 97 && code <= 102;
+    if (!isDigit && !isUpperHex && !isLowerHex) {
+      break;
+    }
+    index += 1;
+  }
+  return index;
+}
+
+function isHexComponent(value: string): boolean {
+  if (value.length !== 4) {
+    return false;
+  }
+  return readHexComponentEnd(value, 0) === value.length;
+}
+
+function readOsc11Response(
+  response: string,
+): { r: string; g: string; b: string } | undefined {
+  const start = response.indexOf(OSC_11_PREFIX);
+  if (start === -1) {
+    return undefined;
+  }
+
+  const redStart = start + OSC_11_PREFIX.length;
+  const firstSlash = response.indexOf('/', redStart);
+  if (firstSlash === -1) {
+    return undefined;
+  }
+  const secondSlash = response.indexOf('/', firstSlash + 1);
+  if (secondSlash === -1) {
+    return undefined;
+  }
+
+  const blueStart = secondSlash + 1;
+  const blueEnd = readHexComponentEnd(response, blueStart);
+  const hasStTerminator = response.startsWith(OSC_ST_TERMINATOR, blueEnd);
+  const hasBelTerminator = response.startsWith(BEL_TERMINATOR, blueEnd);
+  const r = response.slice(redStart, firstSlash);
+  const g = response.slice(firstSlash + 1, secondSlash);
+  const b = response.slice(blueStart, blueEnd);
+  const hasTerminator = hasStTerminator || hasBelTerminator;
+  if (
+    !isHexComponent(r) ||
+    !isHexComponent(g) ||
+    !isHexComponent(b) ||
+    !hasTerminator
+  ) {
+    return undefined;
+  }
+  return { r, g, b };
+}
+
 /**
  * Detects terminal background color using OSC 11 escape sequence
  * Returns hex color string like '#1E1E2E' or undefined if detection fails
@@ -296,7 +357,6 @@ export function getThemeTypeFromBackgroundColor(
  * 5. Non-TTY detection: Returns undefined immediately if stdin is not a TTY
  * 6. Proper cleanup: Always removes listeners and restores terminal state
  */
-/* eslint-disable prefer-const, no-control-regex */
 export function detectTerminalBackgroundColor(): Promise<string | undefined> {
   return new Promise((resolve) => {
     const stdin = process.stdin;
@@ -306,41 +366,24 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
     }
 
     const wasRaw = stdin.isRaw === true;
-    let timeoutHandle: NodeJS.Timeout;
+    const timeoutHandle: { current?: NodeJS.Timeout } = {};
     let response = '';
 
     const cleanup = () => {
       stdin.setRawMode(wasRaw);
       stdin.removeListener('data', dataHandler);
-      clearTimeout(timeoutHandle);
+      clearTimeout(timeoutHandle.current);
     };
 
     const dataHandler = (data: Buffer) => {
       // Accumulate response across multiple data events (handles split chunks)
       response += data.toString();
 
-      // OSC 11 response formats:
-      // ESC ] 11 ; rgb:RRRR/GGGG/BBBB ESC \ (ST terminator - standard)
-      // ESC ] 11 ; rgb:RRRR/GGGG/BBBB BEL   (BEL terminator - legacy terminals)
-      // Match either terminator (case-insensitive hex)
-      // Static regex for OSC 11 response with ST terminator - no dynamic parts
-      const matchST = response.match(
-        /* eslint-disable-next-line sonarjs/regular-expr */
-        /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x1b\\/i,
-      );
-      // Static regex for OSC 11 response with BEL terminator - no dynamic parts
-      const matchBEL = response.match(
-        /* eslint-disable-next-line sonarjs/regular-expr */
-        /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x07/i,
-      );
-
-      const match = matchST ?? matchBEL;
-      if (match) {
-        // Convert 16-bit RGB components to 8-bit hex
-        // Take first 2 hex digits of each 4-digit component (high byte)
-        const r = parseInt(match[1].substring(0, 2), 16);
-        const g = parseInt(match[2].substring(0, 2), 16);
-        const b = parseInt(match[3].substring(0, 2), 16);
+      const osc11Response = readOsc11Response(response);
+      if (osc11Response !== undefined) {
+        const r = parseInt(osc11Response.r.substring(0, 2), 16);
+        const g = parseInt(osc11Response.g.substring(0, 2), 16);
+        const b = parseInt(osc11Response.b.substring(0, 2), 16);
         cleanup();
         const hexColor =
           `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
@@ -357,10 +400,9 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
     process.stdout.write('\x1b]11;?\x1b\\');
 
     // Timeout after 100ms (terminal doesn't support OSC 11 or no response)
-    timeoutHandle = setTimeout(() => {
+    timeoutHandle.current = setTimeout(() => {
       cleanup();
       resolve(undefined);
     }, 100);
   });
 }
-/* eslint-enable prefer-const, no-control-regex */
