@@ -51,7 +51,7 @@ interface MockProvider {
   name: string;
   isAuthenticated(): Promise<boolean>;
   resolveAuthentication(): Promise<string | null>;
-  makeApiCall?(): Promise<unknown>;
+  makeApiCall(): Promise<unknown>;
 }
 
 describe('Auth Integration: Complete Precedence Flow and Provider Coordination', () => {
@@ -290,9 +290,6 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       const oauthMetadata = integrationMetadata('qwen');
 
       // Mock provider API call that triggers lazy authentication
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!mockQwenProvider.makeApiCall)
-        throw new Error('unreachable: narrowing failed');
       vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
         const token = await mockOAuthManager.getToken('qwen', oauthMetadata);
         if (!token) {
@@ -334,9 +331,6 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       const oauthMetadata = integrationMetadata('qwen');
 
       // Mock provider API call that checks authentication
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!mockQwenProvider.makeApiCall)
-        throw new Error('unreachable: narrowing failed');
       vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
         const token = await mockOAuthManager.getToken('qwen', oauthMetadata);
         if (!token) {
@@ -481,9 +475,6 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(
         'oauth-token-from-lazy-trigger',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!mockQwenProvider.makeApiCall)
-        throw new Error('unreachable: narrowing failed');
       vi.mocked(mockQwenProvider.makeApiCall).mockResolvedValue('api-success');
 
       const apiResult = await mockQwenProvider.makeApiCall();
@@ -535,8 +526,11 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         async () => mockOAuthManager.getToken('qwen', qwenMetadata), // OAuth only
       );
       vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string API key should be treated as missing
-        async () => process.env.OPENAI_API_KEY || null, // Env var only
+        async () =>
+          process.env.OPENAI_API_KEY !== '' &&
+          process.env.OPENAI_API_KEY !== undefined
+            ? process.env.OPENAI_API_KEY
+            : null, // Env var only (empty string treated as missing)
       );
 
       // When: Both providers resolve authentication

@@ -16,13 +16,15 @@ export interface ApiError {
 }
 
 export function isApiError(error: unknown): error is ApiError {
+  if (typeof error !== 'object' || error === null || !('error' in error)) {
+    return false;
+  }
+  const inner = (error as { error: unknown }).error;
   return (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    typeof error === 'object' &&
-    error !== null &&
-    'error' in error &&
-    typeof (error as ApiError).error === 'object' &&
-    'message' in (error as ApiError).error
+    typeof inner === 'object' &&
+    inner !== null &&
+    'message' in inner &&
+    typeof (inner as { message: unknown }).message === 'string'
   );
 }
 
@@ -88,10 +90,10 @@ function isGaxiosProQuotaExceededError(
   }
   if (typeof responseData === 'object' && 'error' in responseData) {
     const errorData = responseData as {
-      error?: { message?: string };
+      error?: { message?: unknown };
     };
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: error message may be empty string, should still check
-    return checkMessage(errorData.error?.message || '');
+    const message = errorData.error?.message;
+    return typeof message === 'string' && checkMessage(message);
   }
   return false;
 }

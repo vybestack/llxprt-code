@@ -10,6 +10,8 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
+
 /**
  * Error thrown when authentication is required but not available
  */
@@ -191,11 +193,8 @@ export class LoadBalancerFailoverError extends Error {
     profileName: string,
     failures: Array<{ profile: string; error: Error }>,
   ) {
-    const profileNames = failures.map((f) => f.profile).join(', ');
-    const errorSummary =
-      failures.length === 1
-        ? failures[0].error.message
-        : `${failures.length} backends failed`;
+    const profileNames = failures.map((f) => f.profile).join(', ') || 'none';
+    const errorSummary = summarizeFailures(failures);
     super(
       `Load balancer "${profileName}" failover exhausted: ${errorSummary} (tried: ${profileNames})`,
     );
@@ -203,6 +202,32 @@ export class LoadBalancerFailoverError extends Error {
     this.profileName = profileName;
     this.failures = failures;
   }
+}
+
+/**
+ * Build a human-readable summary of per-backend failures. For a single failure
+ * the underlying message is used; for multiple failures each backend name,
+ * message, and HTTP status (when available) are included so callers can diagnose
+ * auth, rate-limit, and server issues without inspecting structured fields.
+ */
+function summarizeFailures(
+  failures: Array<{ profile: string; error: Error }>,
+): string {
+  if (failures.length === 0) {
+    return 'no backend attempts were recorded';
+  }
+
+  if (failures.length === 1) {
+    return failures[0].error.message;
+  }
+
+  return failures
+    .map((failure) => {
+      const status = getErrorStatus(failure.error);
+      const statusSuffix = status !== undefined ? ` (status: ${status})` : '';
+      return `${failure.profile}: ${failure.error.message}${statusSuffix}`;
+    })
+    .join('; ');
 }
 
 /**

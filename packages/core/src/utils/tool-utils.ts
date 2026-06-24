@@ -37,49 +37,47 @@ export function doesToolInvocationMatch(
     toolNames = [...new Set([...toolNames, ...SHELL_TOOL_NAMES])];
   }
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const pattern of patterns) {
-    const openParen = pattern.indexOf('(');
-
-    if (openParen === -1) {
-      // No arguments, just a tool name
-      if (toolNames.includes(pattern)) {
-        return true;
-      }
-      continue;
-    }
-
-    const patternToolName = pattern.substring(0, openParen);
-    if (!toolNames.includes(patternToolName)) {
-      continue;
-    }
-
-    if (!pattern.endsWith(')')) {
-      continue;
-    }
-
-    const argPattern = pattern.substring(openParen + 1, pattern.length - 1);
-
-    let command: string;
-    if (typeof invocation === 'string') {
-      command = invocation;
-    } else {
-      if (!('command' in invocation.params)) {
-        // This invocation has no command - nothing to check.
-        continue;
-      }
-      command = String((invocation.params as { command: string }).command);
-    }
-
-    if (
-      toolNames.some((name) => SHELL_TOOL_NAMES.includes(name)) &&
-      (command === argPattern || command.startsWith(argPattern + ' '))
-    ) {
+    if (matchesToolPattern(pattern, toolNames, invocation)) {
       return true;
     }
   }
 
   return false;
+}
+
+function matchesToolPattern(
+  pattern: string,
+  toolNames: string[],
+  invocation: AnyToolInvocation | string,
+): boolean {
+  const openParen = pattern.indexOf('(');
+
+  if (openParen === -1) {
+    return toolNames.includes(pattern);
+  }
+
+  const patternToolName = pattern.substring(0, openParen);
+  if (!toolNames.includes(patternToolName) || !pattern.endsWith(')')) {
+    return false;
+  }
+
+  const argPattern = pattern.substring(openParen + 1, pattern.length - 1);
+
+  let command: string;
+  if (typeof invocation === 'string') {
+    command = invocation;
+  } else {
+    if (!('command' in invocation.params)) {
+      return false;
+    }
+    command = String((invocation.params as { command: string }).command);
+  }
+
+  return (
+    toolNames.some((name) => SHELL_TOOL_NAMES.includes(name)) &&
+    (command === argPattern || command.startsWith(argPattern + ' '))
+  );
 }
 
 /**

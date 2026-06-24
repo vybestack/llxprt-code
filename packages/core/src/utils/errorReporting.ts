@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -9,6 +8,30 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { type Content } from '@google/genai';
+
+function reportToStderr(message: string, ...extras: unknown[]): void {
+  const parts = [message, ...extras];
+  try {
+    const output = parts.map((part) => formatPart(part)).join(' ') + '\n';
+    process.stderr.write(output);
+  } catch {
+    // Swallow formatting/write failures to avoid masking the original error
+  }
+}
+
+function formatPart(part: unknown): string {
+  if (part instanceof Error) {
+    return part.stack ?? `${part.name}: ${part.message}`;
+  }
+  if (typeof part === 'object' && part !== null) {
+    try {
+      return JSON.stringify(part);
+    } catch {
+      return String(part);
+    }
+  }
+  return String(part);
+}
 
 interface ErrorReportData {
   error: { message: string; stack?: string } | { message: string };
@@ -40,11 +63,11 @@ async function writeMinimalReport(
     const minimalReportContent = { error: errorToReport };
     const stringifiedContent = JSON.stringify(minimalReportContent, null, 2);
     await fs.writeFile(reportPath, stringifiedContent);
-    console.error(
+    reportToStderr(
       `${baseMessage} Partial report (excluding context) available at: ${reportPath}`,
     );
   } catch (minimalWriteError) {
-    console.error(
+    reportToStderr(
       `${baseMessage} Failed to write even a minimal error report:`,
       minimalWriteError,
     );
@@ -82,13 +105,13 @@ export async function reportError(
     stringifiedReportContent = JSON.stringify(reportContent, null, 2);
   } catch (stringifyError) {
     // This can happen if context contains something like BigInt
-    console.error(
+    reportToStderr(
       `${baseMessage} Could not stringify report content (likely due to context):`,
       stringifyError,
     );
-    console.error('Original error that triggered report generation:', error);
+    reportToStderr('Original error that triggered report generation:', error);
     if (context) {
-      console.error(
+      reportToStderr(
         'Original context could not be stringified or included in report.',
       );
     }
@@ -98,31 +121,37 @@ export async function reportError(
 
   try {
     await fs.writeFile(reportPath, stringifiedReportContent);
-    console.error(`${baseMessage} Full report available at: ${reportPath}`);
+    reportToStderr(`${baseMessage} Full report available at: ${reportPath}`);
   } catch (writeError) {
-    console.error(
+    reportToStderr(
       `${baseMessage} Additionally, failed to write detailed error report:`,
       writeError,
     );
     // Log the original error as a fallback if report writing fails
-    console.error('Original error that triggered report generation:', error);
+    reportToStderr('Original error that triggered report generation:', error);
     if (context) {
-      // Context was stringifiable, but writing the file failed.
-      // We already have stringifiedReportContent, but it might be too large for console.
-      // So, we try to log the original context object, and if that fails, its stringified version (truncated).
-      try {
-        console.error('Original context:', context);
-      } catch {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        try {
-          console.error(
-            'Original context (stringified, truncated):',
-            JSON.stringify(context).substring(0, 1000),
-          );
-        } catch {
-          console.error('Original context could not be logged or stringified.');
-        }
-      }
+      logContextFallback(context);
+    }
+  }
+}
+
+function logContextFallback(context: unknown): void {
+  const contextText = formatContextFallback(context);
+  if (contextText === undefined) {
+    reportToStderr('Original context could not be logged or stringified.');
+    return;
+  }
+  reportToStderr('Original context:', contextText);
+}
+
+function formatContextFallback(context: unknown): string | undefined {
+  try {
+    return JSON.stringify(context).substring(0, 1000);
+  } catch {
+    try {
+      return String(context).substring(0, 1000);
+    } catch {
+      return undefined;
     }
   }
 }

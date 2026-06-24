@@ -17,8 +17,8 @@ import type { SubagentManager } from '../config/subagentManager.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig as CoreSubagentConfig } from '../config/types.js';
 import type { Config } from '../config/config.js';
+import type { ContextState } from '../core/subagentTypes.js';
 import {
-  ContextState,
   SubagentTerminateMode,
   type OutputConfig,
   type OutputObject,
@@ -154,55 +154,13 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       );
 
       try {
-        const output = await this.runScope(
+        return await this.runSubagentWithTimeout(
           request,
           launchResult,
           config,
-          options.updateOutput,
-        );
-
-        if (timeoutController.signal.aborted) {
-          if (options.signal?.aborted === true) {
-            return createCancelledResult(
-              'Task execution aborted before completion.',
-              launchResult.agentId,
-              output,
-            );
-          }
-          return this.createTimeoutResult(
-            timeoutSeconds,
-            output,
-            launchResult.agentId,
-          );
-        }
-
-        return this.formatOutputResult(
-          request.name,
-          launchResult.agentId,
-          output,
-        );
-      } catch (error) {
-        if (this.isAbortError(error)) {
-          if (options.signal?.aborted === true) {
-            return createCancelledResult(
-              'Task execution aborted before completion.',
-              launchResult.agentId,
-              launchResult.scope.output,
-            );
-          }
-          if (timeoutController.signal.aborted) {
-            return this.createTimeoutResult(
-              timeoutSeconds,
-              launchResult.scope.output,
-              launchResult.agentId,
-            );
-          }
-        }
-
-        return createErrorResult(
-          error,
-          'Subagent execution failed.',
-          launchResult.agentId,
+          timeoutController,
+          timeoutSeconds,
+          options,
         );
       } finally {
         if (timeoutId !== null) {
@@ -217,6 +175,98 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
         request.name,
       );
     }
+  }
+
+  private async runSubagentWithTimeout(
+    request: SubagentRequest,
+    launchResult: CoreSubagentLaunchResult,
+    config: Config,
+    timeoutController: AbortController,
+    timeoutSeconds: number | undefined,
+    options: SubagentExecutionOptions,
+  ): Promise<SubagentResult> {
+    try {
+      const output = await this.runScope(
+        request,
+        launchResult,
+        config,
+        options.updateOutput,
+      );
+
+      if (timeoutController.signal.aborted) {
+        return this.resolveAbortedResult(
+          options.signal,
+          timeoutSeconds,
+          output,
+          launchResult,
+        );
+      }
+
+      return this.formatOutputResult(
+        request.name,
+        launchResult.agentId,
+        output,
+      );
+    } catch (error) {
+      return this.resolveCaughtError(
+        error,
+        options.signal,
+        timeoutController,
+        timeoutSeconds,
+        launchResult,
+      );
+    }
+  }
+
+  private resolveAbortedResult(
+    parentSignal: AbortSignal | undefined,
+    timeoutSeconds: number | undefined,
+    output: OutputObject,
+    launchResult: CoreSubagentLaunchResult,
+  ): SubagentResult {
+    if (parentSignal?.aborted === true) {
+      return createCancelledResult(
+        'Task execution aborted before completion.',
+        launchResult.agentId,
+        output,
+      );
+    }
+    return this.createTimeoutResult(
+      timeoutSeconds,
+      output,
+      launchResult.agentId,
+    );
+  }
+
+  private resolveCaughtError(
+    error: unknown,
+    parentSignal: AbortSignal | undefined,
+    timeoutController: AbortController,
+    timeoutSeconds: number | undefined,
+    launchResult: CoreSubagentLaunchResult,
+  ): SubagentResult {
+    if (this.isAbortError(error)) {
+      if (parentSignal?.aborted === true) {
+        return createCancelledResult(
+          'Task execution aborted before completion.',
+          launchResult.agentId,
+          launchResult.scope.output,
+        );
+      }
+      if (timeoutController.signal.aborted) {
+        return this.createTimeoutResult(
+          timeoutSeconds,
+          launchResult.scope.output,
+          launchResult.agentId,
+        );
+      }
+    }
+
+    return createErrorResult(
+      error,
+      'Subagent execution failed.',
+      launchResult.agentId,
+    );
   }
 
   async listSubagents(): Promise<SubagentInfo[]> {
@@ -247,9 +297,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     }
 
     const loaded = await manager.loadSubagent(name);
-    return loaded
-      ? toToolsSubagentConfig(loaded as CoreSubagentConfig)
-      : undefined;
+    return toToolsSubagentConfig(loaded);
   }
 
   private createExecutionServices(): {
@@ -275,6 +323,13 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     };
   }
 
+  private requireConfig(): Config {
+    if (this.config === undefined) {
+      throw new Error('Subagent execution requires config services.');
+    }
+    return this.config;
+  }
+
   private buildLaunchRequest(
     request: SubagentRequest,
     timeoutMs?: number,
@@ -287,11 +342,15 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
     const behaviourPrompts =
       request.behaviourPrompts ?? request.behaviorPrompts;
-    if (behaviourPrompts?.length) {
+    if (behaviourPrompts !== undefined && behaviourPrompts.length > 0) {
       launchRequest.behaviourPrompts = behaviourPrompts;
     }
 
-    const effectiveWhitelist = this.buildEffectiveToolWhitelist(request);
+    const config = this.requireConfig();
+    const effectiveWhitelist = this.buildEffectiveToolWhitelist(
+      request,
+      config,
+    );
     if (effectiveWhitelist !== undefined && effectiveWhitelist.length > 0) {
       launchRequest.toolConfig = { tools: effectiveWhitelist };
     } else if (this.hasExplicitWhitelist(request)) {
@@ -333,6 +392,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
   private buildEffectiveToolWhitelist(
     request: SubagentRequest,
+    config: Config,
   ): string[] | undefined {
     // Issue #2069: no explicit whitelist must preserve omitted toolConfig so
     // the subagent runtime/profile default tools apply. Do NOT synthesize a
@@ -344,15 +404,24 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       return undefined;
     }
 
-    const registry = this.config?.getToolRegistry?.() as
-      | ToolRegistry
-      | undefined;
+    const registryProvider = (
+      config as Partial<Pick<Config, 'getToolRegistry'>>
+    ).getToolRegistry;
+    const registry =
+      typeof registryProvider === 'function'
+        ? registryProvider.call(config)
+        : undefined;
 
     let effectiveWhitelist = request.toolWhitelist;
-    if (registry && effectiveWhitelist && effectiveWhitelist.length > 0) {
+    if (
+      registry !== undefined &&
+      effectiveWhitelist !== undefined &&
+      effectiveWhitelist.length > 0
+    ) {
       effectiveWhitelist = this.buildGovernedToolWhitelist(
         effectiveWhitelist,
         registry,
+        config,
       );
     } else {
       // No registry available: still filter excluded tools (task/list_subagents)
@@ -388,15 +457,14 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   private buildGovernedToolWhitelist(
     candidateTools: string[] | undefined,
     registry: ToolRegistry,
+    config: Config,
   ): string[] | undefined {
     if (!candidateTools || candidateTools.length === 0) {
       return undefined;
     }
 
     const excluded = buildExcludedToolNames();
-    const governance = this.config
-      ? buildToolGovernance(this.config)
-      : buildToolGovernance({});
+    const governance = buildToolGovernance(config);
     const allowedRegistryTools = registry
       .getEnabledTools()
       .map((tool) => tool.name)
@@ -452,7 +520,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     timeoutController: AbortController;
     timeoutId: ReturnType<typeof setTimeout> | null;
   } {
-    const settings = this.config?.getEphemeralSettings?.() ?? {};
+    const settings = this.requireConfig().getEphemeralSettings();
     const defaultTimeoutSeconds =
       (settings['task-default-timeout-seconds'] as number | undefined) ?? 900;
     const maxTimeoutSeconds =
@@ -568,7 +636,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       metadata: {
         agentId,
         terminateReason: output.terminate_reason,
-        emittedVars: output.emitted_vars ?? {},
+        emittedVars: output.emitted_vars,
         ...(output.final_message ? { finalMessage: output.final_message } : {}),
       },
       ...(success
@@ -714,8 +782,8 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   }
 
   private checkAsyncSettings(): SubagentResult | undefined {
-    const settingsService = this.config?.getSettingsService?.();
-    const globalSettings = settingsService?.getAllGlobalSettings?.() ?? {};
+    const settingsService = this.requireConfig().getSettingsService();
+    const globalSettings = settingsService.getAllGlobalSettings();
     const subagentsSettings = globalSettings['subagents'] as
       | { asyncEnabled?: boolean }
       | undefined;
@@ -732,7 +800,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       };
     }
 
-    const ephemeralSettings = this.config?.getEphemeralSettings?.() ?? {};
+    const ephemeralSettings = this.requireConfig().getEphemeralSettings();
     if (ephemeralSettings['subagents.async.enabled'] === false) {
       return {
         output:

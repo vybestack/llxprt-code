@@ -457,6 +457,23 @@ describe('Conversation Data Redaction', () => {
     );
   });
 
+  it('should redact sensitive path tokens by segment across path separators', () => {
+    expect(
+      redactor.redactSensitivePaths(
+        'Paths C:\\Users\\bob\\.ssh\\id_rsa and notes/monkey.txt and /tmp/.env.local',
+      ),
+    ).toBe(
+      'Paths [REDACTED-SSH-KEY-PATH] and notes/monkey.txt and [REDACTED-ENV-FILE]',
+    );
+  });
+
+  it('should redact home paths embedded in assignment-style tokens', () => {
+    expect(
+      redactor.redactSensitivePaths(
+        'Deploy --path=/home/alice/project cwd:/Users/bob/app',
+      ),
+    ).toBe('Deploy [REDACTED-HOME-DIR] [REDACTED-USER-DIR]');
+  });
   /**
    * @requirement REDACTION-008: Personal information redaction
    * @scenario Message with personal identifiable information
@@ -489,6 +506,91 @@ describe('Conversation Data Redaction', () => {
     expect(textBlock.text).toContain('4111-1111-1111-1111'); // Not redacted
   });
 
+  it('should redact emails separated by any whitespace in personal info scanning', () => {
+    const redacted = redactor.redactPersonalInfo(
+      'Contacts john.doe@example.com\tjane@example.org\nadmin@example.net',
+    );
+
+    expect(redacted).toBe(
+      'Contacts [REDACTED-EMAIL]\t[REDACTED-EMAIL]\n[REDACTED-EMAIL]',
+    );
+  });
+
+  it('should redact emails adjacent to punctuation in personal info scanning', () => {
+    const redacted = redactor.redactPersonalInfo(
+      'Contacts (john.doe@example.com) and jane@example.org.',
+    );
+
+    expect(redacted).toBe('Contacts ([REDACTED-EMAIL]) and [REDACTED-EMAIL].');
+  });
+
+  it('should preserve benign shell exports while redacting sensitive exports', () => {
+    const pathTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: 'Run command',
+        parameters: { command: 'export PATH=/usr/local/bin' },
+      },
+    };
+    const envTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: 'Run command',
+        parameters: { command: 'export NODE_ENV=production' },
+      },
+    };
+    const secretTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: 'Run command',
+        parameters: { command: 'export SESSION_TOKEN=abc123' },
+      },
+    };
+
+    expect(
+      (
+        redactor.redactToolCall(pathTool).function.parameters as {
+          command: string;
+        }
+      ).command,
+    ).toBe('export PATH=/usr/local/bin');
+    expect(
+      (
+        redactor.redactToolCall(envTool).function.parameters as {
+          command: string;
+        }
+      ).command,
+    ).toBe('export NODE_ENV=production');
+    expect(
+      (
+        redactor.redactToolCall(secretTool).function.parameters as {
+          command: string;
+        }
+      ).command,
+    ).toBe('export [REDACTED-TOKEN]');
+  });
+
+  it('should redact tab-separated sensitive export assignments', () => {
+    const tabTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'run_command',
+        description: 'Run command',
+        parameters: { command: 'export\tSESSION_TOKEN=abc123' },
+      },
+    };
+
+    expect(
+      (
+        redactor.redactToolCall(tabTool).function.parameters as {
+          command: string;
+        }
+      ).command,
+    ).toBe('export [REDACTED-TOKEN]');
+  });
   /**
    * @requirement REDACTION-009: Preserve message structure
    * @scenario Complex message with multiple fields

@@ -1,0 +1,11 @@
+{
+  "name": "standard-openai",
+  "provider": "openai",
+  "model": "gpt-4o",
+  "isDefault": false,
+  "isLoadBalancer": false,
+  "modelParams": { "temperature": 0.2 },
+  "baseUrl": "https://api.openai.com/v1",
+  "authKeyName": "openai-prod",
+  "authKeyFile": null
+}

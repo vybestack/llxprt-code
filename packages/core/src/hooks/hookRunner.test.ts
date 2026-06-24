@@ -15,8 +15,20 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { HookRunner } from './hookRunner.js';
 import { HookEventName, HookType } from './types.js';
 import type { HookConfig } from './types.js';
+import type { Config } from '../config/config.js';
 import type { HookInput } from './types.js';
 import type { Readable, Writable } from 'node:stream';
+
+/** Checks for escaped version of malicious path in ls command. */
+function isMaliciousPathEscaped(s: string): boolean {
+  if (!s.startsWith('ls ')) {
+    return false;
+  }
+  if (!s.includes('echo') || !s.includes('pwned')) {
+    return false;
+  }
+  return s.includes("'") || s.includes('"');
+}
 
 // Mock type for the child_process spawn
 type MockChildProcessWithoutNullStreams = ChildProcessWithoutNullStreams & {
@@ -83,8 +95,7 @@ describe('HookRunner', () => {
       allowedEnvironmentVariables: [],
       blockedEnvironmentVariables: [],
     }),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any;
+  } as unknown as Config;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -339,15 +350,19 @@ describe('HookRunner', () => {
         // The malicious "; echo pwned" must appear as LITERAL TEXT, not executed
         expect(spawn).toHaveBeenCalledWith(
           expect.stringMatching(/bash|powershell/),
-          expect.arrayContaining([
-            // Command must contain escaped version of malicious path
-            // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-            expect.stringMatching(/ls ['"].*echo.*pwned.*/),
-          ]),
+          expect.arrayContaining([expect.any(String)]),
           expect.objectContaining({
             shell: false, // CRITICAL: shell must be false
           }),
         );
+
+        // Verify the command argument contains the escaped malicious path
+        const spawnCalls = vi.mocked(spawn).mock.calls;
+        const commandArgs = spawnCalls[0][1];
+        const escapedArg = Array.isArray(commandArgs)
+          ? commandArgs.find((arg) => isMaliciousPathEscaped(String(arg)))
+          : undefined;
+        expect(escapedArg).toBeDefined();
       });
     });
   });

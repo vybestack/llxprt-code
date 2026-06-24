@@ -10,7 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -93,7 +92,7 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
-    const activeContext: any = { scope: 'test' };
+    const activeContext: Record<string, unknown> = { scope: 'test' };
     class MockProvider {}
     mockProviderModules({
       openai: MockProvider,
@@ -141,7 +140,7 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
-    const activeContext: any = { scope: 'test' };
+    const activeContext: Record<string, unknown> = { scope: 'test' };
     mockProviderModules({
       openai: openaiCtor,
       openaiResponses: openaiResponsesCtor,
@@ -196,7 +195,7 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
-    const activeContext: any = { scope: 'test' };
+    const activeContext: Record<string, unknown> = { scope: 'test' };
     mockProviderModules({
       openai: openaiCtor,
       openaiResponses: openaiResponsesCtor,

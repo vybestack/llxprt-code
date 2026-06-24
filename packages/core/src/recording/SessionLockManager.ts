@@ -75,36 +75,9 @@ export class SessionLockManager {
     } catch (error: unknown) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'EEXIST') {
-        const isStale = await SessionLockManager.checkStale(lockPath);
-        if (isStale) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            await fs.unlink(lockPath);
-          } catch (unlinkErr: unknown) {
-            if ((unlinkErr as NodeJS.ErrnoException).code !== 'ENOENT') {
-              throw unlinkErr;
-            }
-          }
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
-          } catch {
-            throw new Error('Session is in use by another process');
-          }
-        } else {
-          throw new Error('Session is in use by another process');
-        }
+        await SessionLockManager.acquireStaleLock(lockPath, lockContent);
       } else if (code === 'ENOENT') {
-        await fs.mkdir(path.dirname(lockPath), { recursive: true });
-        try {
-          await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
-        } catch (writeErr: unknown) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if ((writeErr as NodeJS.ErrnoException).code === 'EEXIST') {
-            throw new Error('Session is in use by another process');
-          }
-          throw writeErr;
-        }
+        await SessionLockManager.createLockAfterMkdir(lockPath, lockContent);
       } else {
         throw error;
       }
@@ -123,6 +96,53 @@ export class SessionLockManager {
         }
       },
     };
+  }
+
+  /** Create lock directory and retry after ENOENT. */
+  private static async createLockAfterMkdir(
+    lockPath: string,
+    lockContent: string,
+  ): Promise<void> {
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
+    try {
+      await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
+    } catch (writeErr: unknown) {
+      if ((writeErr as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new Error('Session is in use by another process');
+      }
+      throw writeErr;
+    }
+  }
+
+  /** Attempt to acquire a lock after detecting an EEXIST (stale lock). */
+  private static async acquireStaleLock(
+    lockPath: string,
+    lockContent: string,
+  ): Promise<void> {
+    const isStale = await SessionLockManager.checkStale(lockPath);
+    if (!isStale) {
+      throw new Error('Session is in use by another process');
+    }
+    try {
+      await fs.unlink(lockPath);
+    } catch (unlinkErr: unknown) {
+      if ((unlinkErr as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw unlinkErr;
+      }
+    }
+    try {
+      await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
+    } catch (writeErr: unknown) {
+      const code = (writeErr as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') {
+        throw new Error('Session is in use by another process');
+      }
+      if (code === 'ENOENT') {
+        await SessionLockManager.createLockAfterMkdir(lockPath, lockContent);
+        return;
+      }
+      throw writeErr;
+    }
   }
 
   /** @pseudocode concurrency-lifecycle.md lines 77-96 */

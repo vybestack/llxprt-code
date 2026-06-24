@@ -45,6 +45,8 @@ describe('AnthropicProvider tool format detection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.settings = { providers: { anthropic: {} } };
+    mockSettingsService.getProviderSettings.mockReturnValue({});
+    mockSettingsService.get.mockReturnValue(undefined);
     provider = new AnthropicProvider('test-key');
   });
 

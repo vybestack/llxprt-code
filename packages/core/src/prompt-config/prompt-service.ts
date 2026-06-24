@@ -264,8 +264,7 @@ export class PromptService {
       const content = await this.loadAndProcess(
         file.path,
         context,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: toolName is optional string, empty string should use null
-        file.toolName || null,
+        file.toolName ?? null,
       );
       if (content) {
         processedParts.push(content);

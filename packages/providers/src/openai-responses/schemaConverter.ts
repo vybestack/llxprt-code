@@ -153,23 +153,17 @@ function convertPropertySchema(
     result.enum = prop.enum.map((v) => String(v));
   }
 
-  // Handle array items - preserve old `if (prop.items)` truthiness semantics.
-  // Falsy non-null items (false, 0, '') should not be treated as present.
-  // Only objects/arrays (valid schema types) are considered present.
-  // eslint-disable-next-line no-extra-boolean-cast -- Preserve old schema item truthiness semantics for malformed provider schemas.
-  if (Boolean(prop.items)) {
-    if (Array.isArray(prop.items)) {
+  // Handle array items
+  if (Array.isArray(prop.items)) {
+    if (prop.items.length > 0) {
       // Tuple type - use first item as representative (skip empty tuples)
-      if (prop.items.length > 0) {
-        result.items = convertPropertySchema(
-          prop.items[0] as Record<string, unknown>,
-        );
+      const firstItem = prop.items[0];
+      if (isSchemaObject(firstItem)) {
+        result.items = convertPropertySchema(firstItem);
       }
-    } else {
-      result.items = convertPropertySchema(
-        prop.items as Record<string, unknown>,
-      );
     }
+  } else if (isSchemaObject(prop.items)) {
+    result.items = convertPropertySchema(prop.items);
   }
 
   // Handle nested object properties
@@ -205,6 +199,14 @@ function convertPropertySchema(
   }
 
   return result;
+}
+
+function isSchemaObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 /**
@@ -264,8 +266,7 @@ export function convertToolsToOpenAIResponses(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
-      // eslint-disable-next-line no-extra-boolean-cast -- Preserve old schema truthiness semantics for malformed provider schemas.
-      if (!Boolean(decl.parametersJsonSchema)) {
+      if (!isSchemaObject(decl.parametersJsonSchema)) {
         throw new Error(
           `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
             `Ensure all tool declarations provide parametersJsonSchema at construction time.`,

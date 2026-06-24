@@ -81,16 +81,14 @@ export type ContentGeneratorConfig = {
 export function createContentGeneratorConfig(
   config: Config,
 ): ContentGeneratorConfig {
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string API key means "not configured"
-  const geminiApiKey = process.env.GEMINI_API_KEY || undefined;
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string API key means "not configured"
-  const googleApiKey = process.env.GOOGLE_API_KEY || undefined;
-  const googleCloudProject =
+  const geminiApiKey = process.env.GEMINI_API_KEY ?? undefined;
+  const googleApiKey = process.env.GOOGLE_API_KEY ?? undefined;
+  const rawGoogleCloudProject =
     process.env['GOOGLE_CLOUD_PROJECT'] ??
-    process.env['GOOGLE_CLOUD_PROJECT_ID'] ??
-    undefined;
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string location means "not configured"
-  const googleCloudLocation = process.env.GOOGLE_CLOUD_LOCATION || undefined;
+    process.env['GOOGLE_CLOUD_PROJECT_ID'];
+  const googleCloudProject =
+    rawGoogleCloudProject === '' ? undefined : rawGoogleCloudProject;
+  const googleCloudLocation = process.env.GOOGLE_CLOUD_LOCATION ?? undefined;
 
   // Use runtime model from config if available; otherwise, fall back to parameter or default
   const effectiveModel = config.getModel() || DEFAULT_GEMINI_MODEL;
@@ -120,8 +118,7 @@ export async function createContentGenerator(
   gcConfig: Config,
   sessionId?: string,
 ): Promise<ContentGenerator> {
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty version string should fall back to process.version
-  const version = process.env.CLI_VERSION || process.version;
+  const version = process.env.CLI_VERSION ?? process.version;
   const httpOptions = {
     headers: {
       'User-Agent': `LLxprt-Code/${version} (${process.platform}; ${process.arch})`,

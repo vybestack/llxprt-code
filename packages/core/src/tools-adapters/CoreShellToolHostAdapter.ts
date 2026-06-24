@@ -235,6 +235,12 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
         return { type: 'binary_detected' };
       case 'binary_progress':
         return { type: 'binary_progress', bytesReceived: event.bytesReceived };
+      default:
+        return exhaustiveOutputEvent(event);
     }
   }
+}
+
+function exhaustiveOutputEvent(event: never): ToolsShellOutputEvent {
+  throw new Error(`Unhandled shell output event: ${JSON.stringify(event)}`);
 }

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,6 +18,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 const resolveDefaultModel = (): string =>
   process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-4o';
 
+function log(message: string): void {
+  process.stdout.write(message + '\n');
+}
+
 const runningInCI = process.env.CI === 'true';
 const realProviderOptIn = process.env.LLXPRT_RUN_REAL_PROVIDER_TESTS === 'true';
 
@@ -35,27 +38,21 @@ describe('Multi-Provider Integration Tests', () => {
 
   beforeAll(() => {
     if (runningInCI && !realProviderOptIn) {
-      console.log(
+      log(
         '\nINFO: Skipping Multi-Provider Integration Tests in CI. Set LLXPRT_RUN_REAL_PROVIDER_TESTS=true to enable.',
       );
-    }
-
-    if (!apiKey) {
-      console.log(
+    } else if (!apiKey) {
+      log(
         '\nWARNING:  Skipping Multi-Provider Integration Tests: No OpenAI API key found',
       );
-      console.log(
+      log(
         '   To run these tests, set the OPENAI_API_KEY environment variable\n',
       );
-    }
-
-    if (baseURL != null && baseURL.includes('openrouter') === true) {
-      console.log(
+    } else if (baseURL != null && baseURL.includes('openrouter') === true) {
+      log(
         '\nWARNING:  Skipping Multi-Provider Integration Tests: OpenRouter detected',
       );
-      console.log(
-        '   These tests are currently not compatible with OpenRouter\n',
-      );
+      log('   These tests are currently not compatible with OpenRouter\n');
     }
   });
 
@@ -165,16 +162,14 @@ describe('Multi-Provider Integration Tests', () => {
         expect(modelIds.every((id) => typeof id === 'string')).toBe(true);
         expect(modelIds.every((id) => id.length > 0)).toBe(true);
 
-        console.log(`\n[OK] Found ${models.length} models`);
-        console.log(`   Sample models: ${modelIds.slice(0, 5).join(', ')}...`);
+        log(`\n[OK] Found ${models.length} models`);
+        log(`   Sample models: ${modelIds.slice(0, 5).join(', ')}...`);
       },
     );
 
     it.skipIf(skipTests)(
       'should switch between models within provider',
       async () => {
-        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-        if (!apiKey || skipTests) return; // Guard for when test is skipped
         resetSettingsService();
         const runtime = initializeTestProviderRuntime({
           runtimeId: `multi-provider.integration.model-switch.${Math.random()
@@ -270,7 +265,7 @@ describe('Multi-Provider Integration Tests', () => {
           baseURL != null && baseURL.includes('openrouter') === true
             ? 'OpenRouter'
             : 'OpenAI';
-        console.log(`\n[OK] ${providerName} response: "${fullResponse}"`);
+        log(`\n[OK] ${providerName} response: "${fullResponse}"`);
 
         expect(fullResponse.toLowerCase()).toContain(
           'hello from openai integration test',
@@ -303,11 +298,13 @@ describe('Multi-Provider Integration Tests', () => {
           'model',
           openaiProvider.getDefaultModel(),
         );
-        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-        if (baseURL) {
-          settingsService.set('base-url', baseURL);
-          settingsService.setProviderSetting('openai', 'base-url', baseURL);
-        }
+        const effectiveBaseURL = baseURL ?? '';
+        settingsService.set('base-url', effectiveBaseURL);
+        settingsService.setProviderSetting(
+          'openai',
+          'base-url',
+          effectiveBaseURL,
+        );
 
         const stream = openaiProvider.generateChatCompletion(
           createProviderCallOptions({
@@ -330,8 +327,6 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should handle streaming correctly', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!apiKey || skipTests) return; // Guard for when test is skipped
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.streaming.${Math.random()
           .toString(36)
@@ -379,8 +374,8 @@ describe('Multi-Provider Integration Tests', () => {
       }
 
       const fullResponse = chunks.join('');
-      console.log(`\n[OK] Streaming test received ${chunkCount} chunks`);
-      console.log(`   Response: "${fullResponse.trim()}"`);
+      log(`\n[OK] Streaming test received ${chunkCount} chunks`);
+      log(`   Response: "${fullResponse.trim()}"`);
 
       // Should receive at least one chunk (streaming)
       expect(chunkCount).toBeGreaterThanOrEqual(1);
@@ -394,9 +389,6 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should work with a specific model', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!apiKey || skipTests) return; // Guard for when test is skipped
-
       resetSettingsService();
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.model-specific.${Math.random()
@@ -453,7 +445,7 @@ describe('Multi-Provider Integration Tests', () => {
       }
 
       const fullResponse = chunks.join('').trim();
-      console.log(`\n[OK] Model ${testModel} response: "${fullResponse}"`);
+      log(`\n[OK] Model ${testModel} response: "${fullResponse}"`);
 
       expect(fullResponse).toContain('4');
     });
@@ -461,8 +453,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should handle tool calls',
       async () => {
-        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-        if (!apiKey || skipTests) return; // Guard for when test is skipped
         const runtime = initializeTestProviderRuntime({
           runtimeId: `multi-provider.integration.tool-calls.${Math.random()
             .toString(36)
@@ -535,8 +525,8 @@ describe('Multi-Provider Integration Tests', () => {
               name: string;
               parameters: { location: string };
             };
-            console.log(`\n[OK] Tool call received: ${toolCall.name}`);
-            console.log(`   Arguments: ${JSON.stringify(toolCall.parameters)}`);
+            log(`\n[OK] Tool call received: ${toolCall.name}`);
+            log(`   Arguments: ${JSON.stringify(toolCall.parameters)}`);
 
             expect(toolCall.name).toBe('get_weather');
             const args = toolCall.parameters;
@@ -560,7 +550,7 @@ describe('Multi-Provider Integration Tests', () => {
             errorMessage.includes('tool calling') ||
             errorMessage.includes('not supported')
           ) {
-            console.log(
+            log(
               `\nWARNING:  Skipping tool call test: Model doesn't support tool calling`,
             );
             return; // Skip test gracefully
@@ -575,8 +565,6 @@ describe('Multi-Provider Integration Tests', () => {
 
   describe('Error Handling', () => {
     it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!apiKey || skipTests) return; // Guard for when test is skipped
       resetSettingsService();
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.invalid-model.${Math.random()
@@ -631,9 +619,7 @@ describe('Multi-Provider Integration Tests', () => {
       } catch (error) {
         errorThrown = true;
         errorMessage = error instanceof Error ? error.message : String(error);
-        console.log(
-          `\n[OK] Correctly caught error for invalid model: ${errorMessage}`,
-        );
+        log(`\n[OK] Correctly caught error for invalid model: ${errorMessage}`);
       }
 
       // Either success or error is acceptable for invalid models

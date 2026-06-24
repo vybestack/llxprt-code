@@ -32,9 +32,16 @@ const fdirEntry = resolve(
 function resolveTsSource(baseDir: string, specifier: string): string {
   const direct = baseDir + specifier;
   if (direct.endsWith('.js')) {
-    const tsPath = direct.slice(0, -3) + '.ts';
+    const withoutExt = direct.slice(0, -3);
+    const tsPath = withoutExt + '.ts';
     if (existsSync(tsPath)) {
       return tsPath;
+    }
+    // Directory-index subpaths (e.g. `runtime.js` -> `runtime/index.ts`) mirror
+    // how the package export maps resolve `./runtime.js` to `runtime/index.js`.
+    const indexPath = withoutExt + '/index.ts';
+    if (existsSync(indexPath)) {
+      return indexPath;
     }
   }
   return direct;

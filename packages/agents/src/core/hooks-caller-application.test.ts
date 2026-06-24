@@ -37,8 +37,8 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  type ToolResult,
 } from '@vybestack/llxprt-code-tools';
+import type { ToolResult, IToolMessageBus } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   triggerBeforeToolHook,
@@ -60,8 +60,7 @@ class TrackingToolInvocation extends BaseToolInvocation<
   static executionCount = 0;
   static lastArgs: Record<string, unknown> | undefined;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(params: Record<string, unknown>, messageBus?: any) {
+  constructor(params: Record<string, unknown>, messageBus?: IToolMessageBus) {
     super(params, messageBus);
   }
 
@@ -83,8 +82,7 @@ class TrackingTool extends BaseDeclarativeTool<
   Record<string, unknown>,
   ToolResult
 > {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(messageBus: any) {
+  constructor(messageBus: IToolMessageBus) {
     super(
       'tracking_tool',
       'Tracking Tool',
@@ -99,8 +97,7 @@ class TrackingTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: Record<string, unknown>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    messageBus: any,
+    messageBus?: IToolMessageBus,
   ): TrackingToolInvocation {
     return new TrackingToolInvocation(params, messageBus);
   }

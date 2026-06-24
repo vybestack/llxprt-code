@@ -70,7 +70,6 @@ const getCryptoHelpers = (_store: FileTokenStore) => {
 
   const decrypt = (payload: string): string => {
     const trimmed = payload.trim();
-    // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
     const encryptedPattern = /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i;
 
     if (!encryptedPattern.test(trimmed)) {
@@ -239,7 +238,6 @@ describe('FileTokenStore', () => {
       });
       const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
       expect(writeCall[0]).toBe(testTokenPath);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       expect(writeCall[1]).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
       expect(writeCall[2]).toStrictEqual({ mode: 0o600 });
     });

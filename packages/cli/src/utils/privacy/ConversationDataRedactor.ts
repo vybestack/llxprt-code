@@ -38,10 +38,22 @@ export interface RedactionConfig {
 // single-quoted source strings to avoid premature string termination.
 const SENSITIVE_PATH_SSH_SOURCE = '/[^"\\s]{0,4096}\\.ssh/[^"\\s]{0,4096}';
 const SENSITIVE_PATH_SSH = new RegExp(SENSITIVE_PATH_SSH_SOURCE, 'g');
-const SENSITIVE_PATH_ID_RSA_SOURCE = '/[^"\\s]{0,4096}/id_rsa[^"\\s]{0,4096}';
+const SENSITIVE_PATH_ID_RSA_SOURCE = '[^"\\s]{0,4096}id_rsa[^"\\s]{0,4096}';
 const SENSITIVE_PATH_ID_RSA = new RegExp(SENSITIVE_PATH_ID_RSA_SOURCE, 'g');
-const SENSITIVE_PATH_ENV_SOURCE = '/[^"\\s]{0,4096}\\.env[^"\\s]{0,4096}';
+const SENSITIVE_PATH_ENV_SOURCE = '[^"\\s]{0,4096}\\.env[^"\\s]{0,4096}';
 const SENSITIVE_PATH_ENV = new RegExp(SENSITIVE_PATH_ENV_SOURCE, 'g');
+const SENSITIVE_PATH_HOME_ASSIGN_SOURCE =
+  '[^"\\s]{1,256}[=:]/home/[^"\\s]{1,4096}';
+const SENSITIVE_PATH_HOME_ASSIGN = new RegExp(
+  SENSITIVE_PATH_HOME_ASSIGN_SOURCE,
+  'g',
+);
+const SENSITIVE_PATH_USERS_ASSIGN_SOURCE =
+  '[^"\\s]{1,256}[=:]/Users/[^"\\s]{1,4096}';
+const SENSITIVE_PATH_USERS_ASSIGN = new RegExp(
+  SENSITIVE_PATH_USERS_ASSIGN_SOURCE,
+  'g',
+);
 const SENSITIVE_PATH_HOME_SOURCE = '/home/[^/\\s"]{1,4096}';
 const SENSITIVE_PATH_HOME = new RegExp(SENSITIVE_PATH_HOME_SOURCE, 'g');
 const SENSITIVE_PATH_USERS_SOURCE = '/Users/[^/\\s"]{1,4096}';
@@ -78,9 +90,14 @@ const REDACT_FILE_KEY = new RegExp(REDACT_FILE_KEY_SOURCE, 'gi');
 const EXPORT_SK_SOURCE =
   'export\\s+[A-Z_]+\\s*=\\s*[\\x27"]\\s*sk-[a-zA-Z0-9]+\\s*[\\x27"]';
 const EXPORT_SK = new RegExp(EXPORT_SK_SOURCE, 'g');
-const EXPORT_TOKEN_SOURCE =
-  'export\\s+[A-Z_]+\\s*=\\s*[\\x27"]\\s*[a-zA-Z0-9+/]+=*\\s*[\\x27"]';
-const EXPORT_TOKEN = new RegExp(EXPORT_TOKEN_SOURCE, 'g');
+const SENSITIVE_EXPORT_NAME_PARTS = [
+  'TOKEN',
+  'SECRET',
+  'KEY',
+  'PASSWORD',
+  'PASS',
+  'PWD',
+];
 const CURL_AUTH_SOURCE =
   'curl\\s{1,256}.{0,8192}-H\\s{1,256}[\\x27"]Authorization:\\s{0,256}Bearer\\s{1,256}[^\\x27"]{1,4096}[\\x27"]';
 const CURL_AUTH = new RegExp(CURL_AUTH_SOURCE, 'g');
@@ -258,6 +275,14 @@ export class ConversationDataRedactor {
     redacted = redacted.replace(SENSITIVE_PATH_ENV, '[REDACTED-ENV-FILE]');
 
     // Configuration directories
+    redacted = redacted.replace(
+      SENSITIVE_PATH_HOME_ASSIGN,
+      '[REDACTED-HOME-DIR]',
+    );
+    redacted = redacted.replace(
+      SENSITIVE_PATH_USERS_ASSIGN,
+      '[REDACTED-USER-DIR]',
+    );
     redacted = redacted.replace(SENSITIVE_PATH_HOME, '[REDACTED-HOME-DIR]');
     redacted = redacted.replace(SENSITIVE_PATH_USERS, '[REDACTED-USER-DIR]');
 
@@ -431,12 +456,41 @@ export class ConversationDataRedactor {
 
     // Redact export statements with sensitive values
     redacted = redacted.replace(EXPORT_SK, 'export [REDACTED-API-KEY]');
-    redacted = redacted.replace(EXPORT_TOKEN, 'export [REDACTED-TOKEN]');
+    redacted = this.redactSensitiveExport(redacted);
 
     // Redact curl commands with authorization headers
     redacted = redacted.replace(CURL_AUTH, 'curl [REDACTED-AUTH-HEADER]');
 
     return redacted;
+  }
+
+  private redactSensitiveExport(command: string): string {
+    const trimmedStart = command.trimStart();
+    if (!trimmedStart.startsWith('export')) {
+      return command;
+    }
+    const afterExport = trimmedStart.slice('export'.length);
+    const exportPrefixLength = command.length - trimmedStart.length;
+    const separator = afterExport[0];
+    if (separator !== ' ' && separator !== '\t') {
+      return command;
+    }
+    const assignment = afterExport.trimStart();
+    const equalsIndex = assignment.indexOf('=');
+    if (equalsIndex <= 0) {
+      return command;
+    }
+    const name = assignment.slice(0, equalsIndex).trim().toUpperCase();
+    if (name.length === 0) {
+      return command;
+    }
+    const isSensitive = SENSITIVE_EXPORT_NAME_PARTS.some((part) =>
+      name.includes(part),
+    );
+    if (!isSensitive) {
+      return command;
+    }
+    return `${command.slice(0, exportPrefixLength)}export [REDACTED-TOKEN]`;
   }
 
   private redactUrl(url: string): string {

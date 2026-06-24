@@ -12,6 +12,31 @@ import * as path from 'path';
 import * as os from 'os';
 import { existsSync } from 'fs';
 
+function isDigit(ch: string): boolean {
+  return ch >= '0' && ch <= '9';
+}
+
+/** Validates a backup path of form `<dir>/prompt-backup-YYYYMMDD_HHMMSS`. */
+function matchesBackupPath(value: string): boolean {
+  const idx = value.lastIndexOf('prompt-backup-');
+  if (idx === -1) {
+    return false;
+  }
+  const suffix = value.slice(idx + 'prompt-backup-'.length);
+  if (suffix.length !== 15) {
+    return false;
+  }
+  // YYYYMMDD_HHMMSS = 15 chars: 8 digits, '_', 6 digits
+  for (let i = 0; i < 8; i++) {
+    if (!isDigit(suffix[i])) return false;
+  }
+  if (suffix[8] !== '_') return false;
+  for (let i = 9; i < 15; i++) {
+    if (!isDigit(suffix[i])) return false;
+  }
+  return true;
+}
+
 // Helper to check if we're on Windows
 const isWindows = (): boolean => os.platform() === 'win32';
 
@@ -610,8 +635,8 @@ describe('PromptInstaller', () => {
       const result = await installer.backup(testBaseDir, backupPath);
 
       expect(result.success).toBe(true);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      expect(result.backupPath).toMatch(/prompt-backup-\d{8}_\d{6}/);
+      expect(result.backupPath).toBeTruthy();
+      expect(matchesBackupPath(result.backupPath!)).toBe(true);
       expect(existsSync(result.backupPath!)).toBe(true);
     });
 

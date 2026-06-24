@@ -39,6 +39,7 @@
     "dist",
     "**/*.test.ts",
     "**/*.spec.ts",
+    "src/api/__tests__/fixtures/**",
     "../auth/src/**/*.test.ts",
     "../auth/src/**/*.spec.ts",
     "../settings/src/**/*.test.ts",

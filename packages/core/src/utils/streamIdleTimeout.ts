@@ -33,6 +33,16 @@ export const LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV =
  */
 export const STREAM_IDLE_TIMEOUT_SETTING_KEY = 'stream-idle-timeout-ms';
 
+function parseTimeoutConfigValue(value: unknown): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return Number(value.trim());
+  }
+  return NaN;
+}
+
 /**
  * Resolves the effective stream idle timeout value.
  *
@@ -61,28 +71,17 @@ export function resolveStreamIdleTimeoutMs(config?: {
   }
 
   // Check config ephemeral setting (if config provided)
-  if (config?.getEphemeralSetting) {
-    const configValue = config.getEphemeralSetting(
-      STREAM_IDLE_TIMEOUT_SETTING_KEY,
-    );
-    if (configValue !== undefined) {
-      // Handle string values: empty/whitespace falls through to default
-      if (typeof configValue === 'string' && configValue.trim() === '') {
-        // Fall through to default
-      } else {
-        const parsed =
-          typeof configValue === 'number'
-            ? configValue
-            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              typeof configValue === 'string'
-              ? Number(configValue.trim())
-              : NaN;
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (Number.isFinite(parsed)) {
-          return Math.max(0, parsed);
-        }
+  const configValue = config?.getEphemeralSetting?.(
+    STREAM_IDLE_TIMEOUT_SETTING_KEY,
+  );
+  if (configValue !== undefined) {
+    const isEmptyString =
+      typeof configValue === 'string' && configValue.trim() === '';
+    if (!isEmptyString) {
+      const parsed = parseTimeoutConfigValue(configValue);
+      if (Number.isFinite(parsed)) {
+        return Math.max(0, parsed);
       }
-      // Invalid config value falls through to default
     }
   }
 

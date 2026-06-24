@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -123,7 +122,7 @@ describe('retryWithBackoff abort handling', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     setSimulate429(false);
-    console.warn = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {

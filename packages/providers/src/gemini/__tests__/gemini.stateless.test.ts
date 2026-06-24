@@ -191,30 +191,28 @@ const collectResults = async (
   return results;
 };
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  googleGenAIState.instances.length = 0;
-  googleGenAIState.streamCalls.length = 0;
-  googleGenAIState.nonStreamCalls.length = 0;
-  googleGenAIState.streamPlans.length = 0;
-  codeAssistState.streamCalls.length = 0;
-  codeAssistState.streamPlans.length = 0;
-  vi.mocked(createCodeAssistContentGenerator).mockClear();
-  // Set up default runtime context for tests
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-      runtimeId: 'gemini-stateless-test',
-    }),
-  );
-});
-
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-afterEach(() => {
-  clearActiveProviderRuntimeContext();
-});
-
 describe('Gemini provider stateless contract tests', () => {
+  beforeEach(() => {
+    googleGenAIState.instances.length = 0;
+    googleGenAIState.streamCalls.length = 0;
+    googleGenAIState.nonStreamCalls.length = 0;
+    googleGenAIState.streamPlans.length = 0;
+    codeAssistState.streamCalls.length = 0;
+    codeAssistState.streamPlans.length = 0;
+    vi.mocked(createCodeAssistContentGenerator).mockClear();
+    // Set up default runtime context for tests
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: 'gemini-stateless-test',
+      }),
+    );
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
   it('emits usage metadata chunks during streaming @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 5-7', async () => {
     queueGoogleStream([
       {

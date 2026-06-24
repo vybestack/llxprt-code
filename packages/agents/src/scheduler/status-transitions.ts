@@ -70,8 +70,7 @@ function ensureAgentId(
   request: ToolCall['request'],
 ): ToolCallResponseInfo {
   const copy = { ...response };
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: agentId is string | undefined, empty string should fall through
-  if (!copy.agentId) {
+  if (copy.agentId === undefined || copy.agentId === '') {
     copy.agentId = request.agentId ?? DEFAULT_AGENT_ID;
   }
   return copy;
@@ -162,11 +161,27 @@ export function buildAwaitingApprovalTransition(
     | ToolCallConfirmationDetails
     | SerializableConfirmationDetails,
 ): WaitingToolCall {
+  // Extract the correlationId from the confirmation details so the
+  // awaiting_approval ToolCall carries it for the event adapter projection
+  // (projectConfirmationFromToolCall reads tc.correlationId to build the
+  // public confirmationId). Without this, the confirmationId falls back to
+  // the callId, which does not match the coordinator's pendingConfirmations
+  // map (keyed by correlationId), so respondToConfirmation would fail.
+  //
+  // @plan:PLAN-20260617-COREAPI.P17
+  // @requirement:REQ-006
+  // @pseudocode tool-confirmation-merge.md steps 10-31
+  const correlationId =
+    typeof confirmationDetails === 'object' &&
+    'correlationId' in confirmationDetails
+      ? (confirmationDetails as { correlationId?: unknown }).correlationId
+      : undefined;
   return {
     request: ctx.request,
     tool: ctx.tool,
     status: 'awaiting_approval',
     confirmationDetails,
+    ...(typeof correlationId === 'string' ? { correlationId } : {}),
     startTime: ctx.startTime,
     outcome: ctx.outcome,
     invocation: ctx.invocation,

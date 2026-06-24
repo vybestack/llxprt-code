@@ -83,4 +83,22 @@ describe('convertToolsToOpenAIVercel — parametersJsonSchema source', () => {
       'Tool "search_code" is missing parametersJsonSchema',
     );
   });
+
+  it('throws when parametersJsonSchema is a non-plain object', () => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'date_schema_tool',
+            description: 'Invalid schema',
+            parametersJsonSchema: new Date(),
+          },
+        ],
+      },
+    ];
+
+    expect(() => convertToolsToOpenAIVercel(tools)).toThrow(
+      'Tool "date_schema_tool" is missing parametersJsonSchema',
+    );
+  });
 });

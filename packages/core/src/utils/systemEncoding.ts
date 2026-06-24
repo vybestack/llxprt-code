@@ -15,6 +15,17 @@ let cachedSystemEncoding: string | null | undefined = undefined;
 
 const MAX_BUFFER_BYTES_FOR_ENCODING_DETECTION = 64 * 1024;
 
+function firstNonEmpty(
+  ...values: Array<string | undefined>
+): string | undefined {
+  for (const value of values) {
+    if (value !== undefined && value !== '') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Reset the encoding cache - useful for testing
  */
@@ -41,8 +52,7 @@ export function getCachedEncodingForBuffer(buffer: Buffer): string {
   }
 
   // Otherwise, detect from this specific buffer (don't cache this result)
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for encoding detection
-  return detectEncodingFromBuffer(buffer) || 'utf-8';
+  return detectEncodingFromBuffer(buffer) ?? 'utf-8';
 }
 
 /**
@@ -56,29 +66,7 @@ export function getCachedEncodingForBuffer(buffer: Buffer): string {
 export function getSystemEncoding(): string | null {
   // Windows
   if (os.platform() === 'win32') {
-    try {
-      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
-      const output = execSync('chcp', { encoding: 'utf8' });
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex parses bounded Windows chcp output; behavior preserved.
-      const match = output.match(/:\s*(\d+)/);
-      if (match) {
-        const codePage = parseInt(match[1], 10);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!isNaN(codePage)) {
-          return windowsCodePageToEncoding(codePage);
-        }
-      }
-      // Only warn if we can't parse the output format, not if windowsCodePageToEncoding fails
-      throw new Error(
-        `Unable to parse Windows code page from 'chcp' output "${output.trim()}". `,
-      );
-    } catch (error) {
-      debugLogger.warn(
-        `Failed to get Windows code page using 'chcp' command: ${error instanceof Error ? error.message : String(error)}. ` +
-          `Will attempt to detect encoding from command output instead.`,
-      );
-    }
-    return null;
+    return getWindowsCodePageEncoding();
   }
 
   // Unix-like
@@ -86,13 +74,12 @@ export function getSystemEncoding(): string | null {
   // system encoding. However, these environment variables might not always
   // be set or accurate. Handle cases where none of these variables are set.
   const env = process.env;
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env vars may be empty strings, should fall through
-  let locale = env.LC_ALL || env.LC_CTYPE || env.LANG || '';
+  const envLocale = firstNonEmpty(env.LC_ALL, env.LC_CTYPE, env.LANG);
+  let locale = envLocale ?? '';
 
   // Fallback to querying the system directly when environment variables are missing
   if (!locale) {
     try {
-      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       locale = execSync('locale charmap', { encoding: 'utf8' })
         .toString()
         .trim();
@@ -103,17 +90,58 @@ export function getSystemEncoding(): string | null {
     }
   }
 
-  const match = locale.match(/\.(.+)/); // e.g., "en_US.UTF-8"
-  if (match?.[1]) {
-    return match[1].toLowerCase();
+  const dotIndex = locale.indexOf('.');
+  let encoding: string | undefined;
+  if (dotIndex >= 0) {
+    encoding = locale.slice(dotIndex + 1);
+  } else if (locale) {
+    encoding = locale;
   }
-
-  // Handle cases where locale charmap returns just the encoding name (e.g., "UTF-8")
-  if (locale && !locale.includes('.')) {
-    return locale.toLowerCase();
+  if (encoding) {
+    // Strip locale modifiers like @euro (e.g. utf-8@euro -> utf-8)
+    const atIndex = encoding.indexOf('@');
+    if (atIndex >= 0) {
+      encoding = encoding.slice(0, atIndex);
+    }
+    return encoding.toLowerCase();
   }
 
   return null;
+}
+
+function getWindowsCodePageEncoding(): string | null {
+  try {
+    const output = execSync('chcp', { encoding: 'utf8' });
+    const encoding = parseCodePageFromChcpOutput(output);
+    if (encoding) {
+      return encoding;
+    }
+    throw new Error(
+      `Unable to parse Windows code page from 'chcp' output "${output.trim()}". `,
+    );
+  } catch (error) {
+    debugLogger.warn(
+      `Failed to get Windows code page using 'chcp' command: ${error instanceof Error ? error.message : String(error)}. ` +
+        `Will attempt to detect encoding from command output instead.`,
+    );
+  }
+  return null;
+}
+
+function parseCodePageFromChcpOutput(output: string): string | null {
+  const colonIndex = output.indexOf(':');
+  if (colonIndex < 0) {
+    return null;
+  }
+  const digits = output.slice(colonIndex + 1).match(/\d+/);
+  if (!digits) {
+    return null;
+  }
+  const codePage = parseInt(digits[0], 10);
+  if (isNaN(codePage)) {
+    return null;
+  }
+  return windowsCodePageToEncoding(codePage);
 }
 
 /**

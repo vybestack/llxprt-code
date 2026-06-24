@@ -62,4 +62,22 @@ describe('issue #1844 – OpenAI schema converter schema source', () => {
       'Tool "no_schema_tool" is missing parametersJsonSchema',
     );
   });
+
+  it('should throw when parametersJsonSchema is a non-plain object', () => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'date_schema_tool',
+            description: 'Invalid schema',
+            parametersJsonSchema: new Date(),
+          },
+        ],
+      },
+    ];
+
+    expect(() => convertToolsToOpenAI(tools)).toThrow(
+      'Tool "date_schema_tool" is missing parametersJsonSchema',
+    );
+  });
 });

@@ -66,9 +66,9 @@ describe('SubagentInvocation', () => {
       mockMessageBus,
     );
 
-    // Access the protected messageBus property by casting to any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((invocation as any).messageBus).toBe(mockMessageBus);
+    expect(
+      (invocation as unknown as { messageBus: MessageBus }).messageBus,
+    ).toBe(mockMessageBus);
   });
 
   describe('getDescription', () => {

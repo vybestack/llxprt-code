@@ -411,8 +411,7 @@ describe('AuthStatusService.logout', () => {
     await service.logout('qwen');
 
     expect(flushMockRef.current).toBeDefined();
-    // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-    flushMockRef.current && expect(flushMockRef.current).toHaveBeenCalled();
+    expect(flushMockRef.current).toHaveBeenCalled();
   });
 });
 
@@ -492,8 +491,7 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
 
     // flush must still execute despite all failures
     expect(flushMockRef.current).toBeDefined();
-    // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-    flushMockRef.current && expect(flushMockRef.current).toHaveBeenCalled();
+    expect(flushMockRef.current).toHaveBeenCalled();
   });
 
   it('no provider-name-specific branching for gemini in clearProviderAuthCaches (G3)', async () => {
@@ -724,9 +722,11 @@ describe('AuthStatusService.logout session-bucket clear', () => {
     // Both scoped (with metadata) and unscoped (without) return the same bucket
     (
       bucketManager.getSessionBucket as ReturnType<typeof vi.fn>
-    ).mockImplementation((_provider: string, meta?: unknown) =>
-      // eslint-disable-next-line sonarjs/no-all-duplicated-branches -- Intentional: both branches return same bucket to test the "matching bucket" code path
-      meta !== undefined ? 'target-bucket' : 'target-bucket',
+    ).mockImplementation((providerName: string, metadata?: unknown) =>
+      providerName === 'qwen' &&
+      (metadata === undefined || metadata === sessionMetadata)
+        ? 'target-bucket'
+        : undefined,
     );
 
     const tokenAccessCoordinator: TokenAccessCoordinator = {

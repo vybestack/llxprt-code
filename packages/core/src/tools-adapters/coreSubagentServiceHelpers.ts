@@ -147,8 +147,8 @@ export function buildContextState(
   context.set('task_goal', request.prompt);
   context.set('task_name', request.name);
 
-  const sessionId = config?.getSessionId?.();
-  if (sessionId && sessionId.length > 0) {
+  const sessionId = config?.getSessionId();
+  if (sessionId !== undefined && sessionId.length > 0) {
     context.set('sessionId', sessionId);
   }
 
@@ -227,7 +227,7 @@ export function formatSuccessDisplay(
   agentId: string,
   output: OutputObject,
 ): string {
-  const emittedVars = Object.entries(output.emitted_vars ?? {});
+  const emittedVars = Object.entries(output.emitted_vars);
   const finalMessageSection = output.final_message
     ? `Final message:\n${output.final_message}`
     : 'Final message: _(none)_';
@@ -252,7 +252,7 @@ export function formatSuccessContent(
   const payload: Record<string, unknown> = {
     agent_id: agentId,
     terminate_reason: output.terminate_reason,
-    emitted_vars: output.emitted_vars ?? {},
+    emitted_vars: output.emitted_vars,
   };
 
   if (output.final_message !== undefined) {

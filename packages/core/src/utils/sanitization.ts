@@ -41,27 +41,17 @@ function isNonAscii(codePoint: number): boolean {
 export function sanitizeForByteString(input: string): string {
   let result = '';
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
     const codePoint = input.charCodeAt(i);
 
-    // Skip Unicode replacement character
-    if (char === UNICODE_REPLACEMENT) {
-      continue;
+    if (
+      !isControlChar(codePoint) &&
+      !isNonAscii(codePoint) &&
+      char !== UNICODE_REPLACEMENT
+    ) {
+      result += char;
     }
-
-    // Skip control characters
-    if (isControlChar(codePoint)) {
-      continue;
-    }
-
-    // Skip non-ASCII characters
-    if (isNonAscii(codePoint)) {
-      continue;
-    }
-
-    result += char;
   }
 
   return result.trim();

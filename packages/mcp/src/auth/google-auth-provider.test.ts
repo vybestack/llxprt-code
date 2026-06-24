@@ -56,6 +56,7 @@ describe('GoogleCredentialProvider', () => {
       mockGetAccessToken = vi.fn();
       mockClient = {
         getAccessToken: mockGetAccessToken,
+        credentials: {},
       };
       (GoogleAuth.prototype.getClient as Mock).mockResolvedValue(mockClient);
       provider = new GoogleCredentialProvider(config);

@@ -144,6 +144,30 @@ describe('buildMessagesWithReasoning', () => {
     ).toBe('Hello world');
   });
 
+  it('ignores malformed history entries before reasoning filtering', () => {
+    const contents = [
+      { speaker: 'human' },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello world' }],
+      },
+    ] as unknown as IContent[];
+    const options = createMockOptions({
+      'reasoning.includeInContext': false,
+      'reasoning.stripFromContext': 'all',
+    });
+
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      undefined,
+      undefined,
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe('user');
+  });
+
   it('converts assistant with tool_calls to assistant message', () => {
     const contents: IContent[] = [
       {

@@ -32,6 +32,7 @@ import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { OpenAIResponsesProviderBase } from './OpenAIResponsesProviderBase.js';
 import { buildOpenAIResponsesInput } from './OpenAIResponsesInputBuilder.js';
+import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
 import type {
   OpenAIResponsesRequest,
   ResponsesInputItem,
@@ -347,8 +348,13 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     if (responsesTools === undefined || responsesTools.length === 0) return;
 
     request.tools = responsesTools;
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Preserve original falsy defaulting for request overrides such as an empty tool_choice string.
-    if (!request.tool_choice) request.tool_choice = 'auto';
+    if (
+      request.tool_choice === undefined ||
+      request.tool_choice === null ||
+      request.tool_choice === ''
+    ) {
+      request.tool_choice = 'auto';
+    }
     request.parallel_tool_calls = true;
   }
 
@@ -505,7 +511,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       options.runtime?.runtimeId;
     if (typeof cacheKey !== 'string' || cacheKey.trim() === '') return;
 
-    request.prompt_cache_key = cacheKey;
+    request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);
     if (!isCodex) request.prompt_cache_retention = '24h';
   }
 

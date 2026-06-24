@@ -11,7 +11,7 @@
 
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 
 const isWindows = process.platform === 'win32';
 const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
@@ -20,14 +20,37 @@ const shouldUseForkPool = isWindows || isMacCi;
 const agentsPackagePrefix = '@vybestack/llxprt-code-agents/';
 const authPackagePrefix = '@vybestack/llxprt-code-auth/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
+const ideIntegrationPackagePrefix = '@vybestack/llxprt-code-ide-integration/';
+const mcpPackagePrefix = '@vybestack/llxprt-code-mcp/';
+const policyPackagePrefix = '@vybestack/llxprt-code-policy/';
+const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const testUtilsPackagePrefix = '@vybestack/llxprt-code-test-utils/';
+const toolsPackagePrefix = '@vybestack/llxprt-code-tools/';
 const agentsEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
 const agentsSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
 const authEntry = fileURLToPath(new URL('../auth/index.ts', import.meta.url));
 const authSrcDir = fileURLToPath(new URL('../auth/src/', import.meta.url));
 const coreEntry = fileURLToPath(new URL('../core/index.ts', import.meta.url));
 const coreSrcDir = fileURLToPath(new URL('../core/src/', import.meta.url));
+const ideIntegrationEntry = fileURLToPath(
+  new URL('../ide-integration/index.ts', import.meta.url),
+);
+const ideIntegrationSrcDir = fileURLToPath(
+  new URL('../ide-integration/src/', import.meta.url),
+);
+const mcpEntry = fileURLToPath(new URL('../mcp/index.ts', import.meta.url));
+const mcpSrcDir = fileURLToPath(new URL('../mcp/src/', import.meta.url));
+const policyEntry = fileURLToPath(
+  new URL('../policy/index.ts', import.meta.url),
+);
+const policySrcDir = fileURLToPath(new URL('../policy/src/', import.meta.url));
+const providersEntry = fileURLToPath(
+  new URL('../providers/index.ts', import.meta.url),
+);
+const providersSrcDir = fileURLToPath(
+  new URL('../providers/src/', import.meta.url),
+);
 const settingsEntry = fileURLToPath(
   new URL('../settings/index.ts', import.meta.url),
 );
@@ -40,14 +63,33 @@ const testUtilsEntry = fileURLToPath(
 const testUtilsSrcDir = fileURLToPath(
   new URL('../test-utils/src/', import.meta.url),
 );
+const toolsEntry = fileURLToPath(new URL('../tools/index.ts', import.meta.url));
+const toolsSrcDir = fileURLToPath(new URL('../tools/src/', import.meta.url));
 
 function resolveTsSource(baseDir: string, specifier: string): string {
   const direct = baseDir + specifier;
   if (direct.endsWith('.js')) {
-    const tsPath = direct.slice(0, -3) + '.ts';
+    const withoutExtension = direct.slice(0, -3);
+    const tsPath = withoutExtension + '.ts';
     if (existsSync(tsPath)) {
       return tsPath;
     }
+    const indexPath = withoutExtension + '/index.ts';
+    if (existsSync(indexPath)) {
+      return indexPath;
+    }
+  }
+  return direct;
+}
+
+function resolveToolsSource(specifier: string): string {
+  const direct = resolveTsSource(toolsSrcDir, specifier);
+  if (existsSync(direct)) {
+    return direct;
+  }
+  const formatter = resolveTsSource(toolsSrcDir + 'formatters/', specifier);
+  if (existsSync(formatter)) {
+    return formatter;
   }
   return direct;
 }
@@ -83,6 +125,39 @@ const workspaceAliasPlugin = {
         source.slice(corePackagePrefix.length),
       );
     }
+    if (source === '@vybestack/llxprt-code-ide-integration') {
+      return ideIntegrationEntry;
+    }
+    if (source.startsWith(ideIntegrationPackagePrefix)) {
+      return resolveTsSource(
+        ideIntegrationSrcDir,
+        source.slice(ideIntegrationPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-mcp') {
+      return mcpEntry;
+    }
+    if (source.startsWith(mcpPackagePrefix)) {
+      return resolveTsSource(mcpSrcDir, source.slice(mcpPackagePrefix.length));
+    }
+    if (source === '@vybestack/llxprt-code-policy') {
+      return policyEntry;
+    }
+    if (source.startsWith(policyPackagePrefix)) {
+      return resolveTsSource(
+        policySrcDir,
+        source.slice(policyPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-providers') {
+      return providersEntry;
+    }
+    if (source.startsWith(providersPackagePrefix)) {
+      return resolveTsSource(
+        providersSrcDir,
+        source.slice(providersPackagePrefix.length),
+      );
+    }
     if (source === '@vybestack/llxprt-code-settings') {
       return settingsEntry;
     }
@@ -100,6 +175,12 @@ const workspaceAliasPlugin = {
         testUtilsSrcDir,
         source.slice(testUtilsPackagePrefix.length),
       );
+    }
+    if (source === '@vybestack/llxprt-code-tools') {
+      return toolsEntry;
+    }
+    if (source.startsWith(toolsPackagePrefix)) {
+      return resolveToolsSource(source.slice(toolsPackagePrefix.length));
     }
     if (source === 'ajv') {
       return fileURLToPath(
@@ -147,6 +228,13 @@ export default defineConfig({
   plugins: [workspaceAliasPlugin],
   test: {
     passWithNoTests: false,
+    // Never discover test files inside Stryker's sandbox/backup tree. The B8
+    // mutation gate runs with `inPlace: true`, which keeps a pristine copy of
+    // the project under `.stryker-tmp/backup-<id>/`. Without this exclude both
+    // normal runs (if a backup is left behind) and Stryker's own dry run would
+    // pick up DUPLICATE/stale spec copies from that tree, double-counting tests
+    // and corrupting coverage attribution.
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
     reporters: ['default', 'junit'],
     testTimeout: 30000,
     teardownTimeout: 120000,

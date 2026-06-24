@@ -22,6 +22,10 @@ import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxp
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { debugLogger } from '../utils/debugLogger.js';
 
+function containsAllSubstrings(value: string, parts: string[]): boolean {
+  return parts.every((p) => value.includes(p));
+}
+
 // Mock dependencies
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
@@ -818,12 +822,16 @@ describe('Config LSP Integration (P33)', () => {
         expect(lspClient?.isAlive()).toBe(false);
         expect(lspClient?.getUnavailableReason()).toContain('not found');
 
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          expect.stringMatching(
-            // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-            /LSP.*@vybestack\/llxprt-code-lsp.*not found.*npm install -g @vybestack\/llxprt-code-lsp/i,
-          ),
-        );
+        expect(consoleErrorSpy).toHaveBeenCalled();
+        const errorMessage = String(consoleErrorSpy.mock.calls[0]?.[0] ?? '');
+        expect(
+          containsAllSubstrings(errorMessage, [
+            'LSP',
+            '@vybestack/llxprt-code-lsp',
+            'not found',
+            'npm install -g @vybestack/llxprt-code-lsp',
+          ]),
+        ).toBe(true);
       } finally {
         consoleErrorSpy.mockRestore();
         startSpy.mockRestore();

@@ -12,6 +12,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+import { firstTruthyString } from '../utils/falsyFallback.js';
 
 /**
  * Interface for cancelled tool information
@@ -229,8 +230,7 @@ export class SyntheticToolResponseHandler {
         {
           type: 'tool_response',
           callId: tool.toolCallId,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: toolName is optional string, empty string should use 'unknown'
-          toolName: tool.toolName || 'unknown',
+          toolName: firstTruthyString(tool.toolName, 'unknown'),
           result: 'Tool execution cancelled by user',
           error: 'Cancelled by user',
         } as ToolResponseBlock,

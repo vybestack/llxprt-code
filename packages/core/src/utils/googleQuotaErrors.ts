@@ -102,11 +102,18 @@ function getErrorMessage(
   error: unknown,
   googleApiError: GoogleApiError | null | undefined,
 ): string {
-  return (
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall through to stringified error
-    googleApiError?.message ||
-    (error instanceof Error ? error.message : String(error))
-  );
+  const parsedMessage = googleApiError?.message;
+  if (parsedMessage !== undefined && parsedMessage !== '') {
+    return parsedMessage;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getModelNotFoundFallbackMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'Model not found';
 }
 
 function createModelNotFoundError(
@@ -114,10 +121,11 @@ function createModelNotFoundError(
   googleApiError: GoogleApiError | null | undefined,
   status: number,
 ): ModelNotFoundError {
+  const parsedMessage = googleApiError?.message;
   const message =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall through to generic message
-    googleApiError?.message ||
-    (error instanceof Error ? error.message : 'Model not found');
+    parsedMessage !== undefined && parsedMessage !== ''
+      ? parsedMessage
+      : getModelNotFoundFallbackMessage(error);
   return new ModelNotFoundError(message, status);
 }
 
@@ -188,8 +196,7 @@ function hasQuotaLimit(
 }
 
 function metadataQuotaLimit(errorInfo: ErrorInfo | undefined): string {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
-  return errorInfo?.metadata?.['quota_limit'] ?? '';
+  return errorInfo?.metadata['quota_limit'] ?? '';
 }
 
 function classifyCloudCodeQuota(

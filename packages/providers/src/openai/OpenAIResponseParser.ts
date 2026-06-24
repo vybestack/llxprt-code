@@ -128,15 +128,35 @@ export function sanitizeToolArgumentsString(
  * pattern matches, the final `.`/`:` segment is used as a fallback.
  */
 function inferKimiToolName(rawId: string): string {
-  const match =
-    /^functions\.(\w+):\d+/i.exec(rawId) ?? /^[\w]+\.(\w+):\d+/.exec(rawId);
-  if (match) {
-    return match[1];
+  // Try "functions.<name>:<seq>" pattern
+  const colonIdx = rawId.indexOf(':');
+  if (colonIdx > 0) {
+    const beforeColon = rawId.slice(0, colonIdx);
+    const dotIdx = beforeColon.indexOf('.');
+    if (dotIdx >= 0) {
+      const prefix = beforeColon.slice(0, dotIdx).toLowerCase();
+      const name = beforeColon.slice(dotIdx + 1);
+      if (name.length > 0 && (prefix === 'functions' || isWord(prefix))) {
+        return name;
+      }
+    }
   }
   const colonParts = rawId.split(':');
   const head = colonParts[0] || rawId;
   const dotParts = head.split('.');
   return dotParts[dotParts.length - 1] || head;
+}
+
+function isWord(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    const isUpper = c >= 65 && c <= 90;
+    const isLower = c >= 97 && c <= 122;
+    const isDigit = c >= 48 && c <= 57;
+    const isUnderscore = c === 95;
+    if (!isUpper && !isLower && !isDigit && !isUnderscore) return false;
+  }
+  return s.length > 0;
 }
 
 function buildKimiToolCall(
@@ -157,6 +177,115 @@ function buildKimiToolCall(
     name: toolName,
     parameters: processedParameters,
   };
+}
+
+/**
+ * Remove all occurrences of the given literal token strings from text.
+ */
+function stripAllTokens(text: string, tokens: string[]): string {
+  let result = text;
+  for (const token of tokens) {
+    let idx = result.indexOf(token);
+    while (idx >= 0) {
+      result = result.slice(0, idx) + result.slice(idx + token.length);
+      idx = result.indexOf(token, idx);
+    }
+  }
+  return result;
+}
+
+/**
+ * Find and extract all delimited sections from text.
+ * Returns the cleaned text (sections removed) and the extracted section bodies.
+ */
+function extractSections(
+  text: string,
+  beginToken: string,
+  endToken: string,
+  onSection: (body: string) => void,
+): { foundSection: boolean; cleanedText: string } {
+  const parts: string[] = [];
+  let lastEnd = 0;
+  let searchPos = 0;
+  let found = false;
+
+  let sectionStart = text.indexOf(beginToken, searchPos);
+  while (sectionStart >= 0) {
+    const sectionEnd = text.indexOf(endToken, sectionStart + beginToken.length);
+    if (sectionEnd < 0) break;
+    found = true;
+    parts.push(text.slice(lastEnd, sectionStart));
+    const sectionBody = text.slice(
+      sectionStart + beginToken.length,
+      sectionEnd,
+    );
+    lastEnd = sectionEnd + endToken.length;
+    searchPos = lastEnd;
+    onSection(sectionBody);
+    sectionStart = text.indexOf(beginToken, searchPos);
+  }
+
+  if (!found) return { foundSection: false, cleanedText: text };
+  parts.push(text.slice(lastEnd));
+  return { foundSection: true, cleanedText: parts.join('') };
+}
+
+/**
+ * Parse individual tool calls from a section body.
+ */
+function extractToolCallsFromSection(
+  sectionBody: string,
+  callBegin: string,
+  argBegin: string,
+  callEnd: string,
+  logger: DebugLogger,
+): ToolCallBlock[] {
+  const calls: ToolCallBlock[] = [];
+  try {
+    let searchPos = 0;
+    let cbIdx = sectionBody.indexOf(callBegin, searchPos);
+    while (cbIdx >= 0) {
+      const result = parseOneToolCall(
+        sectionBody,
+        cbIdx,
+        callBegin,
+        argBegin,
+        callEnd,
+      );
+      if (result === null) {
+        searchPos = cbIdx + callBegin.length;
+      } else {
+        calls.push(buildKimiToolCall(result.name, result.args, logger));
+        searchPos = result.nextPos;
+      }
+      cbIdx = sectionBody.indexOf(callBegin, searchPos);
+    }
+  } catch (err) {
+    logger.debug(
+      () =>
+        `[extractKimiToolCallsFromText] Failed to parse Kimi tool_calls_section: ${err}`,
+    );
+  }
+  return calls;
+}
+
+function parseOneToolCall(
+  body: string,
+  cbIdx: number,
+  callBegin: string,
+  argBegin: string,
+  callEnd: string,
+): { name: string; args: string; nextPos: number } | null {
+  const afterCallBegin = cbIdx + callBegin.length;
+  const nextCallIdx = body.indexOf(callBegin, afterCallBegin);
+  const argIdx = body.indexOf(argBegin, afterCallBegin);
+  if (argIdx < 0 || (nextCallIdx >= 0 && nextCallIdx < argIdx)) return null;
+  const ceIdx = body.indexOf(callEnd, argIdx + argBegin.length);
+  if (ceIdx < 0 || (nextCallIdx >= 0 && nextCallIdx < ceIdx)) return null;
+  const namePart = body.slice(cbIdx + callBegin.length, argIdx).trim();
+  const argsPart = body.slice(argIdx + argBegin.length, ceIdx).trim();
+  if (namePart.length === 0) return null;
+  return { name: namePart, args: argsPart, nextPos: ceIdx + callEnd.length };
 }
 
 /**
@@ -184,33 +313,34 @@ export function extractKimiToolCallsFromText(
   const toolCalls: ToolCallBlock[] = [];
   let text = raw;
 
+  const SECTION_BEGIN = '<|tool_calls_section_begin|>';
+  const SECTION_END = '<|tool_calls_section_end|>';
+  const CALL_BEGIN = '<|tool_call_begin|>';
+  const CALL_ARG_BEGIN = '<|tool_call_argument_begin|>';
+  const CALL_END = '<|tool_call_end|>';
+
   // Extract tool calls from complete sections if present
-  if (raw.includes('<|tool_calls_section_begin|>')) {
-    const sectionRegex =
-      /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/g;
+  const collectedCalls: ToolCallBlock[] = [];
+  const { foundSection, cleanedText } = extractSections(
+    text,
+    SECTION_BEGIN,
+    SECTION_END,
+    (sectionBody: string) => {
+      collectedCalls.push(
+        ...extractToolCallsFromSection(
+          sectionBody,
+          CALL_BEGIN,
+          CALL_ARG_BEGIN,
+          CALL_END,
+          logger,
+        ),
+      );
+    },
+  );
 
-    text = text.replace(
-      sectionRegex,
-      (_sectionMatch: string, sectionBody: string) => {
-        try {
-          const callRegex =
-            /<\|tool_call_begin\|>([^<]+)<\|tool_call_argument_begin\|>([\s\S]*?)<\|tool_call_end\|>/g;
-
-          let m: RegExpExecArray | null;
-          while ((m = callRegex.exec(sectionBody)) !== null) {
-            toolCalls.push(buildKimiToolCall(m[1].trim(), m[2].trim(), logger));
-          }
-        } catch (err) {
-          logger.debug(
-            () =>
-              `[extractKimiToolCallsFromText] Failed to parse Kimi tool_calls_section: ${err}`,
-          );
-        }
-
-        // Strip the entire tool section from user-visible text
-        return '';
-      },
-    );
+  if (foundSection) {
+    text = cleanedText;
+    toolCalls.push(...collectedCalls);
 
     if (toolCalls.length > 0) {
       logger.debug(
@@ -226,8 +356,14 @@ export function extractKimiToolCallsFromText(
 
   // ALWAYS run stray token cleanup, even if no complete sections were found
   // This handles partial sections, malformed tokens, orphaned markers, etc.
-  text = text.replace(/<\|tool_call(?:_(?:begin|end|argument_begin))?\|>/g, '');
-  text = text.replace(/<\|tool_calls_section_(?:begin|end)\|>/g, '');
+  text = stripAllTokens(text, [
+    '<|tool_call_begin|>',
+    '<|tool_call_end|>',
+    '<|tool_call_argument_begin|>',
+    '<|tool_call|>',
+    '<|tool_calls_section_begin|>',
+    '<|tool_calls_section_end|>',
+  ]);
 
   // Don't trim - preserve leading/trailing newlines that are important for formatting
   // (e.g., numbered lists from Kimi K2 that have newlines between items)

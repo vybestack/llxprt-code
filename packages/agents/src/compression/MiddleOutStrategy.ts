@@ -89,7 +89,6 @@ export class MiddleOutStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
-  // eslint-disable-next-line max-lines-per-function -- Strategy orchestration remains linear for readability.
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history } = context;
 
@@ -97,14 +96,12 @@ export class MiddleOutStrategy implements CompressionStrategy {
       return this.noCompressionResult(history);
     }
 
-    // Compute sandwich split
     let { toKeepTop, toCompress, toKeepBottom } = this.computeSplit(context);
 
     if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
       return this.noCompressionResult(history);
     }
 
-    // Preserve the last user prompt if it ended up in the middle section
     const {
       toCompress: adjustedCompress,
       toKeepBottom: adjustedBottom,
@@ -118,10 +115,6 @@ export class MiddleOutStrategy implements CompressionStrategy {
       return this.noCompressionResult(history);
     }
 
-    // Resolve the compression prompt
-    const prompt = this.resolvePrompt(context);
-
-    // Resolve the provider (compression profile may be undefined)
     const compressionProfile =
       context.runtimeContext.ephemerals.compressionProfile();
     const {
@@ -134,28 +127,12 @@ export class MiddleOutStrategy implements CompressionStrategy {
       await context.resolveProvider(compressionProfile),
     );
 
-    // Build the LLM request — sanitize tool blocks to text so the compression
-    // call doesn't trip Anthropic's strict tool_use/tool_result pairing
-    // validation (orphaned blocks from interrupted loops would cause 400s).
-    // @plan PLAN-20260211-HIGHDENSITY.P23
-    // @requirement REQ-HD-011.3, REQ-HD-012.2
-    const triggerInstruction = buildTriggerInstruction(toCompress);
-    const compressionRequest: IContent[] = [
-      COMPRESSION_SECURITY_PREAMBLE,
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: prompt }],
-      },
-      ...sanitizeHistoryForCompression(toCompress),
-      ...this.buildContextInjections(context),
-      ...largeLastPromptInjection,
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: triggerInstruction }],
-      },
-    ];
+    const compressionRequest = this.buildCompressionRequest(
+      context,
+      toCompress,
+      largeLastPromptInjection,
+    );
 
-    // Call the provider and aggregate the streamed response
     const { text: summary, usage: capturedUsage } = await this.callProvider(
       provider,
       compressionRequest,
@@ -170,21 +147,16 @@ export class MiddleOutStrategy implements CompressionStrategy {
       throw new EmptySummaryError('middle-out');
     }
 
-    // Optional verification pass — gated by compressionVerification flag (default off)
-    let finalSummary = summary;
-    if (context.compressionVerification === true) {
-      finalSummary = await runVerificationPass(
-        provider,
-        summary,
-        context,
-        resolvedRuntime,
-        resolvedConfig,
-        resolvedOptions,
-        invocation,
-      );
-    }
+    const finalSummary = await this.maybeVerifySummary(
+      context,
+      provider,
+      summary,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    );
 
-    // Assemble result
     const newHistory = this.assembleHistory(
       toKeepTop,
       finalSummary,
@@ -194,7 +166,71 @@ export class MiddleOutStrategy implements CompressionStrategy {
       lastUserPromptContext,
     );
 
-    const metadata: CompressionResultMetadata = {
+    return {
+      newHistory,
+      metadata: this.buildMetadata(
+        history,
+        newHistory,
+        toKeepTop,
+        toCompress,
+        toKeepBottom,
+        capturedUsage,
+      ),
+    };
+  }
+
+  private buildCompressionRequest(
+    context: CompressionContext,
+    toCompress: IContent[],
+    largeLastPromptInjection: IContent[],
+  ): IContent[] {
+    const prompt = this.resolvePrompt(context);
+    const triggerInstruction = buildTriggerInstruction(toCompress);
+    return [
+      COMPRESSION_SECURITY_PREAMBLE,
+      { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
+      ...sanitizeHistoryForCompression(toCompress),
+      ...this.buildContextInjections(context),
+      ...largeLastPromptInjection,
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: triggerInstruction }],
+      },
+    ];
+  }
+
+  private async maybeVerifySummary(
+    context: CompressionContext,
+    provider: IProvider,
+    summary: string,
+    resolvedRuntime: ProviderRuntimeContext,
+    resolvedConfig: Config | undefined,
+    resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
+    invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
+  ): Promise<string> {
+    if (context.compressionVerification !== true) {
+      return summary;
+    }
+    return runVerificationPass(
+      provider,
+      summary,
+      context,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    );
+  }
+
+  private buildMetadata(
+    history: readonly IContent[],
+    newHistory: IContent[],
+    toKeepTop: IContent[],
+    toCompress: IContent[],
+    toKeepBottom: IContent[],
+    capturedUsage: UsageStats | undefined,
+  ): CompressionResultMetadata {
+    return {
       originalMessageCount: history.length,
       compressedMessageCount: newHistory.length,
       strategyUsed: 'middle-out',
@@ -204,8 +240,6 @@ export class MiddleOutStrategy implements CompressionStrategy {
       middleCompressed: toCompress.length,
       ...(capturedUsage ? { usage: capturedUsage } : {}),
     };
-
-    return { newHistory, metadata };
   }
 
   // -------------------------------------------------------------------------

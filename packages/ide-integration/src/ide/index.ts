@@ -37,3 +37,11 @@ export {
   type IdeInstaller,
   type InstallResult,
 } from './ide-installer.js';
+export {
+  isFakeIdeActive,
+  fakeIdeFixturePath,
+  loadFakeIdeFixture,
+  trustFakeIde,
+  type FakeIdeFixture,
+  type FakeIdeFixtureEntry,
+} from './fake-ide-environment.js';

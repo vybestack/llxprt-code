@@ -67,12 +67,11 @@ class OptionRecorderProvider extends BaseProvider {
 
 let contractProvider: OptionRecorderProvider;
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  contractProvider = new OptionRecorderProvider({ name: 'contract' });
-});
-
 describe('generateChatCompletion contract', () => {
+  beforeEach(() => {
+    contractProvider = new OptionRecorderProvider({ name: 'contract' });
+  });
+
   it('normalizes generated call options into options object', async () => {
     const message = asContent('contract-call');
 
