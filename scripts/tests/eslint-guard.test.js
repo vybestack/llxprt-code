@@ -5,83 +5,21 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   checkDiff,
   checkCoreCentralBypassesInConfig,
   checkCoreDirectiveScopesInConfig,
+  extractScopeArray,
   formatViolations,
   hasInlineEslintDirective,
   scanCoreDirectives,
+  scanPackageDirectives,
 } from '../check-eslint-guard.js';
 
 const repoRoot = resolve(__dirname, '..', '..');
-
-function listTsFiles(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      out.push(...listTsFiles(full));
-    } else if (/\.(?:ts|tsx)$/.test(entry)) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
-const eslintConfigPath = join(repoRoot, 'eslint.config.js');
-const eslintConfigSource = readFileSync(eslintConfigPath, 'utf8');
-
-function extractScopeArray(name) {
-  const start = eslintConfigSource.indexOf('const ' + name + ' = [');
-  if (start === -1) {
-    throw new Error(
-      'Could not find scope const declaration for "' +
-        name +
-        '" in eslint.config.js',
-    );
-  }
-  const arrayStart = eslintConfigSource.indexOf('[', start);
-  let depth = 0;
-  let end = -1;
-  for (let i = arrayStart; i < eslintConfigSource.length; i++) {
-    const ch = eslintConfigSource[i];
-    if (ch === '[') {
-      depth += 1;
-    } else if (ch === ']') {
-      depth -= 1;
-      if (depth === 0) {
-        end = i;
-        break;
-      }
-    }
-  }
-  if (end === -1) {
-    throw new Error(
-      'Could not parse closing bracket for scope const "' +
-        name +
-        '" in eslint.config.js',
-    );
-  }
-  const body = eslintConfigSource.slice(arrayStart + 1, end);
-  const entries = [];
-  const re = /'([^']+)'/g;
-  let m;
-  while ((m = re.exec(body)) !== null) {
-    entries.push(m[1]);
-  }
-  return entries;
-}
 
 function diffFor(file, addedLine) {
   return [
@@ -540,15 +478,9 @@ describe('packages/agents directive cleanup (#2117)', () => {
   const agentsSrcDir = join(repoRoot, 'packages', 'agents', 'src');
 
   it('has zero inline ESLint disable/enable directives', () => {
-    const offenders = [];
-    for (const file of listTsFiles(agentsSrcDir)) {
-      const lines = readFileSync(file, 'utf8').split('\n');
-      lines.forEach((line, idx) => {
-        if (hasInlineEslintDirective(line)) {
-          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
-        }
-      });
-    }
+    const offenders = scanPackageDirectives(agentsSrcDir, '2117').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
@@ -571,15 +503,9 @@ describe('packages/storage directive cleanup (#2119)', () => {
   const storageSrcDir = join(repoRoot, 'packages', 'storage', 'src');
 
   it('has zero inline ESLint disable/enable directives', () => {
-    const offenders = [];
-    for (const file of listTsFiles(storageSrcDir)) {
-      const lines = readFileSync(file, 'utf8').split('\n');
-      lines.forEach((line, idx) => {
-        if (hasInlineEslintDirective(line)) {
-          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
-        }
-      });
-    }
+    const offenders = scanPackageDirectives(storageSrcDir, '2119').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
@@ -604,15 +530,9 @@ describe('packages/auth directive cleanup (#2121)', () => {
   const authSrcDir = join(repoRoot, 'packages', 'auth', 'src');
 
   it('has zero inline ESLint disable/enable directives', () => {
-    const offenders = [];
-    for (const file of listTsFiles(authSrcDir)) {
-      const lines = readFileSync(file, 'utf8').split('\n');
-      lines.forEach((line, idx) => {
-        if (hasInlineEslintDirective(line)) {
-          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
-        }
-      });
-    }
+    const offenders = scanPackageDirectives(authSrcDir, '2121').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
@@ -635,15 +555,9 @@ describe('packages/settings directive cleanup (#2120)', () => {
   const settingsSrcDir = join(repoRoot, 'packages', 'settings', 'src');
 
   it('has zero inline ESLint disable/enable directives', () => {
-    const offenders = [];
-    for (const file of listTsFiles(settingsSrcDir)) {
-      const lines = readFileSync(file, 'utf8').split('\n');
-      lines.forEach((line, idx) => {
-        if (hasInlineEslintDirective(line)) {
-          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
-        }
-      });
-    }
+    const offenders = scanPackageDirectives(settingsSrcDir, '2120').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
@@ -660,6 +574,33 @@ describe('packages/settings directive cleanup (#2120)', () => {
     expect(
       settingsEntries,
       'Legacy settings entries: ' + settingsEntries.join(', '),
+    ).toEqual([]);
+  });
+});
+
+describe('packages/a2a-server directive cleanup (#2123)', () => {
+  const a2aSrcDir = join(repoRoot, 'packages', 'a2a-server', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const offenders = scanPackageDirectives(a2aSrcDir, '2123').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/a2a-server/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const a2aEntries = legacy.filter((e) =>
+      e.startsWith('packages/a2a-server'),
+    );
+    expect(
+      a2aEntries,
+      'Legacy a2a-server entries: ' + a2aEntries.join(', '),
     ).toEqual([]);
   });
 });

@@ -312,8 +312,8 @@ describe('AnthropicProvider', () => {
 
         const content = result.value as IContent;
         const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
-        const input = content.metadata?.usage?.promptTokens ?? 0;
-        const hitRate = (cacheRead / (cacheRead + input)) * 100;
+        const totalInput = content.metadata?.usage?.promptTokens ?? 1;
+        const hitRate = (cacheRead / totalInput) * 100;
 
         expect(hitRate).toBe(0);
       });
@@ -345,8 +345,8 @@ describe('AnthropicProvider', () => {
 
         const content = result.value as IContent;
         const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
-        const input = content.metadata?.usage?.promptTokens ?? 0;
-        const hitRate = (cacheRead / (cacheRead + input)) * 100;
+        const totalInput = content.metadata?.usage?.promptTokens ?? 1;
+        const hitRate = (cacheRead / totalInput) * 100;
 
         expect(hitRate).toBeGreaterThan(90);
         expect(cacheRead).toBe(3200);

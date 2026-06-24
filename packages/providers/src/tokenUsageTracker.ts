@@ -99,7 +99,7 @@ export class TokenUsageTracker {
     this.sessionTokenUsage.tool += toolTokens;
     this.sessionTokenUsage.thought += thoughtTokens;
     this.sessionTokenUsage.total +=
-      inputTokens + outputTokens + cacheTokens + toolTokens + thoughtTokens;
+      inputTokens + outputTokens + toolTokens + thoughtTokens;
 
     // Track cache reads/writes if provided
     // Note: cacheWrites can be null (provider doesn't report) vs undefined (not in usage object)
@@ -187,16 +187,15 @@ export class TokenUsageTracker {
     }
 
     // Recalculate hit rate
-    // Hit rate = cache reads / (cache reads + uncached input) * 100
-    const totalPromptTokens = this.sessionTokenUsage.input;
-    const totalInputTokens =
-      this.cacheStats.totalCacheReads + totalPromptTokens;
+    // Hit rate = cache reads / total input tokens * 100
+    // sessionTokenUsage.input includes cached tokens, so it is the total input
+    const totalInputTokens = this.sessionTokenUsage.input;
     if (totalInputTokens > 0) {
       this.cacheStats.hitRate =
         (this.cacheStats.totalCacheReads / totalInputTokens) * 100;
       logger.debug(
         () =>
-          `[ProviderManager.trackCacheUsage] Updated hitRate to ${this.cacheStats.hitRate}% (cacheReads=${this.cacheStats.totalCacheReads}, uncachedInput=${totalPromptTokens}, total=${totalInputTokens})`,
+          `[ProviderManager.trackCacheUsage] Updated hitRate to ${this.cacheStats.hitRate}% (cacheReads=${this.cacheStats.totalCacheReads}, totalInput=${totalInputTokens})`,
       );
     }
   }
