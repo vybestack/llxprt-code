@@ -12,9 +12,13 @@ import {
   checkDiff,
   checkCoreCentralBypassesInConfig,
   checkCoreDirectiveScopesInConfig,
+  extractScopeArray,
   formatViolations,
   scanCoreDirectives,
+  scanPackageDirectives,
 } from '../check-eslint-guard.js';
+
+const repoRoot = process.cwd();
 
 function diffFor(file, addedLine) {
   return [
@@ -368,16 +372,9 @@ describe('packages/auth directive cleanup (#2121)', () => {
   const authSrcDir = join(repoRoot, 'packages', 'auth', 'src');
 
   it('has zero inline ESLint disable/enable directives', () => {
-    const directiveRe = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
-    const offenders = [];
-    for (const file of listTsFiles(authSrcDir)) {
-      const lines = readFileSync(file, 'utf8').split('\n');
-      lines.forEach((line, idx) => {
-        if (directiveRe.test(line)) {
-          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
-        }
-      });
-    }
+    const offenders = scanPackageDirectives(authSrcDir, '2121').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
@@ -392,6 +389,33 @@ describe('packages/auth directive cleanup (#2121)', () => {
     expect(
       authEntries,
       'Legacy auth entries: ' + authEntries.join(', '),
+    ).toEqual([]);
+  });
+});
+
+describe('packages/a2a-server directive cleanup (#2123)', () => {
+  const a2aSrcDir = join(repoRoot, 'packages', 'a2a-server', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const offenders = scanPackageDirectives(a2aSrcDir, '2123').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/a2a-server/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const a2aEntries = legacy.filter((e) =>
+      e.startsWith('packages/a2a-server'),
+    );
+    expect(
+      a2aEntries,
+      'Legacy a2a-server entries: ' + a2aEntries.join(', '),
     ).toEqual([]);
   });
 });
