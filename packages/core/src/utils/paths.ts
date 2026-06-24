@@ -25,9 +25,38 @@ export function ensureLlxprtDirExists() {
  * Includes: spaces, parentheses, brackets, braces, semicolons, ampersands, pipes,
  * asterisks, question marks, dollar signs, backticks, quotes, hash, and other shell metacharacters.
  */
-// eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-export const SHELL_SPECIAL_CHARS = /[ \t()[\]{};|*?$`'"#&<>!~]/;
+const SHELL_SPECIAL_CHAR_STRING = ' \t()[]{};|*?$`\'"#&<>!~';
+const SHELL_SPECIAL_CHAR_SET = new Set(SHELL_SPECIAL_CHAR_STRING);
 
+/**
+ * Tests whether a character is a shell special character that needs escaping.
+ */
+export function isShellSpecialChar(char: string): boolean {
+  return SHELL_SPECIAL_CHAR_SET.has(char);
+}
+
+/**
+ * Returns a character-class-safe representation of the shell special
+ * characters, suitable for embedding inside `[...]` in a RegExp. The `]`
+ * and `\` characters are escaped so the class is well-formed.
+ */
+export function shellSpecialCharSource(): string {
+  return ' \\t()\\[\\]{};|*?$`\'"#&<>!~';
+}
+
+/**
+ * @deprecated Use {@link isShellSpecialChar} or {@link shellSpecialCharSource}
+ * instead. Kept for backward compatibility with external consumers that
+ * access `.source` or `.test()`.
+ */
+export const SHELL_SPECIAL_CHARS = {
+  get source(): string {
+    return `[${shellSpecialCharSource()}]`;
+  },
+  test(char: string): boolean {
+    return isShellSpecialChar(char);
+  },
+};
 /**
  * Expands a leading tilde to the user's home directory.
  */
@@ -295,7 +324,7 @@ export function escapePath(filePath: string): string {
     const isAlreadyEscaped = backslashCount % 2 === 1;
 
     // Only escape if not already escaped
-    if (!isAlreadyEscaped && SHELL_SPECIAL_CHARS.test(char)) {
+    if (!isAlreadyEscaped && isShellSpecialChar(char)) {
       result += '\\' + char;
     } else {
       result += char;
@@ -310,7 +339,7 @@ export function escapePath(filePath: string): string {
  */
 export function unescapePath(filePath: string): string {
   return filePath.replace(
-    new RegExp(`\\\\([${SHELL_SPECIAL_CHARS.source.slice(1, -1)}])`, 'g'),
+    new RegExp(`\\\\([${shellSpecialCharSource()}])`, 'g'),
     '$1',
   );
 }

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Test to reproduce duplicate tool call IDs during compression
  */
@@ -104,12 +103,6 @@ describe('Compression and duplicate tool call IDs', () => {
         }
       }
     }
-
-    // Debug output
-    console.log('Tool call IDs found:', toolCallIds);
-    console.log('Tool response IDs found:', toolResponseIds);
-    console.log('History to keep:', historyToKeep);
-    console.log('All history after rebuild:', allHistory);
 
     // Check for duplicates
     const uniqueToolCallIds = new Set(toolCallIds);

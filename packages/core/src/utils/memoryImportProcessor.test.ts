@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -21,8 +20,11 @@ function testPath(...segments: string[]): string {
   for (let i = 1; i < segments.length; i++) {
     if (segments[i].startsWith('/') || segments[i].startsWith('\\')) {
       // If segment starts with a separator, remove the trailing separator from the result
-      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      result = path.normalize(result.replace(/[\\/]+$/, '') + segments[i]);
+      const trimmed =
+        result.endsWith('/') || result.endsWith('\\')
+          ? result.slice(0, -1)
+          : result;
+      result = path.normalize(trimmed + segments[i]);
     } else {
       // Otherwise join with the platform separator
       result = path.join(result, segments[i]);
@@ -38,7 +40,7 @@ const mockedFs = vi.mocked(fs);
 // Mock console methods to capture warnings
 const originalConsoleWarn = debugLogger.warn;
 const originalConsoleError = debugLogger.error;
-const originalConsoleDebug = console.debug;
+const originalConsoleDebug = debugLogger.debug;
 
 // Helper functions using marked for parsing and validation
 const parseMarkdown = (content: string) => marked.lexer(content);
@@ -99,14 +101,14 @@ describe('memoryImportProcessor', () => {
     // Mock console methods
     debugLogger.warn = vi.fn();
     debugLogger.error = vi.fn();
-    console.debug = vi.fn();
+    debugLogger.debug = vi.fn();
   });
 
   afterEach(() => {
     // Restore console methods
     debugLogger.warn = originalConsoleWarn;
     debugLogger.error = originalConsoleError;
-    console.debug = originalConsoleDebug;
+    debugLogger.debug = originalConsoleDebug;
   });
 
   describe('processImports', () => {

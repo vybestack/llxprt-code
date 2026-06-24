@@ -59,6 +59,8 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
+import type { Config } from './config.js';
+import type { ConfigBaseCore } from './configBaseCore.js';
 
 /**
  * @plan PLAN-20260610-ISSUE1592.P01
@@ -83,8 +85,7 @@ export const TASK_TOOL_NAME = 'task';
  */
 export interface TaskToolRegistration {
   /** Concrete class constructor for ToolRecord.toolClass */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly toolClass: any;
+  readonly toolClass: ToolConstructor;
   /** ToolClass.name ('TaskTool') — becomes ToolRecord.toolName; allow-list/exclude matching */
   readonly className: string;
   /** static ToolClass.Name ('task') — becomes ToolRecord.displayName; also matched by allow-list */
@@ -105,8 +106,7 @@ export interface TaskToolArgs {
 
 /** Tool record for settings UI */
 export interface ToolRecord {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toolClass: any;
+  toolClass: ToolConstructor | undefined;
   toolName: string;
   displayName: string;
   isRegistered: boolean;
@@ -152,20 +152,23 @@ function getTaskToolMissingReason(
 const matchesToolIdentifier = (value: string, target: string): boolean =>
   value === target || value.startsWith(`${target}(`);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RegisterCoreToolFn = (ToolClass: any, ...args: unknown[]) => void;
+/** Minimal constructor shape for declarative tools. */
+type ToolConstructor = new (...args: never[]) => AnyDeclarativeTool;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RegisterCoreToolFn = (
+  ToolClass: ToolConstructor,
+  ...args: unknown[]
+) => void;
+
 function buildRegisterCoreTool(
   registry: ToolRegistry,
   effectiveCoreTools: string[] | undefined,
   excludeTools: string[] | undefined,
   allPotentialTools: ToolRecord[],
 ): RegisterCoreToolFn {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (ToolClass: any, ...args: unknown[]) => {
-    const className = ToolClass.name;
-    const rawName = ToolClass.Name;
+  return (ToolClass: ToolConstructor, ...args: unknown[]) => {
+    const className = (ToolClass as { name: string }).name;
+    const rawName = (ToolClass as unknown as { Name?: unknown }).Name;
     const toolName =
       typeof rawName === 'string' && rawName !== '' ? rawName : className;
     const coreTools = effectiveCoreTools;
@@ -203,7 +206,7 @@ function buildRegisterCoreTool(
     };
 
     if (isEnabled) {
-      registry.registerTool(new ToolClass(...args));
+      registry.registerTool(new ToolClass(...(args as never[])));
       toolRecord.isRegistered = true;
       toolRecord.reason = undefined;
     } else if (!reason) {
@@ -332,8 +335,7 @@ function registerTaskTool(
 
 function registerStandardTools(
   registerCoreTool: RegisterCoreToolFn,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: any,
+  config: Config,
   host: ToolRegistryHost,
   messageBus: MessageBus,
 ): void {
@@ -417,8 +419,8 @@ function registerStandardTools(
 }
 
 function resolveManagers(host: ToolRegistryHost): {
-  profileManager: ProfileManager | undefined;
-  subagentManager: SubagentManager | undefined;
+  profileManager: ProfileManager;
+  subagentManager: SubagentManager;
 } {
   let profileManager = host.getProfileManager();
   if (!profileManager) {
@@ -428,8 +430,7 @@ function resolveManagers(host: ToolRegistryHost): {
   }
 
   let subagentManager = host.getSubagentManager();
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
-  if (subagentManager === undefined && profileManager !== undefined) {
+  if (subagentManager === undefined) {
     const subagentsDir = path.join(os.homedir(), '.llxprt', 'subagents');
     subagentManager = new SubagentManager(subagentsDir, profileManager);
     host.setSubagentManager(subagentManager);
@@ -438,11 +439,9 @@ function resolveManagers(host: ToolRegistryHost): {
   return { profileManager, subagentManager };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function registerAgentTools(
   registerCoreTool: RegisterCoreToolFn,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: any,
+  config: Config,
   profileManager: ProfileManager | undefined,
   subagentManager: SubagentManager | undefined,
   host: ToolRegistryHost,
@@ -509,20 +508,7 @@ function registerAgentTools(
     host.getSubagentManager(),
   );
 
-  if (subagentManager !== undefined) {
-    registerCoreTool(ListSubagentsTool, listSubagentsArgs);
-  } else {
-    const listSubagentsRecord: ToolRecord = {
-      toolClass: ListSubagentsTool,
-      toolName: 'ListSubagentsTool',
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries; Name is static but fallback preserves defensive semantics.
-      displayName: ListSubagentsTool.Name || 'ListSubagentsTool',
-      isRegistered: false,
-      reason: 'requires subagent manager',
-      args: [listSubagentsArgs],
-    };
-    allPotentialTools.push(listSubagentsRecord);
-  }
+  registerCoreTool(ListSubagentsTool, listSubagentsArgs);
 
   // @plan PLAN-20260130-ASYNCTASK.P14
   const checkAsyncTasksArgs = new CoreAsyncTaskServiceAdapter(() =>
@@ -539,12 +525,11 @@ function registerAgentTools(
  */
 export async function createToolRegistry(
   host: ToolRegistryHost,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: any,
+  config: ConfigBaseCore,
   messageBus: MessageBus,
 ): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
   const registry = new ToolRegistry(
-    new CoreToolRegistryHostAdapter(config),
+    new CoreToolRegistryHostAdapter(config as Config),
     new CoreMessageBusAdapter(messageBus),
   );
   const allPotentialTools: ToolRecord[] = [];
@@ -568,13 +553,13 @@ export async function createToolRegistry(
     allPotentialTools,
   );
 
-  registerStandardTools(registerCoreTool, config, host, messageBus);
+  registerStandardTools(registerCoreTool, config as Config, host, messageBus);
 
   const { profileManager, subagentManager } = resolveManagers(host);
 
   registerAgentTools(
     registerCoreTool,
-    config,
+    config as Config,
     profileManager,
     subagentManager,
     host,

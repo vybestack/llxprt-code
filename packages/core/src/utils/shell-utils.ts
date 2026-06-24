@@ -292,6 +292,38 @@ function splitCommandsRegex(
 }
 
 /**
+ * Extracts the first command token from a trimmed command string, respecting
+ * double quotes, single quotes, and bare tokens. Returns the unquoted content
+ * or undefined if no token is found.
+ */
+function extractFirstCommandToken(cmd: string): string | undefined {
+  if (cmd.length === 0) {
+    return undefined;
+  }
+  const first = cmd[0];
+  if (first === '"' || first === "'") {
+    const closeIdx = cmd.indexOf(first, 1);
+    if (closeIdx > 1) {
+      return cmd.slice(1, closeIdx);
+    }
+    return undefined;
+  }
+  // Bare token: read until first whitespace
+  let end = 0;
+  while (end < cmd.length && !isWhitespaceChar(cmd[end])) {
+    end++;
+  }
+  if (end === 0) {
+    return undefined;
+  }
+  return cmd.slice(0, end);
+}
+
+function isWhitespaceChar(ch: string): boolean {
+  return ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r';
+}
+
+/**
  * Extracts the root command from a given shell command string.
  * This is used to identify the base command for permission checks.
  * @param command The shell command string to parse
@@ -305,20 +337,10 @@ export function getCommandRoot(command: string): string | undefined {
     return undefined;
   }
 
-  // This regex is designed to find the first "word" of a command,
-  // while respecting quotes. It looks for a sequence of non-whitespace
-  // characters that are not inside quotes.
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  const match = trimmedCommand.match(/^"([^"]+)"|^'([^']+)'|^(\S+)/);
-  if (match) {
-    // The first element in the match array is the full match.
-    // The subsequent elements are the capture groups.
-    // We prefer a captured group because it will be unquoted.
-    const commandRoot = match[1] || match[2] || match[3];
-    if (commandRoot) {
-      // If the command is a path, return the last component.
-      return commandRoot.split(/[\\/]/).pop();
-    }
+  const commandRoot = extractFirstCommandToken(trimmedCommand);
+  if (commandRoot) {
+    // If the command is a path, return the last component.
+    return commandRoot.split(/[\\/]/).pop();
   }
 
   return undefined;
@@ -347,12 +369,10 @@ export function getCommandRoots(command: string): string[] {
 }
 
 export function stripShellWrapper(command: string): string {
-  const pattern =
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    /^\s*(?:(?:sh|bash|zsh)\s+-c|cmd\.exe\s+\/c|powershell(?:\.exe)?\s+(?:-NoProfile\s+)?-Command|pwsh(?:\.exe)?\s+(?:-NoProfile\s+)?-Command)\s+/i;
-  const match = command.match(pattern);
-  if (match) {
-    let newCommand = command.substring(match[0].length).trim();
+  const trimmed = command.trim();
+  const prefixLength = matchShellWrapperPrefix(trimmed);
+  if (prefixLength > 0) {
+    let newCommand = trimmed.slice(prefixLength).trim();
     if (
       (newCommand.startsWith('"') && newCommand.endsWith('"')) ||
       (newCommand.startsWith("'") && newCommand.endsWith("'"))
@@ -362,6 +382,61 @@ export function stripShellWrapper(command: string): string {
     return newCommand;
   }
   return command.trim();
+}
+
+const SHELL_WRAPPERS = ['sh', 'bash', 'zsh'] as const;
+
+const POWERSHELL_WRAPPERS = ['powershell', 'pwsh'] as const;
+
+/**
+ * Checks if a trimmed command starts with a known shell wrapper prefix and
+ * returns the length of the prefix (including the wrapper and its flags), or
+ * 0 if no wrapper is found.
+ */
+function matchShellWrapperPrefix(cmd: string): number {
+  const lowerCmd = cmd.toLowerCase();
+
+  // Check for sh/bash/zsh -c
+  for (const shell of SHELL_WRAPPERS) {
+    if (lowerCmd.startsWith(shell + ' ')) {
+      const rest = cmd.slice(shell.length + 1).trimStart();
+      if (rest.toLowerCase().startsWith('-c ')) {
+        return cmd.length - rest.length + 3;
+      }
+    }
+  }
+
+  // Check for cmd.exe /c
+  if (lowerCmd.startsWith('cmd.exe ')) {
+    const rest = cmd.slice(8).trimStart();
+    if (rest.toLowerCase().startsWith('/c ')) {
+      return cmd.length - rest.length + 3;
+    }
+  }
+
+  // Check for powershell/pwsh [-NoProfile] -Command
+  for (const pwsh of POWERSHELL_WRAPPERS) {
+    const withExe = pwsh + '.exe';
+    let matched: string | null = null;
+    if (lowerCmd.startsWith(pwsh + ' ')) {
+      matched = pwsh;
+    } else if (lowerCmd.startsWith(withExe + ' ')) {
+      matched = withExe;
+    }
+    if (matched === null) {
+      continue;
+    }
+    let rest = cmd.slice(matched.length + 1).trimStart();
+    // Optional -NoProfile
+    if (rest.toLowerCase().startsWith('-noprofile ')) {
+      rest = rest.slice(11).trimStart();
+    }
+    if (rest.toLowerCase().startsWith('-command ')) {
+      return cmd.length - rest.length + 9;
+    }
+  }
+
+  return 0;
 }
 
 /**
@@ -497,19 +572,14 @@ type PermissionCheckResult = {
 function resolveShellReplacementMode(
   config: Config,
 ): 'allowlist' | 'all' | 'none' {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit ephemeral settings support.
-  const ephemeralValue = config.getEphemeralSetting?.('shell-replacement') as
+  const ephemeralValue = config.getEphemeralSetting('shell-replacement') as
     | 'allowlist'
     | 'all'
     | 'none'
     | boolean
     | undefined;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit static shell replacement support.
-  const configValue = config.getShellReplacement?.();
-  return normalizeShellReplacement(
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission config may omit both ephemeral and static replacement settings.
-    ephemeralValue ?? configValue ?? 'allowlist',
-  );
+  const configValue = config.getShellReplacement();
+  return normalizeShellReplacement(ephemeralValue ?? configValue);
 }
 
 function checkShellReplacementBlock(
@@ -613,7 +683,6 @@ function checkSessionAllowlistMode(
 
   const disallowedCommands: string[] = [];
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const cmd of commandsToValidate) {
     invocation.params['command'] = cmd;
     const isSessionAllowed = doesToolInvocationMatch(
@@ -621,14 +690,12 @@ function checkSessionAllowlistMode(
       invocation,
       [...normalizedSessionAllowlist],
     );
-    if (isSessionAllowed) continue;
-
-    const isGloballyAllowed = doesToolInvocationMatch(
-      'run_shell_command',
-      invocation,
-      coreTools,
-    );
-    if (isGloballyAllowed) continue;
+    const isGloballyAllowed = isSessionAllowed
+      ? true
+      : doesToolInvocationMatch('run_shell_command', invocation, coreTools);
+    if (isSessionAllowed || isGloballyAllowed) {
+      continue;
+    }
 
     disallowedCommands.push(cmd);
   }
@@ -669,7 +736,6 @@ function checkDefaultAllowMode(
       invocation,
       coreTools,
     );
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (!isGloballyAllowed) {
       disallowedCommands.push(cmd);
     }
@@ -720,10 +786,8 @@ export function checkCommandPermissions(
 
   // Debug logging when VERBOSE is set
   if (process.env.VERBOSE === 'true') {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit ephemeral settings support.
-    const ephemeralValue = config.getEphemeralSetting?.('shell-replacement');
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit static shell replacement support.
-    const configValue = config.getShellReplacement?.();
+    const ephemeralValue = config.getEphemeralSetting('shell-replacement');
+    const configValue = config.getShellReplacement();
     debugLogger.log('[SHELL-UTILS] Shell replacement check:', {
       ephemeralValue,
       configValue,

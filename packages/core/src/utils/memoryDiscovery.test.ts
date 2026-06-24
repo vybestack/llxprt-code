@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -426,10 +425,6 @@ My code memory
     'should respect the maxDirs parameter during downward scan',
     { timeout: 15000 },
     async () => {
-      const _consoleDebugSpy = vi
-        .spyOn(console, 'debug')
-        .mockImplementation(() => {});
-
       for (let i = 0; i < 60; i++) {
         await createEmptyDir(path.join(cwd, `deep_dir_${i}`));
       }
@@ -451,8 +446,6 @@ My code memory
       );
 
       // Debug logging removed - no need to check for it
-
-      vi.mocked(console.debug).mockRestore();
 
       const result = await loadServerHierarchicalMemory(
         cwd,
@@ -728,12 +721,12 @@ included directory memory
     );
 
     // Check that files are not duplicated
-    const parentOccurrences =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: match() returns null | string[], we need [] for .length when no match
-      (result.memoryContent.match(/Parent content/g) || []).length;
-    const childOccurrences =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: match() returns null | string[], we need [] for .length when no match
-      (result.memoryContent.match(/Child content/g) || []).length;
+    const parentOccurrences = (
+      result.memoryContent.match(/Parent content/g) ?? []
+    ).length;
+    const childOccurrences = (
+      result.memoryContent.match(/Child content/g) ?? []
+    ).length;
     expect(parentOccurrences).toBe(1);
     expect(childOccurrences).toBe(1);
   });

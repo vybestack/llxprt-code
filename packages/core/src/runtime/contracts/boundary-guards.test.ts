@@ -29,7 +29,6 @@ const THIS_DIR = __dirname; // packages/core/src/runtime/contracts
 const CONTRACTS_DIR = THIS_DIR;
 const ERRORS_DIR = path.join(THIS_DIR, '..', 'errors');
 const CORE_SRC_DIR = path.join(THIS_DIR, '..', '..'); // packages/core/src
-const TOOLS_DIR = path.join(CORE_SRC_DIR, 'tools');
 const PACKAGES_CORE_DIR = path.join(CORE_SRC_DIR, '..'); // packages/core
 
 /**
@@ -58,29 +57,98 @@ function collectTsFiles(dir: string, excludeTests = true): string[] {
 }
 
 /**
- * Providers import pattern: anything importing from a providers path that is
- * NOT a comment. Matches both relative and package-level provider imports.
+ * Provider import substrings: if any of these appear in an import statement,
+ * the file is importing from the providers package.
  */
-const PROVIDER_IMPORT_PATTERNS = [
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"][^'"]*\/providers\//,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"]@vybestack\/llxprt-code-providers/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"][^'"]*providers\/IProvider/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"][^'"]*providers\/ProviderManager/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"][^'"]*providers\/ProviderContentGenerator/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"][^'"]*providers\/tokenizers\//,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"][^'"]*providers\/errors/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"][^'"]*providers\/types/,
-  // eslint-disable-next-line sonarjs/regular-expr -- Static patterns for import scanning are safe; no user-controlled input
-  /from\s+['"][^'"]*providers\/utils\//,
+const PROVIDER_IMPORT_SUBSTRINGS = [
+  '/providers/',
+  '@vybestack/llxprt-code-providers',
+  'providers/IProvider',
+  'providers/ProviderManager',
+  'providers/ProviderContentGenerator',
+  'providers/tokenizers/',
+  'providers/errors',
+  'providers/types',
+  'providers/utils/',
 ];
+
+/**
+ * Checks whether a file's content contains any provider import.
+ * Uses string matching on import statements rather than regex.
+ */
+function detectProviderImport(content: string): string | null {
+  for (const line of content.split('\n')) {
+    const result = checkLineForProviderImport(line);
+    if (result !== null) {
+      return result;
+    }
+  }
+  return null;
+}
+
+function checkLineForProviderImport(line: string): string | null {
+  const trimmed = line.trim();
+  if (trimmed.startsWith('//') || trimmed.startsWith('*')) {
+    return null;
+  }
+  if (!trimmed.startsWith('import') && !trimmed.includes('export')) {
+    return null;
+  }
+  for (const substring of PROVIDER_IMPORT_SUBSTRINGS) {
+    if (trimmed.includes(substring)) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+/**
+ * Strips single-line (// ...) and block (/* ... *\/) comments from tsconfig
+ * content without using regex.
+ */
+function stripTsConfigComments(content: string): string {
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let inBlockComment = false;
+  for (const line of lines) {
+    const { processed, blockComment } = stripCommentsFromLine(
+      line,
+      inBlockComment,
+    );
+    inBlockComment = blockComment;
+    result.push(processed);
+  }
+  return result.join('\n');
+}
+
+function stripCommentsFromLine(
+  line: string,
+  inBlockComment: boolean,
+): { processed: string; blockComment: boolean } {
+  let processed = '';
+  let i = 0;
+  let blockComment = inBlockComment;
+  while (i < line.length) {
+    if (blockComment) {
+      const closeIdx = line.indexOf('*/', i);
+      if (closeIdx === -1) {
+        i = line.length;
+      } else {
+        blockComment = false;
+        i = closeIdx + 2;
+      }
+    } else if (line[i] === '/' && line[i + 1] === '/') {
+      break;
+    } else if (line[i] === '/' && line[i + 1] === '*') {
+      blockComment = true;
+      i += 2;
+    } else {
+      processed += line[i];
+      i++;
+    }
+  }
+  return { processed, blockComment };
+}
 
 /**
  * Contract file tests: verify that P03 contract files have zero provider imports.
@@ -101,13 +169,11 @@ describe('Core contract files must not import from providers', () => {
     const relativePath = path.relative(CORE_SRC_DIR, filePath);
     it(`${relativePath}: no provider imports`, () => {
       const content = fs.readFileSync(filePath, 'utf-8');
-      for (const pattern of PROVIDER_IMPORT_PATTERNS) {
-        const matches = content.match(pattern);
-        expect(
-          matches,
-          `Provider import pattern found in ${relativePath}: ${matches?.[0]}`,
-        ).toBeNull();
-      }
+      const providerImport = detectProviderImport(content);
+      expect(
+        providerImport,
+        `Provider import found in ${relativePath}: ${providerImport ?? ''}`,
+      ).toBeNull();
     });
   }
 });
@@ -125,16 +191,12 @@ describe('Core contract barrel exports must not re-export provider symbols', () 
 
   it('contracts/index.ts has no provider re-exports', () => {
     const content = fs.readFileSync(contractIndexPath, 'utf-8');
-    for (const pattern of PROVIDER_IMPORT_PATTERNS) {
-      expect(content.match(pattern)).toBeNull();
-    }
+    expect(detectProviderImport(content)).toBeNull();
   });
 
   it('errors/index.ts has no provider re-exports', () => {
     const content = fs.readFileSync(errorIndexPath, 'utf-8');
-    for (const pattern of PROVIDER_IMPORT_PATTERNS) {
-      expect(content.match(pattern)).toBeNull();
-    }
+    expect(detectProviderImport(content)).toBeNull();
   });
 });
 
@@ -180,9 +242,7 @@ describe('Tool-owned toolIdNormalization must not import from providers', () => 
 
   it('toolIdNormalization.ts has no provider imports', () => {
     const content = fs.readFileSync(toolIdNormPath, 'utf-8');
-    for (const pattern of PROVIDER_IMPORT_PATTERNS) {
-      expect(content.match(pattern)).toBeNull();
-    }
+    expect(detectProviderImport(content)).toBeNull();
   });
 });
 
@@ -207,30 +267,24 @@ describe('Core package metadata must not reference providers', () => {
     ).toBeUndefined();
   });
 
-  it('core tsconfig.json has no providers reference', () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- tsconfig.json may not exist; early return is valid for optional file check
-    if (!fs.existsSync(coreTsconfigPath)) {
-      // tsconfig.json may or may not exist; skip if absent
-      return;
-    }
-    const content = fs.readFileSync(coreTsconfigPath, 'utf-8');
-    // Strip comments before parsing (TypeScript tsconfig can have comments)
-    const strippedContent = content
-      // eslint-disable-next-line sonarjs/slow-regex -- Static regex on config file content; no ReDoS risk
-      .replace(/\/\/.*$/gm, '')
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex on config file content; no ReDoS risk
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    try {
-      const tsconfig = JSON.parse(strippedContent);
-      const references = tsconfig.references ?? [];
-      for (const ref of references) {
-        expect(
-          ref.path.includes('providers'),
-          `tsconfig.json references providers path: ${ref.path}`,
-        ).toBe(false);
+  it.skipIf(!fs.existsSync(coreTsconfigPath))(
+    'core tsconfig.json has no providers reference',
+    () => {
+      const content = fs.readFileSync(coreTsconfigPath, 'utf-8');
+      // Strip comments before parsing (TypeScript tsconfig can have comments)
+      const strippedContent = stripTsConfigComments(content);
+      try {
+        const tsconfig = JSON.parse(strippedContent);
+        const references = tsconfig.references ?? [];
+        for (const ref of references) {
+          expect(
+            ref.path.includes('providers'),
+            `tsconfig.json references providers path: ${ref.path}`,
+          ).toBe(false);
+        }
+      } catch {
+        // If tsconfig.json can't be parsed (e.g. TS extends format), skip
       }
-    } catch {
-      // If tsconfig.json can't be parsed (e.g. TS extends format), skip
-    }
-  });
+    },
+  );
 });

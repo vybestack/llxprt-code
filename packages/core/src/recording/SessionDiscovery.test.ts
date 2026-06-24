@@ -1,4 +1,3 @@
-/* eslint-disable vitest/no-standalone-expect */
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -29,7 +28,7 @@
  */
 
 import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { it as itProp } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as fsSyncModule from 'node:fs';
@@ -142,7 +141,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('finds sessions matching the given project hash', async () => {
+    itProp('finds sessions matching the given project hash', async () => {
       // Create 3 sessions with matching hash
       await createTestSession(chatsDir, { projectHash: PROJECT_HASH });
       await delay(50);
@@ -173,7 +172,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('returns sessions sorted newest-first by mtime', async () => {
+    itProp('returns sessions sorted newest-first by mtime', async () => {
       const _s1 = await createTestSession(chatsDir, {
         sessionId: 'session-oldest',
         projectHash: PROJECT_HASH,
@@ -208,17 +207,20 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('returns empty array when no sessions match the project hash', async () => {
-      await createTestSession(chatsDir, {
-        projectHash: 'completely-different-hash',
-      });
+    itProp(
+      'returns empty array when no sessions match the project hash',
+      async () => {
+        await createTestSession(chatsDir, {
+          projectHash: 'completely-different-hash',
+        });
 
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        'non-existent-hash',
-      );
-      expect(sessions).toStrictEqual([]);
-    });
+        const sessions = await SessionDiscovery.listSessions(
+          chatsDir,
+          'non-existent-hash',
+        );
+        expect(sessions).toStrictEqual([]);
+      },
+    );
 
     /**
      * Test 4: listSessions returns empty for non-existent dir
@@ -229,7 +231,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('returns empty array for non-existent directory', async () => {
+    itProp('returns empty array for non-existent directory', async () => {
       const sessions = await SessionDiscovery.listSessions(
         path.join(tempDir, 'nonexistent-dir'),
         PROJECT_HASH,
@@ -246,7 +248,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('reads session metadata from header event', async () => {
+    itProp('reads session metadata from header event', async () => {
       const sessionId = 'metadata-check-session-id';
       await createTestSession(chatsDir, {
         sessionId,
@@ -279,50 +281,53 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('discovers sessions when session_start header exceeds fast-read buffer', async () => {
-      const sessionId = 'long-header-session-id';
-      const { filePath } = await createTestSession(chatsDir, {
-        sessionId,
-        projectHash: PROJECT_HASH,
-        provider: 'google',
-        model: 'gemini-3',
-      });
+    itProp(
+      'discovers sessions when session_start header exceeds fast-read buffer',
+      async () => {
+        const sessionId = 'long-header-session-id';
+        const { filePath } = await createTestSession(chatsDir, {
+          sessionId,
+          projectHash: PROJECT_HASH,
+          provider: 'google',
+          model: 'gemini-3',
+        });
 
-      const raw = await fs.readFile(filePath, 'utf-8');
-      const [firstLine, ...restLines] = raw.split('\n');
-      const firstEvent = JSON.parse(firstLine) as {
-        v: number;
-        seq: number;
-        ts: string;
-        type: string;
-        payload: {
-          sessionId: string;
-          projectHash: string;
-          workspaceDirs: string[];
-          provider: string;
-          model: string;
-          startTime: string;
+        const raw = await fs.readFile(filePath, 'utf-8');
+        const [firstLine, ...restLines] = raw.split('\n');
+        const firstEvent = JSON.parse(firstLine) as {
+          v: number;
+          seq: number;
+          ts: string;
+          type: string;
+          payload: {
+            sessionId: string;
+            projectHash: string;
+            workspaceDirs: string[];
+            provider: string;
+            model: string;
+            startTime: string;
+          };
         };
-      };
 
-      firstEvent.payload.workspaceDirs = ['/tmp/' + 'x'.repeat(5000)];
-      const oversizedFirstLine = JSON.stringify(firstEvent);
-      expect(oversizedFirstLine.length).toBeGreaterThan(4096);
+        firstEvent.payload.workspaceDirs = ['/tmp/' + 'x'.repeat(5000)];
+        const oversizedFirstLine = JSON.stringify(firstEvent);
+        expect(oversizedFirstLine.length).toBeGreaterThan(4096);
 
-      await fs.writeFile(
-        filePath,
-        [oversizedFirstLine, ...restLines].join('\n'),
-      );
+        await fs.writeFile(
+          filePath,
+          [oversizedFirstLine, ...restLines].join('\n'),
+        );
 
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        PROJECT_HASH,
-      );
-      expect(sessions).toHaveLength(1);
-      expect(sessions[0].sessionId).toBe(sessionId);
-      expect(sessions[0].provider).toBe('google');
-      expect(sessions[0].model).toBe('gemini-3');
-    });
+        const sessions = await SessionDiscovery.listSessions(
+          chatsDir,
+          PROJECT_HASH,
+        );
+        expect(sessions).toHaveLength(1);
+        expect(sessions[0].sessionId).toBe(sessionId);
+        expect(sessions[0].provider).toBe('google');
+        expect(sessions[0].model).toBe('gemini-3');
+      },
+    );
 
     /**
      * Addendum test: Identical mtime selects lexicographically greater session ID
@@ -333,29 +338,32 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('uses session ID descending as tiebreaker when mtime is identical', async () => {
-      const s1 = await createTestSession(chatsDir, {
-        sessionId: 'aaa11111',
-        projectHash: PROJECT_HASH,
-      });
-      const s2 = await createTestSession(chatsDir, {
-        sessionId: 'zzz99999',
-        projectHash: PROJECT_HASH,
-      });
+    itProp(
+      'uses session ID descending as tiebreaker when mtime is identical',
+      async () => {
+        const s1 = await createTestSession(chatsDir, {
+          sessionId: 'aaa11111',
+          projectHash: PROJECT_HASH,
+        });
+        const s2 = await createTestSession(chatsDir, {
+          sessionId: 'zzz99999',
+          projectHash: PROJECT_HASH,
+        });
 
-      // Set identical mtime on both files
-      const identicalTime = new Date('2026-02-11T12:00:00.000Z');
-      fsSyncModule.utimesSync(s1.filePath, identicalTime, identicalTime);
-      fsSyncModule.utimesSync(s2.filePath, identicalTime, identicalTime);
+        // Set identical mtime on both files
+        const identicalTime = new Date('2026-02-11T12:00:00.000Z');
+        fsSyncModule.utimesSync(s1.filePath, identicalTime, identicalTime);
+        fsSyncModule.utimesSync(s2.filePath, identicalTime, identicalTime);
 
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        PROJECT_HASH,
-      );
-      expect(sessions).toHaveLength(2);
-      expect(sessions[0].sessionId).toBe('zzz99999');
-      expect(sessions[1].sessionId).toBe('aaa11111');
-    });
+        const sessions = await SessionDiscovery.listSessions(
+          chatsDir,
+          PROJECT_HASH,
+        );
+        expect(sessions).toHaveLength(2);
+        expect(sessions[0].sessionId).toBe('zzz99999');
+        expect(sessions[1].sessionId).toBe('aaa11111');
+      },
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -372,7 +380,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-002
      */
-    it('resolves a session by exact ID', async () => {
+    itProp('resolves a session by exact ID', async () => {
       const targetId = 'exact-match-target-id';
       await createTestSession(chatsDir, {
         sessionId: targetId,
@@ -404,7 +412,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-002
      */
-    it('resolves a session by unique prefix', async () => {
+    itProp('resolves a session by unique prefix', async () => {
       const targetId = 'abcdef123456';
       await createTestSession(chatsDir, {
         sessionId: targetId,
@@ -436,28 +444,31 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('returns error for ambiguous prefix matching multiple sessions', async () => {
-      await createTestSession(chatsDir, {
-        sessionId: 'ab12cd-session',
-        projectHash: PROJECT_HASH,
-      });
-      await createTestSession(chatsDir, {
-        sessionId: 'ab34ef-session',
-        projectHash: PROJECT_HASH,
-      });
+    itProp(
+      'returns error for ambiguous prefix matching multiple sessions',
+      async () => {
+        await createTestSession(chatsDir, {
+          sessionId: 'ab12cd-session',
+          projectHash: PROJECT_HASH,
+        });
+        await createTestSession(chatsDir, {
+          sessionId: 'ab34ef-session',
+          projectHash: PROJECT_HASH,
+        });
 
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        PROJECT_HASH,
-      );
-      const result = SessionDiscovery.resolveSessionRef('ab', sessions);
+        const sessions = await SessionDiscovery.listSessions(
+          chatsDir,
+          PROJECT_HASH,
+        );
+        const result = SessionDiscovery.resolveSessionRef('ab', sessions);
 
-      expect('error' in result).toBe(true);
-      if ('error' in result) {
-        expect(result.error).toContain('ab12cd');
-        expect(result.error).toContain('ab34ef');
-      }
-    });
+        expect('error' in result).toBe(true);
+        if ('error' in result) {
+          expect(result.error).toContain('ab12cd');
+          expect(result.error).toContain('ab34ef');
+        }
+      },
+    );
 
     /**
      * Test 9: resolveSessionRef by numeric index
@@ -468,33 +479,36 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-002
      */
-    it('resolves numeric index "1" to the first (newest) session', async () => {
-      await createTestSession(chatsDir, {
-        sessionId: 'oldest-session',
-        projectHash: PROJECT_HASH,
-      });
-      await delay(50);
-      await createTestSession(chatsDir, {
-        sessionId: 'middle-session',
-        projectHash: PROJECT_HASH,
-      });
-      await delay(50);
-      await createTestSession(chatsDir, {
-        sessionId: 'newest-session',
-        projectHash: PROJECT_HASH,
-      });
+    itProp(
+      'resolves numeric index "1" to the first (newest) session',
+      async () => {
+        await createTestSession(chatsDir, {
+          sessionId: 'oldest-session',
+          projectHash: PROJECT_HASH,
+        });
+        await delay(50);
+        await createTestSession(chatsDir, {
+          sessionId: 'middle-session',
+          projectHash: PROJECT_HASH,
+        });
+        await delay(50);
+        await createTestSession(chatsDir, {
+          sessionId: 'newest-session',
+          projectHash: PROJECT_HASH,
+        });
 
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        PROJECT_HASH,
-      );
-      const result = SessionDiscovery.resolveSessionRef('1', sessions);
+        const sessions = await SessionDiscovery.listSessions(
+          chatsDir,
+          PROJECT_HASH,
+        );
+        const result = SessionDiscovery.resolveSessionRef('1', sessions);
 
-      expect('session' in result).toBe(true);
-      if ('session' in result) {
-        expect(result.session.sessionId).toBe('newest-session');
-      }
-    });
+        expect('session' in result).toBe(true);
+        if ('session' in result) {
+          expect(result.session.sessionId).toBe('newest-session');
+        }
+      },
+    );
 
     /**
      * Test 10: resolveSessionRef not found → error
@@ -505,20 +519,23 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-002
      */
-    it('returns error when session ref does not match any session', async () => {
-      await createTestSession(chatsDir, { projectHash: PROJECT_HASH });
+    itProp(
+      'returns error when session ref does not match any session',
+      async () => {
+        await createTestSession(chatsDir, { projectHash: PROJECT_HASH });
 
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        PROJECT_HASH,
-      );
-      const result = SessionDiscovery.resolveSessionRef(
-        'nonexistent-id',
-        sessions,
-      );
+        const sessions = await SessionDiscovery.listSessions(
+          chatsDir,
+          PROJECT_HASH,
+        );
+        const result = SessionDiscovery.resolveSessionRef(
+          'nonexistent-id',
+          sessions,
+        );
 
-      expect('error' in result).toBe(true);
-    });
+        expect('error' in result).toBe(true);
+      },
+    );
 
     /**
      * Addendum test: Numeric-looking session ID prefix vs. index resolution
@@ -529,35 +546,38 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('treats pure digit strings as numeric indices, not prefix matches', async () => {
-      await createTestSession(chatsDir, {
-        sessionId: '123abc-session',
-        projectHash: PROJECT_HASH,
-      });
-      await delay(50);
-      await createTestSession(chatsDir, {
-        sessionId: '456def-session',
-        projectHash: PROJECT_HASH,
-      });
-      await delay(50);
-      // This is the most recent (index 1)
-      await createTestSession(chatsDir, {
-        sessionId: '789ghi-session',
-        projectHash: PROJECT_HASH,
-      });
+    itProp(
+      'treats pure digit strings as numeric indices, not prefix matches',
+      async () => {
+        await createTestSession(chatsDir, {
+          sessionId: '123abc-session',
+          projectHash: PROJECT_HASH,
+        });
+        await delay(50);
+        await createTestSession(chatsDir, {
+          sessionId: '456def-session',
+          projectHash: PROJECT_HASH,
+        });
+        await delay(50);
+        // This is the most recent (index 1)
+        await createTestSession(chatsDir, {
+          sessionId: '789ghi-session',
+          projectHash: PROJECT_HASH,
+        });
 
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        PROJECT_HASH,
-      );
-      const result = SessionDiscovery.resolveSessionRef('1', sessions);
+        const sessions = await SessionDiscovery.listSessions(
+          chatsDir,
+          PROJECT_HASH,
+        );
+        const result = SessionDiscovery.resolveSessionRef('1', sessions);
 
-      expect('session' in result).toBe(true);
-      if ('session' in result) {
-        // Should be the newest (index 1), not the one starting with "1"
-        expect(result.session.sessionId).toBe('789ghi-session');
-      }
-    });
+        expect('session' in result).toBe(true);
+        if ('session' in result) {
+          // Should be the newest (index 1), not the one starting with "1"
+          expect(result.session.sessionId).toBe('789ghi-session');
+        }
+      },
+    );
 
     /**
      * Addendum test: Exact session ID match takes precedence over prefix
@@ -568,7 +588,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('exact match takes precedence over prefix match', async () => {
+    itProp('exact match takes precedence over prefix match', async () => {
       await createTestSession(chatsDir, {
         sessionId: 'abc',
         projectHash: PROJECT_HASH,
@@ -600,7 +620,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('reads session_start payload from valid JSONL file', async () => {
+    itProp('reads session_start payload from valid JSONL file', async () => {
       const sessionId = 'header-read-test';
       const { filePath } = await createTestSession(chatsDir, {
         sessionId,
@@ -621,7 +641,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('returns null for non-existent file', async () => {
+    itProp('returns null for non-existent file', async () => {
       const header = await SessionDiscovery.readSessionHeader(
         path.join(chatsDir, 'nonexistent.jsonl'),
       );
@@ -641,7 +661,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it.prop([fc.integer({ min: 1, max: 5 })])(
+    itProp.prop([fc.integer({ min: 1, max: 5 })])(
       'finds all N sessions for a random project hash @requirement:REQ-RSM-003',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -675,7 +695,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-002
      */
-    it.prop([fc.uuid()])(
+    itProp.prop([fc.uuid()])(
       'resolveSessionRef always finds exact match for any UUID @requirement:REQ-RSM-002',
       async (sessionId) => {
         const localTempDir = await fs.mkdtemp(
@@ -716,7 +736,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it.prop([fc.integer({ min: 2, max: 6 })], { numRuns: 20 })(
+    itProp.prop([fc.integer({ min: 2, max: 6 })], { numRuns: 20 })(
       'newest session is always first regardless of count @requirement:REQ-RSM-003',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -760,7 +780,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it.prop([fc.uuid(), fc.uuid()])(
+    itProp.prop([fc.uuid(), fc.uuid()])(
       'returns empty for any non-matching hash @requirement:REQ-RSM-003',
       async (createHash, queryHash) => {
         // Ensure hashes are different
@@ -795,7 +815,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-002
      */
-    it.prop([fc.integer({ min: 1, max: 5 })], { numRuns: 20 })(
+    itProp.prop([fc.integer({ min: 1, max: 5 })], { numRuns: 20 })(
       'numeric index within range always resolves correctly @requirement:REQ-RSM-002',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -843,7 +863,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it.prop([
+    itProp.prop([
       fc.tuple(
         fc.stringMatching(/^[0-9a-f]{8}$/),
         fc.stringMatching(/^[0-9a-f]{8}$/),

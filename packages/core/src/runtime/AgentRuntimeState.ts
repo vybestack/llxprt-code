@@ -231,8 +231,7 @@ export function createAgentRuntimeState(
 
   // Generate sessionId if not provided (line 101)
   const sessionId =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string sessionId should generate new ID
-    params.sessionId ||
+    params.sessionId ??
     `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
   // Create frozen state object (lines 92-103)

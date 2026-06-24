@@ -1,4 +1,3 @@
-/* eslint-disable vitest/no-standalone-expect */
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -29,7 +28,7 @@
  */
 
 import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { it as itProp } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -153,7 +152,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('finds .jsonl session files in the chats directory', async () => {
+    itProp('finds .jsonl session files in the chats directory', async () => {
       const file1 = writeSessionFile(
         chatsDir,
         'aaa11111-0000-0000-0000-000000000001',
@@ -181,7 +180,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('skips non-session files (.txt, random names)', async () => {
+    itProp('skips non-session files (.txt, random names)', async () => {
       writeSessionFile(chatsDir, 'session-valid001');
       fs.writeFileSync(path.join(chatsDir, 'notes.txt'), 'some notes');
       fs.writeFileSync(path.join(chatsDir, 'data.jsonl'), '{"not":"session"}');
@@ -198,33 +197,36 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('ignores old .json session files (only targets .jsonl)', async () => {
-      writeSessionFile(chatsDir, 'session-newformat');
-      fs.writeFileSync(
-        path.join(
-          chatsDir,
-          'persisted-session-2025-01-01T00-00-00-old12345.json',
-        ),
-        JSON.stringify({ sessionId: 'old', messages: [] }),
-      );
-      fs.writeFileSync(
-        path.join(chatsDir, 'session-2025-01-01T00-00-00-legacy12.json'),
-        JSON.stringify({ sessionId: 'legacy', messages: [] }),
-      );
+    itProp(
+      'ignores old .json session files (only targets .jsonl)',
+      async () => {
+        writeSessionFile(chatsDir, 'session-newformat');
+        fs.writeFileSync(
+          path.join(
+            chatsDir,
+            'persisted-session-2025-01-01T00-00-00-old12345.json',
+          ),
+          JSON.stringify({ sessionId: 'old', messages: [] }),
+        );
+        fs.writeFileSync(
+          path.join(chatsDir, 'session-2025-01-01T00-00-00-legacy12.json'),
+          JSON.stringify({ sessionId: 'legacy', messages: [] }),
+        );
 
-      const entries = await getAllJsonlSessionFiles(chatsDir);
+        const entries = await getAllJsonlSessionFiles(chatsDir);
 
-      expect(entries).toHaveLength(1);
-      const fileNames = entries.map((e) => e.fileName);
-      expect(fileNames.every((f) => f.endsWith('.jsonl'))).toBe(true);
-    });
+        expect(entries).toHaveLength(1);
+        const fileNames = entries.map((e) => e.fileName);
+        expect(fileNames.every((f) => f.endsWith('.jsonl'))).toBe(true);
+      },
+    );
 
     /**
      * Test 11: Empty chats directory returns empty list
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('returns empty list for empty chats directory', async () => {
+    itProp('returns empty list for empty chats directory', async () => {
       const entries = await getAllJsonlSessionFiles(chatsDir);
       expect(entries).toHaveLength(0);
     });
@@ -234,7 +236,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('returns empty list for non-existent chats directory', async () => {
+    itProp('returns empty list for non-existent chats directory', async () => {
       const nonExistent = path.join(tempDir, 'does-not-exist');
       const entries = await getAllJsonlSessionFiles(nonExistent);
       expect(entries).toHaveLength(0);
@@ -245,17 +247,20 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('extracts session info from .jsonl header (session_start event)', async () => {
-      const sessionId = 'abc12345-6789-0000-aaaa-bbbbccccdddd';
-      const startTime = '2025-06-15T10:30:00.000Z';
-      writeSessionFile(chatsDir, sessionId, startTime);
+    itProp(
+      'extracts session info from .jsonl header (session_start event)',
+      async () => {
+        const sessionId = 'abc12345-6789-0000-aaaa-bbbbccccdddd';
+        const startTime = '2025-06-15T10:30:00.000Z';
+        writeSessionFile(chatsDir, sessionId, startTime);
 
-      const entries = await getAllJsonlSessionFiles(chatsDir);
+        const entries = await getAllJsonlSessionFiles(chatsDir);
 
-      expect(entries).toHaveLength(1);
-      expect(entries[0].sessionInfo).not.toBeNull();
-      expect(entries[0].sessionInfo!.id).toBe(sessionId);
-    });
+        expect(entries).toHaveLength(1);
+        expect(entries[0].sessionInfo).not.toBeNull();
+        expect(entries[0].sessionInfo!.id).toBe(sessionId);
+      },
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -268,22 +273,25 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002
      */
-    it('returns skip for a .jsonl with an active lock (current PID)', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'locked-session');
-      writeLockFile(sessionPath, process.pid);
-      const entry = makeEntry(sessionPath, 'locked-session');
+    itProp(
+      'returns skip for a .jsonl with an active lock (current PID)',
+      async () => {
+        const sessionPath = writeSessionFile(chatsDir, 'locked-session');
+        writeLockFile(sessionPath, process.pid);
+        const entry = makeEntry(sessionPath, 'locked-session');
 
-      const result = await shouldDeleteSession(entry);
+        const result = await shouldDeleteSession(entry);
 
-      expect(result).toBe('skip');
-    });
+        expect(result).toBe('skip');
+      },
+    );
 
     /**
      * Test 5: shouldDeleteSession allows unlocked .jsonl (no .lock file)
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002
      */
-    it('returns delete for a .jsonl with no .lock file', async () => {
+    itProp('returns delete for a .jsonl with no .lock file', async () => {
       const sessionPath = writeSessionFile(chatsDir, 'unlocked-session');
       const entry = makeEntry(sessionPath, 'unlocked-session');
 
@@ -297,15 +305,18 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002, REQ-CLN-003
      */
-    it('returns stale-lock-only for a .jsonl with a stale lock (dead PID)', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'stale-session1');
-      writeLockFile(sessionPath, DEAD_PID);
-      const entry = makeEntry(sessionPath, 'stale-session1');
+    itProp(
+      'returns stale-lock-only for a .jsonl with a stale lock (dead PID)',
+      async () => {
+        const sessionPath = writeSessionFile(chatsDir, 'stale-session1');
+        writeLockFile(sessionPath, DEAD_PID);
+        const entry = makeEntry(sessionPath, 'stale-session1');
 
-      const result = await shouldDeleteSession(entry);
+        const result = await shouldDeleteSession(entry);
 
-      expect(result).toBe('stale-lock-only');
-    });
+        expect(result).toBe('stale-lock-only');
+      },
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -318,7 +329,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it('removes orphaned .lock file with no matching .jsonl', async () => {
+    itProp('removes orphaned .lock file with no matching .jsonl', async () => {
       const orphanedLockPath = path.join(chatsDir, 'orphan.lock');
       fs.writeFileSync(
         orphanedLockPath,
@@ -340,37 +351,43 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it('keeps .lock file that has matching .jsonl and live PID', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'active-sess1');
-      const lockPath = writeLockFile(sessionPath, process.pid);
+    itProp(
+      'keeps .lock file that has matching .jsonl and live PID',
+      async () => {
+        const sessionPath = writeSessionFile(chatsDir, 'active-sess1');
+        const lockPath = writeLockFile(sessionPath, process.pid);
 
-      await cleanupStaleLocks(chatsDir);
+        await cleanupStaleLocks(chatsDir);
 
-      expect(fs.existsSync(lockPath)).toBe(true);
-      expect(fs.existsSync(sessionPath)).toBe(true);
-    });
+        expect(fs.existsSync(lockPath)).toBe(true);
+        expect(fs.existsSync(sessionPath)).toBe(true);
+      },
+    );
 
     /**
      * Test 9: cleanupStaleLocks removes stale .lock (dead PID) but preserves .jsonl
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it('removes stale .lock (dead PID) but preserves the .jsonl file', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'stale-lock01');
-      const lockPath = writeLockFile(sessionPath, DEAD_PID);
+    itProp(
+      'removes stale .lock (dead PID) but preserves the .jsonl file',
+      async () => {
+        const sessionPath = writeSessionFile(chatsDir, 'stale-lock01');
+        const lockPath = writeLockFile(sessionPath, DEAD_PID);
 
-      await cleanupStaleLocks(chatsDir);
+        await cleanupStaleLocks(chatsDir);
 
-      expect(fs.existsSync(lockPath)).toBe(false);
-      expect(fs.existsSync(sessionPath)).toBe(true);
-    });
+        expect(fs.existsSync(lockPath)).toBe(false);
+        expect(fs.existsSync(sessionPath)).toBe(true);
+      },
+    );
 
     /**
      * Test 10: cleanupStaleLocks returns count
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it('returns the count of lock files cleaned up', async () => {
+    itProp('returns the count of lock files cleaned up', async () => {
       // Create 3 orphaned locks
       for (let i = 0; i < 3; i++) {
         const orphanLock = path.join(chatsDir, `orphan${i}.lock`);
@@ -400,28 +417,31 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-003
      */
-    it('stale lock with recent session: shouldDeleteSession returns stale-lock-only (not delete)', async () => {
-      const recentTime = new Date(
-        Date.now() - 1 * 60 * 60 * 1000,
-      ).toISOString(); // 1 hour ago
-      const sessionPath = writeSessionFile(
-        chatsDir,
-        'recent-stale1',
-        recentTime,
-      );
-      writeLockFile(sessionPath, DEAD_PID);
-      const entry = makeEntry(sessionPath, 'recent-stale1');
+    itProp(
+      'stale lock with recent session: shouldDeleteSession returns stale-lock-only (not delete)',
+      async () => {
+        const recentTime = new Date(
+          Date.now() - 1 * 60 * 60 * 1000,
+        ).toISOString(); // 1 hour ago
+        const sessionPath = writeSessionFile(
+          chatsDir,
+          'recent-stale1',
+          recentTime,
+        );
+        writeLockFile(sessionPath, DEAD_PID);
+        const entry = makeEntry(sessionPath, 'recent-stale1');
 
-      const result = await shouldDeleteSession(entry);
+        const result = await shouldDeleteSession(entry);
 
-      // Stale lock should result in 'stale-lock-only' — the data file
-      // is NOT deleted just because the lock is stale. Retention policy
-      // (not exercised here) decides deletion of the data file.
-      expect(result).toBe('stale-lock-only');
+        // Stale lock should result in 'stale-lock-only' — the data file
+        // is NOT deleted just because the lock is stale. Retention policy
+        // (not exercised here) decides deletion of the data file.
+        expect(result).toBe('stale-lock-only');
 
-      // The .jsonl file must still exist on disk
-      expect(fs.existsSync(sessionPath)).toBe(true);
-    });
+        // The .jsonl file must still exist on disk
+        expect(fs.existsSync(sessionPath)).toBe(true);
+      },
+    );
 
     /**
      * Test 24: Stale lock with OLD session → lock removed, session deleted by retention (not stale status)
@@ -433,21 +453,28 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * policy layer, not shouldDeleteSession. shouldDeleteSession only evaluates
      * lock status.
      */
-    it('stale lock with old session: shouldDeleteSession still returns stale-lock-only', async () => {
-      const oldTime = new Date(
-        Date.now() - 30 * 24 * 60 * 60 * 1000,
-      ).toISOString(); // 30 days ago
-      const sessionPath = writeSessionFile(chatsDir, 'old-stale-001', oldTime);
-      writeLockFile(sessionPath, DEAD_PID);
-      const entry = makeEntry(sessionPath, 'old-stale-001');
+    itProp(
+      'stale lock with old session: shouldDeleteSession still returns stale-lock-only',
+      async () => {
+        const oldTime = new Date(
+          Date.now() - 30 * 24 * 60 * 60 * 1000,
+        ).toISOString(); // 30 days ago
+        const sessionPath = writeSessionFile(
+          chatsDir,
+          'old-stale-001',
+          oldTime,
+        );
+        writeLockFile(sessionPath, DEAD_PID);
+        const entry = makeEntry(sessionPath, 'old-stale-001');
 
-      const result = await shouldDeleteSession(entry);
+        const result = await shouldDeleteSession(entry);
 
-      // shouldDeleteSession only evaluates lock status, not age.
-      // 'stale-lock-only' means: remove the lock, let retention policy
-      // independently decide whether to delete the data file.
-      expect(result).toBe('stale-lock-only');
-    });
+        // shouldDeleteSession only evaluates lock status, not age.
+        // 'stale-lock-only' means: remove the lock, let retention policy
+        // independently decide whether to delete the data file.
+        expect(result).toBe('stale-lock-only');
+      },
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -460,7 +487,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it.prop([fc.nat({ max: 8 })], { numRuns: 15 })(
+    itProp.prop([fc.nat({ max: 8 })], { numRuns: 15 })(
       'all N .jsonl session files are discovered for any N @requirement:REQ-CLN-001',
       async (count) => {
         const localTemp = fs.mkdtempSync(
@@ -496,7 +523,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it.prop([fc.nat({ max: 5 }), fc.nat({ max: 5 })], { numRuns: 15 })(
+    itProp.prop([fc.nat({ max: 5 }), fc.nat({ max: 5 })], { numRuns: 15 })(
       'orphaned lock cleanup is safe: only orphans removed for any counts @requirement:REQ-CLN-004',
       async (orphanCount, pairedCount) => {
         const localTemp = fs.mkdtempSync(
@@ -564,7 +591,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002
      */
-    it.prop([fc.nat({ max: 6 })], { numRuns: 15 })(
+    itProp.prop([fc.nat({ max: 6 })], { numRuns: 15 })(
       'shouldDeleteSession never returns delete for active-locked sessions @requirement:REQ-CLN-002',
       async (count) => {
         const localTemp = fs.mkdtempSync(
@@ -597,7 +624,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002, REQ-CLN-003
      */
-    it.prop([fc.boolean()], { numRuns: 20 })(
+    itProp.prop([fc.boolean()], { numRuns: 20 })(
       'shouldDeleteSession result is consistent with PID liveness @requirement:REQ-CLN-002',
       async (useAlivePid) => {
         const localTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'prop-pid-'));
@@ -629,7 +656,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it.prop([fc.nat({ max: 8 })], { numRuns: 15 })(
+    itProp.prop([fc.nat({ max: 8 })], { numRuns: 15 })(
       'non-session files are never included in scan results @requirement:REQ-CLN-001',
       async (count) => {
         const localTemp = fs.mkdtempSync(
@@ -672,7 +699,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it.prop([fc.nat({ max: 4 }), fc.nat({ max: 4 }), fc.nat({ max: 4 })], {
+    itProp.prop([fc.nat({ max: 4 }), fc.nat({ max: 4 }), fc.nat({ max: 4 })], {
       numRuns: 10,
     })(
       'cleanupStaleLocks returns correct count for any combo of orphan/stale/active @requirement:REQ-CLN-004',
@@ -729,7 +756,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-003
      */
-    it.prop([fc.nat({ max: 5 })], { numRuns: 10 })(
+    itProp.prop([fc.nat({ max: 5 })], { numRuns: 10 })(
       'stale lock on recent sessions: lock removed, session preserved @requirement:REQ-CLN-003',
       async (count) => {
         const localTemp = fs.mkdtempSync(
@@ -780,7 +807,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * for the retention policy to handle (cleanupStaleLocks does NOT delete
      * session files).
      */
-    it.prop([fc.nat({ max: 5 })], { numRuns: 10 })(
+    itProp.prop([fc.nat({ max: 5 })], { numRuns: 10 })(
       'stale lock cleanup removes locks but never deletes session files @requirement:REQ-CLN-003',
       async (count) => {
         const localTemp = fs.mkdtempSync(
@@ -827,7 +854,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-003
      */
-    it.prop([fc.nat({ max: 3 }), fc.nat({ max: 3 })], { numRuns: 10 })(
+    itProp.prop([fc.nat({ max: 3 }), fc.nat({ max: 3 })], { numRuns: 10 })(
       'stale lock status never causes deletion of sessions within retention window @requirement:REQ-CLN-003',
       async (staleWithinRetention, staleOutsideRetention) => {
         const localTemp = fs.mkdtempSync(
@@ -892,7 +919,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it.prop([fc.nat({ max: 5 })], { numRuns: 10 })(
+    itProp.prop([fc.nat({ max: 5 })], { numRuns: 10 })(
       'getAllJsonlSessionFiles always returns entries with correct structure @requirement:REQ-CLN-001',
       async (count) => {
         const localTemp = fs.mkdtempSync(
@@ -928,7 +955,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002
      */
-    it.prop([fc.nat({ max: 6 })], { numRuns: 10 })(
+    itProp.prop([fc.nat({ max: 6 })], { numRuns: 10 })(
       'shouldDeleteSession returns delete for all unlocked sessions @requirement:REQ-CLN-002',
       async (count) => {
         const localTemp = fs.mkdtempSync(
@@ -958,7 +985,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it.prop([fc.nat({ max: 3 })], { numRuns: 10 })(
+    itProp.prop([fc.nat({ max: 3 })], { numRuns: 10 })(
       'cleanupStaleLocks on directory with only session files (no locks) returns 0 @requirement:REQ-CLN-004',
       async (count) => {
         const localTemp = fs.mkdtempSync(

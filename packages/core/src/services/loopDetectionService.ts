@@ -18,6 +18,124 @@ const DEFAULT_TOOL_CALL_LOOP_THRESHOLD = 50;
 const DEFAULT_CONTENT_LOOP_THRESHOLD = 50;
 
 /**
+ * Counts non-overlapping occurrences of a literal substring.
+ */
+function countOccurrences(haystack: string, needle: string): number {
+  if (needle.length === 0) {
+    return 0;
+  }
+  let count = 0;
+  let pos = 0;
+  while ((pos = haystack.indexOf(needle, pos)) !== -1) {
+    count++;
+    pos += needle.length;
+  }
+  return count;
+}
+
+/**
+ * Checks whether any line in the content, after optional leading whitespace,
+ * starts with a markdown table row (`|…|`) or a run of three-or-more table
+ * delimiter characters (`|`, `+`, `-`).
+ */
+function detectMarkdownTable(content: string): boolean {
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+    if (trimmed.length === 0) {
+      continue;
+    }
+    if (
+      trimmed.length >= 2 &&
+      trimmed.startsWith('|') &&
+      trimmed.endsWith('|')
+    ) {
+      return true;
+    }
+    let delimiterCount = 0;
+    for (const ch of trimmed) {
+      if (ch === '|' || ch === '+' || ch === '-') {
+        delimiterCount++;
+      } else {
+        break;
+      }
+    }
+    if (delimiterCount >= 3) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks whether any line starts with an unordered list marker (`*`, `-`, `+`
+ * followed by whitespace) or an ordered list marker (digits followed by `.`
+ * and whitespace).
+ */
+function detectMarkdownListItem(content: string): boolean {
+  const lines = content.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trimStart();
+    if (line.length < 2) {
+      continue;
+    }
+    const first = line[0];
+    const second = line[1];
+    if ((first === '*' || first === '-' || first === '+') && second === ' ') {
+      return true;
+    }
+    // Ordered list: one or more digits, then '.', then space
+    let i = 0;
+    while (i < line.length && line[i] >= '0' && line[i] <= '9') {
+      i++;
+    }
+    if (
+      i > 0 &&
+      i + 1 < line.length &&
+      line[i] === '.' &&
+      line[i + 1] === ' '
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks whether any line starts with one or more `#` characters followed by
+ * whitespace (markdown heading).
+ */
+function detectMarkdownHeading(content: string): boolean {
+  const lines = content.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trimStart();
+    let hashCount = 0;
+    while (hashCount < line.length && line[hashCount] === '#') {
+      hashCount++;
+    }
+    if (hashCount > 0 && hashCount < line.length && line[hashCount] === ' ') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks whether any line starts with `>` followed by whitespace (markdown
+ * blockquote).
+ */
+function detectMarkdownBlockquote(content: string): boolean {
+  const lines = content.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trimStart();
+    if (line.length >= 2 && line[0] === '>' && line[1] === ' ') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Service for detecting and preventing infinite loops in AI responses.
  * Monitors tool call repetitions and content sentence repetitions.
  */
@@ -57,9 +175,9 @@ export class LoopDetectionService {
   addAndCheck(event: ServerGeminiStreamEvent): boolean {
     // Check if loop detection is disabled
     const loopDetectionEnabled =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('loopDetectionEnabled') as boolean) ??
-      true;
+      (this.config.getEphemeralSetting('loopDetectionEnabled') as
+        | boolean
+        | undefined) ?? true;
     if (!loopDetectionEnabled) {
       return false;
     }
@@ -96,9 +214,9 @@ export class LoopDetectionService {
   async turnStarted(_signal: AbortSignal) {
     // Check if loop detection is disabled (master switch)
     const loopDetectionEnabled =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('loopDetectionEnabled') as boolean) ??
-      true;
+      (this.config.getEphemeralSetting('loopDetectionEnabled') as
+        | boolean
+        | undefined) ?? true;
     if (!loopDetectionEnabled) {
       return false;
     }
@@ -107,8 +225,9 @@ export class LoopDetectionService {
 
     // Check if max turns per prompt is configured and exceeded
     const maxTurnsPerPrompt =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as number) ?? -1;
+      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as
+        | number
+        | undefined) ?? -1;
     if (
       maxTurnsPerPrompt > 0 &&
       this.turnsInCurrentPrompt >= maxTurnsPerPrompt
@@ -125,9 +244,9 @@ export class LoopDetectionService {
 
   private checkToolCallLoop(toolCall: { name: string; args: object }): boolean {
     const threshold =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('toolCallLoopThreshold') as number) ??
-      DEFAULT_TOOL_CALL_LOOP_THRESHOLD;
+      (this.config.getEphemeralSetting('toolCallLoopThreshold') as
+        | number
+        | undefined) ?? DEFAULT_TOOL_CALL_LOOP_THRESHOLD;
     if (threshold === -1) {
       return false; // Disabled
     }
@@ -166,33 +285,23 @@ export class LoopDetectionService {
     // Different content elements can often contain repetitive syntax that is not indicative of a loop.
     // To avoid false positives, we detect when we encounter different content types and
     // reset tracking to avoid analyzing content that spans across different element boundaries.
-    const numFences = (content.match(/```/g) ?? []).length;
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const hasTable = /(^|\n)\s*(\|.*\||[|+-]{3,})/.test(content);
-    const hasListItem =
-      // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      /(^|\n)\s*[*-+]\s/.test(content) || /(^|\n)\s*\d+\.\s/.test(content);
-    const hasHeading = /(^|\n)#+\s/.test(content);
-    const hasBlockquote = /(^|\n)>\s/.test(content);
+    const numFences = countOccurrences(content, '```');
+    const hasTable = detectMarkdownTable(content);
+    const hasListItem = detectMarkdownListItem(content);
+    const hasHeading = detectMarkdownHeading(content);
+    const hasBlockquote = detectMarkdownBlockquote(content);
     const isDivider =
       content.length > 0 &&
-      [...content].every((char) =>
-        [
-          char === '*',
-          char >= '+' && char <= '_',
-          char >= '─' && char <= '╿',
-        ].some(Boolean),
-      );
+      [...content].every((char) => {
+        const isAsterisk = char === '*';
+        const isPlusToUnderscore = char >= '+' && char <= '_';
+        const isBoxDrawing = char >= '─' && char <= '╿';
+        return isAsterisk || isPlusToUnderscore || isBoxDrawing;
+      });
 
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      numFences > 0 ||
-      hasTable ||
-      hasListItem ||
-      hasHeading ||
-      hasBlockquote ||
-      isDivider
-    ) {
+    const hasStructuralElement = numFences > 0 || hasTable || hasListItem;
+    const hasMarkdownElement = hasStructuralElement || hasHeading;
+    if (hasMarkdownElement || hasBlockquote || isDivider) {
       // Reset tracking when different content elements are detected to avoid analyzing content
       // that spans across different element boundaries.
       this.resetContentTracking();
@@ -299,9 +408,9 @@ export class LoopDetectionService {
    */
   private isLoopDetectedForChunk(chunk: string, hash: string): boolean {
     const threshold =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
-      (this.config.getEphemeralSetting('contentLoopThreshold') as number) ??
-      DEFAULT_CONTENT_LOOP_THRESHOLD;
+      (this.config.getEphemeralSetting('contentLoopThreshold') as
+        | number
+        | undefined) ?? DEFAULT_CONTENT_LOOP_THRESHOLD;
     if (threshold === -1) {
       return false; // Disabled
     }

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -14,7 +13,12 @@ const originalStderrWrite = process.stderr.write.bind(process.stderr);
 // Module-level error handlers so the same references are used for add/remove.
 const handleStdoutError = (err: NodeJS.ErrnoException) => {
   if (err.code !== 'EPIPE') {
-    console.warn(`stdout error: ${err.message}`);
+    try {
+      process.stderr.write(`stdout error: ${err.message}
+`);
+    } catch {
+      // Swallow write failures to avoid infinite recursion
+    }
   }
 };
 

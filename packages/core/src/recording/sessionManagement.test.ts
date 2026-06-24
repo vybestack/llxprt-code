@@ -1,4 +1,3 @@
-/* eslint-disable vitest/no-standalone-expect */
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -28,7 +27,7 @@
  */
 
 import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { it as itProp } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -165,7 +164,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    it('returns session data for all matching sessions', async () => {
+    itProp('returns session data for all matching sessions', async () => {
       await createTestSession(chatsDir);
       await delay(50);
       await createTestSession(chatsDir);
@@ -188,7 +187,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    it('returns sessions sorted newest-first by mtime', async () => {
+    itProp('returns sessions sorted newest-first by mtime', async () => {
       await createTestSession(chatsDir, { sessionId: 'oldest-session' });
       await delay(100);
       await createTestSession(chatsDir, { sessionId: 'middle-session' });
@@ -211,7 +210,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    it('returns sessions with correct metadata fields', async () => {
+    itProp('returns sessions with correct metadata fields', async () => {
       const sessionId = 'metadata-test-session';
       await createTestSession(chatsDir, {
         sessionId,
@@ -242,7 +241,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    it('returns empty sessions array when no sessions exist', async () => {
+    itProp('returns empty sessions array when no sessions exist', async () => {
       const result = await listSessions(chatsDir, PROJECT_HASH);
       expect(result.sessions).toStrictEqual([]);
     });
@@ -256,18 +255,21 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    it('wraps discovery result in ListSessionsResult with sessions property', async () => {
-      await createTestSession(chatsDir);
-      await createTestSession(chatsDir, {
-        projectHash: 'other-project',
-      });
+    itProp(
+      'wraps discovery result in ListSessionsResult with sessions property',
+      async () => {
+        await createTestSession(chatsDir);
+        await createTestSession(chatsDir, {
+          projectHash: 'other-project',
+        });
 
-      const result = await listSessions(chatsDir, PROJECT_HASH);
-      expect(result).toHaveProperty('sessions');
-      expect(Array.isArray(result.sessions)).toBe(true);
-      // Only the matching-project session
-      expect(result.sessions).toHaveLength(1);
-    });
+        const result = await listSessions(chatsDir, PROJECT_HASH);
+        expect(result).toHaveProperty('sessions');
+        expect(Array.isArray(result.sessions)).toBe(true);
+        // Only the matching-project session
+        expect(result.sessions).toHaveLength(1);
+      },
+    );
   });
 
   // =========================================================================
@@ -284,19 +286,22 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it('deletes session by exact ID and removes file from disk', async () => {
-      const sessionId = 'a1b2c3d4-test-session';
-      const { filePath } = await createTestSession(chatsDir, { sessionId });
-      expect(await fileExists(filePath)).toBe(true);
+    itProp(
+      'deletes session by exact ID and removes file from disk',
+      async () => {
+        const sessionId = 'a1b2c3d4-test-session';
+        const { filePath } = await createTestSession(chatsDir, { sessionId });
+        expect(await fileExists(filePath)).toBe(true);
 
-      const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
+        const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.deletedSessionId).toBe(sessionId);
-      }
-      expect(await fileExists(filePath)).toBe(false);
-    });
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.deletedSessionId).toBe(sessionId);
+        }
+        expect(await fileExists(filePath)).toBe(false);
+      },
+    );
 
     /**
      * Test 7: deleteSession by prefix
@@ -307,7 +312,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it('deletes session by unique prefix', async () => {
+    itProp('deletes session by unique prefix', async () => {
       const sessionId = 'abcdef12-3456-7890-unique';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
       // Create another with different prefix so there's no ambiguity
@@ -333,7 +338,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it('deletes session by numeric index (1 = newest)', async () => {
+    itProp('deletes session by numeric index (1 = newest)', async () => {
       await createTestSession(chatsDir, { sessionId: 'oldest-del' });
       await delay(100);
       await createTestSession(chatsDir, { sessionId: 'middle-del' });
@@ -360,7 +365,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it('removes lock sidecar file alongside session file', async () => {
+    itProp('removes lock sidecar file alongside session file', async () => {
       const sessionId = 'sidecar-lock-test';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
 
@@ -385,7 +390,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it('returns the deleted session ID in the result', async () => {
+    itProp('returns the deleted session ID in the result', async () => {
       const sessionId = 'confirmation-id-test';
       await createTestSession(chatsDir, { sessionId });
 
@@ -412,7 +417,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-003
      */
-    it('refuses to delete a session locked by a live process', async () => {
+    itProp('refuses to delete a session locked by a live process', async () => {
       const sessionId = 'locked-session-test';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
 
@@ -442,7 +447,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-004
      */
-    it('deletes a session with a stale lock (dead PID)', async () => {
+    itProp('deletes a session with a stale lock (dead PID)', async () => {
       const sessionId = 'stale-lock-test';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
 
@@ -470,7 +475,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it('returns error when session ID does not exist', async () => {
+    itProp('returns error when session ID does not exist', async () => {
       // Create a session so the directory isn't empty
       await createTestSession(chatsDir);
 
@@ -495,7 +500,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it('returns error when no sessions exist for the project', async () => {
+    itProp('returns error when no sessions exist for the project', async () => {
       const result = await deleteSession('any-ref', chatsDir, PROJECT_HASH);
 
       expect(result.ok).toBe(false);
@@ -517,7 +522,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    it.prop([fc.integer({ min: 0, max: 8 })])(
+    itProp.prop([fc.integer({ min: 0, max: 8 })])(
       'listSessions returns correct session count for any N @requirement:REQ-MGT-001',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -548,7 +553,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it.prop([fc.boolean()])(
+    itProp.prop([fc.boolean()])(
       'delete always removes session file and any lock sidecar @requirement:REQ-MGT-002',
       async (hasLock) => {
         const localTempDir = await fs.mkdtemp(
@@ -595,7 +600,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    it.prop([fc.integer({ min: 2, max: 6 })])(
+    itProp.prop([fc.integer({ min: 2, max: 6 })])(
       'listSessions always returns sessions sorted newest-first @requirement:REQ-MGT-001',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -632,7 +637,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it.prop([fc.integer({ min: 1, max: 5 })])(
+    itProp.prop([fc.integer({ min: 1, max: 5 })])(
       'deleteSession by any valid numeric index removes correct session @requirement:REQ-MGT-002',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -684,7 +689,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001, REQ-MGT-002
      */
-    it.prop([fc.uuid()])(
+    itProp.prop([fc.uuid()])(
       'any session created with a UUID can be listed then deleted @requirement:REQ-MGT-002',
       async (sessionId) => {
         const localTempDir = await fs.mkdtemp(
@@ -728,7 +733,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    it.prop([fc.integer({ min: 1, max: 5 })])(
+    itProp.prop([fc.integer({ min: 1, max: 5 })])(
       'every listed session has a positive file size @requirement:REQ-MGT-001',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -762,7 +767,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    it.prop([
+    itProp.prop([
       fc.stringMatching(/^[a-z]{5,20}$/).filter((s) => !/^\d+$/.test(s)),
     ])(
       'delete always returns error for any non-matching ref @requirement:REQ-MGT-002',

@@ -628,7 +628,6 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
 
       // Invariant: shouldStop === outputs.some(o => o.continue === false)
       const expectedStop = outputs.some((o) => o.continue === false);
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(result.shouldStop).toBe(expectedStop);
     },
   );
@@ -664,7 +663,6 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
 
       // Invariant: if stopReason is present, it should already be trimmed
       if (result.stopReason !== undefined) {
-        // eslint-disable-next-line vitest/no-standalone-expect
         expect(result.stopReason).toBe(result.stopReason.trim());
       }
     },
@@ -717,7 +715,6 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
       emitMethod(HookEventName.BeforeTool, hookResults);
 
       // Invariant: each hook gets at least one record
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(mockDebugLogger.logRecords.length).toBeGreaterThanOrEqual(
         hookResultShapes.length,
       );
@@ -787,7 +784,6 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
           successCount: number;
           failureCount: number;
         };
-        // eslint-disable-next-line vitest/no-standalone-expect
         expect(summary.successCount + summary.failureCount).toBe(
           summary.hookCount,
         );
@@ -833,7 +829,6 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
       )?.systemMessage;
 
       // Invariant: result.systemMessage === first systemMessage in outputs
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(result.systemMessage).toBe(firstSystemMessage);
     },
   );

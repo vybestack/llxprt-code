@@ -22,11 +22,29 @@
 
 import { DebugLogger } from '../debug/index.js';
 import {
-  parseAttributeValue,
-  readQuotedAttributeValue,
   toTruthyString,
   truthyJsonValueOrEmptyObject,
 } from './tool-call-parser-utils.js';
+import {
+  extractTagContentCaseInsensitive,
+  extractXmlTagPair,
+  hasAnyToolCallMarker,
+  isDigitChar,
+  isIdentifierChar,
+  isWhitespaceChar,
+  skipWhitespace,
+} from './text-tool-call-helpers.js';
+import {
+  extractBalancedSegment,
+  extractToolNameAndAttributes,
+  findTagClose,
+  normalizeArguments,
+  parseAttributeArguments,
+  parseKeyValuePairs,
+  parseValue,
+  postProcessCleanedContent,
+  removeMatchedRanges,
+} from './text-tool-call-arg-parsing.js';
 
 const logger = new DebugLogger('llxprt:parser:textToolCall');
 
@@ -51,26 +69,12 @@ interface MatchCandidate {
 }
 
 export class GemmaToolCallParser implements ITextToolCallParser {
-  private readonly keyValuePattern =
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-    /✦\s*tool_call:\s*([A-Za-z0-9_.-]+)\s+for\s+([^\n✦]*)/g;
-
   parse(content: string): {
     cleanedContent: string;
     toolCalls: TextToolCall[];
   } {
     // Quick check: if content doesn't contain any tool call markers, return early
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      !content.includes('[TOOL_REQUEST') &&
-      !content.includes('tool_call:') &&
-      !content.includes('[END_TOOL_REQUEST]') &&
-      !content.includes('{"name":') &&
-      !content.includes('<tool_call>') &&
-      !content.includes('<invoke') &&
-      !content.includes('<tool>') &&
-      !content.includes('<use ')
-    ) {
+    if (!hasAnyToolCallMarker(content)) {
       return { cleanedContent: content, toolCalls: [] };
     }
 
@@ -78,33 +82,33 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const toolCalls: TextToolCall[] = [];
     const ranges: Array<{ start: number; end: number }> = [];
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const match of matches) {
       ranges.push({ start: match.start, end: match.end });
-      if (!match.toolName) {
-        continue;
+      const toolCall = this.tryBuildToolCall(match);
+      if (toolCall) {
+        toolCalls.push(toolCall);
       }
-
-      const parsedArgs = this.normalizeArguments(
-        match.rawArgs,
-        match.toolName,
-        match.fullMatch,
-      );
-
-      if (!parsedArgs) {
-        continue;
-      }
-
-      toolCalls.push({
-        name: match.toolName,
-        arguments: parsedArgs,
-      });
     }
 
-    const withoutMatches = this.removeMatchedRanges(content, ranges);
-    const cleanedContent = this.postProcessCleanedContent(withoutMatches);
+    const withoutMatches = removeMatchedRanges(content, ranges);
+    const cleanedContent = postProcessCleanedContent(withoutMatches);
 
     return { cleanedContent, toolCalls };
+  }
+
+  private tryBuildToolCall(match: MatchCandidate): TextToolCall | null {
+    if (!match.toolName) {
+      return null;
+    }
+    const parsedArgs = normalizeArguments(
+      match.rawArgs,
+      match.toolName,
+      match.fullMatch,
+    );
+    if (!parsedArgs) {
+      return null;
+    }
+    return { name: match.toolName, arguments: parsedArgs };
   }
 
   private collectMatches(content: string): MatchCandidate[] {
@@ -128,121 +132,197 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const endMarker = '[TOOL_REQUEST_END]';
     let searchIndex = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(startMarker, searchIndex);
-      if (start === -1) break;
-
-      const afterStart = start + startMarker.length;
-      const endMarkerIndex = content.indexOf(endMarker, afterStart);
-      if (endMarkerIndex === -1) break;
-
-      const segment = content.slice(afterStart, endMarkerIndex);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const toolNameMatch = segment.match(/^\s*([^\s{]+)\s+/);
-      if (!toolNameMatch) {
-        searchIndex = endMarkerIndex + endMarker.length;
-        continue;
+      if (start === -1) {
+        break;
       }
-
-      const toolName = toolNameMatch[1];
-      const braceOffset = segment.indexOf('{', toolNameMatch[0].length);
-      if (braceOffset === -1) {
-        searchIndex = endMarkerIndex + endMarker.length;
-        continue;
-      }
-
-      const jsonStart = afterStart + braceOffset;
-      const jsonSegment = this.extractBalancedSegment(
+      const result = this.tryParseBracketRequest(
         content,
-        jsonStart,
-        '{',
-        '}',
-      );
-      if (!jsonSegment || jsonSegment.endIndex > endMarkerIndex) {
-        searchIndex = endMarkerIndex + endMarker.length;
-        continue;
-      }
-
-      const fullEnd = endMarkerIndex + endMarker.length;
-      matches.push({
         start,
-        end: fullEnd,
-        toolName,
-        rawArgs: jsonSegment.segment,
-        fullMatch: content.slice(start, fullEnd),
-      });
-
-      searchIndex = fullEnd;
+        startMarker,
+        endMarker,
+      );
+      if (result.match) {
+        matches.push(result.match);
+      }
+      searchIndex = result.nextSearchIndex;
     }
 
     return matches;
   }
 
+  private tryParseBracketRequest(
+    content: string,
+    start: number,
+    startMarker: string,
+    endMarker: string,
+  ): { match: MatchCandidate | null; nextSearchIndex: number } {
+    const afterStart = start + startMarker.length;
+    const endMarkerIndex = content.indexOf(endMarker, afterStart);
+    if (endMarkerIndex === -1) {
+      return { match: null, nextSearchIndex: content.length };
+    }
+
+    const segment = content.slice(afterStart, endMarkerIndex);
+    const skipTo = endMarkerIndex + endMarker.length;
+
+    // Parse tool name: skip whitespace, read until whitespace or '{'
+    let nameStart = 0;
+    while (nameStart < segment.length && isWhitespaceChar(segment[nameStart])) {
+      nameStart++;
+    }
+    let nameEnd = nameStart;
+    while (
+      nameEnd < segment.length &&
+      !isWhitespaceChar(segment[nameEnd]) &&
+      segment[nameEnd] !== '{'
+    ) {
+      nameEnd++;
+    }
+    if (nameEnd === nameStart) {
+      return { match: null, nextSearchIndex: skipTo };
+    }
+    const toolName = segment.slice(nameStart, nameEnd);
+
+    const braceOffset = segment.indexOf('{', nameEnd);
+    if (braceOffset === -1) {
+      return { match: null, nextSearchIndex: skipTo };
+    }
+
+    const jsonStart = afterStart + braceOffset;
+    const jsonSegment = extractBalancedSegment(content, jsonStart, '{', '}');
+    if (!jsonSegment || jsonSegment.endIndex > endMarkerIndex) {
+      return { match: null, nextSearchIndex: skipTo };
+    }
+
+    const fullEnd = endMarkerIndex + endMarker.length;
+    return {
+      match: {
+        start,
+        end: fullEnd,
+        toolName,
+        rawArgs: jsonSegment.segment,
+        fullMatch: content.slice(start, fullEnd),
+      },
+      nextSearchIndex: fullEnd,
+    };
+  }
+
   private findJsonToolRequests(content: string): MatchCandidate[] {
     const matches: MatchCandidate[] = [];
-    const marker = '{"name":';
     const endMarker = '[END_TOOL_REQUEST]';
     let searchIndex = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
-      const candidateIndex = content.indexOf(marker, searchIndex);
+      const candidateIndex = this.findNextJsonNameObject(content, searchIndex);
       if (candidateIndex === -1) {
         break;
       }
 
-      let startIndex = candidateIndex;
-      let backPointer = candidateIndex;
-      while (backPointer > 0 && /\s/.test(content.charAt(backPointer - 1))) {
-        backPointer--;
-      }
-      let digitPointer = backPointer;
-      while (digitPointer > 0 && /\d/.test(content.charAt(digitPointer - 1))) {
-        digitPointer--;
-      }
-      if (digitPointer < backPointer) {
-        startIndex = digitPointer;
-      }
-
-      const jsonSegment = this.extractBalancedSegment(
+      const startIndex = this.computeJsonStartIndex(content, candidateIndex);
+      const result = this.tryParseJsonRequest(
         content,
         candidateIndex,
-        '{',
-        '}',
+        startIndex,
+        endMarker,
       );
-      if (!jsonSegment) {
-        searchIndex = candidateIndex + marker.length;
-        continue;
+      if (result.match) {
+        matches.push(result.match);
       }
+      searchIndex = result.nextSearchIndex;
+    }
 
-      try {
-        const parsed = JSON.parse(jsonSegment.segment);
-        const toolName = toTruthyString(parsed.name);
-        const argsText = JSON.stringify(
-          truthyJsonValueOrEmptyObject(parsed.arguments),
-        );
-        const endMarkerIndex = content.indexOf(endMarker, jsonSegment.endIndex);
-        if (toolName && endMarkerIndex !== -1) {
-          const fullEnd = endMarkerIndex + endMarker.length;
-          matches.push({
+    return matches;
+  }
+
+  private findNextJsonNameObject(content: string, startIndex: number): number {
+    let candidateIndex = content.indexOf('{', startIndex);
+    while (candidateIndex !== -1) {
+      const keyStart = skipWhitespace(content, candidateIndex + 1);
+      const keyEnd = content.indexOf('"', keyStart + 1);
+      if (
+        content[keyStart] === '"' &&
+        content.slice(keyStart + 1, keyEnd) === 'name'
+      ) {
+        const colonIndex = skipWhitespace(content, keyEnd + 1);
+        if (content[colonIndex] === ':') {
+          return candidateIndex;
+        }
+      }
+      candidateIndex = content.indexOf('{', candidateIndex + 1);
+    }
+    return -1;
+  }
+
+  private computeJsonStartIndex(
+    content: string,
+    candidateIndex: number,
+  ): number {
+    let backPointer = candidateIndex;
+    while (
+      backPointer > 0 &&
+      isWhitespaceChar(content.charAt(backPointer - 1))
+    ) {
+      backPointer--;
+    }
+    let digitPointer = backPointer;
+    while (digitPointer > 0 && isDigitChar(content.charAt(digitPointer - 1))) {
+      digitPointer--;
+    }
+    if (digitPointer < backPointer) {
+      return digitPointer;
+    }
+    return candidateIndex;
+  }
+
+  private tryParseJsonRequest(
+    content: string,
+    candidateIndex: number,
+    startIndex: number,
+    endMarker: string,
+  ): { match: MatchCandidate | null; nextSearchIndex: number } {
+    const jsonSegment = extractBalancedSegment(
+      content,
+      candidateIndex,
+      '{',
+      '}',
+    );
+    if (!jsonSegment) {
+      return {
+        match: null,
+        nextSearchIndex: candidateIndex + 1,
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(jsonSegment.segment);
+      const toolName = toTruthyString(parsed.name);
+      const argsText = JSON.stringify(
+        truthyJsonValueOrEmptyObject(parsed.arguments),
+      );
+      const endMarkerIndex = content.indexOf(endMarker, jsonSegment.endIndex);
+      if (toolName && endMarkerIndex !== -1) {
+        const fullEnd = endMarkerIndex + endMarker.length;
+        return {
+          match: {
             start: startIndex,
             end: fullEnd,
             toolName,
             rawArgs: argsText,
             fullMatch: content.slice(startIndex, fullEnd),
-          });
-          searchIndex = fullEnd;
-          continue;
-        }
-      } catch (error) {
-        logger.error(`Failed to parse structured tool call JSON: ${error}`);
+          },
+          nextSearchIndex: fullEnd,
+        };
       }
-
-      searchIndex = candidateIndex + marker.length;
+    } catch (error) {
+      logger.error(`Failed to parse structured tool call JSON: ${error}`);
     }
 
-    return matches;
+    return {
+      match: null,
+      nextSearchIndex: candidateIndex + 1,
+    };
   }
 
   private findXMLToolRequests(content: string): MatchCandidate[] {
@@ -251,32 +331,47 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const endTag = '</tool_call>';
     let searchIndex = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(startTag, searchIndex);
-      if (start === -1) break;
-
-      const end = content.indexOf(endTag, start + startTag.length);
-      if (end === -1) break;
-
-      const innerContent = content.slice(start + startTag.length, end).trim();
-      const fullEnd = end + endTag.length;
-
-      // Smart parsing: First try JSON parsing (Hermes format), then try XML parsing
-      const match = this.parseToolCallContent(
-        innerContent,
-        start,
-        fullEnd,
-        content.slice(start, fullEnd),
-      );
-      if (match) {
-        matches.push(match);
+      if (start === -1) {
+        break;
       }
-
-      searchIndex = fullEnd;
+      const result = this.tryParseXmlTagRequest(
+        content,
+        start,
+        startTag,
+        endTag,
+      );
+      if (result.match) {
+        matches.push(result.match);
+      }
+      searchIndex = result.nextSearchIndex;
     }
 
     return matches;
+  }
+
+  private tryParseXmlTagRequest(
+    content: string,
+    start: number,
+    startTag: string,
+    endTag: string,
+  ): { match: MatchCandidate | null; nextSearchIndex: number } {
+    const end = content.indexOf(endTag, start + startTag.length);
+    if (end === -1) {
+      return { match: null, nextSearchIndex: content.length };
+    }
+
+    const innerContent = content.slice(start + startTag.length, end).trim();
+    const fullEnd = end + endTag.length;
+
+    const match = this.parseToolCallContent(
+      innerContent,
+      start,
+      fullEnd,
+      content.slice(start, fullEnd),
+    );
+    return { match, nextSearchIndex: fullEnd };
   }
 
   private parseToolCallContent(
@@ -325,37 +420,39 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   } {
     const result = { toolName: '', args: {} as Record<string, unknown> };
 
-    // Parse XML-like format: tool_name followed by <arg_key>value</arg_key>
     const lines = xmlContent
       .split('\n')
       .map((line) => line.trim())
-      .filter((line) => line);
+      .filter((line) => line.length > 0);
 
-    if (lines.length > 0) {
-      const potentialToolName = lines[0];
-
-      // Validate if tool name is reasonable (should not contain special characters or braces)
-      if (
-        potentialToolName &&
-        !potentialToolName.includes('{') &&
-        !potentialToolName.includes('}')
-      ) {
-        result.toolName = potentialToolName;
-
-        // Only parse parameters when there is a valid tool name
-        for (let i = 1; i < lines.length; i++) {
-          // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-          const argMatch = lines[i].match(/<(\w+)>([^<]*)<\/\1>/);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (argMatch) {
-            const [, key, value] = argMatch;
-            result.args[key] = this.parseValue(value.trim());
-          }
-        }
-      }
+    if (lines.length === 0) {
+      return result;
     }
 
+    const potentialToolName = lines[0];
+    if (
+      !potentialToolName ||
+      potentialToolName.includes('{') ||
+      potentialToolName.includes('}')
+    ) {
+      return result;
+    }
+
+    result.toolName = potentialToolName;
+    this.parseXmlArgLines(lines, result.args);
     return result;
+  }
+
+  private parseXmlArgLines(
+    lines: string[],
+    args: Record<string, unknown>,
+  ): void {
+    for (let i = 1; i < lines.length; i++) {
+      const parsed = extractXmlTagPair(lines[i]);
+      if (parsed !== null) {
+        args[parsed.key] = parseValue(parsed.value.trim());
+      }
+    }
   }
 
   private findInvokeToolRequests(content: string): MatchCandidate[] {
@@ -364,44 +461,60 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const closing = '</invoke>';
     let searchIndex = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(tagPrefix, searchIndex);
       if (start === -1) {
         break;
       }
-
-      const tagEnd = this.findTagClose(content, start + tagPrefix.length);
-      if (tagEnd === -1) {
-        break;
+      const result = this.tryParseInvokeRequest(
+        content,
+        start,
+        tagPrefix,
+        closing,
+      );
+      if (result.match) {
+        matches.push(result.match);
       }
+      searchIndex = result.nextSearchIndex;
+    }
 
-      const header = content.slice(start + tagPrefix.length, tagEnd);
-      const attributes = this.parseAttributeArguments(header);
-      const toolNameValue = attributes.name;
-      const toolName =
-        typeof toolNameValue === 'string' ? toolNameValue.trim() : '';
+    return matches;
+  }
 
-      const bodyStart = tagEnd + 1;
-      const closingIndex = content.indexOf(closing, bodyStart);
-      if (!toolName || closingIndex === -1) {
-        searchIndex = bodyStart;
-        continue;
-      }
+  private tryParseInvokeRequest(
+    content: string,
+    start: number,
+    tagPrefix: string,
+    closing: string,
+  ): { match: MatchCandidate | null; nextSearchIndex: number } {
+    const tagEnd = findTagClose(content, start + tagPrefix.length);
+    if (tagEnd === -1) {
+      return { match: null, nextSearchIndex: content.length };
+    }
 
-      const fullEnd = closingIndex + closing.length;
-      matches.push({
+    const header = content.slice(start + tagPrefix.length, tagEnd);
+    const attributes = parseAttributeArguments(header);
+    const toolNameValue = attributes.name;
+    const toolName =
+      typeof toolNameValue === 'string' ? toolNameValue.trim() : '';
+
+    const bodyStart = tagEnd + 1;
+    const closingIndex = content.indexOf(closing, bodyStart);
+    if (!toolName || closingIndex === -1) {
+      return { match: null, nextSearchIndex: bodyStart };
+    }
+
+    const fullEnd = closingIndex + closing.length;
+    return {
+      match: {
         start,
         end: fullEnd,
         toolName,
         rawArgs: content.slice(bodyStart, closingIndex),
         fullMatch: content.slice(start, fullEnd),
-      });
-
-      searchIndex = fullEnd;
-    }
-
-    return matches;
+      },
+      nextSearchIndex: fullEnd,
+    };
   }
 
   private findGenericXmlToolRequests(content: string): MatchCandidate[] {
@@ -410,36 +523,56 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const endTag = '</tool>';
     let searchIndex = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(startTag, searchIndex);
-      if (start === -1) break;
-
-      const end = content.indexOf(endTag, start + startTag.length);
-      if (end === -1) break;
-
-      const inner = content.slice(start + startTag.length, end);
-      const nameMatch = inner.match(/<name>([^<]+)<\/name>/i);
-      const argsMatch = inner.match(/<arguments>([\s\S]*?)<\/arguments>/i);
-
-      if (!nameMatch || !argsMatch) {
-        searchIndex = end + endTag.length;
-        continue;
+      if (start === -1) {
+        break;
       }
-
-      const fullEnd = end + endTag.length;
-      matches.push({
+      const result = this.tryParseGenericXmlRequest(
+        content,
         start,
-        end: fullEnd,
-        toolName: nameMatch[1].trim(),
-        rawArgs: argsMatch[1],
-        fullMatch: content.slice(start, fullEnd),
-      });
-
-      searchIndex = fullEnd;
+        startTag,
+        endTag,
+      );
+      if (result.match) {
+        matches.push(result.match);
+      }
+      searchIndex = result.nextSearchIndex;
     }
 
     return matches;
+  }
+
+  private tryParseGenericXmlRequest(
+    content: string,
+    start: number,
+    startTag: string,
+    endTag: string,
+  ): { match: MatchCandidate | null; nextSearchIndex: number } {
+    const end = content.indexOf(endTag, start + startTag.length);
+    if (end === -1) {
+      return { match: null, nextSearchIndex: content.length };
+    }
+
+    const inner = content.slice(start + startTag.length, end);
+    const skipTo = end + endTag.length;
+
+    const nameValue = extractTagContentCaseInsensitive(inner, 'name');
+    const argsValue = extractTagContentCaseInsensitive(inner, 'arguments');
+    if (nameValue === null || argsValue === null) {
+      return { match: null, nextSearchIndex: skipTo };
+    }
+
+    return {
+      match: {
+        start,
+        end: skipTo,
+        toolName: nameValue.trim(),
+        rawArgs: argsValue,
+        fullMatch: content.slice(start, skipTo),
+      },
+      nextSearchIndex: skipTo,
+    };
   }
 
   private findUseToolRequests(content: string): MatchCandidate[] {
@@ -448,39 +581,53 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const closing = '</use>';
     let searchIndex = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(prefix, searchIndex);
-      if (start === -1) break;
-
-      const tagEnd = this.findTagClose(content, start + prefix.length);
-      if (tagEnd === -1) break;
-
-      const header = content.slice(start + prefix.length, tagEnd);
-      const { toolName, attributeText } =
-        this.extractToolNameAndAttributes(header);
-
-      const closingIndex = content.startsWith(closing, tagEnd + 1)
-        ? tagEnd + 1 + closing.length
-        : tagEnd + 1;
-
-      if (!toolName) {
-        searchIndex = tagEnd + 1;
-        continue;
+      if (start === -1) {
+        break;
       }
-
-      matches.push({
-        start,
-        end: closingIndex,
-        toolName,
-        rawArgs: this.parseAttributeArguments(attributeText),
-        fullMatch: content.slice(start, closingIndex),
-      });
-
-      searchIndex = closingIndex;
+      const result = this.tryParseUseRequest(content, start, prefix, closing);
+      if (result.match) {
+        matches.push(result.match);
+      }
+      searchIndex = result.nextSearchIndex;
     }
 
     return matches;
+  }
+
+  private tryParseUseRequest(
+    content: string,
+    start: number,
+    prefix: string,
+    closing: string,
+  ): { match: MatchCandidate | null; nextSearchIndex: number } {
+    const tagEnd = findTagClose(content, start + prefix.length);
+    if (tagEnd === -1) {
+      return { match: null, nextSearchIndex: content.length };
+    }
+
+    const header = content.slice(start + prefix.length, tagEnd);
+    const { toolName, attributeText } = extractToolNameAndAttributes(header);
+
+    const closingIndex = content.startsWith(closing, tagEnd + 1)
+      ? tagEnd + 1 + closing.length
+      : tagEnd + 1;
+
+    if (!toolName) {
+      return { match: null, nextSearchIndex: tagEnd + 1 };
+    }
+
+    return {
+      match: {
+        start,
+        end: closingIndex,
+        toolName,
+        rawArgs: parseAttributeArguments(attributeText),
+        fullMatch: content.slice(start, closingIndex),
+      },
+      nextSearchIndex: closingIndex,
+    };
   }
 
   private findUseUnderscoreToolRequests(content: string): MatchCandidate[] {
@@ -488,517 +635,156 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const prefix = '<use_';
     let searchIndex = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     while (searchIndex < content.length) {
       const start = content.indexOf(prefix, searchIndex);
-      if (start === -1) break;
-
-      let nameEnd = start + prefix.length;
-      while (
-        nameEnd < content.length &&
-        /[A-Za-z0-9_.-]/.test(content[nameEnd])
-      ) {
-        nameEnd++;
+      if (start === -1) {
+        break;
       }
-
-      const toolName = content.slice(start + prefix.length, nameEnd);
-      const tagEnd = this.findTagClose(content, nameEnd);
-      if (tagEnd === -1) break;
-
-      const attributeText = content.slice(nameEnd, tagEnd);
-      const closingTag = `</use_${toolName}>`;
-      const bodyEnd = tagEnd + 1;
-      const closingIndex = content.startsWith(closingTag, bodyEnd)
-        ? bodyEnd + closingTag.length
-        : bodyEnd;
-
-      if (!toolName) {
-        searchIndex = bodyEnd;
-        continue;
+      const result = this.tryParseUseUnderscoreRequest(content, start, prefix);
+      if (result.match) {
+        matches.push(result.match);
       }
-
-      matches.push({
-        start,
-        end: closingIndex,
-        toolName,
-        rawArgs: this.parseAttributeArguments(attributeText),
-        fullMatch: content.slice(start, closingIndex),
-      });
-
-      searchIndex = closingIndex;
+      searchIndex = result.nextSearchIndex;
     }
 
     return matches;
+  }
+
+  private tryParseUseUnderscoreRequest(
+    content: string,
+    start: number,
+    prefix: string,
+  ): { match: MatchCandidate | null; nextSearchIndex: number } {
+    let nameEnd = start + prefix.length;
+    while (nameEnd < content.length && isIdentifierChar(content[nameEnd])) {
+      nameEnd++;
+    }
+
+    const toolName = content.slice(start + prefix.length, nameEnd);
+    const tagEnd = findTagClose(content, nameEnd);
+    if (tagEnd === -1) {
+      return { match: null, nextSearchIndex: content.length };
+    }
+
+    const attributeText = content.slice(nameEnd, tagEnd);
+    const closingTag = `</use_${toolName}>`;
+    const bodyEnd = tagEnd + 1;
+    const closingIndex = content.startsWith(closingTag, bodyEnd)
+      ? bodyEnd + closingTag.length
+      : bodyEnd;
+
+    if (!toolName) {
+      return { match: null, nextSearchIndex: bodyEnd };
+    }
+
+    return {
+      match: {
+        start,
+        end: closingIndex,
+        toolName,
+        rawArgs: parseAttributeArguments(attributeText),
+        fullMatch: content.slice(start, closingIndex),
+      },
+      nextSearchIndex: closingIndex,
+    };
   }
 
   private findKeyValueToolRequests(content: string): MatchCandidate[] {
     const matches: MatchCandidate[] = [];
-    let match: RegExpExecArray | null;
+    const marker = 'tool_call:';
+    const keyValueMarker = String.fromCodePoint(0x2728);
+    let searchIndex = 0;
 
-    while ((match = this.keyValuePattern.exec(content)) !== null) {
-      const fullMatch = match[0];
-      matches.push({
-        start: match.index,
-        end: match.index + fullMatch.length,
-        toolName: match[1],
-        rawArgs: this.parseKeyValuePairs(match[2]),
-        fullMatch,
-      });
+    while (searchIndex < content.length) {
+      const starIdx = content.indexOf(keyValueMarker, searchIndex);
+      if (starIdx === -1) {
+        break;
+      }
+      const result = this.tryParseKeyValueRequest(
+        content,
+        starIdx,
+        marker,
+        keyValueMarker,
+      );
+      if (result.match) {
+        matches.push(result.match);
+      }
+      searchIndex = result.nextSearchIndex;
     }
 
-    this.keyValuePattern.lastIndex = 0;
     return matches;
   }
 
-  private removeMatchedRanges(
+  private tryParseKeyValueRequest(
     content: string,
-    ranges: Array<{ start: number; end: number }>,
-  ): string {
-    if (ranges.length === 0) {
-      return content;
-    }
-
-    const sorted = ranges
-      .filter(({ start, end }) => start < end)
-      .sort((a, b) => a.start - b.start);
-
-    const merged: Array<{ start: number; end: number }> = [];
-    for (const range of sorted) {
-      const last = merged[merged.length - 1];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Array access may return undefined at runtime despite TypeScript inference
-      if (last != null && range.start <= last.end) {
-        last.end = Math.max(last.end, range.end);
-      } else {
-        merged.push({ ...range });
-      }
-    }
-
-    let cursor = 0;
-    const pieces: string[] = [];
-    for (const range of merged) {
-      if (cursor < range.start) {
-        pieces.push(content.slice(cursor, range.start));
-      }
-      cursor = Math.max(cursor, range.end);
-    }
-    pieces.push(content.slice(cursor));
-
-    return pieces.join('');
-  }
-
-  private postProcessCleanedContent(content: string): string {
-    return (
-      content
-        .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
-        .replace(/<\|im_start\|>assistant/g, '')
-        .replace(/<\|im_end\|>/g, '')
-        .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
-        .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '')
-        .replace(/<invoke[\s\S]*?<\/invoke>/g, '')
-        .replace(/<tool>[\s\S]*?<\/tool>/g, '')
-        .replace(/<\/use_[A-Za-z0-9_.-]+>/g, '')
-        .replace(/<\/use>/g, '')
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        .replace(/<tool_call>\s*\{[^}]*$/gm, '')
-        .replace(
-          // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-          /\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm,
-          '',
-        )
-        .replace(/✦\s*<think>/g, '')
-        .replace(/\n{2,}/g, '\n')
-        .trim()
-    );
-  }
-
-  private normalizeArguments(
-    args: string | Record<string, unknown>,
-    toolName: string,
-    fullMatch: string,
-  ): Record<string, unknown> | null {
-    if (typeof args !== 'string') {
-      return this.applyToolSpecificNormalizations(args, toolName);
-    }
-
-    try {
-      if (
-        args.includes('<parameter') ||
-        (args.includes('<') && args.includes('>'))
-      ) {
-        return this.parseXMLParameters(args);
-      }
-      return this.applyToolSpecificNormalizations(JSON.parse(args), toolName);
-    } catch (error) {
-      const repaired = this.tryRepairJson(args);
-      if (repaired) {
-        try {
-          return this.applyToolSpecificNormalizations(
-            JSON.parse(repaired),
-            toolName,
-          );
-        } catch {
-          // ignore and fall through
-        }
-      }
-
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const simpleJsonMatch = args.match(/^{[^{]*}$/);
-      if (simpleJsonMatch) {
-        try {
-          return JSON.parse(simpleJsonMatch[0]);
-        } catch {
-          // fall through to logging
-        }
-      }
-
-      logger.error(
-        `Failed to parse tool arguments for ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      logger.error(`Raw arguments excerpt: ${fullMatch.slice(0, 200)}`);
-      return null;
-    }
-  }
-
-  private applyToolSpecificNormalizations(
-    args: Record<string, unknown>,
-    toolName: string,
-  ): Record<string, unknown> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
-    if (args === null || args === undefined) {
-      return args;
-    }
-    const normalizedTool =
-      typeof toolName === 'string' ? toolName.trim().toLowerCase() : '';
-    if (normalizedTool === 'todo_write') {
-      const todos = args['todos'];
-      if (Array.isArray(todos)) {
-        args['todos'] = todos.map((todo, index) =>
-          this.normalizeTodoEntry(todo, index),
-        );
-      }
-    }
-    return args;
-  }
-
-  private normalizeTodoEntry(
-    todo: unknown,
-    index: number,
-  ): Record<string, unknown> {
-    const normalized =
-      todo != null && typeof todo === 'object'
-        ? { ...(todo as Record<string, unknown>) }
-        : {};
-
-    if (
-      normalized.content === undefined ||
-      normalized.content === null ||
-      normalized.content === ''
+    starIdx: number,
+    marker: string,
+    keyValueMarker: string,
+  ): { match: MatchCandidate | null; nextSearchIndex: number } {
+    let markerIndex = starIdx + keyValueMarker.length;
+    while (
+      markerIndex < content.length &&
+      isWhitespaceChar(content[markerIndex])
     ) {
-      normalized.content =
-        typeof todo === 'string' && todo.trim().length > 0
-          ? todo
-          : `Task ${index + 1}`;
-    } else {
-      normalized.content = String(normalized.content);
+      markerIndex++;
     }
 
-    normalized.status = this.normalizeTodoStatus(normalized.status);
-
-    return normalized;
-  }
-
-  private normalizeTodoStatus(
-    value: unknown,
-  ): 'pending' | 'in_progress' | 'completed' {
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (normalized === 'in_progress' || normalized === 'completed') {
-        return normalized;
-      }
-      if (normalized === 'pending') {
-        return 'pending';
-      }
-    }
-    return 'pending';
-  }
-
-  private extractBalancedSegment(
-    content: string,
-    startIndex: number,
-    openChar: '{' | '[' | '(',
-    closeChar: '}' | ']' | ')',
-  ): { segment: string; endIndex: number } | null {
-    if (content[startIndex] !== openChar) {
-      return null;
+    if (!content.startsWith(marker, markerIndex)) {
+      return { match: null, nextSearchIndex: markerIndex };
     }
 
-    let depth = 0;
-    let inString: '"' | "'" | null = null;
-    let escapeNext = false;
-
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (let i = startIndex; i < content.length; i++) {
-      const char = content[i];
-
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-
-      if (char === '\\' && inString) {
-        escapeNext = true;
-        continue;
-      }
-
-      if (inString) {
-        if (char === inString) {
-          inString = null;
-        }
-        continue;
-      }
-
-      if (char === '"' || char === "'") {
-        inString = char;
-        continue;
-      }
-
-      if (char === openChar) {
-        depth++;
-      } else if (char === closeChar) {
-        depth--;
-        if (depth === 0) {
-          return {
-            segment: content.slice(startIndex, i + 1),
-            endIndex: i + 1,
-          };
-        }
-      }
+    let nameStart = markerIndex + marker.length;
+    while (nameStart < content.length && isWhitespaceChar(content[nameStart])) {
+      nameStart++;
     }
 
-    return null;
-  }
-
-  // Best-effort repair for JSON with unescaped inner quotes in string values.
-  private tryRepairJson(args: string): string | null {
-    try {
-      JSON.parse(args);
-      return args; // already valid
-    } catch {
-      // Target only inner quotes within JSON string values, preserving multibyte and spacing
-      // e.g., { "command": "printf "ありがとう 世界"" } -> { "command": "printf \"ありがとう 世界\"" }
-      const repaired = args.replace(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        /:(\s*)"((?:\\.|[^"\\])*)"(\s*)([,}])/g,
-        (_m, s1, val, s2, tail) => {
-          // Escape only unescaped quotes inside the value
-          const fixed = val.replace(/(?<!\\)"/g, '\\"');
-          return `:${s1}"${fixed}"${s2}${tail}`;
-        },
-      );
-      try {
-        JSON.parse(repaired);
-        return repaired;
-      } catch {
-        return null;
-      }
-    }
-  }
-
-  private parseKeyValuePairs(str: string): Record<string, unknown> {
-    const args: Record<string, unknown> = {};
-
-    // Parse "key value key2 value2" format
-    // Example: "path /Users/acoliver/projects/gemini-code/gemini-cli/docs"
-    const parts = str.trim().split(/\s+/);
-
-    for (let i = 0; i < parts.length; i += 2) {
-      if (i + 1 < parts.length) {
-        const key = parts[i];
-        let value: string | number | boolean = parts[i + 1];
-
-        // Handle quoted strings that might contain spaces
-        if (value.startsWith('"') || value.startsWith("'")) {
-          const quote = value[0];
-          let endIndex = i + 1;
-
-          // Find the closing quote
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          while (endIndex < parts.length && !parts[endIndex].endsWith(quote)) {
-            endIndex++;
-          }
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (endIndex < parts.length) {
-            value = parts.slice(i + 1, endIndex + 1).join(' ');
-            value = value.slice(1, -1); // Remove quotes
-            i = endIndex - 1; // Adjust loop counter
-          }
-        }
-
-        // Try to parse as number or boolean
-        if (!isNaN(Number(value))) {
-          args[key] = Number(value);
-        } else if (value === 'true' || value === 'false') {
-          args[key] = value === 'true';
-        } else {
-          args[key] = value;
-        }
-      }
+    const toolName = this.readIdentifierToken(content, nameStart);
+    if (!toolName) {
+      return { match: null, nextSearchIndex: nameStart };
     }
 
-    return args;
-  }
+    let afterName = nameStart + toolName.length;
+    while (afterName < content.length && isWhitespaceChar(content[afterName])) {
+      afterName++;
+    }
 
-  private parseAttributeArguments(
-    attributeText: string,
-  ): Record<string, unknown> {
-    const args: Record<string, unknown> = {};
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
-    const text = attributeText ?? '';
-    const length = text.length;
-    let index = 0;
+    if (!content.startsWith('for', afterName)) {
+      return { match: null, nextSearchIndex: afterName };
+    }
 
-    const readIdentifier = () => {
-      const start = index;
-      while (index < length && /[A-Za-z0-9_.-]/.test(text.charAt(index))) {
-        index++;
-      }
-      return text.slice(start, index);
+    let argsStart = afterName + 'for'.length;
+    while (argsStart < content.length && isWhitespaceChar(content[argsStart])) {
+      argsStart++;
+    }
+
+    let argsEnd = content.indexOf('\n', argsStart);
+    if (argsEnd === -1) {
+      argsEnd = content.length;
+    }
+    const nextStar = content.indexOf(keyValueMarker, argsStart);
+    if (nextStar !== -1 && nextStar < argsEnd) {
+      argsEnd = nextStar;
+    }
+
+    const rawArgs = content.slice(argsStart, argsEnd).trim();
+    const fullMatch = content.slice(starIdx, argsEnd);
+    return {
+      match: {
+        start: starIdx,
+        end: argsEnd,
+        toolName,
+        rawArgs: parseKeyValuePairs(rawArgs),
+        fullMatch,
+      },
+      nextSearchIndex: argsEnd,
     };
-
-    const skipWhitespace = () => {
-      while (index < length && /\s/.test(text.charAt(index))) {
-        index++;
-      }
-    };
-
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    while (index < length) {
-      skipWhitespace();
-      const key = readIdentifier();
-      if (!key) {
-        index++;
-        continue;
-      }
-
-      const normalizedKey = key.toLowerCase();
-      if (
-        normalizedKey === 'with' ||
-        normalizedKey === 'and' ||
-        normalizedKey === 'then'
-      ) {
-        continue;
-      }
-
-      skipWhitespace();
-      if (text.charAt(index) !== '=') {
-        index++;
-        continue;
-      }
-      index++;
-      skipWhitespace();
-
-      const quote = text.charAt(index);
-      if (quote !== '"' && quote !== "'") {
-        index++;
-        continue;
-      }
-      index++;
-
-      const { value, nextIndex } = readQuotedAttributeValue(text, index, quote);
-      index = nextIndex;
-      args[key] = parseAttributeValue(value);
-    }
-
-    return args;
   }
 
-  private parseXMLParameters(xmlContent: string): Record<string, unknown> {
-    const args: Record<string, unknown> = {};
-
-    // Parse Claude-style <parameter name="key">value</parameter>
-    const parameterPattern =
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      /<parameter\s+name="([^"]+)">([^<]*)<\/parameter>/g;
-    let match;
-    while ((match = parameterPattern.exec(xmlContent)) !== null) {
-      const [, key, value] = match;
-      args[key] = this.parseValue(value.trim());
+  private readIdentifierToken(content: string, start: number): string {
+    let end = start;
+    while (end < content.length && isIdentifierChar(content[end])) {
+      end++;
     }
-
-    // If no parameter tags found, try generic XML <key>value</key>
-    if (Object.keys(args).length === 0) {
-      // Match any XML tag pair
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-      const genericPattern = /<(\w+)>([^<]*)<\/\1>/g;
-      while ((match = genericPattern.exec(xmlContent)) !== null) {
-        const [, key, value] = match;
-        args[key] = this.parseValue(value.trim());
-      }
-    }
-
-    return args;
-  }
-
-  private parseValue(value: string): string | number | boolean {
-    // Try to parse as number
-    if (!isNaN(Number(value)) && value !== '') {
-      return Number(value);
-    }
-    // Try to parse as boolean
-    if (value === 'true' || value === 'false') {
-      return value === 'true';
-    }
-    // Handle HTML entities
-    return value
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'");
-  }
-
-  private findTagClose(content: string, fromIndex: number): number {
-    let inQuote: '"' | "'" | null = null;
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (let i = fromIndex; i < content.length; i++) {
-      const char = content[i];
-      if (inQuote) {
-        if (char === inQuote && content[i - 1] !== '\\') {
-          inQuote = null;
-        }
-        continue;
-      }
-
-      if (char === '"' || char === "'") {
-        inQuote = char;
-        continue;
-      }
-
-      if (char === '>') {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  private extractToolNameAndAttributes(header: string): {
-    toolName: string;
-    attributeText: string;
-  } {
-    let index = 0;
-    const length = header.length;
-
-    while (index < length && /\s/.test(header.charAt(index))) {
-      index++;
-    }
-    const nameStart = index;
-    while (index < length && /[A-Za-z0-9_.-]/.test(header.charAt(index))) {
-      index++;
-    }
-    const toolName = header.slice(nameStart, index).trim();
-    const attributeText = header.slice(index);
-
-    return { toolName, attributeText };
+    return content.slice(start, end);
   }
 }

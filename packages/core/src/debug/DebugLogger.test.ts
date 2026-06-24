@@ -7,6 +7,35 @@ import * as fc from 'fast-check';
 import { DebugLogger } from './DebugLogger.js';
 import { ConfigurationManager } from './ConfigurationManager.js';
 
+function isDigit(ch: string): boolean {
+  return ch >= '0' && ch <= '9';
+}
+
+/** Validates an ISO-8601 timestamp like `2025-01-20T12:34:56.789Z` */
+function isIsoTimestampString(value: string): boolean {
+  // YYYY-MM-DDTHH:MM:SS.mmmZ = 24 chars
+  if (value.length !== 24) {
+    return false;
+  }
+  for (let i = 0; i < 24; i++) {
+    const ch = value[i];
+    if (i === 4 || i === 7) {
+      if (ch !== '-') return false;
+    } else if (i === 10) {
+      if (ch !== 'T') return false;
+    } else if (i === 13 || i === 16) {
+      if (ch !== ':') return false;
+    } else if (i === 19) {
+      if (ch !== '.') return false;
+    } else if (i === 23) {
+      if (ch !== 'Z') return false;
+    } else if (!isDigit(ch)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 describe('DebugLogger', () => {
   const configManager = ConfigurationManager.getInstance();
 
@@ -286,12 +315,13 @@ describe('DebugLogger', () => {
 
     expect(writeSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        timestamp: expect.stringMatching(
-          // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
-        ),
+        timestamp: expect.any(String),
       }),
     );
+    const writtenEntry = writeSpy.mock.calls[0]?.[0] as
+      | { timestamp?: string }
+      | undefined;
+    expect(isIsoTimestampString(String(writtenEntry?.timestamp))).toBe(true);
   });
 
   /**

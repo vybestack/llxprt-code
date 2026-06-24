@@ -122,31 +122,14 @@ export class SessionDiscovery {
     );
 
     const summaries: SessionSummary[] = [];
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const fileName of sessionFiles) {
-      const filePath = path.join(chatsDir, fileName);
-
-      let stat: Awaited<ReturnType<typeof fs.stat>>;
-      try {
-        stat = await fs.stat(filePath);
-      } catch {
-        continue;
+      const summary = await readSessionSummary(
+        path.join(chatsDir, fileName),
+        projectHash,
+      );
+      if (summary) {
+        summaries.push(summary);
       }
-
-      const header = await readFirstLineFromFile(filePath);
-      if (header === null) continue;
-      if (header.projectHash !== projectHash) continue;
-
-      summaries.push({
-        sessionId: header.sessionId,
-        filePath,
-        projectHash: header.projectHash,
-        startTime: header.startTime,
-        lastModified: stat.mtime,
-        fileSize: stat.size,
-        provider: header.provider,
-        model: header.model,
-      });
     }
 
     summaries.sort((a, b) => {
@@ -241,35 +224,14 @@ export class SessionDiscovery {
     const summaries: SessionSummary[] = [];
     let skippedCount = 0;
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const fileName of sessionFiles) {
       const filePath = path.join(chatsDir, fileName);
-
-      let stat: Awaited<ReturnType<typeof fs.stat>>;
-      try {
-        stat = await fs.stat(filePath);
-      } catch {
+      const summary = await readSessionSummary(filePath, projectHash);
+      if (summary) {
+        summaries.push(summary);
+      } else {
         skippedCount++;
-        continue;
       }
-
-      const header = await readFirstLineFromFile(filePath);
-      if (header === null) {
-        skippedCount++;
-        continue;
-      }
-      if (header.projectHash !== projectHash) continue;
-
-      summaries.push({
-        sessionId: header.sessionId,
-        filePath,
-        projectHash: header.projectHash,
-        startTime: header.startTime,
-        lastModified: stat.mtime,
-        fileSize: stat.size,
-        provider: header.provider,
-        model: header.model,
-      });
     }
 
     summaries.sort((a, b) => {
@@ -292,18 +254,7 @@ export class SessionDiscovery {
   static async hasContentEvents(filePath: string): Promise<boolean> {
     try {
       const fileContent = await fs.readFile(filePath, 'utf-8');
-      const lines = fileContent.split('\n');
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line) as Record<string, unknown>;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (event.type === 'content') return true;
-        } catch {
-          // Skip malformed JSON lines
-        }
-      }
-      return false;
+      return fileContent.split('\n').some((line) => isContentEventLine(line));
     } catch {
       return false;
     }
@@ -325,46 +276,10 @@ export class SessionDiscovery {
     try {
       const fileContent = await fs.readFile(filePath, 'utf-8');
       const lines = fileContent.split('\n');
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
       for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line) as Record<string, unknown>;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (event.type !== 'content') continue;
-
-          const payload = event.payload as Record<string, unknown> | undefined;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!payload || typeof payload !== 'object') continue;
-
-          const contentObj = payload.content as
-            | Record<string, unknown>
-            | undefined;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!contentObj || typeof contentObj !== 'object') continue;
-
-          // Check if this is a human/user message
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (contentObj.speaker !== 'human') continue;
-
-          const blocks = contentObj.blocks as
-            | Array<Record<string, unknown>>
-            | undefined;
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!Array.isArray(blocks)) continue;
-
-          // Extract text from text blocks only
-          const text = blocks
-            .filter((block) => block.type === 'text')
-            .map((block) => (block.text as string) || '')
-            .join('');
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (text) {
-            return text.length > maxLength ? text.slice(0, maxLength) : text;
-          }
-        } catch {
-          // Skip malformed JSON lines
+        const text = extractUserMessageText(line);
+        if (text !== null) {
+          return text.length > maxLength ? text.slice(0, maxLength) : text;
         }
       }
       return null;
@@ -372,4 +287,87 @@ export class SessionDiscovery {
       return null;
     }
   }
+}
+
+async function readSessionSummary(
+  filePath: string,
+  projectHash: string,
+): Promise<SessionSummary | null> {
+  let stat: Awaited<ReturnType<typeof fs.stat>>;
+  try {
+    stat = await fs.stat(filePath);
+  } catch {
+    return null;
+  }
+
+  const header = await readFirstLineFromFile(filePath);
+  if (header === null || header.projectHash !== projectHash) {
+    return null;
+  }
+
+  return {
+    sessionId: header.sessionId,
+    filePath,
+    projectHash: header.projectHash,
+    startTime: header.startTime,
+    lastModified: stat.mtime,
+    fileSize: stat.size,
+    provider: header.provider,
+    model: header.model,
+  };
+}
+
+function isContentEventLine(line: string): boolean {
+  if (!line.trim()) {
+    return false;
+  }
+  try {
+    const event = JSON.parse(line) as Record<string, unknown>;
+    return event.type === 'content';
+  } catch {
+    return false;
+  }
+}
+
+function extractUserMessageText(line: string): string | null {
+  if (!line.trim()) {
+    return null;
+  }
+  let event: Record<string, unknown>;
+  try {
+    event = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (event.type !== 'content') {
+    return null;
+  }
+
+  const payload = event.payload as Record<string, unknown> | undefined;
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const contentObj = payload.content as Record<string, unknown> | undefined;
+  if (!contentObj || typeof contentObj !== 'object') {
+    return null;
+  }
+
+  if (contentObj.speaker !== 'human') {
+    return null;
+  }
+
+  const blocks = contentObj.blocks as
+    | Array<Record<string, unknown>>
+    | undefined;
+  if (!Array.isArray(blocks)) {
+    return null;
+  }
+
+  const text = blocks
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text as string)
+    .join('');
+
+  return text || null;
 }

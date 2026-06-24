@@ -34,10 +34,8 @@ import {
   type SessionStartPayload,
   type SessionEventPayload,
   type ContentPayload,
-  type CompressedPayload,
   type RewindPayload,
   type ProviderSwitchPayload,
-  type DirectoriesChangedPayload,
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
 
@@ -182,19 +180,23 @@ function handleContent(
 ): void {
   const contentPayload = payload as unknown as ContentPayload;
   const content = contentPayload.content as unknown;
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    content !== undefined &&
-    content !== null &&
-    typeof content === 'object' &&
-    'speaker' in content &&
-    Boolean(content.speaker)
-  ) {
-    acc.history.push(content as IContent);
+  if (isSpeakerContent(content)) {
+    acc.history.push(content);
   } else {
     acc.malformedCount++;
     acc.warnings.push(`Line ${lineNumber}: malformed content event, skipping`);
   }
+}
+
+/** Narrow an unknown value into an IContent with a truthy speaker field. */
+function isSpeakerContent(value: unknown): value is IContent {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return false;
+  }
+  if (!('speaker' in value)) {
+    return false;
+  }
+  return Boolean((value as IContent).speaker);
 }
 
 /** @pseudocode line 88-98: compressed — reset history to [summary] or record malformed. */
@@ -203,14 +205,10 @@ function handleCompressed(
   acc: ReplayAccumulators,
   lineNumber: number,
 ): void {
-  const compPayload = payload as unknown as CompressedPayload;
-  if (
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
-    compPayload.summary?.speaker &&
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Replay fixture session data.
-    compPayload.itemsCompressed !== undefined
-  ) {
-    acc.history = [compPayload.summary];
+  const summary = payload.summary;
+  const itemsCompressed = payload.itemsCompressed;
+  if (isSpeakerContent(summary) && itemsCompressed !== undefined) {
+    acc.history = [summary];
   } else {
     acc.malformedCount++;
     acc.warnings.push(
@@ -263,12 +261,16 @@ function handleSessionEvent(
   acc: ReplayAccumulators,
   lineNumber: number,
 ): void {
-  const sePayload = payload as unknown as SessionEventPayload;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
-  if (sePayload.severity && typeof sePayload.message === 'string') {
+  const severity = payload.severity;
+  const message = payload.message;
+  if (
+    typeof severity === 'string' &&
+    severity.length > 0 &&
+    typeof message === 'string'
+  ) {
     acc.sessionEvents.push({
-      severity: sePayload.severity,
-      message: sePayload.message,
+      severity: severity as SessionEventPayload['severity'],
+      message,
     });
   } else {
     acc.malformedCount++;
@@ -282,16 +284,48 @@ function handleDirectoriesChanged(
   acc: ReplayAccumulators,
   lineNumber: number,
 ): void {
-  const dirPayload = payload as unknown as DirectoriesChangedPayload;
-  if (acc.metadata && Array.isArray(dirPayload.directories)) {
-    acc.metadata.workspaceDirs = dirPayload.directories;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
-  } else if (!Array.isArray(dirPayload?.directories)) {
+  const directories = payload.directories;
+  if (acc.metadata && Array.isArray(directories)) {
+    acc.metadata.workspaceDirs = directories as string[];
+  } else if (!Array.isArray(directories)) {
     acc.malformedCount++;
     acc.warnings.push(
       `Line ${lineNumber}: malformed directories_changed event, skipping`,
     );
   }
+}
+
+function applyParsedEvent(
+  parsed: Record<string, unknown> | null,
+  acc: ReplayAccumulators,
+  expectedProjectHash: string,
+): ReplayResult | undefined {
+  if (parsed === null) {
+    return undefined;
+  }
+  // @pseudocode line 44-48: Track sequence numbers
+  acc.lastSeq = trackSequence(
+    parsed,
+    acc.lastSeq,
+    acc.eventCount,
+    acc.lineNumber,
+    acc.warnings,
+  );
+
+  // @pseudocode line 51
+  acc.eventCount++;
+
+  // @pseudocode line 54: Dispatch by event type
+  const eventType = parsed.type as string;
+  const payload = parsed.payload as Record<string, unknown>;
+
+  return dispatchEvent(
+    eventType,
+    payload,
+    acc,
+    acc.lineNumber,
+    expectedProjectHash,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -419,49 +453,21 @@ export async function replaySession(
     const reader = readline.createInterface({ input: stream });
 
     // @pseudocode line 24: Process each line
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for await (let rawLine of reader) {
       // @pseudocode line 25-26
       acc.lineNumber++;
       acc.totalLines = acc.lineNumber;
-
-      // @pseudocode line 28: Skip empty lines
-      if (rawLine.trim() === '') continue;
 
       // @pseudocode line 28b-28e: Strip UTF-8 BOM on first line
       if (acc.lineNumber === 1 && rawLine.startsWith('\uFEFF')) {
         rawLine = rawLine.slice(1);
       }
 
-      // @pseudocode line 31-39: Parse JSON line
-      const parsed = parseLine(rawLine, acc.lineNumber, acc);
-
-      // @pseudocode line 41: Skip unparseable lines
-      if (parsed === null) continue;
-
-      // @pseudocode line 44-48: Track sequence numbers
-      acc.lastSeq = trackSequence(
-        parsed,
-        acc.lastSeq,
-        acc.eventCount,
-        acc.lineNumber,
-        acc.warnings,
-      );
-
-      // @pseudocode line 51
-      acc.eventCount++;
-
-      // @pseudocode line 54: Dispatch by event type
-      const eventType = parsed.type as string;
-      const payload = parsed.payload as Record<string, unknown>;
-
-      const earlyReturn = dispatchEvent(
-        eventType,
-        payload,
-        acc,
-        acc.lineNumber,
-        expectedProjectHash,
-      );
+      // @pseudocode line 28: Skip empty lines and unparseable lines
+      const trimmed = rawLine.trim();
+      const parsed =
+        trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
+      const earlyReturn = applyParsedEvent(parsed, acc, expectedProjectHash);
       if (earlyReturn !== undefined) {
         reader.close();
         stream.destroy();

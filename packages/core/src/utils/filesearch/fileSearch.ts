@@ -76,8 +76,9 @@ export async function filter(
 
     // This is 40% faster than localeCompare and the only thing we would really
     // gain from localeCompare is case-sensitive sort
-    // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    return a < b ? -1 : a > b ? 1 : 0;
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
   });
 
   return results;
@@ -218,7 +219,6 @@ class RecursiveFileSearch implements FileSearch {
 
     const fileFilter = this.ignore.getFileFilter();
     const results: string[] = [];
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const [i, candidate] of filteredCandidates.entries()) {
       if (i % 1000 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
@@ -230,12 +230,7 @@ class RecursiveFileSearch implements FileSearch {
       if (results.length >= (options.maxResults ?? Infinity)) {
         break;
       }
-      if (candidate === '.') {
-        continue;
-      }
-      if (!fileFilter(candidate)) {
-        results.push(candidate);
-      }
+      addCandidateIfIncluded(results, candidate, fileFilter);
     }
     return results;
   }
@@ -300,17 +295,11 @@ class DirectoryFileSearch implements FileSearch {
 
     const fileFilter = this.ignore.getFileFilter();
     const finalResults: string[] = [];
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const candidate of filteredResults) {
       if (finalResults.length >= (options.maxResults ?? Infinity)) {
         break;
       }
-      if (candidate === '.') {
-        continue;
-      }
-      if (!fileFilter(candidate)) {
-        finalResults.push(candidate);
-      }
+      addCandidateIfIncluded(finalResults, candidate, fileFilter);
     }
     return finalResults;
   }
@@ -322,5 +311,18 @@ export class FileSearchFactory {
       return new RecursiveFileSearch(options);
     }
     return new DirectoryFileSearch(options);
+  }
+}
+
+function addCandidateIfIncluded(
+  results: string[],
+  candidate: string,
+  fileFilter: (path: string) => boolean,
+): void {
+  if (candidate === '.') {
+    return;
+  }
+  if (!fileFilter(candidate)) {
+    results.push(candidate);
   }
 }

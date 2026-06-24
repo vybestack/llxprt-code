@@ -76,34 +76,33 @@ export class PromptCache {
     // Extract key components with defaults
     const provider = context.provider || 'unknown';
     const model = context.model || 'unknown';
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
-    const tools = [...(context.enabledTools ?? [])].sort();
+    const ctx = context as {
+      enabledTools?: string[];
+      environment?: {
+        isGitRepository?: boolean;
+        isSandboxed?: boolean;
+        hasIdeCompanion?: boolean;
+        interactionMode?: string;
+      };
+    };
+    const tools = [...(ctx.enabledTools ?? [])].sort();
     const envFlags: string[] = [];
 
     // Build environment flags
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
-    if (context.environment?.isGitRepository) {
+    if (ctx.environment?.isGitRepository === true) {
       envFlags.push('git');
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
-    if (context.environment?.isSandboxed) {
+    if (ctx.environment?.isSandboxed === true) {
       envFlags.push('sandbox');
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
-    if (context.environment?.hasIdeCompanion) {
+    if (ctx.environment?.hasIdeCompanion === true) {
       envFlags.push('ide');
     }
 
     // Include interaction mode in cache key
-    const interactionMode = (
-      context.environment as { interactionMode?: string } | undefined
-    )?.interactionMode;
+    const interactionMode = ctx.environment?.interactionMode;
 
-    envFlags.push(
-      interactionMode === undefined || interactionMode === ''
-        ? 'interactive'
-        : interactionMode,
-    );
+    envFlags.push(interactionMode ?? 'interactive');
 
     // Include subagent delegation flag in cache key
     if (context.includeSubagentDelegation === true) {
@@ -129,7 +128,7 @@ export class PromptCache {
    */
   set(
     context: PromptContext,
-    prompt: string,
+    prompt: string | null,
     metadata: CacheEntry['metadata'],
   ): void {
     // Handle zero-size cache edge case - effectively disable caching
@@ -140,8 +139,7 @@ export class PromptCache {
     const key = this.generateKey(context);
 
     // Validate inputs
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
-    if (!key || prompt === null || prompt === undefined) {
+    if (!key || prompt === null) {
       return;
     }
 
@@ -365,9 +363,6 @@ export class PromptCache {
     let successCount = 0;
 
     for (const context of contexts) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted prompt cache data.
-      if (context == null) continue;
-
       const key = this.generateKey(context);
       if (key && !this.has(context)) {
         // In real implementation, this would trigger assembly

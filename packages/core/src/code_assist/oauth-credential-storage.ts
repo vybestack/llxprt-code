@@ -19,6 +19,18 @@ import { coreEvents } from '../utils/events.js';
 const KEYCHAIN_SERVICE_NAME = 'llxprt-code-oauth';
 const MAIN_ACCOUNT_KEY = 'main-account';
 
+/**
+ * Normalizes a credential field that may arrive as null/undefined/'' from an
+ * external library into `undefined` when absent. The Credentials type from
+ * google-auth-library declares these as optional strings, but runtime data can
+ * still surface as null, so we widen to unknown for the boundary check.
+ */
+function normalizeOptionalString(value: unknown): string | undefined {
+  return value === null || value === undefined || value === ''
+    ? undefined
+    : (value as string);
+}
+
 function getLegacyCredentialPaths(): string[] {
   const legacyPaths = [Storage.getOAuthCredsPath()];
   const homeDir = os.homedir();
@@ -90,12 +102,19 @@ export class OAuthCredentialStorage {
       serverName: MAIN_ACCOUNT_KEY,
       token: {
         accessToken: credentials.access_token,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided"
-        refreshToken: credentials.refresh_token || undefined,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string token_type is invalid, default to Bearer
-        tokenType: credentials.token_type || 'Bearer',
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided"
-        scope: credentials.scope || undefined,
+        refreshToken:
+          credentials.refresh_token === undefined ||
+          credentials.refresh_token === null ||
+          credentials.refresh_token === ''
+            ? undefined
+            : credentials.refresh_token,
+        tokenType:
+          credentials.token_type === undefined ||
+          credentials.token_type === null ||
+          credentials.token_type === ''
+            ? 'Bearer'
+            : credentials.token_type,
+        scope: normalizeOptionalString(credentials.scope),
         // Preserve JS falsy behavior: 0/null/undefined expiry_date means "no expiration"
         expiresAt:
           credentials.expiry_date != null && credentials.expiry_date !== 0

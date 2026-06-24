@@ -66,6 +66,111 @@ describe('GemmaToolCallParser', () => {
     });
   });
 
+  it('should parse key-value tool call format with marker', () => {
+    const marker = String.fromCodePoint(0x2728);
+    const content = `Before\n${marker} tool_call: search for query "weather today" limit 3\nAfter`;
+
+    const result = parser.parse(content);
+
+    expect(result.cleanedContent).toBe('Before\nAfter');
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]).toMatchObject({
+      name: 'search',
+      arguments: { query: 'weather today', limit: 3 },
+    });
+  });
+
+  it('should not parse separated key-value marker and tool_call text', () => {
+    const marker = String.fromCodePoint(0x2728);
+    const content = `Before\n${marker} unrelated text\ntool_call: search for query "weather today"\nAfter`;
+
+    const result = parser.parse(content);
+
+    expect(result.cleanedContent).toBe(content);
+    expect(result.toolCalls).toHaveLength(0);
+  });
+
+  it('should remove key-value think artifacts with optional whitespace', () => {
+    const marker = String.fromCodePoint(0x2728);
+    const trigger = '[TOOL_REQUEST]\nnoop {}\n[TOOL_REQUEST_END]\n';
+
+    expect(parser.parse(`${trigger}A${marker}<think>B`).cleanedContent).toBe(
+      'AB',
+    );
+    expect(parser.parse(`${trigger}A${marker} <think>B`).cleanedContent).toBe(
+      'AB',
+    );
+  });
+
+  it('should preserve original attribute scalar parsing boundaries', () => {
+    const content =
+      '<use search negative="-1" decimal="1.5" plus="+1" leading_decimal=".5" trailing_decimal="1."></use>';
+
+    const result = parser.parse(content);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].arguments).toStrictEqual({
+      negative: -1,
+      decimal: 1.5,
+      plus: '+1',
+      leading_decimal: '.5',
+      trailing_decimal: '1.',
+    });
+  });
+
+  it('should only remove trailing open tool_call fragments with open JSON', () => {
+    expect(parser.parse('Keep <tool_call> plain text').cleanedContent).toBe(
+      'Keep <tool_call> plain text',
+    );
+    expect(
+      parser.parse('Keep <tool_call> {"name":"search"}').cleanedContent,
+    ).toBe('Keep <tool_call> {"name":"search"}');
+    expect(
+      parser.parse('Drop <tool_call> {"name":"search"').cleanedContent,
+    ).toBe('Drop');
+    expect(
+      parser.parse('Keep <tool_call>{"name":"search"').cleanedContent,
+    ).toBe('Keep <tool_call>{"name":"search"');
+  });
+
+  it('should remove whitespace-tolerant trailing JSON argument fragments', () => {
+    const content =
+      'Before { "name" : "search", "arguments" : { "query" : "open"';
+
+    expect(parser.parse(content).cleanedContent).toBe('Before');
+  });
+
+  it('should remove trailing JSON argument fragments with closed nested values', () => {
+    const content =
+      'Before { "name" : "search", "arguments" : { "nested" : { "x" : 1 }';
+
+    expect(parser.parse(content).cleanedContent).toBe('Before');
+  });
+
+  it('should preserve complete JSON fragments with nested argument values', () => {
+    const content =
+      'Before { "name" : "search", "arguments" : { "nested" : { "x" : 1 } }}';
+
+    expect(parser.parse(content).cleanedContent).toBe(content);
+    expect(parser.parse(content).toolCalls).toHaveLength(0);
+  });
+
+  it('should preserve complete JSON fragments that are not tool requests', () => {
+    const content =
+      'Before { "name" : "search", "arguments" : { "query" : "closed" }}';
+
+    expect(parser.parse(content).cleanedContent).toBe(content);
+    expect(parser.parse(content).toolCalls).toHaveLength(0);
+  });
+
+  it('should parse whitespace-tolerant JSON object format with END_TOOL_REQUEST', () => {
+    const content =
+      'Before { "name" : "search", "arguments" : { "query" : "closed" }}\n[END_TOOL_REQUEST]';
+
+    expect(parser.parse(content).cleanedContent).toBe('Before');
+    expect(parser.parse(content).toolCalls).toHaveLength(1);
+  });
+
   describe('Hermes format', () => {
     it('should parse single Hermes tool call', () => {
       const content = `<|im_start|>assistant

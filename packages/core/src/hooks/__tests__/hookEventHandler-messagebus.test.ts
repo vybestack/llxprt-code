@@ -36,6 +36,33 @@ import { DebugLogger } from '../../debug/index.js';
 const HOOK_EXECUTION_REQUEST = 'HOOK_EXECUTION_REQUEST';
 const HOOK_EXECUTION_RESPONSE = 'HOOK_EXECUTION_RESPONSE';
 
+const HEX_CHARS = new Set('0123456789abcdefABCDEF'.split(''));
+
+function isHexChar(ch: string): boolean {
+  return HEX_CHARS.has(ch);
+}
+
+/** Validates a UUID v4 string (8-4-4-4-12 hex groups, case-insensitive). */
+function isValidUuid(value: string): boolean {
+  const groups = value.split('-');
+  if (groups.length !== 5) {
+    return false;
+  }
+  const expectedLengths = [8, 4, 4, 4, 12];
+  for (let i = 0; i < 5; i++) {
+    const g = groups[i];
+    if (g.length !== expectedLengths[i]) {
+      return false;
+    }
+    for (const ch of g) {
+      if (!isHexChar(ch)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 /**
  * Minimal fake MessageBus for testing
  */
@@ -328,9 +355,7 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
       await waitMs(50);
 
       const responses = localBus.getPublishedResponses();
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses.length).toBeGreaterThan(0);
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses[0].correlationId).toBe(correlationId);
 
       localHandler.dispose();
@@ -447,11 +472,8 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
       await waitMs(50);
 
       const responses = localBus.getPublishedResponses();
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses.length).toBeGreaterThan(0);
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses[0].success).toBe(false);
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses[0].correlationId).toBe(correlationId);
 
       localHandler.dispose();
@@ -581,10 +603,7 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
 
     const responses = bus.getPublishedResponses();
     expect(responses).toHaveLength(1);
-    const uuidRegex =
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    expect(responses[0].correlationId).toMatch(uuidRegex);
+    expect(isValidUuid(responses[0].correlationId)).toBe(true);
   });
 
   /**
@@ -617,11 +636,8 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
       await waitMs(50);
 
       const responses = localBus.getPublishedResponses();
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses.length).toBeGreaterThan(0);
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses[0].correlationId).toBeDefined();
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses[0].correlationId.length).toBeGreaterThan(0);
 
       localHandler.dispose();
@@ -718,7 +734,6 @@ describe('Model translation (DELTA-HPAY-003)', () => {
       await waitMs(50);
 
       const responses = localBus.getPublishedResponses();
-      // eslint-disable-next-line vitest/no-standalone-expect -- test.prop wraps test block
       expect(responses).toHaveLength(1);
 
       localHandler.dispose();

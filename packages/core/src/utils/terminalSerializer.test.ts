@@ -32,11 +32,8 @@ describe('terminalSerializer', () => {
       const result = serializeTerminalToObject(terminal);
       expect(result).toHaveLength(24);
       result.forEach((line) => {
-        // Expect each line to be either empty or contain a single token with spaces
-        if (line.length > 0) {
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-          expect(line[0].text.trim()).toBe('');
-        }
+        const isEmpty = line.length === 0;
+        expect(isEmpty || line[0].text.trim() === '').toBe(true);
       });
     });
 

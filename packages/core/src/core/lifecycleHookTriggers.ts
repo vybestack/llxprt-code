@@ -27,10 +27,37 @@ import {
   AfterAgentHookOutput,
 } from '../hooks/types.js';
 import { DebugLogger } from '../debug/index.js';
+import type { HookSystem } from '../hooks/hookSystem.js';
 
 const debugLogger = DebugLogger.getLogger(
   'llxprt:core:hook-triggers:lifecycle',
 );
+
+/**
+ * Boundary view of Config: CLI test doubles may omit hook accessors.
+ * Treats the methods as optional so the guards below are honest.
+ */
+type HookConfigBoundary = {
+  getEnableHooks?(): boolean;
+  getHookSystem?(): HookSystem | undefined;
+};
+
+/**
+ * Returns the active HookSystem (or null) when hooks are enabled.
+ * Handles config test doubles that may not implement hook accessors.
+ */
+function getEnabledHookSystem(config: Config): HookSystem | null {
+  const boundary = config as unknown as HookConfigBoundary;
+  const enabled = boundary.getEnableHooks?.();
+  if (enabled !== true) {
+    return null;
+  }
+  const hookSystem = boundary.getHookSystem?.();
+  if (hookSystem === undefined) {
+    return null;
+  }
+  return hookSystem;
+}
 
 /**
  * Trigger SessionStart hook when a new session begins
@@ -43,15 +70,8 @@ export async function triggerSessionStartHook(
   config: Config,
   source: SessionStartSource,
 ): Promise<SessionStartHookOutput | undefined> {
-  // Check if hooks are enabled
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  if (!config.getEnableHooks?.()) {
-    return undefined;
-  }
-
-  // Get the HookSystem singleton
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  const hookSystem = config.getHookSystem?.();
+  // Get the HookSystem singleton (null when hooks disabled or unavailable)
+  const hookSystem = getEnabledHookSystem(config);
   if (!hookSystem) {
     return undefined;
   }
@@ -89,15 +109,8 @@ export async function triggerSessionEndHook(
   config: Config,
   reason: SessionEndReason,
 ): Promise<SessionEndHookOutput | undefined> {
-  // Check if hooks are enabled
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  if (!config.getEnableHooks?.()) {
-    return undefined;
-  }
-
-  // Get the HookSystem singleton
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  const hookSystem = config.getHookSystem?.();
+  // Get the HookSystem singleton (null when hooks disabled or unavailable)
+  const hookSystem = getEnabledHookSystem(config);
   if (!hookSystem) {
     return undefined;
   }
@@ -135,15 +148,8 @@ export async function triggerBeforeAgentHook(
   config: Config,
   prompt: string,
 ): Promise<BeforeAgentHookOutput | undefined> {
-  // Check if hooks are enabled
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  if (!config.getEnableHooks?.()) {
-    return undefined;
-  }
-
-  // Get the HookSystem singleton
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  const hookSystem = config.getHookSystem?.();
+  // Get the HookSystem singleton (null when hooks disabled or unavailable)
+  const hookSystem = getEnabledHookSystem(config);
   if (!hookSystem) {
     return undefined;
   }
@@ -185,15 +191,8 @@ export async function triggerAfterAgentHook(
   promptResponse: string,
   stopHookActive: boolean,
 ): Promise<AfterAgentHookOutput | undefined> {
-  // Check if hooks are enabled
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  if (!config.getEnableHooks?.()) {
-    return undefined;
-  }
-
-  // Get the HookSystem singleton
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  const hookSystem = config.getHookSystem?.();
+  // Get the HookSystem singleton (null when hooks disabled or unavailable)
+  const hookSystem = getEnabledHookSystem(config);
   if (!hookSystem) {
     return undefined;
   }
@@ -238,15 +237,8 @@ export async function triggerPreCompressHook(
   config: Config,
   trigger: PreCompressTrigger,
 ): Promise<PreCompressOutput | undefined> {
-  // Check if hooks are enabled
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  if (!config.getEnableHooks?.()) {
-    return undefined;
-  }
-
-  // Get the HookSystem singleton
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
-  const hookSystem = config.getHookSystem?.();
+  // Get the HookSystem singleton (null when hooks disabled or unavailable)
+  const hookSystem = getEnabledHookSystem(config);
   if (!hookSystem) {
     return undefined;
   }

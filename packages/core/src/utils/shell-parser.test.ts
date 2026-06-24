@@ -27,6 +27,8 @@ import {
 } from './shell-parser.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
+let parserInitialized = await initializeParser();
+
 /**
  * Tree-sitter parser tests.
  *
@@ -38,10 +40,8 @@ import { DebugLogger } from '../debug/DebugLogger.js';
  * manual verification with the bundled CLI.
  */
 describe('shell-parser', () => {
-  let parserInitialized = false;
-
   beforeAll(async () => {
-    // Try to initialize - may fail in test environment
+    // Refresh initialization state in case another test reset the parser.
     parserInitialized = await initializeParser();
   });
 
@@ -74,23 +74,22 @@ describe('shell-parser', () => {
   });
 
   describe('parseShellCommand', () => {
-    it('should parse a simple command when parser is available', () => {
-      // Skip if parser not available in test environment
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should parse a simple command when parser is available',
+      () => {
+        const tree = parseShellCommand('ls -la');
+        expect(tree).not.toBeNull();
+        expect(tree?.rootNode.type).toBe('program');
+      },
+    );
 
-      const tree = parseShellCommand('ls -la');
-      expect(tree).not.toBeNull();
-      expect(tree?.rootNode.type).toBe('program');
-    });
-
-    it('should parse complex pipelines when parser is available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
-      expect(tree).not.toBeNull();
-    });
+    it.skipIf(!parserInitialized)(
+      'should parse complex pipelines when parser is available',
+      () => {
+        const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
+        expect(tree).not.toBeNull();
+      },
+    );
 
     it('should return null if parser not available', () => {
       resetParser();
@@ -106,41 +105,43 @@ describe('shell-parser', () => {
       vi.restoreAllMocks();
     });
 
-    it('should handle bash parser timeouts in parseShellCommand', async () => {
-      await initializeParser();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isParserAvailable()) return;
+    it.skipIf(!isParserAvailable())(
+      'should handle bash parser timeouts in parseShellCommand',
+      async () => {
+        await initializeParser();
 
-      const errorSpy = vi
-        .spyOn(DebugLogger.prototype, 'error')
-        .mockImplementation(() => {});
-      const nowSpy = vi.spyOn(performance, 'now');
-      // First call sets the deadline, subsequent calls simulate time passing past it
-      nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);
+        const errorSpy = vi
+          .spyOn(DebugLogger.prototype, 'error')
+          .mockImplementation(() => {});
+        const nowSpy = vi.spyOn(performance, 'now');
+        // First call sets the deadline, subsequent calls simulate time passing past it
+        nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);
 
-      const command = 'ls -la';
-      const result = parseShellCommand(command);
-      expect(result).toBeNull();
-      expect(errorSpy).toHaveBeenCalledWith(
-        'Bash command parsing timed out for command:',
-        command,
-      );
-    });
+        const command = 'ls -la';
+        const result = parseShellCommand(command);
+        expect(result).toBeNull();
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Bash command parsing timed out for command:',
+          command,
+        );
+      },
+    );
 
-    it('should handle bash parser timeouts in parseCommandDetails', async () => {
-      await initializeParser();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isParserAvailable()) return;
+    it.skipIf(!isParserAvailable())(
+      'should handle bash parser timeouts in parseCommandDetails',
+      async () => {
+        await initializeParser();
 
-      vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
-      const nowSpy = vi.spyOn(performance, 'now');
-      nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);
+        vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
+        const nowSpy = vi.spyOn(performance, 'now');
+        nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);
 
-      const command = 'ls -la';
-      const result = parseCommandDetails(command);
-      // When parseShellCommand times out, parseCommandDetails returns hasError: true
-      expect(result).toStrictEqual({ details: [], hasError: true });
-    });
+        const command = 'ls -la';
+        const result = parseCommandDetails(command);
+        // When parseShellCommand times out, parseCommandDetails returns hasError: true
+        expect(result).toStrictEqual({ details: [], hasError: true });
+      },
+    );
   });
 
   describe('extractCommandNames', () => {
@@ -148,65 +149,65 @@ describe('shell-parser', () => {
       await initializeParser();
     });
 
-    it('should extract simple command when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should extract simple command when parser available',
+      () => {
+        const tree = parseShellCommand('ls -la');
+        expect(tree).not.toBeNull();
+        const names = extractCommandNames(tree!);
+        expect(names).toContain('ls');
+      },
+    );
 
-      const tree = parseShellCommand('ls -la');
-      expect(tree).not.toBeNull();
-      const names = extractCommandNames(tree!);
-      expect(names).toContain('ls');
-    });
+    it.skipIf(!parserInitialized)(
+      'should extract commands from pipeline when parser available',
+      () => {
+        const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
+        expect(tree).not.toBeNull();
+        const names = extractCommandNames(tree!);
+        expect(names).toStrictEqual(['cat', 'grep', 'wc']);
+      },
+    );
 
-    it('should extract commands from pipeline when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should extract commands from && chain when parser available',
+      () => {
+        const tree = parseShellCommand('npm install && npm test && npm build');
+        expect(tree).not.toBeNull();
+        const names = extractCommandNames(tree!);
+        expect(names).toStrictEqual(['npm', 'npm', 'npm']);
+      },
+    );
 
-      const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
-      expect(tree).not.toBeNull();
-      const names = extractCommandNames(tree!);
-      expect(names).toStrictEqual(['cat', 'grep', 'wc']);
-    });
+    it.skipIf(!parserInitialized)(
+      'should extract commands from || chain when parser available',
+      () => {
+        const tree = parseShellCommand('test -f file || touch file');
+        expect(tree).not.toBeNull();
+        const names = extractCommandNames(tree!);
+        expect(names).toStrictEqual(['test', 'touch']);
+      },
+    );
 
-    it('should extract commands from && chain when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should handle commands with paths when parser available',
+      () => {
+        const tree = parseShellCommand('/usr/bin/python script.py');
+        expect(tree).not.toBeNull();
+        const names = extractCommandNames(tree!);
+        expect(names).toContain('python');
+      },
+    );
 
-      const tree = parseShellCommand('npm install && npm test && npm build');
-      expect(tree).not.toBeNull();
-      const names = extractCommandNames(tree!);
-      expect(names).toStrictEqual(['npm', 'npm', 'npm']);
-    });
-
-    it('should extract commands from || chain when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('test -f file || touch file');
-      expect(tree).not.toBeNull();
-      const names = extractCommandNames(tree!);
-      expect(names).toStrictEqual(['test', 'touch']);
-    });
-
-    it('should handle commands with paths when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('/usr/bin/python script.py');
-      expect(tree).not.toBeNull();
-      const names = extractCommandNames(tree!);
-      expect(names).toContain('python');
-    });
-
-    it('should handle quoted commands when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('"my command" arg1 arg2');
-      expect(tree).not.toBeNull();
-      const names = extractCommandNames(tree!);
-      expect(names.length).toBeGreaterThan(0);
-    });
+    it.skipIf(!parserInitialized)(
+      'should handle quoted commands when parser available',
+      () => {
+        const tree = parseShellCommand('"my command" arg1 arg2');
+        expect(tree).not.toBeNull();
+        const names = extractCommandNames(tree!);
+        expect(names.length).toBeGreaterThan(0);
+      },
+    );
   });
 
   describe('hasCommandSubstitution', () => {
@@ -214,78 +215,78 @@ describe('shell-parser', () => {
       await initializeParser();
     });
 
-    it('should detect $() substitution when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should detect $() substitution when parser available',
+      () => {
+        const tree = parseShellCommand('echo $(whoami)');
+        expect(tree).not.toBeNull();
+        expect(hasCommandSubstitution(tree!)).toBe(true);
+      },
+    );
 
-      const tree = parseShellCommand('echo $(whoami)');
-      expect(tree).not.toBeNull();
-      expect(hasCommandSubstitution(tree!)).toBe(true);
-    });
+    it.skipIf(!parserInitialized)(
+      'should detect backtick substitution when parser available',
+      () => {
+        const tree = parseShellCommand('echo `date`');
+        expect(tree).not.toBeNull();
+        expect(hasCommandSubstitution(tree!)).toBe(true);
+      },
+    );
 
-    it('should detect backtick substitution when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should detect process substitution <() when parser available',
+      () => {
+        const tree = parseShellCommand('diff <(ls dir1) <(ls dir2)');
+        expect(tree).not.toBeNull();
+        expect(hasCommandSubstitution(tree!)).toBe(true);
+      },
+    );
 
-      const tree = parseShellCommand('echo `date`');
-      expect(tree).not.toBeNull();
-      expect(hasCommandSubstitution(tree!)).toBe(true);
-    });
+    it.skipIf(!parserInitialized)(
+      'should detect process substitution >() when parser available',
+      () => {
+        const tree = parseShellCommand('tee >(cat > file.txt)');
+        expect(tree).not.toBeNull();
+        expect(hasCommandSubstitution(tree!)).toBe(true);
+      },
+    );
 
-    it('should detect process substitution <() when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should not detect substitution in single quotes when parser available',
+      () => {
+        const tree = parseShellCommand("echo 'hello $(world)'");
+        expect(tree).not.toBeNull();
+        // Single quotes prevent substitution in bash - tree-sitter sees string literal
+        expect(hasCommandSubstitution(tree!)).toBe(false);
+      },
+    );
 
-      const tree = parseShellCommand('diff <(ls dir1) <(ls dir2)');
-      expect(tree).not.toBeNull();
-      expect(hasCommandSubstitution(tree!)).toBe(true);
-    });
+    it.skipIf(!parserInitialized)(
+      'should return false for simple commands when parser available',
+      () => {
+        const tree = parseShellCommand('ls -la /tmp');
+        expect(tree).not.toBeNull();
+        expect(hasCommandSubstitution(tree!)).toBe(false);
+      },
+    );
 
-    it('should detect process substitution >() when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should return false for pipes (not substitution) when parser available',
+      () => {
+        const tree = parseShellCommand('cat file | grep pattern');
+        expect(tree).not.toBeNull();
+        expect(hasCommandSubstitution(tree!)).toBe(false);
+      },
+    );
 
-      const tree = parseShellCommand('tee >(cat > file.txt)');
-      expect(tree).not.toBeNull();
-      expect(hasCommandSubstitution(tree!)).toBe(true);
-    });
-
-    it('should not detect substitution in single quotes when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand("echo 'hello $(world)'");
-      expect(tree).not.toBeNull();
-      // Single quotes prevent substitution in bash - tree-sitter sees string literal
-      expect(hasCommandSubstitution(tree!)).toBe(false);
-    });
-
-    it('should return false for simple commands when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('ls -la /tmp');
-      expect(tree).not.toBeNull();
-      expect(hasCommandSubstitution(tree!)).toBe(false);
-    });
-
-    it('should return false for pipes (not substitution) when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('cat file | grep pattern');
-      expect(tree).not.toBeNull();
-      expect(hasCommandSubstitution(tree!)).toBe(false);
-    });
-
-    it('should detect nested substitution when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('echo $(cat $(ls))');
-      expect(tree).not.toBeNull();
-      expect(hasCommandSubstitution(tree!)).toBe(true);
-    });
+    it.skipIf(!parserInitialized)(
+      'should detect nested substitution when parser available',
+      () => {
+        const tree = parseShellCommand('echo $(cat $(ls))');
+        expect(tree).not.toBeNull();
+        expect(hasCommandSubstitution(tree!)).toBe(true);
+      },
+    );
   });
 
   describe('splitCommandsWithTree', () => {
@@ -293,79 +294,79 @@ describe('shell-parser', () => {
       await initializeParser();
     });
 
-    it('should split && commands when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should split && commands when parser available',
+      () => {
+        const tree = parseShellCommand('cd /tmp && ls');
+        expect(tree).not.toBeNull();
+        const commands = splitCommandsWithTree(tree!);
+        expect(commands.length).toBe(2);
+        expect(commands[0]).toContain('cd');
+        expect(commands[1]).toContain('ls');
+      },
+    );
 
-      const tree = parseShellCommand('cd /tmp && ls');
-      expect(tree).not.toBeNull();
-      const commands = splitCommandsWithTree(tree!);
-      expect(commands.length).toBe(2);
-      expect(commands[0]).toContain('cd');
-      expect(commands[1]).toContain('ls');
-    });
+    it.skipIf(!parserInitialized)(
+      'should split || commands when parser available',
+      () => {
+        const tree = parseShellCommand('test -f file || touch file');
+        expect(tree).not.toBeNull();
+        const commands = splitCommandsWithTree(tree!);
+        expect(commands.length).toBe(2);
+      },
+    );
 
-    it('should split || commands when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should handle semicolon separation when parser available',
+      () => {
+        const tree = parseShellCommand('echo a; echo b; echo c');
+        expect(tree).not.toBeNull();
+        const commands = splitCommandsWithTree(tree!);
+        expect(commands.length).toBe(3);
+      },
+    );
 
-      const tree = parseShellCommand('test -f file || touch file');
-      expect(tree).not.toBeNull();
-      const commands = splitCommandsWithTree(tree!);
-      expect(commands.length).toBe(2);
-    });
+    it.skipIf(!parserInitialized)(
+      'should handle pipeline as single command unit when parser available',
+      () => {
+        const tree = parseShellCommand('cat file | grep pattern');
+        expect(tree).not.toBeNull();
+        const commands = splitCommandsWithTree(tree!);
+        // Pipeline is treated as one logical unit
+        expect(commands.length).toBeGreaterThanOrEqual(1);
+      },
+    );
 
-    it('should handle semicolon separation when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
+    it.skipIf(!parserInitialized)(
+      'should handle mixed operators when parser available',
+      () => {
+        const tree = parseShellCommand('cmd1 && cmd2 || cmd3; cmd4');
+        expect(tree).not.toBeNull();
+        const commands = splitCommandsWithTree(tree!);
+        expect(commands.length).toBe(4);
+      },
+    );
 
-      const tree = parseShellCommand('echo a; echo b; echo c');
-      expect(tree).not.toBeNull();
-      const commands = splitCommandsWithTree(tree!);
-      expect(commands.length).toBe(3);
-    });
+    it.skipIf(!parserInitialized)(
+      'should handle empty input gracefully',
+      () => {
+        // Empty string should produce an empty command list
+        const tree = parseShellCommand('');
+        expect(tree).not.toBeNull();
+        const commands = splitCommandsWithTree(tree!);
+        expect(commands.length).toBe(0);
+      },
+    );
 
-    it('should handle pipeline as single command unit when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('cat file | grep pattern');
-      expect(tree).not.toBeNull();
-      const commands = splitCommandsWithTree(tree!);
-      // Pipeline is treated as one logical unit
-      expect(commands.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('should handle mixed operators when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('cmd1 && cmd2 || cmd3; cmd4');
-      expect(tree).not.toBeNull();
-      const commands = splitCommandsWithTree(tree!);
-      expect(commands.length).toBe(4);
-    });
-
-    it('should handle empty input gracefully', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      // Empty string should produce an empty command list
-      const tree = parseShellCommand('');
-      expect(tree).not.toBeNull();
-      const commands = splitCommandsWithTree(tree!);
-      expect(commands.length).toBe(0);
-    });
-
-    it('should handle subshells when parser available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!parserInitialized) return;
-
-      const tree = parseShellCommand('(cd /tmp && ls)');
-      expect(tree).not.toBeNull();
-      const commands = splitCommandsWithTree(tree!);
-      expect(commands.length).toBeGreaterThanOrEqual(1);
-    });
+    it.skipIf(!parserInitialized)(
+      'should handle subshells when parser available',
+      () => {
+        const tree = parseShellCommand('(cd /tmp && ls)');
+        expect(tree).not.toBeNull();
+        const commands = splitCommandsWithTree(tree!);
+        expect(commands.length).toBeGreaterThanOrEqual(1);
+      },
+    );
   });
 
   describe('resetParser', () => {
@@ -387,63 +388,68 @@ describe('shell-parser', () => {
       await initializeParser();
     });
 
-    it('should extract commands from simple command', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isParserAvailable()) return;
+    it.skipIf(!isParserAvailable())(
+      'should extract commands from simple command',
+      () => {
+        const tree = parseShellCommand('echo hello');
+        expect(tree).not.toBeNull();
+        const details = collectCommandDetails(tree!, 'echo hello');
+        expect(details).toHaveLength(1);
+        expect(details[0].name).toBe('echo');
+      },
+    );
 
-      const tree = parseShellCommand('echo hello');
-      expect(tree).not.toBeNull();
-      const details = collectCommandDetails(tree!, 'echo hello');
-      expect(details).toHaveLength(1);
-      expect(details[0].name).toBe('echo');
-    });
+    it.skipIf(!isParserAvailable())(
+      'should extract commands from command substitution $()',
+      () => {
+        const tree = parseShellCommand('echo $(curl google.com)');
+        expect(tree).not.toBeNull();
+        const details = collectCommandDetails(tree!, 'echo $(curl google.com)');
+        expect(details.map((d) => d.name)).toContain('echo');
+        expect(details.map((d) => d.name)).toContain('curl');
+      },
+    );
 
-    it('should extract commands from command substitution $()', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isParserAvailable()) return;
+    it.skipIf(!isParserAvailable())(
+      'should extract commands from backtick substitution',
+      () => {
+        const tree = parseShellCommand('echo `rm -rf /`');
+        expect(tree).not.toBeNull();
+        const details = collectCommandDetails(tree!, 'echo `rm -rf /`');
+        expect(details.map((d) => d.name)).toContain('echo');
+        expect(details.map((d) => d.name)).toContain('rm');
+      },
+    );
 
-      const tree = parseShellCommand('echo $(curl google.com)');
-      expect(tree).not.toBeNull();
-      const details = collectCommandDetails(tree!, 'echo $(curl google.com)');
-      expect(details.map((d) => d.name)).toContain('echo');
-      expect(details.map((d) => d.name)).toContain('curl');
-    });
+    it.skipIf(!isParserAvailable())(
+      'should extract commands from process substitution <()',
+      () => {
+        const tree = parseShellCommand('diff <(curl a) <(echo b)');
+        expect(tree).not.toBeNull();
+        const details = collectCommandDetails(
+          tree!,
+          'diff <(curl a) <(echo b)',
+        );
+        expect(details.map((d) => d.name)).toContain('diff');
+        expect(details.map((d) => d.name)).toContain('curl');
+        expect(details.map((d) => d.name)).toContain('echo');
+      },
+    );
 
-    it('should extract commands from backtick substitution', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isParserAvailable()) return;
-
-      const tree = parseShellCommand('echo `rm -rf /`');
-      expect(tree).not.toBeNull();
-      const details = collectCommandDetails(tree!, 'echo `rm -rf /`');
-      expect(details.map((d) => d.name)).toContain('echo');
-      expect(details.map((d) => d.name)).toContain('rm');
-    });
-
-    it('should extract commands from process substitution <()', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isParserAvailable()) return;
-
-      const tree = parseShellCommand('diff <(curl a) <(echo b)');
-      expect(tree).not.toBeNull();
-      const details = collectCommandDetails(tree!, 'diff <(curl a) <(echo b)');
-      expect(details.map((d) => d.name)).toContain('diff');
-      expect(details.map((d) => d.name)).toContain('curl');
-      expect(details.map((d) => d.name)).toContain('echo');
-    });
-
-    it('should extract commands from function definitions', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!isParserAvailable()) return;
-
-      const tree = parseShellCommand('echo () (curl google.com) ; echo Hello');
-      expect(tree).not.toBeNull();
-      const details = collectCommandDetails(
-        tree!,
-        'echo () (curl google.com) ; echo Hello',
-      );
-      expect(details.map((d) => d.name)).toContain('curl');
-      expect(details.map((d) => d.name)).toContain('echo');
-    });
+    it.skipIf(!isParserAvailable())(
+      'should extract commands from function definitions',
+      () => {
+        const tree = parseShellCommand(
+          'echo () (curl google.com) ; echo Hello',
+        );
+        expect(tree).not.toBeNull();
+        const details = collectCommandDetails(
+          tree!,
+          'echo () (curl google.com) ; echo Hello',
+        );
+        expect(details.map((d) => d.name)).toContain('curl');
+        expect(details.map((d) => d.name)).toContain('echo');
+      },
+    );
   });
 });

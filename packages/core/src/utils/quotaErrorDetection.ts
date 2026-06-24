@@ -16,14 +16,11 @@ export interface ApiError {
 }
 
 export function isApiError(error: unknown): error is ApiError {
-  return (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    typeof error === 'object' &&
-    error !== null &&
-    'error' in error &&
-    typeof (error as ApiError).error === 'object' &&
-    'message' in (error as ApiError).error
-  );
+  if (typeof error !== 'object' || error === null || !('error' in error)) {
+    return false;
+  }
+  const inner = (error as { error: unknown }).error;
+  return typeof inner === 'object' && inner !== null && 'message' in inner;
 }
 
 export function isStructuredError(error: unknown): error is StructuredError {
@@ -90,8 +87,7 @@ function isGaxiosProQuotaExceededError(
     const errorData = responseData as {
       error?: { message?: string };
     };
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: error message may be empty string, should still check
-    return checkMessage(errorData.error?.message || '');
+    return checkMessage(errorData.error?.message ?? '');
   }
   return false;
 }

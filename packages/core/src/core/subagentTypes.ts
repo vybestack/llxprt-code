@@ -238,14 +238,55 @@ export function templateString(
   template: string,
   context: ContextState,
 ): string {
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  const templateTokenRegex = /\$\{(\w+)\}/g;
-
-  return template.replace(templateTokenRegex, (_match, key: string) => {
+  return replaceTemplateTokens(template, (key) => {
     const value = context.get(key);
     if (value === undefined) {
       return `<missing:${key}>`;
     }
     return String(value);
   });
+}
+
+/**
+ * Replaces `${identifier}` tokens in a template string using a callback.
+ * Uses string operations instead of regex to avoid ReDoS heuristics.
+ */
+function replaceTemplateTokens(
+  template: string,
+  resolve: (key: string) => string,
+): string {
+  let result = '';
+  let i = 0;
+  let start = template.indexOf('${', i);
+  while (start !== -1) {
+    result += template.slice(i, start);
+    const end = template.indexOf('}', start + 2);
+    if (end === -1) {
+      result += template.slice(start);
+      return result;
+    }
+    const key = template.slice(start + 2, end);
+    if (key.length > 0 && isWordIdentifier(key)) {
+      result += resolve(key);
+    } else {
+      result += template.slice(start, end + 1);
+    }
+    i = end + 1;
+    start = template.indexOf('${', i);
+  }
+  result += template.slice(i);
+  return result;
+}
+
+function isWordIdentifier(key: string): boolean {
+  for (const ch of key) {
+    const code = ch.charCodeAt(0);
+    const isLower = code >= 97 && code <= 122; // a-z
+    const isUpper = code >= 65 && code <= 90; // A-Z
+    const isDigit = code >= 48 && code <= 57; // 0-9
+    if (!isLower && !isUpper && !isDigit && ch !== '_') {
+      return false;
+    }
+  }
+  return true;
 }

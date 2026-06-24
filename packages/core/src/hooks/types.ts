@@ -173,8 +173,10 @@ export class DefaultHookOutput implements HookOutput {
    * Prioritizes stopReason over reason per upstream 05049b5a
    */
   getEffectiveReason(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, strings have fallthrough intent
-    return this.stopReason || this.reason || 'No reason provided';
+    const reason = this.stopReason ?? this.reason;
+    return reason === undefined || reason === ''
+      ? 'No reason provided'
+      : reason;
   }
 
   /**
@@ -308,11 +310,8 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
       ] as LLMResponse;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookResponse != null) {
-        // Convert hook format to SDK format
-        return defaultHookTranslator.fromHookLLMResponse(hookResponse);
-      }
+      // Convert hook format to SDK format
+      return defaultHookTranslator.fromHookLLMResponse(hookResponse);
     }
     return undefined;
   }
@@ -327,18 +326,15 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
       const hookRequest = this.hookSpecificOutput[
         'llm_request'
       ] as Partial<LLMRequest>;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookRequest !== null && hookRequest !== undefined) {
-        // Convert hook format to SDK format
-        const sdkRequest = defaultHookTranslator.fromHookLLMRequest(
-          hookRequest as LLMRequest,
-          target,
-        );
-        return {
-          ...target,
-          ...sdkRequest,
-        };
-      }
+      // Convert hook format to SDK format
+      const sdkRequest = defaultHookTranslator.fromHookLLMRequest(
+        hookRequest as LLMRequest,
+        target,
+      );
+      return {
+        ...target,
+        ...sdkRequest,
+      };
     }
     return target;
   }
@@ -365,21 +361,18 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
       const hookToolConfig = this.hookSpecificOutput[
         'toolConfig'
       ] as HookToolConfig;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookToolConfig != null) {
-        // Convert hook format to SDK format
-        const sdkToolConfig =
-          defaultHookTranslator.fromHookToolConfig(hookToolConfig);
-        return {
-          ...target,
-          tools: target.tools ?? [],
-          toolConfig: {
-            ...sdkToolConfig,
-            // Also expose allowedFunctionNames directly for easier access
-            allowedFunctionNames: hookToolConfig.allowedFunctionNames,
-          },
-        };
-      }
+      // Convert hook format to SDK format
+      const sdkToolConfig =
+        defaultHookTranslator.fromHookToolConfig(hookToolConfig);
+      return {
+        ...target,
+        tools: target.tools ?? [],
+        toolConfig: {
+          ...sdkToolConfig,
+          // Also expose allowedFunctionNames directly for easier access
+          allowedFunctionNames: hookToolConfig.allowedFunctionNames,
+        },
+      };
     }
     return target;
   }
@@ -397,8 +390,7 @@ export class AfterModelHookOutput extends DefaultHookOutput {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
       ] as Partial<LLMResponse>;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookResponse?.candidates?.[0]?.content) {
+      if (hookResponse.candidates?.[0]?.content) {
         // Convert hook format to SDK format
         return defaultHookTranslator.fromHookLLMResponse(
           hookResponse as LLMResponse,

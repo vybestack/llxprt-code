@@ -26,6 +26,21 @@ export interface LogEntry {
   message: string;
 }
 
+function isValidLogEntry(entry: unknown): boolean {
+  if (entry === null || typeof entry !== 'object') {
+    return false;
+  }
+  const e = entry as Record<string, unknown>;
+  if (
+    typeof e.sessionId !== 'string' ||
+    typeof e.messageId !== 'number' ||
+    typeof e.timestamp !== 'string'
+  ) {
+    return false;
+  }
+  return typeof e.type === 'string' && typeof e.message === 'string';
+}
+
 // This regex matches any character that is NOT a letter (a-z, A-Z),
 // a number (0-9), a hyphen (-), an underscore (_), or a dot (.).
 
@@ -91,15 +106,7 @@ export class Logger {
         await this._backupCorruptedLogFile('malformed_array');
         return [];
       }
-      return parsedLogs.filter(
-        (entry) =>
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          typeof entry.sessionId === 'string' &&
-          typeof entry.messageId === 'number' &&
-          typeof entry.timestamp === 'string' &&
-          typeof entry.type === 'string' &&
-          typeof entry.message === 'string',
-      ) as LogEntry[];
+      return parsedLogs.filter(isValidLogEntry) as LogEntry[];
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'ENOENT') {
@@ -370,14 +377,9 @@ export class Logger {
         const filteredHistory = parsedContent.history.map((item: Content) => {
           const filteredItem = { ...item };
           if (Array.isArray(filteredItem.parts)) {
-            filteredItem.parts = filteredItem.parts.map((part: Part) => {
-              // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              if (part.text) {
-                const filterResult = emojiFilter.filterText(part.text);
-                return { ...part, text: filterResult.filtered as string };
-              }
-              return part;
-            });
+            filteredItem.parts = filteredItem.parts.map((part: Part) =>
+              filterPartText(part, emojiFilter),
+            );
           }
           return filteredItem;
         });
@@ -484,4 +486,12 @@ export class Logger {
     this.sessionId = undefined;
     this.messageId = 0;
   }
+}
+
+function filterPartText(part: Part, emojiFilter: EmojiFilter): Part {
+  if (!part.text) {
+    return part;
+  }
+  const filterResult = emojiFilter.filterText(part.text);
+  return { ...part, text: filterResult.filtered as string };
 }

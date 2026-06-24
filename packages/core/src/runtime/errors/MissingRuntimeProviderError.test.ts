@@ -170,18 +170,15 @@ describe('MissingRuntimeProviderError', () => {
       MissingRuntimeProviderError,
     );
 
+    let thrownError: MissingRuntimeProviderError | undefined;
     try {
       throwIfNoProvider(undefined);
     } catch (e) {
-      // eslint-disable-next-line vitest/no-conditional-expect -- instanceof type guard is necessary for narrowing
-      expect(e).toBeInstanceOf(MissingRuntimeProviderError);
-      if (e instanceof MissingRuntimeProviderError) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- narrowing via type guard is idiomatic
-        expect(e.providerKey).toBe('unknown');
-        // eslint-disable-next-line vitest/no-conditional-expect -- narrowing via type guard is idiomatic
-        expect(e.missingFields).toStrictEqual(['providerKey']);
-      }
+      thrownError = e as MissingRuntimeProviderError;
     }
+    expect(thrownError).toBeInstanceOf(MissingRuntimeProviderError);
+    expect(thrownError?.providerKey).toBe('unknown');
+    expect(thrownError?.missingFields).toStrictEqual(['providerKey']);
   });
 
   /**

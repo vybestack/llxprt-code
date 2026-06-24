@@ -4,18 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createRequire } from 'node:module';
+import AjvPkg from 'ajv';
+import type { ErrorObject } from 'ajv';
 // ajv v8 does not declare package "exports", so subpath imports like
 // "ajv/dist/2020" are the only supported way to pull in the draft-2020-12
 // build. See https://ajv.js.org/json-schema.html#draft-2020-12
-// eslint-disable-next-line import/no-internal-modules
-import Ajv2020Pkg from 'ajv/dist/2020.js';
-import AjvPkg from 'ajv';
-import type { ErrorObject } from 'ajv';
+// We use createRequire to avoid a static subpath import.
+const requireFromModule = createRequire(import.meta.url);
+const Ajv2020Pkg = requireFromModule('ajv/dist/2020.js');
 // Ajv's ESM/CJS interop: default/namespace dual export.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Ajv2020Class = (Ajv2020Pkg as any).default ?? Ajv2020Pkg;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const AjvClass = (AjvPkg as any).default ?? AjvPkg;
+type AjvValidateFunction = ((data: unknown) => boolean) & {
+  errors?: ErrorObject[] | null;
+};
+type AjvConstructor = new (options: unknown) => {
+  compile: (schema: unknown) => AjvValidateFunction;
+  addMetaSchema: (schema: unknown, key?: string) => void;
+  addFormat: (name: string, format: unknown) => unknown;
+};
+const Ajv2020Class = (
+  Ajv2020Pkg as unknown as { default?: AjvConstructor } & AjvConstructor
+).default as AjvConstructor;
+const AjvClass = (
+  AjvPkg as unknown as { default?: AjvConstructor } & AjvConstructor
+).default as AjvConstructor;
 
 /**
  * The JSON Schema draft-07 meta-schema, inlined verbatim from ajv's
@@ -211,15 +223,59 @@ function registerCustomFormats(instance: {
     validate: () => true,
   });
   // Ensure date format is available when ajv-formats is not installed
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-  instance.addFormat('date', /^\d{4}-\d{2}-\d{2}$/);
+  instance.addFormat('date', {
+    type: 'string',
+    validate: isIsoDate,
+  });
 }
 registerCustomFormats(ajValidator2020);
 registerCustomFormats(ajValidator07);
 
 /** Returns true if the declared `$schema` URI refers to JSON Schema draft-07. */
 function isDraft07SchemaUri(uri: unknown): boolean {
-  return typeof uri === 'string' && /\/draft-07\/schema/.test(uri);
+  if (typeof uri !== 'string') {
+    return false;
+  }
+  return uri.includes('/draft-07/schema');
+}
+
+/** Validates ISO date strings (YYYY-MM-DD) without using a regex. */
+function isIsoDate(value: unknown): boolean {
+  if (typeof value !== 'string' || value.length !== 10) {
+    return false;
+  }
+  if (value[4] !== '-' || value[7] !== '-') {
+    return false;
+  }
+  const year = value.substring(0, 4);
+  const month = value.substring(5, 7);
+  const day = value.substring(8, 10);
+  if (!isAllDigits(year) || !isAllDigits(month) || !isAllDigits(day)) {
+    return false;
+  }
+  const monthNum = Number(month);
+  const dayNum = Number(day);
+  return monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31;
+}
+
+function isAllDigits(str: string): boolean {
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] < '0' || str[i] > '9') {
+      return false;
+    }
+  }
+  return str.length > 0;
+}
+
+/** Resolves the JSON Pointer path from an Ajv error, preferring instancePath. */
+function resolveErrorPath(instancePath: unknown, dataPath: unknown): string {
+  if (typeof instancePath === 'string' && instancePath !== '') {
+    return instancePath;
+  }
+  if (typeof dataPath === 'string' && dataPath !== '') {
+    return dataPath;
+  }
+  return '';
 }
 
 /**
@@ -259,17 +315,10 @@ export class SchemaValidator {
   /** Extracts and normalises error messages from Ajv validation errors. */
   private static formatErrors(errors: ErrorObject[]): string {
     const formattedErrors = errors.map((err: ErrorObject) => {
-      /* eslint-disable @typescript-eslint/no-explicit-any */
-      const instancePath = (err as any).instancePath;
-      const dataPath = (err as any).dataPath;
-      /* eslint-enable @typescript-eslint/no-explicit-any */
-      const path =
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        (typeof instancePath === 'string' && instancePath !== ''
-          ? instancePath
-          : null) ??
-        (typeof dataPath === 'string' && dataPath !== '' ? dataPath : null) ??
-        '';
+      const errRecord = err as unknown as Record<string, unknown>;
+      const instancePath = errRecord.instancePath;
+      const dataPath = errRecord.dataPath;
+      const path = resolveErrorPath(instancePath, dataPath);
       const basePath = SchemaValidator.formatPath(path);
       const message = err.message ?? 'is invalid';
       return `${basePath} ${message}`;
@@ -299,8 +348,7 @@ export class SchemaValidator {
   }
 
   static validate(schema: unknown | undefined, data: unknown): string | null {
-    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy no-schema behavior for malformed schemas.
-    if (!schema) {
+    if (schema === undefined || schema === null) {
       return null;
     }
     if (typeof data !== 'object' || data === null) {

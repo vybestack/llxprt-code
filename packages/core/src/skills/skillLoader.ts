@@ -35,8 +35,88 @@ export interface SkillDefinition {
   source?: SkillSource;
 }
 
-// eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)/;
+/**
+ * Extracts frontmatter (between `---` delimiters) and body from skill content.
+ * Returns [frontmatter, body] or null if no frontmatter block is found.
+ */
+function extractFrontmatter(content: string): [string, string] | null {
+  // Must start with ---\n (or ---\r\n)
+  if (!content.startsWith('---\n') && !content.startsWith('---\r\n')) {
+    return null;
+  }
+  const firstLineEnd = content.indexOf('\n') + 1;
+  let searchStart = firstLineEnd;
+
+  while (searchStart < content.length) {
+    const closeMarker = content.indexOf('\n---', searchStart);
+    if (closeMarker === -1) {
+      return null;
+    }
+
+    const markerEnd = closeMarker + '\n---'.length;
+    const nextChar = content[markerEnd];
+    if (nextChar === '\n') {
+      return [
+        content.slice(firstLineEnd, closeMarker + 1),
+        content.slice(markerEnd + 1),
+      ];
+    }
+    if (nextChar === '\r' && content[markerEnd + 1] === '\n') {
+      return [
+        content.slice(firstLineEnd, closeMarker + 1),
+        content.slice(markerEnd + 2),
+      ];
+    }
+
+    searchStart = markerEnd;
+  }
+
+  return null;
+}
+
+/**
+ * Matches a "key:" prefix at the start of a line (with optional leading
+ * whitespace) and returns the remainder, or undefined if the line does not
+ * start with `key:`.
+ */
+function matchPrefixedField(line: string, field: string): string | undefined {
+  const trimmed = line.trimStart();
+  const prefix = field + ':';
+  if (trimmed.startsWith(prefix)) {
+    return trimmed.slice(prefix.length);
+  }
+  return undefined;
+}
+
+/**
+ * Returns true if the line starts with whitespace and contains at least one
+ * non-whitespace character (used to detect indented continuation lines).
+ */
+function isIndentedNonEmptyLine(line: string): boolean {
+  if (line.length === 0) {
+    return false;
+  }
+  const first = line[0];
+  if (first !== ' ' && first !== '\t') {
+    return false;
+  }
+  return line.trim().length > 0;
+}
+
+function collectMultilineDescription(
+  lines: string[],
+  startIndex: number,
+  firstLine: string,
+): string {
+  const descLines = [firstLine];
+  for (let j = startIndex + 1; j < lines.length; j++) {
+    if (!isIndentedNonEmptyLine(lines[j])) {
+      break;
+    }
+    descLines.push(lines[j].trim());
+  }
+  return descLines.filter(Boolean).join(' ');
+}
 
 /**
  * Parses frontmatter content using YAML with a fallback to simple key-value parsing.
@@ -74,39 +154,19 @@ function parseSimpleFrontmatter(
   let name: string | undefined;
   let description: string | undefined;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // Match "name:" at the start of the line (optional whitespace)
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const nameMatch = line.match(/^\s*name:\s*(.*)$/);
-    if (nameMatch) {
-      name = nameMatch[1].trim();
-      continue;
-    }
-
-    // Match "description:" at the start of the line (optional whitespace)
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-    const descMatch = line.match(/^\s*description:\s*(.*)$/);
-    if (descMatch) {
-      const descLines = [descMatch[1].trim()];
-
-      // Check for multi-line description (indented continuation lines)
-      while (i + 1 < lines.length) {
-        const nextLine = lines[i + 1];
-        // If next line is indented, it's a continuation of the description
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (nextLine.match(/^[ \t]+\S/)) {
-          descLines.push(nextLine.trim());
-          i++;
-        } else {
-          break;
-        }
+    const nameMatch = matchPrefixedField(line, 'name');
+    if (nameMatch !== undefined) {
+      name = nameMatch.trim();
+    } else {
+      const descResult = tryExtractDescription(lines, i);
+      if (descResult) {
+        description = descResult.description;
+        i = descResult.nextIndex;
       }
-
-      description = descLines.filter(Boolean).join(' ');
-      continue;
     }
   }
 
@@ -114,6 +174,24 @@ function parseSimpleFrontmatter(
     return { name, description };
   }
   return null;
+}
+
+function tryExtractDescription(
+  lines: string[],
+  i: number,
+): { description: string; nextIndex: number } | null {
+  const line = lines[i];
+  const descMatch = matchPrefixedField(line, 'description');
+  if (descMatch === undefined) {
+    return null;
+  }
+  const description = collectMultilineDescription(lines, i, descMatch.trim());
+  let skip = i + 1;
+  while (skip < lines.length && isIndentedNonEmptyLine(lines[skip])) {
+    i = skip;
+    skip++;
+  }
+  return { description, nextIndex: i };
 }
 
 /**
@@ -173,12 +251,12 @@ export async function loadSkillFromFile(
 ): Promise<SkillDefinition | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const match = content.match(FRONTMATTER_REGEX);
-    if (!match) {
+    const parts = extractFrontmatter(content);
+    if (!parts) {
       return null;
     }
 
-    const frontmatter = parseFrontmatter(match[1]);
+    const frontmatter = parseFrontmatter(parts[0]);
     if (!frontmatter) {
       return null;
     }
@@ -187,7 +265,7 @@ export async function loadSkillFromFile(
       name: frontmatter.name,
       description: frontmatter.description,
       location: filePath,
-      body: match[2].trim(),
+      body: parts[1].trim(),
       source,
     };
   } catch (error) {
@@ -202,12 +280,12 @@ function loadSkillFromFileSync(
 ): SkillDefinition | null {
   try {
     const content = fsSync.readFileSync(filePath, 'utf-8');
-    const match = content.match(FRONTMATTER_REGEX);
-    if (!match) {
+    const parts = extractFrontmatter(content);
+    if (!parts) {
       return null;
     }
 
-    const frontmatter = yaml.load(match[1]);
+    const frontmatter = yaml.load(parts[0]);
     if (
       frontmatter === null ||
       frontmatter === undefined ||
@@ -225,7 +303,7 @@ function loadSkillFromFileSync(
       name,
       description,
       location: filePath,
-      body: match[2].trim(),
+      body: parts[1].trim(),
       source,
     };
   } catch (error) {
@@ -252,16 +330,15 @@ export function loadSkillsFromDirSync(
     const entries = fsSync.readdirSync(absoluteSearchPath, {
       withFileTypes: true,
     });
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const entry of entries) {
       if (!entry.isDirectory()) {
         continue;
       }
-      const skillFile = path.join(absoluteSearchPath, entry.name, 'SKILL.md');
-      if (!fsSync.existsSync(skillFile)) {
-        continue;
-      }
-      const skill = loadSkillFromFileSync(skillFile, source);
+      const skill = loadSkillFromDirEntry(
+        absoluteSearchPath,
+        entry.name,
+        source,
+      );
       if (skill) {
         discoveredSkills.push(skill);
       }
@@ -281,4 +358,16 @@ export function getBuiltinSkillsDir(): string {
   // The built-in skills directory is located at packages/core/src/skills/builtin
   // At runtime, this will be resolved relative to this file's location
   return path.join(path.dirname(new URL(import.meta.url).pathname), 'builtin');
+}
+
+function loadSkillFromDirEntry(
+  searchPath: string,
+  dirName: string,
+  source?: SkillSource,
+): SkillDefinition | null {
+  const skillFile = path.join(searchPath, dirName, 'SKILL.md');
+  if (!fsSync.existsSync(skillFile)) {
+    return null;
+  }
+  return loadSkillFromFileSync(skillFile, source);
 }
