@@ -288,6 +288,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       testServer.removeAllListeners('request');
       let storedChallenge: string | undefined;
       let verifierVerified = false;
+      let computedChallenge: string | undefined;
 
       testServer.on('request', (req, res) => {
         if (req.url?.includes('device/code') === true) {
@@ -320,11 +321,9 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
             const verifier = params.get('code_verifier');
 
             if (verifier && storedChallenge) {
-              const expectedChallenge = createHash('sha256')
+              computedChallenge = createHash('sha256')
                 .update(verifier)
                 .digest('base64url');
-              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-              expect(expectedChallenge).toBe(storedChallenge);
               verifierVerified = true;
             }
 
@@ -346,6 +345,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       const tokenResult = await deviceFlow.pollForToken('test_device');
       expect(tokenResult.access_token).toBe('test_token');
       expect(verifierVerified).toBe(true);
+      expect(computedChallenge).toBe(storedChallenge);
     });
   });
 
@@ -506,16 +506,9 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         expect(timestamps.length).toBeGreaterThanOrEqual(3);
 
         // Verify the intervals are at least close to 5 seconds (allowing some variance)
-        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-        if (timestamps.length > 1) {
-          const intervals = timestamps
-            .slice(1)
-            .map((t, i) => t - timestamps[i]);
-          intervals.forEach((interval) =>
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect(interval).toBeGreaterThanOrEqual(4000),
-          ); // Allow some variance
-        }
+        const intervals = timestamps.slice(1).map((t, i) => t - timestamps[i]);
+        const minimumInterval = Math.min(...intervals);
+        expect(minimumInterval).toBeGreaterThanOrEqual(4000); // Allow some variance
       },
     );
 
@@ -851,6 +844,8 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         'client_id',
         'code_verifier',
       ];
+      let capturedDeviceParams: URLSearchParams | null = null;
+      let capturedTokenParams: URLSearchParams | null = null;
 
       testServer.removeAllListeners('request');
       testServer.on('request', (req, res) => {
@@ -862,27 +857,28 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
           const params = new URLSearchParams(body);
 
           if (req.url?.includes('device/code') === true) {
-            requiredDeviceParams.forEach((param) => {
-              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-              expect(params.has(param)).toBe(true);
-            });
-          } else if (req.url?.includes('token') === true) {
-            requiredTokenParams.forEach((param) => {
-              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-              expect(params.has(param)).toBe(true);
-            });
+            capturedDeviceParams = params;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                device_code: 'test',
+                user_code: 'TEST',
+                verification_uri: 'https://test',
+                expires_in: 900,
+                interval: 5,
+              }),
+            );
+          } else {
+            capturedTokenParams = params;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                access_token: 'test_token',
+                token_type: 'Bearer',
+                expires_in: 3600,
+              }),
+            );
           }
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              device_code: 'test',
-              user_code: 'TEST',
-              verification_uri: 'https://test',
-              expires_in: 900,
-              interval: 5,
-            }),
-          );
         });
       });
 
@@ -894,6 +890,19 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         expires_in: 900,
         interval: 5,
       });
+
+      const tokenResult = await deviceFlow.pollForToken('test');
+      expect(tokenResult.access_token).toBe('test_token');
+
+      const missingDeviceParams = requiredDeviceParams.filter(
+        (p) => capturedDeviceParams?.has(p) !== true,
+      );
+      expect(missingDeviceParams).toStrictEqual([]);
+
+      const missingTokenParams = requiredTokenParams.filter(
+        (p) => capturedTokenParams?.has(p) !== true,
+      );
+      expect(missingTokenParams).toStrictEqual([]);
     });
   });
 
