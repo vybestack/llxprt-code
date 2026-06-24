@@ -129,10 +129,13 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
   it('PROP disabled-set round-trip: for a generated unique string[] (len 0..5), setDisabledHooks(arr) then getDisabledHooks() deep-equals arr @requirement:REQ-004 @scenario:property-round-trip @given:a real agent and a generated unique string[] of length 0..5 @when:setDisabledHooks(arr) then getDisabledHooks() @then:the result deep-equals arr (R-HOOKS-ROUNDTRIP); MIN-2 distinct cases exercised by the generator', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.uniqueArray(fc.string({ minLength: 1 }).filter((s) => !s.includes(' ')), {
-          minLength: 0,
-          maxLength: 5,
-        }),
+        fc.uniqueArray(
+          fc.string({ minLength: 1 }).filter((s) => !s.includes(' ')),
+          {
+            minLength: 0,
+            maxLength: 5,
+          },
+        ),
         async (arr) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {

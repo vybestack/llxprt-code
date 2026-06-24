@@ -119,9 +119,9 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
         abortController: new AbortController(),
       });
       // Complete one task: it leaves the running set but stays in history.
-      expect(
-        mgr.completeTask('t10-done', { result: 'ok' } as never),
-      ).toBe(true);
+      expect(mgr.completeTask('t10-done', { result: 'ok' } as never)).toBe(
+        true,
+      );
       // list() reflects ALL tasks (both remain in history).
       const all = agent.tasks.list();
       expect(all).toHaveLength(2);

@@ -277,6 +277,31 @@ export interface HookExecutionResponse {
   readonly output: HookOutput;
 }
 
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+export interface ToolKeyInfo {
+  readonly toolName: string;
+  readonly displayName: string;
+  readonly description?: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+export interface ToolKeyStatus {
+  readonly toolName: string;
+  readonly hasKey: boolean;
+  readonly maskedKey?: string;
+  readonly keyFile?: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+export interface AgentToolKeyControl {
+  supported(): readonly ToolKeyInfo[];
+  status(toolName: string): Promise<ToolKeyStatus>;
+  save(toolName: string, key: string): Promise<void>;
+  delete(toolName: string): Promise<void>;
+  setKeyFile(toolName: string, path: string | null): Promise<void>;
+  getKeyFile(toolName: string): Promise<string | null>;
+}
+
 export interface AgentToolControl {
   list(): readonly ToolInfo[];
   setEnabled(names: readonly string[]): Promise<void>;
@@ -284,6 +309,8 @@ export interface AgentToolControl {
   respondToConfirmation(confirmationId: string, decision: ToolDecision): void;
   onToolUpdate(cb: (u: ToolUpdate) => void): Unsubscribe;
   setEditorCallbacks(cbs: EditorCallbacks): void;
+  // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+  readonly keys: AgentToolKeyControl;
 }
 
 export interface AgentMcpControl {

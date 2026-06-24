@@ -4,7 +4,10 @@
  */
 
 import type { AgentPolicyControl, PolicyRuleView } from '../agent.js';
-import { type PolicyEngine, type PolicyDecision } from '@vybestack/llxprt-code-core';
+import {
+  type PolicyEngine,
+  type PolicyDecision,
+} from '@vybestack/llxprt-code-core';
 
 /**
  * @plan:PLAN-20260622-COREAPIGAP.P06

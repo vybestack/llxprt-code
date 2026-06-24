@@ -25,6 +25,8 @@ import type {
   ApprovalMode,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   switchActiveProvider,
@@ -322,6 +324,8 @@ export class AgentImpl implements Agent {
       messageBus: deps.messageBus,
       config: deps.config,
       editorCallbacksHolder: this.editorCallbacksHolder,
+      // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+      keysDeps: { getStorage: () => getToolKeyStorage() },
     };
     this.tools = new ToolControl(toolControlDeps);
     this.profiles = new ProfilesControl({

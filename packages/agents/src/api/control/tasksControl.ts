@@ -10,7 +10,10 @@
  */
 
 import type { AgentTasksControl, AgentTaskInfo } from '../agent.js';
-import type { AsyncTaskManager, AsyncTaskInfo } from '@vybestack/llxprt-code-core';
+import type {
+  AsyncTaskManager,
+  AsyncTaskInfo,
+} from '@vybestack/llxprt-code-core';
 
 /**
  * @plan:PLAN-20260622-COREAPIGAP.P08

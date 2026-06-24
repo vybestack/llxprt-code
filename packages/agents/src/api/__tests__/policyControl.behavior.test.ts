@@ -38,7 +38,10 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { buildAgent } from './helpers/agentHarness.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
-import type { PolicyEngineConfig, PolicyRuleView } from '@vybestack/llxprt-code-agents';
+import type {
+  PolicyEngineConfig,
+  PolicyRuleView,
+} from '@vybestack/llxprt-code-agents';
 
 describe('agent.policy read-only control @plan:PLAN-20260622-COREAPIGAP.P05 @requirement:REQ-002', () => {
   it('T4 getRules projects argsPattern to .source string and preserves undefined for rules without a pattern @requirement:REQ-002 @scenario:argsPattern-string @given:an engine seeded with two rules, one WITH argsPattern /"command":"npm test"/ (source "user") and one WITHOUT @when:agent.policy.getRules() @then:the seeded argsPattern rule projects argsPattern === \'"command":"npm test"\' (a STRING); the no-argsPattern seeded rule has argsPattern === undefined; and NO view.argsPattern is a RegExp instance', async () => {
