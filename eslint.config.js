@@ -36,13 +36,13 @@ const legacyDirectiveCleanupScopes = [
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   // packages/storage/src is locked in completedDirectiveCleanupScopes (#2119).
-  // #2089 scope: the six target packages (auth/settings/telemetry/
+  // packages/auth/src is locked in completedDirectiveCleanupScopes (#2121).
+  // #2089 scope: the four target packages (settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
   // inline lint directives. Those packages are kept in legacy scope so
   // existing directives do not break lint. The target files and extracted
   // modules are locked in completedDirectiveCleanupScopes below, which
   // overrides this block for those specific files.
-  'packages/auth/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/settings/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/telemetry/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/ide-integration/src/**/*.{ts,tsx}', // #2089 (non-target files)
@@ -246,6 +246,9 @@ const completedDirectiveCleanupScopes = [
   // lint directives. The broad glob below supersedes the individual #2090
   // entries above. Locked to error so any new directive fails immediately.
   'packages/agents/src/**/*.{ts,tsx}', // #2117
+  // #2121 — all packages/auth/src files are now fully compliant: zero inline
+  // lint directives. Locked to error so any new directive fails immediately.
+  'packages/auth/src/**/*.{ts,tsx}', // #2121
   // #2091 packages/cli test cleanup — target files (and extracted helpers)
   // are fully compliant: zero inline lint directives. Locked to error so any
   // new directive fails immediately while the rest of packages/cli remains in
