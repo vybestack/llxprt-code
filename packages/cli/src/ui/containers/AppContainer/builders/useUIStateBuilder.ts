@@ -4,18 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo } from 'react';
 import { buildUIState, type UIStateParams } from './buildUIState.js';
+import { useShallowMemo } from '../../../hooks/useShallowMemo.js';
 import type { UIState } from '../../../contexts/UIStateContext.js';
 
 /**
  * @hook useUIStateBuilder
- * @description Wraps buildUIState with useMemo for memoized UIState
+ * @description Wraps buildUIState with shallow-value memoization for UIState
  * @inputs All primitives from hooks via UIStateParams
  * @outputs Memoized UIState
- * @sideEffects useMemo
- * @strictMode Safe - useMemo deps are primitives
+ * @sideEffects useRef-based memoization
+ * @strictMode Safe - recomputes only when a param value changes
  */
 export function useUIStateBuilder(params: UIStateParams): UIState {
-  return useMemo(() => buildUIState(params), Object.values(params));
+  return useShallowMemo(
+    () => buildUIState(params),
+    params as unknown as Record<string, unknown>,
+  );
 }

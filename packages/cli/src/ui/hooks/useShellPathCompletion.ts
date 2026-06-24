@@ -118,6 +118,8 @@ function usePathSuggestionFetcher(
     setVisibleStartIndex,
     setShowSuggestions,
     setIsLoadingSuggestions,
+    generationRef,
+    debounceTimerRef,
   ]);
 }
 

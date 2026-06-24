@@ -253,6 +253,8 @@ export function useStickToBottom(
     scrollAnchor.index,
     getAnchorForScrollTop,
     offsets,
+    setIsStickingToBottom,
+    setScrollAnchor,
   ]);
 }
 
@@ -324,6 +326,8 @@ export function useInitialScroll<T>(
     data.length,
     heights,
     scrollableContainerHeight,
+    setIsStickingToBottom,
+    setScrollAnchor,
   ]);
 }
 

@@ -803,16 +803,16 @@ function useBoundDisplayUpdaters(
   replaceToolCalls: ReplaceToolCallsFn;
   updateToolOutput: UpdateToolOutputFn;
 } {
+  const { replaceToolCallsForScheduler, updateToolCallOutput } =
+    toolCallUpdaters;
   const replaceToolCalls = useCallback(
-    (calls: ToolCall[]) =>
-      toolCallUpdaters.replaceToolCallsForScheduler(mainSchedulerId, calls),
-    // Deps reference specific methods on the toolCallUpdaters object.
-    [toolCallUpdaters.replaceToolCallsForScheduler, mainSchedulerId],
+    (calls: ToolCall[]) => replaceToolCallsForScheduler(mainSchedulerId, calls),
+    [replaceToolCallsForScheduler, mainSchedulerId],
   );
   const updateToolOutput = useCallback(
     (toolCallId: string, chunk: string | AnsiOutput) =>
-      toolCallUpdaters.updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
-    [toolCallUpdaters.updateToolCallOutput, mainSchedulerId],
+      updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
+    [updateToolCallOutput, mainSchedulerId],
   );
   return { replaceToolCalls, updateToolOutput };
 }

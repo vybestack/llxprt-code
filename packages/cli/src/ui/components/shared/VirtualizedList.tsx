@@ -82,7 +82,12 @@ function VirtualizedList<T>(
         state.setIsStickingToBottom,
         state.getAnchorForScrollTop,
       ),
-    [imperativeCtx, state.getAnchorForScrollTop],
+    [
+      imperativeCtx,
+      state.getAnchorForScrollTop,
+      state.setScrollAnchor,
+      state.setIsStickingToBottom,
+    ],
   );
 
   return (

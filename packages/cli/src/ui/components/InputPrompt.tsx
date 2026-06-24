@@ -1130,6 +1130,7 @@ const useSubmitHandlers = (
       shellModeActive,
       shellHistory,
       resetReverseSearchCompletionState,
+      pendingLargePastesRef,
     ],
   );
 

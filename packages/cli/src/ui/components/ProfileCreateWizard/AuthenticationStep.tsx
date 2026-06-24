@@ -474,13 +474,16 @@ const useAuthHandlers = (
         onBack,
       );
     },
-    [onUpdateAuth, onContinue, onBack],
+    [setAuthMethod, setFocusedComponent, onUpdateAuth, onContinue, onBack],
   );
-  const handleAuthInputChange = useCallback((value: string) => {
-    setAuthInput(value);
-    setValidationError(null);
-    setIsPathValidated(false);
-  }, []);
+  const handleAuthInputChange = useCallback(
+    (value: string) => {
+      setAuthInput(value);
+      setValidationError(null);
+      setIsPathValidated(false);
+    },
+    [setAuthInput, setValidationError, setIsPathValidated],
+  );
   const handleAuthInputSubmit = useCallback(() => {
     void (async () => {
       try {
@@ -501,7 +504,15 @@ const useAuthHandlers = (
         );
       }
     })();
-  }, [authInput, authMethod, oauthBuckets, onUpdateAuth, onContinue]);
+  }, [
+    authInput,
+    authMethod,
+    oauthBuckets,
+    onUpdateAuth,
+    onContinue,
+    setValidationError,
+    setIsPathValidated,
+  ]);
   return { handleAuthSelect, handleAuthInputChange, handleAuthInputSubmit };
 };
 
