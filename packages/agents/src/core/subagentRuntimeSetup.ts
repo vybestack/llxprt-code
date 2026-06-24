@@ -15,6 +15,7 @@
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import {
   ApprovalMode,
   type SchedulerCallbacks,
@@ -116,11 +117,11 @@ export function convertMetadataToFunctionDeclaration(
     properties: parameterProperties,
   };
 
+  const runtimeMetadata = metadata as Partial<ToolMetadata>;
+
   return {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    name: metadata.name ?? fallbackName,
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    description: metadata.description ?? '',
+    name: runtimeMetadata.name ?? fallbackName,
+    description: runtimeMetadata.description ?? '',
     parametersJsonSchema,
   };
 }
@@ -128,6 +129,27 @@ export function convertMetadataToFunctionDeclaration(
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
+
+function filterToolEntry(
+  toolEntry: ToolConfig['tools'][number],
+  allowedNames: Set<string>,
+): { shouldInclude: boolean; value: ToolConfig['tools'][number] } {
+  if (typeof toolEntry !== 'string') {
+    return { shouldInclude: true, value: toolEntry };
+  }
+
+  if (
+    allowedNames.size > 0 &&
+    !allowedNames.has(canonicalizeToolName(toolEntry))
+  ) {
+    debugLogger.warn(
+      `Tool "${toolEntry}" is not permitted by the runtime view and is skipped.`,
+    );
+    return { shouldInclude: false, value: toolEntry };
+  }
+
+  return { shouldInclude: true, value: toolEntry };
+}
 
 /**
  * Filters the tools in toolConfig against the allowed set from the runtime view.
@@ -150,25 +172,11 @@ export async function filterToolsAgainstRuntime(params: {
   );
 
   const filteredTools: ToolConfig['tools'] = [];
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const toolEntry of toolConfig.tools) {
-    if (typeof toolEntry !== 'string') {
-      // Non-string entries (e.g., FunctionDeclaration objects) are preserved
-      filteredTools.push(toolEntry);
-      continue;
+    const result = filterToolEntry(toolEntry, allowedNames);
+    if (result.shouldInclude) {
+      filteredTools.push(result.value);
     }
-
-    if (
-      allowedNames.size > 0 &&
-      !allowedNames.has(canonicalizeToolName(toolEntry))
-    ) {
-      debugLogger.warn(
-        `Tool "${toolEntry}" is not permitted by the runtime view and is skipped.`,
-      );
-      continue;
-    }
-
-    filteredTools.push(toolEntry);
   }
 
   return {
@@ -302,9 +310,8 @@ function applyToolWhitelistToEphemerals(
 export function createEmojiFilter(
   settingsSnapshot?: ReadonlySettingsSnapshot,
 ): EmojiFilter | undefined {
-  const filterMode =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    (settingsSnapshot?.emojifilter as EmojiFilterMode) ?? 'auto';
+  const rawFilterMode = settingsSnapshot?.emojifilter;
+  const filterMode: EmojiFilterMode = rawFilterMode ?? 'auto';
 
   if (filterMode === 'allowed') {
     const noFilter: EmojiFilter | undefined = void 0;
@@ -317,6 +324,45 @@ export function createEmojiFilter(
 // ---------------------------------------------------------------------------
 // Function declarations
 // ---------------------------------------------------------------------------
+
+function resolveDeclarationEntry(
+  entry: ToolConfig['tools'][number],
+  ctx: {
+    allowedNames: Set<string>;
+    toolsView: ToolRegistryView;
+    registryNameByCanonical: Map<string, string>;
+  },
+): FunctionDeclaration | null {
+  if (typeof entry !== 'string') {
+    if (isSubagentExcludedDeclaration(entry)) {
+      return null;
+    }
+    return entry;
+  }
+
+  const canonical = canonicalizeToolName(entry);
+  if (SUBAGENT_EXCLUDED_TOOLS.has(canonical)) {
+    return null;
+  }
+
+  if (ctx.allowedNames.size > 0 && !ctx.allowedNames.has(canonical)) {
+    debugLogger.warn(
+      `Tool "${entry}" is not permitted by the runtime view and is skipped.`,
+    );
+    return null;
+  }
+
+  const resolvedName = ctx.registryNameByCanonical.get(canonical) ?? entry;
+  const metadata = ctx.toolsView.getToolMetadata(resolvedName);
+  if (!metadata) {
+    debugLogger.warn(
+      `Tool "${entry}" is not available in the runtime view and is skipped.`,
+    );
+    return null;
+  }
+
+  return convertMetadataToFunctionDeclaration(resolvedName, metadata);
+}
 
 export function buildRuntimeFunctionDeclarations(
   toolsView: ToolRegistryView,
@@ -359,43 +405,15 @@ export function buildRuntimeFunctionDeclarations(
     return noFunctionDeclarations;
   }
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const entry of toolConfig.tools) {
-    if (typeof entry !== 'string') {
-      // Non-string FunctionDeclaration entries must still be filtered for
-      // subagent-excluded tools (task/list_subagents) to prevent a caller
-      // from injecting them via an explicit ToolConfig.
-      if (isSubagentExcludedDeclaration(entry)) {
-        continue;
-      }
-      declarations.push(entry);
-      continue;
+    const result = resolveDeclarationEntry(entry, {
+      allowedNames,
+      toolsView,
+      registryNameByCanonical,
+    });
+    if (result) {
+      declarations.push(result);
     }
-
-    const canonical = canonicalizeToolName(entry);
-    if (SUBAGENT_EXCLUDED_TOOLS.has(canonical)) {
-      continue;
-    }
-
-    if (allowedNames.size > 0 && !allowedNames.has(canonical)) {
-      debugLogger.warn(
-        `Tool "${entry}" is not permitted by the runtime view and is skipped.`,
-      );
-      continue;
-    }
-
-    const resolvedName = registryNameByCanonical.get(canonical) ?? entry;
-    const metadata = toolsView.getToolMetadata(resolvedName);
-    if (!metadata) {
-      debugLogger.warn(
-        `Tool "${entry}" is not available in the runtime view and is skipped.`,
-      );
-      continue;
-    }
-
-    declarations.push(
-      convertMetadataToFunctionDeclaration(resolvedName, metadata),
-    );
   }
   return declarations;
 }
@@ -464,39 +482,35 @@ Important Rules:
 // Scheduler config
 // ---------------------------------------------------------------------------
 
-/**
- * Creates a higher-level Config facade for the CoreToolScheduler.
- *
- * This facade delegates scheduler operations (`getOrCreateScheduler`,
- * `disposeScheduler`) through `toolExecutorContext` rather than bypassing
- * it. The only policy this layer adds is the `interactiveMode` flag.
- *
- * Delegation chain: createSchedulerConfig → toolExecutorContext → foregroundConfig
- */
-export function createSchedulerConfig(
+type DefensiveConfig = {
+  getExcludeTools?: () => string[];
+  getEphemeralSettings?: () => Record<string, unknown>;
+};
+
+function resolveConfigAccessors(
   toolExecutorContext: ToolExecutionConfig,
   foregroundConfig: Config,
-  options?: { interactive?: boolean },
-): Config {
-  const isInteractive = options?.interactive ?? false;
-
+  defensiveConfig: DefensiveConfig,
+): Pick<
+  Config,
+  | 'getEphemeralSettings'
+  | 'getEphemeralSetting'
+  | 'getExcludeTools'
+  | 'getTelemetryLogPromptsEnabled'
+  | 'getAllowedTools'
+> {
   const getEphemeralSettings =
     typeof toolExecutorContext.getEphemeralSettings === 'function'
-      ? () => ({
-          ...toolExecutorContext.getEphemeralSettings(),
-        })
-      : () => foregroundConfig.getEphemeralSettings();
+      ? () => ({ ...toolExecutorContext.getEphemeralSettings() })
+      : () => ({ ...(defensiveConfig.getEphemeralSettings?.() ?? {}) });
 
-  const getEphemeralSetting = (key: string): unknown => {
-    const settings = getEphemeralSettings();
-    return settings[key];
-  };
+  const getEphemeralSetting = (key: string): unknown =>
+    getEphemeralSettings()[key];
 
   const getExcludeTools =
     typeof toolExecutorContext.getExcludeTools === 'function'
       ? () => toolExecutorContext.getExcludeTools()
-      : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        () => foregroundConfig.getExcludeTools?.() ?? [];
+      : () => defensiveConfig.getExcludeTools?.() ?? [];
 
   const getTelemetryLogPromptsEnabled =
     typeof toolExecutorContext.getTelemetryLogPromptsEnabled === 'function'
@@ -516,17 +530,63 @@ export function createSchedulerConfig(
       : undefined;
   };
 
-  // Partial Config adapter for CoreToolScheduler — only the methods the
-  // scheduler and tool-execution paths actually call are implemented.
-
   return {
-    getToolRegistry: () => toolExecutorContext.getToolRegistry(),
-    getSessionId: () => toolExecutorContext.getSessionId(),
     getEphemeralSettings,
     getEphemeralSetting,
     getExcludeTools,
     getTelemetryLogPromptsEnabled,
     getAllowedTools,
+  };
+}
+
+/**
+ * Creates a higher-level Config facade for the CoreToolScheduler.
+ *
+ * This facade delegates scheduler operations (`getOrCreateScheduler`,
+ * `disposeScheduler`) through `toolExecutorContext` rather than bypassing
+ * it. The only policy this layer adds is the `interactiveMode` flag.
+ *
+ * Delegation chain: createSchedulerConfig → toolExecutorContext → foregroundConfig
+ */
+export function createSchedulerConfig(
+  toolExecutorContext: ToolExecutionConfig,
+  foregroundConfig: Config,
+  options?: { interactive?: boolean },
+): Config {
+  const isInteractive = options?.interactive ?? false;
+
+  // Defensive runtime guard: test doubles and bootstrap configs may not
+  // implement every Config method despite the declared types.
+  const defensiveConfig = foregroundConfig as unknown as {
+    getEphemeralSettings?: () => Record<string, unknown>;
+    getExcludeTools?: () => string[];
+    getTelemetryLogPromptsEnabled?: () => boolean;
+    getAllowedTools?: () => string[] | undefined;
+    getToolRegistry?: () => unknown;
+    getOrCreateScheduler?: (
+      sessionId: string,
+      callbacks: unknown,
+      options: unknown,
+      deps: unknown,
+    ) => Promise<ToolSchedulerContract>;
+    disposeScheduler?: (sessionId: string) => void;
+    getEnableHooks?: () => boolean;
+    getHooks?: () => unknown;
+    getHookSystem?: () => unknown;
+    getWorkingDir?: () => string;
+    getTargetDir?: () => string;
+  };
+
+  const accessors = resolveConfigAccessors(
+    toolExecutorContext,
+    foregroundConfig,
+    defensiveConfig,
+  );
+
+  return {
+    getToolRegistry: () => toolExecutorContext.getToolRegistry(),
+    getSessionId: () => toolExecutorContext.getSessionId(),
+    ...accessors,
     getApprovalMode: () =>
       typeof foregroundConfig.getApprovalMode === 'function'
         ? foregroundConfig.getApprovalMode()
@@ -550,16 +610,11 @@ export function createSchedulerConfig(
     disposeScheduler: (sessionId: string) => {
       toolExecutorContext.disposeScheduler(sessionId);
     },
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    getEnableHooks: () => foregroundConfig.getEnableHooks?.() ?? false,
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    getHooks: () => foregroundConfig.getHooks?.(),
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    getHookSystem: () => foregroundConfig.getHookSystem?.(),
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    getWorkingDir: () => foregroundConfig.getWorkingDir?.() ?? process.cwd(),
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    getTargetDir: () => foregroundConfig.getTargetDir?.() ?? process.cwd(),
+    getEnableHooks: () => defensiveConfig.getEnableHooks?.() ?? false,
+    getHooks: () => defensiveConfig.getHooks?.(),
+    getHookSystem: () => defensiveConfig.getHookSystem?.(),
+    getWorkingDir: () => defensiveConfig.getWorkingDir?.() ?? process.cwd(),
+    getTargetDir: () => defensiveConfig.getTargetDir?.() ?? process.cwd(),
   } as unknown as Config;
 }
 
@@ -647,27 +702,26 @@ async function buildSystemInstruction(
   const toolNames = Array.from(
     new Set(
       combinedDeclarations
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-        .map((d) => d?.name?.trim())
+        .map((d) => (d as Partial<FunctionDeclaration>).name?.trim())
         .filter((name): name is string => Boolean(name && name.length > 0)),
     ),
   );
 
   const mcpInstructions = config.getMcpClientManager()?.getMcpInstructions();
-  const coreSystemPrompt = await getCoreSystemPromptAsync({
+  const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
     mcpInstructions,
     model: modelConfig.model,
     tools: toolNames,
     includeSubagentDelegation: false,
     interactionMode: 'subagent',
   });
+  const corePromptText =
+    typeof coreSystemPrompt === 'string' ? coreSystemPrompt.trim() : '';
 
   const instructionSections = [
     envContextText,
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    coreSystemPrompt?.trim() ?? '',
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    personaPrompt?.trim() ?? '',
+    corePromptText,
+    personaPrompt.trim(),
   ].filter((section) => section.length > 0);
 
   const systemInstruction =

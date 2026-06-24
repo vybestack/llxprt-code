@@ -70,8 +70,7 @@ function ensureAgentId(
   request: ToolCall['request'],
 ): ToolCallResponseInfo {
   const copy = { ...response };
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: agentId is string | undefined, empty string should fall through
-  if (!copy.agentId) {
+  if (copy.agentId === undefined || copy.agentId === '') {
     copy.agentId = request.agentId ?? DEFAULT_AGENT_ID;
   }
   return copy;

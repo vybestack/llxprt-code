@@ -281,8 +281,8 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
 
     it('should throw EmptyStreamError when stream is immediately exhausted', async () => {
       // Create a stream that immediately returns (empty)
-      // eslint-disable-next-line require-yield
       async function* emptyStream(): AsyncGenerator<IContent> {
+        yield* [];
         return;
       }
 
@@ -491,10 +491,10 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
 
       let apiCallMade = false;
 
-      // eslint-disable-next-line require-yield
       async function* lazyGenerator(): AsyncGenerator<IContent> {
         // This simulates the actual API call happening when iteration starts
         apiCallMade = true;
+        yield* [];
         // Simulate connection error during first chunk
         throw new Error('ECONNRESET');
       }

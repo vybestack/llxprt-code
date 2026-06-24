@@ -85,6 +85,19 @@ interface PostTurnResult {
   newBaseRequest: PartListUnion | undefined;
 }
 
+/**
+ * Normalizes a runtime task-list entry for snapshot storage. Provider/tool-call
+ * payloads can omit or null out fields despite the declared type.
+ */
+function normalizeTodoSnapshotEntry(todo: Todo): Todo {
+  const raw = todo as Partial<Todo>;
+  return {
+    id: `${raw.id ?? ''}`,
+    content: raw.content ?? '',
+    status: raw.status ?? 'pending',
+  } as Todo;
+}
+
 export const MAX_TURNS = 100;
 const MAX_RETRIES = 3;
 
@@ -504,8 +517,7 @@ export class MessageStreamOrchestrator {
     const hadVisible = iter.outcome?.hadVisibleOutput ?? iter.hadContent;
     const hadThinking = iter.outcome?.hadThinking ?? iter.hadThinking;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
-    if (hadThinking && !hadVisible && !iter.hadToolCallsThisTurn) {
+    if (hadThinking && !hadVisible) {
       const newRetry = retryCount + 1;
       this.deps.logger.debug(
         () =>
@@ -740,10 +752,13 @@ export class MessageStreamOrchestrator {
     event: ServerGeminiStreamEvent,
     todoContinuationService: TodoContinuationService,
   ): void {
+    const rawEvent = event as unknown as {
+      type: GeminiEventType;
+      value?: { name?: string; args?: { todos?: unknown } };
+    };
     if (
-      event.type !== GeminiEventType.ToolCallRequest ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
-      !todoContinuationService.isTodoToolCall(event.value?.name)
+      rawEvent.type !== GeminiEventType.ToolCallRequest ||
+      !todoContinuationService.isTodoToolCall(rawEvent.value?.name)
     )
       return;
 
@@ -752,27 +767,21 @@ export class MessageStreamOrchestrator {
     );
     todoContinuationService.consecutiveComplexTurns = 0;
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
-    const requestedTodos = Array.isArray(event.value?.args?.todos)
-      ? (event.value.args.todos as Todo[])
-      : [];
+    const args = rawEvent.value?.args;
+    const requestedTodos: Todo[] =
+      args && Array.isArray(args.todos) ? args.todos : [];
     if (requestedTodos.length > 0) {
-      todoContinuationService.lastTodoSnapshot = requestedTodos.map((todo) => ({
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
-        id: `${todo.id ?? ''}`,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
-        content: todo.content ?? '',
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
-        status: todo.status ?? 'pending',
-      }));
+      todoContinuationService.lastTodoSnapshot = requestedTodos.map((todo) =>
+        normalizeTodoSnapshotEntry(todo),
+      );
     }
   }
 
   private _getProviderName(): string {
     const contentGenConfig = this.deps.config.getContentGeneratorConfig();
     const providerManager = contentGenConfig?.providerManager;
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty provider name should fall back to 'backend'
-    return providerManager?.getActiveProviderName() || 'backend';
+    const activeName = providerManager?.getActiveProviderName();
+    return activeName && activeName.length > 0 ? activeName : 'backend';
   }
 
   /**

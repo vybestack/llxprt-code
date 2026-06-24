@@ -4,8 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, type Mock } from 'vitest';
-import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
+import { vi, expect, type Mock } from 'vitest';
+import type {
+  ToolCall,
+  WaitingToolCall,
+  CompletedToolCall,
+} from './coreToolScheduler.js';
+import type {
+  SuccessfulToolCall,
+  ErroredToolCall,
+} from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
@@ -232,3 +240,17 @@ export class MockEditTool extends BaseDeclarativeTool<
 
 // Re-export WaitingToolCall type for test files
 export type { WaitingToolCall };
+
+export function expectSuccessful(
+  call: CompletedToolCall | ToolCall,
+): SuccessfulToolCall {
+  expect(call.status).toBe('success');
+  return call as SuccessfulToolCall;
+}
+
+export function expectErrored(
+  call: CompletedToolCall | ToolCall,
+): ErroredToolCall {
+  expect(call.status).toBe('error');
+  return call as ErroredToolCall;
+}

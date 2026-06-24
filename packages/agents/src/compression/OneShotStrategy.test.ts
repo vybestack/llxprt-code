@@ -21,6 +21,7 @@ import type {
 import type {
   CompressionContext,
   CompressionProviderResult,
+  CompressionResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -265,6 +266,28 @@ function generateHistory(count: number): IContent[] {
   return messages;
 }
 
+function assertNoOrphanedToolResponsesInTail(result: CompressionResult): void {
+  const tail = result.newHistory.slice(2);
+  for (const msg of tail) {
+    const toolResponse =
+      msg.speaker === 'tool'
+        ? msg.blocks.find((b) => b.type === 'tool_response')
+        : undefined;
+    if (toolResponse === undefined || !('callId' in toolResponse)) {
+      continue;
+    }
+    const hasCall = tail.some(
+      (m) =>
+        m.speaker === 'ai' &&
+        m.blocks.some(
+          (b) =>
+            b.type === 'tool_call' && 'id' in b && b.id === toolResponse.callId,
+        ),
+    );
+    expect(hasCall).toBe(true);
+  }
+}
+
 // ===========================================================================
 // Tests
 // ===========================================================================
@@ -463,29 +486,7 @@ describe('OneShotStrategy', () => {
       // Should still compress and produce valid result
       expect(result.metadata.llmCallMade).toBe(true);
 
-      // The preserved tail should not contain orphaned tool responses
-      const tail = result.newHistory.slice(2); // after summary + ack
-      for (const msg of tail) {
-        if (msg.speaker === 'tool') {
-          // If there's a tool response in the tail, its corresponding
-          // tool call should also be in the tail
-          const toolCallId = msg.blocks.find((b) => b.type === 'tool_response');
-          if (toolCallId && 'callId' in toolCallId) {
-            const hasCall = tail.some(
-              (m) =>
-                m.speaker === 'ai' &&
-                m.blocks.some(
-                  (b) =>
-                    b.type === 'tool_call' &&
-                    'id' in b &&
-                    b.id === toolCallId.callId,
-                ),
-            );
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect(hasCall).toBe(true);
-          }
-        }
-      }
+      assertNoOrphanedToolResponsesInTail(result);
     });
   });
 
@@ -570,14 +571,12 @@ describe('OneShotStrategy', () => {
       const strategy = new OneShotStrategy();
 
       await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
-      try {
-        await strategy.compress(ctx);
-      } catch (error) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(error).toBeInstanceOf(EmptySummaryError);
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(isTransientCompressionError(error)).toBe(false);
-      }
+      const capturedError = await strategy
+        .compress(ctx)
+        .then(() => undefined)
+        .catch((error: unknown) => error);
+      expect(capturedError).toBeInstanceOf(EmptySummaryError);
+      expect(isTransientCompressionError(capturedError)).toBe(false);
     });
 
     it('throws EmptySummaryError when LLM returns whitespace-only summary', async () => {
@@ -596,14 +595,12 @@ describe('OneShotStrategy', () => {
       const strategy = new OneShotStrategy();
 
       await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
-      try {
-        await strategy.compress(ctx);
-      } catch (error) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(error).toBeInstanceOf(EmptySummaryError);
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(isTransientCompressionError(error)).toBe(false);
-      }
+      const capturedError = await strategy
+        .compress(ctx)
+        .then(() => undefined)
+        .catch((error: unknown) => error);
+      expect(capturedError).toBeInstanceOf(EmptySummaryError);
+      expect(isTransientCompressionError(capturedError)).toBe(false);
     });
   });
 
