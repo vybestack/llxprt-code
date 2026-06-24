@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -267,7 +266,7 @@ describe('bfsFileSearch', () => {
 
   it('should perform parallel directory scanning efficiently (performance test)', async () => {
     // Create a more complex directory structure for performance testing
-    console.log('\n🚀 Testing Parallel BFS Performance...');
+    process.stdout.write('\n🚀 Testing Parallel BFS Performance...');
 
     // Create 50 directories with multiple levels for faster test execution
     for (let i = 0; i < 50; i++) {
@@ -307,19 +306,19 @@ describe('bfsFileSearch', () => {
       // Verify consistency across all iterations
       expect(sortedResult).toStrictEqual(firstResultSorted);
 
-      console.log(`📊 Iteration ${i + 1}: ${duration.toFixed(2)}ms`);
+      process.stdout.write(`📊 Iteration ${i + 1}: ${duration.toFixed(2)}ms`);
     }
 
     const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
     const maxDuration = Math.max(...durations);
     const minDuration = Math.min(...durations);
 
-    console.log(`📊 Average Duration: ${avgDuration.toFixed(2)}ms`);
-    console.log(
+    process.stdout.write(`📊 Average Duration: ${avgDuration.toFixed(2)}ms`);
+    process.stdout.write(
       `📊 Min/Max Duration: ${minDuration.toFixed(2)}ms / ${maxDuration.toFixed(2)}ms`,
     );
-    console.log(`📁 Found ${foundFiles} GEMINI.md files`);
-    console.log(
+    process.stdout.write(`📁 Found ${foundFiles} GEMINI.md files`);
+    process.stdout.write(
       `🏎️  Processing ~${Math.round(200 / (avgDuration / 1000))} dirs/second`,
     );
 
@@ -343,7 +342,7 @@ describe('bfsFileSearch', () => {
     const maxConsistencyRatio = process.env.CI ? 3.0 : 2.5;
     expect(consistencyRatio).toBeLessThan(maxConsistencyRatio);
 
-    console.log(
+    process.stdout.write(
       `✅ Performance test passed: avg=${avgDuration.toFixed(2)}ms, consistency=${(consistencyRatio * 100).toFixed(1)}% (threshold: ${(maxConsistencyRatio * 100).toFixed(0)}%)`,
     );
   });

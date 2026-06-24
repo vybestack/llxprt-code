@@ -116,8 +116,9 @@ class Cell {
   }
 
   getChars(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string from getChars() should become space
-    return this.cell?.getChars() || ' ';
+    const chars = this.cell?.getChars();
+    // Empty string from xterm.js should become a space so cell width is preserved
+    return chars === undefined || chars === '' ? ' ' : chars;
   }
 
   isAttribute(attribute: Attribute): boolean {
@@ -126,15 +127,42 @@ class Cell {
 
   equals(other: Cell): boolean {
     return (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      this.attributes === other.attributes &&
-      this.fg === other.fg &&
-      this.bg === other.bg &&
-      this.fgColorMode === other.fgColorMode &&
-      this.bgColorMode === other.bgColorMode &&
+      this.attributesEqual(other) &&
+      this.colorsEqual(other) &&
       this.isCursor() === other.isCursor()
     );
   }
+
+  private attributesEqual(other: Cell): boolean {
+    return this.attributes === other.attributes;
+  }
+
+  private colorsEqual(other: Cell): boolean {
+    return (
+      this.fg === other.fg &&
+      this.bg === other.bg &&
+      this.fgColorMode === other.fgColorMode &&
+      this.bgColorMode === other.bgColorMode
+    );
+  }
+}
+
+function buildTokenFromCell(
+  cell: Cell,
+  text: string,
+  defaultFg: string,
+  defaultBg: string,
+): AnsiToken {
+  return {
+    text,
+    bold: cell.isAttribute(Attribute.bold),
+    italic: cell.isAttribute(Attribute.italic),
+    underline: cell.isAttribute(Attribute.underline),
+    dim: cell.isAttribute(Attribute.dim),
+    inverse: cell.isAttribute(Attribute.inverse) || cell.isCursor(),
+    fg: convertColorToHex(cell.fg, cell.fgColorMode, defaultFg),
+    bg: convertColorToHex(cell.bg, cell.bgColorMode, defaultBg),
+  };
 }
 
 export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
@@ -161,40 +189,25 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
       const cellData = line.getCell(x);
       const cell = new Cell(cellData ?? null, x, y, cursorX, cursorY);
 
-      if (x > 0 && !cell.equals(lastCell)) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (currentText) {
-          const token: AnsiToken = {
-            text: currentText,
-            bold: lastCell.isAttribute(Attribute.bold),
-            italic: lastCell.isAttribute(Attribute.italic),
-            underline: lastCell.isAttribute(Attribute.underline),
-            dim: lastCell.isAttribute(Attribute.dim),
-            inverse:
-              lastCell.isAttribute(Attribute.inverse) || lastCell.isCursor(),
-            fg: convertColorToHex(lastCell.fg, lastCell.fgColorMode, defaultFg),
-            bg: convertColorToHex(lastCell.bg, lastCell.bgColorMode, defaultBg),
-          };
-          currentLine.push(token);
-        }
-        currentText = '';
+      if (x === 0 || cell.equals(lastCell)) {
+        currentText += cell.getChars();
+        lastCell = cell;
+        continue;
       }
-      currentText += cell.getChars();
+
+      if (currentText) {
+        currentLine.push(
+          buildTokenFromCell(lastCell, currentText, defaultFg, defaultBg),
+        );
+      }
+      currentText = cell.getChars();
       lastCell = cell;
     }
 
     if (currentText) {
-      const token: AnsiToken = {
-        text: currentText,
-        bold: lastCell.isAttribute(Attribute.bold),
-        italic: lastCell.isAttribute(Attribute.italic),
-        underline: lastCell.isAttribute(Attribute.underline),
-        dim: lastCell.isAttribute(Attribute.dim),
-        inverse: lastCell.isAttribute(Attribute.inverse) || lastCell.isCursor(),
-        fg: convertColorToHex(lastCell.fg, lastCell.fgColorMode, defaultFg),
-        bg: convertColorToHex(lastCell.bg, lastCell.bgColorMode, defaultBg),
-      };
-      currentLine.push(token);
+      currentLine.push(
+        buildTokenFromCell(lastCell, currentText, defaultFg, defaultBg),
+      );
     }
 
     // Drop fully-empty lines to reduce blank padding (prevents hiding visible rows).

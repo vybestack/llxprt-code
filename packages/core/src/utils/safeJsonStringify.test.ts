@@ -15,8 +15,7 @@ describe('safeJsonStringify', () => {
   });
 
   it('should handle circular references by replacing them with [Circular]', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const obj: any = { name: 'test' };
+    const obj: Record<string, unknown> = { name: 'test' };
     obj.circular = obj; // Create circular reference
 
     const result = safeJsonStringify(obj);
@@ -24,12 +23,11 @@ describe('safeJsonStringify', () => {
   });
 
   it('should handle complex circular structures like HttpsProxyAgent', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const agent: any = {
-      sockets: {},
+    const agent: Record<string, unknown> = {
+      sockets: {} as Record<string, unknown>,
       options: { host: 'example.com' },
     };
-    agent.sockets['example.com'] = [{ agent }];
+    (agent.sockets as Record<string, unknown[]>)['example.com'] = [{ agent }];
 
     const result = safeJsonStringify(agent);
     expect(result).toContain('[Circular]');
@@ -43,8 +41,7 @@ describe('safeJsonStringify', () => {
   });
 
   it('should handle circular references with formatting', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const obj: any = { name: 'test' };
+    const obj: Record<string, unknown> = { name: 'test' };
     obj.circular = obj;
 
     const result = safeJsonStringify(obj, 2);
@@ -52,8 +49,7 @@ describe('safeJsonStringify', () => {
   });
 
   it('should handle arrays with circular references', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const arr: any[] = [{ id: 1 }];
+    const arr: Array<Record<string, unknown>> = [{ id: 1 }];
     arr[0].parent = arr; // Create circular reference
 
     const result = safeJsonStringify(arr);

@@ -10,6 +10,15 @@ import { escapePath, expandTildePath, unescapePath } from './paths.js';
 
 const MAX_SUGGESTIONS = 50;
 
+const PATH_PREFIXES = ['~/', './', '../', '/'];
+
+function isPathLikeToken(token: string): boolean {
+  if (PATH_PREFIXES.some((prefix) => token.startsWith(prefix))) {
+    return true;
+  }
+  return token === '~' || token.includes('/');
+}
+
 export interface ShellPathSuggestion {
   readonly label: string;
   readonly value: string;
@@ -44,14 +53,7 @@ export function extractPathToken(
 
   const token = line.substring(wordStart, cursorCol);
 
-  const isPathLike =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    token.startsWith('~/') ||
-    token === '~' ||
-    token.startsWith('./') ||
-    token.startsWith('../') ||
-    token.startsWith('/') ||
-    token.includes('/');
+  const isPathLike = isPathLikeToken(token);
 
   return { token, tokenStart: wordStart, tokenEnd: cursorCol, isPathLike };
 }

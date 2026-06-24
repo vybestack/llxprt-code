@@ -36,7 +36,7 @@ Answer ALL in the completion marker:
 1. Does the model cover every REQ and every T-row? (list any gap → FAIL)
 2. Are invariants testable and consistent with P00a corrections (file-based
    FakeProvider, telemetry stats source, subpath-must-be-created, rebuild-hook
-   pinning)? 
+   pinning)?
 3. Is there ANY implementation code? (if yes → FAIL)
 4. Are the 6 state transitions internally consistent with the 6 pseudocode files?
 

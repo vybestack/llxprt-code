@@ -170,10 +170,9 @@ export class CoreEventEmitter extends EventEmitter {
   ): this;
   override on(
     event: string | symbol,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    listener: (...args: any[]) => void,
+    listener: (...args: never[]) => void,
   ): this {
-    return super.on(event, listener);
+    return super.on(event, listener as (...args: unknown[]) => void);
   }
 
   override off(
@@ -207,10 +206,9 @@ export class CoreEventEmitter extends EventEmitter {
   ): this;
   override off(
     event: string | symbol,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    listener: (...args: any[]) => void,
+    listener: (...args: never[]) => void,
   ): this {
-    return super.off(event, listener);
+    return super.off(event, listener as (...args: unknown[]) => void);
   }
 
   override emit(
@@ -237,8 +235,7 @@ export class CoreEventEmitter extends EventEmitter {
     event: CoreEvent.McpClientUpdate,
     payload: McpClientUpdatePayload,
   ): boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  override emit(event: string | symbol, ...args: any[]): boolean {
+  override emit(event: string | symbol, ...args: unknown[]): boolean {
     return super.emit(event, ...args);
   }
 

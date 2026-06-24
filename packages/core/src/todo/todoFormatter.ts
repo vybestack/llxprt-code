@@ -75,21 +75,7 @@ const formatParameters = (parameters: Record<string, unknown>): string => {
 
   for (const [key, value] of Object.entries(parameters)) {
     if (typeof value === 'string') {
-      let displayValue = value;
-
-      if (
-        key === 'file_path' ||
-        key === 'absolute_path' ||
-        value.includes('/')
-      ) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (displayValue.length > MAX_LENGTH) {
-          displayValue = '...' + displayValue.slice(-(MAX_LENGTH - 3));
-        }
-      } else if (displayValue.length > MAX_LENGTH) {
-        displayValue = `${displayValue.substring(0, MAX_LENGTH - 3)}...`;
-      }
-
+      const displayValue = truncateStringValue(key, value, MAX_LENGTH);
       segments.push(`${key}: '${displayValue}'`);
     } else {
       const jsonValue = JSON.stringify(value);
@@ -103,6 +89,18 @@ const formatParameters = (parameters: Record<string, unknown>): string => {
 
   return segments.join(', ');
 };
+
+function truncateStringValue(key: string, value: string, max: number): string {
+  const isPath =
+    key === 'file_path' || key === 'absolute_path' || value.includes('/');
+  if (value.length <= max) {
+    return value;
+  }
+  if (isPath) {
+    return '...' + value.slice(-(max - 3));
+  }
+  return `${value.substring(0, max - 3)}...`;
+}
 
 const pushToolCalls = (
   lines: string[],
@@ -193,13 +191,7 @@ export const formatTodoListForDisplay = (
     lines.push(formatTodoEntry(todo));
 
     if (todo.subtasks) {
-      for (const subtask of todo.subtasks) {
-        lines.push(`  • ${subtask.content}`);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (subtask.toolCalls && subtask.toolCalls.length > 0) {
-          pushToolCalls(lines, subtask.toolCalls, '    ', maxToolCalls);
-        }
-      }
+      pushSubtaskLines(lines, todo.subtasks, maxToolCalls);
     }
 
     const combinedToolCalls = mergeToolCalls(todo, options.getLiveToolCalls);
@@ -208,6 +200,22 @@ export const formatTodoListForDisplay = (
   }
 
   return lines.join('\n').trimEnd();
+};
+
+const pushSubtaskLines = (
+  lines: string[],
+  subtasks: Todo['subtasks'],
+  maxToolCalls: number,
+) => {
+  if (!subtasks) {
+    return;
+  }
+  for (const subtask of subtasks) {
+    lines.push(`  • ${subtask.content}`);
+    if (subtask.toolCalls && subtask.toolCalls.length > 0) {
+      pushToolCalls(lines, subtask.toolCalls, '    ', maxToolCalls);
+    }
+  }
 };
 const orderTodos = (todos: Todo[]): Todo[] =>
   // Sort by status only, preserving original array order within each status group

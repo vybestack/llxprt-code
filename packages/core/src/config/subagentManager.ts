@@ -89,7 +89,7 @@ export class SubagentManager {
       // Warn if another extension already registered this name (cross-extension conflict)
       const existing = this.extensionSubagents.get(sa.name);
       if (existing && existing.sourceExtension !== extensionName) {
-        console.warn(
+        debugLogger.warn(
           `Extension '${extensionName}' overrides subagent '${sa.name}' previously registered by extension '${existing.sourceExtension}'. Last-registered wins.`,
         );
       }
@@ -140,7 +140,7 @@ export class SubagentManager {
         validNameRegex,
       );
       if (validationError !== null) {
-        console.warn(validationError);
+        debugLogger.warn(validationError);
         continue;
       }
 

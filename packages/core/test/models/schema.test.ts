@@ -22,6 +22,15 @@ import {
   invalidProviderData,
 } from './__fixtures__/mock-data.js';
 
+function omitKey<T extends object, K extends keyof T>(
+  obj: T,
+  key: K,
+): Omit<T, K> {
+  const result = { ...obj };
+  delete result[key];
+  return result;
+}
+
 describe('ModelsDevModelSchema', () => {
   describe('valid models', () => {
     it('validates model with all fields', () => {
@@ -50,36 +59,31 @@ describe('ModelsDevModelSchema', () => {
 
   describe('required fields', () => {
     it('fails when id is missing', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id: _, ...modelWithoutId } = minimalModel;
+      const modelWithoutId = omitKey(minimalModel, 'id');
       const result = ModelsDevModelSchema.safeParse(modelWithoutId);
       expect(result.success).toBe(false);
     });
 
     it('fails when name is missing', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { name: _, ...modelWithoutName } = minimalModel;
+      const modelWithoutName = omitKey(minimalModel, 'name');
       const result = ModelsDevModelSchema.safeParse(modelWithoutName);
       expect(result.success).toBe(false);
     });
 
     it('fails when limit is missing', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { limit: _, ...modelWithoutLimit } = minimalModel;
+      const modelWithoutLimit = omitKey(minimalModel, 'limit');
       const result = ModelsDevModelSchema.safeParse(modelWithoutLimit);
       expect(result.success).toBe(false);
     });
 
     it('fails when release_date is missing', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { release_date: _, ...modelWithoutDate } = minimalModel;
+      const modelWithoutDate = omitKey(minimalModel, 'release_date');
       const result = ModelsDevModelSchema.safeParse(modelWithoutDate);
       expect(result.success).toBe(false);
     });
 
     it('fails when open_weights is missing', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { open_weights: _, ...modelWithoutOW } = minimalModel;
+      const modelWithoutOW = omitKey(minimalModel, 'open_weights');
       const result = ModelsDevModelSchema.safeParse(modelWithoutOW);
       expect(result.success).toBe(false);
     });

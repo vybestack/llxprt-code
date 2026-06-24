@@ -15,6 +15,11 @@ import { debugLogger } from './debugLogger.js';
 
 const MAX_ITEMS = 200;
 const TRUNCATION_INDICATOR = '...';
+
+function getChildIndent(isLastChildOfParent: boolean): string {
+  return isLastChildOfParent ? '    ' : '│   ';
+}
+
 const DEFAULT_IGNORED_FOLDERS = new Set([
   'node_modules',
   '.git',
@@ -109,30 +114,21 @@ function collectFilesFromEntries(
   itemCount: { count: number },
 ): string[] {
   const filesInCurrentDir: string[] = [];
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  const fileEntries = entries.filter((e) => e.isFile());
+  for (const entry of fileEntries) {
     if (itemCount.count >= options.maxItems) {
       folderInfo.hasMoreFiles = true;
       break;
     }
     const fileName = entry.name;
     const filePath = path.join(currentPath, fileName);
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (
-      shouldIgnorePath(
+      !shouldIgnorePath(
         filePath,
         options.fileService,
         options.fileFilteringOptions,
-      )
-    ) {
-      continue;
-    }
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    if (
-      !options.fileIncludePattern ||
-      options.fileIncludePattern.test(fileName)
+      ) &&
+      (!options.fileIncludePattern || options.fileIncludePattern.test(fileName))
     ) {
       filesInCurrentDir.push(fileName);
       itemCount.count++;
@@ -152,10 +148,8 @@ function collectSubFoldersFromEntries(
   queue: Array<{ folderInfo: FullFolderInfo; currentPath: string }>,
 ): FullFolderInfo[] {
   const subFoldersInCurrentDir: FullFolderInfo[] = [];
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
+  const dirEntries = entries.filter((e) => e.isDirectory());
+  for (const entry of dirEntries) {
     if (itemCount.count >= options.maxItems) {
       folderInfo.hasMoreSubfolders = true;
       break;
@@ -168,7 +162,6 @@ function collectSubFoldersFromEntries(
       options.fileService,
       options.fileFilteringOptions,
     );
-    // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     if (options.ignoredFolders.has(subFolderName) || isIgnored) {
       subFoldersInCurrentDir.push({
         name: subFolderName,
@@ -181,21 +174,20 @@ function collectSubFoldersFromEntries(
       });
       itemCount.count++;
       folderInfo.totalChildren++;
-      continue;
+    } else {
+      const subFolderNode: FullFolderInfo = {
+        name: subFolderName,
+        path: subFolderPath,
+        files: [],
+        subFolders: [],
+        totalChildren: 0,
+        totalFiles: 0,
+      };
+      subFoldersInCurrentDir.push(subFolderNode);
+      itemCount.count++;
+      folderInfo.totalChildren++;
+      queue.push({ folderInfo: subFolderNode, currentPath: subFolderPath });
     }
-
-    const subFolderNode: FullFolderInfo = {
-      name: subFolderName,
-      path: subFolderPath,
-      files: [],
-      subFolders: [],
-      totalChildren: 0,
-      totalFiles: 0,
-    };
-    subFoldersInCurrentDir.push(subFolderNode);
-    itemCount.count++;
-    folderInfo.totalChildren++;
-    queue.push({ folderInfo: subFolderNode, currentPath: subFolderPath });
   }
   return subFoldersInCurrentDir;
 }
@@ -219,33 +211,34 @@ async function readFullStructure(
   const itemCount = { count: 0 };
   const processedPaths = new Set<string>();
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   while (queue.length > 0) {
     const { folderInfo, currentPath } = queue.shift()!;
 
-    if (processedPaths.has(currentPath)) continue;
+    if (processedPaths.has(currentPath)) {
+      continue;
+    }
     processedPaths.add(currentPath);
 
-    if (itemCount.count >= options.maxItems) continue;
+    if (itemCount.count < options.maxItems) {
+      const entries = await readDirectoryEntries(currentPath, rootPath);
+      if (entries === null) return null;
 
-    const entries = await readDirectoryEntries(currentPath, rootPath);
-    if (entries === null) return null;
-
-    folderInfo.files = collectFilesFromEntries(
-      entries,
-      currentPath,
-      folderInfo,
-      options,
-      itemCount,
-    );
-    folderInfo.subFolders = collectSubFoldersFromEntries(
-      entries,
-      currentPath,
-      folderInfo,
-      options,
-      itemCount,
-      queue,
-    );
+      folderInfo.files = collectFilesFromEntries(
+        entries,
+        currentPath,
+        folderInfo,
+        options,
+        itemCount,
+      );
+      folderInfo.subFolders = collectSubFoldersFromEntries(
+        entries,
+        currentPath,
+        folderInfo,
+        options,
+        itemCount,
+        queue,
+      );
+    }
   }
 
   return rootNode;
@@ -282,8 +275,7 @@ function formatStructure(
   // Otherwise, children's indent extends from the current node's indent.
   const indentForChildren = isProcessingRootNode
     ? ''
-    : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      currentIndent + (isLastChildOfParent ? '    ' : '│   ');
+    : currentIndent + getChildIndent(isLastChildOfParent);
 
   // Render files of the current node
   const fileCount = node.files.length;

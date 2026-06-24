@@ -21,7 +21,6 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
  * ProviderTelemetryContext import retained for backward compatibility;
  * core-owned TelemetryContext contract is available for injection path.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { TelemetryContext as ProviderTelemetryContext } from './contracts/TelemetryContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import { separateSettings } from '@vybestack/llxprt-code-settings';
