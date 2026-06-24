@@ -166,6 +166,22 @@ export interface AuthBucket {
   readonly active: boolean;
 }
 
+// @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+export interface AuthProviderDetail {
+  readonly provider: string;
+  readonly authenticated: boolean;
+  readonly oauthEnabled: boolean;
+  readonly expiry?: number;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+export interface AuthBucketStatus {
+  readonly bucket: string;
+  readonly authenticated: boolean;
+  readonly expiry?: number;
+  readonly isSessionBucket: boolean;
+}
+
 export interface KeyInfo {
   readonly name: string;
   readonly provider?: string;
@@ -275,6 +291,10 @@ export interface AgentAuthControl {
     baseUrl: string | null,
     opts?: { readonly provider?: string },
   ): Promise<void>;
+  // @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+  detailedStatus(provider: string): Promise<AuthProviderDetail>;
+  getHigherPriorityAuth(provider: string): Promise<string | null>;
+  listBucketStatuses(provider: string): Promise<readonly AuthBucketStatus[]>;
 }
 
 export interface AgentIdeControl {

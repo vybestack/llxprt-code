@@ -472,6 +472,8 @@ export class AgentImpl implements Agent {
         }
       },
       keysDeps,
+      // @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+      getOAuthManager: () => this.deps.oauthManager,
     });
   }
 
