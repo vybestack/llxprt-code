@@ -131,9 +131,10 @@ function extractUsageMetadata(
 
   return {
     usage: {
-      promptTokens: usage.input_tokens,
+      promptTokens: usage.input_tokens + cacheRead + cacheCreation,
       completionTokens: usage.output_tokens,
-      totalTokens: usage.input_tokens + usage.output_tokens,
+      totalTokens:
+        usage.input_tokens + usage.output_tokens + cacheRead + cacheCreation,
       cache_read_input_tokens: cacheRead,
       cache_creation_input_tokens: cacheCreation,
     },

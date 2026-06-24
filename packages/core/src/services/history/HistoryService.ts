@@ -76,6 +76,7 @@ export class HistoryService
   private baseTokenOffset: number = 0;
   private tokenizerCache = new Map<string, ITokenizer>();
   private tokenizerLock: Promise<void> = Promise.resolve();
+  private syncGeneration: number = 0;
   private logger = new DebugLogger('llxprt:history:service');
 
   /**
@@ -235,9 +236,11 @@ export class HistoryService
     }
 
     const normalized = Math.max(0, Math.floor(actualTotal));
+    const generation = this.syncGeneration;
 
-    // Ensure sync happens after any pending token estimation updates.
     this.tokenizerLock = this.tokenizerLock.then(() => {
+      if (generation !== this.syncGeneration) return;
+
       const currentTotal = this.getTotalTokens();
       const drift = normalized - currentTotal;
 
@@ -252,6 +255,16 @@ export class HistoryService
         addedTokens: drift,
         contentId: null,
       });
+    });
+  }
+
+  resetTokenAccounting(): void {
+    this.syncGeneration++;
+    this.baseTokenOffset = 0;
+    this.emit('tokensUpdated', {
+      totalTokens: this.getTotalTokens(),
+      addedTokens: 0,
+      contentId: null,
     });
   }
 
@@ -425,16 +438,13 @@ export class HistoryService
    * @requirement REQ-HD-003.6
    * @pseudocode history-service.md lines 90-120
    */
-  async recalculateTotalTokens(): Promise<void> {
+  async recalculateTotalTokens(modelName?: string): Promise<void> {
     this.tokenizerLock = this.tokenizerLock.then(async () => {
       let newTotal = 0;
-      const defaultModel = 'gpt-4.1';
+      const model = modelName ?? 'gpt-4.1';
 
       for (const entry of this.history) {
-        const entryTokens = await this.estimateContentTokens(
-          entry,
-          defaultModel,
-        );
+        const entryTokens = await this.estimateContentTokens(entry, model);
         newTotal += entryTokens;
       }
 

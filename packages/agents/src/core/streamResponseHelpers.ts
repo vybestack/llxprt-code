@@ -84,15 +84,11 @@ export function trackPromptTokens(
   const promptTokens = iContent.metadata?.usage?.promptTokens;
   if (promptTokens === undefined) return;
 
-  const cacheReads = iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
-  const cacheWrites =
-    iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
-  const combinedPromptTokens = promptTokens + cacheReads + cacheWrites;
   logger.debug(
     () =>
-      `[StreamProcessor] Tracking promptTokens from IContent: ${combinedPromptTokens}`,
+      `[StreamProcessor] Tracking promptTokens from IContent: ${promptTokens}`,
   );
-  compressionHandler.lastPromptTokenCount = combinedPromptTokens;
+  compressionHandler.lastPromptTokenCount = promptTokens;
 }
 
 /**
@@ -323,12 +319,7 @@ export async function recordHistoryWithUsage(
         lastChunkWithMetadata.usageMetadata.candidatesTokenCount ?? 0,
       totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount ?? 0,
     };
-    const usageMetadata =
-      lastChunkWithMetadata.usageMetadata as UsageMetadataWithCache;
-    const cacheReads = usageMetadata.cache_read_input_tokens ?? 0;
-    const cacheWrites = usageMetadata.cache_creation_input_tokens ?? 0;
-    actualPromptTokens =
-      streamingUsageMetadata.promptTokens + cacheReads + cacheWrites;
+    actualPromptTokens = streamingUsageMetadata.promptTokens;
   }
 
   args.conversationManager.recordHistory(

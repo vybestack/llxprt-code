@@ -80,7 +80,6 @@ export function emitResponseTelemetry(
   const totalTokens =
     tokenCounts.input_token_count +
     tokenCounts.output_token_count +
-    tokenCounts.cached_content_token_count +
     tokenCounts.thoughts_token_count +
     tokenCounts.tool_token_count;
 

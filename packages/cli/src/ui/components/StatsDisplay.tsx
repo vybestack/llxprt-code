@@ -73,7 +73,7 @@ const getInputTokens = (
   inputTokens: number | undefined,
   promptTokens: number,
   cachedTokens: number,
-) => inputTokens ?? promptTokens - cachedTokens;
+) => Math.max(0, (inputTokens ?? promptTokens) - cachedTokens);
 
 const hasCodeChanges = (
   files:
