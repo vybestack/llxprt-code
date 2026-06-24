@@ -1249,20 +1249,6 @@ export default tseslint.config(
   // ============================================================================
 
 
-  // Issue #2084: Kimi K2 fixed-format tool-call template regexes.
-  // These parse the vendor-specific protocol emitted by HF/vLLM-style Kimi
-  // deployments. Inputs are bounded to model-generated tool-call sections, and
-  // the patterns use explicit delimiters and lazy quantifiers to avoid
-  // unbounded backtracking. sonarjs/regular-expr is a generic heuristic that
-  // cannot distinguish these reviewed, bounded protocol parsers from unsafe
-  // regexes.
-  {
-    files: ['packages/providers/src/openai/OpenAIResponseParser.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2084 Kimi protocol template regex
-    },
-  },
-
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node
