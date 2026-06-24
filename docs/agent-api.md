@@ -178,7 +178,7 @@ The type is re-exported from core; see the
 ## The `Agent` Control Plane
 
 An `Agent` is the live runtime facade. It exposes top-level methods for sending
-turns and switching provider/model/params, plus seven `readonly` sub-surfaces
+turns and switching provider/model/params, plus nine `readonly` sub-surfaces
 for focused control. See
 [`packages/agents/src/api/agent.ts`](../packages/agents/src/api/agent.ts) for the
 full interface.
