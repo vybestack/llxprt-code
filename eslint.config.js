@@ -35,14 +35,14 @@ const legacyDirectiveCleanupScopes = [
   // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
-  'packages/storage/src/**/*.{ts,tsx}', // #2092
-  // #2089 scope: the five target packages (settings/telemetry/
+  // packages/storage/src is locked in completedDirectiveCleanupScopes (#2119).
+  // packages/auth/src is locked in completedDirectiveCleanupScopes (#2121).
+  // #2089 scope: the four target packages (settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
   // inline lint directives. Those packages are kept in legacy scope so
   // existing directives do not break lint. The target files and extracted
   // modules are locked in completedDirectiveCleanupScopes below, which
   // overrides this block for those specific files.
-  // packages/auth/src is locked in completedDirectiveCleanupScopes (#2121).
   'packages/settings/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/telemetry/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/ide-integration/src/**/*.{ts,tsx}', // #2089 (non-target files)
@@ -362,9 +362,10 @@ const completedDirectiveCleanupScopes = [
   'packages/mcp/src/client/mcp-client.oauth.test.ts', // #2092
   'packages/mcp/src/client/mcp-tool.execute.test.ts', // #2092
   'packages/mcp/src/client/mcp-tool.confirm.test.ts', // #2092
-  'packages/storage/src/secure-store/secure-store.basic.test.ts', // #2092
-  'packages/storage/src/secure-store/secure-store.fallback2.test.ts', // #2092
-  'packages/storage/src/secure-store/secure-store.fallback.test.ts', // #2092
+  // #2119 — all packages/storage/src files are now fully compliant: zero inline
+  // lint directives. The broad glob below supersedes the individual #2092
+  // storage entries above. Locked to error so any new directive fails immediately.
+  'packages/storage/src/**/*.{ts,tsx}', // #2119
 ];
 
 export default tseslint.config(
