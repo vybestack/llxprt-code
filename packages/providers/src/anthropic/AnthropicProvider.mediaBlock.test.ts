@@ -351,6 +351,137 @@ describe('AnthropicProvider MediaBlock support', () => {
     });
   });
 
+  it('should correct mismatched declared MIME type to actual format detected from image bytes (issue #2130)', async () => {
+    mockMessagesCreate.mockResolvedValue(createMockStream('I see the image'));
+
+    const pngBytesDeclaredAsJpeg = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52,
+    ]).toString('base64');
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Describe this image' },
+          {
+            type: 'media',
+            mimeType: 'image/jpeg',
+            data: pngBytesDeclaredAsJpeg,
+            encoding: 'base64' as const,
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+    for await (const _chunk of generator) {
+      // consume
+    }
+
+    const request = mockMessagesCreate.mock.calls[0][0];
+    const anthropicMessages = request.messages as AnthropicMessage[];
+    const userMsg = anthropicMessages.find((m) => m.role === 'user');
+    const contentArray = userMsg!.content as AnthropicContentBlock[];
+
+    const imageBlock = contentArray.find(
+      (b) => b.type === 'image',
+    ) as AnthropicImageBlock;
+    expect(imageBlock).toBeDefined();
+    expect(imageBlock.source).toStrictEqual({
+      type: 'base64',
+      media_type: 'image/png',
+      data: pngBytesDeclaredAsJpeg,
+    });
+  });
+
+  it('should correct mismatched declared MIME type inside tool_result images (issue #2130)', async () => {
+    mockMessagesCreate.mockResolvedValue(createMockStream('I see the image'));
+
+    const pngBytesDeclaredAsJpeg = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52,
+    ]).toString('base64');
+
+    const toolCallId = 'hist_tool_readfile_2130';
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Read that image' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: toolCallId,
+            name: 'read_file',
+            parameters: { path: 'photo.jpg' },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: toolCallId,
+            toolName: 'read_file',
+            result: { output: 'Binary content provided (1 item(s)).' },
+          },
+          {
+            type: 'media',
+            mimeType: 'image/jpeg',
+            data: pngBytesDeclaredAsJpeg,
+            encoding: 'base64' as const,
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+    for await (const _chunk of generator) {
+      // consume
+    }
+
+    const request = mockMessagesCreate.mock.calls[0][0];
+    const anthropicMessages = request.messages as AnthropicMessage[];
+
+    const toolResultMsg = anthropicMessages.find(
+      (msg) =>
+        msg.role === 'user' &&
+        Array.isArray(msg.content) &&
+        msg.content.some((b) => b.type === 'tool_result'),
+    );
+    expect(toolResultMsg).toBeDefined();
+
+    const toolResultBlock = (
+      toolResultMsg!.content as AnthropicContentBlock[]
+    ).find((b) => b.type === 'tool_result') as AnthropicContentBlock & {
+      type: 'tool_result';
+    };
+    expect(toolResultBlock).toBeDefined();
+    expect(Array.isArray(toolResultBlock.content)).toBe(true);
+
+    const contentParts = toolResultBlock.content as Array<
+      | { type: 'text'; text: string }
+      | AnthropicImageBlock
+      | AnthropicDocumentBlock
+    >;
+    const imagePart = contentParts.find(
+      (p) => p.type === 'image',
+    ) as AnthropicImageBlock;
+    expect(imagePart).toBeDefined();
+    expect(imagePart.source).toStrictEqual({
+      type: 'base64',
+      media_type: 'image/png',
+      data: pngBytesDeclaredAsJpeg,
+    });
+  });
   it('should use url source type for URL-encoded media', async () => {
     mockMessagesCreate.mockResolvedValue(createMockStream('OK'));
 
