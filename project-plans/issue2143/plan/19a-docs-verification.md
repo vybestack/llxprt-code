@@ -44,8 +44,16 @@ for SYM in ApprovalMode PolicyDecision PolicyRuleView AgentTaskInfo HookInfo Aut
 done
 grep -qE "export \{ PolicyDecision, ApprovalMode \}" packages/agents/src/api/index.ts || { echo "FAIL: enums not actually on barrel"; exit 1; }
 
-# 3. No escape hatch in examples.
-if grep -nE "@vybestack/llxprt-code-core/" "$D"; then echo "FAIL: deep-core import in docs"; exit 1; fi
+# 3. No NEW escape hatch. P19 is additive docs; it must not ADD any deep-core
+#    reference. NOTE: HEAD already contains intentional prose mentions of
+#    `@vybestack/llxprt-code-core/...` — the telemetry source path and the
+#    "Import Boundary for #1595" section that documents what NOT to import.
+#    The append-only constraint forbids removing them, so a blunt whole-file
+#    grep can never pass; gate only what THIS phase ADDED (the real escape risk:
+#    a new code example reaching around the public API).
+if git diff HEAD -- "$D" | grep -E "^\+" | grep -vE "^\+\+\+" | grep -qE "@vybestack/llxprt-code-core/"; then
+  echo "FAIL: P19 added a deep-core reference in docs"; exit 1
+fi
 grep -qE "from '@vybestack/llxprt-code-agents'" "$D" || { echo "FAIL: examples not public-root"; exit 1; }
 
 # 4. Six command rows + map parity with the production map.

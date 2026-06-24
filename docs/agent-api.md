@@ -2,6 +2,8 @@
 
 # Agent API
 
+<!-- @plan:PLAN-20260622-COREAPIGAP.P19 @requirement:REQ-010 -->
+
 The Agent API is the public, embeddable surface for driving an LLxprt agent
 from your own code — without the CLI. You create an agent, send it input, and
 consume a typed event stream. The same primitives the CLI uses are exposed as a
@@ -206,6 +208,36 @@ full interface.
 | `getUserTier()`                                                           | Returns the provider user tier, if known.                           |
 | `getCurrentSequenceModel()`                                               | Current load-balancer sequence model, or `null`.                    |
 
+### Top-level: approval mode
+
+Read and mutate the live approval mode — the tool-confirmation policy the agent
+applies on every turn. Both methods delegate directly to the bound `Config`
+(no caching), so they always reflect the runtime's current state.
+
+```ts
+import { createAgent, ApprovalMode } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+
+agent.getApprovalMode(); // → ApprovalMode.DEFAULT (default)
+agent.setApprovalMode(ApprovalMode.AUTO_EDIT);
+agent.getApprovalMode(); // → ApprovalMode.AUTO_EDIT
+```
+
+`ApprovalMode` is a runtime VALUE enum exported from the public root:
+
+| Member      | Meaning                                          |
+| ----------- | ------------------------------------------------ |
+| `DEFAULT`   | Confirm every tool call (interactive prompt).    |
+| `AUTO_EDIT` | Auto-approve edit-class tools; confirm the rest. |
+| `YOLO`      | Auto-approve all tools (no confirmation).        |
+
+> **Untrusted-folder guard.** `setApprovalMode` delegates to the bound `Config`,
+> which throws
+> `"Cannot enable privileged approval modes in an untrusted folder."` for any
+> non-`DEFAULT` mode when the working directory is not trusted. That throw
+> propagates **unchanged** — it is not caught or normalized by the agent.
+
 ### Top-level: history & stats
 
 `getHistory` / `setHistory` / `addHistory` / `restoreHistory` / `resetChat`
@@ -239,10 +271,100 @@ Live tool registry + confirmation wiring: `list()`, `setEnabled(names)`,
 `onConfirmationRequest(cb)`, `respondToConfirmation(confirmationId, decision)`,
 `onToolUpdate(cb)`, `setEditorCallbacks(cbs)`.
 
+##### `agent.tools.keys` — `AgentToolKeyControl`
+
+Built-in tool API-key storage (distinct from `agent.auth.keys`, which manages
+**provider-auth** keys). Each method targets a built-in tool that consumes its
+own API key (e.g. a search or web tool):
+
+```ts
+agent.tools.keys.supported(): readonly ToolKeyInfo[]
+agent.tools.keys.status(toolName: string): Promise<ToolKeyStatus>   // masked
+agent.tools.keys.save(toolName: string, key: string): Promise<void>
+agent.tools.keys.delete(toolName: string): Promise<void>
+agent.tools.keys.setKeyFile(toolName: string, path: string | null): Promise<void>
+agent.tools.keys.getKeyFile(toolName: string): Promise<string | null>
+```
+
+`ToolKeyInfo` = `{ toolName: string; displayName: string; description?: string }`.
+`ToolKeyStatus` = `{ toolName: string; hasKey: boolean; maskedKey?: string; keyFile?: string }`.
+
+```ts
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+
+// Discover which built-in tools accept an API key.
+for (const info of agent.tools.keys.supported()) {
+  console.log(info.toolName, info.displayName);
+}
+
+// Store a key (masked on read-back).
+await agent.tools.keys.save('web-search', 'sk-live-xxxxxxxx');
+const status = await agent.tools.keys.status('web-search');
+console.log(status.hasKey, status.maskedKey); // true 'sk-l••••••••xxxx'
+```
+
+> **SECURITY — masked only.** Raw secret values are **never** returned.
+> `status(...)` surfaces only `maskedKey` (a redacted preview) and `keyFile`
+> (a path reference); the full key is write-only through `save(...)`.
+
 #### `agent.mcp` — `AgentMcpControl`
 
 **Runtime-only** view of MCP servers: `listServers()`, `status()`,
 `toolsByServer()`, `auth(server)`, `discoveryState()`, `refresh(server?)`.
+
+OAuth + detailed inspection (added by #2143):
+
+```ts
+agent.mcp.authenticate(server: string): Promise<McpServerAuthStatus>   // real OAuth flow + post-auth tool refresh
+agent.mcp.details(opts?: McpDetailsOptions): Promise<McpDetailStatus>
+```
+
+- `McpServerAuthStatus` = `{ server: string; authenticated: boolean; requiresAuth: boolean; authUrl?: string }`.
+- `McpDetailsOptions` = `{ includeTools?: boolean; includePrompts?: boolean; includeResources?: boolean }`.
+- `McpDetailStatus` = `{ servers: readonly McpServerDetail[]; blockedServers: readonly McpBlockedServer[] }`.
+
+`authenticate(server)` runs the real OAuth flow against a server that requires
+auth, then refreshes that server's tool declarations so the live tool list
+stays in sync. `details(opts?)` returns a structured snapshot of every server
+(auth status, tools/prompts/resources as requested) plus any servers blocked by
+an extension.
+
+```ts
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({
+  provider: 'fake',
+  model: 'fake-model',
+  mcpServers: {
+    'auth-required-server': {
+      /* … */
+    },
+  },
+});
+
+// Run OAuth for a server that requires it.
+const authStatus = await agent.mcp.authenticate('auth-required-server');
+if (authStatus.authUrl) {
+  // Direct the user to authStatus.authUrl to complete the flow.
+}
+
+// Full structural snapshot (tools + prompts + resources).
+const detail = await agent.mcp.details({
+  includeTools: true,
+  includePrompts: true,
+  includeResources: true,
+});
+for (const server of detail.servers) {
+  console.log(server.name, server.authenticated, server.tools?.length);
+}
+```
+
+> **Refresh parity.** `agent.mcp.refresh(server?)` restarts the target server
+> (or all servers when called with no argument) **and** re-publishes its tool
+> declarations (`setTools` parity), so the live tool list tracks server
+> restarts without a separate manual publish step.
 
 > **Runtime-only.** `agent.mcp` reflects the _live_ connection set. Durable
 > MCP server add/remove is **not** here — it lives on the
@@ -257,6 +379,43 @@ Provider authentication: `login(provider, opts?)`, `logout(provider, opts?)`,
 `setBaseUrl(baseUrl, opts?)`, and a nested `keys` control
 (`AgentAuthKeysControl`: `list`, `save`, `use`, `delete`, `setRaw`,
 `setKeyFile`). See [Authentication](#authentication-and-precedence).
+
+Detailed provider/bucket metadata (added by #2143):
+
+```ts
+agent.auth.detailedStatus(provider: string): Promise<AuthProviderDetail>
+agent.auth.getHigherPriorityAuth(provider: string): Promise<string | null>
+agent.auth.listBucketStatuses(provider: string): Promise<readonly AuthBucketStatus[]>
+```
+
+- `AuthProviderDetail` = `{ provider: string; authenticated: boolean; oauthEnabled: boolean; expiry?: number }`.
+- `AuthBucketStatus` = `{ bucket: string; authenticated: boolean; expiry?: number; isSessionBucket: boolean }`.
+
+`detailedStatus(provider)` returns a single provider's auth profile (whether
+OAuth is enabled, token expiry). `getHigherPriorityAuth(provider)` reports the
+name of the highest-priority auth source currently winning for that provider, or
+`null` if none. `listBucketStatuses(provider)` returns per-bucket auth/expiry
+metadata for providers that support multiple buckets.
+
+```ts
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+
+const detail = await agent.auth.detailedStatus('openai');
+console.log(detail.authenticated, detail.oauthEnabled, detail.expiry);
+
+const winner = await agent.auth.getHigherPriorityAuth('openai');
+console.log(winner); // e.g. 'keyName' | 'keyfile' | 'oauth' | null
+
+for (const bucket of await agent.auth.listBucketStatuses('openai')) {
+  console.log(bucket.bucket, bucket.authenticated, bucket.isSessionBucket);
+}
+```
+
+> **SECURITY — masked only.** These methods return **metadata only** —
+> `authenticated` flags, `expiry` timestamps, and reference names. Raw token
+> strings are **never** returned.
 
 #### `agent.ide` — `AgentIdeControl`
 
@@ -273,6 +432,104 @@ Session lifecycle: `resume(target, options?)`, `createCheckpoint(label?)`,
 
 Lifecycle hooks: `onHookExecution(cb)`, `triggerSessionStart()`,
 `triggerSessionEnd()`, `clear()`.
+
+Hook administration (added by #2143):
+
+```ts
+agent.hooks.listHooks(): readonly HookInfo[]
+agent.hooks.getDisabledHooks(): readonly string[]
+agent.hooks.setDisabledHooks(names: readonly string[]): void
+agent.hooks.enable(name: string): void
+agent.hooks.disable(name: string): void
+```
+
+`HookInfo` = `{ name: string; eventName: string; enabled: boolean; source?: string }`.
+
+`listHooks()` returns the full registered-hook registry (name, event, enabled
+flag, source). `getDisabledHooks()` / `setDisabledHooks(names)` read/replace the
+disabled-hook name list in one call. `enable(name)` / `disable(name)` toggle a
+single hook by name.
+
+```ts
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+
+for (const hook of agent.hooks.listHooks()) {
+  console.log(hook.name, hook.eventName, hook.enabled);
+}
+
+agent.hooks.disable('my-pre-send-hook');
+console.log(agent.hooks.getDisabledHooks()); // ['my-pre-send-hook']
+agent.hooks.enable('my-pre-send-hook');
+```
+
+> **Undefined-safe.** When no hook system is present, `listHooks()` → `[]`,
+> `getDisabledHooks()` → `[]`, and the setters are no-ops.
+
+#### `agent.policy` — `AgentPolicyControl`
+
+Read-only inspection of the engine policy (added by #2143):
+
+```ts
+agent.policy.getRules(): readonly PolicyRuleView[]
+agent.policy.getDefaultDecision(): PolicyDecision
+agent.policy.isNonInteractive(): boolean
+```
+
+- `PolicyRuleView` = `{ priority?: number; toolName?: string; decision: PolicyDecision; argsPattern?: string; source?: string }`.
+  Note `argsPattern` is the RegExp **source string** (JSON-safe) — never a live
+  `RegExp`. Read-only inspection; rule mutation is intentionally out of scope.
+
+`getRules()` returns the active policy rule set in priority order.
+`getDefaultDecision()` returns the fallback `PolicyDecision` applied when no
+rule matches. `isNonInteractive()` reports whether the engine is running in a
+non-interactive context (no confirmation prompts).
+
+```ts
+import { createAgent, PolicyDecision } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+
+for (const rule of agent.policy.getRules()) {
+  console.log(rule.priority, rule.toolName, rule.decision, rule.argsPattern);
+}
+console.log(agent.policy.getDefaultDecision()); // e.g. PolicyDecision.ALLOW
+console.log(agent.policy.isNonInteractive()); // false
+```
+
+#### `agent.tasks` — `AgentTasksControl`
+
+Undefined-safe async-task administration (added by #2143):
+
+```ts
+agent.tasks.list(): readonly AgentTaskInfo[]
+agent.tasks.listRunning(): readonly AgentTaskInfo[]
+agent.tasks.get(id: string): AgentTaskInfo | undefined
+agent.tasks.cancel(id: string): boolean
+agent.tasks.cancelAllRunning(): number   // returns count cancelled
+```
+
+`AgentTaskInfo` = `{ id: string; subagentName: string; goalPrompt: string; status: 'running'|'completed'|'failed'|'cancelled'; launchedAt: number; completedAt?: number; error?: string }`.
+Note `abortController` is intentionally **NOT** exposed (projected public type
+omits non-serializable internals).
+
+```ts
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+
+for (const task of agent.tasks.listRunning()) {
+  console.log(task.id, task.subagentName, task.goalPrompt);
+}
+
+const cancelled = agent.tasks.cancelAllRunning();
+console.log(`Cancelled ${cancelled} running task(s).`);
+```
+
+> **Undefined-safe.** When no async-task manager is present, `list()` /
+> `listRunning()` → `[]`, `get(id)` → `undefined`, `cancel(id)` → `false`,
+> `cancelAllRunning()` → `0`.
 
 ### `dispose()`
 
@@ -637,6 +894,54 @@ break under #1595:
 The stable contract is the curated root + the two documented subpaths above.
 Anything under a package's internal source tree has no stability guarantee.
 
+## New public enums & projected types (#2143)
+
+Issue #2143 promoted a set of enums and projected types to the **public root**
+(`@vybestack/llxprt-code-agents`) so a #1595 developer can construct and inspect
+these values without a deep import into the core package's internals or an
+`agent.getConfig()` escape hatch.
+
+### VALUE enums
+
+These are real runtime values (enum members round-trip), importable from the
+public root:
+
+```ts
+import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-agents';
+
+// ApprovalMode: DEFAULT | AUTO_EDIT | YOLO  (see "Top-level: approval mode")
+// PolicyDecision: ALLOW | DENY | ASK        (see "agent.policy")
+console.log(ApprovalMode.DEFAULT, PolicyDecision.ALLOW);
+```
+
+### Projected types
+
+These are type-only exports (compile-time shapes for the inspection methods
+above); import them as types from the public root:
+
+```ts
+import type {
+  PolicyRuleView,
+  AgentTaskInfo,
+  HookInfo,
+  AuthProviderDetail,
+  AuthBucketStatus,
+  McpServerAuthStatus,
+  McpDetailStatus,
+  McpServerDetail,
+  McpDetailsOptions,
+  McpPromptInfo,
+  McpResourceInfo,
+  McpBlockedServer,
+  ToolKeyInfo,
+  ToolKeyStatus,
+} from '@vybestack/llxprt-code-agents';
+```
+
+Each projected type omits non-serializable internals (e.g. `abortController` on
+`AgentTaskInfo`, live `RegExp` on `PolicyRuleView`'s `argsPattern` string field)
+so the public surface is JSON-safe and stable across versions.
+
 ## Runtime vs App-Service
 
 LLxprt distinguishes **runtime** concerns (the live conversation) from
@@ -686,6 +991,21 @@ canonical slash-command → API mapping. Each entry assigns exactly one `kind`:
 The shape of each mapping entry is `{ command, kind, target, exportName?,
 note? }`. See
 [`packages/agents/src/app-services/command-api-map.ts`](../packages/agents/src/app-services/command-api-map.ts).
+
+#### `runtime` rows added by #2143
+
+Six new `runtime` rows map slash-commands onto the live `Agent` sub-surfaces
+documented above. Each `target` is a live `Agent` method path (matching
+`packages/agents/src/app-services/command-api-map.ts`):
+
+| Command          | Kind      | Target                        | Notes                                          |
+| ---------------- | --------- | ----------------------------- | ---------------------------------------------- |
+| `/approval-mode` | `runtime` | `agent.setApprovalMode`       | Live engine approval setting on the active run |
+| `/policies`      | `runtime` | `agent.policy.getRules`       | Policy inspection reads the active run engine  |
+| `/task`          | `runtime` | `agent.tasks.list`            | Async task list/inspect/cancel over active run |
+| `/hooks`         | `runtime` | `agent.hooks.listHooks`       | Hook registry inspection + enable/disable      |
+| `/toolkey`       | `runtime` | `agent.tools.keys.save`       | Built-in tool key storage feeds active run     |
+| `/toolkeyfile`   | `runtime` | `agent.tools.keys.setKeyFile` | Built-in tool keyfile path feeds active run    |
 
 ## Power-User Subpath: `internals.js`
 
@@ -737,3 +1057,14 @@ These decisions shaped the public surface and are recorded here for posterity:
 - **`core/index` trim:** the eventual removal of low-level re-exports from the
   package root is sequenced into issue #1595; today the root entry stays
   additive and non-breaking.
+- **#2143 capability gaps (REQ-001..008):** the top-level approval-mode methods,
+  the `policy` / `tasks` sub-controllers, the extended `hooks` administration,
+  the extended `auth` detailed metadata, the extended `mcp` OAuth/details, and
+  `agent.tools.keys` close the capability gaps that previously forced a
+  `getConfig()` escape hatch or a deep import into the core package's internals.
+  They are a prerequisite to the #1595 public-API trim, shipped under three
+  constraints: **masked-only** (raw secrets/tokens are never returned — only
+  `maskedKey` or reference metadata), **projected public types** (omit
+  non-serializable internals like `abortController` and live `RegExp`), and
+  **delegate-don't-cache** (every method delegates to the bound runtime/config
+  on each call rather than holding a stale snapshot).
