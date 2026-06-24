@@ -258,8 +258,12 @@ export class HistoryService
     });
   }
 
-  resetTokenAccounting(): void {
+  private invalidatePendingSyncs(): void {
     this.syncGeneration++;
+  }
+
+  resetTokenAccounting(): void {
+    this.invalidatePendingSyncs();
     this.baseTokenOffset = 0;
     this.emit('tokensUpdated', {
       totalTokens: this.getTotalTokens(),
@@ -476,6 +480,8 @@ export class HistoryService
    * Release all listeners and internal buffers to allow GC
    */
   dispose(): void {
+    this.invalidatePendingSyncs();
+
     try {
       this.removeAllListeners();
     } catch {
@@ -512,6 +518,8 @@ export class HistoryService
     this.logger.debug('Clearing history', {
       previousLength: this.history.length,
     });
+
+    this.invalidatePendingSyncs();
 
     const previousTokens = this.totalTokens;
     this.history = [];

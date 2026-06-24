@@ -137,6 +137,39 @@ describe('HistoryService - Token Accounting Reset (provider switch)', () => {
     });
   });
 
+  describe('syncTotalTokens race condition (clear and dispose paths)', () => {
+    it('ignores syncTotalTokens queued before clear', async () => {
+      service.add(
+        createUserMessage('Conversation history', { timestamp: Date.now() }),
+        'gpt-4.1',
+      );
+      await service.waitForTokenUpdates();
+
+      service.syncTotalTokens(80000);
+
+      service.clear();
+      await service.waitForTokenUpdates();
+
+      expect(service.getBaseTokenOffset()).toBe(0);
+      expect(service.getTotalTokens()).toBe(0);
+    });
+
+    it('ignores syncTotalTokens queued before dispose', async () => {
+      service.add(
+        createUserMessage('Conversation history', { timestamp: Date.now() }),
+        'gpt-4.1',
+      );
+      await service.waitForTokenUpdates();
+
+      service.syncTotalTokens(80000);
+
+      service.dispose();
+
+      expect(service.getBaseTokenOffset()).toBe(0);
+      expect(service.getTotalTokens()).toBe(0);
+    });
+  });
+
   describe('recalculateTotalTokens with explicit model', () => {
     it('re-estimates history tokens using the provided model tokenizer', async () => {
       const factory = createScalingTokenizerFactory({
