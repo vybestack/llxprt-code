@@ -60,6 +60,8 @@ import { HookControl } from './control/hooks.js';
 import type { HookControlDeps } from './control/hooks.js';
 import { PolicyControl } from './control/policyControl.js';
 import type { PolicyControlDeps } from './control/policyControl.js';
+import { TasksControl } from './control/tasksControl.js';
+import type { TasksControlDeps } from './control/tasksControl.js';
 import { SessionControl } from './control/sessionControl.js';
 import type { SessionControlDeps } from './control/sessionControl.js';
 import { ProfilesControl } from './control/profilesControl.js';
@@ -201,6 +203,8 @@ export class AgentImpl implements Agent {
   readonly session: SessionControl;
   readonly hooks: HookControl;
   readonly policy: PolicyControl;
+  /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
+  readonly tasks: TasksControl;
 
   /** @pseudocode createAgent.md steps 150-160 */
   readonly ownership: OwnershipRecord;
@@ -334,6 +338,7 @@ export class AgentImpl implements Agent {
     this.session = this.buildSessionControl();
     this.hooks = this.buildHookControl();
     this.policy = this.buildPolicyControl();
+    this.tasks = this.buildTasksControl();
   }
 
   /**
@@ -511,6 +516,17 @@ export class AgentImpl implements Agent {
       getEngine: () => this.deps.config.getPolicyEngine(),
     };
     return new PolicyControl(policyDeps);
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P08
+   * @requirement:REQ-003
+   */
+  private buildTasksControl(): TasksControl {
+    const tasksDeps: TasksControlDeps = {
+      getManager: () => this.deps.config.getAsyncTaskManager(),
+    };
+    return new TasksControl(tasksDeps);
   }
 
   /**

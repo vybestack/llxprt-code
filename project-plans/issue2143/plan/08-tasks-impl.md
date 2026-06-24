@@ -175,7 +175,7 @@ T=packages/agents/src/api/control/tasksControl.ts
 test -f "$T"
 
 # project() must NOT spread the task (would leak abortController) (BLOCKING).
-if grep -nE "\.\.\.task\b|\{\s*\.\.\.t\s*\}" "$T"; then echo "FAIL: project spreads task (abortController leak)"; exit 1; fi
+if grep -nE "\.\.\.task\b|\{[[:space:]]*\.\.\.t[[:space:]]*\}" "$T"; then echo "FAIL: project spreads task (abortController leak)"; exit 1; fi
 # abortController must never be referenced as a copied field.
 if grep -nE "abortController" "$T"; then echo "FAIL: abortController referenced in projection"; exit 1; fi
 

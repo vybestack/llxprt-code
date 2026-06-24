@@ -39,7 +39,7 @@ grep -qE "return 0;" "$T" || { echo "FAIL: cancelAllRunning 0-guard"; exit 1; }
 grep -qE "const running = mgr\.getRunningTasks\(\);" "$T" || { echo "FAIL: snapshot-before-iterate"; exit 1; }
 
 # No cache (BLOCKING).
-if grep -nE "this\.(manager|_manager|tasks|_tasks)\s*=" "$T"; then echo "FAIL: cached manager/tasks"; exit 1; fi
+if grep -nE "this\.(manager|_manager|tasks|_tasks)[[:space:]]*=" "$T"; then echo "FAIL: cached manager/tasks"; exit 1; fi
 
 # Re-audit test discipline (BLOCKING).
 if grep -nE "toHaveBeenCalled|mockResolvedValue|mockReturnValue|vi\.spyOn|vi\.fn\(" "$F"; then echo "FAIL: mock theater in test"; exit 1; fi

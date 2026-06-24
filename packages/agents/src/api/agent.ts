@@ -346,6 +346,35 @@ export interface AgentPolicyControl {
   isNonInteractive(): boolean;
 }
 
+/**
+ * Projected public view of an async task. OMITS abortController and any
+ * non-serializable internal (REQ-003.7).
+ * @plan:PLAN-20260622-COREAPIGAP.P08
+ * @requirement:REQ-003
+ */
+export interface AgentTaskInfo {
+  readonly id: string;
+  readonly subagentName: string;
+  readonly goalPrompt: string;
+  readonly status: 'running' | 'completed' | 'failed' | 'cancelled';
+  readonly launchedAt: number;
+  readonly completedAt?: number;
+  readonly error?: string;
+}
+
+/**
+ * Undefined-safe async-task administration (REQ-003).
+ * @plan:PLAN-20260622-COREAPIGAP.P08
+ * @requirement:REQ-003
+ */
+export interface AgentTasksControl {
+  list(): readonly AgentTaskInfo[];
+  listRunning(): readonly AgentTaskInfo[];
+  get(id: string): AgentTaskInfo | undefined;
+  cancel(id: string): boolean;
+  cancelAllRunning(): number;
+}
+
 export interface Agent {
   chat(input: AgentInput, opts?: TurnOptions): Promise<AgentResult>;
   stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent>;
@@ -395,6 +424,8 @@ export interface Agent {
   readonly session: AgentSessionControl;
   readonly hooks: AgentHookControl;
   readonly policy: AgentPolicyControl;
+  /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
+  readonly tasks: AgentTasksControl;
 
   getHistory(): Promise<readonly AgentMessage[]>;
   setHistory(
