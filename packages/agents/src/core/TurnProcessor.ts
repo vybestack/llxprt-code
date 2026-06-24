@@ -613,10 +613,7 @@ export class TurnProcessor {
       return;
     }
 
-    const cacheReads = iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
-    const cacheWrites =
-      iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
-    this.lastPromptTokenCount = promptTokens + cacheReads + cacheWrites;
+    this.lastPromptTokenCount = promptTokens;
     this.compressionHandler.lastPromptTokenCount = this.lastPromptTokenCount;
   }
   private _selectRequestTools(
@@ -830,10 +827,7 @@ export class TurnProcessor {
       | UsageMetadataWithCache
       | undefined;
     if (usageMetadata?.promptTokenCount !== undefined) {
-      const combined =
-        usageMetadata.promptTokenCount +
-        (usageMetadata.cache_read_input_tokens ?? 0) +
-        (usageMetadata.cache_creation_input_tokens ?? 0);
+      const combined = usageMetadata.promptTokenCount;
       if (combined > 0) {
         this.historyService.syncTotalTokens(combined);
         await this.historyService.waitForTokenUpdates();
@@ -843,8 +837,6 @@ export class TurnProcessor {
       this.lastPromptTokenCount > 0 &&
       !Number.isNaN(this.lastPromptTokenCount)
     ) {
-      // lastPromptTokenCount is already cache-adjusted (includes
-      // cache_read + cache_creation tokens) from the provider call path
       this.historyService.syncTotalTokens(this.lastPromptTokenCount);
       await this.historyService.waitForTokenUpdates();
     }

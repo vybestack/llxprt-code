@@ -305,20 +305,52 @@ function resolveRulePatterns(
     );
   } catch (e) {
     const error = e as Error;
-    const patternStr =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      (typeof rule.commandRegex === 'string' && rule.commandRegex !== ''
-        ? rule.commandRegex
-        : '') ||
-      (typeof rule.commandPrefix === 'string' && rule.commandPrefix !== ''
-        ? rule.commandPrefix
-        : '') ||
-      'unknown';
+    const patternStr = resolvePatternDescription(rule);
     errors.push(
       buildRegexError(filePath, file, tierName, patternStr, error.message),
     );
     return null;
   }
+}
+
+/**
+ * Resolves a human-readable description of the pattern that failed to compile.
+ * Prefers commandRegex, then commandPrefix, falling back to 'unknown'.
+ */
+function resolvePatternDescription(rule: PolicyRuleToml): string {
+  if (typeof rule.commandRegex === 'string' && rule.commandRegex !== '') {
+    return rule.commandRegex;
+  }
+  if (typeof rule.commandPrefix === 'string' && rule.commandPrefix !== '') {
+    return rule.commandPrefix;
+  }
+  return 'unknown';
+}
+
+/**
+ * Normalizes an optional string or string[] into an array. When the value is
+ * undefined, returns [undefined] so call sites iterate exactly once.
+ */
+function normalizeToOptionalArray(
+  value: string | string[] | undefined,
+): Array<string | undefined> {
+  if (value === undefined) {
+    return [undefined];
+  }
+  return Array.isArray(value) ? value : [value];
+}
+
+/**
+ * Normalizes an optional string or string[] into a string[]. When the value is
+ * undefined, returns [].
+ */
+function normalizeToStringArray(
+  value: string | string[] | undefined,
+): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
 }
 
 /** Expands a single validated rule into PolicyRule objects, handling toolName/mcpName arrays. */
@@ -333,13 +365,9 @@ function expandRuleToPolicyRules(
     patterns.length > 0 ? patterns : [undefined];
 
   return argsPatterns.flatMap((argsPattern) => {
-    const toolNames: Array<string | undefined> =
-      rule.toolName !== undefined
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          Array.isArray(rule.toolName)
-          ? rule.toolName
-          : [rule.toolName]
-        : [undefined];
+    const toolNames: Array<string | undefined> = normalizeToOptionalArray(
+      rule.toolName,
+    );
 
     return toolNames.map((toolName) => {
       const hasMcpName = rule.mcpName !== undefined && rule.mcpName !== '';
@@ -524,12 +552,7 @@ function expandTomlRule(
   const hasCommandRegex =
     rule.commandRegex !== undefined && rule.commandRegex !== '';
   if (hasCommandPrefix) {
-    const prefixes = Array.isArray(rule.commandPrefix)
-      ? rule.commandPrefix
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        rule.commandPrefix !== undefined
-        ? [rule.commandPrefix]
-        : [];
+    const prefixes = normalizeToStringArray(rule.commandPrefix);
     commandPrefixes.push(...prefixes);
   } else if (hasCommandRegex) {
     effectiveArgsPattern = `"command":"${rule.commandRegex}`;
@@ -546,13 +569,9 @@ function expandTomlRule(
 
   // For each argsPattern, expand toolName arrays
   return argsPatterns.flatMap((argsPattern) => {
-    const toolNames: Array<string | undefined> =
-      rule.toolName !== undefined
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          Array.isArray(rule.toolName)
-          ? rule.toolName
-          : [rule.toolName]
-        : [undefined];
+    const toolNames: Array<string | undefined> = normalizeToOptionalArray(
+      rule.toolName,
+    );
 
     // Create a policy rule for each tool name
     return toolNames.map((toolName) => {

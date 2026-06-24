@@ -85,6 +85,59 @@ describe('tokenLimit', () => {
     });
   });
 
+  describe('Codex (gpt-5.x) models', () => {
+    it('should return 256K limit for gpt-5.3-codex', () => {
+      expect(tokenLimit('gpt-5.3-codex')).toBe(262_144);
+    });
+
+    it('should return 128K limit for gpt-5.3-codex-spark (smaller window)', () => {
+      expect(tokenLimit('gpt-5.3-codex-spark')).toBe(131_072);
+    });
+
+    it('should return 256K limit for gpt-5.2-codex', () => {
+      expect(tokenLimit('gpt-5.2-codex')).toBe(262_144);
+    });
+
+    it('should return 256K limit for gpt-5.1-codex', () => {
+      expect(tokenLimit('gpt-5.1-codex')).toBe(262_144);
+    });
+
+    it('should return 256K limit for gpt-5.1-codex-max', () => {
+      expect(tokenLimit('gpt-5.1-codex-max')).toBe(262_144);
+    });
+
+    it('should return 256K limit for gpt-5.1-codex-mini', () => {
+      expect(tokenLimit('gpt-5.1-codex-mini')).toBe(262_144);
+    });
+
+    it('should handle codex provider prefix', () => {
+      expect(tokenLimit('codex:gpt-5.3-codex')).toBe(262_144);
+      expect(tokenLimit('codex:gpt-5.3-codex-spark')).toBe(131_072);
+    });
+
+    it('should return 256K for codex-prefixed non-suffixed models', () => {
+      // These IDs contain no "codex" substring, so only the provider prefix
+      // can identify them as Codex models (per CODEX_MODELS.ts).
+      expect(tokenLimit('codex:gpt-5.5')).toBe(262_144);
+      expect(tokenLimit('codex:gpt-5.4')).toBe(262_144);
+      expect(tokenLimit('codex:gpt-5.2')).toBe(262_144);
+      expect(tokenLimit('codex:gpt-5.1')).toBe(262_144);
+    });
+
+    it('should treat bare non-suffixed gpt-5.x IDs as ambiguous (default)', () => {
+      // Without the codex provider prefix, a bare "gpt-5.5" could be either
+      // a regular OpenAI or a Codex model, so it must fall through to the
+      // default rather than assume the 256K Codex window.
+      expect(tokenLimit('gpt-5.5')).toBe(DEFAULT_TOKEN_LIMIT);
+      expect(tokenLimit('gpt-5.4')).toBe(DEFAULT_TOKEN_LIMIT);
+      expect(tokenLimit('openai:gpt-5.5')).toBe(DEFAULT_TOKEN_LIMIT);
+    });
+
+    it('honors a user-supplied context limit override for codex models', () => {
+      expect(tokenLimit('gpt-5.3-codex', 500_000)).toBe(500_000);
+    });
+  });
+
   describe('Default behavior', () => {
     it('should return default limit for unknown models', () => {
       expect(tokenLimit('unknown-model')).toBe(DEFAULT_TOKEN_LIMIT);

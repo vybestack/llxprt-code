@@ -144,8 +144,9 @@ describe('Token Tracking Integration Tests', () => {
     expect(initialUsage.total).toBe(0);
 
     // Simulate token accumulation from provider responses
+    // Note: input includes cache tokens (total-including-cache invariant)
     const usage1 = {
-      input: 120,
+      input: 140,
       output: 80,
       cache: 20,
       tool: 10,
@@ -155,13 +156,13 @@ describe('Token Tracking Integration Tests', () => {
     providerManager.accumulateSessionTokens('test-provider', usage1);
 
     const afterFirstUsage = providerManager.getSessionTokenUsage();
-    expect(afterFirstUsage.input).toBe(120);
+    expect(afterFirstUsage.input).toBe(140);
     expect(afterFirstUsage.output).toBe(80);
     expect(afterFirstUsage.total).toBe(235);
 
     // Add more usage
     const usage2 = {
-      input: 150,
+      input: 180,
       output: 90,
       cache: 30,
       tool: 15,
@@ -171,7 +172,7 @@ describe('Token Tracking Integration Tests', () => {
     providerManager.accumulateSessionTokens('test-provider', usage2);
 
     const finalUsage = providerManager.getSessionTokenUsage();
-    expect(finalUsage.input).toBe(270); // 120 + 150
+    expect(finalUsage.input).toBe(320); // 140 + 180
     expect(finalUsage.output).toBe(170); // 80 + 90
     expect(finalUsage.total).toBe(530); // 235 + 295
   });

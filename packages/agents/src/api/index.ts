@@ -18,3 +18,26 @@ export { listProviders, listTools } from './discovery.js';
 export { mapLoopStream, mapStreamEvent } from './eventAdapter.js';
 export { toConfigParameters, AdapterError } from './agentConfig.adapter.js';
 export type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+
+/**
+ * @plan:PLAN-20260622-COREAPIGAP.P17
+ * @requirement:REQ-008
+ * @pseudocode barrel-exports.md lines 1-9
+ */
+export { PolicyDecision, ApprovalMode } from '@vybestack/llxprt-code-core';
+export type {
+  PolicyRuleView,
+  AgentTaskInfo,
+  HookInfo,
+  AuthProviderDetail,
+  AuthBucketStatus,
+  McpServerAuthStatus,
+  McpDetailStatus,
+  McpServerDetail,
+  McpDetailsOptions,
+  McpPromptInfo,
+  McpResourceInfo,
+  McpBlockedServer,
+  ToolKeyInfo,
+  ToolKeyStatus,
+} from './agent.js';

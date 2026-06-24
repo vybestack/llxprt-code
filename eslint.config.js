@@ -33,21 +33,21 @@ const legacyDirectiveCleanupScopes = [
   // #2083 completed files are locked in completedDirectiveCleanupScopes below.
   // #2116: provider module entries removed after directive cleanup.
   // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
-  // #2114: CLI source is fully directive-free and locked in
-  // completedDirectiveCleanupScopes; it must NOT appear here.
-  'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
+  // #2114: CLI source is fully directive-free and enforced directly by
+  // checkCliSourcePolicy; it must NOT appear in either scope array.
+  // packages/policy/src is locked in completedDirectiveCleanupScopes (#2122).
   // packages/storage/src is locked in completedDirectiveCleanupScopes (#2119).
   // packages/auth/src is locked in completedDirectiveCleanupScopes (#2121).
-  // #2089 scope: the four target packages (settings/telemetry/
-  // ide-integration/a2a-server) still contain other files with legacy
-  // inline lint directives. Those packages are kept in legacy scope so
-  // existing directives do not break lint. The target files and extracted
-  // modules are locked in completedDirectiveCleanupScopes below, which
-  // overrides this block for those specific files.
+  // packages/a2a-server/src is locked in completedDirectiveCleanupScopes (#2123).
+  // #2089 scope: the three remaining target packages (settings/telemetry/
+  // ide-integration) still contain other files with legacy inline lint
+  // directives. Those packages are kept in legacy scope so existing directives
+  // do not break lint. The target files and extracted modules are locked in
+  // completedDirectiveCleanupScopes below, which overrides this block for those
+  // specific files.
   'packages/settings/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/telemetry/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/ide-integration/src/**/*.{ts,tsx}', // #2089 (non-target files)
-  'packages/a2a-server/src/**/*.{ts,tsx}', // #2089 (non-target files)
 ];
 
 const completedDirectiveCleanupScopes = [
@@ -205,6 +205,17 @@ const completedDirectiveCleanupScopes = [
   // #2121 — all packages/auth/src files are now fully compliant: zero inline
   // lint directives. Locked to error so any new directive fails immediately.
   'packages/auth/src/**/*.{ts,tsx}', // #2121
+  // #2122 — all packages/policy/src files are now fully compliant: zero inline
+  // lint directives. Locked to error so any new directive fails immediately.
+  'packages/policy/src/**/*.{ts,tsx}', // #2122
+  // #2123 — all packages/a2a-server/src files are now fully compliant: zero
+  // inline lint directives. The broad glob below supersedes the individual
+  // #2089 a2a-server entries above. Locked to error so any new directive
+  // fails immediately.
+  'packages/a2a-server/src/**/*.{ts,tsx}', // #2123
+  // #2114: CLI source is enforced directly by checkCliSourcePolicy and must
+  // NOT appear in this scope array. The #2091 CLI test files are covered by
+  // that same enforcement.
   'packages/agents/src/agents/executor.ts', // #2085
   'packages/agents/src/compression/HighDensityStrategy.ts', // #2085
   'packages/agents/src/core/bucketFailoverIntegration.ts', // #2085

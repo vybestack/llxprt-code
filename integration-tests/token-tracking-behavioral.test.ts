@@ -105,7 +105,8 @@ describe('Token Tracking Behavioral Tests', () => {
         thought: 0,
       };
       const chunk3Tokens = {
-        input: 0,
+        // input includes cache tokens (total-including-cache invariant)
+        input: 10,
         output: 45,
         cache: 10,
         tool: 0,
@@ -127,7 +128,8 @@ describe('Token Tracking Behavioral Tests', () => {
       expect(afterChunk3.total).toBe(160); // 105 + 45 + 10
 
       // And: Individual token types are tracked correctly
-      expect(afterChunk3.input).toBe(50);
+      // input includes cache tokens (total-including-cache invariant)
+      expect(afterChunk3.input).toBe(60); // 50 + 10 (cache folded in)
       expect(afterChunk3.output).toBe(100); // 25 + 30 + 45
       expect(afterChunk3.cache).toBe(10);
     });
@@ -183,7 +185,8 @@ describe('Token Tracking Behavioral Tests', () => {
 
       // When: Each provider contributes tokens to the session
       const openaiTokens = {
-        input: 200,
+        // input includes cache tokens (total-including-cache invariant)
+        input: 250,
         output: 150,
         cache: 50,
         tool: 25,
@@ -203,7 +206,8 @@ describe('Token Tracking Behavioral Tests', () => {
       const sessionUsage = providerManager.getSessionTokenUsage();
 
       // Then: Session totals reflect contributions from all providers
-      expect(sessionUsage.input).toBe(500); // 200 + 300
+      // input includes cache tokens (total-including-cache invariant)
+      expect(sessionUsage.input).toBe(550); // 250 + 300
       expect(sessionUsage.output).toBe(350); // 150 + 200
       expect(sessionUsage.cache).toBe(50); // 50 + 0
       expect(sessionUsage.tool).toBe(35); // 25 + 10
@@ -232,7 +236,8 @@ describe('Token Tracking Behavioral Tests', () => {
 
       providerManager.setActiveProvider('gemini');
       providerManager.accumulateSessionTokens('gemini', {
-        input: 150,
+        // input includes cache tokens (total-including-cache invariant)
+        input: 175,
         output: 100,
         cache: 25,
         tool: 15,
@@ -241,7 +246,8 @@ describe('Token Tracking Behavioral Tests', () => {
 
       providerManager.setActiveProvider('openai');
       providerManager.accumulateSessionTokens('openai', {
-        input: 80,
+        // input includes cache tokens (total-including-cache invariant)
+        input: 90,
         output: 60,
         cache: 10,
         tool: 5,
@@ -251,7 +257,8 @@ describe('Token Tracking Behavioral Tests', () => {
       const finalUsage = providerManager.getSessionTokenUsage();
 
       // Then: All tokens are correctly accumulated regardless of provider switches
-      expect(finalUsage.input).toBe(330); // 100 + 150 + 80
+      // input includes cache tokens (total-including-cache invariant)
+      expect(finalUsage.input).toBe(365); // 100 + 175 + 90
       expect(finalUsage.output).toBe(235); // 75 + 100 + 60
       expect(finalUsage.cache).toBe(35); // 0 + 25 + 10
       expect(finalUsage.tool).toBe(20); // 0 + 15 + 5
@@ -523,8 +530,9 @@ describe('Token Tracking Behavioral Tests', () => {
       // When: Multiple requests are made during the session
       const requests = [
         { input: 200, output: 150, cache: 0, tool: 25, thought: 0 },
-        { input: 300, output: 200, cache: 50, tool: 15, thought: 10 },
-        { input: 150, output: 100, cache: 25, tool: 0, thought: 5 },
+        // input includes cache tokens (total-including-cache invariant)
+        { input: 350, output: 200, cache: 50, tool: 15, thought: 10 },
+        { input: 175, output: 100, cache: 25, tool: 0, thought: 5 },
       ];
 
       for (const request of requests) {
@@ -534,7 +542,8 @@ describe('Token Tracking Behavioral Tests', () => {
       const finalUsage = providerManager.getSessionTokenUsage();
 
       // Then: Final totals are accurate
-      expect(finalUsage.input).toBe(650); // 200 + 300 + 150
+      // input includes cache tokens (total-including-cache invariant)
+      expect(finalUsage.input).toBe(725); // 200 + 350 + 175
       expect(finalUsage.output).toBe(450); // 150 + 200 + 100
       expect(finalUsage.cache).toBe(75); // 0 + 50 + 25
       expect(finalUsage.tool).toBe(40); // 25 + 15 + 0

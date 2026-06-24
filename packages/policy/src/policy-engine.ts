@@ -151,14 +151,13 @@ export class PolicyEngine {
     command: string,
     subCommands: string[],
   ): PolicyDecision {
+    // Filter out the original command to prevent infinite recursion
+    const subCommandsToEvaluate = subCommands
+      .map((rawSubCmd) => rawSubCmd.trim())
+      .filter((subCmd) => subCmd !== command);
+
     let aggregateDecision = PolicyDecision.ALLOW;
-
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const rawSubCmd of subCommands) {
-      const subCmd = rawSubCmd.trim();
-      // Prevent infinite recursion
-      if (subCmd === command) continue;
-
+    for (const subCmd of subCommandsToEvaluate) {
       // Preserve dir_path from original args
       const subResult = this.evaluate(
         toolName,
@@ -167,8 +166,8 @@ export class PolicyEngine {
       );
 
       if (subResult === PolicyDecision.DENY) {
-        aggregateDecision = PolicyDecision.DENY;
-        break; // Fail fast: DENY overrides everything
+        // Fail fast: DENY overrides everything
+        return PolicyDecision.DENY;
       } else if (subResult === PolicyDecision.ASK_USER) {
         aggregateDecision = PolicyDecision.ASK_USER;
         // Continue checking for DENY (don't short-circuit)
@@ -260,25 +259,16 @@ export class PolicyEngine {
   ): PolicyRule | undefined {
     const argsString = stableStringify(args);
 
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const rule of this.rules) {
+    return this.rules.find((rule) => {
       // Check tool name match
       const toolMatches = !rule.toolName || rule.toolName === toolName;
       if (!toolMatches) {
-        continue;
+        return false;
       }
 
       // Check args pattern match
-      const argsMatch = !rule.argsPattern || rule.argsPattern.test(argsString);
-      if (!argsMatch) {
-        continue;
-      }
-
-      // Both match - return this rule
-      return rule;
-    }
-
-    return undefined;
+      return !rule.argsPattern || rule.argsPattern.test(argsString);
+    });
   }
 
   /**

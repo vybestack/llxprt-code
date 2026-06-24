@@ -168,8 +168,9 @@ describe('ProviderPerformanceTracker', () => {
     expect(initialUsage.total).toBe(0);
 
     // Accumulate tokens
+    // input includes cache tokens (total input), cache is tracked separately
     manager.accumulateSessionTokens('test-provider', {
-      input: 100,
+      input: 150,
       output: 200,
       cache: 50,
       tool: 25,
@@ -178,16 +179,16 @@ describe('ProviderPerformanceTracker', () => {
 
     // Verify updated state
     const updatedUsage = manager.getSessionTokenUsage();
-    expect(updatedUsage.input).toBe(100);
+    expect(updatedUsage.input).toBe(150);
     expect(updatedUsage.output).toBe(200);
     expect(updatedUsage.cache).toBe(50);
     expect(updatedUsage.tool).toBe(25);
     expect(updatedUsage.thought).toBe(10);
-    expect(updatedUsage.total).toBe(385); // 100+200+50+25+10
+    expect(updatedUsage.total).toBe(385); // 150+200+25+10
 
     // Accumulate more tokens
     manager.accumulateSessionTokens('test-provider', {
-      input: 50,
+      input: 75,
       output: 100,
       cache: 25,
       tool: 15,
@@ -196,12 +197,12 @@ describe('ProviderPerformanceTracker', () => {
 
     // Verify final state
     const finalUsage = manager.getSessionTokenUsage();
-    expect(finalUsage.input).toBe(150); // 100+50
+    expect(finalUsage.input).toBe(225); // 150+75
     expect(finalUsage.output).toBe(300); // 200+100
     expect(finalUsage.cache).toBe(75); // 50+25
     expect(finalUsage.tool).toBe(40); // 25+15
     expect(finalUsage.thought).toBe(15); // 10+5
-    expect(finalUsage.total).toBe(580); // 385+150+100+75+25+15
+    expect(finalUsage.total).toBe(580); // 385+75+100+15+5
   });
 
   it('should reset session token usage', () => {
@@ -214,7 +215,7 @@ describe('ProviderPerformanceTracker', () => {
 
     // Accumulate some tokens first
     manager.accumulateSessionTokens('test-provider', {
-      input: 100,
+      input: 150,
       output: 200,
       cache: 50,
       tool: 25,

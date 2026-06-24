@@ -269,4 +269,45 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     target: 'exit (UI)',
     note: 'Pure UI with no core dependency',
   },
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P17
+   * @requirement:REQ-008
+   * @pseudocode command-map.md lines 1-13
+   */
+  {
+    command: '/approval-mode',
+    kind: 'runtime',
+    target: 'agent.setApprovalMode',
+    note: 'Approval mode is a live engine setting on the active run',
+  },
+  {
+    command: '/policies',
+    kind: 'runtime',
+    target: 'agent.policy.getRules',
+    note: 'Policy inspection reads the active run policy engine',
+  },
+  {
+    command: '/task',
+    kind: 'runtime',
+    target: 'agent.tasks.list',
+    note: 'Async task list/inspect/cancel over the active run task manager',
+  },
+  {
+    command: '/hooks',
+    kind: 'runtime',
+    target: 'agent.hooks.listHooks',
+    note: 'Hook registry inspection + enable/disable on the active run',
+  },
+  {
+    command: '/toolkey',
+    kind: 'runtime',
+    target: 'agent.tools.keys.save',
+    note: 'Built-in tool key storage feeds the active run tools',
+  },
+  {
+    command: '/toolkeyfile',
+    kind: 'runtime',
+    target: 'agent.tools.keys.setKeyFile',
+    note: 'Built-in tool keyfile path feeds the active run tools',
+  },
 ];

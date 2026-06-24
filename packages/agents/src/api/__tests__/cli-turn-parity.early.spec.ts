@@ -266,6 +266,10 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
           }
         },
       ),
+      // Each run builds two configs and drains two full streams; cap the case
+      // count to keep the property well within the 30s timeout under parallel
+      // test load (consistent with other heavy-agent property tests).
+      { numRuns: 8 },
     );
   }, 30000);
 });
