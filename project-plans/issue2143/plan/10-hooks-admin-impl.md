@@ -73,7 +73,7 @@ listHooks(): readonly HookInfo[] {
     name: registry.getHookName(entry),
     eventName: String(entry.eventName),
     enabled: entry.enabled,
-    source: entry.source === undefined ? undefined : String(entry.source),
+    source: String(entry.source), // ConfigSource is non-nullable (hookRegistry.ts:37)
   }));
 }
 

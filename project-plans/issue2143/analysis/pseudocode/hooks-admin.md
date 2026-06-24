@@ -71,7 +71,7 @@ methods resolve the live hook system from that Config per call.
 11:      name: registry.getHookName(entry),                 // hookRegistry.ts:118
 12:      eventName: String(entry.eventName),                // HookEventName enum → string
 13:      enabled: entry.enabled,                             // hookRegistry.ts:41
-14:      source: entry.source IS undefined ? undefined : String(entry.source),  // optional; never the literal "undefined"
+14:      source: String(entry.source),                       // ConfigSource (NON-nullable, hookRegistry.ts:37) → string
 15:    }
 16:    APPEND info TO out
 17:  END FOR

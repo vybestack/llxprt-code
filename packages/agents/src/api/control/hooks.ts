@@ -48,6 +48,7 @@ import type {
   AgentHookControl,
   HookExecutionRequest,
   HookExecutionResponse,
+  HookInfo,
   Unsubscribe,
 } from '../agent.js';
 
@@ -166,6 +167,53 @@ export class HookControl implements AgentHookControl {
   clear(): void {
     this.observers.clear();
     this.pendingByCorrelation.clear();
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 1-19
+   */
+  listHooks(): readonly HookInfo[] {
+    const system = this.deps.config.getHookSystem();
+    if (!system) return [];
+    if (!system.isInitialized()) return [];
+    const registry = system.getRegistry();
+    return registry.getAllHooks().map((entry) => ({
+      name: registry.getHookName(entry),
+      eventName: String(entry.eventName),
+      enabled: entry.enabled,
+      source: String(entry.source),
+    }));
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 30-32
+   */
+  getDisabledHooks(): readonly string[] {
+    return [...this.deps.config.getDisabledHooks()];
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 40-42
+   */
+  setDisabledHooks(names: readonly string[]): void {
+    this.deps.config.setDisabledHooks([...names]);
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 50-54
+   */
+  disable(name: string): void {
+    const current = this.deps.config.getDisabledHooks();
+    if (current.includes(name)) return;
+    this.deps.config.setDisabledHooks([...current, name]);
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 57-61
+   */
+  enable(name: string): void {
+    const current = this.deps.config.getDisabledHooks();
+    this.deps.config.setDisabledHooks(current.filter((n) => n !== name));
   }
 
   /**

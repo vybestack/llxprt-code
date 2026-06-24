@@ -319,6 +319,25 @@ export interface AgentHookControl {
   triggerSessionStart(): Promise<void>;
   triggerSessionEnd(): Promise<void>;
   clear(): void;
+  // @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004
+  listHooks(): readonly HookInfo[];
+  getDisabledHooks(): readonly string[];
+  setDisabledHooks(names: readonly string[]): void;
+  enable(name: string): void;
+  disable(name: string): void;
+}
+
+/**
+ * Projected public view of a registered hook (REQ-004.1). Mirrors a live
+ * HookRegistryEntry's identifying fields without exposing the engine type.
+ * @plan:PLAN-20260622-COREAPIGAP.P10
+ * @requirement:REQ-004
+ */
+export interface HookInfo {
+  readonly name: string;
+  readonly eventName: string;
+  readonly enabled: boolean;
+  readonly source?: string;
 }
 
 /**
