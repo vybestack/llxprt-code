@@ -260,6 +260,7 @@ export default defineConfig({
       'config.test.ts',
       // Temporarily include KeypressContext test for issue #263
       'src/ui/contexts/KeypressContext.test.tsx',
+      'src/ui/contexts/KeypressContext.parsing.test.tsx',
       // ThinkingBlockDisplay test excluded - ink-testing-library doesn't render styled Text in NO_COLOR mode
       // Include useGeminiStream thinking test for Phase P07
       'src/ui/hooks/useGeminiStream.thinking.test.tsx',
