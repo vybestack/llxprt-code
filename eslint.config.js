@@ -502,6 +502,7 @@ export default tseslint.config(
             'vscode-jsonrpc/node.js',
             'yargs/**',
             '@anthropic-ai/sdk/**',
+            'ajv/dist/2020.js',
             '**/generated/**',
           ],
         },

@@ -4,15 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createRequire } from 'node:module';
 import AjvPkg from 'ajv';
+import Ajv2020Pkg from 'ajv/dist/2020.js';
 import type { ErrorObject } from 'ajv';
 // ajv v8 does not declare package "exports", so subpath imports like
 // "ajv/dist/2020" are the only supported way to pull in the draft-2020-12
 // build. See https://ajv.js.org/json-schema.html#draft-2020-12
-// We use createRequire to avoid a static subpath import.
-const requireFromModule = createRequire(import.meta.url);
-const Ajv2020Pkg = requireFromModule('ajv/dist/2020.js');
 // Ajv's ESM/CJS interop: default/namespace dual export.
 type AjvValidateFunction = ((data: unknown) => boolean) & {
   errors?: ErrorObject[] | null;
