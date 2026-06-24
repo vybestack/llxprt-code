@@ -95,11 +95,9 @@ function createConfirmationDetails(): ToolCallConfirmationDetails {
 }
 
 function createScheduledCalls(requests: ToolCallRequestInfo[]): MockToolCall[] {
-  return requests.map((requestItem, index) =>
+  return requests.map((requestItem) =>
     makeCall(
-      // Test utility mock contract: callId fallback for defensive testing
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Permissive mock contract for test utilities
-      requestItem.callId ?? `call-${index}`,
+      requestItem.callId,
       requestItem.name,
       'scheduled',
       requestItem.args,
