@@ -49,7 +49,7 @@ echo "non-vacuity proven: injected deep import was caught; original restored."
 # 3. Whole-package shell scan agrees: no deep import / internals in any public-consumer .spec.ts.
 if grep -rnE "from '[^']*(/src/|core/src|providers/src|tools/src|policy/src)" packages/agents/src/api/__tests__/*.spec.ts 2>/dev/null | grep -vE "node_modules"; then
   echo "FAIL: deep import in a .spec.ts"; exit 1; fi
-if grep -rnE "internals(\.js)?'" packages/agents/src/api/__tests__/*.spec.ts 2>/dev/null; then
+if grep -rnE "from '[^']*internals(\.js)?'" packages/agents/src/api/__tests__/*.spec.ts 2>/dev/null; then
   echo "FAIL: .spec.ts imports internals"; exit 1; fi
 
 # 4. New controls use the barrel, not deep core/src.

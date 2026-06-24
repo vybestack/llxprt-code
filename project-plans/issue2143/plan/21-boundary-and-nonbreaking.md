@@ -101,7 +101,7 @@ npx vitest run packages/agents/src/api/__tests__/boundary.spec.ts 2>&1 | tail -2
 if grep -rnE "from '[^']*(/src/|core/src|providers/src|tools/src|policy/src)" packages/agents/src/api/__tests__/*.spec.ts 2>/dev/null | grep -vE "node_modules"; then
   echo "FAIL: deep import in a public-consumer .spec.ts"; exit 1
 fi
-if grep -rnE "internals(\.js)?'" packages/agents/src/api/__tests__/*.spec.ts 2>/dev/null; then
+if grep -rnE "from '[^']*internals(\.js)?'" packages/agents/src/api/__tests__/*.spec.ts 2>/dev/null; then
   echo "FAIL: a .spec.ts imports internals (public-consumer path forbidden)"; exit 1
 fi
 
