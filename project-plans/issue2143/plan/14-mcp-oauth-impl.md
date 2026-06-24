@@ -107,15 +107,22 @@ export interface McpControlDeps {
 }
 ```
 
-Add the type-only barrel imports (source MAY import the bare core barrel):
+Add the type-only imports — **VERIFIED ground truth, these three come from THREE different sources;
+do NOT collapse them into one bare-barrel import (that fails to compile)**:
 
 ```ts
-import type {
-  MCPServerConfig,
-  MCPOAuthConfig,
-  ToolInfo,
-} from '@vybestack/llxprt-code-core';
+// MCPOAuthConfig IS exported as a type from the bare core barrel (core/src/index.ts:508).
+import type { MCPOAuthConfig } from '@vybestack/llxprt-code-core';
+// MCPServerConfig is NOT in the bare barrel — it lives at the deep config path
+// (this exactly mirrors how agent.ts:13 already imports it).
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
 ```
+
+> `ToolInfo` is ALREADY imported from `'../agent.js'` at the top of `mcpControl.ts` (the existing
+> `import type { … ToolInfo } from '../agent.js'` block). Do **NOT** add a second `ToolInfo` import —
+> reuse the existing one. The new projected types (`McpDetailsOptions`, `McpServerDetail`,
+> `McpDetailStatus`, `McpPromptInfo`, `McpResourceInfo`, `McpBlockedServer`) must be ADDED to that
+> SAME existing `'../agent.js'` type-import group.
 
 Implement `authenticate` (NEW), modify `refresh` (parity), implement `details` (NEW), following the
 pseudocode line-by-line:
@@ -201,7 +208,7 @@ async details(opts?: McpDetailsOptions): Promise<McpDetailStatus> {
 > Adjust the exact shape access (`toolsByServer[name]`) to match the existing return type; if it
 > returns a `Map`/record, index accordingly — follow the existing method's real type.
 
-#### 3. `packages/agents/src/api/agentImpl.ts` — wire `buildMcpControl()` (around :476)
+#### 3. `packages/agents/src/api/agentImpl.ts` — wire `buildMcpControl()` (method def at `:487`)
 
 Extend the deps object passed to `new McpControl({...})` with the six closures (existing three stay):
 
@@ -217,9 +224,17 @@ getResourceRegistry: () => ({
   getAllResources: () => this.deps.config.getResourceRegistry().getAllResources(),
 }),
 refreshClientTools: () => this.deps.resolveClient().setTools(),
-performOAuth: (server, oauthConfig, mcpServerUrl) =>
-  MCPOAuthProvider.authenticate(server, oauthConfig, mcpServerUrl, undefined),
+performOAuth: async (server, oauthConfig, mcpServerUrl) => {
+  await MCPOAuthProvider.authenticate(server, oauthConfig, mcpServerUrl, undefined);
+},
 ```
+
+> The `performOAuth` closure MUST use the `async … => { await …; }` form (NOT a bare arrow returning
+> the call). The dep type is `Promise<void>`, but `MCPOAuthProvider.authenticate(...)` returns
+> `Promise<MCPOAuthToken>`; a bare `(…) => MCPOAuthProvider.authenticate(…)` is `Promise<MCPOAuthToken>`
+> and is NOT assignable to `Promise<void>` (TS only special-cases a bare `void`, not `Promise<void>`).
+> Awaiting + discarding also keeps the OAuth token out of the closure result (it is a handshake
+> side-effect only).
 
 Add the `MCPOAuthProvider` VALUE import from the bare core barrel at the top of `agentImpl.ts`:
 

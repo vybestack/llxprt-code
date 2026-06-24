@@ -21,7 +21,10 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getResponseText } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
-import type { ApprovalMode, RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type {
+  ApprovalMode,
+  RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   switchActiveProvider,
@@ -53,6 +56,8 @@ import { ToolControl } from './control/toolControl.js';
 import type { ToolControlDeps } from './control/toolControl.js';
 import { McpControl } from './control/mcpControl.js';
 import type { McpControlDeps } from './control/mcpControl.js';
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+import { buildMcpControlDeps } from './control/mcpControlWiring.js';
 import { AuthControl } from './control/authControl.js';
 import { IdeControl } from './control/ideControl.js';
 import type { IdeControlDeps } from './control/ideControl.js';
@@ -485,11 +490,12 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-013
    */
   private buildMcpControl(): McpControl {
-    const mcpDeps: McpControlDeps = {
+    // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 @pseudocode Dependencies/buildMcpControl
+    const mcpDeps: McpControlDeps = buildMcpControlDeps({
+      config: this.deps.config,
       isMcpAuthenticated: (server) => this.authState.mcpAuth.has(server),
-      getManager: () => this.deps.config.getMcpClientManager(),
-      getToolRegistry: () => this.deps.config.getToolRegistry(),
-    };
+      resolveClient: () => this.deps.resolveClient(),
+    });
     return new McpControl(mcpDeps);
   }
 

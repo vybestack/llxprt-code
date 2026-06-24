@@ -159,6 +159,46 @@ export interface McpStatus {
   readonly servers: readonly McpServerInfo[];
 }
 
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpDetailsOptions {
+  readonly includeTools?: boolean;
+  readonly includePrompts?: boolean;
+  readonly includeResources?: boolean;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpPromptInfo {
+  readonly name: string;
+  readonly description?: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpResourceInfo {
+  readonly name?: string;
+  readonly uri: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpBlockedServer {
+  readonly name: string;
+  readonly extensionName: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpServerDetail {
+  readonly name: string;
+  readonly authenticated: boolean;
+  readonly tools?: readonly ToolInfo[];
+  readonly prompts?: readonly McpPromptInfo[];
+  readonly resources?: readonly McpResourceInfo[];
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpDetailStatus {
+  readonly servers: readonly McpServerDetail[];
+  readonly blockedServers: readonly McpBlockedServer[];
+}
+
 export interface AuthBucket {
   readonly name: string;
   readonly provider?: string;
@@ -253,6 +293,10 @@ export interface AgentMcpControl {
   auth(server: string): Promise<McpServerAuthStatus>;
   discoveryState(): McpDiscoveryState;
   refresh(server?: string): Promise<void>;
+  // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+  authenticate(server: string): Promise<McpServerAuthStatus>;
+  // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+  details(opts?: McpDetailsOptions): Promise<McpDetailStatus>;
 }
 
 export interface AgentAuthKeysControl {

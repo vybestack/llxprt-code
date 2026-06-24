@@ -30,6 +30,7 @@ set -e
 A=packages/agents/src/api/agent.ts
 M=packages/agents/src/api/control/mcpControl.ts
 I=packages/agents/src/api/agentImpl.ts
+W=packages/agents/src/api/control/mcpControlWiring.ts
 F=packages/agents/src/api/__tests__/mcpOAuth.behavior.test.ts
 
 # 1. Target test + whole dir GREEN.
@@ -64,10 +65,17 @@ awk '/async authenticate\(/{f=1} f&&/try[[:space:]]*\{/{c=1} /^  }/{if(f){f=0}} 
 awk '/async refresh\(/{f=1} f&&/refreshClientTools/{ok=1} /^  }/{if(f){f=0}} END{exit ok?0:1}' "$M" \
   || { echo "FAIL: refresh lacks setTools parity"; exit 1; }
 
-# 5. MCPOAuthProvider bound ONLY in wiring, never imported into the control.
+# 5. MCPOAuthProvider bound ONLY in the dedicated wiring module ($W), never in
+#    the control ($M) and never in agentImpl ($I). The closure bundle is built
+#    by buildMcpControlDeps and consumed by buildMcpControl.
 if grep -nE "MCPOAuthProvider" "$M"; then echo "FAIL: control references MCPOAuthProvider directly"; exit 1; fi
-grep -qE "import \{ MCPOAuthProvider \} from '@vybestack/llxprt-code-core'" "$I" || { echo "FAIL: wiring import missing"; exit 1; }
-grep -qE "performOAuth:.*MCPOAuthProvider\.authenticate" "$I" || { echo "FAIL: performOAuth not bound to static in wiring"; exit 1; }
+if grep -nE "MCPOAuthProvider" "$I"; then echo "FAIL: agentImpl references MCPOAuthProvider directly (should be in wiring module)"; exit 1; fi
+grep -qE "import \{ MCPOAuthProvider \} from '@vybestack/llxprt-code-core'" "$W" || { echo "FAIL: wiring import missing in mcpControlWiring.ts"; exit 1; }
+grep -qE "buildMcpControlDeps" "$I" || { echo "FAIL: agentImpl does not consume buildMcpControlDeps"; exit 1; }
+# performOAuth binding may be prettier-wrapped across lines -> flatten before matching.
+W_FLAT="$(tr '\n' ' ' < "$W" | tr -s '[:space:]' ' ')"
+echo "$W_FLAT" | grep -qE "performOAuth: async .* await MCPOAuthProvider\.authenticate\(" \
+  || { echo "FAIL: performOAuth not bound to MCPOAuthProvider.authenticate in wiring"; exit 1; }
 
 # 6. Markers + delegation; no cache.
 grep -qE "@pseudocode lines 1-16" "$M" || { echo "FAIL: authenticate marker"; exit 1; }
@@ -75,8 +83,15 @@ grep -qE "@pseudocode lines 30-41" "$M" || { echo "FAIL: refresh marker"; exit 1
 grep -qE "@pseudocode lines 50-78" "$M" || { echo "FAIL: details marker"; exit 1; }
 if grep -nE "private .*(cachedDetails|serverCache|mcpCache)\b" "$M"; then echo "FAIL: cached state"; exit 1; fi
 
-# 7. No raw prompt/resource leak: details projects named fields only.
-if grep -nE "getAllResources\(\)\s*;?\s*$" "$M" | grep -v "map("; then : ; fi  # informational
+# 7. No raw prompt/resource leak: details() MUST map registry rows to named fields, never spread/return raw.
+#    (formatting-tolerant: prettier may wrap the object literal across lines, so collapse whitespace first.
+#     tr+grep -E are portable on BSD/macOS, unlike grep -P/-z.)
+if grep -nE "\.\.\.(p|r|prompt|resource)\b" "$M"; then echo "FAIL: raw prompt/resource spread leaks internal fields"; exit 1; fi
+M_FLAT="$(tr '\n' ' ' < "$M" | tr -s '[:space:]' ' ')"
+echo "$M_FLAT" | grep -qE "prompts\.map\(\(p\) => \(\{ name: p\.name" \
+  || { echo "FAIL: prompts not projected to named fields"; exit 1; }
+echo "$M_FLAT" | grep -qE "map\(\(r\) => \(\{ name: r\.name, uri: r\.uri" \
+  || { echo "FAIL: resources not projected to named fields"; exit 1; }
 
 # 8. Re-audit P13 tests are behavioral.
 if grep -nE "toHaveBeenCalled|mockResolvedValue|mockReturnValue|vi\.fn\(|vi\.spyOn" "$F"; then echo "FAIL: mock theater"; exit 1; fi
@@ -106,7 +121,8 @@ echo "PASS: gates green."
 | 1-16 | authenticate (unknown/unwired guard; oauthConfig+url; performOAuth→restart→refreshClientTools; propagate) | mcpControl.ts:___ | |
 | 30-41 | refresh (existing restart + NEW refreshClientTools parity; undefined-safe) | mcpControl.ts:___ | |
 | 50-78 | details (opts gating; per-server projection; named-field prompts/resources; blockedServers) | mcpControl.ts:___ | |
-| Dependencies/wiring | six closures wired; performOAuth→MCPOAuthProvider.authenticate(...,undefined) | agentImpl.ts:___ | |
+| Dependencies/wiring | six closures wired via buildMcpControlDeps; performOAuth→MCPOAuthProvider.authenticate(...,undefined) | mcpControlWiring.ts:___ | |
+| Wiring consumption | buildMcpControl delegates to buildMcpControlDeps; MCPOAuthProvider NOT imported here | agentImpl.ts:___ | |
 
 ## Holistic Functionality Assessment (MANDATORY — into marker)
 

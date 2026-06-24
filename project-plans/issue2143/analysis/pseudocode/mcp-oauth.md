@@ -101,8 +101,10 @@ export interface McpPromptRegistryView {
 export interface McpResourceRegistryView {
   getAllResources(): ReadonlyArray<{ serverName: string; name?: string; uri: string }>;
 }
-// Type-only barrel imports in mcpControl.ts (source MAY import the bare core barrel):
-//   import type { MCPServerConfig, MCPOAuthConfig } from '@vybestack/llxprt-code-core';
+// Type-only imports in mcpControl.ts (VERIFIED ground truth — these differ by source):
+//   import type { MCPOAuthConfig } from '@vybestack/llxprt-code-core';            // bare barrel (core/src/index.ts:508)
+//   import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js'; // NOT in bare barrel; deep path (mirrors agent.ts:13)
+//   // ToolInfo is ALREADY imported from '../agent.js' (mcpControl.ts:17) — do NOT re-import it.
 ```
 
 Wiring in `AgentImpl.buildMcpControl()` (`agentImpl.ts:476`):
@@ -111,7 +113,12 @@ Wiring in `AgentImpl.buildMcpControl()` (`agentImpl.ts:476`):
 - `getPromptRegistry: () => ({ getPromptsByServer: (s) => this.deps.config.getPromptRegistry().getPromptsByServer(s) })`
 - `getResourceRegistry: () => ({ getAllResources: () => this.deps.config.getResourceRegistry().getAllResources() })`
 - `refreshClientTools: () => this.deps.resolveClient().setTools()`
-- `performOAuth: (server, oauthConfig, mcpServerUrl) => MCPOAuthProvider.authenticate(server, oauthConfig, mcpServerUrl, undefined)`
+- `performOAuth: async (server, oauthConfig, mcpServerUrl) => { await MCPOAuthProvider.authenticate(server, oauthConfig, mcpServerUrl, undefined); }`
+  - MUST use the `async … => { await …; }` form (NOT a bare arrow returning the call): the closure type
+    is `Promise<void>` but `MCPOAuthProvider.authenticate(...)` returns `Promise<MCPOAuthToken>`. A bare
+    `() => authenticate(...)` is `Promise<MCPOAuthToken>` and is NOT assignable to `Promise<void>`
+    (TS only special-cases a bare `void` return, not `Promise<void>`). Awaiting and discarding also keeps
+    the token out of the closure result (R-NO-RAW-SECRETS — the token is a handshake side-effect only).
   - `MCPOAuthProvider` is a VALUE import from the bare core barrel `@vybestack/llxprt-code-core`
     (re-exported at `core/src/index.ts:498`) — NO new mcp dependency, NO deep import.
   - `events` arg is OMITTED (undefined): `appEvents` is CLI-only (`cli/src/utils/events.ts`) and

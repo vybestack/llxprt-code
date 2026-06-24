@@ -4,6 +4,10 @@
  */
 
 import type { McpClientManager } from '@vybestack/llxprt-code-core';
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+import type { MCPOAuthConfig } from '@vybestack/llxprt-code-core';
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   MCPServerStatus,
   MCPDiscoveryState,
@@ -11,8 +15,13 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type {
   AgentMcpControl,
+  McpDetailStatus,
+  McpDetailsOptions,
   McpDiscoveryState as PublicMcpDiscoveryState,
+  McpPromptInfo,
+  McpResourceInfo,
   McpServerAuthStatus,
+  McpServerDetail,
   McpServerInfo,
   McpStatus,
   ToolInfo,
@@ -34,6 +43,23 @@ export interface McpToolRegistryView {
   getEnabledTools(): ReadonlyArray<{ readonly name: string }>;
 }
 
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpPromptRegistryView {
+  getPromptsByServer(server: string): ReadonlyArray<{
+    name: string;
+    description?: string;
+  }>;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpResourceRegistryView {
+  getAllResources(): ReadonlyArray<{
+    serverName: string;
+    name?: string;
+    uri: string;
+  }>;
+}
+
 /**
  * Callback bundle injected by AgentImpl so McpControl can read the per-agent
  * MCP auth state plus the REAL discovery/status/tools surface (the configured
@@ -49,6 +75,25 @@ export interface McpControlDeps {
   readonly getManager: () => McpClientManager | undefined;
   /** Resolves the live tool registry view for discovered-tool projection. */
   readonly getToolRegistry: () => McpToolRegistryView | undefined;
+  /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Raw configured MCP servers. */
+  readonly getServerConfigs?: () => Record<string, MCPServerConfig> | undefined;
+  /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Blocked servers. */
+  readonly getBlockedServers?: () => ReadonlyArray<{
+    name: string;
+    extensionName: string;
+  }>;
+  /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Prompt registry view. */
+  readonly getPromptRegistry?: () => McpPromptRegistryView | undefined;
+  /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Resource registry view. */
+  readonly getResourceRegistry?: () => McpResourceRegistryView | undefined;
+  /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Re-publishes client tool declarations. */
+  readonly refreshClientTools?: () => Promise<void>;
+  /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Performs the real OAuth handshake. */
+  readonly performOAuth?: (
+    server: string,
+    oauthConfig: MCPOAuthConfig,
+    mcpServerUrl: string | undefined,
+  ) => Promise<void>;
 }
 
 /**
@@ -226,11 +271,13 @@ export class McpControl implements AgentMcpControl {
   }
 
   /**
-   * Re-runs discovery for a single server (when named) or all configured
-   * servers. Delegates to the REAL McpClientManager restart paths.
+   * @plan:PLAN-20260622-COREAPIGAP.P14
+   * @requirement:REQ-006
+   * @pseudocode lines 30-41
    *
-   * @plan:PLAN-20260617-COREAPI.P22
-   * @requirement:REQ-013
+   * Re-runs discovery for a single server (when named) or all configured
+   * servers, then re-publishes the agent client's tool declarations
+   * (R-REFRESH-PARITY). Delegates to the REAL McpClientManager restart paths.
    */
   async refresh(server?: string): Promise<void> {
     const manager = this.deps?.getManager();
@@ -239,8 +286,120 @@ export class McpControl implements AgentMcpControl {
     }
     if (server !== undefined) {
       await manager.restartServer(server);
-      return;
+    } else {
+      await manager.restart();
     }
-    await manager.restart();
+    if (this.deps?.refreshClientTools !== undefined) {
+      await this.deps.refreshClientTools();
+    }
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P14
+   * @requirement:REQ-006
+   * @pseudocode lines 1-16
+   *
+   * Real OAuth flow: orchestrates performOAuth -> restartServer ->
+   * refreshClientTools. An unknown server or unwired performOAuth is a no-op
+   * returning authenticated:false. A performOAuth rejection PROPAGATES (no
+   * restart, no setTools) — the control does NOT catch.
+   */
+  async authenticate(server: string): Promise<McpServerAuthStatus> {
+    const configs = this.deps?.getServerConfigs?.();
+    const serverConfig = configs ? configs[server] : undefined;
+    const performOAuth = this.deps?.performOAuth;
+    if (serverConfig === undefined || performOAuth === undefined) {
+      return { server, authenticated: false, requiresAuth: true };
+    }
+    const oauthConfig = serverConfig.oauth ?? { enabled: false };
+    const mcpServerUrl = serverConfig.httpUrl ?? serverConfig.url;
+    await performOAuth(server, oauthConfig, mcpServerUrl);
+    const manager = this.deps?.getManager();
+    if (manager !== undefined) {
+      await manager.restartServer(server);
+    }
+    if (this.deps?.refreshClientTools !== undefined) {
+      await this.deps.refreshClientTools();
+    }
+    return { server, authenticated: true, requiresAuth: true };
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P14
+   * @requirement:REQ-006
+   * @pseudocode lines 50-78
+   *
+   * Deep per-server projection. includeTools defaults true;
+   * includePrompts/includeResources default false. Projects prompts/resources
+   * to named-field-only public types. Undefined-safe via ?. + ?? []/?? {}.
+   */
+  async details(opts?: McpDetailsOptions): Promise<McpDetailStatus> {
+    const includeTools = opts?.includeTools ?? true;
+    const includePrompts = opts?.includePrompts ?? false;
+    const includeResources = opts?.includeResources ?? false;
+    const configs = this.deps?.getServerConfigs?.() ?? {};
+    const toolsByServer = this.toolsByServer();
+    const resourcesAll = includeResources
+      ? (this.deps?.getResourceRegistry?.()?.getAllResources() ?? [])
+      : [];
+    const servers: McpServerDetail[] = [];
+    for (const name of Object.keys(configs)) {
+      servers.push(
+        this.buildServerDetail(
+          name,
+          includeTools,
+          includePrompts,
+          includeResources,
+          toolsByServer,
+          resourcesAll,
+        ),
+      );
+    }
+    const blockedServers = (this.deps?.getBlockedServers?.() ?? []).map(
+      (b) => ({ name: b.name, extensionName: b.extensionName }),
+    );
+    return { servers, blockedServers };
+  }
+
+  // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 @pseudocode lines 60-74
+  private buildServerDetail(
+    name: string,
+    includeTools: boolean,
+    includePrompts: boolean,
+    includeResources: boolean,
+    toolsByServer: Readonly<Record<string, readonly ToolInfo[]>>,
+    resourcesAll: ReadonlyArray<{
+      serverName: string;
+      name?: string;
+      uri: string;
+    }>,
+  ): McpServerDetail {
+    const detail: {
+      name: string;
+      authenticated: boolean;
+      tools?: readonly ToolInfo[];
+      prompts?: readonly McpPromptInfo[];
+      resources?: readonly McpResourceInfo[];
+    } = {
+      name,
+      authenticated: this.deps?.isMcpAuthenticated(name) ?? false,
+    };
+    if (includeTools) {
+      detail.tools = toolsByServer[name] ?? [];
+    }
+    if (includePrompts) {
+      const prompts =
+        this.deps?.getPromptRegistry?.()?.getPromptsByServer(name) ?? [];
+      detail.prompts = prompts.map((p) => ({
+        name: p.name,
+        description: p.description,
+      }));
+    }
+    if (includeResources) {
+      detail.resources = resourcesAll
+        .filter((r) => r.serverName === name)
+        .map((r) => ({ name: r.name, uri: r.uri }));
+    }
+    return detail;
   }
 }
