@@ -170,7 +170,7 @@ const legacyDirectiveCleanupScopes = [
   // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
-  'packages/storage/src/**/*.{ts,tsx}', // #2092
+  // packages/storage/src is locked in completedDirectiveCleanupScopes (#2119).
   // #2089 scope: the six target packages (auth/settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
   // inline lint directives. Those packages are kept in legacy scope so
@@ -609,7 +609,7 @@ const completedDirectiveCleanupScopes = [
   // #2092 scope — 25 target test files plus their split/helper modules are
   // fully compliant: zero inline lint directives. Locked to error so any new
   // directive fails immediately. The broad provider/mcp/storage legacy globs
-  // remain for other issues' non-target files.
+  // remain for other issues non-target files.
   'packages/providers/src/__tests__/LoadBalancingProvider.failover.selection.test.ts', // #2092
   'packages/providers/src/__tests__/LoadBalancingProvider.failover.errors.test.ts', // #2092
   'packages/providers/src/__tests__/LoadBalancingProvider.failover.settings.test.ts', // #2092
@@ -700,9 +700,10 @@ const completedDirectiveCleanupScopes = [
   'packages/mcp/src/client/mcp-client.oauth.test.ts', // #2092
   'packages/mcp/src/client/mcp-tool.execute.test.ts', // #2092
   'packages/mcp/src/client/mcp-tool.confirm.test.ts', // #2092
-  'packages/storage/src/secure-store/secure-store.basic.test.ts', // #2092
-  'packages/storage/src/secure-store/secure-store.fallback2.test.ts', // #2092
-  'packages/storage/src/secure-store/secure-store.fallback.test.ts', // #2092
+  // #2119 — all packages/storage/src files are now fully compliant: zero inline
+  // lint directives. The broad glob below supersedes the individual #2092
+  // storage entries above. Locked to error so any new directive fails immediately.
+  'packages/storage/src/**/*.{ts,tsx}', // #2119
 ];
 
 export default tseslint.config(

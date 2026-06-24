@@ -258,15 +258,40 @@ describe('ConversationFileWriter — Singleton Reuse', () => {
 // ─── Zero-Arg Backward Compat (Scenario 5) ──────────────────────────────────
 
 describe('ConversationFileWriter — Zero-Arg Backward Compat', () => {
-  it('constructs without error and resolves logPath including .llxprt and conversations', () => {
-    // Approach B: Test zero-arg construction verifies the instance is created
-    // and the path includes .llxprt/conversations, without actually writing.
-    const writer = new ConversationFileWriter();
-    // Access the private logPath via reflection to verify the resolved path
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resolvedPath = (writer as any).logPath as string;
-    expect(resolvedPath).toContain('.llxprt');
-    expect(resolvedPath).toContain('conversations');
+  it('constructs without error and writes to the default .llxprt conversations path', async () => {
+    const originalHome = process.env.HOME;
+    const tmpHome = await createTempDir('cfw-home-');
+    process.env.HOME = tmpHome;
+    try {
+      const writer = new ConversationFileWriter();
+      writer.writeEntry({ type: 'probe' });
+
+      const lines = await readJsonlLines(
+        path.join(tmpHome, '.llxprt', 'conversations'),
+      );
+      expect(lines[0].type).toBe('probe');
+    } finally {
+      process.env.HOME = originalHome;
+      await fsp.rm(tmpHome, { recursive: true, force: true });
+    }
+  });
+
+  it('treats an empty log path as a request for the default path', async () => {
+    const originalHome = process.env.HOME;
+    const tmpHome = await createTempDir('cfw-home-');
+    process.env.HOME = tmpHome;
+    try {
+      const writer = new ConversationFileWriter('');
+      writer.writeEntry({ type: 'empty-path-probe' });
+
+      const lines = await readJsonlLines(
+        path.join(tmpHome, '.llxprt', 'conversations'),
+      );
+      expect(lines[0].type).toBe('empty-path-probe');
+    } finally {
+      process.env.HOME = originalHome;
+      await fsp.rm(tmpHome, { recursive: true, force: true });
+    }
   });
 });
 

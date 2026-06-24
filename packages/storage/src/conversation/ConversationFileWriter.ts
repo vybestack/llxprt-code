@@ -10,15 +10,24 @@ import * as os from 'os';
 import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
 
+function defaultConversationLogPath(): string {
+  return path.join(os.homedir(), '.llxprt', 'conversations');
+}
+
+function resolveConversationLogPath(logPath?: string): string {
+  if (logPath === undefined || logPath === '') {
+    return defaultConversationLogPath();
+  }
+  return logPath;
+}
+
 export class ConversationFileWriter {
   private logPath: string;
   private currentLogFile: string;
   private logger: StorageLogger;
 
   constructor(logPath?: string, logger?: StorageLogger) {
-    this.logPath =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty logPath string should fall through to default path
-      logPath || path.join(os.homedir(), '.llxprt', 'conversations');
+    this.logPath = resolveConversationLogPath(logPath);
     this.currentLogFile = path.join(
       this.logPath,
       `conversation-${new Date().toISOString().split('T')[0]}.jsonl`,
