@@ -26,8 +26,20 @@
  * regression the additive-only contract (REQ-009) forbids.
  *
  * Anchors are `void`-consumed so noUnusedLocals (root tsconfig) does not raise
- * TS6196; they never execute (compile-only).
+ * TS6196; they never execute (compile-only). Types are imported via a top-level
+ * `import type` (not inline `import()` annotations) to satisfy the
+ * @typescript-eslint/consistent-type-imports lint rule.
  */
+
+import type {
+  Agent,
+  AgentTaskInfo,
+  AuthProviderDetail,
+  HookInfo,
+  McpDetailStatus,
+  PolicyRuleView,
+  ToolKeyStatus,
+} from '@vybestack/llxprt-code-agents';
 
 // --- Compile anchors for new projected types (load-bearing under typecheck) ---
 
@@ -36,43 +48,41 @@
 // so the P18a perl mutation probe
 //   s/(_TaskInfoShape\) => string = \(x\) => x\.)id/.../
 // matches and can prove this anchor is load-bearing. DO NOT reformat this line.
-type _TaskInfoShape = import('@vybestack/llxprt-code-agents').AgentTaskInfo;
+type _TaskInfoShape = AgentTaskInfo;
 const _taskInfoAnchor: (x: _TaskInfoShape) => string = (x) => x.id;
 void _taskInfoAnchor;
 
-type _PolicyRuleViewShape =
-  import('@vybestack/llxprt-code-agents').PolicyRuleView;
+type _PolicyRuleViewShape = PolicyRuleView;
 const _policyRuleViewAnchor: (x: _PolicyRuleViewShape) => string = (x) =>
   x.decision;
 void _policyRuleViewAnchor;
 
-type _ToolKeyStatusShape = import('@vybestack/llxprt-code-agents').ToolKeyStatus;
+type _ToolKeyStatusShape = ToolKeyStatus;
 const _toolKeyStatusAnchor: (x: _ToolKeyStatusShape) => string = (x) =>
   x.toolName;
 void _toolKeyStatusAnchor;
 
-type _HookInfoShape = import('@vybestack/llxprt-code-agents').HookInfo;
+type _HookInfoShape = HookInfo;
 const _hookInfoAnchor: (x: _HookInfoShape) => string = (x) => x.name;
 void _hookInfoAnchor;
 
-type _AuthProviderDetailShape =
-  import('@vybestack/llxprt-code-agents').AuthProviderDetail;
+type _AuthProviderDetailShape = AuthProviderDetail;
 const _authProviderDetailAnchor: (x: _AuthProviderDetailShape) => string = (
   x,
 ) => x.provider;
 void _authProviderDetailAnchor;
 
-type _McpDetailStatusShape =
-  import('@vybestack/llxprt-code-agents').McpDetailStatus;
-const _mcpDetailStatusAnchor: (x: _McpDetailStatusShape) => readonly unknown[] =
-  (x) => x.servers;
+type _McpDetailStatusShape = McpDetailStatus;
+const _mcpDetailStatusAnchor: (
+  x: _McpDetailStatusShape,
+) => readonly unknown[] = (x) => x.servers;
 void _mcpDetailStatusAnchor;
 
 // --- Extended-controller signature anchors (compile-only) ---
 // Pin the EXISTING signatures of methods that were extended-AROUND (not
 // changed). Any accidental change to a prior member's signature fails
 // typecheck.
-type _AgentShape = import('@vybestack/llxprt-code-agents').Agent;
+type _AgentShape = Agent;
 const _mcpRefreshShape: _AgentShape['mcp']['refresh'] = async (
   _server?: string,
 ) => {};

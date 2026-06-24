@@ -32,14 +32,16 @@ describe('P17 public barrel + command-api-map @plan:PLAN-20260622-COREAPIGAP.P17
   });
 
   it('T2 the two enums are runtime keys of the public root namespace @requirement:REQ-008 @scenario:namespace-runtime-keys @given:import * as root from the public barrel @when:Object.prototype.hasOwnProperty.call(root, NAME) @then:ApprovalMode and PolicyDecision are OWN runtime properties (not type-only projections)', () => {
-    expect(Object.prototype.hasOwnProperty.call(root, 'ApprovalMode')).toBe(true);
-    expect(Object.prototype.hasOwnProperty.call(root, 'PolicyDecision')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(root, 'ApprovalMode')).toBe(
+      true,
+    );
+    expect(Object.prototype.hasOwnProperty.call(root, 'PolicyDecision')).toBe(
+      true,
+    );
   });
 
   it('T3 the six target command rows exist with kind runtime and correct targets @requirement:REQ-008 @scenario:command-map-rows @given:COMMAND_API_MAP indexed by command @when:looking up each of the six target commands @then:each row exists, kind==="runtime", and target equals the expected dotted Agent-method path', () => {
-    const byCmd = new Map(
-      COMMAND_API_MAP.map((e) => [e.command, e] as const),
-    );
+    const byCmd = new Map(COMMAND_API_MAP.map((e) => [e.command, e] as const));
     const expected: ReadonlyArray<readonly [string, string]> = [
       ['/approval-mode', 'agent.setApprovalMode'],
       ['/policies', 'agent.policy.getRules'],
@@ -81,9 +83,7 @@ describe('P17 public barrel + command-api-map @plan:PLAN-20260622-COREAPIGAP.P17
   });
 
   it('T6 PROPERTY: every target command is present in the map with kind runtime and an agent.* target @requirement:REQ-008 @scenario:property-command-targets', () => {
-    const byCmd = new Map(
-      COMMAND_API_MAP.map((e) => [e.command, e] as const),
-    );
+    const byCmd = new Map(COMMAND_API_MAP.map((e) => [e.command, e] as const));
     fc.assert(
       fc.property(
         fc.constantFrom(
