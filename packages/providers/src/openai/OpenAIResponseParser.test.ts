@@ -132,6 +132,32 @@ describe('extractKimiToolCallsFromText', () => {
     expect(result.cleanedText).not.toContain('<|tool_calls_section_end|>');
   });
 
+  it('continues extracting Kimi tool calls after malformed markers', () => {
+    const input =
+      '<|tool_calls_section_begin|>' +
+      '<|tool_call_begin|>malformed_without_args' +
+      '<|tool_call_begin|>functions.read_file:0<|tool_call_argument_begin|>' +
+      '{"path":"test.ts"}' +
+      '<|tool_call_end|>' +
+      '<|tool_calls_section_end|>';
+
+    const result = extractKimiToolCallsFromText(input, mockLogger);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('read_file');
+  });
+
+  it('rejects Kimi tool calls with an empty tool name', () => {
+    const input =
+      '<|tool_calls_section_begin|>' +
+      '<|tool_call_begin|><|tool_call_argument_begin|>{}' +
+      '<|tool_call_end|>' +
+      '<|tool_calls_section_end|>';
+
+    const result = extractKimiToolCallsFromText(input, mockLogger);
+
+    expect(result.toolCalls).toHaveLength(0);
+  });
   it('returns empty result for empty string', () => {
     const result = extractKimiToolCallsFromText('', mockLogger);
     expect(result.toolCalls).toHaveLength(0);

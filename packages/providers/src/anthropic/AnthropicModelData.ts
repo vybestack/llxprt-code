@@ -14,7 +14,10 @@
 import type { IModel } from '../IModel.js';
 
 /**
- * Model token patterns for max output tokens - static configuration only
+ * Model token patterns for max output tokens - static configuration only.
+ * These intentionally use substring matchers rather than regexes so the table
+ * stays readable. The v4 hardcoded checks in getMaxTokensForModel run first,
+ * and Anthropic model IDs consistently use claude-family-name ordering.
  */
 export const MODEL_TOKEN_PATTERNS: Array<{
   requiredParts: readonly string[];

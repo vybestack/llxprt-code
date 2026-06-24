@@ -113,23 +113,22 @@ export function buildToolDeclarationsFromView(
  * Returns the deduplicated list of enabled tool names for use in system prompts.
  */
 export function getEnabledToolNamesForPrompt(config: Config): string[] {
-  const toolRegistry = config.getToolRegistry();
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config test doubles and runtime bootstrap may omit a tool registry.
-  if (toolRegistry == null) {
-    return [];
-  }
+  const registry: unknown = config.getToolRegistry();
   if (
-    typeof (toolRegistry as { getEnabledTools?: unknown }).getEnabledTools !==
-    'function'
+    registry == null ||
+    typeof (registry as { getEnabledTools?: unknown }).getEnabledTools !==
+      'function'
   ) {
     return [];
   }
   return Array.from(
     new Set(
-      toolRegistry
+      (registry as { getEnabledTools: () => Array<{ name?: string }> })
         .getEnabledTools()
         .map((tool) => tool.name)
-        .filter(Boolean),
+        .filter(
+          (name): name is string => typeof name === 'string' && name.length > 0,
+        ),
     ),
   );
 }

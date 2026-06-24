@@ -53,17 +53,15 @@ function buildCodexOptions(overrides?: Partial<NormalizedGenerateChatOptions>) {
 
 let originalFetch: typeof globalThis.fetch;
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  originalFetch = globalThis.fetch;
-});
-
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
-
 describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   it('should not emit function_call_output for malformed call ids that cannot match a function_call', async () => {
     const provider = buildProviderWithOAuth();
 

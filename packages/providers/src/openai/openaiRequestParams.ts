@@ -74,25 +74,49 @@ function stripInternalReasoningKeys(
   }
 
   const sanitized: Record<string, unknown> = {};
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const [key, nestedValue] of Object.entries(
     value as Record<string, unknown>,
   )) {
-    if (
-      nestedValue === undefined ||
-      nestedValue === null ||
-      OPENAI_REASONING_INTERNAL_KEYS.has(key)
-    ) {
-      continue;
-    }
-    // Filter out summary='none' - 'none' means don't include summary in the request
-    if (key === 'summary' && nestedValue === 'none') {
+    const isNullOrUndefined = nestedValue === undefined || nestedValue === null;
+    const shouldSkip =
+      isNullOrUndefined ||
+      OPENAI_REASONING_INTERNAL_KEYS.has(key) ||
+      (key === 'summary' && nestedValue === 'none');
+    if (shouldSkip) {
       continue;
     }
     sanitized[key] = nestedValue;
   }
 
   return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+function processParamEntry(
+  rawKey: string,
+  value: unknown,
+): { key: string; value: unknown } | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const normalizedKey = normalizeOpenAIParamKey(rawKey);
+  if (!OPENAI_ALLOWED_PARAM_KEYS.has(normalizedKey)) {
+    return undefined;
+  }
+  if (normalizedKey === 'reasoning') {
+    const sanitized = stripInternalReasoningKeys(value);
+    if (!sanitized) {
+      return undefined;
+    }
+    return { key: normalizedKey, value: sanitized };
+  }
+  if (
+    normalizedKey === 'prompt_cache_key' &&
+    typeof value === 'string' &&
+    value.trim() === ''
+  ) {
+    return undefined;
+  }
+  return { key: normalizedKey, value };
 }
 
 export function filterOpenAIRequestParams(
@@ -103,34 +127,11 @@ export function filterOpenAIRequestParams(
   }
 
   const filtered: Record<string, unknown> = {};
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const [rawKey, value] of Object.entries(source)) {
-    if (value === undefined || value === null) {
-      continue;
+    const processed = processParamEntry(rawKey, value);
+    if (processed !== undefined) {
+      filtered[processed.key] = processed.value;
     }
-    const normalizedKey = normalizeOpenAIParamKey(rawKey);
-    if (!OPENAI_ALLOWED_PARAM_KEYS.has(normalizedKey)) {
-      continue;
-    }
-
-    if (normalizedKey === 'reasoning') {
-      const sanitized = stripInternalReasoningKeys(value);
-      if (!sanitized) {
-        continue;
-      }
-      filtered[normalizedKey] = sanitized;
-      continue;
-    }
-
-    if (
-      normalizedKey === 'prompt_cache_key' &&
-      typeof value === 'string' &&
-      value.trim() === ''
-    ) {
-      continue;
-    }
-
-    filtered[normalizedKey] = value;
   }
 
   return Object.keys(filtered).length > 0 ? filtered : undefined;

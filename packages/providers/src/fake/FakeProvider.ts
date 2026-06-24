@@ -266,8 +266,7 @@ export class FakeProvider implements IProvider {
     _optionsOrContent: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     const turnIndex = this.callCounter++;
-    const [turn] = this.turns.slice(turnIndex, turnIndex + 1);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Fixture replay must guard exhausted response files at runtime.
+    const turn = this.turns[turnIndex] as FakeResponseTurn | undefined;
     if (turn === undefined) {
       throw new Error(
         `FakeProvider: no more canned responses (call #${turnIndex + 1}, only ${this.turns.length} turn(s) available)`,

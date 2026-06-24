@@ -378,6 +378,31 @@ describe('BaseProvider', () => {
       });
       expect(getContentText(result.value as IContent)).toContain('custom-aut');
     });
+
+    it('falls back when provider settings are unavailable', async () => {
+      const settings = getSettingsService();
+      vi.spyOn(settings, 'getProviderSettings').mockReturnValue(
+        undefined as never,
+      );
+      const provider = new TestProvider({
+        name: 'test',
+        baseURL: 'https://config.example.test',
+        defaultModel: 'config-model',
+      });
+
+      await provider
+        .generateChatCompletion(
+          createOptionsWithRuntime([userMessage('test')], settings),
+        )
+        .next();
+
+      expect(provider.lastOptions?.resolved.baseURL).toBe(
+        'https://config.example.test',
+      );
+      expect(provider.lastOptions?.resolved.model).toBe(
+        'claude-sonnet-4-20250514',
+      );
+    });
   });
 
   describe('OAuth Support Validation', () => {

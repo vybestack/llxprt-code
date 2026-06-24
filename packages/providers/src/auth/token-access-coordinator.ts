@@ -60,6 +60,35 @@ const logger = new DebugLogger('llxprt:oauth:token');
  * - TOCTOU double-check pattern around refresh
  * - Delegates auth flows to injected AuthenticatorInterface
  */
+
+function resolveImplicitBucketToCheck(
+  sessionBucket: string | undefined,
+  profileBuckets: string[],
+): string | undefined {
+  if (typeof sessionBucket === 'string' && sessionBucket.trim() !== '') {
+    return sessionBucket;
+  }
+  return profileBuckets.length === 1 ? profileBuckets[0] : undefined;
+}
+
+function extractRequestMetadata(
+  bucket: string | unknown,
+): OAuthTokenRequestMetadata | undefined {
+  if (typeof bucket === 'string' || bucket === null || bucket === undefined) {
+    return undefined;
+  }
+  if (isPlainObject(bucket)) {
+    return bucket as OAuthTokenRequestMetadata;
+  }
+  return undefined;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 export class TokenAccessCoordinator {
   private bucketResolutionLocks: Map<string, Promise<void>> = new Map();
   private authenticator?: AuthenticatorInterface;
@@ -201,18 +230,11 @@ export class TokenAccessCoordinator {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
-    const explicitBucket = typeof bucket === 'string';
-    const requestMetadata =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      !explicitBucket &&
-      bucket !== null &&
-      bucket !== undefined &&
-      typeof bucket === 'object'
-        ? (bucket as OAuthTokenRequestMetadata)
-        : undefined;
+    const { explicitBucket, requestMetadata } =
+      this.resolveTokenRequestBucket(bucket);
 
     const bucketToUse = explicitBucket
-      ? bucket
+      ? (bucket as string)
       : await this.resolveImplicitBucket(providerName, requestMetadata);
 
     try {
@@ -409,14 +431,7 @@ export class TokenAccessCoordinator {
     requestMetadata: OAuthTokenRequestMetadata | undefined;
   } {
     const explicitBucket = typeof bucket === 'string';
-    const requestMetadata =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      !explicitBucket &&
-      bucket !== null &&
-      bucket !== undefined &&
-      typeof bucket === 'object'
-        ? (bucket as OAuthTokenRequestMetadata)
-        : undefined;
+    const requestMetadata = extractRequestMetadata(bucket);
     return { explicitBucket, requestMetadata };
   }
 
@@ -572,11 +587,10 @@ export class TokenAccessCoordinator {
       : this.facadeRef.getSessionBucket(providerName, requestMetadata);
     const bucketToCheck = explicitBucket
       ? (bucket as string)
-      : (scopedSessionBucket ??
-        // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        (resolvedProfileBuckets.length === 1
-          ? resolvedProfileBuckets[0]
-          : undefined));
+      : resolveImplicitBucketToCheck(
+          scopedSessionBucket,
+          resolvedProfileBuckets,
+        );
 
     // @fix issue1262 & issue1195: Before triggering OAuth, check disk with lock
     const diskCheckResult = await this.performDiskCheck(

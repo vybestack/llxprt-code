@@ -362,6 +362,22 @@ function handleContentBlockDelta(
   return {};
 }
 
+function isNonArrayRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function canCoerceParameters(
+  toolSchema: unknown,
+  params: unknown,
+): toolSchema is Record<string, unknown> {
+  return isNonArrayRecord(params) && isNonArrayRecord(toolSchema);
+}
+
+function sanitizeTokenCount(value: number | null | undefined): number {
+  if (value === undefined || value === null || value === 0) return 0;
+  return Number.isNaN(value) ? 0 : value;
+}
+
 function completeToolCall(
   currentToolCall: { id: string; name: string; input: string },
   tools: ProviderToolset | undefined,
@@ -382,18 +398,10 @@ function completeToolCall(
   );
 
   const toolSchema = findToolSchema(tools, currentToolCall.name, isOAuth);
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    toolSchema !== undefined &&
-    toolSchema !== null &&
-    processedParameters !== undefined &&
-    processedParameters !== null &&
-    typeof processedParameters === 'object' &&
-    typeof toolSchema === 'object'
-  ) {
+  if (canCoerceParameters(toolSchema, processedParameters)) {
     processedParameters = coerceParametersToSchema(
       processedParameters,
-      toolSchema as Record<string, unknown>,
+      toolSchema,
     );
   }
 
@@ -530,22 +538,8 @@ function* handleMessageDelta(
 
   const rawInputTokens = usage.input_tokens as number | null | undefined;
   const rawOutputTokens = usage.output_tokens as number | null | undefined;
-  const basePromptTokens =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    rawInputTokens !== undefined &&
-    rawInputTokens !== null &&
-    rawInputTokens !== 0 &&
-    !Number.isNaN(rawInputTokens)
-      ? rawInputTokens
-      : 0;
-  const completionTokens =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    rawOutputTokens !== undefined &&
-    rawOutputTokens !== null &&
-    rawOutputTokens !== 0 &&
-    !Number.isNaN(rawOutputTokens)
-      ? rawOutputTokens
-      : 0;
+  const basePromptTokens = sanitizeTokenCount(rawInputTokens);
+  const completionTokens = sanitizeTokenCount(rawOutputTokens);
   const promptTokens = basePromptTokens + cacheRead + cacheCreation;
 
   logger.debug(

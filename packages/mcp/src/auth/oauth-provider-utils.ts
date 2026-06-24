@@ -19,6 +19,43 @@ export interface OAuthTokenResponse {
   scope?: string;
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function normalizeTokenResponse(
+  response: Partial<OAuthTokenResponse>,
+  action: string,
+  responseText: string,
+  missingTokenError: string,
+): OAuthTokenResponse {
+  const accessToken = nonEmptyString(response.access_token);
+  if (accessToken === undefined) {
+    throw new Error(`${action}: ${missingTokenError} - ${responseText}`);
+  }
+
+  const normalized: OAuthTokenResponse = {
+    access_token: accessToken,
+    token_type: nonEmptyString(response.token_type) ?? 'Bearer',
+  };
+
+  if (response.expires_in !== undefined) {
+    normalized.expires_in = response.expires_in;
+  }
+
+  const refreshToken = nonEmptyString(response.refresh_token);
+  if (refreshToken !== undefined) {
+    normalized.refresh_token = refreshToken;
+  }
+
+  const scope = nonEmptyString(response.scope);
+  if (scope !== undefined) {
+    normalized.scope = scope;
+  }
+
+  return normalized;
+}
+
 /**
  * Parse an error message from a form-urlencoded token response body.
  * Returns null if no error can be extracted.
@@ -29,11 +66,11 @@ export function parseTokenErrorResponse(
 ): string | null {
   try {
     const errorParams = new URLSearchParams(responseText);
-    const error = errorParams.get('error');
-    const errorDescription = errorParams.get('error_description');
-    if (error) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string errorDescription should fall back to 'No description'
-      return `${action}: ${error} - ${errorDescription || 'No description'}`;
+    const error = nonEmptyString(errorParams.get('error'));
+    const errorDescription =
+      nonEmptyString(errorParams.get('error_description')) ?? 'No description';
+    if (error !== undefined) {
+      return `${action}: ${error} - ${errorDescription}`;
     }
   } catch {
     // Fall back to raw error
@@ -65,35 +102,42 @@ export function parseTokenResponse(
   }
 
   try {
-    return JSON.parse(responseText) as OAuthTokenResponse;
-  } catch {
-    // Parse form-urlencoded response
-    const tokenParams = new URLSearchParams(responseText);
-    const accessToken = tokenParams.get('access_token');
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string token_type is invalid, default to Bearer
-    const tokenType = tokenParams.get('token_type') || 'Bearer';
-    const expiresIn = tokenParams.get('expires_in');
-    const refreshToken = tokenParams.get('refresh_token');
-    const scope = tokenParams.get('scope');
-
-    if (!accessToken) {
-      const error = tokenParams.get('error');
-      const errorDescription = tokenParams.get('error_description');
-      throw new Error(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error uses action-specific fallback
-        `${action}: ${error || missingTokenError} - ${errorDescription || responseText}`,
-      );
+    return normalizeTokenResponse(
+      JSON.parse(responseText) as Partial<OAuthTokenResponse>,
+      action,
+      responseText,
+      missingTokenError,
+    );
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error;
     }
 
-    return {
-      access_token: accessToken,
-      token_type: tokenType,
-      expires_in: expiresIn ? parseInt(expiresIn, 10) : undefined,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided"
-      refresh_token: refreshToken || undefined,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided"
-      scope: scope || undefined,
-    } as OAuthTokenResponse;
+    // Parse form-urlencoded response
+    const tokenParams = new URLSearchParams(responseText);
+    const expiresIn = nonEmptyString(tokenParams.get('expires_in'));
+    const parsedResponse: Partial<OAuthTokenResponse> = {
+      access_token: tokenParams.get('access_token') ?? undefined,
+      token_type: tokenParams.get('token_type') ?? undefined,
+      expires_in: expiresIn !== undefined ? parseInt(expiresIn, 10) : undefined,
+      refresh_token: tokenParams.get('refresh_token') ?? undefined,
+      scope: tokenParams.get('scope') ?? undefined,
+    };
+
+    if (nonEmptyString(parsedResponse.access_token) === undefined) {
+      const error =
+        nonEmptyString(tokenParams.get('error')) ?? missingTokenError;
+      const errorDescription =
+        nonEmptyString(tokenParams.get('error_description')) ?? responseText;
+      throw new Error(`${action}: ${error} - ${errorDescription}`);
+    }
+
+    return normalizeTokenResponse(
+      parsedResponse,
+      action,
+      responseText,
+      missingTokenError,
+    );
   }
 }
 

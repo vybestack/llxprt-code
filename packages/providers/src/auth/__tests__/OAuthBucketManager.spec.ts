@@ -81,8 +81,7 @@ class MockTokenStore implements TokenStore {
   }
 
   private getKey(provider: string, bucket?: string): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string bucket should use 'default'
-    return `${provider}:${bucket || 'default'}`;
+    return `${provider}:${bucket && bucket.length > 0 ? bucket : 'default'}`;
   }
 
   clear(): void {

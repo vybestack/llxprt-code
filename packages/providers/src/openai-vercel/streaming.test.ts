@@ -110,14 +110,18 @@ describe('OpenAIVercelProvider - Streaming', () => {
     const rejectedPromise = Promise.reject(error);
     rejectedPromise.catch(() => {});
 
-    // biome-ignore lint/correctness/useYield
-    // eslint-disable-next-line require-yield
-    async function* errorStream() {
-      throw error;
-    }
+    const errorStream: AsyncIterable<string> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next(): Promise<IteratorResult<string>> {
+            throw error;
+          },
+        };
+      },
+    };
 
     return {
-      textStream: errorStream(),
+      textStream: errorStream,
       toolCalls: rejectedPromise,
       usage: rejectedPromise,
       finishReason: rejectedPromise,

@@ -147,37 +147,17 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/utils/tool-utils.ts', // remaining core cleanup after #2081/#2082
   'packages/core/src/utils/userAccountManager.ts', // remaining core cleanup after #2081/#2082
   // #2083 completed files are locked in completedDirectiveCleanupScopes below.
-  // Remaining #2084/#2092 provider files keep narrowed globs here. #2092 test
-  // files are locked in completedDirectiveCleanupScopes (overrides this block).
-  'packages/providers/src/**/*.{test,spec}.ts', // #2084 (non-#2092 test files)
-  'packages/providers/src/anthropic/**/*.ts', // #2084/#2092
-  'packages/providers/src/openai/**/*.ts', // #2084/#2092
-  'packages/providers/src/openai-responses/**/*.ts', // #2084/#2092
-  'packages/providers/src/openai-vercel/**/*.ts', // #2084/#2092
-  'packages/providers/src/gemini/**/*.ts', // #2084/#2092
-  'packages/providers/src/auth/**/*.ts', // #2092
-  'packages/providers/src/BaseProvider.ts', // #2084
-  'packages/providers/src/composition/**/*.ts', // #2084
-  'packages/providers/src/fake/**/*.ts', // #2084
-  'packages/providers/src/logging/ProviderContentExtractor.ts', // #2084
-  'packages/providers/src/reasoning/**/*.ts', // #2084
-  'packages/providers/src/runtime/bucketFailover.ts', // #2092
-  'packages/providers/src/runtime/modelParamParser.ts', // #2084
-  'packages/providers/src/runtime/runtimeAccessors.ts', // #2084
-  'packages/providers/src/utils/localEndpoint.ts', // #2084
-  'packages/providers/src/utils/toolNameNormalization.ts', // #2084
-  'packages/providers/src/utils/toolResponsePayload.ts', // #2084
-  'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
+  // #2116: provider module entries removed after directive cleanup.
+  // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
-  // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
+  // #2089 scope: the six target packages (auth/settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
   // inline lint directives. Those packages are kept in legacy scope so
   // existing directives do not break lint. The target files and extracted
   // modules are locked in completedDirectiveCleanupScopes below, which
   // overrides this block for those specific files.
-  'packages/mcp/src/**/*.{ts,tsx}', // #2089/#2092 (non-target files)
   'packages/auth/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/settings/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/telemetry/src/**/*.{ts,tsx}', // #2089 (non-target files)
@@ -239,34 +219,8 @@ const completedDirectiveCleanupScopes = [
   'packages/core/src/prompt-config/resolver/**/*.{ts,tsx}', // #2082
   'packages/core/src/runtime/runtimeStateFactory.ts', // #2082
   'packages/tools/src/**/*.{ts,tsx}', // #2088
-  // #2083 providers core cleanup — only these enumerated files are locked;
-  // ProviderContentExtractor.ts remains in legacyDirectiveCleanupScopes for #2084.
-  'packages/providers/src/LoadBalancingProvider.ts', // #2083
-  'packages/providers/src/LoggingProviderWrapper.ts', // #2083
-  'packages/providers/src/ProviderManager.ts', // #2083
-  'packages/providers/src/RetryOrchestrator.ts', // #2083
-  'packages/providers/src/runtime/profileSnapshot.ts', // #2083
-  'packages/providers/src/runtime/runtimeContextFactory.ts', // #2083
-  'packages/providers/src/runtime/runtimeRegistry.ts', // #2083
-  'packages/providers/src/runtime/settingsResolver.ts', // #2083
-  'packages/providers/src/utils/retryStrategy.ts', // #2083
-  'packages/providers/src/baseUrlResolver.ts', // #2083
-  'packages/providers/src/modelResolver.ts', // #2083
-  'packages/providers/src/providerCapabilitiesService.ts', // #2083
-  'packages/providers/src/runtimeNormalizer.ts', // #2083
-  'packages/providers/src/tokenUsageTracker.ts', // #2083
-  'packages/providers/src/loadBalancing/**/*.ts', // #2083
-  'packages/providers/src/logging/ConfigBasedRedactor.ts', // #2083
-  'packages/providers/src/logging/configValidator.ts', // #2083
-  'packages/providers/src/logging/conversationLogger.ts', // #2083
-  'packages/providers/src/logging/optionsNormalizer.ts', // #2083
-  'packages/providers/src/logging/streamChunkUtils.ts', // #2083
-  'packages/providers/src/logging/telemetryEmitter.ts', // #2083
-  'packages/providers/src/logging/tokenAccumulator.ts', // #2083
-  'packages/providers/src/logging/tokenCounts.ts', // #2083
-  'packages/providers/src/runtime/keyResolution.ts', // #2083
-  'packages/providers/src/runtime/runtimeIdentityResolution.ts', // #2083
-  'packages/providers/src/utils/statusExtraction.ts', // #2083
+  // #2116: provider module entries removed; the global package source rule
+  // enforces eslint-comments/no-use and unused-disable reporting.
   // #2089 scope — six target files and their extracted modules are fully
   // compliant: zero inline lint directives. Locked to error so any new
   // directive fails immediately.
@@ -293,52 +247,11 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
-  // #2084 scope — provider implementation files fully compliant: zero inline
-  // lint directives. Locked to error so any new directive fails immediately.
-  // The broad packages/providers/src/** legacy override above is overridden
-  // here for these specific files. Extracted modules added as created.
-  'packages/providers/src/anthropic/AnthropicProvider.ts', // #2084
-  'packages/providers/src/anthropic/AnthropicRequestPreparation.ts', // #2084
-  'packages/providers/src/gemini/GeminiProvider.ts', // #2084
-  'packages/providers/src/gemini/thoughtSignatures.ts', // #2084
-  'packages/providers/src/gemini/geminiAuth.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiGenerationExecution.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiGenerationSetup.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiModels.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiReasoningConfig.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiRequestBuilding.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiResponseMapper.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiSchemaHelpers.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiServerTools.ts', // #2084 extracted
-  'packages/providers/src/openai-responses/buildResponsesInputFromContent.ts', // #2084
-  'packages/providers/src/openai-vercel/messageConversion.ts', // #2084
-  'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts', // #2084
-  'packages/providers/src/openai-vercel/vercelDeveloperRoleFetch.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelLogging.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelMetadataMapper.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelModelClient.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelModelListing.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelNonStreamingHandler.ts', // #2084 extracted
-  'packages/providers/src/gemini/geminiAbort.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelNonStreamingResponse.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelReasoningCapture.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelRequestParams.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelStreamHandler.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelStreamProcessor.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelStreamTypes.ts', // #2084 extracted
-  'packages/providers/src/openai-vercel/vercelSystemPrompt.ts', // #2084 extracted
-  'packages/providers/src/openai/buildResponsesRequest.ts', // #2084
-  'packages/providers/src/openai/getOpenAIProviderInfo.ts', // #2084
-  'packages/providers/src/openai/OpenAIApiExecution.ts', // #2084
-  'packages/providers/src/openai/OpenAINonStreamHandler.ts', // #2084
-  'packages/providers/src/openai/OpenAIProvider.ts', // #2084
-  'packages/providers/src/openai/OpenAIStreamChunkText.ts', // #2084 extracted
-  'packages/providers/src/openai/OpenAIRequestPreparation.ts', // #2084
-  'packages/providers/src/openai/OpenAIResponseParser.ts', // #2084
-  'packages/providers/src/openai/parseResponsesStream.ts', // #2084
-  'packages/providers/src/openai/responsesErrorParsing.ts', // #2084 extracted
-  // #2084 extracted shared helpers
-  'packages/providers/src/utils/falsyFallback.ts', // #2084
+  // #2116: #2084 provider entries removed — covered by global rule block.
+  // #2118 scope — all remaining mcp source/test files are fully compliant:
+  // zero inline lint directives. Locked to error so any new directive fails
+  // immediately. The broad mcp legacy entry has been removed entirely.
+  'packages/mcp/src/**/*.{ts,tsx}', // #2118
   // #2087 scope — packages/cli UI hooks, components, utils, state, themes,
   // and Zed integration are fully compliant: zero inline lint directives.
   // Locked to error so any new directive fails immediately.
@@ -497,6 +410,10 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/task.issues.test.ts', // #2090
   'packages/agents/src/tools/task.max-turns.test.ts', // #2090
   'packages/agents/src/tools/task.timeout.test.ts', // #2090
+  // #2117 — all packages/agents/src files are now fully compliant: zero inline
+  // lint directives. The broad glob below supersedes the individual #2090
+  // entries above. Locked to error so any new directive fails immediately.
+  'packages/agents/src/**/*.{ts,tsx}', // #2117
   // #2091 packages/cli test cleanup — target files (and extracted helpers)
   // are fully compliant: zero inline lint directives. Locked to error so any
   // new directive fails immediately while the rest of packages/cli remains in
@@ -601,57 +518,9 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/taskToolGovernance.ts', // #2085
   // #2092 scope — 25 target test files plus their split/helper modules are
   // fully compliant: zero inline lint directives. Locked to error so any new
-  // directive fails immediately. The broad provider/mcp/storage legacy globs
-  // remain for other issues' non-target files.
-  'packages/providers/src/__tests__/LoadBalancingProvider.failover.selection.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.failover.errors.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.failover.settings.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.failover.streaming.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.interface.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.roundrobin.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.delegation.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.delegation2.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.settings-merge.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.stats.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.stats2.test.ts', // #2092
-  'packages/providers/src/__tests__/LoadBalancingProvider.types.test.ts', // #2092
-  'packages/providers/src/__tests__/LoggingProviderWrapper.apiTelemetry.test.ts', // #2092
-  'packages/providers/src/__tests__/LoggingProviderWrapper.tpm.test.ts', // #2092
-  'packages/providers/src/__tests__/LoggingProviderWrapper.enhancedMetrics.test.ts', // #2092
-  'packages/providers/src/__tests__/LoggingProviderWrapper.test-helpers.ts', // #2092
-  'packages/providers/src/__tests__/RetryOrchestrator.basic.test.ts', // #2092
-  'packages/providers/src/__tests__/RetryOrchestrator.failover.test.ts', // #2092
-  'packages/providers/src/__tests__/RetryOrchestrator.integration.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.issue1150.toolresult.adjacency.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.issue1150.toolresult.edgecases.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.getModels.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.chat.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.tools.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.caching.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.caching-metrics.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.ratelimits.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.throttling.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.oauth.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.messaging.test.ts', // #2092
-  'packages/providers/src/anthropic/test-utils/anthropicProviderTestSetup.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.thinking.config.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.thinking.context.test.ts', // #2092
-  'packages/providers/src/anthropic/AnthropicProvider.thinking.multiturn.test.ts', // #2092
-  'packages/providers/src/anthropic/test-utils/anthropicThinkingTestSetup.ts', // #2092
-  'packages/providers/src/openai-vercel/nonStreaming.test.ts', // #2092
-  'packages/providers/src/openai-vercel/nonStreaming.config.test.ts', // #2092
-  'packages/providers/src/openai/OpenAIProvider.emptyResponseRetry.test.ts', // #2092
-  'packages/providers/src/openai/OpenAIProvider.emptyResponseRetry.conditions.test.ts', // #2092
-  'packages/providers/src/runtime/__tests__/profileApplication.lb.detection.test.ts', // #2092
-  'packages/providers/src/runtime/__tests__/profileApplication.lb.authkey.test.ts', // #2092
-  'packages/providers/src/runtime/__tests__/lbProfileApplicationTestSetup.ts', // #2092
-  'packages/providers/src/runtime/__tests__/profileApplication.basics.test.ts', // #2092
-  'packages/providers/src/runtime/__tests__/profileApplication.authtiming.test.ts', // #2092
-  'packages/providers/src/runtime/__tests__/profileApplication.workflow.test.ts', // #2092
-  'packages/providers/src/runtime/__tests__/profileApplicationTestSetup.ts', // #2092
-  'packages/providers/src/runtime/provider-alias-defaults.switch.test.ts', // #2092
-  'packages/providers/src/runtime/provider-alias-defaults.modeldefaults.test.ts', // #2092
-  'packages/providers/src/runtime/provider-alias-defaults.propagation.test.ts', // #2092
+  // directive fails immediately. The broad mcp/storage legacy globs remain for
+  // other issues' non-target files.
+  // #2116: provider module entries removed after directive cleanup.
   'packages/core/src/config/config.a.test.ts', // #2092
   'packages/core/src/config/config.b.test.ts', // #2092
   'packages/core/src/config/config.b2.test.ts', // #2092
@@ -1686,6 +1555,63 @@ export default tseslint.config(
   // End Issue #1581
   // ============================================================================
 
+  // Issue #2081/#2082: Security credential-detection regex patterns.
+  // These are intentionally crafted to scan environment variables for secrets
+  // (credentials in URLs, JWT tokens). The sonarjs/regular-expr rule is a
+  // generic safety heuristic that cannot distinguish "validating untrusted
+  // input" from "scanning for secrets". The patterns are already bounded with
+  // explicit quantifiers to prevent ReDoS.
+  {
+    files: ['packages/core/src/services/environmentSanitization.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2081/#2082 security credential-detection regex
+    },
+  },
+
+  // Issue #2087: Static, reviewed regex patterns that parse terminal/command
+  // input at trusted boundaries. The inputs are bounded (single CLI command
+  // lines or local config values, not untrusted network data) and the patterns
+  // are anchored with explicit quantifiers. sonarjs/regular-expr and
+  // sonarjs/slow-regex are generic heuristics that cannot distinguish these
+  // bounded parsing cases from ReDoS-vulnerable network input validation.
+  {
+    files: [
+      'packages/cli/src/ui/utils/secureInputHandler.ts',
+      'packages/cli/src/ui/utils/terminalSetup.ts',
+      'packages/cli/src/utils/privacy/ConversationDataRedactor.ts',
+      'packages/cli/src/utils/sandbox-env.ts',
+      'packages/cli/src/zed-integration/zed-path-resolver.ts',
+    ],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2087 trusted-boundary input parsing
+    },
+  },
+
+  // Issue #2086: MCP prompt argument parsing regexes. These patterns parse
+  // double-quoted strings with escape sequences (\.) for CLI prompt
+  // arguments. The sonarjs regular-expr/slow-regex heuristics flag the
+  // alternation-with-backreference structure, but the patterns operate on
+  // bounded single-line user input with explicit non-overlapping alternation
+  // branches that prevent catastrophic backtracking.
+  {
+    files: ['packages/cli/src/services/mcpPromptArgParser.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 quoted-string arg parsing
+    },
+  },
+  // Issue #2086: position/range argument parsing regexes in todoOperations.
+  // These parse user-supplied positional numbers (e.g. "1", "1.2", "2-5")
+  // and are anchored with ^...$; inputs are bounded single-line tokens.
+  {
+    files: ['packages/cli/src/ui/commands/todoOperations.ts'],
+    rules: {
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2086 position arg parsing
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2086 position arg parsing
+    },
+  },
+
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node
@@ -1739,22 +1665,9 @@ export default tseslint.config(
     },
   },
   // ============================================================================
-  // Issue #1584: Provider test strict-boolean-expressions relaxation
   // ============================================================================
-  // Providers test files were moved from packages/core/src/providers/ to
-  // packages/providers/src/ as part of the provider extraction. The old
-  // test location had strict-boolean-expressions off for test files via the
-  // core/providers test exemptions. The new location picks up the full
-  // strict rule (allowAny: false), which flags common test patterns like
-  // .filter(x => x.someProperty) where the property type includes `any`.
-  // Disabling to error level for provider test files preserves the prior
-  // behavior without weakening production provider auth anti-pattern rules.
-  {
-    files: ['packages/providers/src/**/*.{test,spec}.ts'],
-    rules: {
-      '@typescript-eslint/strict-boolean-expressions': 'off',
-    },
-  },
+  // Issue #2116: Provider test strict-boolean-expressions relaxation removed.
+  // Provider test files are now compliant with the strict rule.
   // Provider authentication anti-patterns
   {
     files: ['packages/core/src/providers/**/*.ts'],
@@ -1838,7 +1751,6 @@ export default tseslint.config(
   {
     files: [
       'packages/tools/src/**/*.{test,spec}.{ts,tsx}',
-      'packages/providers/src/__tests__/tools-formatting.test.ts',
     ],
     rules: {
       'vitest/no-conditional-expect': 'off',

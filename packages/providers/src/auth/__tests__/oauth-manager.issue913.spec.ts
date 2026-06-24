@@ -10,6 +10,29 @@ import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 import { MessageBus, PolicyEngine } from '@vybestack/llxprt-code-core';
 import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
 
+type StdinSetRawMode = typeof process.stdin.setRawMode;
+type StdinWithOptionalSetRawMode = NodeJS.ReadStream & {
+  setRawMode?: StdinSetRawMode;
+};
+
+function installStdinSetRawModeSpy(setRawModeSpy: StdinSetRawMode): void {
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode = setRawModeSpy;
+  }
+}
+
+function restoreStdinSetRawMode(
+  originalSetRawMode: StdinSetRawMode | undefined,
+): void {
+  const stdin = process.stdin as StdinWithOptionalSetRawMode;
+  if (originalSetRawMode === undefined) {
+    Reflect.deleteProperty(stdin, 'setRawMode');
+    return;
+  }
+
+  stdin.setRawMode = originalSetRawMode;
+}
+
 /**
  * Issue 913: OAuth Bucket Prompt Mode Tests
  *
@@ -236,11 +259,9 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
 
       // Spy on stdin.setRawMode if it exists
       const setRawModeSpy = vi.fn();
-      const originalSetRawMode = process.stdin.setRawMode;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (process.stdin.isTTY) {
-        process.stdin.setRawMode = setRawModeSpy;
-      }
+      const originalSetRawMode = (process.stdin as StdinWithOptionalSetRawMode)
+        .setRawMode;
+      installStdinSetRawModeSpy(setRawModeSpy);
 
       const policyEngine = new PolicyEngine();
       const messageBus = new MessageBus(policyEngine);
@@ -259,10 +280,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
       expect(setRawModeSpy).not.toHaveBeenCalled();
 
       // Restore (platform-specific: setRawMode may not exist on non-TTY)
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, vitest/no-conditional-in-test -- setRawMode may be undefined on non-TTY platforms
-      if (originalSetRawMode !== undefined) {
-        process.stdin.setRawMode = originalSetRawMode;
-      }
+      restoreStdinSetRawMode(originalSetRawMode);
     });
 
     it('should preserve stdin state when falling back to TTY prompt', async () => {
@@ -320,10 +338,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
           configurable: true,
           value: originalIsRaw,
         });
-        Object.defineProperty(process.stdin, 'setRawMode', {
-          configurable: true,
-          value: originalSetRawMode,
-        });
+        restoreStdinSetRawMode(originalSetRawMode);
       }
     });
   });

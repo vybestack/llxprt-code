@@ -970,10 +970,8 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
         const newToken: MCPOAuthToken = {
           accessToken: newTokenResponse.access_token,
           tokenType: newTokenResponse.token_type,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided", keep existing
-          refreshToken: newTokenResponse.refresh_token || token.refreshToken,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided", keep existing
-          scope: newTokenResponse.scope || token.scope,
+          refreshToken: newTokenResponse.refresh_token ?? token.refreshToken,
+          scope: newTokenResponse.scope ?? token.scope,
         };
 
         if (
