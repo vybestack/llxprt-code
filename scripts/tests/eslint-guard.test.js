@@ -12,11 +12,9 @@ import {
   readdirSync,
   statSync,
   writeFileSync,
-  existsSync,
 } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import {
   checkDiff,
   checkCoreCentralBypassesInConfig,
@@ -28,39 +26,63 @@ import {
   scanModuleDirectives,
 } from '../check-eslint-guard.js';
 
-const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+const repoRoot = process.cwd();
 
 function listTsFiles(dir) {
-  const results = [];
-  if (!existsSync(dir)) {
-    return results;
-  }
+  const out = [];
   for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    if (statSync(fullPath).isDirectory()) {
-      results.push(...listTsFiles(fullPath));
-    } else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) {
-      results.push(fullPath);
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      out.push(...listTsFiles(full));
+    } else if (/\.(?:ts|tsx)$/.test(entry)) {
+      out.push(full);
     }
   }
-  return results;
+  return out;
 }
 
-function extractScopeArray(scopeName) {
-  const configPath = join(repoRoot, 'eslint.config.js');
-  const source = readFileSync(configPath, 'utf8');
-  const match = new RegExp(scopeName + String.raw`\s*=\s*\[([\s\S]*?)\];`).exec(
-    source,
-  );
-  if (!match) {
-    return [];
+const eslintConfigSource = readFileSync(
+  join(repoRoot, 'eslint.config.js'),
+  'utf8',
+);
+
+function extractScopeArray(name) {
+  const start = eslintConfigSource.indexOf('const ' + name + ' = [');
+  if (start === -1) {
+    throw new Error(
+      'Could not find scope const declaration for "' +
+        name +
+        '" in eslint.config.js',
+    );
   }
-  const body = match[1];
+  const arrayStart = eslintConfigSource.indexOf('[', start);
+  let depth = 0;
+  let end = -1;
+  for (let i = arrayStart; i < eslintConfigSource.length; i++) {
+    const ch = eslintConfigSource[i];
+    if (ch === '[') {
+      depth += 1;
+    } else if (ch === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end === -1) {
+    throw new Error(
+      'Could not parse closing bracket for scope const "' +
+        name +
+        '" in eslint.config.js',
+    );
+  }
+  const body = eslintConfigSource.slice(arrayStart + 1, end);
   const entries = [];
-  const lineRegex = /'([^']+)'/g;
-  let lineMatch;
-  while ((lineMatch = lineRegex.exec(body)) !== null) {
-    entries.push(lineMatch[1]);
+  const re = /'([^']+)'/g;
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    entries.push(m[1]);
   }
   return entries;
 }
@@ -410,6 +432,40 @@ describe('check-eslint-guard', () => {
 
       expect(checkCoreCentralBypassesInConfig(config)).toEqual([]);
     });
+  });
+});
+
+describe('packages/storage directive cleanup (#2119)', () => {
+  const storageSrcDir = join(repoRoot, 'packages', 'storage', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const directiveRe = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
+    const offenders = [];
+    for (const file of listTsFiles(storageSrcDir)) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, idx) => {
+        if (directiveRe.test(line)) {
+          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
+        }
+      });
+    }
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/storage/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const storageEntries = legacy.filter((e) =>
+      e.startsWith('packages/storage'),
+    );
+    expect(
+      storageEntries,
+      'Legacy storage entries: ' + storageEntries.join(', '),
+    ).toEqual([]);
   });
 });
 

@@ -91,6 +91,40 @@ function safeUsername(): string {
   }
 }
 
+function isErrorWithCode(value: unknown): value is { code: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'code' in value &&
+    typeof (value as { code: unknown }).code === 'string'
+  );
+}
+
+function isErrorWithMessage(value: unknown): value is { message: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'message' in value &&
+    typeof (value as { message: unknown }).message === 'string'
+  );
+}
+
+const KEYRING_MODULE_ERROR_CODES = new Set([
+  'ERR_MODULE_NOT_FOUND',
+  'MODULE_NOT_FOUND',
+  'ERR_DLOPEN_FAILED',
+]);
+
+function isKeyringModuleMissingError(error: unknown): boolean {
+  if (isErrorWithCode(error) && KEYRING_MODULE_ERROR_CODES.has(error.code)) {
+    return true;
+  }
+  if (!isErrorWithMessage(error)) {
+    return false;
+  }
+  return error.message.includes('@napi-rs/keyring');
+}
+
 function classifyError(error: unknown): SecureStoreErrorCode {
   const msg =
     error instanceof Error
@@ -100,9 +134,7 @@ function classifyError(error: unknown): SecureStoreErrorCode {
   if (msg.includes('denied') || msg.includes('permission')) return 'DENIED';
   if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
   if (msg.includes('not found')) return 'NOT_FOUND';
-  const errObj = error as NodeJS.ErrnoException;
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
-  if (errObj?.code === 'ENOENT') return 'NOT_FOUND';
+  if (isErrorWithCode(error) && error.code === 'ENOENT') return 'NOT_FOUND';
   return 'UNAVAILABLE';
 }
 
@@ -221,20 +253,10 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
 
     return withFindCredentials(adapter, findCredentialsFn);
   } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    const isModuleMissing =
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
-      err?.code === 'ERR_MODULE_NOT_FOUND' ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
-      err?.code === 'MODULE_NOT_FOUND' ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
-      err?.code === 'ERR_DLOPEN_FAILED' ||
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
-      err?.message?.includes('@napi-rs/keyring');
-    if (!isModuleMissing && process.env.DEBUG) {
+    if (!isKeyringModuleMissingError(error) && process.env.DEBUG) {
+      const message = isErrorWithMessage(error) ? error.message : String(error);
       _moduleLogger.warn(
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
-        `[SecureStore] Unexpected error loading @napi-rs/keyring: ${err?.message}`,
+        `[SecureStore] Unexpected error loading @napi-rs/keyring: ${message}`,
       );
     }
     return null;
@@ -657,12 +679,7 @@ export class SecureStore {
     if (adapter !== null && typeof adapter.findCredentials === 'function') {
       try {
         const creds = await adapter.findCredentials(this.serviceName);
-        for (const cred of creds) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (!cred.account.startsWith('__securestore_probe__')) {
-            keys.add(cred.account);
-          }
-        }
+        this.addKeyringAccounts(keys, creds);
       } catch {
         // Keyring enumeration failed
       }
@@ -670,28 +687,7 @@ export class SecureStore {
 
     try {
       const files = await fs.readdir(this.fallbackDir);
-      for (const file of files) {
-        if (file.endsWith('.enc')) {
-          const keyInFile = file.slice(0, -4);
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          try {
-            // First try decoding as the new sanitizer (which uses %XX for reserved chars)
-            // or as encodeURIComponent (previous version).
-            // decodeURIComponent handles both.
-            const decodedKey = decodeURIComponent(keyInFile);
-            this.validateKey(decodedKey);
-            keys.add(decodedKey);
-          } catch {
-            // If decoding fails, it might be a legacy raw key filename.
-            try {
-              this.validateKey(keyInFile);
-              keys.add(keyInFile);
-            } catch {
-              // Truly malformed filename — skip
-            }
-          }
-        }
-      }
+      this.addFallbackFileKeys(keys, files);
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code !== 'ENOENT') {
@@ -702,6 +698,44 @@ export class SecureStore {
     const sorted = Array.from(keys).sort();
     this.logger.debug(() => `[list] found ${sorted.length} key(s)`);
     return sorted;
+  }
+
+  private addKeyringAccounts(
+    keys: Set<string>,
+    creds: Array<{ account: string; password: string }>,
+  ): void {
+    for (const cred of creds) {
+      if (!cred.account.startsWith('__securestore_probe__')) {
+        keys.add(cred.account);
+      }
+    }
+  }
+
+  private addFallbackFileKeys(keys: Set<string>, files: string[]): void {
+    for (const file of files) {
+      if (!file.endsWith('.enc')) {
+        continue;
+      }
+      this.addDecodedFallbackKey(keys, file.slice(0, -4));
+    }
+  }
+
+  private addDecodedFallbackKey(keys: Set<string>, keyInFile: string): void {
+    // First try decoding as the new sanitizer (which uses %XX for reserved chars)
+    // or as encodeURIComponent (previous version). decodeURIComponent handles both.
+    try {
+      const decodedKey = decodeURIComponent(keyInFile);
+      this.validateKey(decodedKey);
+      keys.add(decodedKey);
+    } catch {
+      // If decoding fails, it might be a legacy raw key filename.
+      try {
+        this.validateKey(keyInFile);
+        keys.add(keyInFile);
+      } catch {
+        // Truly malformed filename — skip
+      }
+    }
   }
 
   // ─── CRUD: has() ─────────────────────────────────────────────────────────
