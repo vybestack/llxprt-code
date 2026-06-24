@@ -474,10 +474,12 @@ Zod schemas are provided for the projected DATA types that cross the public boun
 (callbacks and class instances are NOT Zod-validated, per #1594 precedent).
 
 ```typescript
-// Policy (REQ-002) — argsPattern projected to string (never raw RegExp)
+// Policy (REQ-002) — argsPattern projected to string (never raw RegExp).
+// priority/toolName mirror core PolicyRule optionality (types.ts:29,46) — projected
+// faithfully (NOT coerced to a placeholder); CLI renders undefined as `?? 0` / `?? '*'`.
 export interface PolicyRuleView {
-  readonly priority: number;
-  readonly toolName: string;
+  readonly priority?: number;
+  readonly toolName?: string;
   readonly decision: PolicyDecision;          // VALUE enum (core barrel)
   readonly argsPattern?: string;              // = rule.argsPattern?.source
   readonly source?: string;

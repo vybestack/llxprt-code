@@ -22,8 +22,8 @@ interface AgentPolicyControl {
 
 // Projected public type (specification.md Data Schemas) — argsPattern is a STRING, never RegExp.
 interface PolicyRuleView {
-  readonly priority: number;
-  readonly toolName: string;
+  readonly priority?: number;            // mirror core PolicyRule.priority? (types.ts:46)
+  readonly toolName?: string;            // mirror core PolicyRule.toolName? (types.ts:29)
   readonly decision: PolicyDecision;     // VALUE enum, re-exported from core barrel (index.ts:17)
   readonly argsPattern?: string;         // = rule.argsPattern?.source
   readonly source?: string;

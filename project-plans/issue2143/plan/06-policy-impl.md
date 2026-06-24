@@ -38,8 +38,8 @@ See Phase 05 GIVEN/WHEN/THEN.
     * @requirement:REQ-002
     */
    export interface PolicyRuleView {
-     readonly priority: number;
-     readonly toolName: string;
+     readonly priority?: number;
+     readonly toolName?: string;
      readonly decision: PolicyDecision;
      readonly argsPattern?: string;
      readonly source?: string;
@@ -117,12 +117,16 @@ See Phase 05 GIVEN/WHEN/THEN.
    }
    ```
 
-   - VERIFY the real `PolicyRule` field names against `packages/policy/src/types.ts` (`priority`,
-     `toolName`, `decision`, `argsPattern?`, `source?` — `toolName` may be optional in core; if so,
-     project a sensible value, e.g. keep the same optionality on the view OR default to a documented
-     placeholder — prefer mirroring core's optionality by making `toolName?: string` on the view if
-     core's is optional, and update the Phase 05 test/pseudocode note accordingly during compliance).
-     Do NOT invent fields.
+   - GROUND TRUTH (verified `packages/policy/src/types.ts`): `PolicyRule` is
+     `{ name?: string; toolName?: string; argsPattern?: RegExp; decision: PolicyDecision;
+     priority?: number; allowRedirection?: boolean; source?: string }`. BOTH `priority` (`:46`) and
+     `toolName` (`:29`) are OPTIONAL, and `decision` is the only REQUIRED field. The repo does NOT set
+     `exactOptionalPropertyTypes`, but `strict` is on, so a required `priority: number` field CANNOT
+     receive `rule.priority` (type `number | undefined`). Therefore `PolicyRuleView` MUST mirror
+     core's optionality: `priority?`, `toolName?` (and keep `argsPattern?`, `source?`). Project each
+     field FAITHFULLY — copy `rule.priority`/`rule.toolName` through as-is (do NOT coerce a missing
+     value to `0`/`'*'`/any placeholder; the CLI consumer already renders undefined via `?? 0` /
+     `?? '*'` at `policiesCommand.ts:107/106`). Do NOT invent fields. `decision` stays required.
 
 3. `packages/agents/src/api/agentImpl.ts`:
    - Add `readonly policy: PolicyControl;` to the controls field block (near `:194-200`).
@@ -170,7 +174,7 @@ grep -qE "getEngine\(\)\.isNonInteractive\(\)" packages/agents/src/api/control/p
 # argsPattern projected to .source string (BLOCKING — no raw RegExp on the view).
 grep -qE "argsPattern\.source" packages/agents/src/api/control/policyControl.ts || { echo "FAIL: argsPattern not projected to .source"; exit 1; }
 # Must NOT return the live engine array directly.
-if grep -nE "return\s+(engine|this\.deps\.getEngine\(\))\.getRules\(\)" packages/agents/src/api/control/policyControl.ts; then
+if grep -nE "return[[:space:]]+(engine|this\.deps\.getEngine\(\))\.getRules\(\)" packages/agents/src/api/control/policyControl.ts; then
   echo "FAIL: getRules returns the live engine array (must snapshot)"; exit 1
 fi
 
@@ -228,4 +232,6 @@ Files Modified: [list each changed file with diff stats]
 Tests Added: [count]
 Verification: [paste the actual output of THIS phase's verification commands]
 Semantic Assessment: [one-line holistic assessment]
+```
+ssment]
 ```

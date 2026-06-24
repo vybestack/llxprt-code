@@ -18,6 +18,7 @@ import type {
   HookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type { PolicyDecision } from '@vybestack/llxprt-code-core';
 import type { EditorCallbacks } from './config-types.js';
 import type {
   AgentEvent,
@@ -320,6 +321,31 @@ export interface AgentHookControl {
   clear(): void;
 }
 
+/**
+ * Read-only projection of a policy rule (REQ-002.1). `argsPattern` is the
+ * RegExp source STRING (JSON-safe), never a RegExp.
+ * @plan:PLAN-20260622-COREAPIGAP.P06
+ * @requirement:REQ-002
+ */
+export interface PolicyRuleView {
+  readonly priority?: number;
+  readonly toolName?: string;
+  readonly decision: PolicyDecision;
+  readonly argsPattern?: string;
+  readonly source?: string;
+}
+
+/**
+ * Read-only inspection of the engine policy (REQ-002).
+ * @plan:PLAN-20260622-COREAPIGAP.P06
+ * @requirement:REQ-002
+ */
+export interface AgentPolicyControl {
+  getRules(): readonly PolicyRuleView[];
+  getDefaultDecision(): PolicyDecision;
+  isNonInteractive(): boolean;
+}
+
 export interface Agent {
   chat(input: AgentInput, opts?: TurnOptions): Promise<AgentResult>;
   stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent>;
@@ -368,6 +394,7 @@ export interface Agent {
   readonly ide: AgentIdeControl;
   readonly session: AgentSessionControl;
   readonly hooks: AgentHookControl;
+  readonly policy: AgentPolicyControl;
 
   getHistory(): Promise<readonly AgentMessage[]>;
   setHistory(

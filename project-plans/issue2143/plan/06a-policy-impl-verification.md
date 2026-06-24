@@ -28,9 +28,9 @@ npm run typecheck
 npm run lint
 
 # Delegation + snapshot + projection (BLOCKING).
-grep -qE "getEngine\(\)\.getRules\(\)" packages/agents/src/api/control/policyControl.ts || { echo "FAIL: getRules delegate"; exit 1; }
+grep -qE "engine\.getRules\(\)|getEngine\(\)\.getRules\(\)" packages/agents/src/api/control/policyControl.ts || { echo "FAIL: getRules delegate"; exit 1; }
 grep -qE "argsPattern\.source" packages/agents/src/api/control/policyControl.ts || { echo "FAIL: argsPattern projection"; exit 1; }
-if grep -nE "return\s+(engine|this\.deps\.getEngine\(\))\.getRules\(\)" packages/agents/src/api/control/policyControl.ts; then echo "FAIL: live array returned"; exit 1; fi
+if grep -nE "return[[:space:]]+(engine|this\.deps\.getEngine\(\))\.getRules\(\)" packages/agents/src/api/control/policyControl.ts; then echo "FAIL: live array returned"; exit 1; fi
 # No engine/rules caching field.
 if grep -nE "this\.(engine|_engine|rules|_rules)\s*=" packages/agents/src/api/control/policyControl.ts; then echo "FAIL: cached engine/rules"; exit 1; fi
 # No mutation.

@@ -58,6 +58,8 @@ import { IdeControl } from './control/ideControl.js';
 import type { IdeControlDeps } from './control/ideControl.js';
 import { HookControl } from './control/hooks.js';
 import type { HookControlDeps } from './control/hooks.js';
+import { PolicyControl } from './control/policyControl.js';
+import type { PolicyControlDeps } from './control/policyControl.js';
 import { SessionControl } from './control/sessionControl.js';
 import type { SessionControlDeps } from './control/sessionControl.js';
 import { ProfilesControl } from './control/profilesControl.js';
@@ -198,6 +200,7 @@ export class AgentImpl implements Agent {
   readonly ide: IdeControl;
   readonly session: SessionControl;
   readonly hooks: HookControl;
+  readonly policy: PolicyControl;
 
   /** @pseudocode createAgent.md steps 150-160 */
   readonly ownership: OwnershipRecord;
@@ -330,6 +333,7 @@ export class AgentImpl implements Agent {
     this.ide = this.buildIdeControl();
     this.session = this.buildSessionControl();
     this.hooks = this.buildHookControl();
+    this.policy = this.buildPolicyControl();
   }
 
   /**
@@ -496,6 +500,17 @@ export class AgentImpl implements Agent {
       getEditorCallbacks: () => this.editorCallbacksHolder.editorCallbacks,
     };
     return new IdeControl(ideDeps);
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P06
+   * @requirement:REQ-002
+   */
+  private buildPolicyControl(): PolicyControl {
+    const policyDeps: PolicyControlDeps = {
+      getEngine: () => this.deps.config.getPolicyEngine(),
+    };
+    return new PolicyControl(policyDeps);
   }
 
   /**
