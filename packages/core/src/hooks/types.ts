@@ -60,6 +60,17 @@ export interface CommandHookConfig {
 export type HookConfig = CommandHookConfig;
 
 /**
+ * Returns true when `value` is a non-null object. Used to guard hook payload
+ * fields that are checked with the `in` operator before being passed to
+ * translators, since `in` only confirms key presence, not value shape.
+ */
+function isNonNullObjectRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
  * Hook definition with matcher
  */
 export interface HookDefinition {
@@ -173,8 +184,10 @@ export class DefaultHookOutput implements HookOutput {
    * Prioritizes stopReason over reason per upstream 05049b5a
    */
   getEffectiveReason(): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, strings have fallthrough intent
-    return this.stopReason || this.reason || 'No reason provided';
+    const reason = this.stopReason ?? this.reason;
+    return reason === undefined || reason === ''
+      ? 'No reason provided'
+      : reason;
   }
 
   /**
@@ -304,15 +317,15 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
    * Get synthetic LLM response if provided by hook
    */
   getSyntheticResponse(): GenerateContentResponse | undefined {
-    if (this.hookSpecificOutput && 'llm_response' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput &&
+      isNonNullObjectRecord(this.hookSpecificOutput['llm_response'])
+    ) {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
-      ] as LLMResponse;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookResponse != null) {
-        // Convert hook format to SDK format
-        return defaultHookTranslator.fromHookLLMResponse(hookResponse);
-      }
+      ] as unknown as LLMResponse;
+      // Convert hook format to SDK format
+      return defaultHookTranslator.fromHookLLMResponse(hookResponse);
     }
     return undefined;
   }
@@ -323,22 +336,22 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
   override applyLLMRequestModifications(
     target: GenerateContentParameters,
   ): GenerateContentParameters {
-    if (this.hookSpecificOutput && 'llm_request' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput &&
+      isNonNullObjectRecord(this.hookSpecificOutput['llm_request'])
+    ) {
       const hookRequest = this.hookSpecificOutput[
         'llm_request'
       ] as Partial<LLMRequest>;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookRequest !== null && hookRequest !== undefined) {
-        // Convert hook format to SDK format
-        const sdkRequest = defaultHookTranslator.fromHookLLMRequest(
-          hookRequest as LLMRequest,
-          target,
-        );
-        return {
-          ...target,
-          ...sdkRequest,
-        };
-      }
+      // Convert hook format to SDK format
+      const sdkRequest = defaultHookTranslator.fromHookLLMRequest(
+        hookRequest as LLMRequest,
+        target,
+      );
+      return {
+        ...target,
+        ...sdkRequest,
+      };
     }
     return target;
   }
@@ -361,25 +374,25 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
     toolConfig?: GenAIToolConfig & { allowedFunctionNames?: string[] };
     tools?: ToolListUnion;
   } {
-    if (this.hookSpecificOutput && 'toolConfig' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput &&
+      isNonNullObjectRecord(this.hookSpecificOutput['toolConfig'])
+    ) {
       const hookToolConfig = this.hookSpecificOutput[
         'toolConfig'
       ] as HookToolConfig;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookToolConfig != null) {
-        // Convert hook format to SDK format
-        const sdkToolConfig =
-          defaultHookTranslator.fromHookToolConfig(hookToolConfig);
-        return {
-          ...target,
-          tools: target.tools ?? [],
-          toolConfig: {
-            ...sdkToolConfig,
-            // Also expose allowedFunctionNames directly for easier access
-            allowedFunctionNames: hookToolConfig.allowedFunctionNames,
-          },
-        };
-      }
+      // Convert hook format to SDK format
+      const sdkToolConfig =
+        defaultHookTranslator.fromHookToolConfig(hookToolConfig);
+      return {
+        ...target,
+        tools: target.tools ?? [],
+        toolConfig: {
+          ...sdkToolConfig,
+          // Also expose allowedFunctionNames directly for easier access
+          allowedFunctionNames: hookToolConfig.allowedFunctionNames,
+        },
+      };
     }
     return target;
   }
@@ -393,12 +406,14 @@ export class AfterModelHookOutput extends DefaultHookOutput {
    * Get modified LLM response if provided by hook
    */
   getModifiedResponse(): GenerateContentResponse | undefined {
-    if (this.hookSpecificOutput && 'llm_response' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput &&
+      isNonNullObjectRecord(this.hookSpecificOutput['llm_response'])
+    ) {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
       ] as Partial<LLMResponse>;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook type guards protect plugin payload boundaries despite declared types.
-      if (hookResponse?.candidates?.[0]?.content) {
+      if (hookResponse.candidates?.[0]?.content) {
         // Convert hook format to SDK format
         return defaultHookTranslator.fromHookLLMResponse(
           hookResponse as LLMResponse,

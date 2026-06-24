@@ -105,24 +105,38 @@ function getErrorCodeFromUnknown(error: unknown): string | undefined {
       return (error as { code: string }).code;
     }
 
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      'error' in error &&
-      typeof (error as { error?: unknown }).error === 'object' &&
-      (error as { error?: unknown }).error !== null &&
-      'code' in (error as { error?: { code?: unknown } }).error! &&
-      typeof (
-        (error as { error?: { code?: unknown } }).error as {
-          code?: unknown;
-        }
-      ).code === 'string'
-    ) {
-      return (
-        (error as { error?: { code?: unknown } }).error as {
-          code?: string;
-        }
-      ).code;
+    const nestedCode = extractNestedCodeAsString(error);
+    if (nestedCode !== undefined) {
+      return nestedCode;
     }
+  }
+  return undefined;
+}
+
+function extractNestedCodeAsString(error: object): string | undefined {
+  if (!('error' in error)) {
+    return undefined;
+  }
+  const inner = (error as { error?: unknown }).error;
+  if (
+    typeof inner === 'object' &&
+    inner !== null &&
+    'code' in inner &&
+    typeof (inner as { code?: unknown }).code === 'string'
+  ) {
+    return (inner as { code: string }).code;
+  }
+  return undefined;
+}
+
+function extractMessageString(error: unknown): string | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
   }
   return undefined;
 }
@@ -178,24 +192,20 @@ function getRateLimitMessage(
     return getRateLimitErrorMessageGeneric();
   }
 
+  const effectiveModel =
+    currentModel === undefined || currentModel === ''
+      ? DEFAULT_GEMINI_MODEL
+      : currentModel;
+
   if (isProQuotaExceededError(error)) {
     return isPaidTier
-      ? getRateLimitErrorMessageGoogleProQuotaPaid(
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for model name
-          currentModel || DEFAULT_GEMINI_MODEL,
-        )
-      : getRateLimitErrorMessageGoogleProQuotaFree(
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for model name
-          currentModel || DEFAULT_GEMINI_MODEL,
-        );
+      ? getRateLimitErrorMessageGoogleProQuotaPaid(effectiveModel)
+      : getRateLimitErrorMessageGoogleProQuotaFree(effectiveModel);
   }
 
   if (isGenericQuotaExceededError(error)) {
     return isPaidTier
-      ? getRateLimitErrorMessageGoogleGenericQuotaPaid(
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for model name
-          currentModel || DEFAULT_GEMINI_MODEL,
-        )
+      ? getRateLimitErrorMessageGoogleGenericQuotaPaid(effectiveModel)
       : getRateLimitErrorMessageGoogleGenericQuotaFree();
   }
 
@@ -204,13 +214,8 @@ function getRateLimitMessage(
 
 function formatStreamInterruptedError(error: unknown): string {
   const baseMessage =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof (error as { message?: unknown }).message === 'string'
-      ? (error as { message: string }).message
-      : 'Streaming parse error: model response contained malformed data.';
+    extractMessageString(error) ??
+    'Streaming parse error: model response contained malformed data.';
   const formattedMessage = formatErrorMessageWithStatus(
     baseMessage,
     undefined,

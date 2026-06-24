@@ -504,10 +504,10 @@ describe('HistoryService — Density Extensions', () => {
               let rawIdx = 0;
               for (let origIdx = 0; origIdx < histSize; origIdx++) {
                 if (removals.includes(origIdx)) continue;
-                if (!touched.has(origIdx)) {
-                  // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-                  expect(raw[rawIdx]).toBe(entries[origIdx]);
-                }
+                const isTouched = touched.has(origIdx);
+                expect(isTouched || raw[rawIdx] === entries[origIdx]).toBe(
+                  true,
+                );
                 rawIdx++;
               }
             },

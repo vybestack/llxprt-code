@@ -34,11 +34,6 @@ export interface FilterResult {
 }
 
 /**
- * Compiled regex patterns for emoji detection
- */
-type CompiledRegexArray = RegExp[];
-
-/**
  * Gets the most restrictive filter mode from two modes
  * Hierarchy: error > warn > auto > allowed
  */
@@ -57,11 +52,161 @@ export function getMostRestrictiveFilter(
 }
 
 /**
+ * Emoji Unicode code-point ranges for comprehensive detection.
+ * Each tuple is [start, end] inclusive.
+ */
+const EMOJI_CODE_POINT_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x1f300, 0x1f9ff],
+  [0x1fa00, 0x1faff],
+  [0x2600, 0x26ff],
+  [0x2700, 0x27bf],
+  [0x1f170, 0x1f1ff],
+  [0x1f600, 0x1f64f],
+  [0x1f680, 0x1f6ff],
+  [0x23e9, 0x23ff],
+  [0x2328, 0x2328],
+  [0x2705, 0x2705],
+  [0x2713, 0x2713],
+  [0x26a0, 0x26a0],
+  [0x274c, 0x274c],
+  [0x26a1, 0x26a1],
+];
+
+/**
+ * Checks whether a single Unicode code point falls within any known emoji
+ * range. Used as a regex-free alternative to character-class matching.
+ */
+function isEmojiCodePoint(codePoint: number): boolean {
+  for (const [start, end] of EMOJI_CODE_POINT_RANGES) {
+    if (codePoint >= start && codePoint <= end) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function codePointAt(char: string): number {
+  return char.codePointAt(0) ?? 0;
+}
+
+function isVariationSelector(codePoint: number): boolean {
+  return codePoint === 0xfe0e || codePoint === 0xfe0f;
+}
+
+function isZeroWidthJoiner(codePoint: number): boolean {
+  return codePoint === 0x200d;
+}
+
+function isKeycapCombiningMark(codePoint: number): boolean {
+  return codePoint === 0x20e3;
+}
+
+function isDigitChar(char: string): boolean {
+  return char.length === 1 && char >= '0' && char <= '9';
+}
+
+function isKeycapBase(char: string): boolean {
+  if (char === '#' || char === '*') {
+    return true;
+  }
+  return isDigitChar(char);
+}
+
+function isKeycapSequence(chars: readonly string[], index: number): boolean {
+  if (!isKeycapBase(chars[index])) {
+    return false;
+  }
+
+  if (index + 2 < chars.length) {
+    return (
+      isVariationSelector(codePointAt(chars[index + 1])) &&
+      isKeycapCombiningMark(codePointAt(chars[index + 2]))
+    );
+  }
+
+  return (
+    index + 1 < chars.length &&
+    isKeycapCombiningMark(codePointAt(chars[index + 1]))
+  );
+}
+
+function isEmojiVariationSequence(
+  chars: readonly string[],
+  index: number,
+): boolean {
+  if (index + 1 >= chars.length) {
+    return false;
+  }
+  return (
+    isEmojiCodePoint(codePointAt(chars[index])) &&
+    isVariationSelector(codePointAt(chars[index + 1]))
+  );
+}
+
+function isEmojiJoinerSequence(
+  chars: readonly string[],
+  index: number,
+): boolean {
+  if (index + 2 >= chars.length) {
+    return false;
+  }
+  return (
+    isEmojiCodePoint(codePointAt(chars[index])) &&
+    isZeroWidthJoiner(codePointAt(chars[index + 1])) &&
+    isEmojiCodePoint(codePointAt(chars[index + 2]))
+  );
+}
+
+function isEmojiSequenceAt(chars: readonly string[], index: number): boolean {
+  if (isEmojiCodePoint(codePointAt(chars[index]))) {
+    return true;
+  }
+  if (isKeycapSequence(chars, index)) {
+    return true;
+  }
+  return (
+    isEmojiVariationSequence(chars, index) ||
+    isEmojiJoinerSequence(chars, index)
+  );
+}
+
+/**
+ * Tests whether the given text contains at least one emoji code point.
+ */
+function textContainsEmoji(text: string): boolean {
+  const chars = Array.from(text);
+  for (let index = 0; index < chars.length; index++) {
+    if (isEmojiSequenceAt(chars, index)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Removes all emoji code points from the given text.
+ */
+function stripEmojiCodePoints(text: string): string {
+  let result = '';
+  for (const char of text) {
+    const codePoint = codePointAt(char);
+    if (
+      !isEmojiCodePoint(codePoint) &&
+      !isVariationSelector(codePoint) &&
+      !isZeroWidthJoiner(codePoint) &&
+      !isKeycapCombiningMark(codePoint)
+    ) {
+      result += char;
+    }
+  }
+  return result;
+}
+
+/**
  * EmojiFilter class for filtering emojis from various content types
  * @pseudocode lines 01-186
  */
 export class EmojiFilter {
-  private patterns: CompiledRegexArray;
   private conversions: Map<string, string>;
   private buffer: string;
   private config: FilterConfiguration;
@@ -73,7 +218,6 @@ export class EmojiFilter {
    */
   constructor(config: FilterConfiguration) {
     this.config = config;
-    this.patterns = this.compileEmojiPatterns();
     this.conversions = this.loadConversionMap();
     this.buffer = '';
   }
@@ -262,14 +406,7 @@ export class EmojiFilter {
    * @pseudocode lines 140-147
    */
   private detectEmojis(text: string): boolean {
-    for (const pattern of this.patterns) {
-      // Reset lastIndex to ensure test starts from beginning
-      pattern.lastIndex = 0;
-      if (pattern.test(text)) {
-        return true;
-      }
-    }
-    return false;
+    return textContainsEmoji(text);
   }
 
   /**
@@ -293,16 +430,9 @@ export class EmojiFilter {
    * @pseudocode lines 157-163
    */
   private removeDecorativeEmojis(text: string): string {
-    // Remove ALL emojis using comprehensive Unicode patterns
-    // Note: Functional emojis (✅, ✓, ⚠️, ❌, ⚡) are already converted by applyConversions
-    let result = text;
-
-    // Apply each pattern to remove emojis
-    for (const pattern of this.patterns) {
-      result = result.replace(new RegExp(pattern.source, pattern.flags), '');
-    }
-
-    return result;
+    // Remove ALL emojis using code-point range stripping.
+    // Functional emojis ([OK], [OK], WARNING:, [ERROR], [ACTION]) are already converted by applyConversions.
+    return stripEmojiCodePoints(text);
   }
 
   /**
@@ -321,10 +451,21 @@ export class EmojiFilter {
     const hasEmojis = this.detectEmojis(text);
 
     // Special case: if text ends with known complete words (common endings)
-    const endsWithKnownCompleteWords =
-      /(?:done|completed|finished|success|error|failed|ready|developer|warnings)$/i.test(
-        text,
-      );
+    const completeWordSuffixes = [
+      'done',
+      'completed',
+      'finished',
+      'success',
+      'error',
+      'failed',
+      'ready',
+      'developer',
+      'warnings',
+    ];
+    const lowerText = text.toLowerCase();
+    const endsWithKnownCompleteWords = completeWordSuffixes.some((word) =>
+      lowerText.endsWith(word),
+    );
     if (endsWithKnownCompleteWords) {
       return length;
     }
@@ -332,16 +473,19 @@ export class EmojiFilter {
     // If we have emojis in the text, be very conservative - only process
     // when we have known complete words or strong punctuation
     if (hasEmojis) {
-      const endsWithPunctuation = /[.!?]$/.test(text);
-      if (endsWithPunctuation) {
+      const lastChar = text.charAt(text.length - 1);
+      if (lastChar === '.' || lastChar === '!' || lastChar === '?') {
         return length;
       }
       return -1;
     }
 
     // For text without emojis, check if text ends with clear termination
-    const endsWithPunctuation = /[.!?]$/.test(text);
-    const endsWithSpace = /\s$/.test(text);
+    const lastChar = text.charAt(text.length - 1);
+    const endsWithPunctuation =
+      lastChar === '.' || lastChar === '!' || lastChar === '?';
+    const endsWithSpace =
+      lastChar === ' ' || lastChar === '\t' || lastChar === '\n';
 
     // Process text if it ends with punctuation or whitespace
     if (endsWithPunctuation || endsWithSpace) {
@@ -350,30 +494,6 @@ export class EmojiFilter {
 
     // Otherwise buffer - text might be incomplete (like 'tas' from 'task')
     return -1;
-  }
-
-  /**
-   * Compiles emoji detection patterns
-   * @returns Array of compiled regex patterns
-   * @pseudocode line 09
-   */
-  private compileEmojiPatterns(): CompiledRegexArray {
-    return [
-      // Unicode emoji ranges for comprehensive detection
-      /[\u{1F300}-\u{1F9FF}]/gu, // Miscellaneous Symbols and Pictographs + Supplemental Symbols
-      /[\u{1FA00}-\u{1FAFF}]/gu, // Extended Symbols and Pictographs (includes magic wand, rock, blood, planet, berries, vegetables, teapot, beans, jar)
-      /[\u{2600}-\u{26FF}]/gu, // Miscellaneous Symbols
-      /[\u{2700}-\u{27BF}]/gu, // Dingbats
-      /[\u{1F170}-\u{1F1FF}]/gu, // Enclosed Alphanumeric Supplement (includes 🆙 U+1F199) and Regional Indicators
-      /[\u{1F600}-\u{1F64F}]/gu, // Emoticons
-      /[\u{1F680}-\u{1F6FF}]/gu, // Transport and Map Symbols
-      /[\u{23E9}-\u{23FF}]/gu, // Additional symbols including ⏳ (hourglass)
-      // Specific functional emojis that might not be caught by ranges
-      /[\u2705\u2713\u26A0\u274C\u26A1]|\u26A0\uFE0F/gu,
-      // Variation selectors and combining characters often used with emojis
-      /[\uFE0E\uFE0F]/gu, // Variation selectors
-      /[\u200D]/gu, // Zero-width joiner
-    ];
   }
 
   /**

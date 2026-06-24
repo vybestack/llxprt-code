@@ -341,11 +341,9 @@ describe('classifyGoogleError', () => {
     const originalError = new Error();
     const result = classifyGoogleError(originalError);
     expect(result).toBeInstanceOf(RetryableQuotaError);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (result instanceof RetryableQuotaError) {
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(result.retryDelayMs).toBeUndefined();
-    }
+
+    const quotaError = result as RetryableQuotaError;
+    expect(quotaError.retryDelayMs).toBeUndefined();
   });
 
   it('should classify nested JSON string 404 error as ModelNotFoundError', () => {
@@ -384,18 +382,15 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(errorWithEmptyDetails);
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (result instanceof RetryableQuotaError) {
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(result.retryDelayMs).toBe(5000);
-      // The cause should be the parsed GoogleApiError
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(result.cause).toStrictEqual({
-        code: 429,
-        message: 'Resource exhausted. Please retry in 5s',
-        details: [],
-      });
-    }
+
+    const quotaError = result as RetryableQuotaError;
+    expect(quotaError.retryDelayMs).toBe(5000);
+    // The cause should be the parsed GoogleApiError
+    expect(quotaError.cause).toStrictEqual({
+      code: 429,
+      message: 'Resource exhausted. Please retry in 5s',
+      details: [],
+    });
   });
 
   it('should return RetryableQuotaError without delay time for generic 429 without specific message', () => {
@@ -407,11 +402,9 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(generic429);
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (result instanceof RetryableQuotaError) {
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(result.retryDelayMs).toBeUndefined();
-    }
+
+    const quotaError = result as RetryableQuotaError;
+    expect(quotaError.retryDelayMs).toBeUndefined();
   });
 
   it('should return RetryableQuotaError without delay time for 429 with empty details and no regex match', () => {
@@ -426,11 +419,9 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(errorWithEmptyDetails);
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (result instanceof RetryableQuotaError) {
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(result.retryDelayMs).toBeUndefined();
-    }
+
+    const quotaError = result as RetryableQuotaError;
+    expect(quotaError.retryDelayMs).toBeUndefined();
   });
 
   it('should return RetryableQuotaError without delay time for 429 with some detail', () => {
@@ -454,10 +445,8 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(errorWithEmptyDetails);
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (result instanceof RetryableQuotaError) {
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(result.retryDelayMs).toBeUndefined();
-    }
+
+    const quotaError = result as RetryableQuotaError;
+    expect(quotaError.retryDelayMs).toBeUndefined();
   });
 });

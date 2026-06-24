@@ -4,9 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/** Subset of the node-pty module API used by the shell execution service. */
+import type { IPty } from '@lydell/node-pty';
+
+export interface PtyModule {
+  spawn(
+    file: string,
+    args: string[],
+    options: {
+      cwd?: string;
+      name?: string;
+      cols?: number;
+      rows?: number;
+      env?: Record<string, string | undefined>;
+      handleFlowControl?: boolean;
+    },
+  ): IPty;
+}
+
 export type PtyImplementation = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  module: any;
+  module: PtyModule;
   name: 'lydell-node-pty' | 'node-pty';
 } | null;
 

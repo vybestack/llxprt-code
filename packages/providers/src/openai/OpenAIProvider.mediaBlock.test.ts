@@ -400,6 +400,50 @@ describe('OpenAIProvider - MediaBlock support', () => {
     });
   });
 
+  it('uses an unsupported placeholder for URL-backed PDF MediaBlocks', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [{ delta: { content: 'PDF fallback' } }],
+        };
+      },
+    };
+    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+    process.env.OPENAI_API_KEY = 'test-key';
+
+    const provider = new OpenAIProvider('test-key');
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'https://example.com/report.pdf',
+            encoding: 'url',
+            filename: 'report.pdf',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({ providerName: provider.name, contents }),
+    );
+    for await (const _chunk of generator) {
+      /* drain */
+    }
+
+    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+    const userMessage = callArgs.messages.find(
+      (m: { role: string }) => m.role === 'user',
+    );
+    expect(userMessage.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('[Unsupported PDF:'),
+    });
+  });
+
   it('produces text placeholder for unsupported media in user message', async () => {
     const fakeStream = {
       async *[Symbol.asyncIterator]() {

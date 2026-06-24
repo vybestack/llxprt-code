@@ -10,6 +10,14 @@
  */
 
 /**
+ * Type guard for non-null objects. Unlike `typeof x === 'object'`, this
+ * correctly excludes `null` (which has typeof 'object' at runtime).
+ */
+function isNonNullObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
  * Based on google/rpc/error_details.proto
  */
 
@@ -116,6 +124,14 @@ type ErrorShape = {
   code?: number;
 };
 
+function hasErrorShape(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || !('error' in value)) {
+    return false;
+  }
+  const err = (value as { error: unknown }).error;
+  return err !== undefined && err !== null;
+}
+
 /**
  * Parses an error object to check if it's a structured Google API error
  * and extracts all details.
@@ -129,8 +145,7 @@ type ErrorShape = {
  * @returns A GoogleApiError object if the error matches, otherwise null.
  */
 export function parseGoogleApiError(error: unknown): GoogleApiError | null {
-  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy short-circuit for malformed error inputs.
-  if (!error) {
+  if (error === null || error === undefined) {
     return null;
   }
 
@@ -166,15 +181,8 @@ function parseNestedMessage(message: string): ErrorShape | undefined {
     const parsedMessage = JSON.parse(
       message.replace(/\u00A0/g, '').replace(/\n/g, ' '),
     );
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      typeof parsedMessage === 'object' &&
-      parsedMessage !== null &&
-      'error' in parsedMessage &&
-      parsedMessage.error !== undefined &&
-      parsedMessage.error !== null
-    ) {
-      return parsedMessage.error as ErrorShape;
+    if (hasErrorShape(parsedMessage)) {
+      return (parsedMessage as { error: ErrorShape }).error;
     }
   } catch {
     // Not a JSON string; drilling complete.
@@ -279,8 +287,7 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
 
   let outerError: ErrorShape | undefined;
   // External data boundary: gaxios error response data from Google API may have unexpected shapes at runtime
-  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy fallback for external response data.
-  if (gaxiosError.response?.data) {
+  if (gaxiosError.response?.data !== undefined) {
     let data = gaxiosError.response.data;
 
     if (typeof data === 'string') {
@@ -295,17 +302,15 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && 'error' in data) {
+    if (isNonNullObject(data) && 'error' in data) {
       outerError = (data as { error?: ErrorShape }).error;
     }
   }
 
   // External data boundary: outerError may be undefined after parsing attempts, and gaxiosError.error comes from external API
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (outerError === undefined || outerError === null) {
+  if (outerError === undefined) {
     // If the gaxios structure isn't there, check for a top-level `error` property.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (gaxiosError.error !== undefined && gaxiosError.error !== null) {
+    if (gaxiosError.error !== undefined) {
       outerError = gaxiosError.error;
     } else {
       return undefined;
@@ -325,8 +330,7 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
   };
 
   let outerError: ErrorShape | undefined;
-  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve original falsy fallback for external API error messages.
-  if (apiError.message) {
+  if (apiError.message !== undefined && apiError.message !== '') {
     let data = apiError.message;
 
     if (typeof data === 'string') {
@@ -334,19 +338,7 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
         data = JSON.parse(data);
       } catch {
         // Not a JSON string, can't parse.
-        const stringData = String(data);
-
-        // Try one more fallback: look for the first '{' and last '}'
-        const firstBrace = stringData.indexOf('{');
-        const lastBrace = stringData.lastIndexOf('}');
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          try {
-            data = JSON.parse(stringData.substring(firstBrace, lastBrace + 1));
-          } catch {
-            // Substring also not valid JSON.
-          }
-        }
+        data = tryExtractJsonSubstring(String(data)) ?? data;
       }
     }
 
@@ -354,9 +346,22 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && 'error' in data) {
+    if (isNonNullObject(data) && 'error' in data) {
       outerError = (data as { error?: ErrorShape }).error;
     }
   }
   return outerError;
+}
+
+function tryExtractJsonSubstring(stringData: string): unknown | undefined {
+  const firstBrace = stringData.indexOf('{');
+  const lastBrace = stringData.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      return JSON.parse(stringData.substring(firstBrace, lastBrace + 1));
+    } catch {
+      // Substring also not valid JSON.
+    }
+  }
+  return undefined;
 }

@@ -152,7 +152,7 @@ export abstract class ConfigBaseCore {
   protected readonly noBrowser!: boolean;
   protected readonly folderTrust!: boolean;
   protected ideMode!: boolean;
-  protected ideClient!: IdeClient;
+  protected ideClient: IdeClient | undefined;
   protected inFallbackMode = false;
   protected _modelSwitchedDuringSession: boolean = false;
   protected readonly maxSessionTurns!: number;
@@ -637,11 +637,9 @@ export abstract class ConfigBaseCore {
     this.ideMode = value;
   }
   setIdeClientDisconnected(): void {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public IDE setter can be invoked before initialization or via partial runtime/test boundaries.
     void this.ideClient?.disconnect();
   }
   setIdeClientConnected(): void {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public IDE setter can be invoked before initialization or via partial runtime/test boundaries.
     void this.ideClient?.connect();
   }
   getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {

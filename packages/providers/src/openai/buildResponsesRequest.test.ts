@@ -1,5 +1,4 @@
-/* eslint-disable no-console */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type {
   ResponsesRequestParams,
   ResponsesRequest,
@@ -7,11 +6,16 @@ import type {
 import { buildResponsesRequest } from './buildResponsesRequest.js';
 
 describe('buildResponsesRequest', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
   describe('Basic Functionality', () => {
     it('should build request with prompt', () => {
       const params: ResponsesRequestParams = {
@@ -298,7 +302,7 @@ describe('buildResponsesRequest', () => {
       const result = buildResponsesRequest(params);
 
       expect(result.input).toHaveLength(2);
-      expect(console.warn).not.toHaveBeenCalledWith(
+      expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Trimmed messages'),
       );
     });
@@ -312,7 +316,7 @@ describe('buildResponsesRequest', () => {
 
       buildResponsesRequest(params);
 
-      expect(console.warn).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
     });
 
     it('should include stateful flag when provided', () => {

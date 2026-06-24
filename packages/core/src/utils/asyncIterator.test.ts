@@ -30,9 +30,9 @@ describe('prependAsyncGenerator', () => {
   });
 
   it('should handle empty source iterator', async () => {
-    // eslint-disable-next-line require-yield, sonarjs/generator-without-yield
     async function* emptySource(): AsyncGenerator<string> {
       // Generator returns immediately without yielding
+      yield* [] as string[];
       return;
     }
 
@@ -139,8 +139,8 @@ describe('prependAsyncGenerator', () => {
   });
 
   it('should handle source that immediately returns', async () => {
-    // eslint-disable-next-line require-yield, sonarjs/generator-without-yield
     async function* immediateSource(): AsyncGenerator<string> {
+      yield* [] as string[];
       return;
     }
 
@@ -201,8 +201,8 @@ describe('prependAsyncGenerator', () => {
   });
 
   it('should work with generator that has return value', async () => {
-    // eslint-disable-next-line require-yield, sonarjs/generator-without-yield
     async function* source(): AsyncGenerator<string, string> {
+      yield* [] as string[];
       return 'return-value';
     }
 

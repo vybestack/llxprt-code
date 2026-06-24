@@ -147,7 +147,6 @@ describe('Provider package public API behavioral tests', () => {
    * nothing. This test documents exactly which runtime symbols are missing
    * and must be added during P11 migration.
    */
-  /* eslint-disable vitest/no-conditional-in-test -- RED/GREEN migration tests use try/catch and conditional logic intentionally */
   it('providers package exports all expected runtime public API symbols (P11 green)', async () => {
     let providersModule: Record<string, unknown>;
     try {
@@ -172,16 +171,12 @@ describe('Provider package public API behavioral tests', () => {
       }
     }
 
-    if (missingSymbols.length > 0) {
-      // This is expected RED state — P11 will add these exports
-      throw new Error(
-        '@vybestack/llxprt-code-providers is missing ' +
-          `${missingSymbols.length} expected runtime exports: ${missingSymbols.join(', ')}. ` +
-          'These must be added during P11 migration when provider files are moved.',
-      );
-    }
-
-    // If all symbols are present, P11 has been completed
+    // All expected runtime symbols must be present after P11 migration
+    const missingDetail =
+      missingSymbols.length > 0
+        ? `@vybestack/llxprt-code-providers is missing ${missingSymbols.length} expected runtime exports: ${missingSymbols.join(', ')}. These must be added during P11 migration when provider files are moved.`
+        : '';
+    expect(missingDetail).toBe('');
     expect(missingSymbols).toStrictEqual([]);
   });
 
@@ -192,7 +187,6 @@ describe('Provider package public API behavioral tests', () => {
    * RED TEST: ProviderManager must be constructable from providers package.
    * Currently undefined because the package doesn't export it yet.
    */
-  /* eslint-disable vitest/no-conditional-in-test -- RED/GREEN migration test uses try/catch intentionally */
   it('ProviderManager is constructable from providers package (P11 green)', async () => {
     let providersModule: Record<string, unknown>;
     try {
@@ -202,13 +196,6 @@ describe('Provider package public API behavioral tests', () => {
     }
 
     const ProviderManager = providersModule.ProviderManager;
-    if (typeof ProviderManager !== 'function') {
-      throw new Error(
-        'ProviderManager is not exported from providers package. ' +
-          'This is expected before P11 migration.',
-      );
-    }
-
     expect(typeof ProviderManager).toBe('function');
     expect(
       (ProviderManager as new (...args: unknown[]) => unknown).prototype,
@@ -221,7 +208,6 @@ describe('Provider package public API behavioral tests', () => {
    *
    * RED TEST: FakeProvider must be constructable from providers package.
    */
-  /* eslint-disable vitest/no-conditional-in-test -- RED/GREEN migration test uses try/catch intentionally */
   it('FakeProvider is constructable from providers package (P11 green)', async () => {
     let providersModule: Record<string, unknown>;
     try {
@@ -231,13 +217,6 @@ describe('Provider package public API behavioral tests', () => {
     }
 
     const FakeProvider = providersModule.FakeProvider;
-    if (typeof FakeProvider !== 'function') {
-      throw new Error(
-        'FakeProvider is not exported from providers package. ' +
-          'This is expected before P11 migration.',
-      );
-    }
-
     expect(typeof FakeProvider).toBe('function');
   });
 });

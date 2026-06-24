@@ -34,6 +34,13 @@ function createTestMessageBus(): MessageBus {
   );
 }
 
+function isToolResultLike(result: unknown): boolean {
+  if (result === null || result === undefined || typeof result !== 'object') {
+    return false;
+  }
+  return 'llmContent' in result && 'returnDisplay' in result;
+}
+
 /**
  * Shared execute implementation for mock tool invocations.
  * Used by both MockToolInvocation and MockModifiableToolInvocation.
@@ -45,14 +52,7 @@ async function executeMockTool(
   updateOutput?: (output: string) => void,
 ): Promise<ToolResult> {
   const result = await tool.executeFn(params, abortSignal, updateOutput);
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    result !== null &&
-    result !== undefined &&
-    typeof result === 'object' &&
-    'llmContent' in result &&
-    'returnDisplay' in result
-  ) {
+  if (isToolResultLike(result)) {
     return result as ToolResult;
   }
   return {

@@ -251,6 +251,24 @@ describe('runtimeAccessors', () => {
       expect(manager).toBe(mockRuntimeProviderManager);
     });
 
+    it('should ignore non-function OAuth setAddItem fields', () => {
+      const runtimeId = setupCompleteRuntime();
+      upsertRuntimeEntry(runtimeId, {
+        oauthManager: {
+          providers: new Map([
+            [
+              'bad-provider',
+              {
+                name: 'bad-provider',
+                setAddItem: true,
+              },
+            ],
+          ]),
+        },
+      });
+
+      expect(() => getCliProviderManager({ addItem: vi.fn() })).not.toThrow();
+    });
     it('should get session token usage', () => {
       setupCompleteRuntime();
 

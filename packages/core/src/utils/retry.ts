@@ -15,6 +15,12 @@ export interface HttpError extends Error {
   status?: number;
 }
 
+const RETRYABLE_STATUS_CODES = new Set([401, 403, 429]);
+
+function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_STATUS_CODES.has(status) || (status >= 500 && status < 600);
+}
+
 export interface RetryOptions {
   maxAttempts: number;
   initialDelayMs: number;
@@ -98,7 +104,6 @@ function collectErrorDetails(error: unknown): {
   const stack: unknown[] = [error];
   const visited = new Set<unknown>();
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   while (stack.length > 0) {
     const current = stack.pop();
     if (current === null || current === undefined) {
@@ -107,46 +112,46 @@ function collectErrorDetails(error: unknown): {
 
     if (typeof current === 'string') {
       messages.push(current);
-      continue;
-    }
-
-    if (typeof current !== 'object') {
-      continue;
-    }
-
-    if (visited.has(current)) {
-      continue;
-    }
-    visited.add(current);
-
-    const errorObject = current as {
-      message?: unknown;
-      code?: unknown;
-      cause?: unknown;
-      originalError?: unknown;
-      error?: unknown;
-    };
-
-    if ('message' in errorObject && typeof errorObject.message === 'string') {
-      messages.push(errorObject.message);
-    }
-    if ('code' in errorObject && typeof errorObject.code === 'string') {
-      codes.push(errorObject.code);
-    }
-
-    const possibleNestedErrors = [
-      errorObject.cause,
-      errorObject.originalError,
-      errorObject.error,
-    ];
-    for (const nested of possibleNestedErrors) {
-      if (nested !== undefined && nested !== null && nested !== current) {
-        stack.push(nested);
-      }
+    } else if (typeof current === 'object' && !visited.has(current)) {
+      visited.add(current);
+      collectFromErrorObject(current, messages, codes, stack);
     }
   }
 
   return { messages, codes };
+}
+
+function collectFromErrorObject(
+  current: object,
+  messages: string[],
+  codes: string[],
+  stack: unknown[],
+): void {
+  const errorObject = current as {
+    message?: unknown;
+    code?: unknown;
+    cause?: unknown;
+    originalError?: unknown;
+    error?: unknown;
+  };
+
+  if ('message' in errorObject && typeof errorObject.message === 'string') {
+    messages.push(errorObject.message);
+  }
+  if ('code' in errorObject && typeof errorObject.code === 'string') {
+    codes.push(errorObject.code);
+  }
+
+  const possibleNestedErrors = [
+    errorObject.cause,
+    errorObject.originalError,
+    errorObject.error,
+  ];
+  for (const nested of possibleNestedErrors) {
+    if (nested !== undefined && nested !== null && nested !== current) {
+      stack.push(nested);
+    }
+  }
 }
 
 export function createStreamInterruptionError(
@@ -167,34 +172,19 @@ export function createStreamInterruptionError(
 }
 
 export function getErrorCode(error: unknown): string | undefined {
-  if (typeof error === 'object' && error !== null) {
-    if (
-      'code' in error &&
-      typeof (error as { code?: unknown }).code === 'string'
-    ) {
-      return (error as { code: string }).code;
-    }
-
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      'error' in error &&
-      typeof (error as { error?: unknown }).error === 'object' &&
-      (error as { error?: unknown }).error !== null &&
-      'code' in (error as { error?: { code?: unknown } }).error! &&
-      typeof (
-        (error as { error?: { code?: unknown } }).error as {
-          code?: unknown;
-        }
-      ).code === 'string'
-    ) {
-      return (
-        (error as { error?: { code?: unknown } }).error as {
-          code?: string;
-        }
-      ).code;
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+  const obj = error as Record<string, unknown>;
+  if (typeof obj.code === 'string') {
+    return obj.code;
+  }
+  if (typeof obj.error === 'object' && obj.error !== null) {
+    const inner = obj.error as Record<string, unknown>;
+    if (typeof inner.code === 'string') {
+      return inner.code;
     }
   }
-
   return undefined;
 }
 
@@ -281,25 +271,13 @@ export function isRetryableError(
   // PRIORITY 5: ApiError with deterministic 400 is NEVER retryable
   if (error instanceof ApiError) {
     if (error.status === 400) return false;
-    return (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      error.status === 401 ||
-      error.status === 403 ||
-      error.status === 429 ||
-      (error.status >= 500 && error.status < 600)
-    );
+    return isRetryableStatus(error.status);
   }
 
   // PRIORITY 6: Generic status-based retry (handles non-ApiError shapes)
   const status = getErrorStatus(error);
   if (status !== undefined) {
-    return (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      status === 401 ||
-      status === 403 ||
-      status === 429 ||
-      (status >= 500 && status < 600)
-    );
+    return isRetryableStatus(status);
   }
 
   return false;
@@ -905,44 +883,49 @@ export function getErrorStatus(error: unknown): number | undefined {
  * @param error The error object.
  * @returns The delay in milliseconds, or 0 if not found or invalid.
  */
+type RetryAfterHeaders = {
+  'retry-after'?: unknown;
+  get?: (name: string) => string | null;
+};
+
+function getErrorHeaders(error: unknown): RetryAfterHeaders | undefined {
+  if (typeof error !== 'object' || error === null || !('response' in error)) {
+    return undefined;
+  }
+  const response = (error as { response?: unknown }).response;
+  if (response === null || typeof response !== 'object') {
+    return undefined;
+  }
+  if (!('headers' in response)) {
+    return undefined;
+  }
+  const headers = (response as { headers?: unknown }).headers;
+  if (headers === null || typeof headers !== 'object') {
+    return undefined;
+  }
+  return headers as RetryAfterHeaders;
+}
+
 function getRetryAfterDelayMs(error: unknown): number {
   // Check for error.response.headers (common in axios errors)
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof (error as { response?: unknown }).response === 'object' &&
-    (error as { response?: unknown }).response !== null
-  ) {
-    const response = (error as { response: { headers?: unknown } }).response;
-    if (
-      'headers' in response &&
-      typeof response.headers === 'object' &&
-      response.headers !== null
-    ) {
-      const headers = response.headers as {
-        'retry-after'?: unknown;
-        get?: (name: string) => string | null;
-      };
-      // Support both plain object and Fetch Headers API
-      const retryAfterHeader =
-        typeof headers.get === 'function'
-          ? headers.get('retry-after')
-          : headers['retry-after'];
-      if (typeof retryAfterHeader === 'string') {
-        const retryAfterSeconds = parseInt(retryAfterHeader, 10);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!isNaN(retryAfterSeconds)) {
-          return retryAfterSeconds * 1000;
-        }
-        // It might be an HTTP date
-        const retryAfterDate = new Date(retryAfterHeader);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!isNaN(retryAfterDate.getTime())) {
-          return Math.max(0, retryAfterDate.getTime() - Date.now());
-        }
-      }
+  const headers = getErrorHeaders(error);
+  if (headers === undefined) {
+    return 0;
+  }
+  // Support both plain object and Fetch Headers API
+  const retryAfterHeader =
+    typeof headers.get === 'function'
+      ? headers.get('retry-after')
+      : headers['retry-after'];
+  if (typeof retryAfterHeader === 'string') {
+    const retryAfterSeconds = parseInt(retryAfterHeader, 10);
+    if (!isNaN(retryAfterSeconds)) {
+      return retryAfterSeconds * 1000;
+    }
+    // It might be an HTTP date
+    const retryAfterDate = new Date(retryAfterHeader);
+    if (!isNaN(retryAfterDate.getTime())) {
+      return Math.max(0, retryAfterDate.getTime() - Date.now());
     }
   }
   return 0;

@@ -286,7 +286,6 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
     (toolName, toolInput, extraFields) => {
       const base = { tool_name: toolName, tool_input: toolInput };
       const withExtra = { ...base, ...extraFields };
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateBeforeToolInput(withExtra)).toBe(
         validateBeforeToolInput(base),
       );
@@ -307,9 +306,7 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
     (toolName, toolInput) => {
       const valid = { tool_name: toolName, tool_input: toolInput };
       const degraded = { tool_input: toolInput }; // required field removed
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateBeforeToolInput(valid)).toBe(true); // valid baseline
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateBeforeToolInput(degraded)).toBe(false); // degraded always fails
     },
   );
@@ -332,13 +329,9 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
   ])(
     'METAMORPHIC: all validators reject any primitive input @plan:PLAN-20250218-HOOKSYSTEM.P10',
     (primitive) => {
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateBeforeToolInput(primitive)).toBe(false);
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateAfterToolInput(primitive)).toBe(false);
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateBeforeModelInput(primitive)).toBe(false);
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateNotificationInput(primitive)).toBe(false);
     },
   );
@@ -362,7 +355,6 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
         message,
         details: { ...extra },
       };
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateNotificationInput(payload)).toBe(true);
     },
   );
@@ -384,7 +376,6 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
         message: '',
         details: { ...extra },
       };
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateNotificationInput(payload)).toBe(false);
     },
   );
@@ -397,7 +388,6 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
   test.prop([fc.string({ minLength: 1, maxLength: 500 })])(
     'METAMORPHIC: validateBeforeAgentInput passes for any non-empty prompt @plan:PLAN-20250218-HOOKSYSTEM.P10',
     (prompt) => {
-      // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateBeforeAgentInput({ prompt })).toBe(true);
     },
   );

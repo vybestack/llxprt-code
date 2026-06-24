@@ -82,6 +82,73 @@ export function getTruncatedCheckpointNames(filenames: string[]): string[] {
   });
 }
 
+async function processSingleToolCall<HistoryType>(
+  toolCall: ToolCallRequestInfo,
+  gitService: GitService,
+  agentClient: AgentClientContract,
+  history?: HistoryType,
+): Promise<{
+  errors: string[];
+  checkpointFileName?: string;
+  checkpointData?: string;
+}> {
+  try {
+    const errors: string[] = [];
+    let commitHash: string | undefined;
+    try {
+      commitHash = await gitService.createFileSnapshot(
+        `Snapshot for ${toolCall.name}`,
+      );
+    } catch (error) {
+      errors.push(
+        `Failed to create new snapshot for ${toolCall.name}: ${getErrorMessage(error)}. Attempting to use current commit.`,
+      );
+      commitHash = await gitService.getCurrentCommitHash();
+    }
+
+    if (!commitHash) {
+      errors.push(
+        `Failed to create snapshot for ${toolCall.name}. Checkpointing may not be working properly. Ensure Git is installed and the project directory is accessible.`,
+      );
+      return { errors };
+    }
+
+    const checkpointFileName = generateCheckpointFileName(toolCall);
+    if (!checkpointFileName) {
+      errors.push(
+        `Skipping restorable tool call due to missing file_path: ${toolCall.name}`,
+      );
+      return { errors };
+    }
+
+    const clientHistory = await agentClient.getHistory();
+    const checkpointData: ToolCallData<HistoryType> = {
+      history,
+      clientHistory,
+      toolCall: {
+        name: toolCall.name,
+        args: toolCall.args,
+      },
+      commitHash,
+      messageId: toolCall.prompt_id,
+    };
+
+    return {
+      errors,
+      checkpointFileName: `${checkpointFileName}.json`,
+      checkpointData: JSON.stringify(checkpointData, null, 2),
+    };
+  } catch (error) {
+    return {
+      errors: [
+        `Failed to create checkpoint for ${toolCall.name}: ${getErrorMessage(
+          error,
+        )}`,
+      ],
+    };
+  }
+}
+
 export async function processRestorableToolCalls<HistoryType>(
   toolCalls: ToolCallRequestInfo[],
   gitService: GitService,
@@ -96,61 +163,22 @@ export async function processRestorableToolCalls<HistoryType>(
   const toolCallToCheckpointMap = new Map<string, string>();
   const errors: string[] = [];
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const toolCall of toolCalls) {
-    try {
-      let commitHash: string | undefined;
-      try {
-        commitHash = await gitService.createFileSnapshot(
-          `Snapshot for ${toolCall.name}`,
-        );
-      } catch (error) {
-        errors.push(
-          `Failed to create new snapshot for ${
-            toolCall.name
-          }: ${getErrorMessage(error)}. Attempting to use current commit.`,
-        );
-        commitHash = await gitService.getCurrentCommitHash();
-      }
-
-      if (!commitHash) {
-        errors.push(
-          `Failed to create snapshot for ${toolCall.name}. Checkpointing may not be working properly. Ensure Git is installed and the project directory is accessible.`,
-        );
-        continue;
-      }
-
-      const checkpointFileName = generateCheckpointFileName(toolCall);
-      if (!checkpointFileName) {
-        errors.push(
-          `Skipping restorable tool call due to missing file_path: ${toolCall.name}`,
-        );
-        continue;
-      }
-
-      const clientHistory = await agentClient.getHistory();
-      const checkpointData: ToolCallData<HistoryType> = {
-        history,
-        clientHistory,
-        toolCall: {
-          name: toolCall.name,
-          args: toolCall.args,
-        },
-        commitHash,
-        messageId: toolCall.prompt_id,
-      };
-
-      const fileName = `${checkpointFileName}.json`;
-      checkpointsToWrite.set(fileName, JSON.stringify(checkpointData, null, 2));
+    const result = await processSingleToolCall(
+      toolCall,
+      gitService,
+      agentClient,
+      history,
+    );
+    errors.push(...result.errors);
+    if (result.checkpointFileName) {
+      checkpointsToWrite.set(
+        result.checkpointFileName,
+        result.checkpointData ?? '',
+      );
       toolCallToCheckpointMap.set(
         toolCall.callId,
-        fileName.replace('.json', ''),
-      );
-    } catch (error) {
-      errors.push(
-        `Failed to create checkpoint for ${toolCall.name}: ${getErrorMessage(
-          error,
-        )}`,
+        result.checkpointFileName.replace(/\.json$/, ''),
       );
     }
   }

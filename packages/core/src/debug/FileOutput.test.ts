@@ -9,6 +9,54 @@ import { homedir } from 'os';
 import { FileOutput } from './FileOutput.js';
 import type { LogEntry } from './types.js';
 
+function isDigit(ch: string): boolean {
+  return ch >= '0' && ch <= '9';
+}
+
+/**
+ * Validates a debug file path of the form:
+ * `<...>/llxprt-debug-<name>-YYYY-MM-DD-HH-MM-SS.jsonl`
+ */
+function matchesDebugFilePath(value: string): boolean {
+  const suffix = '.jsonl';
+  if (!value.endsWith(suffix)) {
+    return false;
+  }
+  const base = value.slice(0, -suffix.length);
+  const prefix = 'llxprt-debug-';
+  const prefixIdx = base.lastIndexOf(prefix);
+  if (prefixIdx === -1) {
+    return false;
+  }
+  const afterPrefix = base.slice(prefixIdx + prefix.length);
+  // Expect: <name>-YYYY-MM-DD-HH-MM-SS
+  const lastDash = afterPrefix.lastIndexOf('-');
+  if (lastDash === -1) {
+    return false;
+  }
+  const dateTimePart = afterPrefix.slice(0, lastDash);
+  // dateTimePart = <name>-YYYY-MM-DD-HH-MM, take last 16 chars: "YYYY-MM-DD-HH-MM"
+  if (dateTimePart.length < 17) {
+    return false;
+  }
+  const timestampPortion = dateTimePart.slice(-16);
+  // YYYY-MM-DD-HH-MM => positions: 4,7,10,13 are dashes, rest are digits
+  const expectedDashes = [4, 7, 10, 13];
+  for (let i = 0; i < 16; i++) {
+    if (expectedDashes.includes(i)) {
+      if (timestampPortion[i] !== '-') return false;
+    } else if (!isDigit(timestampPortion[i])) {
+      return false;
+    }
+  }
+  // seconds: 2 digits at the end
+  const seconds = afterPrefix.slice(lastDash + 1);
+  if (seconds.length !== 2 || !isDigit(seconds[0]) || !isDigit(seconds[1])) {
+    return false;
+  }
+  return true;
+}
+
 // Mock fs module
 vi.mock('fs', () => ({
   promises: {
@@ -482,12 +530,12 @@ describe('FileOutput', () => {
     await fileOutput.write(logEntry);
 
     expect(fs.appendFile).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /llxprt-debug-[^-]+-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.jsonl$/,
-      ),
+      expect.any(String),
       expect.any(String),
       expect.any(Object),
     );
+    const filePath = String(vi.mocked(fs.appendFile).mock.calls[0]?.[0]);
+    expect(matchesDebugFilePath(filePath)).toBe(true);
   });
 
   /**

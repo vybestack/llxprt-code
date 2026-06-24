@@ -7,6 +7,9 @@
 import type { Config } from '../config/config.js';
 import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
+// Type-only import of vitest: erased at compile time, creates no runtime edge.
+// Required to obtain the precise `vi.fn()` Mock<T> return type.
+import type { vi as ViNamespace } from 'vitest';
 import {
   createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
@@ -206,21 +209,21 @@ export function initializeTestProviderRuntime(
 }
 
 // Vitest is a devDependency and must NOT be statically imported from a file
-// that lives under src/. The `typeof import('vitest')` form below is the only
-// way to reference its type without creating a runtime edge. Disable the
-// consistent-type-imports rule for this narrow use.
-/* eslint-disable @typescript-eslint/consistent-type-imports */
-function requireVi() {
-  const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
+// that lives under src/. The type-only import above is erased at compile time
+// and creates no runtime edge; it merely provides the precise Mock<T> type for
+// `vi.fn()` return values.
+type VitestApi = typeof ViNamespace;
+
+function requireVi(): VitestApi {
+  const viGlobal = (globalThis as { vi?: VitestApi }).vi;
   if (viGlobal) {
     return viGlobal;
   }
 
   return {
     fn: (impl?: (...args: unknown[]) => unknown) => createSpy(impl),
-  } as unknown as (typeof import('vitest'))['vi'];
+  } as unknown as VitestApi;
 }
-/* eslint-enable @typescript-eslint/consistent-type-imports */
 
 interface ChatSessionConfigShape {
   getSessionId: () => string;

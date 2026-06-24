@@ -28,6 +28,25 @@ const debugLogger = new DebugLogger('llxprt:shell-parser');
 
 const PARSE_TIMEOUT_MICROS = 1000 * 1000; // 1 second
 
+/**
+ * Resolve the tree-sitter Parser constructor. web-tree-sitter's export shape
+ * varies between bundler/runtime configurations: the Parser may be a named
+ * export, nested under `default`, or be the module default itself.
+ */
+function resolveTreeSitterParser(
+  named: unknown,
+  defaultExport: unknown,
+  fallback: unknown,
+): unknown {
+  if (typeof named === 'function') {
+    return named;
+  }
+  if (typeof defaultExport === 'function') {
+    return defaultExport;
+  }
+  return fallback;
+}
+
 // Type definitions for tree-sitter query results
 interface QueryCapture {
   name: string;
@@ -70,18 +89,21 @@ export async function initializeParser(): Promise<boolean> {
 
   try {
     // Dynamic import to get the Parser class
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const TreeSitter = (await import('web-tree-sitter')) as any;
+    const TreeSitter = (await import('web-tree-sitter')) as {
+      Parser?: new () => unknown;
+      default?: { Parser?: new () => unknown };
+    };
     // web-tree-sitter exports Parser directly as a named export, not default
     const parserCandidate = TreeSitter.Parser;
     const defaultCandidate = TreeSitter.default;
-    const Parser =
-      typeof parserCandidate === 'function'
-        ? parserCandidate
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          typeof defaultCandidate === 'function'
-          ? defaultCandidate
-          : TreeSitter;
+    const Parser = resolveTreeSitterParser(
+      parserCandidate,
+      defaultCandidate,
+      TreeSitter,
+    ) as typeof ParserType & {
+      init(): Promise<void>;
+      Language: typeof Language;
+    };
 
     await Parser.init();
     parser = new Parser();
@@ -92,7 +114,7 @@ export async function initializeParser(): Promise<boolean> {
       'tree-sitter-bash/tree-sitter-bash.wasm?binary'
     );
     bashLanguage = await Parser.Language.load(wasmModule.default);
-    parser!.setLanguage(bashLanguage);
+    parser.setLanguage(bashLanguage);
 
     return true;
   } catch (error) {
@@ -168,20 +190,26 @@ export function extractCommandNames(tree: Tree): string[] {
   const matches = query.matches(tree.rootNode) as QueryMatch[];
 
   for (const match of matches) {
-    for (const capture of match.captures) {
-      if (capture.name === 'cmd') {
-        const cmdText = capture.node.text;
-        // Extract just the command name (last path component if it's a path)
-        const cmdName = cmdText.split(/[\\/]/).pop();
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (cmdName) {
-          commands.push(cmdName);
-        }
-      }
-    }
+    collectCommandNamesFromCaptures(match.captures, commands);
   }
 
   return commands;
+}
+
+function collectCommandNamesFromCaptures(
+  captures: QueryMatch['captures'],
+  commands: string[],
+): void {
+  for (const capture of captures) {
+    if (capture.name !== 'cmd') {
+      continue;
+    }
+    const cmdText = capture.node.text;
+    const cmdName = cmdText.split(/[\\/]/).pop();
+    if (cmdName) {
+      commands.push(cmdName);
+    }
+  }
 }
 
 /**
@@ -305,19 +333,11 @@ function hasPromptCommandTransform(root: Node): boolean {
       continue;
     }
 
-    if (current.type === 'expansion') {
-      for (let i = 0; i < current.childCount - 1; i += 1) {
-        const operatorNode = current.child(i);
-        const transformNode = current.child(i + 1);
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (
-          operatorNode?.text === '@' &&
-          transformNode?.text.toLowerCase() === 'p'
-        ) {
-          return true;
-        }
-      }
+    if (
+      current.type === 'expansion' &&
+      hasPromptTransformInExpansion(current)
+    ) {
+      return true;
     }
 
     for (let i = current.namedChildCount - 1; i >= 0; i -= 1) {
@@ -328,6 +348,20 @@ function hasPromptCommandTransform(root: Node): boolean {
     }
   }
 
+  return false;
+}
+
+function hasPromptTransformInExpansion(node: Node): boolean {
+  for (let i = 0; i < node.childCount - 1; i += 1) {
+    const operatorNode = node.child(i);
+    const transformNode = node.child(i + 1);
+    if (
+      operatorNode?.text === '@' &&
+      transformNode?.text.toLowerCase() === 'p'
+    ) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -439,39 +473,42 @@ export function splitCommandsWithTree(
   const splitOnPipes = options?.splitOnPipes ?? true;
   const commands: string[] = [];
 
-  function extractCommands(node: Node): void {
-    switch (node.type) {
-      case 'command':
-      case 'subshell':
-        commands.push(node.text);
-        break;
-      case 'pipeline':
-        if (splitOnPipes) {
-          // Recurse into pipeline children to get individual commands
-          for (const child of node.children) {
-            // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            if (child) extractCommands(child);
-          }
-        } else {
-          // Treat pipeline as atomic for instrumentation
-          commands.push(node.text);
-        }
-        break;
-      case 'list':
-      // Lists are command chains (&&, ||, ;) - recurse into children
-      // falls through to program/default
-      case 'program':
-      default:
-        // For other node types (and program), check children
-        for (const child of node.children) {
-          if (child) extractCommands(child);
-        }
-        break;
-    }
-  }
-
-  extractCommands(tree.rootNode);
+  extractCommands(tree.rootNode, commands, splitOnPipes);
   return commands.filter((cmd) => cmd.trim().length > 0);
+}
+
+function extractCommands(
+  node: Node,
+  commands: string[],
+  splitOnPipes: boolean,
+): void {
+  switch (node.type) {
+    case 'command':
+    case 'subshell':
+      commands.push(node.text);
+      break;
+    case 'pipeline':
+      if (splitOnPipes) {
+        // Recurse into pipeline children to get individual commands
+        for (const child of node.children.filter(isNode)) {
+          extractCommands(child, commands, splitOnPipes);
+        }
+      } else {
+        // Treat pipeline as atomic for instrumentation
+        commands.push(node.text);
+      }
+      break;
+    case 'list':
+    // Lists are command chains (&&, ||, ;) - recurse into children
+    // falls through to program/default
+    case 'program':
+    default:
+      // For other node types (and program), check children
+      for (const child of node.children.filter(isNode)) {
+        extractCommands(child, commands, splitOnPipes);
+      }
+      break;
+  }
 }
 
 /**
@@ -482,4 +519,8 @@ export function resetParser(): void {
   bashLanguage = null;
   initializationAttempted = false;
   initializationError = null;
+}
+
+function isNode(node: Node | null): node is Node {
+  return node !== null;
 }

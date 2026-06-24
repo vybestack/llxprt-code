@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -41,7 +40,6 @@ function grepFiles(
 
   try {
     const cmd = `grep -rn "${pattern}" . --include="${include}" ${excludeArgs} 2>/dev/null || true`;
-    // eslint-disable-next-line sonarjs/os-command -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     const result = execSync(cmd, { cwd, encoding: 'utf-8' });
     return result.split('\n').filter((line) => line.trim().length > 0);
   } catch {
@@ -91,14 +89,6 @@ describe('Deprecation Guards (P36)', () => {
 
       const violations = filterMatches(matches, allowedPaths);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (violations.length > 0) {
-        console.error('Found direct KeyringTokenStore instantiation:');
-        violations.forEach((v) => {
-          console.error(`  ${v}`);
-        });
-      }
-
       expect(violations).toStrictEqual([]);
     });
   });
@@ -119,14 +109,6 @@ describe('Deprecation Guards (P36)', () => {
 
       const violations = filterMatches(matches, allowedPaths);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (violations.length > 0) {
-        console.error('Found direct getProviderKeyStorage() calls:');
-        violations.forEach((v) => {
-          console.error(`  ${v}`);
-        });
-      }
-
       expect(violations).toStrictEqual([]);
     });
   });
@@ -146,14 +128,6 @@ describe('Deprecation Guards (P36)', () => {
         m.includes('export function mergeRefreshedToken'),
       );
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (definitions.length !== 1) {
-        console.error('Expected exactly 1 mergeRefreshedToken definition:');
-        definitions.forEach((d) => {
-          console.error(`  ${d}`);
-        });
-      }
-
       expect(definitions.length).toBe(1);
       expect(definitions[0]).toContain('token-merge.ts');
     });
@@ -167,14 +141,6 @@ describe('Deprecation Guards (P36)', () => {
       );
 
       // Should find zero - no variable assignments creating duplicate implementations
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (matches.length > 0) {
-        console.error('Found mergeRefreshedToken assignments:');
-        matches.forEach((m) => {
-          console.error(`  ${m}`);
-        });
-      }
-
       expect(matches).toStrictEqual([]);
     });
   });

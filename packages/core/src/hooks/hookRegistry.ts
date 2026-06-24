@@ -116,8 +116,59 @@ export class HookRegistry {
    * Get hook name for identification and display purposes (public for external use)
    */
   getHookName(entry: HookRegistryEntry | { config: HookConfig }): string {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string name/command should fall through to unknown-command
-    return entry.config.name || entry.config.command || 'unknown-command';
+    const name = entry.config.name;
+    if (name !== undefined && name !== '') {
+      return name;
+    }
+    const command = entry.config.command;
+    if (typeof command === 'string' && command.length > 0) {
+      return command;
+    }
+    return 'unknown-command';
+  }
+
+  /** Extract all HookConfig entries from project hooks settings. */
+  private collectProjectHookConfigs(
+    projectHooks: Record<string, unknown> | null | undefined,
+  ): HookConfig[] {
+    if (!projectHooks) {
+      return [];
+    }
+    const configs: HookConfig[] = [];
+    for (const [key, eventDefinitions] of Object.entries(projectHooks)) {
+      const hooksFromKey = this.extractHooksFromKey(key, eventDefinitions);
+      configs.push(...hooksFromKey);
+    }
+    return configs;
+  }
+
+  private extractHooksFromKey(
+    key: string,
+    eventDefinitions: unknown,
+  ): HookConfig[] {
+    if (key === 'disabled') return [];
+    if (!Array.isArray(eventDefinitions)) return [];
+    const result: HookConfig[] = [];
+    for (const definition of eventDefinitions) {
+      const hooks = this.extractHooksFromDefinition(definition);
+      result.push(...hooks);
+    }
+    return result;
+  }
+
+  private extractHooksFromDefinition(definition: unknown): HookConfig[] {
+    if (
+      definition == null ||
+      typeof definition !== 'object' ||
+      !('hooks' in definition)
+    ) {
+      return [];
+    }
+    const hookDef = definition as { hooks?: unknown };
+    if (Array.isArray(hookDef.hooks)) {
+      return hookDef.hooks as HookConfig[];
+    }
+    return [];
   }
 
   /**
@@ -127,31 +178,8 @@ export class HookRegistry {
     const projectHooks = this.config.getProjectHooks();
 
     // Collect all hook configs from project settings
-    const allProjectHooks: HookConfig[] = [];
-    if (projectHooks) {
-      for (const [key, eventDefinitions] of Object.entries(projectHooks)) {
-        // Skip the 'disabled' key
-        if (key === 'disabled') continue;
-
-        if (Array.isArray(eventDefinitions)) {
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          for (const definition of eventDefinitions) {
-            // External data boundary: projectHooks is parsed from user config files and may not match TypeScript types at runtime
-            if (
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-              definition != null &&
-              typeof definition === 'object' &&
-              'hooks' in definition
-            ) {
-              const hookDef = definition;
-              if (Array.isArray(hookDef.hooks)) {
-                allProjectHooks.push(...hookDef.hooks);
-              }
-            }
-          }
-        }
-      }
-    }
+    const allProjectHooks: HookConfig[] =
+      this.collectProjectHookConfigs(projectHooks);
 
     if (allProjectHooks.length === 0) {
       return;
@@ -163,8 +191,9 @@ export class HookRegistry {
     const untrusted = trustManager.getUntrustedHooks(allProjectHooks);
 
     if (untrusted.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string hook name/command should fall through
-      const hookNames = untrusted.map((h) => h.name || h.command).join(', ');
+      const hookNames = untrusted
+        .map((h) => this.getHookName({ config: h }))
+        .join(', ');
       const warning = `WARNING: Project defines ${untrusted.length} untrusted hook(s): ${hookNames}. Review these hooks before trusting them.
 `;
 
@@ -213,57 +242,60 @@ export class HookRegistry {
     hooksConfig: { [K in HookEventName]?: HookDefinition[] },
     source: ConfigSource,
   ): void {
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
     for (const [eventName, definitions] of Object.entries(hooksConfig)) {
-      // Warn about config keys that belong under hooksConfig, not hooks
-      if (HOOKS_CONFIG_FIELDS.includes(eventName)) {
-        coreEvents.emit(CoreEvent.Output, {
-          chunk: `Warning: "${eventName}" is a hooksConfig field, not a hook event. It is ignored under "hooks" — move it to "hooksConfig". Skipping.
-`,
-          isStderr: true,
-        });
-        continue;
-      }
-
-      if (!this.isValidEventName(eventName)) {
-        coreEvents.emit(CoreEvent.Output, {
-          chunk: `Warning: Invalid hook event name: "${eventName}" from ${source} config. Skipping.
-`,
-          isStderr: true,
-        });
-        continue;
-      }
-
-      const typedEventName = eventName;
-
-      if (!Array.isArray(definitions)) {
+      const typedEventName = this.validateAndResolveEventName(
+        eventName,
+        source,
+      );
+      if (typedEventName !== null && Array.isArray(definitions)) {
+        for (const definition of definitions) {
+          this.processHookDefinition(definition, typedEventName, source);
+        }
+      } else if (typedEventName !== null) {
         debugLogger.warn(
-          `Hook definitions for event "${eventName}" from source "${source}" is not an array. Skipping.`,
+          `Hook event "${eventName}" is not an array; skipping malformed definitions.`,
         );
-        continue;
-      }
-
-      for (const definition of definitions) {
-        this.processHookDefinition(definition, typedEventName, source);
       }
     }
+  }
+
+  private validateAndResolveEventName(
+    eventName: string,
+    source: ConfigSource,
+  ): HookEventName | null {
+    if (HOOKS_CONFIG_FIELDS.includes(eventName)) {
+      coreEvents.emit(CoreEvent.Output, {
+        chunk: `Warning: "${eventName}" is a hooksConfig field, not a hook event. It is ignored under "hooks" — move it to "hooksConfig". Skipping.
+`,
+        isStderr: true,
+      });
+      return null;
+    }
+    if (!this.isValidEventName(eventName)) {
+      coreEvents.emit(CoreEvent.Output, {
+        chunk: `Warning: Invalid hook event name: "${eventName}" from ${source} config. Skipping.
+`,
+        isStderr: true,
+      });
+      return null;
+    }
+    return eventName;
   }
 
   /**
    * Process a single hook definition
    */
   private processHookDefinition(
-    definition: HookDefinition,
+    definition: HookDefinition | unknown,
     eventName: HookEventName,
     source: ConfigSource,
   ): void {
     const disabledHooks = this.config.getDisabledHooks();
 
     if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- External data boundary: definition is parsed from user config files and may not match TypeScript types at runtime.
       definition == null ||
       typeof definition !== 'object' ||
-      !Array.isArray(definition.hooks)
+      !Array.isArray((definition as { hooks?: unknown }).hooks)
     ) {
       debugLogger.warn(
         `Discarding invalid hook definition for ${eventName} from ${source}:`,
@@ -272,28 +304,33 @@ export class HookRegistry {
       return;
     }
 
-    for (const hookConfig of definition.hooks) {
+    const def = definition as HookDefinition;
+    for (const hookConfig of def.hooks as unknown[]) {
       // External data boundary: hookConfig is parsed from user config files and may not match TypeScript types at runtime
       if (
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         hookConfig != null &&
         typeof hookConfig === 'object' &&
-        this.validateHookConfig(hookConfig, eventName, source)
+        this.validateHookConfig(
+          hookConfig as Record<string, unknown>,
+          eventName,
+          source,
+        )
       ) {
+        const validConfig = hookConfig as HookConfig;
         // Set source on the hook config for secondary security check
-        (hookConfig as { source?: ConfigSource }).source = source;
+        (validConfig as { source?: ConfigSource }).source = source;
 
         const hookName = this.getHookName({
-          config: hookConfig,
+          config: validConfig,
         } as HookRegistryEntry);
         const isDisabled = disabledHooks.includes(hookName);
 
         this.entries.push({
-          config: hookConfig,
+          config: validConfig,
           source,
           eventName,
-          matcher: definition.matcher,
-          sequential: definition.sequential,
+          matcher: def.matcher,
+          sequential: def.sequential,
           enabled: !isDisabled,
         });
       } else {
@@ -310,21 +347,28 @@ export class HookRegistry {
    * Validate a hook configuration
    */
   private validateHookConfig(
-    config: HookConfig,
+    config: HookConfig | Record<string, unknown>,
     eventName: HookEventName,
     source: ConfigSource,
-  ): boolean {
-    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unnecessary-condition -- Preserve original external hook payload validation, including legacy plugin type.
-    if (!config.type || !['command', 'plugin'].includes(config.type)) {
+  ): config is HookConfig {
+    const cfg = config as Record<string, unknown>;
+    const typeValue = cfg.type;
+    if (
+      typeof typeValue !== 'string' ||
+      !['command', 'plugin'].includes(typeValue)
+    ) {
       debugLogger.warn(
-        `Invalid hook ${eventName} from ${source} type: ${config.type}`,
+        `Invalid hook ${eventName} from ${source} type: ${typeValue}`,
       );
       return false;
     }
 
     // Check command field for command-type hooks - must be a non-empty string.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Preserve original falsy validation for external command hook payloads.
-    if (config.type === 'command' && !config.command) {
+    const commandValue = cfg.command;
+    if (
+      typeValue === 'command' &&
+      (typeof commandValue !== 'string' || commandValue.length === 0)
+    ) {
       debugLogger.warn(
         `Command hook ${eventName} from ${source} missing command field`,
       );

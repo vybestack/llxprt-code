@@ -6,6 +6,7 @@
 
 import * as crypto from 'node:crypto';
 import type * as net from 'node:net';
+import { firstTruthyString } from '../../utils/falsyFallback.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import {
@@ -462,8 +463,7 @@ export class CredentialProxyOAuthHandler {
     error: unknown,
   ): void {
     const err = error as Error & { code?: string; newInterval?: number };
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string code should fall back to message
-    const errorCode = err.code || err.message;
+    const errorCode = firstTruthyString(err.code, err.message);
 
     if (errorCode === 'authorization_pending') {
       this.sendOk(socket, id, { status: 'pending' });

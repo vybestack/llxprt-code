@@ -32,3 +32,18 @@ export function firstTruthyString(
   }
   return '';
 }
+
+/**
+ * Returns the value if truthy, otherwise `undefined`.
+ *
+ * Mirrors the semantics of `value || undefined` for optional fields where
+ * empty-string, `0`, or `false` should normalize to `undefined`.
+ */
+export function orUndefined<T>(
+  value: T | '' | 0 | false | null,
+): T | undefined {
+  if (value === '' || value === 0 || value === false || value === null) {
+    return undefined;
+  }
+  return value;
+}

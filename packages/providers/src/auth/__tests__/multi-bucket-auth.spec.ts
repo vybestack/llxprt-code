@@ -40,6 +40,29 @@ function clearEphemeralSettings(): void {
   mockEphemeralSettings.clear();
 }
 
+type StdinSetRawMode = typeof process.stdin.setRawMode;
+type StdinWithOptionalSetRawMode = NodeJS.ReadStream & {
+  setRawMode?: StdinSetRawMode;
+};
+
+function installStdinSetRawModeSpy(setRawModeSpy: StdinSetRawMode): void {
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode = setRawModeSpy;
+  }
+}
+
+function restoreStdinSetRawMode(
+  originalSetRawMode: StdinSetRawMode | undefined,
+): void {
+  const stdin = process.stdin as StdinWithOptionalSetRawMode;
+  if (originalSetRawMode === undefined) {
+    Reflect.deleteProperty(stdin, 'setRawMode');
+    return;
+  }
+
+  stdin.setRawMode = originalSetRawMode;
+}
+
 describe('Phase 9: Multi-Bucket Authentication Flow', () => {
   let authenticator: MultiBucketAuthenticator;
   let authLog: string[] = [];
@@ -808,11 +831,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       // Spy on stdin.setRawMode to detect fallback usage
       const setRawModeSpy = vi.fn();
-      const originalSetRawMode = process.stdin.setRawMode;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (process.stdin.isTTY) {
-        process.stdin.setRawMode = setRawModeSpy;
-      }
+      const originalSetRawMode = (process.stdin as StdinWithOptionalSetRawMode)
+        .setRawMode;
+      installStdinSetRawModeSpy(setRawModeSpy);
 
       const noStdinAuthenticator = new MultiBucketAuthenticator(
         async () => {},
@@ -835,10 +856,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       expect(setRawModeSpy).not.toHaveBeenCalled();
 
       // Restore original setRawMode (platform-specific: setRawMode may not exist on non-TTY)
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, vitest/no-conditional-in-test -- setRawMode may be undefined on non-TTY platforms
-      if (originalSetRawMode !== undefined) {
-        process.stdin.setRawMode = originalSetRawMode;
-      }
+      restoreStdinSetRawMode(originalSetRawMode);
     });
 
     /**

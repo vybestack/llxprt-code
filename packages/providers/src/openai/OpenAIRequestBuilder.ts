@@ -16,6 +16,7 @@
 
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -111,6 +112,46 @@ export function buildToolResponseContent(
     }),
   );
 }
+type OpenAIPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'file'; file: { filename: string; file_data: string } };
+
+function convertBlockToPart(block: ContentBlock): OpenAIPart | null {
+  if (block.type === 'text' && block.text) {
+    return { type: 'text', text: block.text };
+  }
+  if (block.type !== 'media') {
+    return null;
+  }
+  const category = classifyMediaBlock(block);
+  if (category === 'image') {
+    return {
+      type: 'image_url',
+      image_url: { url: normalizeMediaToDataUri(block) },
+    };
+  }
+  if (category === 'pdf') {
+    const fileData = normalizeMediaToDataUri(block);
+    if (!fileData.startsWith('data:')) {
+      return {
+        type: 'text',
+        text: buildUnsupportedMediaPlaceholder(block, 'OpenAI'),
+      };
+    }
+    return {
+      type: 'file',
+      file: {
+        filename: block.filename ?? 'document.pdf',
+        file_data: fileData,
+      },
+    };
+  }
+  return {
+    type: 'text',
+    text: buildUnsupportedMediaPlaceholder(block, 'OpenAI'),
+  };
+}
 
 /**
  * Processes a user/human message block and converts it to OpenAI format.
@@ -128,32 +169,9 @@ function processUserMessage(
     > = [];
 
     for (const block of content.blocks) {
-      if (block.type === 'text' && block.text) {
-        parts.push({ type: 'text', text: block.text });
-      } else if (block.type === 'media') {
-        const category = classifyMediaBlock(block);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (category === 'image') {
-          parts.push({
-            type: 'image_url',
-            image_url: {
-              url: normalizeMediaToDataUri(block),
-            },
-          });
-        } else if (category === 'pdf') {
-          parts.push({
-            type: 'file',
-            file: {
-              filename: block.filename ?? 'document.pdf',
-              file_data: normalizeMediaToDataUri(block),
-            },
-          });
-        } else {
-          parts.push({
-            type: 'text',
-            text: buildUnsupportedMediaPlaceholder(block, 'OpenAI'),
-          });
-        }
+      const part = convertBlockToPart(block);
+      if (part !== null) {
+        parts.push(part);
       }
     }
 
@@ -358,8 +376,7 @@ function processContentMessages(
       if (assistantMessage) {
         messages.push(assistantMessage);
       }
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI history can include legacy/partial content records; only tool content belongs here.
-    } else if (content.speaker === 'tool') {
+    } else {
       const toolMessages = processToolResponses(
         content,
         toolFormat ?? 'openai',
@@ -388,14 +405,21 @@ export function buildMessagesWithReasoning(
   config: Config | undefined,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
   const stripPolicy =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings can omit reasoning policy during provider test/runtime bootstrap.
-    (options.settings.get('reasoning.stripFromContext') as StripPolicy) ??
-    'none';
+    (options.settings.get('reasoning.stripFromContext') as
+      | StripPolicy
+      | undefined) ?? 'none';
   const includeInContext =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings can omit reasoning inclusion during provider test/runtime bootstrap.
-    (options.settings.get('reasoning.includeInContext') as boolean) ?? false;
+    (options.settings.get('reasoning.includeInContext') as
+      | boolean
+      | undefined) ?? false;
 
-  const filteredContents = filterThinkingForContext(contents, stripPolicy);
+  const contentsWithBlocks = contents.filter((content): content is IContent =>
+    Array.isArray(content.blocks),
+  );
+  const filteredContents = filterThinkingForContext(
+    contentsWithBlocks,
+    stripPolicy,
+  );
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
   const toolIdMapper: ToolIdMapper | null =
@@ -486,18 +510,13 @@ function scanForOrphanedToolMessages(
         const removalReason =
           'tool_call_id not found in last assistant tool_calls';
 
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (logger) {
-          logger.warn(
-            `[validateToolMessageSequence] Invalid tool message sequence detected - removing orphaned tool message: ${removalReason}`,
-            {
-              currentIndex: i,
-              toolCallId: current.tool_call_id,
-              lastAssistantToolCallIds,
-              removalReason,
-            },
-          );
-        }
+        logOrphanedToolRemoval(
+          logger,
+          i,
+          current.tool_call_id,
+          lastAssistantToolCallIds,
+          removalReason,
+        );
 
         validatedMessages.splice(i, 1);
         i--;
@@ -617,4 +636,23 @@ export function buildContinuationMessages(
         'The tool calls above have been registered. Please continue with your response.',
     },
   ];
+}
+
+function logOrphanedToolRemoval(
+  logger: DebugLogger | undefined,
+  index: number,
+  toolCallId: string | undefined,
+  lastAssistantToolCallIds: string[],
+  removalReason: string,
+): void {
+  if (!logger) return;
+  logger.warn(
+    `[validateToolMessageSequence] Invalid tool message sequence detected - removing orphaned tool message: ${removalReason}`,
+    {
+      currentIndex: index,
+      toolCallId,
+      lastAssistantToolCallIds,
+      removalReason,
+    },
+  );
 }

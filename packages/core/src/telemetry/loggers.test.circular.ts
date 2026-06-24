@@ -30,28 +30,23 @@ function buildMockConfig(): Config {
   } as unknown as Config;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildCircularObject(): any {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const circularObject: any = {
-    sockets: {},
+function buildCircularObject(): Record<string, unknown> {
+  const circularObject: Record<string, unknown> = {
+    sockets: {} as Record<string, unknown>,
     agent: null,
   };
   circularObject.agent = circularObject;
-  circularObject.sockets['test-host'] = [
+  (circularObject.sockets as Record<string, unknown[]>)['test-host'] = [
     { _httpMessage: { agent: circularObject } },
   ];
   return circularObject;
 }
 
-function buildMockRequest(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  args: any,
-): ToolCallRequestInfo {
+function buildMockRequest(args: unknown): ToolCallRequestInfo {
   return {
     callId: 'test-call-id',
     name: 'ReadFile',
-    args,
+    args: args as Record<string, unknown>,
     isClientInitiated: false,
     prompt_id: 'test-prompt-id',
     agentId: 'agent-circular',

@@ -97,27 +97,25 @@ function buildCallOptions(
   });
 }
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  FakeOpenAIClass.reset();
-  vi.stubEnv('OPENAI_API_KEY', '');
-  vi.stubEnv('OPENAI_BASE_URL', '');
-
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-      runtimeId: 'requires-auth-test',
-    }),
-  );
-});
-
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-afterEach(() => {
-  clearActiveProviderRuntimeContext();
-  vi.unstubAllEnvs();
-});
-
 describe('requires-auth setting', () => {
+  beforeEach(() => {
+    FakeOpenAIClass.reset();
+    vi.stubEnv('OPENAI_API_KEY', '');
+    vi.stubEnv('OPENAI_BASE_URL', '');
+
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: 'requires-auth-test',
+      }),
+    );
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+    vi.unstubAllEnvs();
+  });
+
   it('allows connection to remote endpoint without auth when requires-auth is false', async () => {
     const provider = new RequiresAuthTestProvider(
       undefined,
