@@ -132,8 +132,10 @@ echo "PASS: P18 non-breaking guard green."
 ### Semantic Verification Checklist
 
 - [ ] Existing REQ-006 characterization block untouched and green.
-- [ ] New REQ-009 block fences: prior runtime subset, internals identity, new enum values, new
-      projected-type compile anchors, extended-controller signature anchors.
+- [ ] New REQ-009 runtime block fences: prior runtime subset, internals identity, new enum values.
+- [ ] Compile anchors (new projected types + extended-controller signatures) live in
+      `additiveSurface.types.ts` (a `.types.ts`, NOT `.test.ts`) and are confirmed typecheck-visible —
+      so they are LOAD-BEARING, not vacuous.
 - [ ] typecheck green (compile anchors actively guard prior + new shapes).
 - [ ] ≥30% property; no mock theater / reverse tests; no production source touched.
 
@@ -154,9 +156,9 @@ Create: `project-plans/issue2143/.completed/P18.md`
 ```markdown
 Phase: P18
 Completed: YYYY-MM-DD HH:MM
-Files Created: none
-Files Modified: [publicSurface.nonbreaking.test.ts +N/-0]
+Files Created: [additiveSurface.types.ts +N (compile anchors; typecheck-visible, build-excluded, vitest-ignored)]
+Files Modified: [publicSurface.nonbreaking.test.ts +N/-0 (runtime assertions only)]
 Tests Added: [count in the new describe block]
-Verification: [paste actual output]
-Semantic Assessment: [one-line: additive surface fenced; prior ⊂ current; no shape change]
+Verification: [paste actual output — include proof the .types.ts anchor is load-bearing under typecheck]
+Semantic Assessment: [one-line: additive surface fenced; prior ⊂ current; no shape change; compile anchors load-bearing in .types.ts]
 ```
