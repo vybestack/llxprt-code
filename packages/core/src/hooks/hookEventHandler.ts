@@ -606,8 +606,7 @@ export class HookEventHandler {
     let suppressOutput = false;
 
     // Pass 1 - stop intent (first wins): triggered by continue === false (upstream parity)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
-    for (const hookOutput of aggregated.allOutputs ?? []) {
+    for (const hookOutput of aggregated.allOutputs) {
       if (hookOutput.continue === false) {
         shouldStop = true;
         // Use effective reason: reason, stopReason, or fallback
@@ -620,8 +619,7 @@ export class HookEventHandler {
     }
 
     // Pass 2 - systemMessage and suppressOutput (first non-empty systemMessage wins)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
-    for (const hookOutput of aggregated.allOutputs ?? []) {
+    for (const hookOutput of aggregated.allOutputs) {
       if (hookOutput.systemMessage != null && hookOutput.systemMessage !== '') {
         systemMessage = hookOutput.systemMessage;
         if (hookOutput.suppressOutput === true) {
@@ -660,8 +658,7 @@ export class HookEventHandler {
    */
   private getHookNameFromResult(result: HookExecutionResult): string {
     const config = result.hookConfig as { command?: string; type: string };
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string command falls through to placeholder
-    return config.command || 'unknown-hook';
+    return config.command ?? 'unknown-hook';
   }
 
   /**
@@ -692,13 +689,9 @@ export class HookEventHandler {
         }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
-      if (this.debugLogger === undefined) continue;
-
       const record = {
         eventName: String(eventName),
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
-        hookIdentity: result.hookConfig?.type ?? 'unknown',
+        hookIdentity: result.hookConfig.type,
         duration: result.duration,
         success: result.success,
         exitCode: result.exitCode,
@@ -731,9 +724,6 @@ export class HookEventHandler {
     hookResults: readonly HookExecutionResult[],
     totalDurationMs: number,
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
-    if (this.debugLogger === undefined) return;
-
     const hookCount = hookResults.length;
     const successCount = hookResults.filter((r) => r.success).length;
     const failureCount = hookCount - successCount;

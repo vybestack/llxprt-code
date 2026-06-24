@@ -29,7 +29,7 @@ export function truthyJsonValueOrEmptyObject(value: unknown): unknown {
 }
 
 export function parseScalarValue(value: string): string | number | boolean {
-  if (/^-?\d+(\.\d+)?$/.test(value)) {
+  if (looksNumeric(value)) {
     return Number(value);
   }
   const lower = value.toLowerCase();
@@ -37,6 +37,49 @@ export function parseScalarValue(value: string): string | number | boolean {
     return lower === 'true';
   }
   return value;
+}
+
+function looksNumeric(value: string): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+
+  let start = 0;
+  if (value[0] === '-') {
+    if (value.length === 1) {
+      return false;
+    }
+    start = 1;
+  }
+
+  const integerEnd = readDigits(value, start);
+  if (integerEnd === start) {
+    return false;
+  }
+
+  if (integerEnd === value.length) {
+    return true;
+  }
+
+  if (value[integerEnd] !== '.') {
+    return false;
+  }
+
+  const fractionStart = integerEnd + 1;
+  const fractionEnd = readDigits(value, fractionStart);
+  return fractionEnd > fractionStart && fractionEnd === value.length;
+}
+
+function readDigits(value: string, start: number): number {
+  let index = start;
+  while (index < value.length && isDigitCode(value.charCodeAt(index))) {
+    index++;
+  }
+  return index;
+}
+
+function isDigitCode(code: number): boolean {
+  return code >= 48 && code <= 57;
 }
 
 export function readQuotedAttributeValue(

@@ -36,7 +36,7 @@ function ensureDynamicLanguages(): void {
     c,
     json,
     ruby,
-  } as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- Required for ast-grep dynamic language registration (third-party API limitation)
+  } as unknown as Parameters<typeof registerDynamicLanguage>[0]);
   dynamicLanguagesRegistered = true;
 }
 

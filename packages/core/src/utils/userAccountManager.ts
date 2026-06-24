@@ -14,6 +14,17 @@ interface UserAccounts {
   old: string[];
 }
 
+function isValidActive(active: unknown): boolean {
+  return active === undefined || active === null || typeof active === 'string';
+}
+
+function isValidOld(old: unknown): boolean {
+  if (old === undefined) {
+    return true;
+  }
+  return Array.isArray(old) && old.every((i) => typeof i === 'string');
+}
+
 export class UserAccountManager {
   private getGoogleAccountsCachePath(): string {
     return Storage.getProviderAccountsPath();
@@ -39,13 +50,7 @@ export class UserAccountManager {
         return defaultState;
       }
       const { active, old } = parsed as Partial<UserAccounts>;
-      const isValid =
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        (active === undefined ||
-          active === null ||
-          typeof active === 'string') &&
-        (old === undefined ||
-          (Array.isArray(old) && old.every((i) => typeof i === 'string')));
+      const isValid = isValidActive(active) && isValidOld(old);
 
       if (!isValid) {
         debugLogger.log('Invalid accounts file schema, starting fresh.');

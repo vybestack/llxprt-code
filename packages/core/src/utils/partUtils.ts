@@ -10,6 +10,14 @@ import {
   type GenerateContentResponse,
 } from '@google/genai';
 
+function isEmptyPartValue(value: PartListUnion): boolean {
+  const v = value as unknown;
+  if (v === undefined || v === null || v === false || v === 0) {
+    return true;
+  }
+  return typeof v === 'number' && Number.isNaN(v);
+}
+
 /**
  * Converts a PartListUnion into a string.
  * If verbose is true, includes summary representations of non-text parts.
@@ -18,15 +26,7 @@ export function partToString(
   value: PartListUnion,
   options?: { verbose?: boolean },
 ): string {
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    (value as unknown) === undefined ||
-    (value as unknown) === null ||
-    (value as unknown) === false ||
-    (value as unknown) === 0 ||
-    (typeof (value as unknown) === 'number' &&
-      Number.isNaN(value as unknown as number))
-  ) {
+  if (isEmptyPartValue(value)) {
     return '';
   }
   if (typeof value === 'string') {

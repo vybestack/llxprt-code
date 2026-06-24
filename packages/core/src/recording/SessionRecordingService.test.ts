@@ -1,4 +1,3 @@
-/* eslint-disable vitest/no-standalone-expect */
 /**
  * Copyright 2025 Vybestack LLC
  *

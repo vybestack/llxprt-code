@@ -45,7 +45,6 @@ export class GitService {
 
   verifyGitAvailability(): Promise<boolean> {
     return new Promise((resolve) => {
-      // eslint-disable-next-line sonarjs/no-os-command-from-path -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
       exec('git --version', (error) => {
         if (error) {
           resolve(false);

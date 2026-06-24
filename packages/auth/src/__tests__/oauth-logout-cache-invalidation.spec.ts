@@ -142,10 +142,7 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     expect(cachedResult).toBe(staleToken);
 
     // Invalidate the cache (simulating logout)
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (typeof resolver.invalidateCache === 'function') {
-      resolver.invalidateCache();
-    }
+    resolver.invalidateCache();
 
     // OAuth manager now returns fresh token
     vi.mocked(mockOAuthManager.getToken).mockResolvedValue(freshToken);

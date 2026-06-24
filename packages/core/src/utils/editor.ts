@@ -67,7 +67,6 @@ interface DiffCommand {
 
 function commandExists(cmd: string): boolean {
   try {
-    // eslint-disable-next-line sonarjs/os-command -- Project intentionally invokes platform tooling at this trusted boundary; arguments remain explicit and behavior is preserved.
     execSync(
       process.platform === 'win32' ? `where.exe ${cmd}` : `command -v ${cmd}`,
       { stdio: 'ignore' },
@@ -110,8 +109,7 @@ export function getEditorCommand(editor: EditorType): string {
   const commands =
     process.platform === 'win32' ? commandConfig.win32 : commandConfig.default;
   return (
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: commandExists returns boolean, falsy means command not found
-    commands.slice(0, -1).find((cmd) => commandExists(cmd)) ||
+    commands.slice(0, -1).find((cmd) => commandExists(cmd)) ??
     commands[commands.length - 1]
   );
 }

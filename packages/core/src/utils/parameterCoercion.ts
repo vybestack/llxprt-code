@@ -78,6 +78,55 @@ function coerceByType(
   return undefined;
 }
 
+/**
+ * Checks whether a string looks like a decimal numeric literal (integer or
+ * float, with optional exponent), excluding special values like NaN/Infinity.
+ */
+function looksLikeNumericLiteral(s: string): boolean {
+  if (s.length === 0) {
+    return false;
+  }
+  let i = 0;
+  if (s[0] === '-' || s[0] === '+') {
+    i++;
+  }
+  let hasDigits = false;
+  while (i < s.length && s[i] >= '0' && s[i] <= '9') {
+    hasDigits = true;
+    i++;
+  }
+  if (i < s.length && s[i] === '.') {
+    i++;
+    let fracDigits = false;
+    while (i < s.length && s[i] >= '0' && s[i] <= '9') {
+      fracDigits = true;
+      i++;
+    }
+    if (!hasDigits && !fracDigits) {
+      return false;
+    }
+    hasDigits = true;
+  }
+  if (!hasDigits) {
+    return false;
+  }
+  if (i < s.length && (s[i] === 'e' || s[i] === 'E')) {
+    i++;
+    if (i < s.length && (s[i] === '+' || s[i] === '-')) {
+      i++;
+    }
+    let expDigits = false;
+    while (i < s.length && s[i] >= '0' && s[i] <= '9') {
+      expDigits = true;
+      i++;
+    }
+    if (!expDigits) {
+      return false;
+    }
+  }
+  return i === s.length;
+}
+
 function coerceNumber(
   value: unknown,
   expectedType: string,
@@ -87,7 +136,7 @@ function coerceNumber(
     typeof value === 'string'
   ) {
     const trimmed = value.trim();
-    if (/^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+    if (looksLikeNumericLiteral(trimmed)) {
       const num = Number(trimmed);
       if (!Number.isFinite(num)) {
         return value;
@@ -120,18 +169,9 @@ function coerceArray(value: unknown, propertySchema: PropertySchema): unknown {
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (Array.isArray(parsed)) {
-          const itemSchema = propertySchema.items;
-          if (itemSchema) {
-            return parsed.map((item) => coerceValue(item, itemSchema));
-          }
-          return parsed;
-        }
-      } catch {
-        // Not valid JSON array, fall through to single value wrapping
+      const parsedArray = tryParseJsonArray(trimmed, propertySchema);
+      if (parsedArray !== undefined) {
+        return parsedArray;
       }
     }
     const itemSchema = propertySchema.items;
@@ -166,17 +206,9 @@ function coerceObject(
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (typeof parsed === 'object' && parsed !== null) {
-          if (propertySchema.properties) {
-            return coerceObjectProperties(parsed, propertySchema);
-          }
-          return parsed;
-        }
-      } catch {
-        // Not valid JSON, return original
+      const parsedObject = tryParseJsonObject(trimmed, propertySchema);
+      if (parsedObject !== undefined) {
+        return parsedObject;
       }
     }
     return value;
@@ -281,4 +313,41 @@ export function coerceParametersToSchema(
     params as Record<string, unknown>,
     typedSchema as PropertySchema,
   );
+}
+
+function tryParseJsonArray(
+  trimmed: string,
+  propertySchema: PropertySchema,
+): unknown | undefined {
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) {
+      return undefined;
+    }
+    const itemSchema = propertySchema.items;
+    if (itemSchema) {
+      return parsed.map((item) => coerceValue(item, itemSchema));
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function tryParseJsonObject(
+  trimmed: string,
+  propertySchema: PropertySchema,
+): unknown | undefined {
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed !== 'object' || parsed === null) {
+      return undefined;
+    }
+    if (propertySchema.properties) {
+      return coerceObjectProperties(parsed, propertySchema);
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
 }

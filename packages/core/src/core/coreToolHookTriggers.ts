@@ -22,8 +22,34 @@ import type {
   ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '../debug/index.js';
+import type { HookSystem } from '../hooks/hookSystem.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hook-triggers:tool');
+
+/**
+ * Boundary view of Config: test doubles may omit hook accessors.
+ */
+type HookConfigBoundary = {
+  getEnableHooks?(): boolean;
+  getHookSystem?(): HookSystem | undefined;
+};
+
+/**
+ * Returns the active HookSystem (or null) when hooks are enabled.
+ * Handles config test doubles that may not implement hook accessors.
+ */
+function getEnabledHookSystem(config: Config): HookSystem | null {
+  const boundary = config as unknown as HookConfigBoundary;
+  const enabled = boundary.getEnableHooks?.();
+  if (enabled !== true) {
+    return null;
+  }
+  const hookSystem = boundary.getHookSystem?.();
+  if (hookSystem === undefined) {
+    return null;
+  }
+  return hookSystem;
+}
 
 /**
  * Trigger BeforeTool hook for a tool call
@@ -41,15 +67,8 @@ export async function triggerBeforeToolHook(
   toolInput: Record<string, unknown>,
   mcpContext?: McpContext,
 ): Promise<BeforeToolHookOutput | undefined> {
-  // Check if hooks are enabled
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
-  if (!config.getEnableHooks?.()) {
-    return undefined;
-  }
-
-  // Get the HookSystem singleton
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
-  const hookSystem = config.getHookSystem?.();
+  // Get the HookSystem singleton (null when hooks disabled or unavailable)
+  const hookSystem = getEnabledHookSystem(config);
   if (!hookSystem) {
     return undefined;
   }
@@ -101,15 +120,8 @@ export async function triggerAfterToolHook(
   toolOutput: ToolResult,
   mcpContext?: McpContext,
 ): Promise<AfterToolHookOutput | undefined> {
-  // Check if hooks are enabled
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
-  if (!config.getEnableHooks?.()) {
-    return undefined;
-  }
-
-  // Get the HookSystem singleton
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
-  const hookSystem = config.getHookSystem?.();
+  // Get the HookSystem singleton (null when hooks disabled or unavailable)
+  const hookSystem = getEnabledHookSystem(config);
   if (!hookSystem) {
     return undefined;
   }
@@ -265,13 +277,7 @@ export async function triggerToolNotificationHook(
   config: Config,
   confirmationDetails: ToolCallConfirmationDetails,
 ): Promise<NotificationHookResult | undefined> {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
-  if (!config.getEnableHooks?.()) {
-    return undefined;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
-  const hookSystem = config.getHookSystem?.();
+  const hookSystem = getEnabledHookSystem(config);
   if (!hookSystem) {
     return undefined;
   }

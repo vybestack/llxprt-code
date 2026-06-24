@@ -24,6 +24,31 @@ import {
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
+const HEX_CHARS = new Set('0123456789abcdefABCDEF'.split(''));
+
+function isHexChar(ch: string): boolean {
+  return HEX_CHARS.has(ch);
+}
+
+/** Validates `hex:hex:hex` format (e.g. AES-256-GCM iv:authTag:encrypted). */
+function isHexColonFormat(value: string): boolean {
+  const parts = value.split(':');
+  if (parts.length !== 3) {
+    return false;
+  }
+  for (const part of parts) {
+    if (part.length === 0) {
+      return false;
+    }
+    for (const ch of part) {
+      if (!isHexChar(ch)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 /**
  * Creates an in-memory mock keytar adapter for testing keychain operations.
  * This is injected via ToolKeyStorageOptions.keyringLoader — no mock theater.
@@ -297,7 +322,7 @@ describe('ToolKeyStorage', () => {
       const content = await fs.readFile(filePath, 'utf-8');
       expect(content).not.toContain('sk-secret-value');
       // AES-256-GCM format: iv:authTag:encrypted (hex strings)
-      expect(content).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
+      expect(isHexColonFormat(content)).toBe(true);
     });
 
     /**

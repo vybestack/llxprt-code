@@ -5,68 +5,16 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { checkDiff, formatViolations } from '../check-eslint-guard.js';
-
-const repoRoot = resolve(__dirname, '..', '..');
-
-function listTsFiles(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      out.push(...listTsFiles(full));
-    } else if (/\.(?:ts|tsx)$/.test(entry)) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
-const eslintConfigPath = join(repoRoot, 'eslint.config.js');
-const eslintConfigSource = readFileSync(eslintConfigPath, 'utf8');
-
-function extractScopeArray(name) {
-  const start = eslintConfigSource.indexOf('const ' + name + ' = [');
-  if (start === -1) {
-    throw new Error(
-      'Could not find scope const declaration for "' +
-        name +
-        '" in eslint.config.js',
-    );
-  }
-  const arrayStart = eslintConfigSource.indexOf('[', start);
-  let depth = 0;
-  let end = -1;
-  for (let i = arrayStart; i < eslintConfigSource.length; i++) {
-    const ch = eslintConfigSource[i];
-    if (ch === '[') {
-      depth += 1;
-    } else if (ch === ']') {
-      depth -= 1;
-      if (depth === 0) {
-        end = i;
-        break;
-      }
-    }
-  }
-  if (end === -1) {
-    throw new Error(
-      'Could not parse closing bracket for scope const "' +
-        name +
-        '" in eslint.config.js',
-    );
-  }
-  const body = eslintConfigSource.slice(arrayStart + 1, end);
-  const entries = [];
-  const re = /'([^']+)'/g;
-  let m;
-  while ((m = re.exec(body)) !== null) {
-    entries.push(m[1]);
-  }
-  return entries;
-}
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import {
+  checkDiff,
+  checkCoreCentralBypassesInConfig,
+  checkCoreDirectiveScopesInConfig,
+  formatViolations,
+  scanCoreDirectives,
+} from '../check-eslint-guard.js';
 
 function diffFor(file, addedLine) {
   return [
@@ -183,28 +131,246 @@ describe('check-eslint-guard', () => {
     expect(violations[0].file).toBe('scripts/example.js');
   });
 
-  it('rejects regex-related inline ESLint disables instead of allowing policy bypasses', () => {
-    const violations = checkDiff(
-      diffFor(
-        'packages/core/src/example.ts',
-        '// eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex',
-      ),
-    );
+  describe('#2115 packages/core directive ban', () => {
+    it('reports violations when packages/core files contain directives', () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-core-'));
+      const subDir = join(tmpDir, 'src', 'utils');
+      mkdirSync(subDir, { recursive: true });
+      writeFileSync(
+        join(subDir, 'example.ts'),
+        [
+          'export const x = 1;',
+          '// eslint-disable-next-line @typescript-eslint/no-explicit-any',
+          'export const y: any = 2;',
+        ].join('\n'),
+      );
 
-    expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain(
-      'Inline ESLint disable directives are forbidden',
-    );
+      const violations = scanCoreDirectives(tmpDir);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('#2115');
+      expect(violations[0].lineNumber).toBe(2);
+    });
+
+    it('reports violations in non-JS text files under packages/core', () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-core-text-'));
+      writeFileSync(
+        join(tmpDir, 'fixture.md'),
+        'This fixture must not contain eslint-disable-line directives.\n',
+      );
+
+      const violations = scanCoreDirectives(tmpDir);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].lineNumber).toBe(1);
+    });
+
+    it('passes when packages/core files contain no directives', () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-core-clean-'));
+      writeFileSync(
+        join(tmpDir, 'clean.ts'),
+        ['export const x = 1;', 'export const y = 2;'].join('\n'),
+      );
+
+      expect(scanCoreDirectives(tmpDir)).toEqual([]);
+    });
+
+    it('flags packages/core entries left in legacyDirectiveCleanupScopes', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/core/src/utils/example.ts', // remaining core cleanup",
+        "  'packages/cli/src/foo.ts',",
+        '];',
+      ].join('\n');
+
+      const violations = checkCoreDirectiveScopesInConfig(config);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].file).toBe('eslint.config.js');
+      expect(violations[0].message).toContain('#2115');
+    });
+
+    it('flags packages/core entries left in completedDirectiveCleanupScopes', () => {
+      const config = [
+        'const completedDirectiveCleanupScopes = [',
+        "  'packages/core/src/utils/example.ts', // completed core cleanup",
+        "  'packages/cli/src/foo.ts',",
+        '];',
+      ].join('\n');
+
+      const violations = checkCoreDirectiveScopesInConfig(config);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].file).toBe('eslint.config.js');
+      expect(violations[0].message).toContain(
+        'completedDirectiveCleanupScopes',
+      );
+    });
+
+    it('flags single-line packages/core cleanup scope entries', () => {
+      const config =
+        "const legacyDirectiveCleanupScopes = ['packages/core/src/example.ts'];";
+
+      const violations = checkCoreDirectiveScopesInConfig(config);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('legacyDirectiveCleanupScopes');
+    });
+
+    it('passes when directive cleanup scopes have no packages/core entries', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/cli/src/foo.ts',",
+        '];',
+        'const completedDirectiveCleanupScopes = [',
+        "  'packages/providers/src/foo.ts',",
+        '];',
+      ].join('\n');
+
+      expect(checkCoreDirectiveScopesInConfig(config)).toEqual([]);
+    });
+    it('flags packages/core central rule-off blocks', () => {
+      const config = [
+        '{',
+        "  files: ['packages/core/src/example.ts'],",
+        '  rules: {',
+        "    'sonarjs/regular-expr': 'off',",
+        '  },',
+        '}',
+      ].join('\n');
+
+      const violations = checkCoreCentralBypassesInConfig(config);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('rule-off');
+    });
+
+    it('flags packages/core multiline rule-off values', () => {
+      const config = [
+        '{',
+        "  files: ['packages/core/src/example.ts'],",
+        '  rules: {',
+        "    'sonarjs/regular-expr': [",
+        "      'off',",
+        '    ],',
+        "    'no-console': [",
+        '      0,',
+        '    ],',
+        "    'no-unused-vars': [",
+        "      'off', // inline comment",
+        '    ],',
+        "    'no-magic-numbers': [",
+        '      0, // inline comment',
+        '    ],',
+        '  },',
+        '}',
+      ].join('\n');
+
+      const violations = checkCoreCentralBypassesInConfig(config);
+
+      expect(violations).toHaveLength(4);
+      expect(formatViolations(violations)).toContain('rule-off');
+    });
+
+    it('flags packages/core central rule-off values in long blocks', () => {
+      const config = [
+        '{',
+        "  files: ['packages/core/src/example.ts'],",
+        ...Array.from(
+          { length: 90 },
+          (_, index) => `  settings${index}: { value: ${index} },`,
+        ),
+        '  rules: {',
+        "    'sonarjs/regular-expr': [",
+        "      'off',",
+        '    ],',
+        '  },',
+        '}',
+      ].join('\n');
+
+      const violations = checkCoreCentralBypassesInConfig(config);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('rule-off');
+    });
+
+    it('flags packages/core scoped ignores', () => {
+      const config = [
+        '{',
+        "  files: ['packages/core/src/**/*.ts'],",
+        "  ignores: ['**/*.test.ts'],",
+
+        '  rules: {},',
+        '}',
+      ].join('\n');
+
+      const violations = checkCoreCentralBypassesInConfig(config);
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('scoped ignore');
+    });
+
+    it('flags single-line packages/core scoped rule-off and ignores', () => {
+      const config = [
+        "{ files: ['packages/core/src/example.ts'], rules: { 'no-console': 'off' } },",
+        "{ files: ['packages/core/src/example.ts'], ignores: ['**/*.test.ts'] },",
+      ].join('\n');
+
+      const violations = checkCoreCentralBypassesInConfig(config);
+
+      expect(violations).toHaveLength(2);
+      expect(formatViolations(violations)).toContain('rule-off');
+      expect(formatViolations(violations)).toContain('scoped ignore');
+    });
+
+    it('flags packages/core global ignores and allow-list entries', () => {
+      const config = [
+        'export default [',
+        '  {',
+        '    ignores: [',
+        "      'packages/core/src/prompts/*.d.ts',",
+        '    ],',
+        '  },',
+        '  {',
+        '    rules: {',
+        "      'import/no-internal-modules': ['error', { allow: [",
+        "        '**/packages/core/src/prompts/*.js',",
+        '      ] }],',
+        '    },',
+        '  },',
+        '];',
+      ].join('\n');
+
+      const violations = checkCoreCentralBypassesInConfig(config);
+
+      expect(violations).toHaveLength(2);
+      expect(formatViolations(violations)).toContain('allow-list');
+      expect(formatViolations(violations)).toContain('ignore');
+    });
+
+    it('allows packages/core positive enforcement blocks', () => {
+      const config = [
+        '{',
+        "  files: ['packages/core/src/example.ts'],",
+        '  rules: {',
+        "    'max-lines': ['error', { max: 800 }],",
+        "    'no-restricted-imports': ['error', { name: 'x' }],",
+        '  },',
+        '}',
+      ].join('\n');
+
+      expect(checkCoreCentralBypassesInConfig(config)).toEqual([]);
+    });
   });
 });
 
-describe('packages/agents directive cleanup (#2117)', () => {
-  const agentsSrcDir = join(repoRoot, 'packages', 'agents', 'src');
+describe('packages/auth directive cleanup (#2121)', () => {
+  const authSrcDir = join(repoRoot, 'packages', 'auth', 'src');
 
   it('has zero inline ESLint disable/enable directives', () => {
     const directiveRe = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
     const offenders = [];
-    for (const file of listTsFiles(agentsSrcDir)) {
+    for (const file of listTsFiles(authSrcDir)) {
       const lines = readFileSync(file, 'utf8').split('\n');
       lines.forEach((line, idx) => {
         if (directiveRe.test(line)) {
@@ -217,15 +383,15 @@ describe('packages/agents directive cleanup (#2117)', () => {
 
   it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/agents/src/**/*.{ts,tsx}');
+    expect(completed).toContain('packages/auth/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
     const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
-    const agentsEntries = legacy.filter((e) => e.startsWith('packages/agents'));
+    const authEntries = legacy.filter((e) => e.startsWith('packages/auth'));
     expect(
-      agentsEntries,
-      'Legacy agents entries: ' + agentsEntries.join(', '),
+      authEntries,
+      'Legacy auth entries: ' + authEntries.join(', '),
     ).toEqual([]);
   });
 });

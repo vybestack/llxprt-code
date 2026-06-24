@@ -19,6 +19,16 @@ import { coreEvents } from '../utils/events.js';
 const KEYCHAIN_SERVICE_NAME = 'llxprt-code-oauth';
 const MAIN_ACCOUNT_KEY = 'main-account';
 
+/**
+ * Normalizes a credential field that crosses the legacy JSON boundary.
+ */
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value === '') {
+    return undefined;
+  }
+  return value;
+}
+
 function getLegacyCredentialPaths(): string[] {
   const legacyPaths = [Storage.getOAuthCredsPath()];
   const homeDir = os.homedir();
@@ -90,12 +100,9 @@ export class OAuthCredentialStorage {
       serverName: MAIN_ACCOUNT_KEY,
       token: {
         accessToken: credentials.access_token,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided"
-        refreshToken: credentials.refresh_token || undefined,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string token_type is invalid, default to Bearer
-        tokenType: credentials.token_type || 'Bearer',
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided"
-        scope: credentials.scope || undefined,
+        refreshToken: normalizeOptionalString(credentials.refresh_token),
+        tokenType: normalizeOptionalString(credentials.token_type) ?? 'Bearer',
+        scope: normalizeOptionalString(credentials.scope),
         // Preserve JS falsy behavior: 0/null/undefined expiry_date means "no expiration"
         expiresAt:
           credentials.expiry_date != null && credentials.expiry_date !== 0

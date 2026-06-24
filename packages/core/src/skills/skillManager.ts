@@ -25,6 +25,48 @@ export { type SkillDefinition, type SkillSource };
 // ESM-compatible __dirname equivalent
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function isNonEmptyString(value: string | undefined): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Strips a YAML frontmatter block (delimited by `---` on its own line) from
+ * skill content, returning only the body.
+ */
+function stripFrontmatter(content: string): string {
+  const NEWLINE = '\n';
+  const FRONTMATTER_OPEN = '---' + NEWLINE;
+  const FRONTMATTER_CLOSE = NEWLINE + '---';
+  if (
+    !content.startsWith(FRONTMATTER_OPEN) &&
+    !content.startsWith('---' + '\r\n')
+  ) {
+    return content;
+  }
+  const firstLineEnd = content.indexOf(NEWLINE) + 1;
+  const closeMarker = content.indexOf(FRONTMATTER_CLOSE, firstLineEnd);
+  if (closeMarker === -1) {
+    return content;
+  }
+  // Verify the `---` close delimiter is standalone (followed by newline or EOF),
+  // not part of text like `---foo`.
+  const afterClose = closeMarker + FRONTMATTER_CLOSE.length;
+  const closeTerminator = content[afterClose];
+  if (
+    afterClose < content.length &&
+    closeTerminator !== NEWLINE &&
+    closeTerminator !== '\r'
+  ) {
+    // Not a standalone delimiter — treat as no valid frontmatter close.
+    return content;
+  }
+  const bodyStart = content.indexOf(NEWLINE, afterClose);
+  if (bodyStart === -1) {
+    return '';
+  }
+  return content.slice(bodyStart + 1);
+}
+
 /**
  * Configuration for a built-in skill using config.json format.
  */
@@ -140,36 +182,36 @@ export class SkillManager {
         const fullPath = path.join(dir, entry.name);
 
         if (entry.isDirectory()) {
-          // Check for config.json in this directory
-          const configPath = path.join(fullPath, 'config.json');
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (await this.pathExists(configPath)) {
-            // This is a skill directory
-            try {
-              const skill = await this.loadSkillFromConfig(
-                configPath,
-                fullPath,
-                entry.name,
-              );
-              if (skill) {
-                skills.push(skill);
-              }
-            } catch (error) {
-              console.warn(
-                `Failed to load builtin skill ${entry.name}:`,
-                error,
-              );
-              // Continue with other skills
-            }
-          } else {
-            // Recurse into subdirectories
-            await this.discoverSkillsRecursive(fullPath, skills);
-          }
+          await this.processSkillEntry(fullPath, entry.name, skills);
         }
       }
     } catch {
       // Directory read error - silently continue
+    }
+  }
+
+  private async processSkillEntry(
+    fullPath: string,
+    entryName: string,
+    skills: SkillDefinition[],
+  ): Promise<void> {
+    const configPath = path.join(fullPath, 'config.json');
+
+    if (await this.pathExists(configPath)) {
+      try {
+        const skill = await this.loadSkillFromConfig(
+          configPath,
+          fullPath,
+          entryName,
+        );
+        if (skill) {
+          skills.push(skill);
+        }
+      } catch (error) {
+        debugLogger.warn(`Failed to load builtin skill ${entryName}:`, error);
+      }
+    } else {
+      await this.discoverSkillsRecursive(fullPath, skills);
     }
   }
 
@@ -191,9 +233,7 @@ export class SkillManager {
       }
 
       // Skill name can come from config or use directory name
-      const skillName =
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty name string should fall through to directory name
-        config.name || name;
+      const skillName = isNonEmptyString(config.name) ? config.name : name;
 
       // Look for skill instruction file (SKILL.md or similar)
       const body = await this.loadSkillBody(skillPath);
@@ -201,8 +241,7 @@ export class SkillManager {
       return {
         name: skillName,
         description:
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty description should default to empty string
-          config.description || '',
+          typeof config.description === 'string' ? config.description : '',
         location: skillPath,
         body,
         source: 'builtin',
@@ -226,9 +265,7 @@ export class SkillManager {
         if (await this.pathExists(filePath)) {
           const content = await fs.readFile(filePath, 'utf-8');
           // Extract body after frontmatter if present
-          const frontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)/;
-          const match = content.match(frontmatterRegex);
-          return match ? match[1].trim() : content.trim();
+          return stripFrontmatter(content).trim();
         }
       } catch {
         // Continue to next file

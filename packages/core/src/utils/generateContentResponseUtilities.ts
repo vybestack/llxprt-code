@@ -252,10 +252,13 @@ export function limitFunctionResponsePart(
 
 export function toParts(input: PartListUnion): Part[] {
   const parts: Part[] = [];
-  for (const part of Array.isArray(input) ? input : [input]) {
+  // SDK PartListUnion callers can pass nullish entries at runtime
+  const entries = (Array.isArray(input) ? input : [input]) as Array<
+    Part | string | null | undefined
+  >;
+  for (const part of entries) {
     if (typeof part === 'string') {
       parts.push({ text: part });
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- SDK PartListUnion callers can pass nullish entries at runtime.
     } else if (part !== null && part !== undefined) {
       parts.push(part);
     }

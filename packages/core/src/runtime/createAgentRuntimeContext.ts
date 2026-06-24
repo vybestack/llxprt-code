@@ -18,6 +18,7 @@ import type {
   AgentRuntimeContextFactoryOptions,
 } from './AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
+import type { RuntimeSettingsState } from './providerRuntimeContext.js';
 import { tokenLimit } from '../core/tokenLimits.js';
 /** @plan PLAN-20260211-COMPRESSION.P12 */
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
@@ -37,30 +38,37 @@ const EPHEMERAL_DEFAULTS = {
 } as const;
 
 /**
+ * Widened view of factory options used at the external boundary so the
+ * validation checks below are honestly typed as potentially undefined.
+ * The declared AgentRuntimeContextFactoryOptions marks these required,
+ * but callers may omit them; validate against this widened shape first.
+ */
+type BoundaryFactoryOptions = {
+  provider?: unknown;
+  telemetry?: unknown;
+  tools?: unknown;
+  providerRuntime?: unknown;
+};
+
+/**
  * Validate required top-level options and throw if any are missing.
  */
-function validateRequiredOptions(
-  options: AgentRuntimeContextFactoryOptions,
-): void {
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
+function validateRequiredOptions(options: BoundaryFactoryOptions): void {
   if (options.provider == null) {
     throw new Error(
       'AgentRuntimeContext requires a provider adapter. Supply options.provider.',
     );
   }
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
   if (options.telemetry == null) {
     throw new Error(
       'AgentRuntimeContext requires a telemetry adapter. Supply options.telemetry.',
     );
   }
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
   if (options.tools == null) {
     throw new Error(
       'AgentRuntimeContext requires a tools view. Supply options.tools.',
     );
   }
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
   if (options.providerRuntime == null) {
     throw new Error(
       'AgentRuntimeContext requires a provider runtime context. Supply options.providerRuntime.',
@@ -76,9 +84,10 @@ function createGetLiveSetting(
   options: AgentRuntimeContextFactoryOptions,
 ): <T>(key: string, snapshotValue: T | undefined) => T | undefined {
   return <T>(key: string, snapshotValue: T | undefined): T | undefined => {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
-    const settingsService = options.providerRuntime?.settingsService;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
+    const providerRuntime = options.providerRuntime as
+      | { settingsService?: RuntimeSettingsState | null }
+      | undefined;
+    const settingsService = providerRuntime?.settingsService;
     if (settingsService !== undefined && settingsService !== null) {
       const liveValue = settingsService.get(key) as T | undefined;
       if (liveValue !== undefined) {

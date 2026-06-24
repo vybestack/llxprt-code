@@ -39,35 +39,37 @@ function normalizeRawId(rawId: string | undefined): string | undefined {
   let candidate = rawId;
   let didStrip = true;
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   while (didStrip) {
     didStrip = false;
 
-    if (candidate.startsWith('call_')) {
-      candidate = candidate.substring('call_'.length);
+    const stripResult = stripKnownPrefix(candidate);
+    if (stripResult !== null) {
+      candidate = stripResult;
       didStrip = true;
-      continue;
-    }
-
-    if (candidate.startsWith('toolu_')) {
-      candidate = candidate.substring('toolu_'.length);
-      didStrip = true;
-      continue;
-    }
-
-    if (candidate.startsWith('call') && !candidate.startsWith('call_')) {
-      const suffix = candidate.substring('call'.length);
-      const looksLikeToken =
-        suffix.length >= 8 && /^[a-zA-Z0-9]+$/.test(suffix);
-      if (looksLikeToken) {
-        candidate = suffix;
-        didStrip = true;
-        continue;
-      }
     }
   }
 
   return candidate || undefined;
+}
+
+function stripKnownPrefix(candidate: string): string | null {
+  if (candidate.startsWith('call_')) {
+    return candidate.substring('call_'.length);
+  }
+
+  if (candidate.startsWith('toolu_')) {
+    return candidate.substring('toolu_'.length);
+  }
+
+  if (candidate.startsWith('call') && !candidate.startsWith('call_')) {
+    const suffix = candidate.substring('call'.length);
+    const looksLikeToken = suffix.length >= 8 && /^[a-zA-Z0-9]+$/.test(suffix);
+    if (looksLikeToken) {
+      return suffix;
+    }
+  }
+
+  return null;
 }
 
 function buildCanonicalToolId(input: CanonicalToolIdInput): string {

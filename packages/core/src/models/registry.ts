@@ -389,10 +389,7 @@ let registryInstance: ModelRegistry | null = null;
  * Get the global ModelRegistry instance
  */
 export function getModelRegistry(): ModelRegistry {
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional singleton initialization pattern
-  if (!registryInstance) {
-    registryInstance = new ModelRegistry();
-  }
+  registryInstance ??= new ModelRegistry();
   return registryInstance;
 }
 

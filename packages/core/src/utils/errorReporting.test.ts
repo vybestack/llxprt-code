@@ -14,7 +14,7 @@ import { reportError } from './errorReporting.js';
 type SpyInstance = ReturnType<typeof vi.spyOn>;
 
 describe('reportError', () => {
-  let consoleErrorSpy: SpyInstance;
+  let stderrWriteSpy: SpyInstance;
   let testDir: string;
   const MOCK_TIMESTAMP = '2025-01-01T00-00-00-000Z';
 
@@ -22,9 +22,19 @@ describe('reportError', () => {
     // Create a temporary directory for logs
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gemini-report-test-'));
     vi.resetAllMocks();
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    stderrWriteSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
     vi.spyOn(Date.prototype, 'toISOString').mockReturnValue(MOCK_TIMESTAMP);
   });
+
+  /** Assert that a stderr write call included the given substring. */
+  function expectStderrContaining(fragment: string): void {
+    const matched = stderrWriteSpy.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes(fragment),
+    );
+    expect(matched, `Expected stderr to contain "${fragment}"`).toBe(true);
+  }
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -55,7 +65,7 @@ describe('reportError', () => {
     });
 
     // Verify the console log
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expectStderrContaining(
       `${baseMessage} Full report available at: ${expectedReportPath}`,
     );
   });
@@ -75,7 +85,7 @@ describe('reportError', () => {
       error: { message: 'Test plain object error' },
     });
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expectStderrContaining(
       `${baseMessage} Full report available at: ${expectedReportPath}`,
     );
   });
@@ -95,7 +105,7 @@ describe('reportError', () => {
       error: { message: 'Just a string error' },
     });
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expectStderrContaining(
       `${baseMessage} Full report available at: ${expectedReportPath}`,
     );
   });
@@ -109,15 +119,13 @@ describe('reportError', () => {
 
     await reportError(error, baseMessage, context, type, nonExistentDir);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    // stderr should have been written to
+    expect(stderrWriteSpy).toHaveBeenCalled();
+    expectStderrContaining(
       `${baseMessage} Additionally, failed to write detailed error report:`,
-      expect.any(Error), // The actual write error
     );
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Original error that triggered report generation:',
-      error,
-    );
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Original context:', context);
+    expectStderrContaining('Original error that triggered report generation:');
+    expectStderrContaining('Original context:');
   });
 
   it('should handle stringification failure of report content (e.g. BigInt in context)', async () => {
@@ -146,15 +154,11 @@ describe('reportError', () => {
 
     await reportError(error, baseMessage, context, type, testDir);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expectStderrContaining(
       `${baseMessage} Could not stringify report content (likely due to context):`,
-      stringifyError,
     );
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Original error that triggered report generation:',
-      error,
-    );
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expectStderrContaining('Original error that triggered report generation:');
+    expectStderrContaining(
       'Original context could not be stringified or included in report.',
     );
 
@@ -165,7 +169,7 @@ describe('reportError', () => {
       error: { message: error.message, stack: error.stack },
     });
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expectStderrContaining(
       `${baseMessage} Partial report (excluding context) available at: ${expectedMinimalReportPath}`,
     );
   });
@@ -186,7 +190,7 @@ describe('reportError', () => {
       error: { message: 'Error without context', stack: 'No context stack' },
     });
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expectStderrContaining(
       `${baseMessage} Full report available at: ${expectedReportPath}`,
     );
   });

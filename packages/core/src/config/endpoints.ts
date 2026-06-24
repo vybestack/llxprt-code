@@ -117,11 +117,12 @@ function normalizeBaseURL(baseURL: string): string {
     return '';
   }
 
-  let end = baseURL.length;
-  while (end > 0 && baseURL[end - 1] === '/') {
-    end -= 1;
+  // Remove trailing slashes
+  let result = baseURL;
+  while (result.endsWith('/')) {
+    result = result.slice(0, -1);
   }
-  return baseURL.slice(0, end);
+  return result;
 }
 
 /**

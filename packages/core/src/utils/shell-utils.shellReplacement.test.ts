@@ -17,6 +17,8 @@ import {
   isParserAvailable,
 } from './shell-parser.js';
 
+await initializeShellParsers();
+
 describe('Shell replacement settings', () => {
   let config: Config;
   let settingsService: SettingsService;
@@ -264,104 +266,110 @@ describe('Shell replacement settings', () => {
       expect(result.blockReason).toContain('Command substitution');
     });
 
-    it('should handle arithmetic expansion $((1+2)): regex path flags $(', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: tree-sitter availability guard
-      if (isParserAvailable()) return;
-      // Tree-sitter does NOT treat $((...)) as command_substitution (it is
-      // arithmetic expansion, not command substitution). The regex fallback
-      // sees '$(' and flags it. The two paths intentionally differ — the
-      // regex fallback is more conservative, which is appropriate for a
-      // security-sensitive fallback.
-      const result = detectCommandSubstitution('echo $((1+2))');
-      // Regex path: '$(' is detected → true
-      expect(result).toBe(true);
-    });
+    it.skipIf(isParserAvailable())(
+      'should handle arithmetic expansion $((1+2)): regex path flags $(',
+      () => {
+        // Tree-sitter does NOT treat $((...)) as command_substitution (it is
+        // arithmetic expansion, not command substitution). The regex fallback
+        // sees '$(' and flags it. The two paths intentionally differ — the
+        // regex fallback is more conservative, which is appropriate for a
+        // security-sensitive fallback.
+        const result = detectCommandSubstitution('echo $((1+2))');
+        // Regex path: '$(' is detected → true
+        expect(result).toBe(true);
+      },
+    );
 
-    it('should handle arithmetic expansion via tree-sitter when available', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: tree-sitter availability guard
-      if (!isParserAvailable()) return;
-      // Tree-sitter correctly identifies $((1+2)) as arithmetic expansion,
-      // NOT command substitution, so hasCommandSubstitution returns false.
-      const result = detectCommandSubstitution('echo $((1+2))');
-      expect(result).toBe(false);
-    });
+    it.skipIf(!isParserAvailable())(
+      'should handle arithmetic expansion via tree-sitter when available',
+      () => {
+        // Tree-sitter correctly identifies $((1+2)) as arithmetic expansion,
+        // NOT command substitution, so hasCommandSubstitution returns false.
+        const result = detectCommandSubstitution('echo $((1+2))');
+        expect(result).toBe(false);
+      },
+    );
 
-    it('should NOT flag quoted heredoc body as substitution via tree-sitter', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: tree-sitter availability guard
-      if (!isParserAvailable()) return;
-      // A heredoc with a quoted delimiter (<<'EOF') treats its body as literal
-      // text — $(rm -rf /) inside it is NOT command substitution.
-      const cmd = `cat <<'EOF'
+    it.skipIf(!isParserAvailable())(
+      'should NOT flag quoted heredoc body as substitution via tree-sitter',
+      () => {
+        // A heredoc with a quoted delimiter (<<'EOF') treats its body as literal
+        // text — $(rm -rf /) inside it is NOT command substitution.
+        const cmd = `cat <<'EOF'
 $(rm -rf /)
 EOF`;
-      const result = detectCommandSubstitution(cmd);
-      expect(result).toBe(false);
-    });
+        const result = detectCommandSubstitution(cmd);
+        expect(result).toBe(false);
+      },
+    );
 
-    it('should flag unquoted heredoc body as substitution via tree-sitter', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: tree-sitter availability guard
-      if (!isParserAvailable()) return;
-      // An unquoted heredoc (<<EOF) does expand $(...).
-      const cmd = `cat <<EOF
+    it.skipIf(!isParserAvailable())(
+      'should flag unquoted heredoc body as substitution via tree-sitter',
+      () => {
+        // An unquoted heredoc (<<EOF) does expand $(...).
+        const cmd = `cat <<EOF
 $(rm -rf /)
 EOF`;
-      const result = detectCommandSubstitution(cmd);
-      expect(result).toBe(true);
-    });
+        const result = detectCommandSubstitution(cmd);
+        expect(result).toBe(true);
+      },
+    );
 
-    it('should hard-deny malformed command in allowlist mode with restricted coreTools (tree-sitter)', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: tree-sitter availability guard
-      if (!isParserAvailable()) return;
-      // When tree-sitter is available, parseCommandDetails reports hasError
-      // for malformed input, and the allowlist mode treats that as a hard denial.
-      const restrictedConfig = new Config({
-        model: 'test-model',
-        question: 'test question',
-        embeddingModel: 'test-embedding',
-        targetDir: '.',
-        usageStatisticsEnabled: false,
-        sessionId: 'test-session',
-        debugMode: false,
-        cwd: '.',
-        shellReplacement: 'allowlist',
-        coreTools: ['run_shell_command(echo)'],
-        settingsService: new SettingsService(),
-      });
+    it.skipIf(!isParserAvailable())(
+      'should hard-deny malformed command in allowlist mode with restricted coreTools (tree-sitter)',
+      () => {
+        // When tree-sitter is available, parseCommandDetails reports hasError
+        // for malformed input, and the allowlist mode treats that as a hard denial.
+        const restrictedConfig = new Config({
+          model: 'test-model',
+          question: 'test question',
+          embeddingModel: 'test-embedding',
+          targetDir: '.',
+          usageStatisticsEnabled: false,
+          sessionId: 'test-session',
+          debugMode: false,
+          cwd: '.',
+          shellReplacement: 'allowlist',
+          coreTools: ['run_shell_command(echo)'],
+          settingsService: new SettingsService(),
+        });
 
-      const result = checkCommandPermissions(
-        'echo "unclosed',
-        restrictedConfig,
-      );
-      expect(result.allAllowed).toBe(false);
-      expect(result.isHardDenial).toBe(true);
-      expect(result.blockReason).toContain('could not be parsed safely');
-    });
+        const result = checkCommandPermissions(
+          'echo "unclosed',
+          restrictedConfig,
+        );
+        expect(result.allAllowed).toBe(false);
+        expect(result.isHardDenial).toBe(true);
+        expect(result.blockReason).toContain('could not be parsed safely');
+      },
+    );
 
-    it('should allow malformed command via regex fallback when root matches allowlist', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: tree-sitter availability guard
-      if (isParserAvailable()) return;
-      // When tree-sitter is NOT available, the regex fallback extracts the
-      // command root "echo" which matches the allowlist, so the command passes.
-      const restrictedConfig = new Config({
-        model: 'test-model',
-        question: 'test question',
-        embeddingModel: 'test-embedding',
-        targetDir: '.',
-        usageStatisticsEnabled: false,
-        sessionId: 'test-session',
-        debugMode: false,
-        cwd: '.',
-        shellReplacement: 'allowlist',
-        coreTools: ['run_shell_command(echo)'],
-        settingsService: new SettingsService(),
-      });
+    it.skipIf(isParserAvailable())(
+      'should allow malformed command via regex fallback when root matches allowlist',
+      () => {
+        // When tree-sitter is NOT available, the regex fallback extracts the
+        // command root "echo" which matches the allowlist, so the command passes.
+        const restrictedConfig = new Config({
+          model: 'test-model',
+          question: 'test question',
+          embeddingModel: 'test-embedding',
+          targetDir: '.',
+          usageStatisticsEnabled: false,
+          sessionId: 'test-session',
+          debugMode: false,
+          cwd: '.',
+          shellReplacement: 'allowlist',
+          coreTools: ['run_shell_command(echo)'],
+          settingsService: new SettingsService(),
+        });
 
-      const result = checkCommandPermissions(
-        'echo "unclosed',
-        restrictedConfig,
-      );
-      expect(result.allAllowed).toBe(true);
-    });
+        const result = checkCommandPermissions(
+          'echo "unclosed',
+          restrictedConfig,
+        );
+        expect(result.allAllowed).toBe(true);
+      },
+    );
 
     it('should detect process substitution >(...) on both paths', () => {
       expect(detectCommandSubstitution('tee >(wc -l)')).toBe(true);

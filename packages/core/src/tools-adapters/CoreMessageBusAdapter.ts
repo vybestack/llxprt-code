@@ -13,7 +13,7 @@ import {
   type ToolMessageHandler,
   type Unsubscribe,
 } from '@vybestack/llxprt-code-tools';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   MessageBusType,
   type MessageBusMessage,
@@ -27,6 +27,20 @@ interface ToolConfirmationDetails {
   serverName?: unknown;
 }
 
+function isAbortSignalAborted(abortSignal?: AbortSignal): boolean {
+  return abortSignal?.aborted === true;
+}
+
+function getConfirmationToolName(details: ToolConfirmationDetails): string {
+  if (typeof details.toolName === 'string') {
+    return details.toolName;
+  }
+  if (typeof details.name === 'string') {
+    return details.name;
+  }
+  return 'unknown';
+}
+
 export class CoreMessageBusAdapter implements IToolMessageBus {
   constructor(private readonly messageBus: MessageBus) {}
 
@@ -35,12 +49,7 @@ export class CoreMessageBusAdapter implements IToolMessageBus {
     abortSignal?: AbortSignal,
   ): Promise<ToolConfirmationOutcome> {
     const confirmationDetails = details as ToolConfirmationDetails;
-    const toolName =
-      typeof confirmationDetails.toolName === 'string'
-        ? confirmationDetails.toolName
-        : typeof confirmationDetails.name === 'string'
-          ? confirmationDetails.name
-          : 'unknown';
+    const toolName = getConfirmationToolName(confirmationDetails);
     const args =
       confirmationDetails.args !== null &&
       typeof confirmationDetails.args === 'object' &&
@@ -52,7 +61,7 @@ export class CoreMessageBusAdapter implements IToolMessageBus {
         ? confirmationDetails.serverName
         : undefined;
 
-    if (abortSignal?.aborted) {
+    if (isAbortSignalAborted(abortSignal)) {
       return ToolConfirmationOutcome.Cancel;
     }
 
@@ -67,7 +76,7 @@ export class CoreMessageBusAdapter implements IToolMessageBus {
       serverName,
     );
 
-    if (abortSignal?.aborted) {
+    if (isAbortSignalAborted(abortSignal)) {
       return ToolConfirmationOutcome.Cancel;
     }
 
