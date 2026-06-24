@@ -14,6 +14,7 @@ import type {
   ToolRegistry,
   AccessibilitySettings,
   SandboxConfig,
+  LLxprtClient,
   AgentClient,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -24,12 +25,11 @@ import {
 import type { SettingsFile, Settings } from '../config/settings.js';
 import { LoadedSettings } from '../config/settings.js';
 import process from 'node:process';
-import type { HistoryItem } from './types.js';
-import { MessageType } from './types.js';
-import type { UpdateObject } from './utils/updateCheck.js';
-import { checkForUpdates } from './utils/updateCheck.js';
-import { EventEmitter } from 'events';
-import { updateEventEmitter } from '../utils/updateEventEmitter.js';
+import { useGeminiStream } from './hooks/geminiStream/index.js';
+import { useConsoleMessages } from './hooks/useConsoleMessages.js';
+import type { ConsoleMessageItem, HistoryItem } from './types.js';
+import { StreamingState } from './types.js';
+import { Tips } from './components/Tips.js';
 import * as useTerminalSize from './hooks/useTerminalSize.js';
 
 // Define a more complete mock server config based on actual Config
@@ -343,11 +343,9 @@ vi.mock('../hooks/useTerminalSize.js', () => ({
   useTerminalSize: vi.fn(),
 }));
 
-const mockedCheckForUpdates = vi.mocked(checkForUpdates);
-const {
-  isGitRepository: mockedIsGitRepository,
-  getAllLlxprtMdFilenames: mockedGetAllLlxprtMdFilenames,
-} = vi.mocked(await import('@vybestack/llxprt-code-core'));
+const { getAllLlxprtMdFilenames: mockedGetAllLlxprtMdFilenames } = vi.mocked(
+  await import('@vybestack/llxprt-code-core'),
+);
 
 vi.mock('node:child_process');
 
@@ -366,6 +364,9 @@ describe('App UI', () => {
   let currentUnmount: (() => void) | undefined;
 
   // Helper to detect if we're in a PowerShell environment
+  const isPowerShell = () =>
+    process.env.PSModulePath !== undefined ||
+    process.env.PSVERSION !== undefined;
 
   const createMockSettings = (
     settings: {
@@ -452,35 +453,82 @@ describe('App UI', () => {
     vi.clearAllMocks(); // Clear mocks after each test
   });
 
-  describe('handleAutoUpdate', () => {
-    let spawnEmitter: EventEmitter;
+  it('should not display Footer component when hideFooter is true', async () => {
+    mockSettings = createMockSettings({
+      user: { hideFooter: true },
+    });
 
-    beforeEach(async () => {
-      const { spawn } = await import('node:child_process');
-      spawnEmitter = new EventEmitter();
-      spawnEmitter.stdout = new EventEmitter();
-      spawnEmitter.stderr = new EventEmitter();
-      (spawn as vi.Mock).mockReturnValue(spawnEmitter);
+    const { lastFrame, unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    // Footer should not render - target directory should not appear
+    expect(lastFrame()).not.toContain('/test/dir');
+  });
+
+  it('should show footer if system says show, but workspace and user settings say hide', async () => {
+    mockSettings = createMockSettings({
+      system: { hideFooter: false },
+      user: { hideFooter: true },
+      workspace: { hideFooter: true },
+    });
+
+    const { lastFrame, unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    // Footer should render because system overrides - look for target directory
+    expect(lastFrame()).toContain('/test/dir');
+  });
+
+  it('should show tips if system says show, but workspace and user settings say hide', async () => {
+    mockSettings = createMockSettings({
+      system: { hideTips: false },
+      user: { hideTips: true },
+      workspace: { hideTips: true },
+    });
+
+    const { unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    expect(vi.mocked(Tips)).toHaveBeenCalled();
+  });
+
+  describe('when no theme is set', () => {
+    let originalNoColor: string | undefined;
+
+    beforeEach(() => {
+      originalNoColor = process.env.NO_COLOR;
+      // Ensure no theme is set for these tests
+      mockSettings = createMockSettings({});
+      mockConfig.getDebugMode.mockReturnValue(false);
+      mockConfig.getShowMemoryUsage.mockReturnValue(false);
     });
 
     afterEach(() => {
-      delete process.env.LLXPRT_CODE_DISABLE_AUTOUPDATER;
+      process.env.NO_COLOR = originalNoColor;
     });
 
-    it('should not start the update process when running from git', async () => {
-      mockedIsGitRepository.mockResolvedValue(true);
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Gemini CLI update available!',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-      const { spawn } = await import('node:child_process');
+    it('should display theme dialog if NO_COLOR is not set', async () => {
+      delete process.env.NO_COLOR;
 
-      const { unmount } = renderWithProviders(
+      const { lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -489,24 +537,13 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      // Wait for any potential async operations to complete
-      await Promise.resolve();
-      expect(spawn).not.toHaveBeenCalled();
+      expect(lastFrame()).toContain('Select Theme');
     });
 
-    it('should show a success message when update succeeds', async () => {
-      mockedIsGitRepository.mockResolvedValue(false);
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Update available',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
+    it('should display a message if NO_COLOR is set', async () => {
+      process.env.NO_COLOR = 'true';
 
-      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
+      const { lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -515,130 +552,32 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      updateEventEmitter.emit('update-success', info);
-
-      // Wait for the success message to be added to history
-      await Promise.resolve();
-      expect(mockAddItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.INFO,
-          text: 'Update successful! The new version will be used on your next run.',
-        },
-        expect.any(Number),
+      expect(lastFrame()).toContain(
+        'INFO: Theme configuration unavailable due to NO_COLOR env variable.',
       );
-    });
-
-    it('should show an error message when update fails', async () => {
-      mockedIsGitRepository.mockResolvedValue(false);
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Update available',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-
-      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      updateEventEmitter.emit('update-failed', info);
-
-      // Wait for the error message to be added to history
-      await Promise.resolve();
-      expect(mockAddItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.ERROR,
-          text: 'Automatic update failed. Please try updating manually',
-        },
-        expect.any(Number),
-      );
-    });
-
-    it('should show an error message when spawn fails', async () => {
-      mockedIsGitRepository.mockResolvedValue(false);
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Update available',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-
-      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      // We are testing the App's reaction to an `update-failed` event,
-      // which is what should be emitted when a spawn error occurs elsewhere.
-      updateEventEmitter.emit('update-failed', info);
-
-      // Wait for the error message to be added to history
-      await Promise.resolve();
-      expect(mockAddItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.ERROR,
-          text: 'Automatic update failed. Please try updating manually',
-        },
-        expect.any(Number),
-      );
-    });
-
-    it('should not auto-update if LLXPRT_CODE_DISABLE_AUTOUPDATER is true', async () => {
-      mockedIsGitRepository.mockResolvedValue(false);
-      process.env.LLXPRT_CODE_DISABLE_AUTOUPDATER = 'true';
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Update available',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-      const { spawn } = await import('node:child_process');
-
-      const { unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      // Wait for any potential async operations to complete
-      await Promise.resolve();
-      expect(spawn).not.toHaveBeenCalled();
+      expect(lastFrame()).not.toContain('Select Theme');
     });
   });
 
-  it('should display active file when available', async () => {
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [
-          {
-            path: '/path/to/my-file.ts',
-            isActive: true,
-            selectedText: 'hello',
-            timestamp: 0,
-          },
-        ],
-      },
+  it('should render the initial UI correctly', () => {
+    const { lastFrame, unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    expect(lastFrame()).toMatchSnapshot();
+  });
+
+  it('should render correctly with the prompt input box - common checks', () => {
+    vi.mocked(useGeminiStream).mockReturnValue({
+      streamingState: StreamingState.Idle,
+      submitQuery: vi.fn(),
+      initError: null,
+      pendingHistoryItems: [],
+      thought: null,
     });
 
     const { lastFrame, unmount } = renderWithProviders(
@@ -649,129 +588,208 @@ describe('App UI', () => {
       />,
     );
     currentUnmount = unmount;
-    await Promise.resolve();
-    expect(lastFrame()).toContain('1 open file (ctrl+g to view)');
+
+    // Check for the correct placeholder based on environment
+    const frame = lastFrame();
+    expect(frame).toContain('Context: 0.0k/1049k');
+    expect(frame).toContain('/test/dir');
+    expect(frame).toContain('gemini-pro');
   });
 
-  it('should not display any files when not available', async () => {
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [],
-      },
-    });
+  it.runIf(isPowerShell())(
+    'should render PowerShell-specific placeholder',
+    () => {
+      vi.mocked(useGeminiStream).mockReturnValue({
+        streamingState: StreamingState.Idle,
+        submitQuery: vi.fn(),
+        initError: null,
+        pendingHistoryItems: [],
+        thought: null,
+      });
 
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
-    );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    expect(lastFrame()).not.toContain('Open File');
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+
+      const frame = lastFrame();
+      expect(frame).toContain(
+        'Type your message, @path/to/file or +path/to/file',
+      );
+    },
+  );
+
+  it.skipIf(isPowerShell())(
+    'should render standard placeholder on non-PowerShell',
+    () => {
+      vi.mocked(useGeminiStream).mockReturnValue({
+        streamingState: StreamingState.Idle,
+        submitQuery: vi.fn(),
+        initError: null,
+        pendingHistoryItems: [],
+        thought: null,
+      });
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+
+      const frame = lastFrame();
+      expect(frame).toContain('Type your message or @path/to/file');
+    },
+  );
+
+  describe('with initial prompt from --prompt-interactive', () => {
+    it('should submit the initial prompt automatically', async () => {
+      const mockSubmitQuery = vi.fn();
+
+      mockConfig.getQuestion = vi.fn(() => 'hello from prompt-interactive');
+
+      vi.mocked(useGeminiStream).mockReturnValue({
+        streamingState: StreamingState.Idle,
+        submitQuery: mockSubmitQuery,
+        initError: null,
+        pendingHistoryItems: [],
+        thought: null,
+      });
+
+      mockConfig.getAgentClient.mockReturnValue({
+        isInitialized: vi.fn(() => false),
+        getUserTier: vi.fn(),
+      } as unknown as LLxprtClient);
+
+      const { unmount, rerender } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+
+      // Force a re-render to trigger useEffect
+      rerender(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(mockSubmitQuery).toHaveBeenCalledWith(
+        'hello from prompt-interactive',
+      );
+    });
   });
 
-  it('should display active file and other open files', async () => {
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [
-          {
-            path: '/path/to/my-file.ts',
-            isActive: true,
-            selectedText: 'hello',
-            timestamp: 0,
-          },
-          {
-            path: '/path/to/another-file.ts',
-            isActive: false,
-            timestamp: 1,
-          },
-          {
-            path: '/path/to/third-file.ts',
-            isActive: false,
-            timestamp: 2,
-          },
-        ],
-      },
-    });
+  describe('errorCount', () => {
+    it('should correctly sum the counts of error messages', async () => {
+      const mockConsoleMessages: ConsoleMessageItem[] = [
+        { type: 'error', content: 'First error', count: 1 },
+        { type: 'log', content: 'some log', count: 1 },
+        { type: 'error', content: 'Second error', count: 3 },
+        { type: 'warn', content: 'a warning', count: 1 },
+        { type: 'error', content: 'Third error', count: 1 },
+      ];
 
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
-    );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    expect(lastFrame()).toContain('3 open files (ctrl+g to view)');
+      vi.mocked(useConsoleMessages).mockReturnValue({
+        consoleMessages: mockConsoleMessages,
+        handleNewMessage: vi.fn(),
+        clearConsoleMessages: vi.fn(),
+      });
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+      await Promise.resolve();
+
+      // Total error count should be 1 + 3 + 1 = 5
+      expect(lastFrame()).toContain('5 errors');
+    });
   });
 
-  it('should display active file and other context', async () => {
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [
-          {
-            path: '/path/to/my-file.ts',
-            isActive: true,
-            selectedText: 'hello',
-            timestamp: 0,
-          },
-        ],
-      },
-    });
-    mockConfig.getGeminiMdFileCount.mockReturnValue(1);
-    mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
-    mockConfig.getAllGeminiMdFilenames.mockReturnValue(['GEMINI.md']);
+  describe('when in a narrow terminal', () => {
+    it('should render with a column layout - common checks', () => {
+      vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({
+        columns: 60,
+        rows: 24,
+      });
 
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
-    );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    expect(lastFrame()).toContain(
-      'Using: 1 open file (ctrl+g to view) | 1 GEMINI.md file',
-    );
-  });
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
 
-  it('should not display context summary when hideContextSummary is true', async () => {
-    mockSettings = createMockSettings({
-      workspace: {
-        ui: { hideContextSummary: true },
-      },
+      // Check for the correct layout and placeholder based on environment
+      const frame = lastFrame();
+      expect(frame).toContain('Ctx: 0.0k/1049k'); // Narrow terminal shows abbreviated context
+      expect(frame).toContain('/test/dir');
     });
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [
-          {
-            path: '/path/to/my-file.ts',
-            isActive: true,
-            selectedText: 'hello',
-            timestamp: 0,
-          },
-        ],
-      },
-    });
-    mockConfig.getGeminiMdFileCount.mockReturnValue(1);
-    mockConfig.getAllGeminiMdFilenames.mockReturnValue(['GEMINI.md']);
 
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
+    it.runIf(isPowerShell())(
+      'should render PowerShell-specific placeholder in narrow terminal',
+      () => {
+        vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({
+          columns: 60,
+          rows: 24,
+        });
+
+        const { lastFrame, unmount } = renderWithProviders(
+          <App
+            config={mockConfig as unknown as ServerConfig}
+            settings={mockSettings}
+            version={mockVersion}
+          />,
+        );
+        currentUnmount = unmount;
+
+        const frame = lastFrame();
+        expect(frame).toContain(
+          'Type your message, @path/to/file or +path/to/file',
+        );
+      },
     );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    const output = lastFrame();
-    expect(output).not.toContain('Using:');
-    expect(output).not.toContain('open file');
-    expect(output).not.toContain('GEMINI.md file');
+
+    it.skipIf(isPowerShell())(
+      'should render standard placeholder in narrow terminal on non-PowerShell',
+      () => {
+        vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({
+          columns: 60,
+          rows: 24,
+        });
+
+        const { lastFrame, unmount } = renderWithProviders(
+          <App
+            config={mockConfig as unknown as ServerConfig}
+            settings={mockSettings}
+            version={mockVersion}
+          />,
+        );
+        currentUnmount = unmount;
+
+        const frame = lastFrame();
+        expect(frame).toContain('Type your message or @path/to/file');
+      },
+    );
   });
 });

@@ -178,6 +178,12 @@ const baseExcludePatterns = [
   '**/test-utils/**/*.test.tsx',
   '**/ui/App.e2e.test.tsx',
   '**/ui/App.test.tsx',
+  // App.test.tsx split into cohesive shards (issue #2114, max-lines); all
+  // share the same ink reconciler setup and remain lint-only like the parent.
+  '**/ui/App.context.test.tsx',
+  '**/ui/App.components.test.tsx',
+  '**/ui/App.dialogs.test.tsx',
+  '**/ui/App.behavior.test.tsx',
   // '**/ui/commands/directoryCommand.test.tsx', // Temporarily enabled for trust gating implementation (9786c4dcf)
   // React 19 / ink-stub incompatible — ALL ui/components/*.test.tsx render empty in jsdom
   '**/ui/components/*.test.tsx',

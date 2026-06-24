@@ -20,16 +20,13 @@ import {
   Config as ServerConfig,
   ApprovalMode,
   ideContext,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import type { SettingsFile, Settings } from '../config/settings.js';
 import { LoadedSettings } from '../config/settings.js';
-import process from 'node:process';
+import { useGeminiStream } from './hooks/geminiStream/index.js';
 import type { HistoryItem } from './types.js';
-import { MessageType } from './types.js';
-import type { UpdateObject } from './utils/updateCheck.js';
-import { checkForUpdates } from './utils/updateCheck.js';
-import { EventEmitter } from 'events';
-import { updateEventEmitter } from '../utils/updateEventEmitter.js';
+import { StreamingState } from './types.js';
 import * as useTerminalSize from './hooks/useTerminalSize.js';
 
 // Define a more complete mock server config based on actual Config
@@ -343,11 +340,9 @@ vi.mock('../hooks/useTerminalSize.js', () => ({
   useTerminalSize: vi.fn(),
 }));
 
-const mockedCheckForUpdates = vi.mocked(checkForUpdates);
-const {
-  isGitRepository: mockedIsGitRepository,
-  getAllLlxprtMdFilenames: mockedGetAllLlxprtMdFilenames,
-} = vi.mocked(await import('@vybestack/llxprt-code-core'));
+const { getAllLlxprtMdFilenames: mockedGetAllLlxprtMdFilenames } = vi.mocked(
+  await import('@vybestack/llxprt-code-core'),
+);
 
 vi.mock('node:child_process');
 
@@ -452,35 +447,57 @@ describe('App UI', () => {
     vi.clearAllMocks(); // Clear mocks after each test
   });
 
-  describe('handleAutoUpdate', () => {
-    let spawnEmitter: EventEmitter;
+  describe('Ctrl+C behavior', () => {
+    it('should call cancel but only clear the prompt when a tool is executing', async () => {
+      const mockCancel = vi.fn();
+      let onCancelSubmitCallback = () => {};
 
-    beforeEach(async () => {
-      const { spawn } = await import('node:child_process');
-      spawnEmitter = new EventEmitter();
-      spawnEmitter.stdout = new EventEmitter();
-      spawnEmitter.stderr = new EventEmitter();
-      (spawn as vi.Mock).mockReturnValue(spawnEmitter);
-    });
-
-    afterEach(() => {
-      delete process.env.LLXPRT_CODE_DISABLE_AUTOUPDATER;
-    });
-
-    it('should not start the update process when running from git', async () => {
-      mockedIsGitRepository.mockResolvedValue(true);
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
+      // Simulate a tool in the "Executing" state.
+      vi.mocked(useGeminiStream).mockImplementation(
+        (
+          _client,
+          _history,
+          _addItem,
+          _config,
+          _settings,
+          _onDebugMessage,
+          _handleSlashCommand,
+          _shellModeActive,
+          _getPreferredEditor,
+          _onAuthError,
+          _performMemoryRefresh,
+          _onEditorClose,
+          onCancelSubmit, // Capture the cancel callback from App.tsx
+        ) => {
+          onCancelSubmitCallback = onCancelSubmit;
+          return {
+            streamingState: StreamingState.Responding,
+            submitQuery: vi.fn(),
+            initError: null,
+            pendingHistoryItems: [
+              {
+                type: 'tool_group',
+                agentId: DEFAULT_AGENT_ID,
+                tools: [
+                  {
+                    name: 'test_tool',
+                    status: 'Executing',
+                    result: '',
+                    args: {},
+                  },
+                ],
+              },
+            ],
+            thought: null,
+            cancelOngoingRequest: () => {
+              mockCancel();
+              onCancelSubmitCallback(); // <--- This is the key change
+            },
+          };
         },
-        message: 'Gemini CLI update available!',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-      const { spawn } = await import('node:child_process');
+      );
 
-      const { unmount } = renderWithProviders(
+      const { stdin, lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -489,289 +506,23 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      // Wait for any potential async operations to complete
+      // Simulate user typing something into the prompt while a tool is running.
+      stdin.write('some text');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // When a tool is executing, the tool status should be visible
+      expect(lastFrame()).toContain('test_tool');
+
+      // Simulate Ctrl+C.
+      stdin.write('\x03');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // The main cancellation handler SHOULD be called.
+      expect(mockCancel).toHaveBeenCalled();
+
+      // After cancellation, the tool execution should be cancelled and the UI should change
       await Promise.resolve();
-      expect(spawn).not.toHaveBeenCalled();
+      expect(lastFrame()).toContain('test_tool'); // Tool status should still be visible after cancellation
     });
-
-    it('should show a success message when update succeeds', async () => {
-      mockedIsGitRepository.mockResolvedValue(false);
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Update available',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-
-      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      updateEventEmitter.emit('update-success', info);
-
-      // Wait for the success message to be added to history
-      await Promise.resolve();
-      expect(mockAddItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.INFO,
-          text: 'Update successful! The new version will be used on your next run.',
-        },
-        expect.any(Number),
-      );
-    });
-
-    it('should show an error message when update fails', async () => {
-      mockedIsGitRepository.mockResolvedValue(false);
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Update available',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-
-      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      updateEventEmitter.emit('update-failed', info);
-
-      // Wait for the error message to be added to history
-      await Promise.resolve();
-      expect(mockAddItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.ERROR,
-          text: 'Automatic update failed. Please try updating manually',
-        },
-        expect.any(Number),
-      );
-    });
-
-    it('should show an error message when spawn fails', async () => {
-      mockedIsGitRepository.mockResolvedValue(false);
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Update available',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-
-      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      // We are testing the App's reaction to an `update-failed` event,
-      // which is what should be emitted when a spawn error occurs elsewhere.
-      updateEventEmitter.emit('update-failed', info);
-
-      // Wait for the error message to be added to history
-      await Promise.resolve();
-      expect(mockAddItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.ERROR,
-          text: 'Automatic update failed. Please try updating manually',
-        },
-        expect.any(Number),
-      );
-    });
-
-    it('should not auto-update if LLXPRT_CODE_DISABLE_AUTOUPDATER is true', async () => {
-      mockedIsGitRepository.mockResolvedValue(false);
-      process.env.LLXPRT_CODE_DISABLE_AUTOUPDATER = 'true';
-      const info: UpdateObject = {
-        update: {
-          name: '@vybestack/llxprt-code',
-          latest: '1.1.0',
-          current: '1.0.0',
-        },
-        message: 'Update available',
-      };
-      mockedCheckForUpdates.mockResolvedValue(info);
-      const { spawn } = await import('node:child_process');
-
-      const { unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      // Wait for any potential async operations to complete
-      await Promise.resolve();
-      expect(spawn).not.toHaveBeenCalled();
-    });
-  });
-
-  it('should display active file when available', async () => {
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [
-          {
-            path: '/path/to/my-file.ts',
-            isActive: true,
-            selectedText: 'hello',
-            timestamp: 0,
-          },
-        ],
-      },
-    });
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
-    );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    expect(lastFrame()).toContain('1 open file (ctrl+g to view)');
-  });
-
-  it('should not display any files when not available', async () => {
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [],
-      },
-    });
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
-    );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    expect(lastFrame()).not.toContain('Open File');
-  });
-
-  it('should display active file and other open files', async () => {
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [
-          {
-            path: '/path/to/my-file.ts',
-            isActive: true,
-            selectedText: 'hello',
-            timestamp: 0,
-          },
-          {
-            path: '/path/to/another-file.ts',
-            isActive: false,
-            timestamp: 1,
-          },
-          {
-            path: '/path/to/third-file.ts',
-            isActive: false,
-            timestamp: 2,
-          },
-        ],
-      },
-    });
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
-    );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    expect(lastFrame()).toContain('3 open files (ctrl+g to view)');
-  });
-
-  it('should display active file and other context', async () => {
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [
-          {
-            path: '/path/to/my-file.ts',
-            isActive: true,
-            selectedText: 'hello',
-            timestamp: 0,
-          },
-        ],
-      },
-    });
-    mockConfig.getGeminiMdFileCount.mockReturnValue(1);
-    mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
-    mockConfig.getAllGeminiMdFilenames.mockReturnValue(['GEMINI.md']);
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
-    );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    expect(lastFrame()).toContain(
-      'Using: 1 open file (ctrl+g to view) | 1 GEMINI.md file',
-    );
-  });
-
-  it('should not display context summary when hideContextSummary is true', async () => {
-    mockSettings = createMockSettings({
-      workspace: {
-        ui: { hideContextSummary: true },
-      },
-    });
-    vi.mocked(ideContext.getIdeContext).mockReturnValue({
-      workspaceState: {
-        openFiles: [
-          {
-            path: '/path/to/my-file.ts',
-            isActive: true,
-            selectedText: 'hello',
-            timestamp: 0,
-          },
-        ],
-      },
-    });
-    mockConfig.getGeminiMdFileCount.mockReturnValue(1);
-    mockConfig.getAllGeminiMdFilenames.mockReturnValue(['GEMINI.md']);
-
-    const { lastFrame, unmount } = renderWithProviders(
-      <App
-        config={mockConfig as unknown as ServerConfig}
-        settings={mockSettings}
-        version={mockVersion}
-      />,
-    );
-    currentUnmount = unmount;
-    await Promise.resolve();
-    const output = lastFrame();
-    expect(output).not.toContain('Using:');
-    expect(output).not.toContain('open file');
-    expect(output).not.toContain('GEMINI.md file');
   });
 });
