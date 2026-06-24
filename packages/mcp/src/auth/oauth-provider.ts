@@ -23,7 +23,6 @@ import {
   parseTokenErrorResponse,
   resolveListenPort,
 } from './oauth-provider-utils.js';
-import { firstTruthyString } from '../utils/string-fallback.js';
 
 const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 
@@ -971,11 +970,8 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
         const newToken: MCPOAuthToken = {
           accessToken: newTokenResponse.access_token,
           tokenType: newTokenResponse.token_type,
-          refreshToken: firstTruthyString(
-            newTokenResponse.refresh_token,
-            token.refreshToken,
-          ),
-          scope: firstTruthyString(newTokenResponse.scope, token.scope),
+          refreshToken: newTokenResponse.refresh_token ?? token.refreshToken,
+          scope: newTokenResponse.scope ?? token.scope,
         };
 
         if (

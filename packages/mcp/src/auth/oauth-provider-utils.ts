@@ -5,7 +5,6 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { firstTruthyString } from '../utils/string-fallback.js';
 
 const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 
@@ -20,6 +19,43 @@ export interface OAuthTokenResponse {
   scope?: string;
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function normalizeTokenResponse(
+  response: Partial<OAuthTokenResponse>,
+  action: string,
+  responseText: string,
+  missingTokenError: string,
+): OAuthTokenResponse {
+  const accessToken = nonEmptyString(response.access_token);
+  if (accessToken === undefined) {
+    throw new Error(`${action}: ${missingTokenError} - ${responseText}`);
+  }
+
+  const normalized: OAuthTokenResponse = {
+    access_token: accessToken,
+    token_type: nonEmptyString(response.token_type) ?? 'Bearer',
+  };
+
+  if (response.expires_in !== undefined) {
+    normalized.expires_in = response.expires_in;
+  }
+
+  const refreshToken = nonEmptyString(response.refresh_token);
+  if (refreshToken !== undefined) {
+    normalized.refresh_token = refreshToken;
+  }
+
+  const scope = nonEmptyString(response.scope);
+  if (scope !== undefined) {
+    normalized.scope = scope;
+  }
+
+  return normalized;
+}
+
 /**
  * Parse an error message from a form-urlencoded token response body.
  * Returns null if no error can be extracted.
@@ -30,10 +66,11 @@ export function parseTokenErrorResponse(
 ): string | null {
   try {
     const errorParams = new URLSearchParams(responseText);
-    const error = errorParams.get('error');
-    const errorDescription = errorParams.get('error_description');
-    if (error) {
-      return `${action}: ${error} - ${firstTruthyString(errorDescription, 'No description')}`;
+    const error = nonEmptyString(errorParams.get('error'));
+    const errorDescription =
+      nonEmptyString(errorParams.get('error_description')) ?? 'No description';
+    if (error !== undefined) {
+      return `${action}: ${error} - ${errorDescription}`;
     }
   } catch {
     // Fall back to raw error
@@ -65,35 +102,42 @@ export function parseTokenResponse(
   }
 
   try {
-    return JSON.parse(responseText) as OAuthTokenResponse;
-  } catch {
-    // Parse form-urlencoded response
-    const tokenParams = new URLSearchParams(responseText);
-    const accessToken = tokenParams.get('access_token');
-    const tokenType = firstTruthyString(
-      tokenParams.get('token_type'),
-      'Bearer',
+    return normalizeTokenResponse(
+      JSON.parse(responseText) as Partial<OAuthTokenResponse>,
+      action,
+      responseText,
+      missingTokenError,
     );
-    const expiresIn = tokenParams.get('expires_in');
-    const refreshToken = tokenParams.get('refresh_token');
-    const scope = tokenParams.get('scope');
-
-    if (!accessToken) {
-      const error = tokenParams.get('error');
-      const errorDescription = tokenParams.get('error_description');
-      throw new Error(
-        `${action}: ${firstTruthyString(error, missingTokenError)} - ${firstTruthyString(errorDescription, responseText)}`,
-      );
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error;
     }
 
-    return {
-      access_token: accessToken,
-      token_type: tokenType,
-      expires_in: expiresIn ? parseInt(expiresIn, 10) : undefined,
-      refresh_token:
-        refreshToken !== null && refreshToken !== '' ? refreshToken : undefined,
-      scope: scope !== null && scope !== '' ? scope : undefined,
-    } as OAuthTokenResponse;
+    // Parse form-urlencoded response
+    const tokenParams = new URLSearchParams(responseText);
+    const expiresIn = nonEmptyString(tokenParams.get('expires_in'));
+    const parsedResponse: Partial<OAuthTokenResponse> = {
+      access_token: tokenParams.get('access_token') ?? undefined,
+      token_type: tokenParams.get('token_type') ?? undefined,
+      expires_in: expiresIn !== undefined ? parseInt(expiresIn, 10) : undefined,
+      refresh_token: tokenParams.get('refresh_token') ?? undefined,
+      scope: tokenParams.get('scope') ?? undefined,
+    };
+
+    if (nonEmptyString(parsedResponse.access_token) === undefined) {
+      const error =
+        nonEmptyString(tokenParams.get('error')) ?? missingTokenError;
+      const errorDescription =
+        nonEmptyString(tokenParams.get('error_description')) ?? responseText;
+      throw new Error(`${action}: ${error} - ${errorDescription}`);
+    }
+
+    return normalizeTokenResponse(
+      parsedResponse,
+      action,
+      responseText,
+      missingTokenError,
+    );
   }
 }
 

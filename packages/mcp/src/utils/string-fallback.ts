@@ -7,9 +7,8 @@
 /**
  * Returns the first non-empty string argument, or `''` if none are found.
  *
- * Empty strings are treated as missing because several MCP display and OAuth
- * fallback paths intentionally preserve legacy empty-string-falls-through
- * behavior.
+ * Empty strings are treated as missing because MCP display and local fallback
+ * paths intentionally preserve legacy empty-string-falls-through behavior.
  */
 export function firstTruthyString(
   ...values: ReadonlyArray<string | null | undefined>
