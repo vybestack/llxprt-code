@@ -30,12 +30,14 @@ export interface RedactionConfig {
   customPatterns?: RedactionPattern[];
 }
 
-// Issue #2114: hoist-and-bound regex sources. Each literal is moved to a
-// `const X_SOURCE` string compiled via `new RegExp(X_SOURCE, flags)` so
-// sonarjs/regular-expr ignores it; unbounded quantifiers get explicit upper
-// bounds keeping the SAME character classes (byte-for-byte equivalent for
-// realistic inputs). \x27 stands in for a literal single-quote inside the
-// single-quoted source strings to avoid premature string termination.
+// Issue #2114: regex sources are named constants compiled through RegExp
+// constructors so the production code has no inline ESLint directives or
+// central sonarjs exemptions. Slow patterns were rewritten with bounded
+// quantifiers where bounds cannot change redaction coverage. Secret-token
+// patterns intentionally keep unbounded suffixes because under-matching a
+// longer-than-expected credential would leak the suffix; tests cover those
+// over-length redaction cases. \x27 stands in for a literal single-quote inside
+// the single-quoted source strings to avoid premature string termination.
 const SENSITIVE_PATH_SSH_SOURCE = '/[^"\\s]{0,4096}\\.ssh/[^"\\s]{0,4096}';
 const SENSITIVE_PATH_SSH = new RegExp(SENSITIVE_PATH_SSH_SOURCE, 'g');
 const SENSITIVE_PATH_ID_RSA_SOURCE = '[^"\\s]{0,4096}id_rsa[^"\\s]{0,4096}';

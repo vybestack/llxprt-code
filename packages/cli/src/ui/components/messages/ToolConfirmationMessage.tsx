@@ -353,17 +353,15 @@ function buildInfoBodyContent(
 
   return (
     <Box flexDirection="column">
-      <Text color={theme.text.link}>
-        <RenderInline text={infoProps.prompt} defaultColor={theme.text.link} />
-      </Text>
+      <RenderInline text={infoProps.prompt} defaultColor={theme.text.link} />
       {displayUrls && infoProps.urls !== undefined && (
         <Box flexDirection="column" marginTop={1}>
           <Text color={theme.text.primary}>URLs to fetch:</Text>
           {infoProps.urls.map((url) => (
-            <Text key={url} color={theme.text.primary}>
-              {' '}
-              - <RenderInline text={url} />
-            </Text>
+            <Box key={url} flexDirection="row">
+              <Text color={theme.text.primary}> - </Text>
+              <RenderInline text={url} />
+            </Box>
           ))}
         </Box>
       )}

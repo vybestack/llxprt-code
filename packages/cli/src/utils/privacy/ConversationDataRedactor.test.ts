@@ -794,4 +794,18 @@ describe('issue #2114 regex characterization', () => {
     expect(out).toBe('key=[REDACTED-OPENAI-KEY]');
     expect(out).not.toContain('a'.repeat(100));
   });
+
+  it('fully redacts OpenAI project keys longer than the provider-specific length', () => {
+    const key = 'sk-proj-' + 'a'.repeat(5000);
+    const out = fullRedactor.redactResponseContent(`key=${key}`, 'openai');
+    expect(out).toBe('key=[REDACTED-OPENAI-PROJECT-KEY]');
+    expect(out).not.toContain('a'.repeat(100));
+  });
+
+  it('fully redacts bearer tokens longer than the generic token baseline', () => {
+    const token = 'Bearer ' + 'A'.repeat(5000);
+    const out = fullRedactor.redactResponseContent(`auth=${token}`, 'global');
+    expect(out).toBe('auth=bearer [REDACTED-BEARER-TOKEN]');
+    expect(out).not.toContain('A'.repeat(100));
+  });
 });

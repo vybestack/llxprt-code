@@ -357,9 +357,11 @@ const renderRow = (
             const displayWidth = getPlainTextLength(lineContent);
             const padding = Math.max(0, data.contentWidth - displayWidth);
             const contentNode = isHeader ? (
-              <Text bold color={theme.text.accent}>
-                <RenderInline text={lineContent} />
-              </Text>
+              <RenderInline
+                text={lineContent}
+                defaultColor={theme.text.accent}
+                bold
+              />
             ) : (
               <RenderInline text={lineContent} />
             );

@@ -21,6 +21,9 @@ const UNDERLINE_TAG_END_LENGTH = 4; // For "</u>"
 interface RenderInlineProps {
   text: string;
   defaultColor?: string;
+  bold?: boolean;
+  italic?: boolean;
+  wrap?: React.ComponentProps<typeof Text>['wrap'];
 }
 
 function renderBoldNode(
@@ -211,16 +214,23 @@ function renderMatchedNode(
   return null;
 }
 
-const RenderInlineInternal: React.FC<RenderInlineProps> = ({
+export const RenderInlineInternal: React.FC<RenderInlineProps> = ({
   text,
   defaultColor,
+  bold,
+  italic,
+  wrap,
 }) => {
   const baseColor = defaultColor ?? theme.text.primary;
   // Early return for plain text without markdown or URLs
   // Static regex for markdown marker detection - no dynamic parts
 
   if (!/[*_~`<[]|https?:\/\//.test(text)) {
-    return <Text color={baseColor}>{text}</Text>;
+    return (
+      <Text color={baseColor} bold={bold} italic={italic} wrap={wrap}>
+        {text}
+      </Text>
+    );
   }
 
   const nodes: React.ReactNode[] = [];
@@ -278,7 +288,11 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
     );
   }
 
-  return <>{nodes.filter((node) => node !== null)}</>;
+  return (
+    <Text color={baseColor} bold={bold} italic={italic} wrap={wrap}>
+      {nodes.filter((node) => node !== null)}
+    </Text>
+  );
 };
 
 export const RenderInline = React.memo(RenderInlineInternal);

@@ -376,28 +376,22 @@ function renderHeaderNode(
     case 1:
     case 2:
       return (
-        <Text bold color={theme.text.link}>
-          <RenderInline text={headerText} defaultColor={theme.text.link} />
-        </Text>
+        <RenderInline text={headerText} defaultColor={theme.text.link} bold />
       );
     case 3:
       return (
-        <Text bold color={responseColor}>
-          <RenderInline text={headerText} defaultColor={responseColor} />
-        </Text>
+        <RenderInline text={headerText} defaultColor={responseColor} bold />
       );
     case 4:
       return (
-        <Text italic color={theme.text.secondary}>
-          <RenderInline text={headerText} defaultColor={theme.text.secondary} />
-        </Text>
+        <RenderInline
+          text={headerText}
+          defaultColor={theme.text.secondary}
+          italic
+        />
       );
     default:
-      return (
-        <Text color={responseColor}>
-          <RenderInline text={headerText} defaultColor={responseColor} />
-        </Text>
-      );
+      return <RenderInline text={headerText} defaultColor={responseColor} />;
   }
 }
 
@@ -454,9 +448,7 @@ function processTableLine(
     const block =
       line.trim().length > 0 ? (
         <Box key={key}>
-          <Text wrap="wrap" color={responseColor}>
-            <RenderInline text={line} defaultColor={responseColor} />
-          </Text>
+          <RenderInline text={line} defaultColor={responseColor} wrap="wrap" />
         </Box>
       ) : null;
     return {
@@ -547,9 +539,7 @@ function processNonTableLine(
     ...empty,
     block: (
       <Box key={key}>
-        <Text wrap="wrap" color={responseColor}>
-          <RenderInline text={line} defaultColor={responseColor} />
-        </Text>
+        <RenderInline text={line} defaultColor={responseColor} wrap="wrap" />
       </Box>
     ),
   };
@@ -585,9 +575,7 @@ function processLine(
     return {
       block: (
         <Box key={key}>
-          <Text wrap="wrap" color={responseColor}>
-            <RenderInline text={line} defaultColor={responseColor} />
-          </Text>
+          <RenderInline text={line} defaultColor={responseColor} wrap="wrap" />
         </Box>
       ),
       emptyLine: false,
@@ -718,9 +706,11 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
         <Text color={listResponseColor}>{prefix}</Text>
       </Box>
       <Box flexGrow={LIST_ITEM_TEXT_FLEX_GROW}>
-        <Text wrap="wrap" color={listResponseColor}>
-          <RenderInline text={itemText} defaultColor={listResponseColor} />
-        </Text>
+        <RenderInline
+          text={itemText}
+          defaultColor={listResponseColor}
+          wrap="wrap"
+        />
       </Box>
     </Box>
   );
