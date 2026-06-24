@@ -18,6 +18,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
 } from 'react';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type {
@@ -76,9 +77,13 @@ export const OpenAIProviderContextProvider: React.FC<{
     [],
   );
 
-  // Reset stats when provider changes
+  // Reset stats whenever the provider identity changes, so stale counts from a
+  // previous provider (which may use a different tokenizer and context window)
+  // are not carried over into the new provider's display.
+  const previousProviderRef = useRef(providerInfo.provider);
   useEffect(() => {
-    if (!providerInfo.provider) {
+    if (previousProviderRef.current !== providerInfo.provider) {
+      previousProviderRef.current = providerInfo.provider;
       setRemoteTokenStats({
         promptTokenCount: 0,
         candidatesTokenCount: 0,

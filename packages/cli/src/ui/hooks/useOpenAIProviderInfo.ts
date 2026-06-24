@@ -57,9 +57,9 @@ export function useOpenAIProviderInfo(
 
       // Only update if something changed
       if (
+        newInfo.provider !== providerInfo.provider ||
         newInfo.currentModel !== providerInfo.currentModel ||
-        newInfo.isResponsesAPI !== providerInfo.isResponsesAPI ||
-        (newInfo.provider !== null) !== (providerInfo.provider !== null)
+        newInfo.isResponsesAPI !== providerInfo.isResponsesAPI
       ) {
         setProviderInfo(newInfo);
       }

@@ -464,16 +464,18 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
         thought: 0,
       });
 
+      // input includes cache tokens (total-including-cache invariant)
       providerManager.accumulateSessionTokens('anthropic', {
-        input: 180,
+        input: 210,
         output: 120,
         cache: 30,
         tool: 15,
         thought: 40, // Anthropic reasoning tokens
       });
 
+      // input includes cache tokens (total-including-cache invariant)
       providerManager.accumulateSessionTokens('gemini', {
-        input: 160,
+        input: 180,
         output: 100,
         cache: 20,
         tool: 0,
@@ -483,7 +485,8 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
       const sessionUsage = providerManager.getSessionTokenUsage();
 
       // Then: All contributions are properly aggregated
-      expect(sessionUsage.input).toBe(540); // 200 + 180 + 160
+      // input includes cache tokens (total-including-cache invariant)
+      expect(sessionUsage.input).toBe(590); // 200 + 210 + 180
       expect(sessionUsage.output).toBe(370); // 150 + 120 + 100
       expect(sessionUsage.cache).toBe(50); // 0 + 30 + 20
       expect(sessionUsage.tool).toBe(40); // 25 + 15 + 0
@@ -550,8 +553,9 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
       expect(afterOpenAI.total).toBe(175);
 
       providerManager.setActiveProvider('anthropic');
+      // input includes cache tokens (total-including-cache invariant)
       providerManager.accumulateSessionTokens('anthropic', {
-        input: 150,
+        input: 175,
         output: 90,
         cache: 25,
         tool: 10,
@@ -562,8 +566,9 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
       expect(afterAnthropic.total).toBe(470); // 175 + 295
 
       providerManager.setActiveProvider('openai');
+      // input includes cache tokens (total-including-cache invariant)
       providerManager.accumulateSessionTokens('openai', {
-        input: 80,
+        input: 95,
         output: 60,
         cache: 15,
         tool: 5,
@@ -573,7 +578,8 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
       const final = providerManager.getSessionTokenUsage();
 
       // Then: Token accuracy is preserved across provider switches
-      expect(final.input).toBe(330); // 100 + 150 + 80
+      // input includes cache tokens (total-including-cache invariant)
+      expect(final.input).toBe(370); // 100 + 175 + 95
       expect(final.output).toBe(225); // 75 + 90 + 60
       expect(final.cache).toBe(40); // 0 + 25 + 15
       expect(final.tool).toBe(15); // 0 + 10 + 5

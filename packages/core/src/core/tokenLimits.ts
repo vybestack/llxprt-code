@@ -87,8 +87,11 @@ export function tokenLimit(
     return userContextLimit;
   }
 
-  // Strip provider prefix if present (e.g., "openai:gpt-4o" -> "gpt-4o")
-  const modelWithoutPrefix = model.includes(':') ? model.split(':')[1] : model;
+  // Split provider prefix if present (e.g., "codex:gpt-5.5" -> prefix "codex")
+  const colonIndex = model.indexOf(':');
+  const providerPrefix = colonIndex !== -1 ? model.slice(0, colonIndex) : '';
+  const modelWithoutPrefix =
+    colonIndex !== -1 ? model.slice(colonIndex + 1) : model;
 
   // Check exact model matches first
   if (modelWithoutPrefix in EXACT_LIMITS) {
@@ -99,6 +102,19 @@ export function tokenLimit(
   const prefixLimit = resolvePrefixLimit(modelWithoutPrefix);
   if (prefixLimit !== undefined) {
     return prefixLimit;
+  }
+
+  // Codex models default to 256K context (per CODEX_MODELS.ts). The spark
+  // variant has a smaller 128K window and must be checked first since its ID
+  // also contains the substring "codex". Non-suffixed codex model IDs
+  // (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1) are only resolvable when the
+  // provider prefix is explicitly "codex" — a bare ID is ambiguous and could
+  // belong to the regular OpenAI provider.
+  if (modelWithoutPrefix.includes('codex-spark')) {
+    return 131_072;
+  }
+  if (modelWithoutPrefix.includes('codex') || providerPrefix === 'codex') {
+    return 262_144;
   }
 
   // Check OpenAI 200K models (includes o3, o1 series)

@@ -121,7 +121,7 @@ describe('Token Tracking UI Behavioral Tests', () => {
 
       // When: Tokens accumulate during the session
       providerManager.accumulateSessionTokens('openai', {
-        input: 1500,
+        input: 1700,
         output: 800,
         cache: 200,
         tool: 50,
@@ -222,7 +222,7 @@ describe('Token Tracking UI Behavioral Tests', () => {
 
       // Follow-up message (context + new message)
       providerManager.accumulateSessionTokens('openai', {
-        input: 200, // Follow-up message
+        input: 650, // Follow-up message + cached context
         output: 180, // AI response
         cache: 450, // Previous context cached
         tool: 0,
@@ -234,7 +234,7 @@ describe('Token Tracking UI Behavioral Tests', () => {
 
       // Tool use scenario
       providerManager.accumulateSessionTokens('openai', {
-        input: 100,
+        input: 300,
         output: 50,
         cache: 200,
         tool: 150, // Tool call tokens
@@ -297,7 +297,7 @@ describe('Token Tracking UI Behavioral Tests', () => {
 
       // OpenAI contributions
       providerManager.accumulateSessionTokens('openai', {
-        input: 300,
+        input: 350,
         output: 200,
         cache: 50,
         tool: 75,
@@ -316,7 +316,7 @@ describe('Token Tracking UI Behavioral Tests', () => {
       const combinedUsage = providerManager.getSessionTokenUsage();
 
       // Then: UI display reflects combined usage from all providers
-      expect(combinedUsage.input).toBe(550);
+      expect(combinedUsage.input).toBe(600);
       expect(combinedUsage.output).toBe(380);
       expect(combinedUsage.cache).toBe(50);
       expect(combinedUsage.tool).toBe(100);
@@ -325,7 +325,7 @@ describe('Token Tracking UI Behavioral Tests', () => {
 
       // And: Formatted display includes all contributions
       const formattedDisplay = formatSessionTokenUsage(combinedUsage);
-      expect(formattedDisplay).toContain('Input: 550');
+      expect(formattedDisplay).toContain('Input: 600');
       expect(formattedDisplay).toContain('Output: 380');
       expect(formattedDisplay).toContain('Total: 1,125');
     });

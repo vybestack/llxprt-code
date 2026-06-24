@@ -358,6 +358,92 @@ export function scanCoreDirectives(coreDir) {
 }
 
 /**
+ * Recursively lists all TypeScript source files under rootDir, excluding
+ * generated directories (node_modules, dist, coverage, .git).
+ */
+export function listTsFiles(rootDir) {
+  const results = [];
+  if (!existsSync(rootDir)) {
+    return results;
+  }
+  const entries = readdirSync(rootDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() && GENERATED_DIRECTORIES.has(entry.name)) {
+      continue;
+    }
+    const fullPath = join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...listTsFiles(fullPath));
+    } else if (entry.isFile() && /\.(?:ts|tsx)$/.test(entry.name)) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+/**
+ * Scans an arbitrary package source directory for inline ESLint disable/enable
+ * directives. Each violation references the supplied issueNumber so guard test
+ * failures point at the originating cleanup issue.
+ */
+export function scanPackageDirectives(packageDir, issueNumber) {
+  const target = packageDir;
+  if (!existsSync(target)) {
+    return [];
+  }
+  const files = listTsFiles(target);
+  const violations = [];
+  for (const file of files) {
+    const lines = readFileSync(file, 'utf8').split(String.fromCharCode(10));
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (DIRECTIVE_PATTERN.test(line)) {
+        violations.push({
+          file: relative(process.cwd(), file),
+          lineNumber: i + 1,
+          message: `Inline ESLint disable/enable directives are forbidden in this module (#${issueNumber}).`,
+          content: line,
+        });
+      }
+    }
+  }
+  return violations;
+}
+
+const SCOPE_STRING_PATTERN = /'([^']+)'|"([^"]+)"|`([^`]+)`/;
+
+/**
+ * Extracts the string-literal entries of a named const scope array
+ * (legacyDirectiveCleanupScopes or completedDirectiveCleanupScopes) from
+ * eslint.config.js source text. Returns the raw string values.
+ */
+export function extractScopeArray(scopeName, configSource) {
+  const source =
+    configSource ??
+    readFileSync(join(process.cwd(), 'eslint.config.js'), 'utf8');
+  const startMatch = new RegExp('const\\s+' + scopeName + '\\s*=\\s*\\[').exec(
+    source,
+  );
+  if (startMatch === null) {
+    return [];
+  }
+  const startIdx = startMatch.index + startMatch[0].length;
+  const endIdx = source.indexOf(']', startIdx);
+  if (endIdx === -1) {
+    return [];
+  }
+  const body = source.slice(startIdx, endIdx);
+  const entries = [];
+  for (const rawLine of body.split(String.fromCharCode(10))) {
+    const match = SCOPE_STRING_PATTERN.exec(rawLine);
+    if (match !== null) {
+      entries.push(match[1] ?? match[2] ?? match[3]);
+    }
+  }
+  return entries;
+}
+
+/**
  * Inspects eslint.config.js source text and returns any directive cleanup scope
  * entries that reference the given module path. By default both
  * legacyDirectiveCleanupScopes and completedDirectiveCleanupScopes are checked.
