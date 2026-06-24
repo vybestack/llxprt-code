@@ -22,11 +22,12 @@ export abstract class BaseTokenStorage {
   abstract getAllCredentials(): Promise<Map<string, MCPOAuthCredentials>>;
   abstract clearAll(): Promise<void>;
 
-  protected validateCredentials(credentials: MCPOAuthCredentials): void {
+  protected validateCredentials(
+    credentials: Partial<MCPOAuthCredentials>,
+  ): void {
     if (!credentials.serverName) {
       throw new Error('Server name is required');
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Token storage validates malformed persisted credential records.
     if (credentials.token == null) {
       throw new Error('Token is required');
     }

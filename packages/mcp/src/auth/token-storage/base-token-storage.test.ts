@@ -38,7 +38,9 @@ class TestTokenStorage extends BaseTokenStorage {
     this.storage.clear();
   }
 
-  override validateCredentials(credentials: MCPOAuthCredentials): void {
+  override validateCredentials(
+    credentials: Partial<MCPOAuthCredentials>,
+  ): void {
     super.validateCredentials(credentials);
   }
 
