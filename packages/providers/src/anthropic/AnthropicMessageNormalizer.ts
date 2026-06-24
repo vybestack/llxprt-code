@@ -26,6 +26,7 @@ import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
+  detectImageMimeTypeFromBase64,
 } from '../utils/mediaUtils.js';
 import {
   validateToolResults,
@@ -98,11 +99,14 @@ export function mediaBlockToAnthropicImage(
       ? media.data.split(';base64,')[1]
       : media.data;
 
+  const detected = detectImageMimeTypeFromBase64(rawData);
+  const media_type = detected ?? (media.mimeType || 'image/png');
+
   return {
     type: 'image',
     source: {
       type: 'base64',
-      media_type: media.mimeType || 'image/png',
+      media_type,
       data: rawData,
     },
   };
