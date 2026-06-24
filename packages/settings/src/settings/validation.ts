@@ -41,7 +41,11 @@ export interface TrustedProfileImport {
 export function isPlainObject(
   value: unknown,
 ): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 export function hasDangerousKey(value: unknown): boolean {
@@ -104,20 +108,19 @@ const standardProfileSchema: z.ZodType<StandardProfile> = z
   })
   .passthrough();
 
-function isLoadBalancerShape(value: unknown): value is LoadBalancerProfile {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return (
-    value.type === 'loadbalancer' &&
-    value.version === 1 &&
-    Array.isArray(value.profiles) &&
-    value.profiles.length > 0
-  );
-}
-
-const loadBalancerProfileSchema =
-  z.custom<LoadBalancerProfile>(isLoadBalancerShape);
+const loadBalancerProfileSchema: z.ZodType<LoadBalancerProfile> = z
+  .object({
+    version: z.literal(1),
+    type: z.literal('loadbalancer'),
+    policy: z.union([z.literal('roundrobin'), z.literal('failover')]),
+    profiles: z.array(z.string().min(1)).min(1),
+    contextLimit: z.number().optional(),
+    provider: z.string(),
+    model: z.string(),
+    modelParams: modelParamsSchema,
+    ephemeralSettings: ephemeralSettingsSchema,
+  })
+  .passthrough();
 
 function isMissingVersion(version: unknown): boolean {
   if (version === null || version === undefined) {
@@ -208,7 +211,13 @@ export function parseLoadBalancerProfile(
   if (input.version !== 1) {
     throw new Error('unsupported profile version');
   }
-  if (!Array.isArray(input.profiles) || input.profiles.length === 0) {
+  if (
+    !Array.isArray(input.profiles) ||
+    input.profiles.length === 0 ||
+    !input.profiles.every(
+      (profile) => typeof profile === 'string' && profile !== '',
+    )
+  ) {
     throw new Error(
       `LoadBalancer profile '${name}' must reference at least one profile`,
     );

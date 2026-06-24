@@ -410,4 +410,34 @@ describe('SettingsService — provider trust boundary', () => {
     expect(svc.get('tools.allowed')).toStrictEqual(['read_file']);
     expect(svc.get('tools.disabled')).toStrictEqual(['shell']);
   });
+
+  it('keeps existing provider settings when profile import payload is invalid', async () => {
+    const svc = new SettingsService();
+    svc.setProviderSetting('openai', 'model', 'gpt-4');
+
+    await svc.importFromProfile(null);
+
+    expect(svc.getProviderSettings('openai')).toStrictEqual({ model: 'gpt-4' });
+  });
+
+  it('does not trust provider entries with custom prototypes', async () => {
+    const svc = new SettingsService();
+    const providerSettings: Record<string, unknown> = Object.create({
+      inherited: true,
+    });
+    providerSettings.model = 'gpt-4';
+
+    await svc.importFromProfile({
+      defaultProvider: 'openai',
+      providers: {
+        openai: providerSettings,
+      },
+      tools: { allowed: [], disabled: [] },
+    });
+    const exported = (await svc.exportForProfile()) as {
+      providers: Record<string, Record<string, unknown>>;
+    };
+
+    expect(exported.providers).not.toHaveProperty('openai');
+  });
 });

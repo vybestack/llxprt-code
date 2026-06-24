@@ -373,29 +373,31 @@ export class SettingsService extends EventEmitter {
   }
 
   importFromProfile(profileData: unknown) {
+    const data = parseProfileImport(profileData);
+    if (data === null) {
+      return Promise.resolve();
+    }
+
     this.settings.providers = {};
 
-    const data = parseProfileImport(profileData);
-    if (data !== null) {
-      if (data.defaultProvider !== undefined) {
-        this.set('activeProvider', data.defaultProvider);
-        this.settings.activeProvider = data.defaultProvider;
-      }
-
-      this.settings.providers = data.providers;
-
-      const toolsAllowed = data.tools.allowed;
-      const toolsDisabled = data.tools.disabled;
-
-      this.settings.tools = this.settings.tools ?? {};
-      this.settings.tools.allowed = toolsAllowed;
-      this.settings.tools.disabled = toolsDisabled;
-      this.settings.global['tools'] = {
-        allowed: toolsAllowed,
-        disabled: toolsDisabled,
-      };
-      this.settings.global['disabled-tools'] = toolsDisabled;
+    if (data.defaultProvider !== undefined) {
+      this.set('activeProvider', data.defaultProvider);
+      this.settings.activeProvider = data.defaultProvider;
     }
+
+    this.settings.providers = data.providers;
+
+    const toolsAllowed = data.tools.allowed;
+    const toolsDisabled = data.tools.disabled;
+
+    this.settings.tools = this.settings.tools ?? {};
+    this.settings.tools.allowed = toolsAllowed;
+    this.settings.tools.disabled = toolsDisabled;
+    this.settings.global['tools'] = {
+      allowed: toolsAllowed,
+      disabled: toolsDisabled,
+    };
+    this.settings.global['disabled-tools'] = toolsDisabled;
 
     return Promise.resolve();
   }

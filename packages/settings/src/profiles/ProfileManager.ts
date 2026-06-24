@@ -68,6 +68,10 @@ function referencedProfileIsLoadBalancer(profile: unknown): boolean {
   return isPlainObject(profile) && profile.type === 'loadbalancer';
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((name) => String(name)) : [];
+}
+
 /**
  * Manages saving and loading of configuration profiles.
  * Profiles are stored in ~/.llxprt/profiles/<profileName>.json
@@ -330,18 +334,18 @@ export class ProfileManager {
   private convertProfileToSettingsData(profile: Profile): {
     defaultProvider: string;
     providers: Record<string, unknown>;
-    tools: { allowed: unknown[]; disabled: unknown[] };
+    tools: { allowed: string[]; disabled: string[] };
   } {
     const allowedValue = profile.ephemeralSettings['tools.allowed'];
-    const allowedTools = Array.isArray(allowedValue) ? [...allowedValue] : [];
+    const allowedTools = stringArray(allowedValue);
 
     const disabledValue = profile.ephemeralSettings['tools.disabled'];
     const legacyDisabled = profile.ephemeralSettings['disabled-tools'];
-    let disabledTools: unknown[];
+    let disabledTools: string[];
     if (Array.isArray(disabledValue)) {
-      disabledTools = [...disabledValue];
+      disabledTools = stringArray(disabledValue);
     } else if (Array.isArray(legacyDisabled)) {
-      disabledTools = [...legacyDisabled];
+      disabledTools = stringArray(legacyDisabled);
     } else {
       disabledTools = [];
     }
@@ -372,20 +376,14 @@ export class ProfileManager {
 
   private applyToolSettings(
     settingsData: {
-      tools: { allowed: unknown[]; disabled: unknown[] };
+      tools: { allowed: string[]; disabled: string[] };
     },
     settingsService: ProfileSettingsServiceLike,
   ): void {
-    const allowedList = Array.isArray(settingsData.tools.allowed)
-      ? settingsData.tools.allowed
-      : [];
-    const disabledList = Array.isArray(settingsData.tools.disabled)
-      ? settingsData.tools.disabled
-      : [];
     if (settingsService.set) {
-      settingsService.set('tools.allowed', allowedList);
-      settingsService.set('tools.disabled', disabledList);
-      settingsService.set('disabled-tools', disabledList);
+      settingsService.set('tools.allowed', settingsData.tools.allowed);
+      settingsService.set('tools.disabled', settingsData.tools.disabled);
+      settingsService.set('disabled-tools', settingsData.tools.disabled);
     }
   }
 
