@@ -14,6 +14,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./internals.js": {
+      "types": "./dist/src/internals.d.ts",
+      "import": "./dist/src/internals.js"
+    },
+    "./app-service.js": {
+      "types": "./dist/src/app-service.d.ts",
+      "import": "./dist/src/app-service.js"
     }
   },
   "scripts": {
@@ -22,6 +30,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:ci": "vitest run",
+    "test:mutation:api": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },
   "files": [
@@ -43,6 +52,8 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^24.2.1",
     "@vybestack/llxprt-code-test-utils": "file:../test-utils",
     "fast-check": "^4.2.0",

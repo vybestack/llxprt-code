@@ -26,6 +26,7 @@ import {
   type RuntimeAuthScopeFlushResult,
   SubagentManager,
   type ConfigParameters,
+  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
@@ -143,13 +144,13 @@ interface RuntimeActivationBindings {
     },
   ) => void | Promise<void>;
   registerInfrastructure: (
-    manager: ProviderManager,
+    manager: RuntimeProviderManager,
     oauthManager: OAuthManager,
     options: { messageBus: MessageBus },
   ) => void | Promise<void>;
   linkProviderManager: (
     config: Config,
-    manager: ProviderManager,
+    manager: RuntimeProviderManager,
   ) => void | Promise<void>;
   disposeRuntime?: (
     runtimeId: string,
@@ -189,10 +190,32 @@ export interface IsolatedRuntimeContextOptions {
   debugMode?: boolean;
   workspaceDir?: string;
   oauthManager?: OAuthManager;
+  /**
+   * Caller-provided shared MessageBus. When supplied, the runtime uses THIS
+   * instance as its session bus (so the context-created OAuthManager binds to
+   * it) instead of constructing a private one.
+   * @plan:PLAN-20260617-COREAPI.P15
+   * @requirement:REQ-001
+   */
+  messageBus?: MessageBus;
+  /**
+   * Caller-provided provider manager. When supplied, the runtime ADOPTS this
+   * instance instead of constructing a private one, so a Config-adopting caller
+   * (e.g. agents `fromConfig`) does not create a second manager.
+   *
+   * CRIT-1: typed as the STRUCTURAL core interface RuntimeProviderManager (not the
+   * concrete providers ProviderManager class) so the agents caller can pass
+   * Config.getProviderManager() — which returns RuntimeProviderManager | undefined
+   * (configBaseCore.ts:265) — with ZERO assertion. The default ProviderManager
+   * instance constructed below structurally satisfies this interface.
+   * @plan:PLAN-20260621-COREAPIREMED.P03
+   * @requirement:REQ-005.2
+   */
+  providerManager?: RuntimeProviderManager;
   prepare?: (context: {
     config: Config;
     settingsService: SettingsService;
-    providerManager: ProviderManager;
+    providerManager: RuntimeProviderManager;
     oauthManager: OAuthManager;
     runtimeId: string;
     metadata: Record<string, unknown>;
@@ -200,7 +223,7 @@ export interface IsolatedRuntimeContextOptions {
   onCleanup?: (context: {
     config: Config;
     settingsService: SettingsService;
-    providerManager: ProviderManager;
+    providerManager: RuntimeProviderManager;
     runtimeId: string;
     metadata: Record<string, unknown>;
   }) => void | Promise<void>;
@@ -217,7 +240,7 @@ export interface IsolatedRuntimeContextHandle {
   metadata: Record<string, unknown>;
   settingsService: SettingsService;
   config: Config;
-  providerManager: ProviderManager;
+  providerManager: RuntimeProviderManager;
   oauthManager: OAuthManager;
   activate: (
     options?: IsolatedRuntimeActivationOptions,
@@ -310,7 +333,7 @@ function buildActivateClosure(
   state: RuntimeActivationState,
   resolvedSettingsService: SettingsService,
   config: Config,
-  providerManager: ProviderManager,
+  providerManager: RuntimeProviderManager,
   oauthManager: OAuthManager,
   options: IsolatedRuntimeContextOptions,
   sessionMessageBus: MessageBus,
@@ -393,7 +416,7 @@ function buildCleanupClosure(
   state: RuntimeActivationState,
   resolvedSettingsService: SettingsService,
   config: Config,
-  providerManager: ProviderManager,
+  providerManager: RuntimeProviderManager,
   options: IsolatedRuntimeContextOptions,
 ): () => Promise<void> {
   return async (): Promise<void> => {
@@ -467,10 +490,13 @@ export function createIsolatedRuntimeContext(
 
   const config = resolveRuntimeConfig(options, runtimeId, settingsService);
   const resolvedSettingsService = config.getSettingsService();
-  const sessionMessageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
-  );
+  // @plan:PLAN-20260617-COREAPI.P15
+  // @requirement:REQ-001
+  // Use the caller-provided bus when present so the context-created
+  // OAuthManager binds to the SAME bus the caller shares with the loop.
+  const sessionMessageBus =
+    options.messageBus ??
+    new MessageBus(config.getPolicyEngine(), config.getDebugMode());
   const oauthManager = resolveOAuthManager(
     sessionMessageBus,
     options.oauthManager,
@@ -488,11 +514,16 @@ export function createIsolatedRuntimeContext(
     currentMetadata: baseMetadata,
   };
 
-  const providerManager = new ProviderManager({
-    runtime: initialRuntimeContext,
-    settingsService: resolvedSettingsService,
-    config,
-  });
+  // @plan:PLAN-20260621-COREAPIREMED.P05 @requirement:REQ-005.2 @pseudocode lines 10-40
+  // Adopt the caller-provided manager when supplied (mirrors the messageBus? adoption
+  // at `options.messageBus ?? new MessageBus(...)`); otherwise construct a fresh one.
+  const providerManager =
+    options.providerManager ??
+    new ProviderManager({
+      runtime: initialRuntimeContext,
+      settingsService: resolvedSettingsService,
+      config,
+    });
 
   const activate = buildActivateClosure(
     runtimeId,

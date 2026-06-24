@@ -170,7 +170,7 @@ async function bootstrapRuntimeFixture(options: {
       }
 
       // Step 4 (multi-runtime-baseline.md line 5) ensures the scoped ProviderManager uses fixture services.
-      providerManager.setActiveProvider(options.providerName);
+      void providerManager.setActiveProvider(options.providerName);
       settingsService.set('activeProvider', options.providerName);
       settingsService.setProviderSetting(
         options.providerName,

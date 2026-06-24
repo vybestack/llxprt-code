@@ -1445,6 +1445,17 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  // extra settings for scripts that we run directly with node
+  {
+    files: ['packages/agents/scripts/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        process: 'readonly',
+        console: 'readonly',
+      },
+    },
+  },
   // ============================================================================
   // Issue #1577: text-buffer.ts decomposition - Architecture Enforcement
   // ============================================================================

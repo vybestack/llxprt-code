@@ -1,0 +1,13 @@
+{
+  "compliant": true,
+  "has_integration_plan": true,
+  "builds_in_isolation": false,
+  "gaps_closed": { "C1": true, "C2": true, "C3": true, "H1": true, "H2": true, "H3": true },
+  "enables_1595": true,
+  "reverse_testing_found": false,
+  "mock_theater_found": false,
+  "non_breaking": true,
+  "mutation_ge_80": true,
+  "property_ge_30": true,
+  "violations": []
+}

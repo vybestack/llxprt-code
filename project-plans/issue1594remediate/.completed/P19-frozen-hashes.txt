@@ -1,0 +1,13 @@
+## Frozen parity-test hashes (P19 characterization snapshot)
+7b7c21a8d7bd8c0d2c06108f284f60b0df6a884d826819b19f5211e92a8ebd7c  packages/agents/src/api/__tests__/cli-turn-parity.spec.ts
+96a6097702b710963e14fc7fbc517dcfe1704a080c03913b1b383823ed374fd8  packages/agents/src/api/__tests__/config-injection.spec.ts
+6f4305d2b28700f476dae402280b29955af8b1db9fbbd22b97149add7c51da6b  packages/agents/src/api/__tests__/settings-surface.spec.ts
+d98a1054e2d3451a5174b3dea7405283b02df817018cf2b165eaaaa292eb13c2  packages/agents/src/api/__tests__/helpers/buildCliStyleConfig.ts
+d9705533e9ae8e00eefd80750645a4d2fb228160b55c785b77235a009674ddc6  packages/agents/src/api/__tests__/fixtures/basic-text.jsonl
+a314d0cf7ca4fe9af5f541a0c48a6d4f7d36de843f4c05f384306fae97953dda  packages/agents/src/api/__tests__/fixtures/multi-tool-then-answer.jsonl
+4d867ef7836c2a2e4a91824731a2c8a290e5735ed747b4173d2707b32f055695  packages/agents/src/api/__tests__/fixtures/multi-turn-text.jsonl
+6afc863dc4f1fb58b4882c1c730bfca5f357316590c3809c6c5e52ef45a8516a  packages/agents/src/api/__tests__/fixtures/parity-toolcall.jsonl
+e0f22aa24b332ccf2cd2a1963755026c53d90aa675708e2f6d36932b44bfa0d9  packages/agents/src/api/__tests__/fixtures/plain-text.jsonl
+2aa0125d44a5af0e1242cda7c17e69e7e7c527ba375104db373acc937d301811  packages/agents/src/api/__tests__/fixtures/provider-switch-two-turn.jsonl
+cb05de6d7f22ac71cd229888b2a31122d08a17272e24d8898249485a6a248b0a  packages/agents/src/api/__tests__/fixtures/thinking-text.jsonl
+6fed2d8d78f45789c698367ce146e0957628cdb0b91ba7c1bcb0f9832771c0e4  packages/agents/src/api/__tests__/fixtures/tool-call-then-answer.jsonl
