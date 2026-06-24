@@ -34,7 +34,7 @@ const RIFF_SIGNATURE: readonly number[] = [0x52, 0x49, 0x46, 0x46];
 const WEBP_TAG: readonly number[] = [0x57, 0x45, 0x42, 0x50];
 
 function bytesStartWith(
-  bytes: readonly number[],
+  bytes: Uint8Array,
   signature: readonly number[],
   offset: number,
 ): boolean {
@@ -55,10 +55,10 @@ export function detectImageMimeTypeFromBase64(
   if (typeof base64Data !== 'string' || base64Data.trim() === '') {
     return null;
   }
-  let bytes: readonly number[];
+  let bytes: Uint8Array;
   try {
     const normalized = base64Data.replace(/\s/g, '');
-    bytes = Array.from(Buffer.from(normalized.slice(0, 16), 'base64'));
+    bytes = Buffer.from(normalized.slice(0, 24), 'base64');
   } catch {
     return null;
   }
