@@ -71,6 +71,15 @@ export interface McpResourceRegistryView {
 export interface McpControlDeps {
   /** Returns true when the named server was authenticated via mcpLogin. */
   readonly isMcpAuthenticated: (server: string) => boolean;
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+   * Records the named server as authenticated in the SAME per-agent auth marker
+   * `isMcpAuthenticated` reads (the one `auth.mcpLogin` populates), so a
+   * successful `authenticate(server)` reconciles with a later
+   * `auth(server)` / `details()` read. Optional + undefined-safe: when absent
+   * (or the manager path is a no-op) the control simply does not record.
+   */
+  readonly markAuthenticated?: (server: string) => void;
   /** Resolves the live McpClientManager (undefined before initialize). */
   readonly getManager: () => McpClientManager | undefined;
   /** Resolves the live tool registry view for discovered-tool projection. */
@@ -321,6 +330,9 @@ export class McpControl implements AgentMcpControl {
     if (this.deps?.refreshClientTools !== undefined) {
       await this.deps.refreshClientTools();
     }
+    // Reconcile the per-agent auth marker so a later auth(server) / details()
+    // read agrees with this success (undefined-safe when no writer is wired).
+    this.deps?.markAuthenticated?.(server);
     return { server, authenticated: true, requiresAuth: true };
   }
 
@@ -337,6 +349,12 @@ export class McpControl implements AgentMcpControl {
     const includeTools = opts?.includeTools ?? true;
     const includePrompts = opts?.includePrompts ?? false;
     const includeResources = opts?.includeResources ?? false;
+    // details() projects the CONFIGURED server set (getServerConfigs ->
+    // config.getMcpServers()), mirroring the CLI `/mcp list` which lists
+    // configured + blocked servers. This intentionally differs from
+    // listServers(), which projects the LIVE discovered set
+    // (manager.getMcpServers()); a configured server absent from the live
+    // manager still appears here.
     const configs = this.deps?.getServerConfigs?.() ?? {};
     const toolsByServer = this.toolsByServer();
     const resourcesAll = includeResources

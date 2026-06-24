@@ -22,6 +22,7 @@ import type { McpControlDeps } from './mcpControl.js';
 export interface McpControlWiringArgs {
   readonly config: Config;
   readonly isMcpAuthenticated: (server: string) => boolean;
+  readonly markAuthenticated: (server: string) => void;
   readonly resolveClient: () => AgentClientContract;
 }
 
@@ -38,9 +39,10 @@ export interface McpControlWiringArgs {
 export function buildMcpControlDeps(
   args: McpControlWiringArgs,
 ): McpControlDeps {
-  const { config, isMcpAuthenticated, resolveClient } = args;
+  const { config, isMcpAuthenticated, markAuthenticated, resolveClient } = args;
   return {
     isMcpAuthenticated,
+    markAuthenticated,
     getManager: () => config.getMcpClientManager(),
     getToolRegistry: () => config.getToolRegistry(),
     getServerConfigs: () => config.getMcpServers(),

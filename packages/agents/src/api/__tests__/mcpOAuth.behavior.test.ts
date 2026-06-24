@@ -74,10 +74,16 @@ function buildOrderingDeps(
       }>
     >;
     readonly authenticated?: readonly string[];
+    readonly omitMarkAuthenticated?: boolean;
   } = {},
 ): McpControlDeps {
   const fakeManager: FakeManager | undefined = opts.manager;
   const managerAsCore = fakeManager as unknown as McpClientManager | undefined;
+
+  // Real per-agent auth marker: the SAME set is read by isMcpAuthenticated and
+  // written by markAuthenticated, mirroring agentImpl's authState.mcpAuth wiring.
+  // No spies/mocks — reconciliation is observed through real Set membership.
+  const authSet = new Set<string>(opts.authenticated ?? []);
 
   const { tools, prompts, resources } = opts;
   const toolRegistry: McpToolRegistryView | undefined =
@@ -116,8 +122,14 @@ function buildOrderingDeps(
         };
 
   return {
-    isMcpAuthenticated: (server: string) =>
-      opts.authenticated?.includes(server) ?? false,
+    isMcpAuthenticated: (server: string) => authSet.has(server),
+    ...(opts.omitMarkAuthenticated === true
+      ? {}
+      : {
+          markAuthenticated: (server: string) => {
+            authSet.add(server);
+          },
+        }),
     getManager: () => managerAsCore,
     getToolRegistry: () => toolRegistry,
     getServerConfigs: () => opts.servers,
@@ -211,6 +223,138 @@ describe('agent.mcp OAuth + refresh parity + details @plan:PLAN-20260622-COREAPI
     expect(callLog).toContain('oauth:s');
     expect(callLog).not.toContain('restart:s');
     expect(callLog).not.toContain('setTools');
+  });
+
+  it('T14d authenticate("s") reconciles the auth marker: a prior auth("s") reads false, then after authenticate the SAME auth("s") and details() read true @requirement:REQ-006 @scenario:authenticate-reconciles', async () => {
+    const callLog: string[] = [];
+    const deps = buildOrderingDeps(callLog, {
+      manager: {
+        restartServer: async (n: string) => {
+          callLog.push('restart:' + n);
+        },
+        restart: async () => {
+          callLog.push('restart-all');
+        },
+      },
+      servers: {
+        s: fakeServerConfig({ oauth: { enabled: true }, httpUrl: 'https://x' }),
+      },
+    });
+    const control = new McpControl(deps);
+
+    // BEFORE: the per-agent marker is empty, so auth() reports false.
+    const before = await control.auth('s');
+    expect(before.authenticated).toBe(false);
+
+    // The real OAuth flow succeeds.
+    const status = await control.authenticate('s');
+    expect(status.authenticated).toBe(true);
+
+    // AFTER: auth() and details() now agree with authenticate()'s result —
+    // the surface is internally consistent for a #1595 consumer.
+    const after = await control.auth('s');
+    expect(after.authenticated).toBe(true);
+    const detail = await control.details();
+    const sDetail = detail.servers.find((d) => d.name === 's');
+    expect(sDetail?.authenticated).toBe(true);
+  });
+
+  it('T14e authenticate("s") is undefined-safe when markAuthenticated is absent: still returns authenticated:true and does NOT throw @requirement:REQ-006 @scenario:authenticate-mark-undefined-safe', async () => {
+    const callLog: string[] = [];
+    const deps = buildOrderingDeps(callLog, {
+      omitMarkAuthenticated: true,
+      manager: {
+        restartServer: async (n: string) => {
+          callLog.push('restart:' + n);
+        },
+        restart: async () => {
+          callLog.push('restart-all');
+        },
+      },
+      servers: {
+        s: fakeServerConfig({ oauth: { enabled: true }, httpUrl: 'https://x' }),
+      },
+    });
+    const control = new McpControl(deps);
+    const status = await control.authenticate('s');
+    expect(status).toStrictEqual({
+      server: 's',
+      authenticated: true,
+      requiresAuth: true,
+    });
+    // No marker writer wired -> auth() still reads the (unchanged) empty set.
+    const after = await control.auth('s');
+    expect(after.authenticated).toBe(false);
+  });
+
+  it('T14f authenticate("nope") (unknown server, no oauth) does NOT mark it authenticated: a later auth("nope") stays false @requirement:REQ-006 @scenario:authenticate-unknown-no-mark', async () => {
+    const callLog: string[] = [];
+    const deps = buildOrderingDeps(callLog, {
+      manager: {
+        restartServer: async (n: string) => {
+          callLog.push('restart:' + n);
+        },
+        restart: async () => {
+          callLog.push('restart-all');
+        },
+      },
+      servers: {
+        s: fakeServerConfig({ oauth: { enabled: true }, httpUrl: 'https://x' }),
+      },
+    });
+    const control = new McpControl(deps);
+    const status = await control.authenticate('nope');
+    expect(status.authenticated).toBe(false);
+    const after = await control.auth('nope');
+    expect(after.authenticated).toBe(false);
+  });
+
+  it('PROP for any server name present in configs, authenticate(name) makes the SAME name read authenticated:true via auth() afterwards (reconciliation) @requirement:REQ-006 @scenario:prop-authenticate-reconciles', async () => {
+    const nameArb = fc.constantFrom('srv-a', 'srv-b', 'srv-c', 'srv-d');
+    await fc.assert(
+      fc.asyncProperty(nameArb, async (name) => {
+        const callLog: string[] = [];
+        const servers: Record<string, ReturnType<typeof fakeServerConfig>> = {
+          'srv-a': fakeServerConfig({
+            oauth: { enabled: true },
+            httpUrl: 'https://a',
+          }),
+          'srv-b': fakeServerConfig({
+            oauth: { enabled: true },
+            httpUrl: 'https://b',
+          }),
+          'srv-c': fakeServerConfig({
+            oauth: { enabled: true },
+            httpUrl: 'https://c',
+          }),
+          'srv-d': fakeServerConfig({
+            oauth: { enabled: true },
+            httpUrl: 'https://d',
+          }),
+        };
+        const deps = buildOrderingDeps(callLog, {
+          manager: {
+            restartServer: async (n: string) => {
+              callLog.push('restart:' + n);
+            },
+            restart: async () => {
+              callLog.push('restart-all');
+            },
+          },
+          servers,
+        });
+        const control = new McpControl(deps);
+
+        const before = await control.auth(name);
+        expect(before.authenticated).toBe(false);
+
+        const status = await control.authenticate(name);
+        expect(status.authenticated).toBe(true);
+
+        const after = await control.auth(name);
+        expect(after.authenticated).toBe(true);
+      }),
+    );
   });
 
   it('T15 refresh("s") records restart:s -> setTools; refresh() records restart-all -> setTools @requirement:REQ-006 @scenario:refresh-parity', async () => {

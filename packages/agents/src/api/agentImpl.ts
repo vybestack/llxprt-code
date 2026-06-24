@@ -498,6 +498,9 @@ export class AgentImpl implements Agent {
     const mcpDeps: McpControlDeps = buildMcpControlDeps({
       config: this.deps.config,
       isMcpAuthenticated: (server) => this.authState.mcpAuth.has(server),
+      markAuthenticated: (server) => {
+        this.authState.mcpAuth.add(server);
+      },
       resolveClient: () => this.deps.resolveClient(),
     });
     return new McpControl(mcpDeps);
