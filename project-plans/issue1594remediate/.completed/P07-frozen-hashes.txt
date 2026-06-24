@@ -1,0 +1,57 @@
+## Frozen early-parity hashes (P07 RED snapshot)
+
+### Audit — P09 Frozen-Driver Correction (2026-06-23)
+#
+# The slice `cli-turn-parity.early.spec.ts` was corrected in P09 to resolve
+# two internally-inconsistent driver defects that could never reach GREEN even
+# with a correct `fromConfig`:
+#   Defect #1 (confirmation deadlock): Path A called `fromConfig({ config })`
+#   with no approval handler while the helper forces an ASK policy and the
+#   fixture issues a tool call — the TOOL_CONFIRMATION_REQUEST was never
+#   answered → infinite hang. Path A now mirrors Path B's approval semantics
+#   via `onApproval: () => ToolConfirmationOutcome.ProceedOnce`.
+#   Defect #2 (fixture starvation): EP2/EP3 drove Path A then Path B over the
+#   SAME single built Config, so Path A consumed the finite FakeProvider
+#   script and Path B ended with `doneReason: "error"`. Each path now drives
+#   an independent fixture-config.
+#
+# NO behavioral assertion was weakened, relaxed, deleted, or skipped. Every
+# original `expect(...)` is preserved verbatim.
+#
+# ORIGINAL slice sha256:
+#   d53683b92e447172cd7f566cf8229198f737c94f1a3722da0a24f6c53c737f7d
+# NEW slice sha256 (after P09 correction):
+#   633ed944c757294e8725afbcdaf41045d20fe96446a476c9a8386699d55228df
+#
+# The helper and fixture hashes are UNCHANGED (not modified by P09).
+#
+# P09 follow-up: added explicit 30000ms per-test timeout to EP1/EP2/EP3 (full-suite parallel-load robustness); no assertion changed; new slice sha256 fdf9b6fbff4658ba3ca2b0cdf9d951bf8e3116422c5539bff213e5b1c26b063b.
+
+### Audit — P12 Helper Lint-Only Correction (2026-06-23)
+#
+# During the P12a gate (which requires a fully clean `npm run lint`), the frozen
+# helper `buildCliStyleConfig.ts` was found to carry a single PRE-EXISTING
+# `@typescript-eslint/no-floating-promises` error at the `setActiveProvider`
+# call (its return type is `void | Promise<void>`). This error existed UNCHANGED
+# since the P07 freeze (earlier phase gates ran scoped typecheck + targeted
+# vitest, not full lint, so it stayed latent). The fix is the lint rule's own
+# recommended remedy — the `void` operator:
+#     -    isolatedManager.setActiveProvider(active.name);
+#     +    void isolatedManager.setActiveProvider(active.name);
+# This is PROVABLY NON-BEHAVIORAL: the promise was already floating (un-awaited,
+# result discarded) inside a try/catch; `void expr` evaluates `expr` identically
+# and merely marks the result explicitly ignored. The early parity slice (which
+# consumes this helper) stayed 3/3 GREEN and fromConfig.behavior 22/22 +
+# settings 16/16 GREEN after the change (41/41 across the three suites). NO
+# helper logic, signature, or test assertion changed.
+#
+# ORIGINAL helper sha256 (P07 freeze):
+#   379bbf38257fde4d2e621a572ed998dab3abc903cace6b18ad31c7b42a92e5b8
+# NEW helper sha256 (after P12 lint-only `void` correction):
+#   d98a1054e2d3451a5174b3dea7405283b02df817018cf2b165eaaaa292eb13c2
+#
+# The slice and fixture hashes are UNCHANGED by P12.
+
+fdf9b6fbff4658ba3ca2b0cdf9d951bf8e3116422c5539bff213e5b1c26b063b  packages/agents/src/api/__tests__/cli-turn-parity.early.spec.ts
+d98a1054e2d3451a5174b3dea7405283b02df817018cf2b165eaaaa292eb13c2  packages/agents/src/api/__tests__/helpers/buildCliStyleConfig.ts
+6afc863dc4f1fb58b4882c1c730bfca5f357316590c3809c6c5e52ef45a8516a  packages/agents/src/api/__tests__/fixtures/parity-toolcall.jsonl

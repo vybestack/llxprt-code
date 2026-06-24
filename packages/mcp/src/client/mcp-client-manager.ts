@@ -16,6 +16,11 @@ import {
   populateMcpServerCommand,
 } from './mcp-client.js';
 import {
+  applyFakeServerDiscovery,
+  isFakeMcpDiscoveryActive,
+  loadFakeMcpFixture,
+} from '../fake/fakeMcpDiscovery.js';
+import {
   getErrorMessage,
   isAuthenticationError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
@@ -49,6 +54,15 @@ export class McpClientManager {
     name: string;
     extensionName: string;
   }> = [];
+  /**
+   * Per-server discovery failure messages, keyed by server name. Populated by
+   * the fake discovery seam (and clearable on restart) so callers can detect a
+   * failed discovery without inspecting feedback events.
+   *
+   * @plan:PLAN-20260617-COREAPI.P22
+   * @requirement:REQ-013
+   */
+  private readonly discoveryFailures: Map<string, string> = new Map();
 
   constructor(
     clientVersion: string,
@@ -204,6 +218,11 @@ export class McpClientManager {
     config: MCPServerConfig,
     existing: McpClient | undefined,
   ): Promise<void> {
+    if (isFakeMcpDiscoveryActive()) {
+      await this.connectAndDiscoverFake(name, config, existing);
+      return;
+    }
+
     if (existing) {
       await existing.disconnect();
     }
@@ -251,6 +270,72 @@ export class McpClientManager {
         );
       }
     }
+  }
+
+  /**
+   * Drives discovery for a server through the shipped fake MCP seam. Registers
+   * a real {@link McpClient} (so getMcpServers/getClient continue to work) but
+   * replays the fixture's served tools into the REAL tool registry and the
+   * REAL server-status channel instead of performing network/process I/O.
+   *
+   * @plan:PLAN-20260617-COREAPI.P22
+   * @requirement:REQ-013
+   * @requirement:REQ-017
+   */
+  private async connectAndDiscoverFake(
+    name: string,
+    config: MCPServerConfig,
+    existing: McpClient | undefined,
+  ): Promise<void> {
+    const client =
+      existing ??
+      new McpClient(
+        name,
+        config,
+        this.toolRegistry,
+        this.cliConfig.getPromptRegistry(),
+        this.cliConfig.getResourceRegistry(),
+        this.cliConfig.getWorkspaceContext(),
+        this.cliConfig,
+        this.cliConfig.getDebugMode(),
+        this.clientVersion,
+        async () => {
+          await this.scheduleMcpContextRefresh();
+        },
+      );
+    if (!existing) {
+      this.clients.set(name, client);
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: new Map(this.clients),
+      });
+    }
+    this.discoveryFailures.delete(name);
+    const fixture = loadFakeMcpFixture();
+    if (fixture === undefined) {
+      return;
+    }
+    const outcome = await applyFakeServerDiscovery(
+      name,
+      this.toolRegistry,
+      fixture,
+    );
+    if (outcome.failure !== undefined) {
+      this.discoveryFailures.set(name, outcome.failure);
+    }
+    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+      clients: new Map(this.clients),
+    });
+  }
+
+  /**
+   * Returns the per-server discovery failure messages recorded during the most
+   * recent discovery pass. Empty when discovery succeeded for all servers.
+   *
+   * @plan:PLAN-20260617-COREAPI.P22
+   * @requirement:REQ-013
+   */
+  getDiscoveryFailures(): ReadonlyMap<string, string> {
+    return new Map(this.discoveryFailures);
   }
 
   private enqueueDiscovery(promise: Promise<void>): void {
@@ -371,6 +456,21 @@ export class McpClientManager {
 
   getDiscoveryState(): MCPDiscoveryState {
     return this.discoveryState;
+  }
+
+  /**
+   * Resolves once any in-flight discovery pass has settled. When no discovery
+   * is in flight this resolves immediately. Used by the public Agent discovery
+   * gate to await MCP readiness before a model turn.
+   *
+   * @plan:PLAN-20260617-COREAPI.P22
+   * @requirement:REQ-013
+   */
+  async whenDiscoverySettled(): Promise<void> {
+    const pending = this.discoveryPromise;
+    if (pending !== undefined) {
+      await pending;
+    }
   }
 
   /**

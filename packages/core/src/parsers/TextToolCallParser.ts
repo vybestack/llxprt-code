@@ -52,7 +52,6 @@ interface MatchCandidate {
 
 export class GemmaToolCallParser implements ITextToolCallParser {
   private readonly keyValuePattern =
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /✦\s*tool_call:\s*([A-Za-z0-9_.-]+)\s+for\s+([^\n✦]*)/g;
 
   parse(content: string): {
@@ -138,7 +137,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       if (endMarkerIndex === -1) break;
 
       const segment = content.slice(afterStart, endMarkerIndex);
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const toolNameMatch = segment.match(/^\s*([^\s{]+)\s+/);
       if (!toolNameMatch) {
         searchIndex = endMarkerIndex + endMarker.length;
@@ -344,7 +342,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
         // Only parse parameters when there is a valid tool name
         for (let i = 1; i < lines.length; i++) {
-          // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
           const argMatch = lines[i].match(/<(\w+)>([^<]*)<\/\1>/);
           // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
           if (argMatch) {
@@ -587,28 +584,34 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   }
 
   private postProcessCleanedContent(content: string): string {
-    return (
-      content
-        .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
-        .replace(/<\|im_start\|>assistant/g, '')
-        .replace(/<\|im_end\|>/g, '')
-        .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
-        .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '')
-        .replace(/<invoke[\s\S]*?<\/invoke>/g, '')
-        .replace(/<tool>[\s\S]*?<\/tool>/g, '')
-        .replace(/<\/use_[A-Za-z0-9_.-]+>/g, '')
-        .replace(/<\/use>/g, '')
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
-        .replace(/<tool_call>\s*\{[^}]*$/gm, '')
-        .replace(
-          // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-          /\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm,
-          '',
-        )
-        .replace(/✦\s*<think>/g, '')
-        .replace(/\n{2,}/g, '\n')
-        .trim()
-    );
+    return this.removePartialJsonToolCall(content)
+      .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
+      .replace(/<\|im_(?:start\|>assistant|end\|>)/g, '')
+      .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+      .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '')
+      .replace(/<invoke[\s\S]*?<\/invoke>/g, '')
+      .replace(/<tool>[\s\S]*?<\/tool>/g, '')
+      .replace(/<\/use(?:_[A-Za-z0-9_.-]+)?>/g, '')
+      .replace(/<tool_call>\s*\{[^}]*$/gm, '')
+      .replace(/\u2726\s*<think>/g, '')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+  }
+
+  private removePartialJsonToolCall(content: string): string {
+    const start = content.indexOf('{"name"');
+    if (start === -1) return content;
+    const argsKey = content.indexOf('"arguments"', start + 1);
+    if (argsKey === -1) return content;
+    const argStart = content.indexOf('{', argsKey);
+    if (argStart === -1) return content;
+    const full = this.extractBalancedSegment(content, start, '{', '}');
+    if (full === null) return content.slice(0, start);
+    if (argStart >= full.endIndex) return content;
+    const arg = this.extractBalancedSegment(content, argStart, '{', '}');
+    if (arg === null || arg.endIndex > full.endIndex)
+      return content.slice(0, start);
+    return content;
   }
 
   private normalizeArguments(
@@ -641,7 +644,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         }
       }
 
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const simpleJsonMatch = args.match(/^{[^{]*}$/);
       if (simpleJsonMatch) {
         try {
@@ -787,7 +789,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       // Target only inner quotes within JSON string values, preserving multibyte and spacing
       // e.g., { "command": "printf "ありがとう 世界"" } -> { "command": "printf \"ありがとう 世界\"" }
       const repaired = args.replace(
-        // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
         /:(\s*)"((?:\\.|[^"\\])*)"(\s*)([,}])/g,
         (_m, s1, val, s2, tail) => {
           // Escape only unescaped quotes inside the value
@@ -918,7 +919,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
     // Parse Claude-style <parameter name="key">value</parameter>
     const parameterPattern =
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       /<parameter\s+name="([^"]+)">([^<]*)<\/parameter>/g;
     let match;
     while ((match = parameterPattern.exec(xmlContent)) !== null) {
@@ -929,7 +929,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     // If no parameter tags found, try generic XML <key>value</key>
     if (Object.keys(args).length === 0) {
       // Match any XML tag pair
-      // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
       const genericPattern = /<(\w+)>([^<]*)<\/\1>/g;
       while ((match = genericPattern.exec(xmlContent)) !== null) {
         const [, key, value] = match;

@@ -66,6 +66,45 @@ describe('GemmaToolCallParser', () => {
     });
   });
 
+  it('should remove multiline partial JSON tool calls without truncating escaped complete calls', () => {
+    const partialContent = `Before
+{"name": "write_file", "arguments": {
+  "path": "/tmp/file.txt",
+  "content": "unfinished`;
+
+    const partialResult = parser.parse(partialContent);
+
+    expect(partialResult.cleanedContent).toBe('Before');
+    expect(partialResult.toolCalls).toHaveLength(0);
+
+    const partialOuterResult = parser.parse(
+      'Before {"name":"write_file","arguments":{"path":"x"}',
+    );
+
+    expect(partialOuterResult.cleanedContent).toBe('Before');
+    expect(partialOuterResult.toolCalls).toHaveLength(0);
+
+    const completeJson = JSON.stringify({
+      name: 'write_file',
+      arguments: { content: 'ends with \\\\' },
+    });
+    const completeResult = parser.parse(
+      `Done ${completeJson} [END_TOOL_REQUEST]`,
+    );
+
+    expect(completeResult.cleanedContent).toBe('Done');
+    expect(completeResult.toolCalls).toHaveLength(1);
+    expect(completeResult.toolCalls[0].arguments).toStrictEqual({
+      content: 'ends with \\\\',
+    });
+  });
+
+  it('should not truncate incomplete non-tool JSON that starts with {"name"', () => {
+    const result = parser.parse('Hello {"name": "Alice"');
+
+    expect(result.cleanedContent).toBe('Hello {"name": "Alice"');
+    expect(result.toolCalls).toHaveLength(0);
+  });
   describe('Hermes format', () => {
     it('should parse single Hermes tool call', () => {
       const content = `<|im_start|>assistant

@@ -308,7 +308,6 @@ export function getCommandRoot(command: string): string | undefined {
   // This regex is designed to find the first "word" of a command,
   // while respecting quotes. It looks for a sequence of non-whitespace
   // characters that are not inside quotes.
-  // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
   const match = trimmedCommand.match(/^"([^"]+)"|^'([^']+)'|^(\S+)/);
   if (match) {
     // The first element in the match array is the full match.
@@ -348,7 +347,6 @@ export function getCommandRoots(command: string): string[] {
 
 export function stripShellWrapper(command: string): string {
   const pattern =
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     /^\s*(?:(?:sh|bash|zsh)\s+-c|cmd\.exe\s+\/c|powershell(?:\.exe)?\s+(?:-NoProfile\s+)?-Command|pwsh(?:\.exe)?\s+(?:-NoProfile\s+)?-Command)\s+/i;
   const match = command.match(pattern);
   if (match) {

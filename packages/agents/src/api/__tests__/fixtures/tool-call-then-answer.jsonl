@@ -1,0 +1,3 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call-tool-1","name":"read_file","parameters":{"path":"{{CWD}}/package.json"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"after the tool ran"}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"refreshed-instruction follow-up turn"}]}]}

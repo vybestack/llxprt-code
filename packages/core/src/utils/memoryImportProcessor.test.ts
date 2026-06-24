@@ -12,6 +12,14 @@ import { marked } from 'marked';
 import { processImports, validateImportPath } from './memoryImportProcessor.js';
 import { debugLogger } from './debugLogger.js';
 
+function stripTrailingSeparators(value: string): string {
+  let end = value.length;
+  while (end > 0 && (value[end - 1] === '/' || value[end - 1] === '\\')) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 // Helper function to create platform-agnostic test paths
 function testPath(...segments: string[]): string {
   // Start with the first segment as is (might be an absolute path on Windows)
@@ -21,8 +29,7 @@ function testPath(...segments: string[]): string {
   for (let i = 1; i < segments.length; i++) {
     if (segments[i].startsWith('/') || segments[i].startsWith('\\')) {
       // If segment starts with a separator, remove the trailing separator from the result
-      // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-      result = path.normalize(result.replace(/[\\/]+$/, '') + segments[i]);
+      result = path.normalize(stripTrailingSeparators(result) + segments[i]);
     } else {
       // Otherwise join with the platform separator
       result = path.join(result, segments[i]);

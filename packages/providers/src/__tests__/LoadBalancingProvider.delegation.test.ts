@@ -261,9 +261,9 @@ describe('LoadBalancingProvider', () => {
       }
     });
 
-    it('should preserve existing resolved options if sub-profile does not override them', async () => {
+    it('should NOT inherit parent resolved authToken when sub-profile omits it (issue #2132)', async () => {
       const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'preserve-resolved-test',
+        profileName: 'isolate-authtoken-test',
         strategy: 'round-robin',
         subProfiles: [
           {
@@ -296,27 +296,84 @@ describe('LoadBalancingProvider', () => {
       providerManager.getProviderByName = () => mockProvider as IProvider;
 
       try {
-        // Pass existing resolved options
+        // Pass existing resolved options with an authToken from a previous profile
         const iterator = provider.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: 'test' }] }],
           resolved: {
             model: 'original-model',
             baseURL: 'https://original.api.com',
-            authToken: 'original-token',
+            authToken: 'leaked-token-from-opus',
           },
         });
         for await (const _chunk of iterator) {
           // Consume
         }
 
-        // Verify original resolved options were preserved
+        // authToken must NOT leak through; baseURL still inherited by design
         expect(capturedOptions).toBeDefined();
         expect(capturedOptions!.resolved).toBeDefined();
         expect(capturedOptions!.resolved!.model).toBe('original-model');
         expect(capturedOptions!.resolved!.baseURL).toBe(
           'https://original.api.com',
         );
-        expect(capturedOptions!.resolved!.authToken).toBe('original-token');
+        expect(capturedOptions!.resolved!.authToken).toBeUndefined();
+      } finally {
+        providerManager.getProviderByName = originalGetProvider;
+      }
+    });
+
+    it('should pass sub-profile authToken through when explicitly set (issue #2132)', async () => {
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'pass-authtoken-test',
+        strategy: 'round-robin',
+        subProfiles: [
+          {
+            name: 'authed-sub',
+            providerName: 'gemini',
+            modelId: 'custom-model',
+            authToken: 'sub-profile-secret',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+
+      let capturedOptions: GenerateChatOptions | undefined;
+      const mockProvider = {
+        name: 'gemini',
+        async *generateChatCompletion(
+          options: GenerateChatOptions,
+        ): AsyncIterableIterator<IContent> {
+          capturedOptions = options;
+          yield { role: 'model', parts: [{ text: 'response' }] };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'gemini-flash',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({}),
+      };
+
+      const originalGetProvider =
+        providerManager.getProviderByName.bind(providerManager);
+      providerManager.getProviderByName = () => mockProvider as IProvider;
+
+      try {
+        const iterator = provider.generateChatCompletion({
+          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          resolved: {
+            model: 'original-model',
+            baseURL: 'https://original.api.com',
+            authToken: 'parent-token-that-should-be-overridden',
+          },
+        });
+        for await (const _chunk of iterator) {
+          // Consume
+        }
+
+        // Sub-profile authToken must take precedence over parent
+        expect(capturedOptions).toBeDefined();
+        expect(capturedOptions!.resolved).toBeDefined();
+        expect(capturedOptions!.resolved!.authToken).toBe('sub-profile-secret');
       } finally {
         providerManager.getProviderByName = originalGetProvider;
       }

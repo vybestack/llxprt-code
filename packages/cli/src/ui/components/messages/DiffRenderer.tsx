@@ -21,22 +21,56 @@ interface DiffLine {
   content: string;
 }
 
+function containsOnlyDigits(value: string): boolean {
+  if (value.length === 0) {
+    return false;
+  }
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (code < 48 || code > 57) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function parseHunkHeader(
+  line: string,
+): { oldLine: number; newLine: number } | null {
+  if (!line.startsWith('@@ -')) {
+    return null;
+  }
+  const newLineMarker = line.indexOf(' +', 4);
+  if (newLineMarker === -1) {
+    return null;
+  }
+  const headerEnd = line.indexOf(' @@', newLineMarker + 2);
+  if (headerEnd === -1) {
+    return null;
+  }
+  const oldLineText = line.slice(4, newLineMarker).split(',', 1)[0];
+  const newLineText = line.slice(newLineMarker + 2, headerEnd).split(',', 1)[0];
+  if (!containsOnlyDigits(oldLineText) || !containsOnlyDigits(newLineText)) {
+    return null;
+  }
+  const oldLine = Number(oldLineText);
+  const newLine = Number(newLineText);
+  return { oldLine, newLine };
+}
+
 function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
   const lines = diffContent.split('\n');
   const result: DiffLine[] = [];
   let currentOldLine = 0;
   let currentNewLine = 0;
   let inHunk = false;
-  // Static regex for unified diff hunk headers - no dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-  const hunkHeaderRegex = /^@@ -(\d+),?\d* \+(\d+),?\d* @@/;
 
   // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (const line of lines) {
-    const hunkMatch = line.match(hunkHeaderRegex);
-    if (hunkMatch) {
-      currentOldLine = parseInt(hunkMatch[1], 10);
-      currentNewLine = parseInt(hunkMatch[2], 10);
+    const hunkHeader = parseHunkHeader(line);
+    if (hunkHeader !== null) {
+      currentOldLine = hunkHeader.oldLine;
+      currentNewLine = hunkHeader.newLine;
       inHunk = true;
       result.push({ type: 'hunk', content: line });
       // We need to adjust the starting point because the first line number applies to the *first* actual line change/context,

@@ -348,7 +348,6 @@ function parseNumberedCode(
   cmd: string,
 ): { code: string; modifier: number } | null {
   const match =
-    // eslint-disable-next-line sonarjs/regular-expr, sonarjs/unused-named-groups -- Regex parses terminal escape sequences
     /^(?<first>\d+)(?:;(?<second>\d+))?(?:;(?<third>\d+))?(?<suffix>[~^$u])$/.exec(
       cmd,
     );
@@ -368,7 +367,6 @@ function parseNumberedCode(
 function parseLetterCode(
   cmd: string,
 ): { code: string; modifier: number } | null {
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/unused-named-groups -- Regex parses terminal escape sequences
   const match = /^(?<first>\d+)?(?:;(?<second>\d+))?(?<letter>[A-Za-z])$/.exec(
     cmd,
   );

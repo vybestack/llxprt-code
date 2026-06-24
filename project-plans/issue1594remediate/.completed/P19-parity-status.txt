@@ -1,0 +1,7 @@
+phase: P19
+harness_status_code: 0
+harness_result: pass
+specs: packages/agents/src/api/__tests__/cli-turn-parity.spec.ts packages/agents/src/api/__tests__/config-injection.spec.ts packages/agents/src/api/__tests__/settings-surface.spec.ts
+# harness_result=pass => P20 is a no-op verification (no frozen test weakened, no gap to close).
+# harness_result=fail => P20 MUST close the named production-surface adequacy gaps below (NEVER by weakening tests).
+## Named adequacy gaps (behavioral failures observed; empty when harness_result=pass):

@@ -799,8 +799,17 @@ export default tseslint.config(
       'sonarjs/cognitive-complexity': ['error', 30],
       'sonarjs/todo-tag': 'error',
       'sonarjs/no-ignored-exceptions': 'error',
-      'sonarjs/regular-expr': 'error',
+      // Issue #2113: sonarjs/regular-expr is a deprecated, non-recommended
+      // blanket review heuristic for ordinary regex usage. Keep targeted regex
+      // correctness and ReDoS rules enabled where they provide actionable
+      // signal rather than source-level suppression comments.
+      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2113 deprecated blanket regex heuristic
       'sonarjs/slow-regex': 'error',
+      'sonarjs/no-invalid-regexp': 'error',
+      'sonarjs/stateful-regex': 'error',
+      'sonarjs/unicode-aware-regex': 'error',
+      'sonarjs/no-regex-spaces': 'error',
+      'no-control-regex': 'error',
       // Issue #2079: this CLI intentionally invokes user/platform tools such as
       // git, shells, editors, and ripgrep. These rules are not useful signal.
       'sonarjs/os-command': 'off', // eslint-policy-allow-off: #2079
@@ -1298,6 +1307,17 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  // extra settings for scripts that we run directly with node
+  {
+    files: ['packages/agents/scripts/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        process: 'readonly',
+        console: 'readonly',
+      },
+    },
+  },
   // ============================================================================
   // Issue #1577: text-buffer.ts decomposition - Architecture Enforcement
   // ============================================================================
@@ -1700,15 +1720,6 @@ export default tseslint.config(
     ],
     rules: {
       'sonarjs/todo-tag': 'off', // eslint-policy-allow-off: #2088 domain vocabulary
-    },
-  },
-  // Issue #2088: EmojiFilter uses inherently complex Unicode emoji range regexes
-  // that are safe but exceed SonarJS regex-complexity heuristics, analogous to
-  // ANSI/terminal control-character parsing.
-  {
-    files: ['packages/tools/src/utils/EmojiFilter.ts'],
-    rules: {
-      'sonarjs/regular-expr': 'off', // eslint-policy-allow-off: #2088 emoji Unicode ranges
     },
   },
   // Issue #2088: IToolMessageBus is a cross-package bridge interface consumed

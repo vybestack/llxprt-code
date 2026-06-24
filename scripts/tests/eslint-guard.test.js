@@ -121,4 +121,18 @@ describe('check-eslint-guard', () => {
     expect(violations).toHaveLength(1);
     expect(violations[0].file).toBe('scripts/example.js');
   });
+
+  it('rejects regex-related inline ESLint disables instead of allowing policy bypasses', () => {
+    const violations = checkDiff(
+      diffFor(
+        'packages/core/src/example.ts',
+        '// eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex',
+      ),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain(
+      'Inline ESLint disable directives are forbidden',
+    );
+  });
 });

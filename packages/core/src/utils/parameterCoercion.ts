@@ -87,7 +87,6 @@ function coerceNumber(
     typeof value === 'string'
   ) {
     const trimmed = value.trim();
-    // eslint-disable-next-line sonarjs/regular-expr -- Static regex reviewed for lint hardening; behavior preserved.
     if (/^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
       const num = Number(trimmed);
       if (!Number.isFinite(num)) {

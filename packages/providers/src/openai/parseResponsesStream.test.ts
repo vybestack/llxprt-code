@@ -190,7 +190,9 @@ describe('parseErrorResponse', () => {
 
   it('should handle invalid JSON in error response', () => {
     const error = parseErrorResponse(500, 'Not JSON', 'Responses');
-    expect(error.message).toBe('Server error: Responses API error: 500');
+    expect(error.message).toContain('Server error');
+    expect(error.message).toContain('Status: 500');
+    expect(error.message).toContain('Not JSON');
   });
 
   it('should handle unknown status codes', () => {
@@ -200,6 +202,42 @@ describe('parseErrorResponse', () => {
       'Responses',
     );
     expect(error.message).toBe('I am a teapot');
+  });
+
+  it('should include status and empty-body indication for empty 400 body @issue:2137', () => {
+    const error = parseErrorResponse(400, '', 'Responses');
+    expect(error.message).toContain('Status: 400');
+    expect(error.message).toContain('empty response body');
+    expect(error.message).not.toBe('Client error: Unknown error');
+  });
+
+  it('should include status and body snippet for empty JSON object 400 @issue:2137', () => {
+    const error = parseErrorResponse(400, '{}', 'Responses');
+    expect(error.message).toContain('Status: 400');
+    expect(error.message).toContain('body:');
+    expect(error.message).not.toBe('Client error: Unknown error');
+  });
+
+  it('should include status and body snippet for JSON with empty error object @issue:2137', () => {
+    const error = parseErrorResponse(400, '{"error":{}}', 'Responses');
+    expect(error.message).toContain('Status: 400');
+    expect(error.message).toContain('body:');
+    expect(error.message).not.toBe('Client error: Unknown error');
+  });
+
+  it('should include status and body snippet for plain-text 400 body @issue:2137', () => {
+    const error = parseErrorResponse(400, 'Bad Request', 'Responses');
+    expect(error.message).toContain('Status: 400');
+    expect(error.message).toContain('Bad Request');
+  });
+
+  it('should still extract standard error messages for structured 400s @issue:2137', () => {
+    const error = parseErrorResponse(
+      400,
+      '{"error":{"message":"Invalid prompt"}}',
+      'Responses',
+    );
+    expect(error.message).toBe('Client error: Invalid prompt');
   });
 
   it('should parse cached_tokens from response.completed usage data', async () => {

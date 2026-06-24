@@ -78,7 +78,7 @@ function appendInputForContent(
   }
 
   if (item.speaker === 'ai') {
-    appendAssistantInput(input, item, context, nextReasoningId);
+    appendAssistantInput(input, item, patchedContent, context, nextReasoningId);
     return;
   }
 
@@ -106,6 +106,7 @@ function appendHumanInput(
 function appendAssistantInput(
   input: ResponsesInputItem[],
   content: IContent,
+  patchedContent: IContent[],
   context: ResponsesInputBuildContext,
   nextReasoningId: () => string,
 ): void {
@@ -138,9 +139,18 @@ function appendAssistantInput(
   if (contentText) input.push({ role: 'assistant', content: contentText });
 
   for (const toolCall of toolCallBlocks) {
+    const normalizedCallId = normalizeToOpenAIToolId(toolCall.id);
+    if (!hasMatchingToolResponse(patchedContent, normalizedCallId)) {
+      context.debug(
+        () =>
+          `Dropping dangling function_call with call_id=${normalizedCallId} (no matching tool_response in history)`,
+      );
+      continue;
+    }
+
     input.push({
       type: 'function_call',
-      call_id: normalizeToOpenAIToolId(toolCall.id),
+      call_id: normalizedCallId,
       name: toolCall.name,
       arguments: JSON.stringify(toolCall.parameters),
     });
@@ -227,6 +237,21 @@ function hasMatchingToolCall(
         (block) =>
           block.type === 'tool_call' &&
           normalizeToOpenAIToolId(block.id) === outputCallId,
+      ),
+  );
+}
+
+function hasMatchingToolResponse(
+  patchedContent: IContent[],
+  callId: string,
+): boolean {
+  return patchedContent.some(
+    (msg) =>
+      msg.speaker === 'tool' &&
+      msg.blocks.some(
+        (block) =>
+          block.type === 'tool_response' &&
+          normalizeToOpenAIToolId(block.callId) === callId,
       ),
   );
 }

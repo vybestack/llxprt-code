@@ -1,0 +1,15 @@
+{
+  "name": "lb-anthropic-openai",
+  "provider": "anthropic",
+  "model": "claude-3-5-sonnet",
+  "isDefault": false,
+  "isLoadBalancer": true,
+  "modelParams": { "temperature": 0.5, "maxTokens": 4096 },
+  "targets": [
+    { "provider": "anthropic", "model": "claude-3-5-sonnet", "weight": 1 },
+    { "provider": "openai", "model": "gpt-4o", "weight": 1 }
+  ],
+  "baseUrl": null,
+  "authKeyName": "anthropic-prod",
+  "authKeyFile": null
+}

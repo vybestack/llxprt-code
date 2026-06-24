@@ -1,0 +1,20 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "TEMPORARY config created by P23 quality-gate phase to mutation-test the P03-P05 providerManager? adoption seam in runtimeContextFactory.ts. The providers package has no first-class Stryker devDep/config; this is a minimal config modeled on packages/agents/stryker.conf.json. Coordinator should decide whether to keep this as a permanent plan artifact or remove it.",
+  "mutate": ["src/runtime/runtimeContextFactory.ts"],
+  "testRunner": "vitest",
+  "inPlace": true,
+  "vitest": {
+    "configFile": "vitest.config.ts"
+  },
+  "coverageAnalysis": "perTest",
+  "reporters": ["json", "clear-text", "progress"],
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
+  },
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 80
+  }
+}

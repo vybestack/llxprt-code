@@ -117,9 +117,11 @@ function normalizeBaseURL(baseURL: string): string {
     return '';
   }
 
-  // Remove trailing slashes
-  // eslint-disable-next-line sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-  return baseURL.replace(/\/+$/, '');
+  let end = baseURL.length;
+  while (end > 0 && baseURL[end - 1] === '/') {
+    end -= 1;
+  }
+  return baseURL.slice(0, end);
 }
 
 /**

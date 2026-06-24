@@ -148,6 +148,20 @@ describe('SecureInputHandler', () => {
       expect(sanitized).not.toContain('secret');
     });
 
+    it('should sanitize secure commands with leading whitespace and non-space separators', () => {
+      expect(handler.processInput('  /key\tmy-secret-key')).toBe(
+        '  /key\tmy*********ey',
+      );
+      expect(handler.sanitizeForHistory('  /key\tmy-secret-key')).toBe(
+        '  /key\tmy*********ey',
+      );
+      expect(handler.processInput('\t/toolkey\texa\tsk-secret-token')).toBe(
+        '\t/toolkey\texa\tsk***********en',
+      );
+      expect(
+        handler.sanitizeForHistory('  /key save\tmain\tsk-secret-token'),
+      ).toBe('  /key save\tmain\tsk***********en');
+    });
     it('should not sanitize other commands', () => {
       const commands = ['/help', '/clear', 'normal text', '/auth login'];
 
@@ -297,7 +311,6 @@ describe('SecureInputHandler', () => {
       };
 
       // What does the regex actually match?
-      // eslint-disable-next-line sonarjs/regular-expr -- Static test regex reviewed for lint hardening; behavior preserved.
       const match = afterPaste.match(/^\/key\s+([\s\S]*)/);
       const debug3 = {
         matched: !!match,

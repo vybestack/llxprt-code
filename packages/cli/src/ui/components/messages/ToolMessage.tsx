@@ -47,11 +47,13 @@ function findFirstDelimiter(paren: number, bracket: number): number {
  * Extract echo text from a command if it's an echo command.
  */
 function extractEchoText(cmd: string): string | null {
-  // Static regex for echo command parsing - no dynamic parts
-  // eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex -- Static regex reviewed for lint hardening; bounded inputs preserve behavior.
-  const m = cmd.match(/^\s*echo\s+(.*)$/i);
-  if (!m) return null;
-  let text = m[1].trim();
+  const trimmed = cmd.trimStart();
+  if (!trimmed.toLowerCase().startsWith('echo')) return null;
+  const afterEcho = trimmed.slice('echo'.length);
+  if (afterEcho.length === 0 || ![' ', '\t'].includes(afterEcho[0])) {
+    return null;
+  }
+  let text = afterEcho.trim();
   if (
     (text.startsWith('"') && text.endsWith('"')) ||
     (text.startsWith("'") && text.endsWith("'"))

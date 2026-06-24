@@ -35,9 +35,12 @@ function validateUrl(url: string): void {
     );
   }
 
-  // Additional validation: ensure no newlines or control characters
-  // eslint-disable-next-line no-control-regex
-  if (/[\r\n\x00-\x1f]/.test(url)) {
+  if (
+    [...url].some((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 0x1f;
+    })
+  ) {
     throw new Error('URL contains invalid characters');
   }
 }
