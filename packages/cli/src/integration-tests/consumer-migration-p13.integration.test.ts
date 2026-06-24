@@ -762,36 +762,36 @@ describe('Core no-shim and dependency-direction boundary', () => {
       content.includes('from "@vybestack/llxprt-code-providers"') ||
       content.includes('from "@vybestack/llxprt-code-providers/');
 
+    const isProductionTsFile = (name: string): boolean =>
+      name.endsWith('.ts') &&
+      !name.endsWith('.test.ts') &&
+      !name.endsWith('.spec.ts');
+
+    const isCommentLine = (line: string): boolean =>
+      line.startsWith('//') || line.startsWith('*') || line.startsWith('/*');
+
+    const collectFileViolations = (fullPath: string): void => {
+      const lines = fs.readFileSync(fullPath, 'utf-8').split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const currentLine = lines[i] ?? '';
+        if (isCommentLine(currentLine.trim())) {
+          continue;
+        }
+        if (hasForbiddenProvidersImport(currentLine)) {
+          const rel = path.relative(coreSrcDir, fullPath);
+          violations.push(`${rel}:${i + 1}: ${currentLine.trim()}`);
+        }
+      }
+    };
+
     function scanDir(dir: string) {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           scanDir(fullPath);
-        } else if (
-          entry.isFile() &&
-          entry.name.endsWith('.ts') &&
-          !entry.name.endsWith('.test.ts') &&
-          !entry.name.endsWith('.spec.ts')
-        ) {
-          const content = fs.readFileSync(fullPath, 'utf-8');
-          const lines = content.split('\n');
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            // Skip comment lines
-            if (
-              line.startsWith('//') ||
-              line.startsWith('*') ||
-              line.startsWith('/*')
-            ) {
-              continue;
-            }
-            const currentLine = lines[i] ?? '';
-            if (hasForbiddenProvidersImport(currentLine)) {
-              const rel = path.relative(coreSrcDir, fullPath);
-              violations.push(`${rel}:${i + 1}: ${currentLine.trim()}`);
-            }
-          }
+        } else if (entry.isFile() && isProductionTsFile(entry.name)) {
+          collectFileViolations(fullPath);
         }
       }
     }
@@ -848,22 +848,29 @@ describe('Core no-shim and dependency-direction boundary', () => {
     const forbiddenSuffixes = ['V2', 'Compat', 'New', 'Copy'];
     const violations: string[] = [];
 
+    const isShimNamedProviderFile = (name: string): boolean => {
+      const basename = name
+        .replace(/\.ts$/, '')
+        .replace(/\.test$/, '')
+        .replace(/\.spec$/, '');
+      if (!/provider/i.test(basename)) {
+        return false;
+      }
+      return forbiddenSuffixes.some((suffix) => basename.endsWith(suffix));
+    };
+
     function scanForShimFiles(dir: string) {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           scanForShimFiles(fullPath);
-        } else if (entry.isFile() && entry.name.endsWith('.ts')) {
-          const basename = entry.name
-            .replace(/\.ts$/, '')
-            .replace(/\.test$/, '')
-            .replace(/\.spec$/, '');
-          for (const suffix of forbiddenSuffixes) {
-            if (basename.endsWith(suffix) && /provider/i.test(basename)) {
-              violations.push(path.relative(coreSrcDir, fullPath));
-            }
-          }
+        } else if (
+          entry.isFile() &&
+          entry.name.endsWith('.ts') &&
+          isShimNamedProviderFile(entry.name)
+        ) {
+          violations.push(path.relative(coreSrcDir, fullPath));
         }
       }
     }

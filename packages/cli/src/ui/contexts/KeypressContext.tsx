@@ -173,9 +173,10 @@ function bufferBackslashEnter(
   const bufferer = (function* (): Generator<void, void, Key | null> {
     for (;;) {
       const key = yield;
-      if (key == null) continue;
-      if (key.sequence !== '\\') {
-        keypressHandler(key);
+      if (key == null || key.sequence !== '\\') {
+        if (key != null) {
+          keypressHandler(key);
+        }
         continue;
       }
       const timeoutId = setTimeout(
@@ -202,9 +203,10 @@ function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
     for (;;) {
       let key = yield;
-      if (key === null) continue;
-      if (key.name !== 'paste-start') {
-        keypressHandler(key);
+      if (key === null || key.name !== 'paste-start') {
+        if (key !== null) {
+          keypressHandler(key);
+        }
         continue;
       }
       let buffer = '';
@@ -386,16 +388,21 @@ function parseLetterCode(
 
 function* readOscBuffer(): Generator<void, string, string> {
   let buffer = '';
-  for (;;) {
+  let done = false;
+  while (!done) {
     const next = yield;
-    if (next === '' || next === '\u0007') break;
-    if (next === ESC) {
+    if (next === '' || next === '\u0007') {
+      done = true;
+    } else if (next === ESC) {
       const afterEsc = yield;
-      if (afterEsc === '' || afterEsc === '\\') break;
-      buffer += next + afterEsc;
-      continue;
+      if (afterEsc === '' || afterEsc === '\\') {
+        done = true;
+      } else {
+        buffer += next + afterEsc;
+      }
+    } else {
+      buffer += next;
     }
-    buffer += next;
   }
   return buffer;
 }
@@ -515,13 +522,14 @@ function* emitKeys(
       }
     }
 
-    if (escaped && (ch === 'O' || ch === '[' || ch === ']')) {
-      if (ch === ']') {
-        const result = yield* readOscBuffer();
-        processOscBuffer(result, keypressHandler);
-        continue;
-      }
-
+    const isEscapeIntroducer =
+      escaped && (ch === 'O' || ch === '[' || ch === ']');
+    if (!isEscapeIntroducer) {
+      parseNonEscapeKey(ch, escaped, sequence, keypressHandler);
+    } else if (ch === ']') {
+      const result = yield* readOscBuffer();
+      processOscBuffer(result, keypressHandler);
+    } else {
       const parsed =
         ch === 'O' ? yield* readOCodeSequence() : yield* readBracketSequence();
       const { name, shift, meta, ctrl } = applyKeyCodeModifier(
@@ -542,10 +550,7 @@ function* emitKeys(
         sequence: seq,
         insertable,
       });
-      continue;
     }
-
-    parseNonEscapeKey(ch, escaped, sequence, keypressHandler);
   }
 }
 
