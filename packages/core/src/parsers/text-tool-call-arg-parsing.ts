@@ -110,38 +110,57 @@ export function normalizeArguments(
   }
 
   try {
+    // Try JSON first: valid JSON strings may contain angle brackets
+    // (e.g. {"query":"<div>weather</div>"}) which would otherwise be
+    // misrouted to XML parsing.
+    return applyToolSpecificNormalizations(JSON.parse(args), toolName);
+  } catch (error) {
+    // Not valid JSON — try XML if angle-bracket markers are present.
     if (
       args.includes('<parameter') ||
       (args.includes('<') && args.includes('>'))
     ) {
-      return parseXMLParameters(args);
-    }
-    return applyToolSpecificNormalizations(JSON.parse(args), toolName);
-  } catch (error) {
-    const repaired = tryRepairJson(args);
-    if (repaired) {
       try {
-        return applyToolSpecificNormalizations(JSON.parse(repaired), toolName);
-      } catch {
-        // ignore and fall through
+        return parseXMLParameters(args);
+      } catch (xmlError) {
+        // Fall through to JSON repair attempts below.
+        return repairAndParseArgs(args, toolName, fullMatch, xmlError);
       }
     }
-
-    const simpleJson = extractSimpleJsonObject(args);
-    if (simpleJson !== null) {
-      try {
-        return JSON.parse(simpleJson);
-      } catch {
-        // fall through to logging
-      }
-    }
-
-    logger.error(
-      `Failed to parse tool arguments for ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    logger.error(`Raw arguments excerpt: ${fullMatch.slice(0, 200)}`);
-    return null;
+    // No XML markers either — attempt JSON repair on the original error.
+    return repairAndParseArgs(args, toolName, fullMatch, error);
   }
+}
+
+function repairAndParseArgs(
+  args: string,
+  toolName: string,
+  fullMatch: string,
+  error: unknown,
+): Record<string, unknown> | null {
+  const repaired = tryRepairJson(args);
+  if (repaired) {
+    try {
+      return applyToolSpecificNormalizations(JSON.parse(repaired), toolName);
+    } catch {
+      // ignore and fall through
+    }
+  }
+
+  const simpleJson = extractSimpleJsonObject(args);
+  if (simpleJson !== null) {
+    try {
+      return JSON.parse(simpleJson);
+    } catch {
+      // fall through to logging
+    }
+  }
+
+  logger.error(
+    `Failed to parse tool arguments for ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  logger.error(`Raw arguments excerpt: ${fullMatch.slice(0, 200)}`);
+  return null;
 }
 
 function applyToolSpecificNormalizations(

@@ -22,12 +22,12 @@ type AjvConstructor = new (options: unknown) => {
   addMetaSchema: (schema: unknown, key?: string) => void;
   addFormat: (name: string, format: unknown) => unknown;
 };
-const Ajv2020Class = (
-  Ajv2020Pkg as unknown as { default?: AjvConstructor } & AjvConstructor
-).default as AjvConstructor;
-const AjvClass = (
-  AjvPkg as unknown as { default?: AjvConstructor } & AjvConstructor
-).default as AjvConstructor;
+const Ajv2020Class: AjvConstructor =
+  (Ajv2020Pkg as unknown as { default?: AjvConstructor } & AjvConstructor)
+    .default ?? (Ajv2020Pkg as unknown as AjvConstructor);
+const AjvClass: AjvConstructor =
+  (AjvPkg as unknown as { default?: AjvConstructor } & AjvConstructor)
+    .default ?? (AjvPkg as unknown as AjvConstructor);
 
 /**
  * The JSON Schema draft-07 meta-schema, inlined verbatim from ajv's
@@ -255,7 +255,17 @@ function isIsoDate(value: unknown): boolean {
   }
   const monthNum = Number(month);
   const dayNum = Number(day);
-  return monthNum >= 1 && monthNum <= 12 && dayNum >= 1 && dayNum <= 31;
+  if (monthNum < 1 || monthNum > 12 || dayNum < 1 || dayNum > 31) {
+    return false;
+  }
+  // Verify the date actually exists on the calendar (catches 2024-02-31, etc.)
+  const yearNum = Number(year);
+  const constructed = new Date(yearNum, monthNum - 1, dayNum);
+  return (
+    constructed.getFullYear() === yearNum &&
+    constructed.getMonth() === monthNum - 1 &&
+    constructed.getDate() === dayNum
+  );
 }
 
 function isAllDigits(str: string): boolean {

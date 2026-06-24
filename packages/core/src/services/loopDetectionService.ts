@@ -13,6 +13,11 @@ import type { Config } from '../config/config.js';
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 5000;
 
+/** Returns true for space or tab (markdown list/heading separators). */
+function isMarkdownWhitespace(ch: string | undefined): boolean {
+  return ch === ' ' || ch === '	';
+}
+
 // Default threshold values (used when config is undefined)
 const DEFAULT_TOOL_CALL_LOOP_THRESHOLD = 50;
 const DEFAULT_CONTENT_LOOP_THRESHOLD = 50;
@@ -81,10 +86,13 @@ function detectMarkdownListItem(content: string): boolean {
     }
     const first = line[0];
     const second = line[1];
-    if ((first === '*' || first === '-' || first === '+') && second === ' ') {
+    if (
+      (first === '*' || first === '-' || first === '+') &&
+      isMarkdownWhitespace(second)
+    ) {
       return true;
     }
-    // Ordered list: one or more digits, then '.', then space
+    // Ordered list: one or more digits, then '.', then whitespace
     let i = 0;
     while (i < line.length && line[i] >= '0' && line[i] <= '9') {
       i++;
@@ -93,7 +101,7 @@ function detectMarkdownListItem(content: string): boolean {
       i > 0 &&
       i + 1 < line.length &&
       line[i] === '.' &&
-      line[i + 1] === ' '
+      isMarkdownWhitespace(line[i + 1])
     ) {
       return true;
     }
@@ -113,7 +121,11 @@ function detectMarkdownHeading(content: string): boolean {
     while (hashCount < line.length && line[hashCount] === '#') {
       hashCount++;
     }
-    if (hashCount > 0 && hashCount < line.length && line[hashCount] === ' ') {
+    if (
+      hashCount > 0 &&
+      hashCount < line.length &&
+      isMarkdownWhitespace(line[hashCount])
+    ) {
       return true;
     }
   }
@@ -294,9 +306,9 @@ export class LoopDetectionService {
       content.length > 0 &&
       [...content].every((char) => {
         const isAsterisk = char === '*';
-        const isPlusToUnderscore = char >= '+' && char <= '_';
+        const isDividerChar = '+-=_.'.includes(char);
         const isBoxDrawing = char >= '─' && char <= '╿';
-        return isAsterisk || isPlusToUnderscore || isBoxDrawing;
+        return isAsterisk || isDividerChar || isBoxDrawing;
       });
 
     const hasStructuralElement = numFences > 0 || hasTable || hasListItem;

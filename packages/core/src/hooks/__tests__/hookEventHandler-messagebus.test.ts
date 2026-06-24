@@ -60,6 +60,15 @@ function isValidUuid(value: string): boolean {
       }
     }
   }
+  // Validate UUID v4 version nibble (3rd group starts with '4')
+  if (groups[2][0] !== '4') {
+    return false;
+  }
+  // Validate UUID v4 variant nibble (4th group starts with 8, 9, a, or b)
+  const variantChar = groups[3][0].toLowerCase();
+  if (!['8', '9', 'a', 'b'].includes(variantChar)) {
+    return false;
+  }
   return true;
 }
 

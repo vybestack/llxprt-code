@@ -48,7 +48,14 @@ function stripFrontmatter(content: string): string {
   if (closeMarker === -1) {
     return content;
   }
-  const bodyStart = content.indexOf(NEWLINE, closeMarker + 4);
+  // Verify the `---` close delimiter is standalone (followed by newline or EOF),
+  // not part of text like `---foo`.
+  const afterClose = closeMarker + FRONTMATTER_CLOSE.length;
+  if (afterClose < content.length && content[afterClose] !== NEWLINE) {
+    // Not a standalone delimiter — treat as no valid frontmatter close.
+    return content;
+  }
+  const bodyStart = content.indexOf(NEWLINE, afterClose);
   if (bodyStart === -1) {
     return '';
   }
@@ -228,7 +235,8 @@ export class SkillManager {
 
       return {
         name: skillName,
-        description: config.description ?? '',
+        description:
+          typeof config.description === 'string' ? config.description : '',
         location: skillPath,
         body,
         source: 'builtin',

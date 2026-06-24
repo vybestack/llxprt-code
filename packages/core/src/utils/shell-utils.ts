@@ -396,20 +396,33 @@ const POWERSHELL_WRAPPERS = ['powershell', 'pwsh'] as const;
 function matchShellWrapperPrefix(cmd: string): number {
   const lowerCmd = cmd.toLowerCase();
 
+  // Returns the index after the prefix if `cmd` starts with `prefix` followed
+  // by whitespace (space, tab, or newline); otherwise -1.
+  const startsWithWs = (prefix: string): number => {
+    if (!lowerCmd.startsWith(prefix)) {
+      return -1;
+    }
+    const next = cmd[prefix.length];
+    return isWhitespaceChar(next) ? prefix.length + 1 : -1;
+  };
+
   // Check for sh/bash/zsh -c
   for (const shell of SHELL_WRAPPERS) {
-    if (lowerCmd.startsWith(shell + ' ')) {
-      const rest = cmd.slice(shell.length + 1).trimStart();
-      if (rest.toLowerCase().startsWith('-c ')) {
-        return cmd.length - rest.length + 3;
-      }
+    const afterShell = startsWithWs(shell);
+    if (afterShell === -1) {
+      continue;
+    }
+    const rest = cmd.slice(afterShell).trimStart();
+    if (rest.toLowerCase().startsWith('-c') && isWhitespaceChar(rest[2])) {
+      return cmd.length - rest.length + 3;
     }
   }
 
   // Check for cmd.exe /c
-  if (lowerCmd.startsWith('cmd.exe ')) {
-    const rest = cmd.slice(8).trimStart();
-    if (rest.toLowerCase().startsWith('/c ')) {
+  const afterCmd = startsWithWs('cmd.exe');
+  if (afterCmd !== -1) {
+    const rest = cmd.slice(afterCmd).trimStart();
+    if (rest.toLowerCase().startsWith('/c') && isWhitespaceChar(rest[2])) {
       return cmd.length - rest.length + 3;
     }
   }
@@ -417,22 +430,26 @@ function matchShellWrapperPrefix(cmd: string): number {
   // Check for powershell/pwsh [-NoProfile] -Command
   for (const pwsh of POWERSHELL_WRAPPERS) {
     const withExe = pwsh + '.exe';
-    let matched: string | null = null;
-    if (lowerCmd.startsWith(pwsh + ' ')) {
-      matched = pwsh;
-    } else if (lowerCmd.startsWith(withExe + ' ')) {
-      matched = withExe;
+    let afterExe = startsWithWs(pwsh);
+    if (afterExe === -1) {
+      afterExe = startsWithWs(withExe);
     }
-    if (matched === null) {
+    if (afterExe === -1) {
       continue;
     }
-    let rest = cmd.slice(matched.length + 1).trimStart();
+    let rest = cmd.slice(afterExe).trimStart();
     // Optional -NoProfile
-    if (rest.toLowerCase().startsWith('-noprofile ')) {
-      rest = rest.slice(11).trimStart();
+    if (
+      rest.toLowerCase().startsWith('-noprofile') &&
+      isWhitespaceChar(rest['-noprofile'.length])
+    ) {
+      rest = rest.slice('-noprofile'.length + 1).trimStart();
     }
-    if (rest.toLowerCase().startsWith('-command ')) {
-      return cmd.length - rest.length + 9;
+    if (
+      rest.toLowerCase().startsWith('-command') &&
+      isWhitespaceChar(rest['-command'.length])
+    ) {
+      return cmd.length - rest.length + '-command'.length;
     }
   }
 

@@ -91,16 +91,19 @@ export function getSystemEncoding(): string | null {
   }
 
   const dotIndex = locale.indexOf('.');
+  let encoding: string | undefined;
   if (dotIndex >= 0) {
-    const encoding = locale.slice(dotIndex + 1);
-    if (encoding) {
-      return encoding.toLowerCase();
-    }
+    encoding = locale.slice(dotIndex + 1);
+  } else if (locale) {
+    encoding = locale;
   }
-
-  // Handle cases where locale charmap returns just the encoding name (e.g., "UTF-8")
-  if (locale) {
-    return locale.toLowerCase();
+  if (encoding) {
+    // Strip locale modifiers like @euro (e.g. utf-8@euro -> utf-8)
+    const atIndex = encoding.indexOf('@');
+    if (atIndex >= 0) {
+      encoding = encoding.slice(0, atIndex);
+    }
+    return encoding.toLowerCase();
   }
 
   return null;

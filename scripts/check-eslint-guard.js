@@ -118,7 +118,8 @@ function isNewOffRule(line) {
 }
 
 function isStandaloneOffRuleValue(line) {
-  return /^\s*(?:['"]off['"]|0),?\s*$/.test(line);
+  // Allows optional trailing inline comments, e.g. `'off', // comment` or `0, // x`
+  return /^\s*(?:['"]off['"]|0),?\s*(?:\/\/.*)?$/.test(line);
 }
 
 function shouldCheckInlineDisable(file) {

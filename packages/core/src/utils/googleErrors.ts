@@ -10,6 +10,14 @@
  */
 
 /**
+ * Type guard for non-null objects. Unlike `typeof x === 'object'`, this
+ * correctly excludes `null` (which has typeof 'object' at runtime).
+ */
+function isNonNullObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
  * Based on google/rpc/error_details.proto
  */
 
@@ -294,7 +302,7 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && 'error' in data) {
+    if (isNonNullObject(data) && 'error' in data) {
       outerError = (data as { error?: ErrorShape }).error;
     }
   }
@@ -338,7 +346,7 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && 'error' in data) {
+    if (isNonNullObject(data) && 'error' in data) {
       outerError = (data as { error?: ErrorShape }).error;
     }
   }

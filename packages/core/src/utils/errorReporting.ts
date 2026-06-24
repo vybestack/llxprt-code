@@ -11,11 +11,11 @@ import { type Content } from '@google/genai';
 
 function reportToStderr(message: string, ...extras: unknown[]): void {
   const parts = [message, ...extras];
-  const output = parts.map((part) => formatPart(part)).join(' ') + '\n';
   try {
+    const output = parts.map((part) => formatPart(part)).join(' ') + '\n';
     process.stderr.write(output);
   } catch {
-    // Swallow write failures to avoid masking the original error
+    // Swallow formatting/write failures to avoid masking the original error
   }
 }
 

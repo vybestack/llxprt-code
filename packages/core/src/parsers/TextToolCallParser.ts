@@ -586,11 +586,20 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       if (start === -1) {
         break;
       }
-      const result = this.tryParseUseRequest(content, start, prefix, closing);
-      if (result.match) {
-        matches.push(result.match);
+      // Ensure <use is a complete tag, not <use_foo> etc. The character after
+      // the prefix must be '>' or whitespace.
+      const afterPrefix = content[start + prefix.length];
+      const isCompleteTag =
+        afterPrefix === '>' || isWhitespaceChar(afterPrefix);
+      if (isCompleteTag) {
+        const result = this.tryParseUseRequest(content, start, prefix, closing);
+        if (result.match) {
+          matches.push(result.match);
+        }
+        searchIndex = result.nextSearchIndex;
+      } else {
+        searchIndex = start + prefix.length;
       }
-      searchIndex = result.nextSearchIndex;
     }
 
     return matches;
@@ -752,7 +761,13 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       return { match: null, nextSearchIndex: afterName };
     }
 
-    let argsStart = afterName + 'for'.length;
+    // Word boundary: 'for' must be followed by whitespace or end of content.
+    const afterFor = afterName + 'for'.length;
+    if (afterFor < content.length && !isWhitespaceChar(content[afterFor])) {
+      return { match: null, nextSearchIndex: afterFor };
+    }
+
+    let argsStart = afterFor;
     while (argsStart < content.length && isWhitespaceChar(content[argsStart])) {
       argsStart++;
     }

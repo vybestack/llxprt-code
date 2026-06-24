@@ -255,6 +255,13 @@ function handleProviderSwitch(
   }
 }
 
+/** Type guard: true when value is an array of strings. */
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
+}
+
 /** @pseudocode line 122-126: session_event — collect if valid, otherwise record malformed. */
 function handleSessionEvent(
   payload: Record<string, unknown>,
@@ -263,9 +270,10 @@ function handleSessionEvent(
 ): void {
   const severity = payload.severity;
   const message = payload.message;
+  const VALID_SEVERITIES = new Set(['info', 'warning', 'error']);
   if (
     typeof severity === 'string' &&
-    severity.length > 0 &&
+    VALID_SEVERITIES.has(severity) &&
     typeof message === 'string'
   ) {
     acc.sessionEvents.push({
@@ -285,9 +293,9 @@ function handleDirectoriesChanged(
   lineNumber: number,
 ): void {
   const directories = payload.directories;
-  if (acc.metadata && Array.isArray(directories)) {
-    acc.metadata.workspaceDirs = directories as string[];
-  } else if (!Array.isArray(directories)) {
+  if (acc.metadata && isStringArray(directories)) {
+    acc.metadata.workspaceDirs = directories;
+  } else if (!isStringArray(directories)) {
     acc.malformedCount++;
     acc.warnings.push(
       `Line ${lineNumber}: malformed directories_changed event, skipping`,

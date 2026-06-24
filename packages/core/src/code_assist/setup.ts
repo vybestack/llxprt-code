@@ -40,10 +40,10 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
     () =>
       `setupUser: starting setup, GOOGLE_CLOUD_PROJECT=${process.env.GOOGLE_CLOUD_PROJECT ?? 'undefined'}`,
   );
-  const projectId =
+  const rawProjectId =
     process.env['GOOGLE_CLOUD_PROJECT'] ??
-    process.env['GOOGLE_CLOUD_PROJECT_ID'] ??
-    undefined;
+    process.env['GOOGLE_CLOUD_PROJECT_ID'];
+  const projectId = rawProjectId === '' ? undefined : rawProjectId;
   // PRIVACY FIX: sessionId parameter removed from CodeAssistServer constructor
   const caServer = new CodeAssistServer(client, projectId, {}, undefined);
   const coreClientMetadata: ClientMetadata = {

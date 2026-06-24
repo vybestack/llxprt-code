@@ -7,12 +7,9 @@
 import { describe, it, expect } from 'vitest';
 import { escapeRegex, buildArgsPatterns } from './utils.js';
 
-// Build the regex in a separate function so the regular-expr rule does not
-// flag it at the call site.
-function buildDirPathTestRegExp(): RegExp {
-  const parts = ['"dir_path":"', '[^"]*', 'test', '[^"]*', '"'];
-  return new RegExp(parts.join(''));
-}
+// Static regex literal for matching JSON-serialized dir_path values containing
+// "test". Kept as a module-level constant so it is not reconstructed per test.
+const DIR_PATH_TEST_PATTERN = /"dir_path":"[^"]*test[^"]*"/;
 
 describe('escapeRegex', () => {
   it('should escape all special regex characters', () => {
@@ -76,7 +73,7 @@ describe('buildArgsPatterns', () => {
   });
 
   it('should combine commandPrefix and argsPattern', () => {
-    const argsPattern = buildDirPathTestRegExp();
+    const argsPattern = DIR_PATH_TEST_PATTERN;
     const patterns = buildArgsPatterns(argsPattern, 'npm');
     expect(patterns).toHaveLength(2);
     expect(patterns[0].test('"command":"npm test"')).toBe(true);

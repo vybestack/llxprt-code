@@ -101,7 +101,7 @@ export function parseLspConfig(
  */
 function normalizeLspConfig(lsp: LspConfig): LspConfig {
   const raw = lsp as Partial<LspConfig>;
-  return raw.servers === undefined ? { ...lsp, servers: [] } : lsp;
+  return Array.isArray(raw.servers) ? lsp : { ...lsp, servers: [] };
 }
 
 async function registerAvailableNavigationTools(

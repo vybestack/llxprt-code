@@ -23,7 +23,7 @@ function matchesBackupPath(value: string): boolean {
     return false;
   }
   const suffix = value.slice(idx + 'prompt-backup-'.length);
-  if (suffix.length < 15) {
+  if (suffix.length !== 15) {
     return false;
   }
   // YYYYMMDD_HHMMSS = 15 chars: 8 digits, '_', 6 digits

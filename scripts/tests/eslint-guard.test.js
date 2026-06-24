@@ -246,13 +246,19 @@ describe('check-eslint-guard', () => {
         "    'no-console': [",
         '      0,',
         '    ],',
+        "    'no-unused-vars': [",
+        "      'off', // inline comment",
+        '    ],',
+        "    'no-magic-numbers': [",
+        '      0, // inline comment',
+        '    ],',
         '  },',
         '}',
       ].join('\n');
 
       const violations = checkCoreCentralBypassesInConfig(config);
 
-      expect(violations).toHaveLength(2);
+      expect(violations).toHaveLength(4);
       expect(formatViolations(violations)).toContain('rule-off');
     });
 

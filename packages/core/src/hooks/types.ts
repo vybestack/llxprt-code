@@ -60,6 +60,17 @@ export interface CommandHookConfig {
 export type HookConfig = CommandHookConfig;
 
 /**
+ * Returns true when `value` is a non-null object. Used to guard hook payload
+ * fields that are checked with the `in` operator before being passed to
+ * translators, since `in` only confirms key presence, not value shape.
+ */
+function isNonNullObjectRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
  * Hook definition with matcher
  */
 export interface HookDefinition {
@@ -306,10 +317,13 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
    * Get synthetic LLM response if provided by hook
    */
   getSyntheticResponse(): GenerateContentResponse | undefined {
-    if (this.hookSpecificOutput && 'llm_response' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput &&
+      isNonNullObjectRecord(this.hookSpecificOutput['llm_response'])
+    ) {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
-      ] as LLMResponse;
+      ] as unknown as LLMResponse;
       // Convert hook format to SDK format
       return defaultHookTranslator.fromHookLLMResponse(hookResponse);
     }
@@ -322,7 +336,10 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
   override applyLLMRequestModifications(
     target: GenerateContentParameters,
   ): GenerateContentParameters {
-    if (this.hookSpecificOutput && 'llm_request' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput &&
+      isNonNullObjectRecord(this.hookSpecificOutput['llm_request'])
+    ) {
       const hookRequest = this.hookSpecificOutput[
         'llm_request'
       ] as Partial<LLMRequest>;
@@ -357,7 +374,10 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
     toolConfig?: GenAIToolConfig & { allowedFunctionNames?: string[] };
     tools?: ToolListUnion;
   } {
-    if (this.hookSpecificOutput && 'toolConfig' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput &&
+      isNonNullObjectRecord(this.hookSpecificOutput['toolConfig'])
+    ) {
       const hookToolConfig = this.hookSpecificOutput[
         'toolConfig'
       ] as HookToolConfig;
@@ -386,7 +406,10 @@ export class AfterModelHookOutput extends DefaultHookOutput {
    * Get modified LLM response if provided by hook
    */
   getModifiedResponse(): GenerateContentResponse | undefined {
-    if (this.hookSpecificOutput && 'llm_response' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput &&
+      isNonNullObjectRecord(this.hookSpecificOutput['llm_response'])
+    ) {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
       ] as Partial<LLMResponse>;

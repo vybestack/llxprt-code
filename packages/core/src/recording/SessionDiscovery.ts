@@ -365,7 +365,7 @@ function extractUserMessageText(line: string): string | null {
   }
 
   const text = blocks
-    .filter((block) => block.type === 'text')
+    .filter((block) => block.type === 'text' && typeof block.text === 'string')
     .map((block) => block.text as string)
     .join('');
 

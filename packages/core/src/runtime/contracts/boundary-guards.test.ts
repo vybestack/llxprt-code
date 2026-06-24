@@ -77,8 +77,15 @@ const PROVIDER_IMPORT_SUBSTRINGS = [
  * Uses string matching on import statements rather than regex.
  */
 function detectProviderImport(content: string): string | null {
-  for (const line of content.split('\n')) {
-    const result = checkLineForProviderImport(line);
+  const lines = content.split('\n');
+  let inBlockComment = false;
+  for (const line of lines) {
+    const { processed, blockComment } = stripCommentsFromLine(
+      line,
+      inBlockComment,
+    );
+    inBlockComment = blockComment;
+    const result = checkLineForProviderImport(processed);
     if (result !== null) {
       return result;
     }
@@ -282,8 +289,16 @@ describe('Core package metadata must not reference providers', () => {
             `tsconfig.json references providers path: ${ref.path}`,
           ).toBe(false);
         }
-      } catch {
-        // If tsconfig.json can't be parsed (e.g. TS extends format), skip
+      } catch (parseError) {
+        // Surface unexpected tsconfig parse failures so real regressions
+        // are not silently masked. TS extends-format issues still skip.
+        process.stderr.write(
+          'tsconfig.json could not be parsed for provider-reference check: ' +
+            (parseError instanceof Error
+              ? parseError.message
+              : String(parseError)) +
+            '\n',
+        );
       }
     },
   );

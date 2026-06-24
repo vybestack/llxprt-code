@@ -121,7 +121,10 @@ export class HookRegistry {
       return name;
     }
     const command = entry.config.command;
-    return command.length > 0 ? command : 'unknown-command';
+    if (typeof command === 'string' && command.length > 0) {
+      return command;
+    }
+    return 'unknown-command';
   }
 
   /** Extract all HookConfig entries from project hooks settings. */

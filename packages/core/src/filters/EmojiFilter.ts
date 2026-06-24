@@ -64,13 +64,12 @@ const EMOJI_CODE_POINT_RANGES: ReadonlyArray<readonly [number, number]> = [
   [0x1f600, 0x1f64f],
   [0x1f680, 0x1f6ff],
   [0x23e9, 0x23ff],
+  [0x2328, 0x2328],
   [0x2705, 0x2705],
   [0x2713, 0x2713],
   [0x26a0, 0x26a0],
   [0x274c, 0x274c],
   [0x26a1, 0x26a1],
-  [0xfe0e, 0xfe0f],
-  [0x200d, 0x200d],
 ];
 
 /**
@@ -86,12 +85,98 @@ function isEmojiCodePoint(codePoint: number): boolean {
   return false;
 }
 
+function codePointAt(char: string): number {
+  return char.codePointAt(0) ?? 0;
+}
+
+function isVariationSelector(codePoint: number): boolean {
+  return codePoint === 0xfe0e || codePoint === 0xfe0f;
+}
+
+function isZeroWidthJoiner(codePoint: number): boolean {
+  return codePoint === 0x200d;
+}
+
+function isKeycapCombiningMark(codePoint: number): boolean {
+  return codePoint === 0x20e3;
+}
+
+function isDigitChar(char: string): boolean {
+  return char.length === 1 && char >= '0' && char <= '9';
+}
+
+function isKeycapBase(char: string): boolean {
+  if (char === '#' || char === '*') {
+    return true;
+  }
+  return isDigitChar(char);
+}
+
+function isKeycapSequence(chars: readonly string[], index: number): boolean {
+  if (!isKeycapBase(chars[index])) {
+    return false;
+  }
+
+  if (index + 2 < chars.length) {
+    return (
+      isVariationSelector(codePointAt(chars[index + 1])) &&
+      isKeycapCombiningMark(codePointAt(chars[index + 2]))
+    );
+  }
+
+  return (
+    index + 1 < chars.length &&
+    isKeycapCombiningMark(codePointAt(chars[index + 1]))
+  );
+}
+
+function isEmojiVariationSequence(
+  chars: readonly string[],
+  index: number,
+): boolean {
+  if (index + 1 >= chars.length) {
+    return false;
+  }
+  return (
+    isEmojiCodePoint(codePointAt(chars[index])) &&
+    isVariationSelector(codePointAt(chars[index + 1]))
+  );
+}
+
+function isEmojiJoinerSequence(
+  chars: readonly string[],
+  index: number,
+): boolean {
+  if (index + 2 >= chars.length) {
+    return false;
+  }
+  return (
+    isEmojiCodePoint(codePointAt(chars[index])) &&
+    isZeroWidthJoiner(codePointAt(chars[index + 1])) &&
+    isEmojiCodePoint(codePointAt(chars[index + 2]))
+  );
+}
+
+function isEmojiSequenceAt(chars: readonly string[], index: number): boolean {
+  if (isEmojiCodePoint(codePointAt(chars[index]))) {
+    return true;
+  }
+  if (isKeycapSequence(chars, index)) {
+    return true;
+  }
+  return (
+    isEmojiVariationSequence(chars, index) ||
+    isEmojiJoinerSequence(chars, index)
+  );
+}
+
 /**
  * Tests whether the given text contains at least one emoji code point.
  */
 function textContainsEmoji(text: string): boolean {
-  for (const char of text) {
-    if (isEmojiCodePoint(char.codePointAt(0) ?? 0)) {
+  const chars = Array.from(text);
+  for (let index = 0; index < chars.length; index++) {
+    if (isEmojiSequenceAt(chars, index)) {
       return true;
     }
   }
@@ -104,7 +189,13 @@ function textContainsEmoji(text: string): boolean {
 function stripEmojiCodePoints(text: string): string {
   let result = '';
   for (const char of text) {
-    if (!isEmojiCodePoint(char.codePointAt(0) ?? 0)) {
+    const codePoint = codePointAt(char);
+    if (
+      !isEmojiCodePoint(codePoint) &&
+      !isVariationSelector(codePoint) &&
+      !isZeroWidthJoiner(codePoint) &&
+      !isKeycapCombiningMark(codePoint)
+    ) {
       result += char;
     }
   }

@@ -20,7 +20,12 @@ export function isApiError(error: unknown): error is ApiError {
     return false;
   }
   const inner = (error as { error: unknown }).error;
-  return typeof inner === 'object' && inner !== null && 'message' in inner;
+  return (
+    typeof inner === 'object' &&
+    inner !== null &&
+    'message' in inner &&
+    typeof (inner as { message: unknown }).message === 'string'
+  );
 }
 
 export function isStructuredError(error: unknown): error is StructuredError {
@@ -85,9 +90,10 @@ function isGaxiosProQuotaExceededError(
   }
   if (typeof responseData === 'object' && 'error' in responseData) {
     const errorData = responseData as {
-      error?: { message?: string };
+      error?: { message?: unknown };
     };
-    return checkMessage(errorData.error?.message ?? '');
+    const message = errorData.error?.message;
+    return typeof message === 'string' && checkMessage(message);
   }
   return false;
 }
