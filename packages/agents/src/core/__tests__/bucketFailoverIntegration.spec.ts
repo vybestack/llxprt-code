@@ -18,6 +18,21 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 
+async function* throwingGenerator(
+  error: Error,
+  yieldInsteadOfThrow: boolean,
+): AsyncGenerator<IContent> {
+  if (yieldInsteadOfThrow) {
+    yield {} as IContent;
+    return;
+  }
+  throw error;
+}
+
+function createThrowingGenerator(error: Error): AsyncGenerator<IContent> {
+  return throwingGenerator(error, false);
+}
+
 describe('bucketFailoverIntegration', () => {
   describe('shouldEnableBucketFailover', () => {
     it('returns false when no auth config provided', () => {
@@ -154,10 +169,8 @@ describe('bucketFailoverIntegration', () => {
       };
 
       // First call throws 429, second succeeds
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        throw new Error('429 Rate limit exceeded');
-      }
+      const failGenerator = () =>
+        createThrowingGenerator(new Error('429 Rate limit exceeded'));
 
       async function* successGenerator() {
         yield responseContent;
@@ -195,10 +208,8 @@ describe('bucketFailoverIntegration', () => {
         blocks: [{ type: 'text', text: 'Success!' }],
       };
 
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        throw new Error('Quota exceeded for this bucket');
-      }
+      const failGenerator = () =>
+        createThrowingGenerator(new Error('Quota exceeded for this bucket'));
 
       async function* successGenerator() {
         yield responseContent;
@@ -220,10 +231,10 @@ describe('bucketFailoverIntegration', () => {
     });
 
     it('throws immediately on non-failover errors', async () => {
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        throw new Error('400 Bad Request - invalid parameter');
-      }
+      const failGenerator = () =>
+        createThrowingGenerator(
+          new Error('400 Bad Request - invalid parameter'),
+        );
 
       vi.mocked(mockProvider.generateChatCompletion).mockReturnValue(
         failGenerator(),
@@ -243,10 +254,8 @@ describe('bucketFailoverIntegration', () => {
     });
 
     it('throws comprehensive error when all buckets exhausted', async () => {
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        throw new Error('429 Rate limit exceeded');
-      }
+      const failGenerator = () =>
+        createThrowingGenerator(new Error('429 Rate limit exceeded'));
 
       vi.mocked(mockProvider.generateChatCompletion)
         .mockReturnValueOnce(failGenerator())
@@ -298,10 +307,8 @@ describe('bucketFailoverIntegration', () => {
         blocks: [{ type: 'text', text: 'Success!' }],
       };
 
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        throw new Error('402 Payment Required');
-      }
+      const failGenerator = () =>
+        createThrowingGenerator(new Error('402 Payment Required'));
 
       async function* successGenerator() {
         yield responseContent;
@@ -327,10 +334,8 @@ describe('bucketFailoverIntegration', () => {
         blocks: [{ type: 'text', text: 'Success!' }],
       };
 
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        throw new Error('OAuth token has expired');
-      }
+      const failGenerator = () =>
+        createThrowingGenerator(new Error('OAuth token has expired'));
 
       async function* successGenerator() {
         yield responseContent;
@@ -413,14 +418,11 @@ describe('bucketFailoverIntegration', () => {
         blocks: [{ type: 'text', text: 'Success!' }],
       };
 
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        const error = new Error(
-          'API Error: 403 {"type":"error","error":{"type":"permission_error","message":"OAuth token has been revoked."}}',
-        );
-        (error as { status?: number }).status = 403;
-        throw error;
-      }
+      const permissionError = new Error(
+        'API Error: 403 {"type":"error","error":{"type":"permission_error","message":"OAuth token has been revoked."}}',
+      );
+      (permissionError as { status?: number }).status = 403;
+      const failGenerator = () => createThrowingGenerator(permissionError);
 
       async function* successGenerator() {
         yield responseContent;
@@ -446,10 +448,8 @@ describe('bucketFailoverIntegration', () => {
         blocks: [{ type: 'text', text: 'Success!' }],
       };
 
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        throw new Error('OAuth token has been revoked');
-      }
+      const failGenerator = () =>
+        createThrowingGenerator(new Error('OAuth token has been revoked'));
 
       async function* successGenerator() {
         yield responseContent;
@@ -475,16 +475,14 @@ describe('bucketFailoverIntegration', () => {
         blocks: [{ type: 'text', text: 'Success!' }],
       };
 
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        // Simulate Anthropic's rate_limit_error response structure (body only, no HTTP 429)
-        const error = new Error('Rate limited');
-        (error as { error?: { type?: string; message?: string } }).error = {
-          type: 'rate_limit_error',
-          message: 'Rate limited',
-        };
-        throw error;
-      }
+      const rateLimitError = new Error('Rate limited');
+      (
+        rateLimitError as { error?: { type?: string; message?: string } }
+      ).error = {
+        type: 'rate_limit_error',
+        message: 'Rate limited',
+      };
+      const failGenerator = () => createThrowingGenerator(rateLimitError);
 
       async function* successGenerator() {
         yield responseContent;
@@ -511,16 +509,14 @@ describe('bucketFailoverIntegration', () => {
         blocks: [{ type: 'text', text: 'Success!' }],
       };
 
-      // eslint-disable-next-line require-yield
-      async function* failGenerator() {
-        // Simulate Anthropic's overloaded_error response structure
-        const error = new Error('Overloaded');
-        (error as { error?: { type?: string; message?: string } }).error = {
-          type: 'overloaded_error',
-          message: 'Overloaded',
-        };
-        throw error;
-      }
+      const overloadedError = new Error('Overloaded');
+      (
+        overloadedError as { error?: { type?: string; message?: string } }
+      ).error = {
+        type: 'overloaded_error',
+        message: 'Overloaded',
+      };
+      const failGenerator = () => createThrowingGenerator(overloadedError);
 
       async function* successGenerator() {
         yield responseContent;

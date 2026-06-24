@@ -10,6 +10,7 @@ import type { GenerateContentConfig } from '@google/genai';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   CompressionContext,
@@ -93,6 +94,20 @@ export class CompressionHandler {
       context: CompressionContext,
     ) => Promise<void>,
   ) {}
+  /**
+   * Runtime provider context, widened to include null/undefined for defensive
+   * runtime boundary guards. Provider runtime state may be absent during
+   * bootstrap and test doubles despite declared types.
+   */
+  private get providerRuntimeNullable():
+    | ProviderRuntimeContext
+    | null
+    | undefined {
+    return this.runtimeContext.providerRuntime as
+      | ProviderRuntimeContext
+      | null
+      | undefined;
+  }
 
   /**
    * Calculate effective token count based on reasoning settings.
@@ -168,8 +183,7 @@ export class CompressionHandler {
       const strategy = getCompressionStrategy(strategyName);
 
       // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
-      if (!strategy.optimize || strategy.trigger?.mode !== 'continuous') {
+      if (!strategy.optimize || strategy.trigger.mode !== 'continuous') {
         return;
       }
 
@@ -249,8 +263,7 @@ export class CompressionHandler {
         this.generationConfig,
         this.runtimeContext.state.model,
         undefined,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
-        this.runtimeContext.providerRuntime?.settingsService,
+        this.providerRuntimeNullable?.settingsService,
       ),
     );
     const effectiveLimit = Math.max(0, contextLimit - completionBudget);
@@ -376,8 +389,7 @@ export class CompressionHandler {
         this.generationConfig,
         this.runtimeContext.state.model,
         provider,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
-        this.runtimeContext.providerRuntime?.settingsService,
+        this.providerRuntimeNullable?.settingsService,
       ),
     );
     const userContextLimit = this.runtimeContext.ephemerals.contextLimit();
@@ -619,7 +631,7 @@ export class CompressionHandler {
       this.historyService.getStatistics().totalMessages;
     this.historyService.startCompression();
     let compressionSummary: IContent | undefined;
-    let compressionSucceeded = false;
+    const compressionState: { succeeded: boolean } = { succeeded: false };
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -636,7 +648,7 @@ export class CompressionHandler {
           }
           this.lastPromptTokenCount = null;
           compressionSummary = newHistory[0];
-          compressionSucceeded = true;
+          compressionState.succeeded = true;
         },
       );
     } finally {
@@ -648,8 +660,7 @@ export class CompressionHandler {
     }
 
     await this.historyService.waitForTokenUpdates();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
-    if (didCompress && compressionSucceeded) {
+    if (didCompress && compressionState.succeeded) {
       this.lastSuccessfulCompressionTime = Date.now();
       return PerformCompressionResult.COMPRESSED;
     }
@@ -808,8 +819,7 @@ export class CompressionHandler {
     }
 
     // Get config from runtimeContext for bucket failover handling
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
-    const config = this.runtimeContext.providerRuntime?.config;
+    const config = this.providerRuntimeNullable?.config;
 
     return {
       history: this.historyService.getCurated(),
@@ -830,8 +840,7 @@ export class CompressionHandler {
       promptId,
       ...(activeTodos ? { activeTodos } : {}),
       compressionVerification:
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
-        this.runtimeContext.ephemerals.compressionVerification?.() ?? false,
+        this.runtimeContext.ephemerals.compressionVerification(),
       ...(config ? { config } : {}),
     };
   }

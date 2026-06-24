@@ -97,6 +97,28 @@ export function adjustForToolCallBoundary(
 
   return index;
 }
+/**
+ * Checks whether the AI message has tool calls whose responses are not
+ * present in the given candidate history slice.
+ */
+function hasUnmatchedToolCalls(
+  aiMessage: IContent,
+  candidate: IContent[],
+): boolean {
+  const toolCalls = aiMessage.blocks.filter((b) => b.type === 'tool_call');
+  if (toolCalls.length === 0) {
+    return false;
+  }
+  return !toolCalls.every((call) =>
+    candidate.some(
+      (msg) =>
+        msg.speaker === 'tool' &&
+        msg.blocks.some(
+          (b) => b.type === 'tool_response' && b.callId === call.id,
+        ),
+    ),
+  );
+}
 
 /**
  * Search forward from the given index to find a valid split point that
@@ -115,26 +137,11 @@ export function findForwardValidSplitPoint(
 
   if (index > 0 && index < history.length) {
     const prev = history[index - 1];
-    if (prev.speaker === 'ai') {
-      const toolCalls = prev.blocks.filter((b) => b.type === 'tool_call');
-      if (toolCalls.length > 0) {
-        const keptHistory = history.slice(index);
-        const hasMatchingResponses = toolCalls.every((call) => {
-          const toolCall = call;
-          return keptHistory.some(
-            (msg) =>
-              msg.speaker === 'tool' &&
-              msg.blocks.some(
-                (b) => b.type === 'tool_response' && b.callId === toolCall.id,
-              ),
-          );
-        });
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!hasMatchingResponses) {
-          return index - 1;
-        }
-      }
+    if (
+      prev.speaker === 'ai' &&
+      hasUnmatchedToolCalls(prev, history.slice(index))
+    ) {
+      return index - 1;
     }
   }
 
@@ -151,41 +158,38 @@ export function findBackwardValidSplitPoint(
   history: IContent[],
   startIndex: number,
 ): number {
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
   for (let i = startIndex - 1; i >= 0; i--) {
-    const current = history[i];
-
-    if (current.speaker === 'tool') {
-      continue;
+    const splitPoint = findSplitPointAt(history, i);
+    if (splitPoint.found) {
+      return splitPoint.value;
     }
-
-    if (current.speaker === 'ai') {
-      const toolCalls = current.blocks.filter((b) => b.type === 'tool_call');
-      if (toolCalls.length > 0) {
-        const remainingHistory = history.slice(i + 1);
-        const allCallsHaveResponses = toolCalls.every((call) => {
-          const toolCall = call;
-          return remainingHistory.some(
-            (msg) =>
-              msg.speaker === 'tool' &&
-              msg.blocks.some(
-                (b) => b.type === 'tool_response' && b.callId === toolCall.id,
-              ),
-          );
-        });
-
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (allCallsHaveResponses) {
-          return i + 1;
-        }
-        continue;
-      }
-    }
-
-    return i + 1;
   }
 
   return startIndex;
+}
+
+function findSplitPointAt(
+  history: IContent[],
+  i: number,
+): { found: boolean; value: number } {
+  const current = history[i];
+
+  if (current.speaker === 'tool') {
+    return { found: false, value: -1 };
+  }
+
+  if (current.speaker === 'ai') {
+    const toolCalls = current.blocks.filter((b) => b.type === 'tool_call');
+    if (toolCalls.length > 0) {
+      const remainingHistory = history.slice(i + 1);
+      if (!hasUnmatchedToolCalls(current, remainingHistory)) {
+        return { found: true, value: i + 1 };
+      }
+      return { found: false, value: -1 };
+    }
+  }
+
+  return { found: true, value: i + 1 };
 }
 
 /**
@@ -339,15 +343,14 @@ export async function runVerificationPass(
  */
 export function mediaBlockToCompressionPlaceholder(media: MediaBlock): string {
   const category = classifyMediaBlock(media);
-  // Prefer caption first (for accessibility/context), then filename, then mimeType, then 'unknown'
-  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to next identifier */
+  const candidates = [
+    media.caption?.trim(),
+    media.filename?.trim(),
+    media.mimeType,
+  ];
   const identifier =
-    media.caption?.trim() ||
-    media.filename?.trim() ||
-    media.mimeType ||
+    candidates.find((c): c is string => c !== undefined && c.length > 0) ??
     'unknown';
-  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
-  // Capitalize PDF label for display, keep other categories as-is
   const label = category === 'pdf' ? 'PDF' : category;
   return `[Attached ${label}: ${identifier}]`;
 }

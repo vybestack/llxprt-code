@@ -65,16 +65,15 @@ async function* fireAfterHookAndEmitClearContext(
 function extractToolNamesFromRequest(request: PartListUnion): string[] {
   if (!Array.isArray(request)) return [];
   const names = new Set<string>();
-  for (const part of request) {
+  for (const rawPart of request) {
+    const part = rawPart as unknown;
     if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads may include null entries.
       part != null &&
       typeof part === 'object' &&
       'functionResponse' in part
     ) {
-      const funcResp = (part as { functionResponse: { name?: string } })
+      const funcResp = (part as { functionResponse?: { name?: string } })
         .functionResponse;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
       if (funcResp?.name) {
         names.add(funcResp.name);
       }

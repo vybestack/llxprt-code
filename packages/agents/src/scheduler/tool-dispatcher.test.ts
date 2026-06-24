@@ -7,6 +7,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ToolDispatcher } from './tool-dispatcher.js';
 import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
+import type {
+  ErroredToolCall,
+  ToolCall,
+  ValidatingToolCall,
+} from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type { ToolCallResponseInfo } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ToolGovernance } from '../core/toolGovernance.js';
 import {
   BaseDeclarativeTool,
@@ -153,6 +159,20 @@ function makeMockRegistry(tool?: MockTool | null) {
   };
 }
 
+function expectErrorResult(call: ToolCall): ErroredToolCall {
+  expect(call.status).toBe('error');
+  return call as ErroredToolCall;
+}
+
+function errorResponse(call: ToolCall): ToolCallResponseInfo {
+  return expectErrorResult(call).response;
+}
+
+function expectValidatingResult(call: ToolCall): ValidatingToolCall {
+  expect(call.status).toBe('validating');
+  return call as ValidatingToolCall;
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('ToolDispatcher', () => {
@@ -177,11 +197,10 @@ describe('ToolDispatcher', () => {
       expect(results).toHaveLength(1);
       const result = results[0];
       expect(result.status).toBe('error');
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (result.status !== 'error')
-        throw new Error('unreachable: narrowing failed');
-      expect(result.response.errorType).toBe(ToolErrorType.TOOL_NOT_REGISTERED);
-      expect(result.response.responseParts).toBeDefined();
+      expect(errorResponse(result).errorType).toBe(
+        ToolErrorType.TOOL_NOT_REGISTERED,
+      );
+      expect(errorResponse(result).responseParts).toBeDefined();
     });
 
     it('includes levenshtein suggestion in error message when tool name is close', () => {
@@ -198,10 +217,9 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (results[0].status !== 'error')
-        throw new Error('unreachable: narrowing failed');
-      const responseStr = JSON.stringify(results[0].response.responseParts);
+      const responseStr = JSON.stringify(
+        errorResponse(results[0]).responseParts,
+      );
       expect(responseStr).toContain('list_files');
     });
 
@@ -221,10 +239,9 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (results[0].status !== 'error')
-        throw new Error('unreachable: narrowing failed');
-      expect(results[0].response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
+      expect(errorResponse(results[0]).errorType).toBe(
+        ToolErrorType.TOOL_DISABLED,
+      );
     });
 
     // Issue #2069: explicit empty allowlist (tools.allowed=[]) must block all
@@ -247,10 +264,9 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (results[0].status !== 'error')
-        throw new Error('unreachable: narrowing failed');
-      expect(results[0].response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
+      expect(errorResponse(results[0]).errorType).toBe(
+        ToolErrorType.TOOL_DISABLED,
+      );
       // The tool must never have been resolved from the registry.
       expect(registry.getTool).not.toHaveBeenCalled();
     });
@@ -335,10 +351,7 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (results[0].status !== 'error')
-        throw new Error('unreachable: narrowing failed');
-      expect(results[0].response.errorType).toBe(
+      expect(errorResponse(results[0]).errorType).toBe(
         ToolErrorType.INVALID_TOOL_PARAMS,
       );
     });
@@ -373,12 +386,10 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('validating');
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (results[0].status !== 'validating')
-        throw new Error('unreachable: narrowing failed');
-      expect(results[0].tool).toBe(tool);
-      expect(results[0].invocation).toBeDefined();
-      expect(results[0].request.name).toBe('my_tool');
+      const validating = expectValidatingResult(results[0]);
+      expect(validating.tool).toBe(tool);
+      expect(validating.invocation).toBeDefined();
+      expect(validating.request.name).toBe('my_tool');
     });
 
     it('handles multiple requests mixing success and error', () => {
@@ -464,10 +475,9 @@ describe('ToolDispatcher', () => {
 
     it('wraps non-Error throws in an Error', () => {
       const tool = new MockTool('string_throw_tool');
-      // Override build to throw a string
+      const thrownString = 'just a string';
       vi.spyOn(tool, 'build').mockImplementation(() => {
-        // eslint-disable-next-line no-restricted-syntax
-        throw 'just a string';
+        throw thrownString;
       });
       const registry = makeMockRegistry(tool);
       const dispatcher = new ToolDispatcher(registry as never, config);

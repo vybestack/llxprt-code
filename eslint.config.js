@@ -148,17 +148,16 @@ const legacyDirectiveCleanupScopes = [
   'packages/core/src/utils/userAccountManager.ts', // remaining core cleanup after #2081/#2082
   // #2083 completed files are locked in completedDirectiveCleanupScopes below.
   // #2116: provider module entries removed after directive cleanup.
-  'packages/agents/src/**/*.{ts,tsx}', // #2085/#2090
+  // packages/agents/src is locked in completedDirectiveCleanupScopes (#2117).
   'packages/cli/src/**/*.{ts,tsx}', // #2086/#2091 (#2087 files locked in completedDirectiveCleanupScopes)
   'packages/policy/src/**/*.{ts,tsx}', // #2089 not yet decomposed
   'packages/storage/src/**/*.{ts,tsx}', // #2092
-  // #2089 scope: the six target packages (mcp/auth/settings/telemetry/
+  // #2089 scope: the six target packages (auth/settings/telemetry/
   // ide-integration/a2a-server) still contain other files with legacy
   // inline lint directives. Those packages are kept in legacy scope so
   // existing directives do not break lint. The target files and extracted
   // modules are locked in completedDirectiveCleanupScopes below, which
   // overrides this block for those specific files.
-  'packages/mcp/src/**/*.{ts,tsx}', // #2089/#2092 (non-target files)
   'packages/auth/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/settings/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/telemetry/src/**/*.{ts,tsx}', // #2089 (non-target files)
@@ -249,6 +248,10 @@ const completedDirectiveCleanupScopes = [
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
   // #2116: #2084 provider entries removed — covered by global rule block.
+  // #2118 scope — all remaining mcp source/test files are fully compliant:
+  // zero inline lint directives. Locked to error so any new directive fails
+  // immediately. The broad mcp legacy entry has been removed entirely.
+  'packages/mcp/src/**/*.{ts,tsx}', // #2118
   // #2087 scope — packages/cli UI hooks, components, utils, state, themes,
   // and Zed integration are fully compliant: zero inline lint directives.
   // Locked to error so any new directive fails immediately.
@@ -407,6 +410,10 @@ const completedDirectiveCleanupScopes = [
   'packages/agents/src/tools/task.issues.test.ts', // #2090
   'packages/agents/src/tools/task.max-turns.test.ts', // #2090
   'packages/agents/src/tools/task.timeout.test.ts', // #2090
+  // #2117 — all packages/agents/src files are now fully compliant: zero inline
+  // lint directives. The broad glob below supersedes the individual #2090
+  // entries above. Locked to error so any new directive fails immediately.
+  'packages/agents/src/**/*.{ts,tsx}', // #2117
   // #2091 packages/cli test cleanup — target files (and extracted helpers)
   // are fully compliant: zero inline lint directives. Locked to error so any
   // new directive fails immediately while the rest of packages/cli remains in
