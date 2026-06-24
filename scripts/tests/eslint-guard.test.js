@@ -5,8 +5,15 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import {
   checkDiff,
@@ -15,6 +22,41 @@ import {
   formatViolations,
   scanCoreDirectives,
 } from '../check-eslint-guard.js';
+
+const repoRoot = resolve(
+  join(fileURLToPath(new URL('.', import.meta.url)), '..', '..'),
+);
+
+function listTsFiles(dir) {
+  const results = [];
+  const entries = readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (
+      entry.isDirectory() &&
+      entry.name !== 'node_modules' &&
+      entry.name !== 'dist'
+    ) {
+      results.push(...listTsFiles(fullPath));
+    } else if (
+      entry.isFile() &&
+      (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
+    ) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+function extractScopeArray(keyName) {
+  const configPath = join(repoRoot, 'eslint.config.js');
+  const source = readFileSync(configPath, 'utf8');
+  const match = source.match(
+    new RegExp(String.raw`const\s+${keyName}\s*=\s*\[([\s\S]*?)\]`),
+  );
+  if (!match) return [];
+  return [...match[1].matchAll(/['"`]([^'"`]+)['"`]/g)].map((m) => m[1]);
+}
 
 function diffFor(file, addedLine) {
   return [
