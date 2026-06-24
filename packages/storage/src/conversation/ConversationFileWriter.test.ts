@@ -36,6 +36,31 @@ async function createTempDir(prefix = 'cfw-test-'): Promise<string> {
   return fsp.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
+function restoreEnvValue(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
+async function withTempHome<T>(
+  action: (tmpHome: string) => Promise<T>,
+): Promise<T> {
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
+  const tmpHome = await createTempDir('cfw-home-');
+  process.env.HOME = tmpHome;
+  process.env.USERPROFILE = tmpHome;
+  try {
+    return await action(tmpHome);
+  } finally {
+    restoreEnvValue('HOME', originalHome);
+    restoreEnvValue('USERPROFILE', originalUserProfile);
+    await fsp.rm(tmpHome, { recursive: true, force: true });
+  }
+}
+
 /**
  * Creates a real StorageLogger that records calls to observable arrays.
  * NOT vi.fn() mock theater.
@@ -258,15 +283,28 @@ describe('ConversationFileWriter — Singleton Reuse', () => {
 // ─── Zero-Arg Backward Compat (Scenario 5) ──────────────────────────────────
 
 describe('ConversationFileWriter — Zero-Arg Backward Compat', () => {
-  it('constructs without error and resolves logPath including .llxprt and conversations', () => {
-    // Approach B: Test zero-arg construction verifies the instance is created
-    // and the path includes .llxprt/conversations, without actually writing.
-    const writer = new ConversationFileWriter();
-    // Access the private logPath via reflection to verify the resolved path
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resolvedPath = (writer as any).logPath as string;
-    expect(resolvedPath).toContain('.llxprt');
-    expect(resolvedPath).toContain('conversations');
+  it('constructs without error and writes to the default .llxprt conversations path', async () => {
+    await withTempHome(async (tmpHome) => {
+      const writer = new ConversationFileWriter();
+      writer.writeEntry({ type: 'probe' });
+
+      const lines = await readJsonlLines(
+        path.join(tmpHome, '.llxprt', 'conversations'),
+      );
+      expect(lines[0].type).toBe('probe');
+    });
+  });
+
+  it('treats an empty log path as a request for the default path', async () => {
+    await withTempHome(async (tmpHome) => {
+      const writer = new ConversationFileWriter('');
+      writer.writeEntry({ type: 'empty-path-probe' });
+
+      const lines = await readJsonlLines(
+        path.join(tmpHome, '.llxprt', 'conversations'),
+      );
+      expect(lines[0].type).toBe('empty-path-probe');
+    });
   });
 });
 
