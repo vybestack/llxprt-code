@@ -229,3 +229,37 @@ describe('packages/agents directive cleanup (#2117)', () => {
     ).toEqual([]);
   });
 });
+
+describe('packages/settings directive cleanup (#2120)', () => {
+  const settingsSrcDir = join(repoRoot, 'packages', 'settings', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const directiveRe = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
+    const offenders = [];
+    for (const file of listTsFiles(settingsSrcDir)) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, idx) => {
+        if (directiveRe.test(line)) {
+          offenders.push(file.replace(repoRoot + '/', '') + ':' + (idx + 1));
+        }
+      });
+    }
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/settings/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const settingsEntries = legacy.filter((e) =>
+      e.startsWith('packages/settings'),
+    );
+    expect(
+      settingsEntries,
+      'Legacy settings entries: ' + settingsEntries.join(', '),
+    ).toEqual([]);
+  });
+});

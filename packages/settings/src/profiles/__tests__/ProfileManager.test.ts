@@ -343,3 +343,140 @@ describe('ProfileManager — save and load with SettingsService', () => {
     expect(providers.openai['auth-keyfile']).toBe('/roundtrip/keyfile');
   });
 });
+
+describe('ProfileManager — corrupted and malformed profile JSON', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('maps JSON null to invalid missing required fields (not raw TypeError)', async () => {
+    const filePath = path.join(tempDir, 'null-profile.json');
+    await fs.writeFile(filePath, 'null', 'utf8');
+
+    await expect(pm.loadProfile('null-profile')).rejects.toThrow(
+      "Profile 'null-profile' is invalid: missing required fields",
+    );
+  });
+
+  it('maps a JSON array to invalid missing required fields', async () => {
+    const filePath = path.join(tempDir, 'array-profile.json');
+    await fs.writeFile(filePath, '[1, 2, 3]', 'utf8');
+
+    await expect(pm.loadProfile('array-profile')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('maps a JSON number to invalid missing required fields', async () => {
+    const filePath = path.join(tempDir, 'number-profile.json');
+    await fs.writeFile(filePath, '42', 'utf8');
+
+    await expect(pm.loadProfile('number-profile')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('maps an empty JSON object to invalid missing required fields', async () => {
+    const filePath = path.join(tempDir, 'empty-profile.json');
+    await fs.writeFile(filePath, '{}', 'utf8');
+
+    await expect(pm.loadProfile('empty-profile')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+});
+
+describe('ProfileManager — malformed loadbalancer profile shapes', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('reports unsupported version for a loadbalancer with version 2 and no profiles', async () => {
+    const filePath = path.join(tempDir, 'lb-v2.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({ type: 'loadbalancer', version: 2 }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-v2')).rejects.toThrow(
+      'unsupported profile version',
+    );
+  });
+
+  it('reports unsupported version for a loadbalancer with version 2 and valid profiles', async () => {
+    const filePath = path.join(tempDir, 'lb-v2-profiles.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: 'loadbalancer',
+        version: 2,
+        profiles: ['p1'],
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-v2-profiles')).rejects.toThrow(
+      'unsupported profile version',
+    );
+  });
+
+  it('reports missing profiles for a version-1 loadbalancer without profiles', async () => {
+    const filePath = path.join(tempDir, 'lb-no-profiles.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({ type: 'loadbalancer', version: 1 }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-no-profiles')).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('reports missing profiles for a version-1 loadbalancer with empty profiles array', async () => {
+    const filePath = path.join(tempDir, 'lb-empty-profiles.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: 'loadbalancer',
+        version: 1,
+        profiles: [],
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-empty-profiles')).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('reports unsupported version (not missing profiles) when version is 2 and profiles is missing', async () => {
+    const filePath = path.join(tempDir, 'lb-v2-missing-profiles.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({ type: 'loadbalancer', version: 2 }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-v2-missing-profiles')).rejects.toThrow(
+      'unsupported profile version',
+    );
+  });
+});

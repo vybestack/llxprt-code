@@ -41,7 +41,7 @@ describe('SettingsService — global reads and writes', () => {
   it('overwrites a previously set value', () => {
     const svc = new SettingsService();
     svc.set('shell-replacement', 'none');
-    // eslint-disable-next-line sonarjs/no-element-overwrite -- intentionally testing value overwrite
+    expect(svc.get('shell-replacement')).toBe('none');
     svc.set('shell-replacement', 'all');
     expect(svc.get('shell-replacement')).toBe('all');
   });

@@ -68,6 +68,74 @@ function optionalPromptCaching(
     : undefined;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validateLoadBalancerShape(
+  name: string,
+  profile: unknown,
+): LoadBalancerProfile {
+  if (!isPlainObject(profile)) {
+    throw new Error(
+      `LoadBalancer profile '${name}' must reference at least one profile`,
+    );
+  }
+  const record = profile;
+  if (record.version !== 1) {
+    throw new Error('unsupported profile version');
+  }
+  const profilesField = record.profiles;
+  if (
+    profilesField === null ||
+    profilesField === undefined ||
+    !Array.isArray(profilesField) ||
+    profilesField.length === 0
+  ) {
+    throw new Error(
+      `LoadBalancer profile '${name}' must reference at least one profile`,
+    );
+  }
+  return profile as unknown as LoadBalancerProfile;
+}
+
+function isMissingVersion(version: unknown): boolean {
+  if (version === null || version === undefined) {
+    return true;
+  }
+  if (version === 0 || version === false) {
+    return true;
+  }
+  if (typeof version === 'number' && Number.isNaN(version)) {
+    return true;
+  }
+  return false;
+}
+
+function hasStandardProfileFields(record: Record<string, unknown>): boolean {
+  if (isMissingVersion(record.version)) {
+    return false;
+  }
+  const provider = record.provider;
+  if (typeof provider !== 'string' || provider === '') {
+    return false;
+  }
+  const model = record.model;
+  if (typeof model !== 'string' || model === '') {
+    return false;
+  }
+  if (record.modelParams === null || record.modelParams === undefined) {
+    return false;
+  }
+  if (
+    record.ephemeralSettings === null ||
+    record.ephemeralSettings === undefined
+  ) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Manages saving and loading of configuration profiles.
  * Profiles are stored in ~/.llxprt/profiles/<profileName>.json
@@ -80,8 +148,9 @@ export class ProfileManager {
    */
   constructor(profilesDir?: string) {
     this.profilesDir =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should use default path
-      profilesDir || path.join(os.homedir(), '.llxprt', 'profiles');
+      profilesDir !== undefined && profilesDir !== ''
+        ? profilesDir
+        : path.join(os.homedir(), '.llxprt', 'profiles');
   }
 
   /**
@@ -104,17 +173,7 @@ export class ProfileManager {
     name: string,
     profile: LoadBalancerProfile,
   ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (profile.version !== 1) {
-      throw new Error('unsupported profile version');
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (profile.profiles == null || profile.profiles.length === 0) {
-      throw new Error(
-        `LoadBalancer profile '${name}' must reference at least one profile`,
-      );
-    }
+    validateLoadBalancerShape(name, profile);
 
     const availableProfiles = await this.listProfiles();
 
@@ -157,17 +216,7 @@ export class ProfileManager {
     profileName: string,
     profile: LoadBalancerProfile,
   ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (profile.version !== 1) {
-      throw new Error('unsupported profile version');
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-    if (profile.profiles == null || profile.profiles.length === 0) {
-      throw new Error(
-        `LoadBalancer profile '${profileName}' must reference at least one profile`,
-      );
-    }
+    validateLoadBalancerShape(profileName, profile);
 
     const availableProfiles = await this.listProfiles();
 
@@ -207,40 +256,35 @@ export class ProfileManager {
     try {
       const content = await fs.readFile(filePath, 'utf8');
 
-      const profile = JSON.parse(content) as Profile;
-
-      if (isLoadBalancerProfile(profile)) {
-        await this.validateLoadBalancerReferences(profileName, profile);
-        return profile;
-      }
-
-      const profileRecord = profile as unknown as Record<string, unknown>;
-      const profileVersion = profileRecord.version;
-      const profileProvider = profileRecord.provider;
-      const profileModel = profileRecord.model;
+      const parsed: unknown = JSON.parse(content);
 
       if (
-        // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        profileVersion == null ||
-        profileVersion === 0 ||
-        (typeof profileVersion === 'number' && Number.isNaN(profileVersion)) ||
-        profileVersion === false ||
-        typeof profileProvider !== 'string' ||
-        profileProvider === '' ||
-        typeof profileModel !== 'string' ||
-        profileModel === '' ||
-        profileRecord.modelParams == null ||
-        profileRecord.ephemeralSettings == null
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed)
       ) {
         throw new Error('missing required fields');
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
-      if (profile.version !== 1) {
+      const profileRecord = parsed as Record<string, unknown>;
+
+      if (profileRecord.type === 'loadbalancer') {
+        await this.validateLoadBalancerReferences(
+          profileName,
+          parsed as LoadBalancerProfile,
+        );
+        return parsed as Profile;
+      }
+
+      if (!hasStandardProfileFields(profileRecord)) {
+        throw new Error('missing required fields');
+      }
+
+      if (profileRecord.version !== 1) {
         throw new Error('unsupported profile version');
       }
 
-      return profile;
+      return parsed as Profile;
     } catch (error) {
       if (error instanceof Error && error.message.includes('ENOENT')) {
         throw new Error(`Profile '${profileName}' not found`);
@@ -373,6 +417,27 @@ export class ProfileManager {
     providers: Record<string, unknown>;
     tools: { allowed: unknown[]; disabled: unknown[] };
   } {
+    const ephemeral = profile.ephemeralSettings as unknown as Record<
+      string,
+      unknown
+    >;
+
+    const allowedValue = ephemeral['tools.allowed'];
+    const allowedTools = Array.isArray(allowedValue)
+      ? [...(allowedValue as unknown[])]
+      : [];
+
+    const disabledValue = ephemeral['tools.disabled'];
+    const legacyDisabled = ephemeral['disabled-tools'];
+    let disabledTools: unknown[];
+    if (Array.isArray(disabledValue)) {
+      disabledTools = [...(disabledValue as unknown[])];
+    } else if (Array.isArray(legacyDisabled)) {
+      disabledTools = [...(legacyDisabled as unknown[])];
+    } else {
+      disabledTools = [];
+    }
+
     return {
       defaultProvider: profile.provider,
       providers: {
@@ -391,15 +456,8 @@ export class ProfileManager {
         },
       },
       tools: {
-        allowed: Array.isArray(profile.ephemeralSettings['tools.allowed'])
-          ? [...profile.ephemeralSettings['tools.allowed']]
-          : [],
-        disabled: Array.isArray(profile.ephemeralSettings['tools.disabled'])
-          ? [...profile.ephemeralSettings['tools.disabled']]
-          : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            Array.isArray(profile.ephemeralSettings['disabled-tools'])
-            ? [...profile.ephemeralSettings['disabled-tools']]
-            : [],
+        allowed: allowedTools,
+        disabled: disabledTools,
       },
     };
   }

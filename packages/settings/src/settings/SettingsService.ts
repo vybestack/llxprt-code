@@ -7,9 +7,6 @@
 
 import { EventEmitter } from 'events';
 
-/**
- * In-memory ephemeral settings structure
- */
 interface EphemeralSettings {
   providers: Record<string, Record<string, unknown>>;
   global: Record<string, unknown>;
@@ -38,6 +35,25 @@ type SettingsEventListener =
   | ((event: ProviderSettingsChangeEvent) => void)
   | (() => void)
   | ((...args: unknown[]) => void);
+
+function isProviderSettingsRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value !== 'object') {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return false;
+  }
+  return true;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((name) => String(name)) : [];
+}
 
 export class SettingsService extends EventEmitter {
   private settings: EphemeralSettings;
@@ -95,31 +111,15 @@ export class SettingsService extends EventEmitter {
 
   getProviderSettings(provider: string): Record<string, unknown> {
     const entry = this.settings.providers[provider] as unknown;
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      entry !== null &&
-      entry !== undefined &&
-      entry !== false &&
-      entry !== 0 &&
-      entry !== '' &&
-      !(typeof entry === 'number' && Number.isNaN(entry))
-    ) {
-      return entry as Record<string, unknown>;
+    if (isProviderSettingsRecord(entry)) {
+      return entry;
     }
     return {};
   }
 
   setProviderSetting(provider: string, key: string, value: unknown): void {
     const entry = this.settings.providers[provider] as unknown;
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      entry === null ||
-      entry === undefined ||
-      entry === false ||
-      entry === 0 ||
-      entry === '' ||
-      (typeof entry === 'number' && Number.isNaN(entry))
-    ) {
+    if (!isProviderSettingsRecord(entry)) {
       this.settings.providers[provider] = {};
     }
 
@@ -165,12 +165,11 @@ export class SettingsService extends EventEmitter {
 
   private getNestedValue(obj: unknown, key: string): unknown {
     const keys = key.split('.');
-    let current = obj as Record<string, unknown>;
+    let current: unknown = obj;
 
     for (const k of keys) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Settings values cross persisted/plugin boundaries despite declared types.
-      if (current !== null && typeof current === 'object' && k in current) {
-        current = current[k] as Record<string, unknown>;
+      if (isProviderSettingsRecord(current) && k in current) {
+        current = current[k];
       } else {
         return undefined;
       }
@@ -186,7 +185,6 @@ export class SettingsService extends EventEmitter {
   ): void {
     const keys = key.split('.');
 
-    // Security: Check for dangerous keys that can pollute prototypes
     const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
     for (const k of keys) {
       if (dangerousKeys.includes(k)) {
@@ -198,11 +196,8 @@ export class SettingsService extends EventEmitter {
 
     for (let i = 0; i < keys.length - 1; i++) {
       const k = keys[i];
-      if (
-        current[k] === null ||
-        current[k] === undefined ||
-        typeof current[k] !== 'object'
-      ) {
+      const next = current[k];
+      if (!isProviderSettingsRecord(next)) {
         current[k] = {};
       }
       current = current[k] as Record<string, unknown>;
@@ -262,28 +257,17 @@ export class SettingsService extends EventEmitter {
     provider: string,
     changes: Record<string, unknown>,
   ): Promise<void>;
-  updateSettings(
-    providerOrChanges?: string | Record<string, unknown>,
-    changes?: Record<string, unknown>,
-  ): Promise<void> {
-    const runtimeChanges = changes as
-      | Record<string, unknown>
-      | null
-      | undefined;
-    if (
-      typeof providerOrChanges === 'string' &&
-      runtimeChanges !== undefined &&
-      runtimeChanges !== null
-    ) {
-      for (const [key, value] of Object.entries(runtimeChanges)) {
-        this.setProviderSetting(providerOrChanges, key, value);
+  updateSettings(providerOrChanges: unknown, changes?: unknown): Promise<void> {
+    if (typeof providerOrChanges === 'string') {
+      if (isProviderSettingsRecord(changes)) {
+        const runtimeChanges: Record<string, unknown> = changes;
+        for (const [key, value] of Object.entries(runtimeChanges)) {
+          this.setProviderSetting(providerOrChanges, key, value);
+        }
       }
-    } else if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Settings values cross persisted/plugin boundaries despite declared types.
-      providerOrChanges !== null &&
-      typeof providerOrChanges === 'object'
-    ) {
-      for (const [key, value] of Object.entries(providerOrChanges)) {
+    } else if (isProviderSettingsRecord(providerOrChanges)) {
+      const globalChanges: Record<string, unknown> = providerOrChanges;
+      for (const [key, value] of Object.entries(globalChanges)) {
         this.set(key, value);
       }
     }
@@ -296,12 +280,15 @@ export class SettingsService extends EventEmitter {
   }
 
   exportForProfile() {
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty activeProvider string should fall through to default */
-    const activeProvider =
-      (this.settings.global.activeProvider as string) ||
-      this.settings.activeProvider ||
-      'openai';
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    const globalActive = this.settings.global.activeProvider;
+    let activeProvider: string;
+    if (typeof globalActive === 'string' && globalActive !== '') {
+      activeProvider = globalActive;
+    } else if (this.settings.activeProvider !== null) {
+      activeProvider = this.settings.activeProvider;
+    } else {
+      activeProvider = 'openai';
+    }
 
     const allowedValue = this.get('tools.allowed');
     const disabledValue = this.get('tools.disabled');
@@ -310,12 +297,15 @@ export class SettingsService extends EventEmitter {
     const allowedTools = Array.isArray(allowedValue)
       ? (allowedValue as string[]).slice()
       : [];
-    const disabledTools = Array.isArray(disabledValue)
-      ? (disabledValue as string[]).slice()
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        Array.isArray(legacyDisabled)
-        ? (legacyDisabled as string[]).slice()
-        : [];
+
+    let disabledTools: string[];
+    if (Array.isArray(disabledValue)) {
+      disabledTools = (disabledValue as string[]).slice();
+    } else if (Array.isArray(legacyDisabled)) {
+      disabledTools = (legacyDisabled as string[]).slice();
+    } else {
+      disabledTools = [];
+    }
 
     return Promise.resolve({
       defaultProvider: activeProvider,
@@ -330,11 +320,7 @@ export class SettingsService extends EventEmitter {
   importFromProfile(profileData: unknown) {
     this.settings.providers = {};
 
-    if (
-      profileData !== null &&
-      profileData !== undefined &&
-      typeof profileData === 'object'
-    ) {
+    if (isProviderSettingsRecord(profileData)) {
       const data = profileData as {
         defaultProvider?: string;
         providers?: Record<string, Record<string, unknown>>;
@@ -350,24 +336,11 @@ export class SettingsService extends EventEmitter {
       }
 
       if (data.providers) {
-        for (const [provider, settings] of Object.entries(data.providers)) {
-          // eslint-disable-next-line sonarjs/nested-control-flow, @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Existing nested import path handles persisted/plugin settings across declared types.
-          if (settings !== null && typeof settings === 'object') {
-            for (const [key, value] of Object.entries(settings)) {
-              this.setProviderSetting(provider, key, value);
-            }
-          }
-        }
+        this.importProviderEntries(data.providers);
       }
 
-      const toolsAllowed = Array.isArray(data.tools?.allowed)
-        ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
-          (data.tools?.allowed as unknown[]).map((name) => String(name))
-        : [];
-      const toolsDisabled = Array.isArray(data.tools?.disabled)
-        ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
-          (data.tools?.disabled as unknown[]).map((name) => String(name))
-        : [];
+      const toolsAllowed = asStringArray(data.tools?.allowed);
+      const toolsDisabled = asStringArray(data.tools?.disabled);
 
       this.settings.tools = this.settings.tools ?? {};
       (this.settings.tools as Record<string, unknown>)['allowed'] =
@@ -382,6 +355,17 @@ export class SettingsService extends EventEmitter {
     }
 
     return Promise.resolve();
+  }
+
+  private importProviderEntries(providers: Record<string, unknown>): void {
+    for (const [provider, settings] of Object.entries(providers)) {
+      if (isProviderSettingsRecord(settings)) {
+        const providerSettings: Record<string, unknown> = settings;
+        for (const [key, value] of Object.entries(providerSettings)) {
+          this.setProviderSetting(provider, key, value);
+        }
+      }
+    }
   }
 
   setCurrentProfileName(profileName: string | null): void {
