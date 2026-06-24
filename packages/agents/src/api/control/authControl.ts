@@ -17,12 +17,15 @@ import type {
   AgentAuthControl,
   AgentAuthKeysControl,
   AuthBucket,
+  AuthBucketStatus,
+  AuthProviderDetail,
   AuthStatus,
 } from '../agent.js';
 import type { OAuthPromptHandler } from '../config-types.js';
 import type { AgentAuthState } from './authState.js';
 import { AuthKeysControl } from './authKeysControl.js';
 import type { AuthKeysControlDeps } from './authKeysControl.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
 /**
  * Callback bundle injected by AgentImpl so AuthControl can read/mutate the
@@ -52,6 +55,9 @@ export interface AuthControlDeps {
   readonly setBaseUrl: (baseUrl: string | null) => Promise<void>;
   /** The deps bundle for the constructed AuthKeysControl. */
   readonly keysDeps: AuthKeysControlDeps;
+  // @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+  /** Resolves the live OAuthManager (already on AgentDeps). Never cached. */
+  readonly getOAuthManager: () => OAuthManager;
 }
 
 /**
@@ -249,5 +255,58 @@ export class AuthControl implements AgentAuthControl {
       active: true,
     };
     this.deps.authState.buckets.set(provider, [defaultBucket]);
+  }
+
+  /**
+   * Masked detailed auth state: authenticated + oauthEnabled + (gated) expiry.
+   * Reads expiry ONLY from peekStoredToken (no refresh) and ONLY when
+   * authenticated is true. NEVER copies the token secret strings (R-NO-RAW-SECRETS).
+   * @plan:PLAN-20260622-COREAPIGAP.P12
+   * @requirement:REQ-005
+   * @pseudocode lines 1-17
+   */
+  async detailedStatus(provider: string): Promise<AuthProviderDetail> {
+    const mgr = this.deps.getOAuthManager();
+    const oauthEnabled = mgr.isOAuthEnabled(provider);
+    const authenticated = await mgr.isAuthenticated(provider);
+    let expiry: number | undefined;
+    if (authenticated) {
+      const token = await mgr.peekStoredToken(provider);
+      if (token !== null) {
+        expiry = token.expiry;
+      }
+    }
+    return { provider, authenticated, oauthEnabled, expiry };
+  }
+
+  /**
+   * Read-through for the name of a higher-priority auth source (or null).
+   * Returns a source NAME, never a secret.
+   * @plan:PLAN-20260622-COREAPIGAP.P12
+   * @requirement:REQ-005
+   * @pseudocode lines 30-33
+   */
+  async getHigherPriorityAuth(provider: string): Promise<string | null> {
+    return this.deps.getOAuthManager().getHigherPriorityAuth(provider);
+  }
+
+  /**
+   * Projects per-bucket auth status to the four public fields only.
+   * @plan:PLAN-20260622-COREAPIGAP.P12
+   * @requirement:REQ-005
+   * @pseudocode lines 40-49
+   */
+  async listBucketStatuses(
+    provider: string,
+  ): Promise<readonly AuthBucketStatus[]> {
+    const raw = await this.deps
+      .getOAuthManager()
+      .getAuthStatusWithBuckets(provider);
+    return raw.map((b) => ({
+      bucket: b.bucket,
+      authenticated: b.authenticated,
+      expiry: b.expiry,
+      isSessionBucket: b.isSessionBucket,
+    }));
   }
 }
