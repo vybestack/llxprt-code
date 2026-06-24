@@ -597,74 +597,97 @@ type HistoryNavDeps = {
   buffer: TextBuffer;
 };
 
-const handleHistoryNavigation = (key: Key, deps: HistoryNavDeps): boolean => {
-  const {
-    shellModeActive,
-    shellPathCompletion,
-    shellHistory,
-    inputHistory,
-    buffer,
-  } = deps;
+const handleInputHistoryNavigation = (
+  key: Key,
+  deps: HistoryNavDeps,
+): boolean => {
+  const { inputHistory, buffer } = deps;
 
-  if (!shellModeActive) {
-    if (keyMatchers[Command.HISTORY_UP](key)) {
-      inputHistory.navigateUp();
+  if (keyMatchers[Command.HISTORY_UP](key)) {
+    inputHistory.navigateUp();
+    return true;
+  }
+  if (keyMatchers[Command.HISTORY_DOWN](key)) {
+    inputHistory.navigateDown();
+    return true;
+  }
+
+  const atFirstVisualRow =
+    buffer.allVisualLines.length === 1 ||
+    (buffer.visualCursor[0] === 0 && buffer.visualScrollRow === 0);
+  if (keyMatchers[Command.NAVIGATION_UP](key) && atFirstVisualRow) {
+    inputHistory.navigateUp();
+    return true;
+  }
+
+  const atLastVisualRow =
+    buffer.allVisualLines.length === 1 ||
+    buffer.visualCursor[0] === buffer.allVisualLines.length - 1;
+  if (keyMatchers[Command.NAVIGATION_DOWN](key) && atLastVisualRow) {
+    inputHistory.navigateDown();
+    return true;
+  }
+  return false;
+};
+
+const handleShellCompletionNavigation = (
+  key: Key,
+  deps: HistoryNavDeps,
+): boolean => {
+  const { shellPathCompletion } = deps;
+
+  if (shellPathCompletion.suggestions.length > 1) {
+    if (keyMatchers[Command.COMPLETION_UP](key)) {
+      shellPathCompletion.navigateUp();
       return true;
     }
-    if (keyMatchers[Command.HISTORY_DOWN](key)) {
-      inputHistory.navigateDown();
-      return true;
-    }
-    if (
-      keyMatchers[Command.NAVIGATION_UP](key) &&
-      (buffer.allVisualLines.length === 1 ||
-        (buffer.visualCursor[0] === 0 && buffer.visualScrollRow === 0))
-    ) {
-      inputHistory.navigateUp();
-      return true;
-    }
-    if (
-      keyMatchers[Command.NAVIGATION_DOWN](key) &&
-      (buffer.allVisualLines.length === 1 ||
-        buffer.visualCursor[0] === buffer.allVisualLines.length - 1)
-    ) {
-      inputHistory.navigateDown();
-      return true;
-    }
-  } else if (shellPathCompletion.showSuggestions) {
-    if (shellPathCompletion.suggestions.length > 1) {
-      if (keyMatchers[Command.COMPLETION_UP](key)) {
-        shellPathCompletion.navigateUp();
-        return true;
-      }
-      if (keyMatchers[Command.COMPLETION_DOWN](key)) {
-        shellPathCompletion.navigateDown();
-        return true;
-      }
-    }
-    if (key.name === 'tab') {
-      const idx =
-        shellPathCompletion.activeSuggestionIndex === -1
-          ? 0
-          : shellPathCompletion.activeSuggestionIndex;
-      if (idx < shellPathCompletion.suggestions.length) {
-        shellPathCompletion.handleAutocomplete(idx);
-      }
-      return true;
-    }
-  } else {
-    if (keyMatchers[Command.NAVIGATION_UP](key)) {
-      const prevCommand = shellHistory.getPreviousCommand();
-      if (prevCommand !== null) buffer.setText(prevCommand);
-      return true;
-    }
-    if (keyMatchers[Command.NAVIGATION_DOWN](key)) {
-      const nextCommand = shellHistory.getNextCommand();
-      if (nextCommand !== null) buffer.setText(nextCommand);
+    if (keyMatchers[Command.COMPLETION_DOWN](key)) {
+      shellPathCompletion.navigateDown();
       return true;
     }
   }
+  if (key.name === 'tab') {
+    const idx =
+      shellPathCompletion.activeSuggestionIndex === -1
+        ? 0
+        : shellPathCompletion.activeSuggestionIndex;
+    if (idx < shellPathCompletion.suggestions.length) {
+      shellPathCompletion.handleAutocomplete(idx);
+    }
+    return true;
+  }
   return false;
+};
+
+const handleShellHistoryNavigation = (
+  key: Key,
+  deps: HistoryNavDeps,
+): boolean => {
+  const { shellHistory, buffer } = deps;
+
+  if (keyMatchers[Command.NAVIGATION_UP](key)) {
+    const prevCommand = shellHistory.getPreviousCommand();
+    if (prevCommand !== null) buffer.setText(prevCommand);
+    return true;
+  }
+  if (keyMatchers[Command.NAVIGATION_DOWN](key)) {
+    const nextCommand = shellHistory.getNextCommand();
+    if (nextCommand !== null) buffer.setText(nextCommand);
+    return true;
+  }
+  return false;
+};
+
+const handleHistoryNavigation = (key: Key, deps: HistoryNavDeps): boolean => {
+  const { shellModeActive, shellPathCompletion } = deps;
+
+  if (!shellModeActive) {
+    return handleInputHistoryNavigation(key, deps);
+  }
+  if (shellPathCompletion.showSuggestions) {
+    return handleShellCompletionNavigation(key, deps);
+  }
+  return handleShellHistoryNavigation(key, deps);
 };
 
 type InputHandlerDeps = {
@@ -1624,22 +1647,29 @@ const useGhostTextLines = (
   );
 };
 
+const renderPromptPrefixSymbol = (
+  shellModeActive: boolean,
+  reverseSearchActive: boolean,
+): React.ReactNode => {
+  if (!shellModeActive) {
+    return '> ';
+  }
+  if (reverseSearchActive) {
+    return (
+      <Text color={theme.text.link} aria-label={SCREEN_READER_USER_PREFIX}>
+        (r:){' '}
+      </Text>
+    );
+  }
+  return '! ';
+};
+
 const renderPromptPrefix = (
   shellModeActive: boolean,
   reverseSearchActive: boolean,
 ): React.ReactNode => (
   <Text color={shellModeActive ? theme.status.warning : theme.text.accent}>
-    {shellModeActive ? (
-      reverseSearchActive ? (
-        <Text color={theme.text.link} aria-label={SCREEN_READER_USER_PREFIX}>
-          (r:){' '}
-        </Text>
-      ) : (
-        '! '
-      )
-    ) : (
-      '> '
-    )}
+    {renderPromptPrefixSymbol(shellModeActive, reverseSearchActive)}
   </Text>
 );
 
