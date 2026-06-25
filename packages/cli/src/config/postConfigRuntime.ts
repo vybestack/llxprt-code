@@ -375,6 +375,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
       'tool-format',
       'api-version',
       'custom-headers',
+      'socket-timeout',
       'shell-replacement',
       'authOnly',
     ];

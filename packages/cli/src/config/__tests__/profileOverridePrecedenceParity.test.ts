@@ -509,6 +509,21 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
     );
     expect(defaultProfileCall).toBeUndefined();
   });
+
+  it('applies socket-timeout from profile ephemeral settings without --provider', async () => {
+    const profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'local-model.gguf',
+      ephemeralSettings: {
+        'socket-timeout': 300000,
+      },
+    };
+
+    const config = await runConfig({}, ['--profile', JSON.stringify(profile)]);
+
+    expect(config.getEphemeralSetting('socket-timeout')).toBe(300000);
+  });
 });
 
 describe('profileOverridePrecedenceParity: CLI model override after provider switch', () => {

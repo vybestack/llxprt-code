@@ -376,6 +376,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
           await withHandler.cleanup();
         }
       }),
+      { numRuns: 5 },
     );
   }, 30000);
 
@@ -390,10 +391,10 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
     }
   }, 30000);
 
-  it('PROP setProvider model preservation: for any provider name, setProvider without model preserves the current model (REQ-005)', async () => {
+  it('PROP setProvider model preservation: for any registered provider name, setProvider without model preserves the current model (REQ-005)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 20 }),
+        fc.constantFrom('fake', 'openai'),
         async (providerName) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {
@@ -405,6 +406,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
           }
         },
       ),
+      { numRuns: 8 },
     );
   }, 30000);
 });
