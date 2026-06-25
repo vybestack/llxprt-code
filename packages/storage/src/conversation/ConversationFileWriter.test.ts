@@ -421,4 +421,23 @@ describe('ConversationFileWriter — Multiple Writes', () => {
       expect(lines[i].seq).toBe(i);
     }
   });
+
+  it('serializes concurrent un-awaited writes in invocation order', async () => {
+    // Concurrent writes fired without awaiting must still land on disk in the
+    // order they were invoked, matching the guarantee the synchronous
+    // implementation provided implicitly.
+    const writer = new ConversationFileWriter(tmpDir);
+    const promises: Array<Promise<void>> = [];
+    for (let i = 0; i < 50; i++) {
+      promises.push(writer.writeEntry({ type: 'concurrent', seq: i }));
+    }
+    await Promise.all(promises);
+
+    const lines = await readJsonlLines(tmpDir);
+    expect(lines).toHaveLength(50);
+    for (let i = 0; i < 50; i++) {
+      expect(lines[i].type).toBe('concurrent');
+      expect(lines[i].seq).toBe(i);
+    }
+  });
 });

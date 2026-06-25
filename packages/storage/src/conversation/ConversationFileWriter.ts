@@ -25,6 +25,7 @@ export class ConversationFileWriter {
   private logPath: string;
   private currentLogFile: string;
   private logger: StorageLogger;
+  private writeChain: Promise<void> = Promise.resolve();
 
   constructor(logPath?: string, logger?: StorageLogger) {
     this.logPath = resolveConversationLogPath(logPath);
@@ -36,6 +37,14 @@ export class ConversationFileWriter {
   }
 
   async writeEntry(entry: Record<string, unknown>): Promise<void> {
+    // Serialize writes through a per-instance chain so concurrent callers
+    // append in invocation order, preserving the guarantee the synchronous
+    // implementation had implicitly.
+    this.writeChain = this.writeChain.then(() => this.appendEntry(entry));
+    return this.writeChain;
+  }
+
+  private async appendEntry(entry: Record<string, unknown>): Promise<void> {
     try {
       const logEntry = {
         timestamp: new Date().toISOString(),
