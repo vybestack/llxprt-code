@@ -854,6 +854,28 @@ export class TokenAccessCoordinator {
   // forceRefreshToken - Force refresh when token is known to be revoked
   // --------------------------------------------------------------------------
 
+  /**
+   * Resolve the bucket a forced refresh must target. The auth-error path carries
+   * no bucket/profile context, so when the caller supplies no explicit bucket we
+   * resolve the active profile's session metadata and use the same
+   * scoped->profile->unscoped resolution as the normal token-resolution path,
+   * ensuring a 401 refreshes the bucket the request actually used (including
+   * profile/metadata-scoped session buckets) instead of defaulting to the global
+   * default bucket.
+   *
+   * @fix issue2131
+   */
+  private async resolveForceRefreshEffectiveBucket(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<string | undefined> {
+    if (typeof bucket === 'string' && bucket.trim() !== '') {
+      return bucket;
+    }
+    const metadata = await this.getCurrentProfileSessionMetadata(providerName);
+    return this.getCurrentProfileSessionBucket(providerName, metadata);
+  }
+
   private async acquireForceRefreshLock(
     providerName: string,
     bucket: string | undefined,
@@ -886,6 +908,9 @@ export class TokenAccessCoordinator {
    * @returns The new OAuth token, or null if refresh was not possible
    * @fix issue1861 - Token revocation handling
    * @fix issue2035 - Refresh on empty failed token (OAuth resolved below retry layer)
+   * @fix issue2131 - Resolve the active session/profile bucket so a 401 refreshes
+   *   the bucket the request actually used instead of always defaulting to the
+   *   global default bucket.
    */
   async forceRefreshToken(
     providerName: string,
@@ -905,12 +930,21 @@ export class TokenAccessCoordinator {
       return null;
     }
 
+    // @fix issue2131: refresh the bucket the active request used, not the
+    // global default bucket. When the caller supplies an explicit bucket, honor
+    // it; otherwise resolve the session/profile bucket so a 401 refreshes the
+    // token that actually failed.
+    const effectiveBucket = await this.resolveForceRefreshEffectiveBucket(
+      providerName,
+      bucket,
+    );
+
     // @fix issue2035: capture the baseline BEFORE acquiring the lock so the
     // TOCTOU comparison stays meaningful even when no failed token was supplied.
     const effectiveFailedToken = await resolveForceRefreshBaseline(
       providerName,
       failedAccessToken,
-      bucket,
+      effectiveBucket,
       this.tokenStore,
     );
     if (effectiveFailedToken === '') {
@@ -923,7 +957,7 @@ export class TokenAccessCoordinator {
 
     const lockAcquired = await this.acquireForceRefreshLock(
       providerName,
-      bucket,
+      effectiveBucket,
     );
     if (!lockAcquired) {
       return null;
@@ -933,7 +967,7 @@ export class TokenAccessCoordinator {
       const storedToken = await loadTokenForForceRefresh(
         providerName,
         effectiveFailedToken,
-        bucket,
+        effectiveBucket,
         this.tokenStore,
       );
       // @fix issue2035: if another process already refreshed the disk token,
@@ -952,7 +986,7 @@ export class TokenAccessCoordinator {
       const refreshedToken = await refreshStoredToken(
         providerName,
         storedToken,
-        bucket,
+        effectiveBucket,
         this.tokenStore,
         this.providerRegistry,
         this.proactiveRenewalManager,
@@ -968,7 +1002,7 @@ export class TokenAccessCoordinator {
       );
       return null;
     } finally {
-      await this.tokenStore.releaseRefreshLock(providerName, bucket);
+      await this.tokenStore.releaseRefreshLock(providerName, effectiveBucket);
     }
   }
 }
