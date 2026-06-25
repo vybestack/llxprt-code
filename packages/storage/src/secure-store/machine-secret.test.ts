@@ -242,23 +242,19 @@ describe('Machine Secret Provider', () => {
     expect(secret).toBeNull();
   });
 
-  it('returns null when keyring loader throws and file cannot be read', async () => {
+  it('returns null when keyring loader throws and file persistence cannot create the parent path', async () => {
+    const blockerFile = path.join(tempDir, 'blocker-for-loader-throw');
+    await fs.writeFile(blockerFile, 'x');
+    const impossiblePath = path.join(blockerFile, 'child', 'machine_secret');
     const options: MachineSecretOptions = {
-      filePath: path.join(tempDir, 'nonexistent', 'machine_secret'),
+      filePath: impossiblePath,
       keyringLoader: async () => {
         throw new Error('keyring exploded');
       },
     };
 
-    // Make the directory unwritable so persistence also fails
-    await fs.mkdir(tempDir, { recursive: true });
-    await fs.chmod(tempDir, 0o500);
-    try {
-      const secret = await getMachineSecret(options);
-      expect(secret).toBeNull();
-    } finally {
-      await fs.chmod(tempDir, 0o700);
-    }
+    const secret = await getMachineSecret(options);
+    expect(secret).toBeNull();
   });
 
   it('does not throw when keyringLoader returns null and generates+persists to file', async () => {
@@ -439,6 +435,41 @@ describe('Machine Secret Provider — Cache scoping', () => {
     // And should NOT accidentally be source A's value.
     expect(Buffer.compare(secretBReRead!, secretA!)).not.toBe(0);
   });
+
+  it('two injected keyring loaders using the same filePath keep separate cached secrets', async () => {
+    const sharedPath = path.join(tempDir, 'shared', 'machine_secret');
+    const keyringA = createMockKeyring();
+    const keyringB = createMockKeyring();
+    const secretA = crypto.randomBytes(32);
+    const secretB = crypto.randomBytes(32);
+    await keyringA.setPassword(
+      'llxprt-code-machine-secret',
+      'default',
+      secretA.toString('base64'),
+    );
+    await keyringB.setPassword(
+      'llxprt-code-machine-secret',
+      'default',
+      secretB.toString('base64'),
+    );
+
+    const optsA: MachineSecretOptions = {
+      filePath: sharedPath,
+      keyringLoader: async () => keyringA,
+    };
+    const optsB: MachineSecretOptions = {
+      filePath: sharedPath,
+      keyringLoader: async () => keyringB,
+    };
+
+    const resolvedA = await getMachineSecret(optsA);
+    const resolvedB = await getMachineSecret(optsB);
+
+    expect(resolvedA).not.toBeNull();
+    expect(resolvedB).not.toBeNull();
+    expect(Buffer.compare(resolvedA!, secretA)).toBe(0);
+    expect(Buffer.compare(resolvedB!, secretB)).toBe(0);
+  });
 });
 
 // ─── Existing file permission repair ────────────────────────────────────────
@@ -483,4 +514,45 @@ describe('Machine Secret Provider — Permission repair', () => {
       expect(stat.mode & 0o777).toBe(0o600);
     },
   );
+
+  it.skipIf(process.platform === 'win32')(
+    'pre-existing 0o777 parent directory is repaired to 0o700 before file acceptance',
+    async () => {
+      const preExisting = crypto.randomBytes(32);
+      await fs.mkdir(tempDir, { recursive: true, mode: 0o777 });
+      await fs.chmod(tempDir, 0o777);
+      await fs.writeFile(tempFilePath, preExisting.toString('base64'), {
+        mode: 0o600,
+      });
+
+      const options: MachineSecretOptions = {
+        filePath: tempFilePath,
+        keyringLoader: async () => null,
+      };
+
+      const secret = await getMachineSecret(options);
+
+      expect(secret).not.toBeNull();
+      expect(Buffer.compare(secret!, preExisting)).toBe(0);
+
+      const stat = await fs.stat(tempDir);
+      expect(stat.mode & 0o777).toBe(0o700);
+    },
+  );
+
+  it('invalid existing file degrades instead of rotating the machine secret', async () => {
+    await fs.mkdir(tempDir, { recursive: true });
+    await fs.writeFile(tempFilePath, 'not-a-valid-32-byte-secret');
+
+    const options: MachineSecretOptions = {
+      filePath: tempFilePath,
+      keyringLoader: async () => null,
+    };
+
+    const secret = await getMachineSecret(options);
+
+    expect(secret).toBeNull();
+    const onDisk = await fs.readFile(tempFilePath, 'utf8');
+    expect(onDisk).toBe('not-a-valid-32-byte-secret');
+  });
 });

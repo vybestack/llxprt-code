@@ -13,7 +13,7 @@
  * decryptable for backwards compatibility.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -275,6 +275,51 @@ describe('SecureStore — No v:2 downgrade on overwrite with unavailable secret'
     expect(recovered).toBe('original-value');
   });
 
+  it('v:2 overwrite attempt with unreadable existing envelope fails closed', async () => {
+    const provider = makeSecretProvider(FIXED_SECRET_A);
+    const writer = new SecureStore('test-service', {
+      keyringLoader: async () => null,
+      fallbackDir: tempDir,
+      fallbackPolicy: 'allow',
+      machineSecretLoader: provider.loader,
+      machineSecretPath,
+    });
+    await writer.set('read-error', 'original-value');
+
+    const filePath = path.join(tempDir, 'read-error.enc');
+    const beforeContent = await fs.readFile(filePath, 'utf8');
+    const readFailure = new Error('permission denied') as NodeJS.ErrnoException;
+    readFailure.code = 'EACCES';
+    const originalReadFile = fs.readFile.bind(fs);
+    const readFileSpy = vi.spyOn(fs, 'readFile').mockImplementation((async (
+      target: Parameters<typeof fs.readFile>[0],
+      options?: Parameters<typeof fs.readFile>[1],
+    ) => {
+      if (target === filePath) {
+        throw readFailure;
+      }
+      return originalReadFile(target, options);
+    }) as typeof fs.readFile);
+
+    try {
+      const degradedWriter = new SecureStore('test-service', {
+        keyringLoader: async () => null,
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        machineSecretLoader: nullSecretProvider().loader,
+        machineSecretPath,
+      });
+
+      await expect(
+        degradedWriter.set('read-error', 'new-value'),
+      ).rejects.toThrow('permission denied');
+    } finally {
+      readFileSpy.mockRestore();
+    }
+
+    const afterContent = await fs.readFile(filePath, 'utf8');
+    expect(afterContent).toBe(beforeContent);
+  });
   it('new file with unavailable secret still writes v:1 (no existing v:2 to protect)', async () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,

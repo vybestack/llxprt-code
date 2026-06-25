@@ -69,6 +69,11 @@ interface CacheEntry {
   inFlight: Promise<Buffer | null> | null;
 }
 
+type SecretReadResult =
+  | { status: 'found'; secret: Buffer }
+  | { status: 'missing' }
+  | { status: 'unusable' };
+
 /**
  * Cache scoped by durable source identity. The key is derived from the
  * resolved filePath plus whether a non-default (injected) keyring loader is
@@ -83,6 +88,23 @@ const cache = new Map<string, CacheEntry>();
  * path to avoid accidental collisions.
  */
 const DEFAULT_SOURCE_KEY = '__default__';
+const keyringLoaderIds = new WeakMap<
+  NonNullable<MachineSecretOptions['keyringLoader']>,
+  number
+>();
+let nextKeyringLoaderId = 1;
+
+function keyringLoaderIdOf(
+  loader: NonNullable<MachineSecretOptions['keyringLoader']>,
+): number {
+  const existing = keyringLoaderIds.get(loader);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const id = nextKeyringLoaderId++;
+  keyringLoaderIds.set(loader, id);
+  return id;
+}
 
 /**
  * Computes a durable cache key from the resolved options. Two option sets
@@ -93,14 +115,17 @@ const DEFAULT_SOURCE_KEY = '__default__';
 function sourceKeyOf(options?: MachineSecretOptions): string {
   const filePath = options?.filePath ?? Storage.getMachineSecretPath();
   const resolved = path.resolve(filePath);
-  // Injected keyring loaders represent a distinct durable source (e.g. an
-  // in-memory test keyring); they must not collide with production's
-  // default keyring-backed source.
-  const injected = options?.keyringLoader !== undefined;
-  if (!injected && resolved === path.resolve(Storage.getMachineSecretPath())) {
+  if (
+    options?.keyringLoader === undefined &&
+    resolved === path.resolve(Storage.getMachineSecretPath())
+  ) {
     return DEFAULT_SOURCE_KEY;
   }
-  return `file:${resolved}|injected:${injected ? '1' : '0'}`;
+  const keyringSource =
+    options?.keyringLoader === undefined
+      ? 'default'
+      : `injected:${keyringLoaderIdOf(options.keyringLoader)}`;
+  return `file:${resolved}|keyring:${keyringSource}`;
 }
 
 export function resetMachineSecretCache(): void {
@@ -146,21 +171,27 @@ async function resolveAndPersist(
   const keyring = await loadKeyring(keyringLoader);
 
   // 1. Try the keyring (preferred durable store).
-  let secret: Buffer | null = null;
+  let keyringRead: SecretReadResult = { status: 'missing' };
   if (keyring !== null) {
-    secret = await readFromKeyring(keyring);
+    keyringRead = await readFromKeyring(keyring);
+    if (keyringRead.status === 'found') {
+      return keyringRead.secret;
+    }
   }
 
   // 2. Try the file fallback.
-  secret ??= await readFromFile(filePath);
+  const fileRead = await readFromFile(filePath);
+  if (fileRead.status === 'found') {
+    return fileRead.secret;
+  }
+
+  if (keyringRead.status === 'unusable' || fileRead.status === 'unusable') {
+    return null;
+  }
 
   // 3. Nothing found — generate, persist, then RE-READ the winner so every
   //    concurrent caller converges on the durably persisted value.
-  if (secret === null) {
-    return generatePersistAndReread(keyring, filePath);
-  }
-
-  return secret;
+  return generatePersistAndReread(keyring, filePath);
 }
 
 /**
@@ -183,7 +214,7 @@ async function generatePersistAndReread(
       // Re-read the keyring winner in case a concurrent writer persisted a
       // different secret first.
       const winner = await readFromKeyring(keyring);
-      return winner ?? secret;
+      return winner.status === 'found' ? winner.secret : secret;
     }
   }
 
@@ -193,7 +224,7 @@ async function generatePersistAndReread(
   }
   // Re-read the file winner.
   const winner = await readFromFile(filePath);
-  return winner ?? secret;
+  return winner.status === 'found' ? winner.secret : secret;
 }
 
 async function loadKeyring(
@@ -208,35 +239,44 @@ async function loadKeyring(
 
 async function readFromKeyring(
   keyring: KeyringAdapter,
-): Promise<Buffer | null> {
+): Promise<SecretReadResult> {
   try {
     const stored = await keyring.getPassword(
       MACHINE_SECRET_SERVICE,
       MACHINE_SECRET_ACCOUNT,
     );
     if (stored === null) {
-      return null;
+      return { status: 'missing' };
     }
-    return decodeSecret(stored);
+    const decoded = decodeSecret(stored);
+    return decoded === null
+      ? { status: 'unusable' }
+      : { status: 'found', secret: decoded };
   } catch {
-    return null;
+    return { status: 'unusable' };
   }
 }
 
-async function readFromFile(filePath: string): Promise<Buffer | null> {
+async function readFromFile(filePath: string): Promise<SecretReadResult> {
   try {
     const content = await fs.readFile(filePath, 'utf8');
     const decoded = decodeSecret(content);
     if (decoded === null) {
-      return null;
+      return { status: 'unusable' };
+    }
+    if (!(await ensureSecureDirectory(path.dirname(filePath)))) {
+      return { status: 'unusable' };
     }
     // Repair permissions on existing files before accepting.
     if (!(await ensureSecurePermissions(filePath))) {
-      return null;
+      return { status: 'unusable' };
     }
-    return decoded;
-  } catch {
-    return null;
+    return { status: 'found', secret: decoded };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { status: 'missing' };
+    }
+    return { status: 'unusable' };
   }
 }
 
@@ -270,6 +310,24 @@ async function ensureSecurePermissions(filePath: string): Promise<boolean> {
   }
 }
 
+async function ensureSecureDirectory(dirPath: string): Promise<boolean> {
+  if (process.platform === 'win32') {
+    return true;
+  }
+  try {
+    const stat = await fs.stat(dirPath);
+    if (!stat.isDirectory()) {
+      return false;
+    }
+    const currentMode = stat.mode & 0o777;
+    if (currentMode !== 0o700) {
+      await fs.chmod(dirPath, 0o700);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 async function persistToKeyring(
   keyring: KeyringAdapter,
   encoded: string,
@@ -293,6 +351,9 @@ async function persistToFile(
   const dir = path.dirname(filePath);
   try {
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    if (!(await ensureSecureDirectory(dir))) {
+      return false;
+    }
   } catch {
     return false;
   }

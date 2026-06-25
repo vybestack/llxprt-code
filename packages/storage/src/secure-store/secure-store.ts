@@ -841,8 +841,11 @@ export class SecureStore {
     let content: string;
     try {
       content = await fs.readFile(filePath, 'utf8');
-    } catch {
-      return null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw error;
     }
     let parsed: unknown;
     try {
