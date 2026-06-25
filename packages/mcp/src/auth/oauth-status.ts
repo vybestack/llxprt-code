@@ -49,8 +49,7 @@ export async function getMcpServerOAuthStatus(
   } catch {
     return 'none';
   }
-  // @pseudocode 17-19 — required but no persisted creds ⇒ 'none'.
-  // getToken is typed MCPOAuthCredentials | null; the null check covers every absence case.
+  // @pseudocode 17-19 — required but no persisted creds ⇒ 'none'. getToken is typed MCPOAuthCredentials | null; the null check covers every absence case.
   if (credentials === null) {
     return 'none';
   }

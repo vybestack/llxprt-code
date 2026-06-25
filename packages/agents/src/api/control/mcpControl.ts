@@ -138,7 +138,6 @@ function mapDiscoveryState(
   if (state === MCPDiscoveryState.IN_PROGRESS) {
     return 'pending';
   }
-  // COMPLETED
   if (failures.size === 0) {
     return 'ready';
   }
@@ -371,8 +370,7 @@ export class McpControl implements AgentMcpControl {
     if (this.deps?.refreshClientTools !== undefined) {
       await this.deps.refreshClientTools();
     }
-    // Reconcile the per-agent auth marker so a later auth(server) / details()
-    // read agrees with this success (undefined-safe when no writer is wired).
+    // @pseudocode agents-projection.md 40-72 — reconcile the per-agent auth marker so a later auth(server)/details() read agrees with this success (undefined-safe when no writer is wired).
     this.deps?.markAuthenticated?.(server);
     return this.buildAuthStatus(server);
   }
@@ -393,12 +391,7 @@ export class McpControl implements AgentMcpControl {
     const includeTools = opts?.includeTools ?? true;
     const includePrompts = opts?.includePrompts ?? false;
     const includeResources = opts?.includeResources ?? false;
-    // details() projects the CONFIGURED server set (getServerConfigs ->
-    // config.getMcpServers()), mirroring the CLI `/mcp list` which lists
-    // configured + blocked servers. This intentionally differs from
-    // listServers(), which projects the LIVE discovered set
-    // (manager.getMcpServers()); a configured server absent from the live
-    // manager still appears here.
+    // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004
     const configs = this.deps?.getServerConfigs?.() ?? {};
     const toolsByServer = this.toolsByServer();
     const resourcesAll = includeResources

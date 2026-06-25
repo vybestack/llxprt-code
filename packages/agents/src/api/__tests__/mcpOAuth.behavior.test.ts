@@ -350,6 +350,33 @@ describe('agent.mcp OAuth + refresh parity + details @plan:PLAN-20260622-COREAPI
     expect(after.sessionAuthenticated).toBe(false);
   });
 
+  it('T14g authenticate("s") is undefined-safe when getManager() returns undefined: runs oauth then setTools with NO restart, does NOT throw, and returns the real authenticated status @requirement:REQ-006 @scenario:authenticate-manager-undefined-safe', async () => {
+    const callLog: string[] = [];
+    // Server IS configured with OAuth and performOAuth IS wired (so we pass the
+    // early no-op guard and actually run the flow), but the MCP manager is not
+    // yet initialized — getManager() returns undefined. The restart step must be
+    // SKIPPED (undefined-safe), NOT throw.
+    const deps = buildOrderingDeps(callLog, {
+      oauthStatusByServer: { s: 'authenticated' },
+      requiresAuthByServer: { s: true },
+      manager: undefined,
+      servers: {
+        s: fakeServerConfig({ oauth: { enabled: true }, httpUrl: 'https://x' }),
+      },
+    });
+    const control = new McpControl(deps);
+    const status = await control.authenticate('s');
+    expect(status).toStrictEqual({
+      server: 's',
+      authenticated: true,
+      requiresAuth: true,
+      oauthStatus: 'authenticated',
+      sessionAuthenticated: true,
+    });
+    // performOAuth ran and setTools ran, but NO restart (manager undefined).
+    expect(callLog).toStrictEqual(['oauth:s', 'setTools']);
+  });
+
   it('PROP for any server name present in configs, authenticate(name) makes the SAME name read sessionAuthenticated:true via auth() afterwards (reconciliation) @requirement:REQ-006 @scenario:prop-authenticate-reconciles', async () => {
     const nameArb = fc.constantFrom('srv-a', 'srv-b', 'srv-c', 'srv-d');
     const oauthStatusByServer: Record<string, McpOAuthStatus> = {

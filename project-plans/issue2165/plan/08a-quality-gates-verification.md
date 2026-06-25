@@ -38,8 +38,8 @@ run "build"     "npm run build"     build
 ( cd packages/mcp && npm run test:mutation > /tmp/v08_mcp_stryker.log 2>&1; echo "STRYKER_EXIT=$?"; \
   jq -r '[ .files[].mutants[].status ] as $all | ($all|map(select(.=="Killed" or .=="Timeout"))|length) as $d | ($all|map(select(.=="Killed" or .=="Timeout" or .=="Survived" or .=="NoCoverage"))|length) as $v | if $v==0 then 0 else ($d*100/$v) end' reports/mutation/mutation.json )
 
-# agents projection (scoped to mcpControl.ts)
-( cd packages/agents && npm run test:mutation:api > /tmp/v08_agents_stryker.log 2>&1; echo "STRYKER_EXIT=$?"; \
+# agents projection (scoped to mcpControl.ts via --mutate per LOCKED policy (a))
+( cd packages/agents && npm run test:mutation:api -- --mutate "src/api/control/mcpControl.ts" > /tmp/v08_agents_stryker.log 2>&1; echo "STRYKER_EXIT=$?"; \
   jq -r '(.files | to_entries[] | select(.key | endswith("control/mcpControl.ts")) | .value.mutants) as $m | ($m|map(select(.status=="Killed" or .status=="Timeout"))|length) as $d | ($m|map(select(.status=="Killed" or .status=="Timeout" or .status=="Survived" or .status=="NoCoverage"))|length) as $v | if $v==0 then 0 else ($d*100/$v) end' reports/mutation/mutation.json )
 ```
 
@@ -53,9 +53,15 @@ HONEST:
 - If P08 claims it was killed by a new behavioral case: open that test and confirm it
   asserts a REAL observable VALUE (not `toHaveBeenCalled` / spy / structural-only).
   A survivor "killed" by a mock-theater test is a FAIL.
-- If P08 claims equivalence: confirm the `// Stryker disable next-line` reason is
-  legitimate (genuinely unreachable / reordered-independent), not an excuse to dodge a
-  real assertion gap. A bogus equivalence claim is a FAIL.
+- If P08 claims equivalence: confirm the WRITTEN reason is legitimate (genuinely
+  unreachable / reordered-independent / killable only via private/internal/mock-call
+  assertion), not an excuse to dodge a real assertion gap. A bogus equivalence claim is
+  a FAIL. NOTE: the written reason lives in the P08.md marker prose, NOT as a
+  `// Stryker disable next-line` code comment — the N5 comment-discipline gate forbids
+  non-`@plan`/`@requirement`/`@pseudocode` code comments, so equivalences are
+  documented in the marker (this mirrors the accepted P06a precedent). Audit the
+  marker's per-survivor reasons against the live source; do NOT fail the phase merely
+  because no Stryker-disable code comment exists.
 - Confirm NO threshold in either `stryker.conf.json` was lowered (git diff the configs
   vs their introduction; `break` must remain `80`).
 

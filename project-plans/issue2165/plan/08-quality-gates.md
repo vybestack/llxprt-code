@@ -79,13 +79,18 @@ tail -30 /tmp/p08_mcp_stryker.log
 
 ## Mutation gate — `packages/agents` (mcpControl.ts, scoped)
 
-The agents Stryker config (`packages/agents/stryker.conf.json`) mutates
-`src/api/**/*.ts`. For THIS phase the in-scope logic-bearing file is `mcpControl.ts`;
-the new/changed projection must hit ≥80% on that file specifically.
+The agents Stryker config (`packages/agents/stryker.conf.json`) declares
+`src/api/**/*.ts`, but per LOCKED mutation policy (a) we mutate ONLY the
+logic-bearing file this phase changed — `mcpControl.ts` — via the `--mutate` CLI
+override (the same scoping P06a used). This keeps Stryker's own `break: 80` a
+PER-FILE gate on `mcpControl.ts`, excludes glue/barrels/wiring (`mcpControlWiring.ts`,
+`index.ts`, type-only `agent.ts`) per policy (a), and avoids re-mutating ~15 unrelated
+already-gated #2143 control files. The new/changed projection must hit ≥80% on
+`mcpControl.ts`.
 
 ```bash
 cd packages/agents
-npm run test:mutation:api > /tmp/p08_agents_stryker.log 2>&1; echo "STRYKER_EXIT=$?"
+npm run test:mutation:api -- --mutate "src/api/control/mcpControl.ts" > /tmp/p08_agents_stryker.log 2>&1; echo "STRYKER_EXIT=$?"
 # per-file score for the corrected projection
 jq -r '
   (.files | to_entries[] | select(.key | endswith("control/mcpControl.ts")) | .value.mutants) as $m
@@ -98,9 +103,8 @@ cd ../..
 
 - Survivors on `mcpControl.ts` → strengthen `mcpProjection.behavior.test.ts` /
   `mcpOAuth.behavior.test.ts` behaviorally, or annotate equivalents with reasons.
-- `mcpControlWiring.ts` (glue) is intentionally OUT of the mutate focus per policy (a)
-  — if the agents config includes it and it survives, that is acceptable provided the
-  in-scope `mcpControl.ts` meets the bar; note it in the marker.
+- `mcpControlWiring.ts` (glue) and `agent.ts` (type-only) are intentionally OUT of the
+  mutate focus per policy (a) and are excluded by the `--mutate` override above.
 
 ## N5 comment discipline (BLOCKING)
 
