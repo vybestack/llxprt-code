@@ -17,6 +17,8 @@ export type {
   MCPOAuthToken,
   MCPOAuthCredentials,
 } from './oauth-token-storage.js';
+export { getMcpServerOAuthStatus } from './oauth-status.js';
+export type { McpOAuthStatus } from './oauth-status.js';
 export { BaseTokenStore } from './token-store.js';
 export type {
   MCPOAuthToken as MCPOAuthTokenInterface,
