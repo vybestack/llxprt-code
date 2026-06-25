@@ -62,6 +62,16 @@ describe('applyStreamIdleTimeoutSettings', () => {
     expect(resolveStreamIdleTimeoutMs(config)).toBe(60_000);
   });
 
+  it('keeps the environment variable as the highest priority after settings are wired', () => {
+    process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '240000';
+    const config = createCapturingConfig();
+    const settings: Settings = { streamIdleTimeoutMs: 120_000 };
+
+    applyStreamIdleTimeoutSettings(config, settings);
+
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(240_000);
+  });
+
   it('preserves zero and negative settings as watchdog disable values', () => {
     const zeroConfig = createCapturingConfig();
     applyStreamIdleTimeoutSettings(zeroConfig, { streamIdleTimeoutMs: 0 });

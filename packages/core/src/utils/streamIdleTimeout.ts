@@ -44,6 +44,11 @@ export const STREAM_IDLE_TIMEOUT_SETTING_KEY = 'stream-idle-timeout-ms';
  */
 export const STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY = 'streamIdleTimeoutMs';
 
+const STREAM_IDLE_TIMEOUT_CONFIG_KEYS = [
+  STREAM_IDLE_TIMEOUT_SETTING_KEY,
+  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+] as const;
+
 function parseTimeoutConfigValue(value: unknown): number {
   if (typeof value === 'number') {
     return value;
@@ -99,10 +104,7 @@ export function resolveStreamIdleTimeoutMs(config?: {
   }
 
   // Check config ephemeral settings: hyphenated first (canonical), then camelCase alias
-  for (const settingKey of [
-    STREAM_IDLE_TIMEOUT_SETTING_KEY,
-    STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
-  ]) {
+  for (const settingKey of STREAM_IDLE_TIMEOUT_CONFIG_KEYS) {
     const configValue = normalizeTimeoutConfigValue(
       config?.getEphemeralSetting?.(settingKey),
     );

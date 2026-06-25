@@ -7,6 +7,7 @@
 import {
   ApprovalMode,
   DebugLogger,
+  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
 } from '@vybestack/llxprt-code-core';
@@ -34,7 +35,6 @@ import type { ProfileLoadResult } from './profileResolution.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
 
 const logger = new DebugLogger('llxprt:config:postConfigRuntime');
-const STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY = 'streamIdleTimeoutMs';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 

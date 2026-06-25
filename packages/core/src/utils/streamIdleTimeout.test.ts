@@ -475,6 +475,22 @@ describe('resolveStreamIdleTimeoutMs', () => {
       expect(result).toBe(300_000); // hyphenated wins
     });
 
+    it('invalid hyphenated value falls through to camelCase', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_SETTING_KEY) {
+            return 'not-a-number';
+          }
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return 90_000;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(90_000);
+    });
+
     it('env var LLXPRT_STREAM_IDLE_TIMEOUT_MS remains highest priority', () => {
       process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '500000';
       const mockConfig = {
