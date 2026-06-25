@@ -9,6 +9,14 @@ const fs = require('fs');
 const LISTEN_PORT = Number(process.argv[2] || 11500);
 const OLLAMA_PORT = Number(process.argv[3] || 11434);
 const OUT = process.env.PROXY_LOG || '/tmp/ollama-proxy-requests.log';
+const UPSTREAM_TIMEOUT_MS = Number(
+  process.env.PROXY_UPSTREAM_TIMEOUT_MS || 120000,
+);
+
+// The log captures full system/user prompt content, so keep it readable only
+// by the owner (0o600) to avoid exposing sensitive data to other local users.
+fs.closeSync(fs.openSync(OUT, 'a', 0o600));
+fs.chmodSync(OUT, 0o600);
 
 let counter = 0;
 
@@ -96,6 +104,7 @@ const server = http.createServer((req, res) => {
       }
     }
 
+    let settled = false;
     const proxyReq = http.request(
       {
         hostname: '127.0.0.1',
@@ -105,13 +114,26 @@ const server = http.createServer((req, res) => {
         headers: req.headers,
       },
       (proxyRes) => {
+        settled = true;
         res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
         proxyRes.pipe(res);
       },
     );
+    // Avoid hanging forever if Ollama stops responding: time out and return 504.
+    proxyReq.setTimeout(UPSTREAM_TIMEOUT_MS, () => {
+      proxyReq.destroy(new Error('upstream timeout'));
+    });
     proxyReq.on('error', (err) => {
-      res.writeHead(502);
-      res.end('proxy error: ' + err.message);
+      if (settled) {
+        res.destroy();
+        return;
+      }
+      settled = true;
+      const isTimeout = err && err.message === 'upstream timeout';
+      res.writeHead(isTimeout ? 504 : 502);
+      res.end(
+        (isTimeout ? 'upstream timeout: ' : 'proxy error: ') + err.message,
+      );
     });
     proxyReq.end(body);
   });

@@ -25,6 +25,10 @@ import {
   GlobTool,
   ReadFileTool,
   ReadManyFilesTool,
+  WriteFileTool,
+  LSTool,
+  TaskTool,
+  ListSubagentsTool,
 } from '@vybestack/llxprt-code-tools';
 import process from 'node:process';
 import fs from 'node:fs';
@@ -134,7 +138,7 @@ describe('prompts async integration', () => {
     });
 
     it('should handle custom tools list', async () => {
-      const tools = ['read_file', 'write_file', 'list_directory'];
+      const tools = [ReadFileTool.Name, WriteFileTool.Name, LSTool.Name];
       const prompt = await callPrompt({ tools });
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
@@ -214,8 +218,16 @@ describe('prompts async integration', () => {
   });
 
   describe('subagent delegation block (issue #1019)', () => {
+    // Source tool ids from the canonical tool-class Name constants so these
+    // regressions stay aligned if a tool's registered name ever changes.
+    const subagentTools = [
+      ReadFileTool.Name,
+      ListSubagentsTool.Name,
+      TaskTool.Name,
+    ];
+
     it('should contain Subagent Delegation block when includeSubagentDelegation is true and tools include both task and list_subagents', async () => {
-      const tools = ['read_file', 'list_subagents', 'task'];
+      const tools = subagentTools;
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,
@@ -261,7 +273,7 @@ describe('prompts async integration', () => {
     });
 
     it('should replace SUBAGENT_DELEGATION placeholder with empty when tools do not include Task', async () => {
-      const tools = ['read_file', 'list_subagents'];
+      const tools = [ReadFileTool.Name, ListSubagentsTool.Name];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,
