@@ -140,6 +140,12 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `600000`
   - **Requires restart:** Yes
 
+#### `streamIdleTimeoutMs`
+
+- **`streamIdleTimeoutMs`** (number):
+  - **Description:** Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog; zero or negative disables it. Any finite number is valid.
+  - **Default:** `0`
+
 #### `useExternalAuth`
 
 - **`useExternalAuth`** (boolean):
