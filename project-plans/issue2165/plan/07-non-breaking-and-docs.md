@@ -144,16 +144,28 @@ grep -q "_mcpOAuthStatusAnchor" "$TYPES" || { echo "FAIL: union anchor missing";
 grep -q "_mcpAuthShapeAnchor" "$TYPES" || { echo "FAIL: auth-shape anchor missing"; exit 1; }
 grep -q "_mcpDetailShapeAnchor" "$TYPES" || { echo "FAIL: detail-shape anchor missing"; exit 1; }
 # top-level import type, not inline import()
-if grep -nE "import\(" "$TYPES"; then echo "FAIL: inline import() in types fence"; exit 1; fi
+#   NOTE (CCF-7): match a REAL inline dynamic-import expression `import('…')`
+#   (open-paren immediately followed by a quote), NOT the file's pre-existing
+#   header prose that mentions "inline `import()` annotations" (empty parens).
+if grep -nE "import\(['\"]" "$TYPES"; then echo "FAIL: inline import() in types fence"; exit 1; fi
 
 # 2) runtime guard: new describe block added, old blocks preserved
 grep -q "PLAN-20260622-MCPOAUTHTRUTH.P07" "$RUNTIME" || { echo "FAIL: new describe block missing"; exit 1; }
 
 # 3) docs: new fields documented + example imports public root only
+#    NOTE (CCF-7): scope the public-root check to THIS phase's ADDED lines only.
+#    A whole-file grep false-fails because (a) pristine prose at ~:1064 mentions
+#    "getConfig() ... or a deep import into the core package" while DESCRIBING the
+#    anti-pattern, and (b) `agent.getConfig()` is itself a DOCUMENTED public method
+#    (docs ~:760/:766/:797). Inspect only added (`^+`) lines for a REAL deep-core
+#    import statement or a REAL `.getConfig(` call.
 grep -q "oauthStatus" "$DOCS" || { echo "FAIL: oauthStatus undocumented"; exit 1; }
 grep -q "sessionAuthenticated" "$DOCS" || { echo "FAIL: sessionAuthenticated undocumented"; exit 1; }
-if grep -nE "llxprt-code-core|getConfig\(" "$DOCS" | grep -nE "import|require"; then
-  echo "FAIL: docs example uses a non-public-root import"; exit 1
+if git diff HEAD -- "$DOCS" | grep -E "^\+" | grep -E "^\+[[:space:]]*import\b.*@vybestack/llxprt-code-core"; then
+  echo "FAIL: docs example adds a deep core import"; exit 1
+fi
+if git diff HEAD -- "$DOCS" | grep -E "^\+" | grep -E "\.getConfig\("; then
+  echo "FAIL: docs example added a getConfig() call"; exit 1
 fi
 
 # 4) NO production source modified by this phase

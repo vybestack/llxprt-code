@@ -37,7 +37,13 @@ git diff HEAD -- "$TYPES" | grep -E "^-.*_taskInfoAnchor|^-.*void " && { echo "F
 grep -q "oauthStatus" "$DOCS" || { echo "FAIL: oauthStatus undocumented"; exit 1; }
 grep -q "sessionAuthenticated" "$DOCS" || { echo "FAIL: sessionAuthenticated undocumented"; exit 1; }
 if git diff HEAD -- "$DOCS" | grep -E "^-#|^-\`\`\`|^-\| "; then echo "FAIL: docs heading/fence/row removed"; exit 1; fi
-if grep -nE "import|require" "$DOCS" | grep -nE "llxprt-code-core|getConfig\("; then echo "FAIL: non-public-root docs example"; exit 1; fi
+# CCF-7: scope the public-root check to ADDED (`^+`) lines only. A whole-file grep
+# false-fails on pristine docs: prose at ~:1064 mentions "getConfig() ... or a deep
+# import into the core package" while DESCRIBING the anti-pattern, and `agent.getConfig()`
+# is itself a DOCUMENTED public method (docs ~:760/:766/:797). Only a NEWLY-ADDED real
+# deep-core import statement or a NEWLY-ADDED `.getConfig(` call should fail.
+if git diff HEAD -- "$DOCS" | grep -E "^\+" | grep -E "^\+[[:space:]]*import\b.*@vybestack/llxprt-code-core"; then echo "FAIL: docs example adds a deep core import"; exit 1; fi
+if git diff HEAD -- "$DOCS" | grep -E "^\+" | grep -E "\.getConfig\("; then echo "FAIL: docs example added a getConfig() call"; exit 1; fi
 
 # C) production untouched this phase
 if git diff HEAD --name-only | grep -vE "__tests__/|\.md$" | grep -E "packages/agents/src/"; then
