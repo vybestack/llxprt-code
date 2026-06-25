@@ -516,6 +516,29 @@ describe('issue #2114 regex characterization', () => {
     expect(out.endsWith('cc')).toBe(true);
   });
 
+  it('sanitizeForHistory masks secure command values with leading whitespace', () => {
+    const h = new SecureInputHandler();
+    expect(h.sanitizeForHistory('  /key sk-secret-1234567890')).toBe(
+      '  /key sk****************90',
+    );
+    expect(
+      h.sanitizeForHistory('  /key save provider sk-secret-1234567890'),
+    ).toBe('  /key save provider sk****************90');
+    expect(h.sanitizeForHistory('  /toolkey exa sk-secret-1234567890')).toBe(
+      '  /toolkey exa sk****************90',
+    );
+  });
+
+  it('processInput masks secure command values with leading whitespace', () => {
+    const h = new SecureInputHandler();
+    expect(h.processInput('  /key sk-secret-1234567890')).toBe(
+      '  /key sk****************90',
+    );
+    expect(h.processInput('  /toolkey exa sk-secret-1234567890')).toBe(
+      '  /toolkey exa sk****************90',
+    );
+  });
+
   it('sanitizeForHistory masks only the first line of multiline /key values', () => {
     const h = new SecureInputHandler();
     const out = h.sanitizeForHistory('/key sk-secret-1234567890\nnext line');
