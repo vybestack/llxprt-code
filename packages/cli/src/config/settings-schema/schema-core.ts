@@ -182,6 +182,17 @@ export const CORE_SETTINGS_SCHEMA = {
     showInDialog: true,
   },
 
+  streamIdleTimeoutMs: {
+    type: 'number',
+    label: 'Stream Idle Timeout (ms)',
+    category: 'Streaming',
+    requiresRestart: false,
+    default: 0,
+    description:
+      'Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog; zero or negative disables it. Any finite number is valid.',
+    showInDialog: false,
+  },
+
   useExternalAuth: {
     type: 'boolean',
     label: 'Use External Auth',

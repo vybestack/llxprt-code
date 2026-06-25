@@ -303,7 +303,7 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     hint: 'decimal between 0 and 1 (e.g., 0.7)',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
-      if (typeof value === 'number' && value <= 1) {
+      if (typeof value === 'number' && value >= 0 && value <= 1) {
         return { success: true, value };
       }
       return {

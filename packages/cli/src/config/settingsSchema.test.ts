@@ -16,8 +16,17 @@ import {
   getEnableHooksUI,
 } from './settingsSchema.js';
 import { validateSettings } from './settings-validation.js';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+const generatedSettingsSchemaPath = [
+  resolve(process.cwd(), 'schemas/settings.schema.json'),
+  resolve(process.cwd(), '../../schemas/settings.schema.json'),
+].find((path) => existsSync(path));
+
+if (generatedSettingsSchemaPath === undefined) {
+  throw new Error('Unable to locate schemas/settings.schema.json');
+}
 
 describe('SettingsSchema', () => {
   describe('SETTINGS_SCHEMA', () => {
@@ -338,6 +347,46 @@ describe('SettingsSchema', () => {
       });
     });
 
+    describe('streamIdleTimeoutMs', () => {
+      it('should be defined as a top-level setting in SETTINGS_SCHEMA', () => {
+        expect(SETTINGS_SCHEMA.streamIdleTimeoutMs).toBeDefined();
+      });
+
+      it('should be a number type in SETTINGS_SCHEMA', () => {
+        expect(SETTINGS_SCHEMA.streamIdleTimeoutMs.type).toBe('number');
+      });
+
+      it('should not define minimum or maximum constraints (permissive finite-number intent)', () => {
+        const def = SETTINGS_SCHEMA.streamIdleTimeoutMs as SettingDefinition;
+        expect(def.minimum).toBeUndefined();
+        expect(def.maximum).toBeUndefined();
+      });
+
+      it('should default to 0 (watchdog disabled by default)', () => {
+        expect(SETTINGS_SCHEMA.streamIdleTimeoutMs.default).toBe(0);
+      });
+
+      it('should be present in the generated settings.schema.json as type number without minimum/maximum', () => {
+        const generatedSchema = JSON.parse(
+          readFileSync(generatedSettingsSchemaPath, 'utf8'),
+        ) as {
+          properties: {
+            streamIdleTimeoutMs?: {
+              type?: string;
+              minimum?: number;
+              maximum?: number;
+            };
+          };
+        };
+
+        const setting = generatedSchema.properties.streamIdleTimeoutMs;
+        expect(setting).toBeDefined();
+        expect(setting?.type).toBe('number');
+        expect(setting?.minimum).toBeUndefined();
+        expect(setting?.maximum).toBeUndefined();
+      });
+    });
+
     it('should infer Settings type correctly', () => {
       // This test ensures that the Settings type is properly inferred from the schema
       const settings: Settings = {
@@ -414,10 +463,7 @@ describe('SettingsSchema', () => {
 
     it('should keep generated JSON schema model union consistent with schema definitions', () => {
       const generatedSchema = JSON.parse(
-        readFileSync(
-          resolve(process.cwd(), '../../schemas/settings.schema.json'),
-          'utf8',
-        ),
+        readFileSync(generatedSettingsSchemaPath, 'utf8'),
       ) as {
         properties: { model: { anyOf?: Array<{ $ref: string }> } };
       };

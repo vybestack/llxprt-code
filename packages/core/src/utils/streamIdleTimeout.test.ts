@@ -12,6 +12,7 @@ import {
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
+  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
 } from './streamIdleTimeout.js';
 
 describe('nextStreamEventWithIdleTimeout', () => {
@@ -378,6 +379,164 @@ describe('resolveStreamIdleTimeoutMs', () => {
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(90_000);
+    });
+  });
+
+  describe('camelCase streamIdleTimeoutMs runtime wiring', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+      delete process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV];
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('camelCase streamIdleTimeoutMs with a positive finite value resolves to that value when env var is absent', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return 75_000;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(75_000);
+    });
+
+    it('camelCase 0 resolves to 0 (disabled semantics preserved)', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return 0;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(0);
+    });
+
+    it('camelCase negative resolves to 0 (disabled semantics preserved)', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return -100;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(0);
+    });
+
+    it('camelCase string value is parsed correctly', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return '45000';
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(45_000);
+    });
+
+    it('existing hyphenated stream-idle-timeout-ms behavior remains preserved', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_SETTING_KEY) {
+            return 200_000;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(200_000);
+    });
+
+    it('hyphenated takes priority over camelCase when both are present', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_SETTING_KEY) {
+            return 300_000;
+          }
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return 150_000;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(300_000); // hyphenated wins
+    });
+
+    it('env var LLXPRT_STREAM_IDLE_TIMEOUT_MS remains highest priority', () => {
+      process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '500000';
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_SETTING_KEY) {
+            return 300_000;
+          }
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return 150_000;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(500_000); // env wins
+    });
+
+    it('camelCase is used when hyphenated is absent', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return 60_000;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(60_000);
+    });
+
+    it('falls through to default when camelCase is invalid', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return 'not-a-number';
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
+    });
+
+    it('falls through to default when both keys are absent', () => {
+      const mockConfig = {
+        getEphemeralSetting: () => undefined,
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
+    });
+
+    it('camelCase empty string falls through to default (not parsed as 0)', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return '';
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
     });
   });
 });

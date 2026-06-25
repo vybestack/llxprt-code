@@ -263,6 +263,109 @@ describe('validateSetting — validation', () => {
     const result = validateSetting('requires-auth', 'yes');
     expect(result.success).toBe(false);
   });
+
+  it('validates compression-threshold with a decimal in range (0.7)', () => {
+    const result = validateSetting('compression-threshold', 0.7);
+    expect(result.success).toBe(true);
+  });
+
+  it('validates compression-threshold with lower bound 0', () => {
+    const result = validateSetting('compression-threshold', 0);
+    expect(result.success).toBe(true);
+  });
+
+  it('validates compression-threshold with upper bound 1', () => {
+    const result = validateSetting('compression-threshold', 1);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a small negative compression-threshold (-0.1)', () => {
+    const result = validateSetting('compression-threshold', -0.1);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a large negative compression-threshold (-5)', () => {
+    const result = validateSetting('compression-threshold', -5);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects compression-threshold above 1', () => {
+    const result = validateSetting('compression-threshold', 1.5);
+    expect(result.success).toBe(false);
+  });
+
+  it('validates compression.density.optimizeThreshold with undefined (uses default)', () => {
+    const result = validateSetting(
+      'compression.density.optimizeThreshold',
+      undefined,
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('validates compression.density.optimizeThreshold with null (uses default)', () => {
+    const result = validateSetting(
+      'compression.density.optimizeThreshold',
+      null,
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('validates compression.density.optimizeThreshold with a decimal in range (0.5)', () => {
+    const result = validateSetting(
+      'compression.density.optimizeThreshold',
+      0.5,
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('validates compression.density.optimizeThreshold with lower bound 0', () => {
+    const result = validateSetting('compression.density.optimizeThreshold', 0);
+    expect(result.success).toBe(true);
+  });
+
+  it('validates compression.density.optimizeThreshold with upper bound 1', () => {
+    const result = validateSetting('compression.density.optimizeThreshold', 1);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a negative compression.density.optimizeThreshold (-0.1)', () => {
+    const result = validateSetting(
+      'compression.density.optimizeThreshold',
+      -0.1,
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects compression.density.optimizeThreshold above 1', () => {
+    const result = validateSetting(
+      'compression.density.optimizeThreshold',
+      1.5,
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('preserves permissive stream-idle-timeout-ms validation for finite values', () => {
+    expect(validateSetting('stream-idle-timeout-ms', 60_000).success).toBe(
+      true,
+    );
+    expect(validateSetting('stream-idle-timeout-ms', 0).success).toBe(true);
+    expect(validateSetting('stream-idle-timeout-ms', -1).success).toBe(true);
+    expect(validateSetting('stream-idle-timeout-ms', Infinity).success).toBe(
+      false,
+    );
+    expect(validateSetting('stream-idle-timeout-ms', '60000').success).toBe(
+      false,
+    );
+  });
+
+  it('surfaces stream-idle-timeout-ms in registry schema/help surfaces', () => {
+    expect(getSettingSpec('stream-idle-timeout-ms')?.key).toBe(
+      'stream-idle-timeout-ms',
+    );
+    expect(getAllSettingKeys()).toContain('stream-idle-timeout-ms');
+    expect(getSettingHelp()['stream-idle-timeout-ms']).toBeTruthy();
+    expect(getProfilePersistableKeys()).toContain('stream-idle-timeout-ms');
+  });
 });
 
 describe('parseSetting — string-to-value parsing', () => {

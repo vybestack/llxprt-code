@@ -7,6 +7,7 @@
 import {
   ApprovalMode,
   DebugLogger,
+  STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
 } from '@vybestack/llxprt-code-core';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
@@ -33,6 +34,7 @@ import type { ProfileLoadResult } from './profileResolution.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
 
 const logger = new DebugLogger('llxprt:config:postConfigRuntime');
+const STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY = 'streamIdleTimeoutMs';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -75,6 +77,27 @@ type ApplyToolPoliciesInput = Pick<
 >;
 
 // ─── Sub-functions ────────────────────────────────────────────────────────────
+
+export function applyStreamIdleTimeoutSettings(
+  config: Pick<Config, 'setEphemeralSetting'>,
+  settings: Settings,
+): void {
+  const settingsRecord = settings as Record<string, unknown>;
+  const camelCaseValue = settingsRecord[STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY];
+  if (camelCaseValue !== undefined) {
+    config.setEphemeralSetting(
+      STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+      camelCaseValue,
+    );
+  }
+  const hyphenatedValue = settingsRecord[STREAM_IDLE_TIMEOUT_SETTING_KEY];
+  if (hyphenatedValue !== undefined) {
+    config.setEphemeralSetting(
+      STREAM_IDLE_TIMEOUT_SETTING_KEY,
+      hyphenatedValue,
+    );
+  }
+}
 
 function getSettingsService(
   input: Pick<PostConfigInput, 'runtimeState' | 'runtimeOverrides'>,
@@ -344,6 +367,8 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     profileLoadResult,
     runtimeOverrides,
   } = input;
+
+  applyStreamIdleTimeoutSettings(config, profileSettingsWithTools);
 
   const settingsService = getSettingsService(input);
   if (!runtimeOverrides.settingsService) {

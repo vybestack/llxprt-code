@@ -147,6 +147,13 @@
       "default": 600000,
       "type": "number"
     },
+    "streamIdleTimeoutMs": {
+      "title": "Stream Idle Timeout (ms)",
+      "description": "Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog; zero or negative disables it. Any finite number is valid.",
+      "markdownDescription": "Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog; zero or negative disables it. Any finite number is valid.\n\n- Category: `Streaming`\n- Requires restart: `no`\n- Default: `0`",
+      "default": 0,
+      "type": "number"
+    },
     "useExternalAuth": {
       "title": "Use External Auth",
       "description": "Whether to use an external authentication flow.",
