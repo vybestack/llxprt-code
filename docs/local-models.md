@@ -184,10 +184,10 @@ Before pointing LLxprt Code at the server, confirm it is responding:
 
 ```bash
 # List available models
-curl http://127.0.0.1:8080/v1/models
+curl --fail -sS http://127.0.0.1:8080/v1/models
 
 # Test a chat completion
-curl http://127.0.0.1:8080/v1/chat/completions \
+curl --fail -sS http://127.0.0.1:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "your-model.gguf",
@@ -255,10 +255,11 @@ llxprt --profile-load llamacpp # installed CLI
 
 #### Validate the profile non-interactively
 
-Run a one-shot prompt through the profile to confirm the full chain works end to end. Exporting an empty `OPENAI_API_KEY` ensures LLxprt Code relies on the profile's `auth-key` placeholder rather than any ambient environment key:
+Run a one-shot prompt through the profile to confirm the full chain works end to end. Unset `OPENAI_API_KEY` first so LLxprt Code relies on the profile's `auth-key` placeholder rather than any ambient environment key:
 
 ```bash
-env OPENAI_API_KEY= node scripts/start.js \
+unset OPENAI_API_KEY
+node scripts/start.js \
   --profile-load llamacpp \
   "Reply with exactly: llxprt local profile ok"
 ```
