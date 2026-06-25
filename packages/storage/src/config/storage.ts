@@ -14,6 +14,16 @@ export const PROVIDER_ACCOUNTS_FILENAME = 'provider_accounts.json';
 export const OAUTH_FILE = 'oauth_creds.json';
 const TMP_DIR_NAME = 'tmp';
 
+function resolveSystemSettingsEnv(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw.trim() === '') {
+    return undefined;
+  }
+  if (!path.isAbsolute(raw)) {
+    return undefined;
+  }
+  return path.resolve(raw);
+}
+
 export class Storage {
   private readonly targetDir: string;
 
@@ -66,8 +76,11 @@ export class Storage {
   }
 
   static getSystemSettingsPath(): string {
-    if (process.env['LLXPRT_SYSTEM_SETTINGS_PATH']) {
-      return process.env['LLXPRT_SYSTEM_SETTINGS_PATH'];
+    const sanitized = resolveSystemSettingsEnv(
+      process.env['LLXPRT_SYSTEM_SETTINGS_PATH'],
+    );
+    if (sanitized !== undefined) {
+      return sanitized;
     }
     if (os.platform() === 'darwin') {
       return '/Library/Application Support/LlxprtCode/settings.json';
