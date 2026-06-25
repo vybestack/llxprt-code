@@ -111,9 +111,10 @@ export async function drainStdinBuffer(
       resolve();
     }, timeoutMs);
 
+    const readable = stdin as { read(): unknown | null };
     const onReadable = () => {
       // Read and discard any available data
-      while ((stdin as unknown as { read(): Buffer | null }).read() !== null) {
+      while (readable.read() !== null) {
         // Intentionally discard the data
       }
     };

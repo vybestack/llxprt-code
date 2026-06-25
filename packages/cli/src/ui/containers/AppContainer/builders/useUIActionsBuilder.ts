@@ -17,8 +17,5 @@ import type { UIActions } from '../../../contexts/UIActionsContext.js';
  * @strictMode Safe - recomputes only when a param value changes
  */
 export function useUIActionsBuilder(params: UIActionsParams): UIActions {
-  return useShallowMemo(
-    () => buildUIActions(params),
-    params as unknown as Record<string, unknown>,
-  );
+  return useShallowMemo(() => buildUIActions(params), params);
 }

@@ -26,7 +26,7 @@ import { ExtensionEnablementManager } from './extensions/extensionEnablement.js'
 import type { ConfirmationRequest } from '../ui/types.js';
 import {
   recursivelyHydrateStrings,
-  type JsonObject,
+  type JsonValue,
 } from './extensions/variables.js';
 
 import { maybeRequestConsentOrFail } from './extensions/extensionConsent.js';
@@ -88,6 +88,18 @@ export interface ExtensionConfig {
   }>;
 }
 
+function isExtensionConfig(value: unknown): value is ExtensionConfig {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { name?: unknown }).name === 'string' &&
+    typeof (value as { version?: unknown }).version === 'string'
+  );
+}
+
+function parseJsonValue(content: string): JsonValue {
+  return JSON.parse(content) as JsonValue;
+}
 export interface ExtensionInstallMetadata {
   source: string;
   type: 'git' | 'local' | 'link' | 'github-release';
@@ -764,23 +776,27 @@ export async function loadExtensionConfig(
   }
   try {
     const configContent = fs.readFileSync(configFilePath, 'utf-8');
-    const rawConfig = JSON.parse(configContent) as ExtensionConfig;
-    if (!rawConfig.name || !rawConfig.version) {
+    const rawConfig = parseJsonValue(configContent);
+    if (!isExtensionConfig(rawConfig)) {
       globalThis.console.warn(
-        `Invalid extension configuration in ${configFilePath}: missing ${!rawConfig.name ? '"name"' : '"version"'}`,
+        `Invalid extension configuration in ${configFilePath}: missing name or version`,
       );
       return null;
     }
     const installDir = new ExtensionStorage(rawConfig.name).getExtensionDir();
-    const config = recursivelyHydrateStrings(
-      rawConfig as unknown as JsonObject,
-      {
-        extensionPath: installDir,
-        workspacePath: workspaceDir,
-        '/': path.sep,
-        pathSeparator: path.sep,
-      },
-    ) as unknown as ExtensionConfig;
+    const hydratedConfig = recursivelyHydrateStrings(rawConfig, {
+      extensionPath: installDir,
+      workspacePath: workspaceDir,
+      '/': path.sep,
+      pathSeparator: path.sep,
+    });
+    if (!isExtensionConfig(hydratedConfig)) {
+      globalThis.console.warn(
+        `Invalid extension configuration in ${configFilePath}: missing name or version`,
+      );
+      return null;
+    }
+    const config = hydratedConfig;
 
     validateName(config.name);
 

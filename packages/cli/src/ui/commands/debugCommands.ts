@@ -273,9 +273,9 @@ function handleDebugPersist(
 
   try {
     const config = configManager.getEffectiveConfig();
-    const hasEphemeralChanges =
-      (configManager as unknown as { ephemeralConfig: unknown })
-        .ephemeralConfig !== null;
+    const hasEphemeralChanges = (
+      configManager as typeof configManager & { hasEphemeralConfig(): boolean }
+    ).hasEphemeralConfig();
 
     if (!hasEphemeralChanges) {
       return {

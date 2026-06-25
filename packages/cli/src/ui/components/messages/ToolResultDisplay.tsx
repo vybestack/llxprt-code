@@ -23,6 +23,24 @@ const MIN_LINES_SHOWN = 2; // show at least this many lines
 // outputs that will get truncated further MaxSizedBox anyway.
 const MAXIMUM_RESULT_DISPLAY_CHARACTERS = 1000000;
 
+function isAnsiToken(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { text?: unknown }).text === 'string'
+  );
+}
+
+function isAnsiOutput(value: unknown): value is AnsiOutput {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (line) =>
+        Array.isArray(line) && line.every((token) => isAnsiToken(token)),
+    )
+  );
+}
 /**
  * Render AST validation status.
  */
@@ -225,10 +243,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
     return null;
   }
 
-  const isAnsiOutput =
-    Array.isArray(displayContent) &&
-    displayContent.length > 0 &&
-    Array.isArray(displayContent[0]);
+  const ansiOutput = isAnsiOutput(displayContent) ? displayContent : undefined;
 
   return (
     <Box
@@ -237,9 +252,9 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
       marginTop={1}
       flexDirection="column"
     >
-      {isAnsiOutput && (
+      {ansiOutput !== undefined && (
         <AnsiOutputText
-          data={displayContent as unknown as AnsiOutput}
+          data={ansiOutput}
           availableTerminalHeight={availableHeight}
           width={childWidth}
         />
@@ -252,7 +267,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
           childWidth,
           renderMarkdown,
         )}
-      {!isAnsiOutput &&
+      {ansiOutput === undefined &&
         typeof displayContent !== 'string' &&
         renderObjectContent(
           displayContent,

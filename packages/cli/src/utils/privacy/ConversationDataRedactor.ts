@@ -188,32 +188,17 @@ export class ConversationDataRedactor {
     }
 
     const redactedTool = { ...tool };
-    const toolRecord = tool as unknown as Record<string, unknown>;
-    const redactedToolRecord = redactedTool as unknown as Record<
-      string,
-      unknown
-    >;
-    const toolFunction = toolRecord.function;
+    const toolFunction: unknown = tool.function;
 
     // Handle both ITool interface and test format
     if (this.hasNamedFunction(toolFunction)) {
-      const redactedFunction = redactedToolRecord.function as Record<
-        string,
-        unknown
-      >;
-      redactedFunction.parameters = this.redactToolParameters(
-        redactedFunction.parameters,
-        toolFunction.name,
-      ) as object;
-    } else if (
-      typeof toolRecord.name === 'string' &&
-      Object.prototype.hasOwnProperty.call(redactedToolRecord, 'parameters')
-    ) {
-      // Handle test format that doesn't match ITool interface
-      redactedToolRecord.parameters = this.redactToolParameters(
-        redactedToolRecord.parameters,
-        toolRecord.name,
-      ) as object;
+      redactedTool.function = {
+        ...redactedTool.function,
+        parameters: this.redactToolParameters(
+          redactedTool.function.parameters,
+          toolFunction.name,
+        ) as object,
+      };
     }
 
     return redactedTool;

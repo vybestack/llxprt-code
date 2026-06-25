@@ -31,9 +31,9 @@ function shallowArrayEqual(
  * so the dependency set is the actual runtime values of the params object,
  * which cannot be expressed as a statically analyzable dependency array.
  */
-export function useShallowMemo<T>(
+export function useShallowMemo<T, TParams extends object>(
   factory: () => T,
-  params: Record<string, unknown>,
+  params: TParams,
 ): T {
   const values = Object.values(params);
   const cache = useRef<{ values: unknown[]; result: T } | null>(null);

@@ -31,6 +31,7 @@ import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { AuthDialog } from './AuthDialog.js';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
+import { getPendingOAuthProvider } from '../oauthGlobalState.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { ProviderDialog } from './ProviderDialog.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
@@ -328,10 +329,7 @@ function renderOAuthCodeDialog(
   uiActions: ReturnType<typeof useUIActions>,
   handleOAuthCodeSubmit: (code: string) => void,
 ) {
-  const provider = firstNonEmptyString(
-    (global as unknown as { __oauth_provider?: string }).__oauth_provider,
-    'unknown',
-  );
+  const provider = firstNonEmptyString(getPendingOAuthProvider(), 'unknown');
   return (
     <OAuthCodeDialog
       provider={provider}

@@ -111,12 +111,14 @@ function VirtualizedList<T>(
   );
 }
 
-const VirtualizedListWithForwardRef = forwardRef(VirtualizedList) as <T>(
+type VirtualizedListComponent = (<T>(
   props: VirtualizedListProps<T> & { ref?: React.Ref<VirtualizedListRef<T>> },
-) => React.ReactElement;
+) => React.ReactElement) & { displayName?: string };
+
+const VirtualizedListWithForwardRef = forwardRef(
+  VirtualizedList,
+) as VirtualizedListComponent;
 
 export { VirtualizedListWithForwardRef as VirtualizedList };
 
-(
-  VirtualizedListWithForwardRef as unknown as { displayName?: string }
-).displayName = 'VirtualizedList';
+VirtualizedListWithForwardRef.displayName = 'VirtualizedList';

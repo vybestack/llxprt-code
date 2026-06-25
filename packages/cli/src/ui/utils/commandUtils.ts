@@ -204,12 +204,20 @@ const wrapOsc52Payload = (osc: string): string => {
   return osc;
 };
 
+function getStreamFileDescriptor(stream: Writable): number | undefined {
+  if (!('fd' in stream)) {
+    return undefined;
+  }
+  const fd = stream.fd;
+  return typeof fd === 'number' ? fd : undefined;
+}
+
 const writeAll = (stream: Writable, data: string): Promise<void> =>
   new Promise<void>((resolve, reject) => {
     // On Windows, writing directly to the underlying file descriptor bypasses
     // application-level stream interception (e.g., by the Ink UI framework).
     // This ensures the raw OSC-52 escape sequence reaches the terminal host uncorrupted.
-    const fd = (stream as unknown as { fd?: number }).fd;
+    const fd = getStreamFileDescriptor(stream);
     if (
       process.platform === 'win32' &&
       typeof fd === 'number' &&

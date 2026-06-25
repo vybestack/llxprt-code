@@ -29,6 +29,11 @@ import {
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
+import {
+  getOptionalString,
+  hasFunction,
+  hasObject,
+} from '../../utils/typeGuards.js';
 
 type WrappedProvider = IProvider & { wrappedProvider: IProvider };
 
@@ -59,25 +64,26 @@ function resolveBaseProviderId(provider: IProvider): string {
 }
 
 function getProviderBaseUrl(provider: IProvider): string | undefined {
-  const configBaseUrl = (
-    provider as unknown as { providerConfig?: { baseUrl?: string } }
-  ).providerConfig?.baseUrl;
-  if (configBaseUrl && configBaseUrl !== 'none') {
-    return configBaseUrl;
+  if (hasObject(provider, 'providerConfig')) {
+    const configBaseUrl = getOptionalString(provider.providerConfig, 'baseUrl');
+    if (configBaseUrl && configBaseUrl !== 'none') {
+      return configBaseUrl;
+    }
   }
 
-  const baseConfigUrl = (
-    provider as unknown as { baseProviderConfig?: { baseURL?: string } }
-  ).baseProviderConfig?.baseURL;
-  if (baseConfigUrl && baseConfigUrl !== 'none') {
-    return baseConfigUrl;
+  if (hasObject(provider, 'baseProviderConfig')) {
+    const baseConfigUrl = getOptionalString(
+      provider.baseProviderConfig,
+      'baseURL',
+    );
+    if (baseConfigUrl && baseConfigUrl !== 'none') {
+      return baseConfigUrl;
+    }
   }
 
-  const getBaseUrlFn = (
-    provider as unknown as { getBaseURL?: () => string | undefined }
-  ).getBaseURL;
-  if (typeof getBaseUrlFn === 'function') {
-    return getBaseUrlFn.call(provider);
+  if (hasFunction(provider, 'getBaseURL')) {
+    const baseUrl = provider.getBaseURL();
+    return typeof baseUrl === 'string' ? baseUrl : undefined;
   }
 
   return undefined;

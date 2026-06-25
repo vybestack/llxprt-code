@@ -17,8 +17,5 @@ import type { UIState } from '../../../contexts/UIStateContext.js';
  * @strictMode Safe - recomputes only when a param value changes
  */
 export function useUIStateBuilder(params: UIStateParams): UIState {
-  return useShallowMemo(
-    () => buildUIState(params),
-    params as unknown as Record<string, unknown>,
-  );
+  return useShallowMemo(() => buildUIState(params), params);
 }

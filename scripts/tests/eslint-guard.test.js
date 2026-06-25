@@ -18,6 +18,7 @@ import {
   extractScopeArray,
   formatViolations,
   hasInlineEslintDirective,
+  scanCliProductionTypeEscapes,
   scanCoreDirectives,
   scanModuleDirectives,
   scanPackageDirectives,
@@ -207,6 +208,45 @@ describe('check-eslint-guard', () => {
 
   it('keeps the checked-in cli source policy clean', () => {
     expect(checkCliSourcePolicy()).toEqual([]);
+  });
+
+  it('keeps checked-in CLI production type escape policy clean except tracked shared seams', () => {
+    expect(scanCliProductionTypeEscapes()).toEqual([]);
+  });
+
+  it('rejects production CLI TypeScript escape hatches in cleaned scopes', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-cli-types-'));
+    const sourceDir = join(tmpDir, 'packages', 'cli', 'src', 'ui');
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(
+      join(sourceDir, 'example.ts'),
+      [
+        'export function unsafe(value: unknown): string {',
+        '  return value as unknown as string;',
+        '}',
+      ].join('\n'),
+    );
+
+    const violations = scanCliProductionTypeEscapes(tmpDir);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('#2174');
+  });
+
+  it('ignores CLI test files when checking production type escape policy', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-cli-test-types-'));
+    const sourceDir = join(tmpDir, 'packages', 'cli', 'src', 'ui');
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(
+      join(sourceDir, 'example.test.ts'),
+      [
+        'export function testOnly(value: unknown): string {',
+        '  return value as unknown as string;',
+        '}',
+      ].join('\n'),
+    );
+
+    expect(scanCliProductionTypeEscapes(tmpDir)).toEqual([]);
   });
 
   describe('#2115 packages/core directive ban', () => {

@@ -79,20 +79,20 @@ function resolveEnvVarsInObjectInternal<T>(
   }
 
   if (typeof obj === 'string') {
-    return resolveEnvVarsInString(obj) as unknown as T;
+    return resolveEnvVarsInString(obj) as T;
   }
 
   if (Array.isArray(obj)) {
     // Check for circular reference
     if (visited.has(obj)) {
       // Return a shallow copy to break the cycle
-      return [...obj] as unknown as T;
+      return [...obj] as T;
     }
 
     visited.add(obj);
     const result = obj.map((item) =>
       resolveEnvVarsInObjectInternal(item, visited),
-    ) as unknown as T;
+    ) as T;
     visited.delete(obj);
     return result;
   }
