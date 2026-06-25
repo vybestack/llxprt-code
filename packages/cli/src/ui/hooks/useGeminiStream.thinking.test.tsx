@@ -11,6 +11,11 @@
  */
 
 import type { Mock } from 'vitest';
+import {
+  MockedAgentClientClass,
+  mockSendMessageStream,
+  mockStartChat,
+} from './useGeminiStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
@@ -109,38 +114,6 @@ const ensureReactSharedInternals = () => {
 ensureReactSharedInternals();
 
 // --- MOCKS ---
-const mockSendMessageStream = vi
-  .fn()
-  .mockReturnValue((async function* () {})());
-const mockStartChat = vi.fn();
-
-const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (
-    this: Record<string, unknown>,
-    _config: unknown,
-  ) {
-    this.startChat = mockStartChat;
-    this.sendMessageStream = mockSendMessageStream;
-    this.addHistory = vi.fn();
-    this.getCurrentSequenceModel = vi.fn().mockReturnValue(null);
-    this.getChat = vi.fn().mockReturnValue({
-      recordCompletedToolCalls: vi.fn(),
-    });
-  }),
-);
-
-const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
-
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCoreModule = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actualCoreModule,
-    GitService: vi.fn(),
-    AgentClient: MockedAgentClientClass,
-    parseAndFormatApiError: mockParseAndFormatApiError,
-  };
-});
-
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = await importOriginal<Record<string, unknown>>();

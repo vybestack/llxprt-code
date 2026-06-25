@@ -7,6 +7,11 @@
 /** @vitest-environment jsdom */
 
 import type { Mock } from 'vitest';
+import {
+  MockedAgentClientClass,
+  mockSendMessageStream,
+  mockStartChat,
+} from './useGeminiStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
@@ -33,43 +38,6 @@ import type { SlashCommandProcessorResult } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 // --- MOCKS ---
-const mockSendMessageStream = vi
-  .fn()
-  .mockReturnValue((async function* () {})());
-const mockStartChat = vi.fn();
-
-const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (
-    this: Record<string, unknown>,
-    _config: unknown,
-  ) {
-    // _config
-    this.startChat = mockStartChat;
-    this.sendMessageStream = mockSendMessageStream;
-    this.addHistory = vi.fn();
-    this.getChat = vi.fn().mockReturnValue({
-      recordCompletedToolCalls: vi.fn(),
-    });
-  }),
-);
-
-const MockedUserPromptEvent = vi.hoisted(() =>
-  vi.fn().mockImplementation(() => {}),
-);
-const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
-
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCoreModule = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actualCoreModule,
-    GitService: vi.fn(),
-    AgentClient: MockedAgentClientClass,
-    UserPromptEvent: MockedUserPromptEvent,
-    parseAndFormatApiError: mockParseAndFormatApiError,
-    tokenLimit: vi.fn().mockReturnValue(100), // Mock tokenLimit
-  };
-});
-
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
