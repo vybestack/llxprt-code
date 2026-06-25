@@ -198,7 +198,6 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
       {
         maxAttempts: 3,
         initialDelayMs: 500,
-        retryFetchErrors: true,
         signal,
       },
     );

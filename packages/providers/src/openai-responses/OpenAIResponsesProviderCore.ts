@@ -602,8 +602,8 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
 
     while (streamingAttempt < options.maxStreamingAttempts) {
       streamingAttempt += 1;
-      const response = await this.fetchResponse(options);
       try {
+        const response = await this.fetchResponse(options);
         yield* this.parseSuccessfulResponse(response, options);
         return;
       } catch (error) {
@@ -673,6 +673,9 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       currentDelay: number;
     },
   ): Promise<number> {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     const canRetryStream =
       this.shouldRetryOnError(error) || isNetworkTransientError(error);
     if (

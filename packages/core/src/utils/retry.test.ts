@@ -355,7 +355,7 @@ describe('retryWithBackoff', () => {
       expect(mockFn).toHaveBeenCalledTimes(2);
     });
 
-    it('should retry on fetch failed error when retryFetchErrors=true', async () => {
+    it('should retry on fetch failed error (centralized transient detection)', async () => {
       let attempts = 0;
       const mockFn = vi.fn(async () => {
         attempts++;
@@ -368,7 +368,6 @@ describe('retryWithBackoff', () => {
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
         initialDelayMs: 10,
-        retryFetchErrors: true,
       });
 
       await vi.runAllTimersAsync();
@@ -378,7 +377,29 @@ describe('retryWithBackoff', () => {
       expect(mockFn).toHaveBeenCalledTimes(2);
     });
 
-    it('should retry on "fetch failed sending request" error when retryFetchErrors=true', async () => {
+    it('should retry bare TypeError("fetch failed") (centralized transient detection)', async () => {
+      let attempts = 0;
+      const mockFn = vi.fn(async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new TypeError('fetch failed');
+        }
+        return 'success';
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBe('success');
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry on "fetch failed sending request" error (centralized transient detection)', async () => {
       let attempts = 0;
       const mockFn = vi.fn(async () => {
         attempts++;
@@ -393,7 +414,6 @@ describe('retryWithBackoff', () => {
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
         initialDelayMs: 10,
-        retryFetchErrors: true,
       });
 
       await vi.runAllTimersAsync();

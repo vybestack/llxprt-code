@@ -8,8 +8,7 @@ export interface RetryOptions {
   maxAttempts: number;
   initialDelayMs: number;
   maxDelayMs: number;
-  shouldRetryOnError: (error: Error, retryFetchErrors?: boolean) => boolean;
-  retryFetchErrors?: boolean;
+  shouldRetryOnError: (error: Error) => boolean;
   signal?: AbortSignal;
 }
 
@@ -37,6 +36,7 @@ const TRANSIENT_ERROR_PHRASES = [
   'stream prematurely closed',
   'read econnreset',
   'write econnreset',
+  'fetch failed',
 ];
 
 const TRANSIENT_ERROR_REGEXES = [
@@ -196,19 +196,9 @@ function isRetryableStatus(status: number | undefined): boolean {
   );
 }
 
-export function isRetryableError(
-  error: Error | unknown,
-  retryFetchErrors?: boolean,
-): boolean {
+export function isRetryableError(error: Error | unknown): boolean {
   if (isNetworkTransientError(error)) {
     return true;
-  }
-
-  if (retryFetchErrors === true) {
-    const { messages } = collectErrorDetails(error);
-    if (messages.some((msg) => msg.toLowerCase().includes('fetch failed'))) {
-      return true;
-    }
   }
 
   const status = getErrorStatus(error);
@@ -228,7 +218,6 @@ export async function retryWithBackoff<T>(
     initialDelayMs,
     maxDelayMs,
     shouldRetryOnError,
-    retryFetchErrors,
     signal,
   } = {
     ...DEFAULT_RETRY_OPTIONS,
@@ -250,10 +239,7 @@ export async function retryWithBackoff<T>(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
-      if (
-        attempt >= maxAttempts ||
-        !shouldRetryOnError(error as Error, retryFetchErrors)
-      ) {
+      if (attempt >= maxAttempts || !shouldRetryOnError(error as Error)) {
         throw error;
       }
       await delay(currentDelay, signal);
