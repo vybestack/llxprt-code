@@ -15,13 +15,17 @@ export const OAUTH_FILE = 'oauth_creds.json';
 const TMP_DIR_NAME = 'tmp';
 
 function resolveSystemSettingsEnv(raw: string | undefined): string | undefined {
-  if (raw === undefined || raw.trim() === '') {
+  if (raw === undefined) {
     return undefined;
   }
-  if (!path.isAbsolute(raw)) {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
     return undefined;
   }
-  return path.resolve(raw);
+  if (!path.isAbsolute(trimmed)) {
+    return undefined;
+  }
+  return path.resolve(trimmed);
 }
 
 export class Storage {

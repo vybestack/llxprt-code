@@ -259,6 +259,33 @@ describe('Storage – getSystemSettingsPath env override hardening', () => {
     expect(result).not.toBe(raw);
     expect(result).toBe(path.resolve(raw));
   });
+
+  it('trims leading whitespace on an absolute override and resolves it', () => {
+    const cleaned = `${os.tmpdir()}/settings.json`;
+    process.env[ENV_KEY] = `   ${cleaned}`;
+    expect(Storage.getSystemSettingsPath()).toBe(path.resolve(cleaned));
+  });
+
+  it('trims trailing whitespace on an absolute override and resolves it', () => {
+    const cleaned = `${os.tmpdir()}/settings.json`;
+    process.env[ENV_KEY] = `${cleaned}   `;
+    expect(Storage.getSystemSettingsPath()).toBe(path.resolve(cleaned));
+  });
+
+  it('trims surrounding whitespace on an absolute override and resolves it', () => {
+    const cleaned = `${os.tmpdir()}/settings.json`;
+    process.env[ENV_KEY] = ` \t ${cleaned} \n`;
+    expect(Storage.getSystemSettingsPath()).toBe(path.resolve(cleaned));
+  });
+
+  it('does not preserve trailing whitespace in the resolved path', () => {
+    const cleaned = `${os.tmpdir()}/settings.json`;
+    const raw = `${cleaned}   `;
+    process.env[ENV_KEY] = raw;
+    const result = Storage.getSystemSettingsPath();
+    expect(result).toBe(path.resolve(cleaned));
+    expect(result).not.toBe(path.resolve(raw));
+  });
 });
 
 describe('Storage – getSystemPoliciesDir derives from sanitized path', () => {
