@@ -21,7 +21,12 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getResponseText } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type {
+  ApprovalMode,
+  RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   switchActiveProvider,
@@ -53,11 +58,17 @@ import { ToolControl } from './control/toolControl.js';
 import type { ToolControlDeps } from './control/toolControl.js';
 import { McpControl } from './control/mcpControl.js';
 import type { McpControlDeps } from './control/mcpControl.js';
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+import { buildMcpControlDeps } from './control/mcpControlWiring.js';
 import { AuthControl } from './control/authControl.js';
 import { IdeControl } from './control/ideControl.js';
 import type { IdeControlDeps } from './control/ideControl.js';
 import { HookControl } from './control/hooks.js';
 import type { HookControlDeps } from './control/hooks.js';
+import { PolicyControl } from './control/policyControl.js';
+import type { PolicyControlDeps } from './control/policyControl.js';
+import { TasksControl } from './control/tasksControl.js';
+import type { TasksControlDeps } from './control/tasksControl.js';
 import { SessionControl } from './control/sessionControl.js';
 import type { SessionControlDeps } from './control/sessionControl.js';
 import { ProfilesControl } from './control/profilesControl.js';
@@ -198,6 +209,9 @@ export class AgentImpl implements Agent {
   readonly ide: IdeControl;
   readonly session: SessionControl;
   readonly hooks: HookControl;
+  readonly policy: PolicyControl;
+  /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
+  readonly tasks: TasksControl;
 
   /** @pseudocode createAgent.md steps 150-160 */
   readonly ownership: OwnershipRecord;
@@ -310,6 +324,8 @@ export class AgentImpl implements Agent {
       messageBus: deps.messageBus,
       config: deps.config,
       editorCallbacksHolder: this.editorCallbacksHolder,
+      // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+      keysDeps: { getStorage: () => getToolKeyStorage() },
     };
     this.tools = new ToolControl(toolControlDeps);
     this.profiles = new ProfilesControl({
@@ -330,6 +346,8 @@ export class AgentImpl implements Agent {
     this.ide = this.buildIdeControl();
     this.session = this.buildSessionControl();
     this.hooks = this.buildHookControl();
+    this.policy = this.buildPolicyControl();
+    this.tasks = this.buildTasksControl();
   }
 
   /**
@@ -463,6 +481,8 @@ export class AgentImpl implements Agent {
         }
       },
       keysDeps,
+      // @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+      getOAuthManager: () => this.deps.oauthManager,
     });
   }
 
@@ -474,11 +494,15 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-013
    */
   private buildMcpControl(): McpControl {
-    const mcpDeps: McpControlDeps = {
+    // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 @pseudocode Dependencies/buildMcpControl
+    const mcpDeps: McpControlDeps = buildMcpControlDeps({
+      config: this.deps.config,
       isMcpAuthenticated: (server) => this.authState.mcpAuth.has(server),
-      getManager: () => this.deps.config.getMcpClientManager(),
-      getToolRegistry: () => this.deps.config.getToolRegistry(),
-    };
+      markAuthenticated: (server) => {
+        this.authState.mcpAuth.add(server);
+      },
+      resolveClient: () => this.deps.resolveClient(),
+    });
     return new McpControl(mcpDeps);
   }
 
@@ -496,6 +520,28 @@ export class AgentImpl implements Agent {
       getEditorCallbacks: () => this.editorCallbacksHolder.editorCallbacks,
     };
     return new IdeControl(ideDeps);
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P06
+   * @requirement:REQ-002
+   */
+  private buildPolicyControl(): PolicyControl {
+    const policyDeps: PolicyControlDeps = {
+      getEngine: () => this.deps.config.getPolicyEngine(),
+    };
+    return new PolicyControl(policyDeps);
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P08
+   * @requirement:REQ-003
+   */
+  private buildTasksControl(): TasksControl {
+    const tasksDeps: TasksControlDeps = {
+      getManager: () => this.deps.config.getAsyncTaskManager(),
+    };
+    return new TasksControl(tasksDeps);
   }
 
   /**
@@ -735,6 +781,24 @@ export class AgentImpl implements Agent {
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 40-42 */
   getEphemeralSettings(): Readonly<Record<string, unknown>> {
     return this.deps.config.getEphemeralSettings();
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   * @pseudocode lines 1-4
+   */
+  getApprovalMode(): ApprovalMode {
+    return this.deps.config.getApprovalMode();
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   * @pseudocode lines 10-17
+   */
+  setApprovalMode(mode: ApprovalMode): void {
+    this.deps.config.setApprovalMode(mode);
   }
 
   /**

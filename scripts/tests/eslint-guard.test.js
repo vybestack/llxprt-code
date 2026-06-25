@@ -12,10 +12,13 @@ import {
   checkDiff,
   checkCoreCentralBypassesInConfig,
   checkCoreDirectiveScopesInConfig,
+  checkModuleCentralBypassesInConfig,
+  checkModuleDirectiveScopesInConfig,
   extractScopeArray,
   formatViolations,
   hasInlineEslintDirective,
   scanCoreDirectives,
+  scanModuleDirectives,
   scanPackageDirectives,
 } from '../check-eslint-guard.js';
 
@@ -574,6 +577,251 @@ describe('packages/settings directive cleanup (#2120)', () => {
     expect(
       settingsEntries,
       'Legacy settings entries: ' + settingsEntries.join(', '),
+    ).toEqual([]);
+  });
+});
+
+describe('packages/policy directive cleanup (#2122)', () => {
+  const policySrcDir = join(repoRoot, 'packages', 'policy', 'src');
+
+  describe('scanModuleDirectives', () => {
+    it('reports violations when packages/policy files contain directives', () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-policy-'));
+      const subDir = join(tmpDir, 'src');
+      mkdirSync(subDir, { recursive: true });
+      writeFileSync(
+        join(subDir, 'example.ts'),
+        [
+          'export const x = 1;',
+          '// eslint-disable-next-line sonarjs/expression-complexity',
+          'export const y = (a && b) || (c && d) ? e : f;',
+        ].join('\n'),
+      );
+
+      const violations = scanModuleDirectives(
+        'packages/policy',
+        '2122',
+        tmpDir,
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('#2122');
+      expect(violations[0].message).toContain('packages/policy');
+      expect(violations[0].lineNumber).toBe(2);
+    });
+
+    it('passes when packages/policy files contain no directives', () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-policy-clean-'));
+      writeFileSync(
+        join(tmpDir, 'clean.ts'),
+        ['export const x = 1;', 'export const y = 2;'].join('\n'),
+      );
+
+      expect(scanModuleDirectives('packages/policy', '2122', tmpDir)).toEqual(
+        [],
+      );
+    });
+  });
+
+  describe('checkModuleDirectiveScopesInConfig', () => {
+    it('flags packages/policy entries left in legacyDirectiveCleanupScopes', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/policy/src/**/*.{ts,tsx}', // remaining policy cleanup",
+        "  'packages/cli/src/foo.ts',",
+        '];',
+      ].join('\n');
+
+      const violations = checkModuleDirectiveScopesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].file).toBe('eslint.config.js');
+      expect(violations[0].message).toContain('#2122');
+      expect(violations[0].message).toContain('legacyDirectiveCleanupScopes');
+    });
+
+    it('allows packages/policy in completedDirectiveCleanupScopes (lock)', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/cli/src/foo.ts',",
+        '];',
+        'const completedDirectiveCleanupScopes = [',
+        "  'packages/policy/src/**/*.{ts,tsx}', // #2122",
+        '];',
+      ].join('\n');
+
+      expect(
+        checkModuleDirectiveScopesInConfig(
+          config,
+          'packages/policy',
+          '2122',
+          false,
+        ),
+      ).toEqual([]);
+    });
+  });
+
+  describe('checkModuleCentralBypassesInConfig', () => {
+    it('flags packages/policy central rule-off blocks', () => {
+      const config = [
+        '{',
+        "  files: ['packages/policy/src/example.ts'],",
+        '  rules: {',
+        "    'sonarjs/expression-complexity': 'off',",
+        '  },',
+        '}',
+      ].join('\n');
+
+      const violations = checkModuleCentralBypassesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('rule-off');
+      expect(violations[0].message).toContain('#2122');
+    });
+
+    it('flags packages/policy scoped ignores', () => {
+      const config = [
+        '{',
+        "  files: ['packages/policy/src/**/*.ts'],",
+        "  ignores: ['**/*.test.ts'],",
+        '  rules: {},',
+        '}',
+      ].join('\n');
+
+      const violations = checkModuleCentralBypassesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('scoped ignore');
+    });
+
+    it('allows packages/policy positive enforcement blocks', () => {
+      const config = [
+        '{',
+        "  files: ['packages/policy/src/example.ts'],",
+        '  rules: {',
+        "    'max-lines': ['error', { max: 800 }],",
+        '  },',
+        '}',
+      ].join('\n');
+
+      expect(
+        checkModuleCentralBypassesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
+
+    it('flags packages/policy multi-line files arrays with rule-off', () => {
+      const config = [
+        '{',
+        '  files: [',
+        "    'packages/policy/src/**/*.ts',",
+        '  ],',
+        '  rules: {',
+        "    'sonarjs/expression-complexity': 'off',",
+        '  },',
+        '}',
+      ].join('\n');
+
+      const violations = checkModuleCentralBypassesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('rule-off');
+      expect(violations[0].message).toContain('#2122');
+    });
+
+    it('flags packages/policy multi-line files arrays with scoped ignores', () => {
+      const config = [
+        '{',
+        '  files: [',
+        "    'packages/policy/src/**/*.ts',",
+        '  ],',
+        "  ignores: ['**/*.test.ts'],",
+        '  rules: {},',
+        '}',
+      ].join('\n');
+
+      const violations = checkModuleCentralBypassesInConfig(
+        config,
+        'packages/policy',
+        '2122',
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('scoped ignore');
+    });
+
+    it('ignores packages/policy references in trailing comments', () => {
+      const config = [
+        '{',
+        "  files: ['packages/cli/src/example.ts'], // not packages/policy",
+        '  rules: {',
+        "    'sonarjs/expression-complexity': 'off',",
+        '  },',
+        '}',
+      ].join('\n');
+
+      expect(
+        checkModuleCentralBypassesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
+    it('does not flag completedDirectiveCleanupScopes entries as central bypasses', () => {
+      const config = [
+        'const completedDirectiveCleanupScopes = [',
+        "  'packages/policy/src/**/*.{ts,tsx}', // #2122",
+        '];',
+      ].join('\n');
+
+      expect(
+        checkModuleCentralBypassesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
+
+    it('does not flag legacyDirectiveCleanupScopes entries as central bypasses', () => {
+      const config = [
+        'const legacyDirectiveCleanupScopes = [',
+        "  'packages/policy/src/**/*.ts',",
+        '];',
+      ].join('\n');
+
+      expect(
+        checkModuleCentralBypassesInConfig(config, 'packages/policy', '2122'),
+      ).toEqual([]);
+    });
+  });
+
+  it('has zero inline ESLint disable/enable directives in source', () => {
+    const offenders = scanPackageDirectives(policySrcDir, '2122').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/policy/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const policyEntries = legacy.filter((e) => e.startsWith('packages/policy'));
+    expect(
+      policyEntries,
+      'Legacy policy entries: ' + policyEntries.join(', '),
     ).toEqual([]);
   });
 });

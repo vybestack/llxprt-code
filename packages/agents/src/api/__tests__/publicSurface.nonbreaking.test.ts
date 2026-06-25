@@ -132,3 +132,124 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     );
   }, 30000);
 });
+
+/**
+ * @plan:PLAN-20260622-COREAPIGAP.P18
+ * @requirement:REQ-009
+ *
+ * Additive-surface regression fence: the whole plan is additive, so every
+ * prior #1594-era export MUST still be present with a compatible shape, AND
+ * the new members this plan adds (value enums, projected types, extended
+ * sub-controller methods) MUST be present without altering any prior member.
+ *
+ * This block is APPENDED to the existing REQ-006 characterization (left
+ * byte-identical above). It fences THIS plan's surface growth.
+ *
+ * The COMPILE-TIME half of this fence (projected-type + extended-controller
+ * signature anchors) lives in the sibling additiveSurface.types.ts, NOT here:
+ * the workspace tsconfig excludes "**\/*.test.ts" from `tsc --noEmit`, so
+ * compile anchors placed in this file would be VACUOUS. The ".types.ts" file
+ * IS typecheck-visible (and build-excluded + vitest-ignored). This file holds
+ * only the RUNTIME (introspection) half of the fence.
+ */
+
+describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non-breaking', () => {
+  it('Test A: full #1594-era load-bearing value set is still present as runtime functions (prior ⊂ current)', () => {
+    const rootKeys = new Set(Object.keys(root));
+    const priorLoadBearing: readonly string[] = [
+      'createAgent',
+      'fromConfig',
+      'listProviders',
+      'listTools',
+      'mapLoopStream',
+      'mapStreamEvent',
+      'toConfigParameters',
+      'createTaskToolRegistration',
+      'AdapterError',
+      'AgenticLoop',
+    ];
+    for (const key of priorLoadBearing) {
+      expect(rootKeys.has(key), `prior root key "${key}" must remain`).toBe(
+        true,
+      );
+      expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
+    }
+  });
+
+  it('Test B: internals identity unchanged — AgentClient binding preserved on the documented internals subpath', () => {
+    // AgentClient is a runtime VALUE on the internals.js subpath (REQ-004.1).
+    expect(typeof internals.AgentClient).toBe('function');
+    // PostTurnAction is a value (enum/const) on internals.
+    expect(internals.PostTurnAction).not.toBeUndefined();
+    // Binding identity: AgentClient is a runtime value on BOTH the root barrel
+    // (via `export * from './agent.js'`) AND the documented internals subpath.
+    // The two MUST be the same binding: root.AgentClient === internals.AgentClient
+    const rootAgentClient = (root as Record<string, unknown>).AgentClient;
+    expect(rootAgentClient).toBe(internals.AgentClient);
+  });
+
+  it('Test C: new value enums are present and round-trip (additive surface growth)', () => {
+    expect(typeof root.ApprovalMode).toBe('object');
+    expect(typeof root.PolicyDecision).toBe('object');
+    expect(root.ApprovalMode.YOLO).toBe('yolo');
+    expect(root.ApprovalMode.AUTO_EDIT).toBe('autoEdit');
+    expect(root.ApprovalMode.DEFAULT).toBe('default');
+    expect(root.PolicyDecision.ASK_USER).toBe('ask_user');
+    expect(root.PolicyDecision.ALLOW).toBe('allow');
+    expect(root.PolicyDecision.DENY).toBe('deny');
+  });
+
+  it('PROP 1: each sampled prior load-bearing key is a live root key AND callable (REQ-009)', () => {
+    const priorLoadBearing: readonly string[] = [
+      'createAgent',
+      'fromConfig',
+      'listProviders',
+      'listTools',
+      'mapLoopStream',
+      'mapStreamEvent',
+      'toConfigParameters',
+      'createTaskToolRegistration',
+      'AdapterError',
+      'AgenticLoop',
+    ];
+    const rootKeys = new Set(Object.keys(root));
+    fc.assert(
+      fc.property(fc.constantFrom(...priorLoadBearing), (key) => {
+        expect(rootKeys.has(key)).toBe(true);
+        expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
+        return true;
+      }),
+    );
+  }, 30000);
+
+  it('PROP 2: each sampled new enum member round-trips to its expected string value (REQ-009)', () => {
+    const approvalModeEntries: ReadonlyArray<readonly [string, string]> = [
+      ['YOLO', 'yolo'],
+      ['AUTO_EDIT', 'autoEdit'],
+      ['DEFAULT', 'default'],
+    ];
+    const policyDecisionEntries: ReadonlyArray<readonly [string, string]> = [
+      ['ASK_USER', 'ask_user'],
+      ['ALLOW', 'allow'],
+      ['DENY', 'deny'],
+    ];
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...approvalModeEntries, ...policyDecisionEntries),
+        ([memberName, expectedValue]) => {
+          const enumObj =
+            memberName === 'ASK_USER' ||
+            memberName === 'ALLOW' ||
+            memberName === 'DENY'
+              ? root.PolicyDecision
+              : root.ApprovalMode;
+          const value = (enumObj as Record<string, string>)[memberName];
+          expect(typeof value).toBe('string');
+          expect(value.length).toBeGreaterThan(0);
+          expect(value).toBe(expectedValue);
+          return true;
+        },
+      ),
+    );
+  }, 30000);
+});

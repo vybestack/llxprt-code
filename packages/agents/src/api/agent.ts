@@ -18,6 +18,7 @@ import type {
   HookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type { PolicyDecision } from '@vybestack/llxprt-code-core';
 import type { EditorCallbacks } from './config-types.js';
 import type {
   AgentEvent,
@@ -158,11 +159,67 @@ export interface McpStatus {
   readonly servers: readonly McpServerInfo[];
 }
 
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpDetailsOptions {
+  readonly includeTools?: boolean;
+  readonly includePrompts?: boolean;
+  readonly includeResources?: boolean;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpPromptInfo {
+  readonly name: string;
+  readonly description?: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpResourceInfo {
+  readonly name?: string;
+  readonly uri: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpBlockedServer {
+  readonly name: string;
+  readonly extensionName: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpServerDetail {
+  readonly name: string;
+  readonly authenticated: boolean;
+  readonly tools?: readonly ToolInfo[];
+  readonly prompts?: readonly McpPromptInfo[];
+  readonly resources?: readonly McpResourceInfo[];
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+export interface McpDetailStatus {
+  readonly servers: readonly McpServerDetail[];
+  readonly blockedServers: readonly McpBlockedServer[];
+}
+
 export interface AuthBucket {
   readonly name: string;
   readonly provider?: string;
   readonly baseUrl?: string;
   readonly active: boolean;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+export interface AuthProviderDetail {
+  readonly provider: string;
+  readonly authenticated: boolean;
+  readonly oauthEnabled: boolean;
+  readonly expiry?: number;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+export interface AuthBucketStatus {
+  readonly bucket: string;
+  readonly authenticated: boolean;
+  readonly expiry?: number;
+  readonly isSessionBucket: boolean;
 }
 
 export interface KeyInfo {
@@ -220,6 +277,31 @@ export interface HookExecutionResponse {
   readonly output: HookOutput;
 }
 
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+export interface ToolKeyInfo {
+  readonly toolName: string;
+  readonly displayName: string;
+  readonly description?: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+export interface ToolKeyStatus {
+  readonly toolName: string;
+  readonly hasKey: boolean;
+  readonly maskedKey?: string;
+  readonly keyFile?: string;
+}
+
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+export interface AgentToolKeyControl {
+  supported(): readonly ToolKeyInfo[];
+  status(toolName: string): Promise<ToolKeyStatus>;
+  save(toolName: string, key: string): Promise<void>;
+  delete(toolName: string): Promise<void>;
+  setKeyFile(toolName: string, path: string | null): Promise<void>;
+  getKeyFile(toolName: string): Promise<string | null>;
+}
+
 export interface AgentToolControl {
   list(): readonly ToolInfo[];
   setEnabled(names: readonly string[]): Promise<void>;
@@ -227,6 +309,8 @@ export interface AgentToolControl {
   respondToConfirmation(confirmationId: string, decision: ToolDecision): void;
   onToolUpdate(cb: (u: ToolUpdate) => void): Unsubscribe;
   setEditorCallbacks(cbs: EditorCallbacks): void;
+  // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+  readonly keys: AgentToolKeyControl;
 }
 
 export interface AgentMcpControl {
@@ -236,6 +320,10 @@ export interface AgentMcpControl {
   auth(server: string): Promise<McpServerAuthStatus>;
   discoveryState(): McpDiscoveryState;
   refresh(server?: string): Promise<void>;
+  // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+  authenticate(server: string): Promise<McpServerAuthStatus>;
+  // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+  details(opts?: McpDetailsOptions): Promise<McpDetailStatus>;
 }
 
 export interface AgentAuthKeysControl {
@@ -274,6 +362,10 @@ export interface AgentAuthControl {
     baseUrl: string | null,
     opts?: { readonly provider?: string },
   ): Promise<void>;
+  // @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
+  detailedStatus(provider: string): Promise<AuthProviderDetail>;
+  getHigherPriorityAuth(provider: string): Promise<string | null>;
+  listBucketStatuses(provider: string): Promise<readonly AuthBucketStatus[]>;
 }
 
 export interface AgentIdeControl {
@@ -318,6 +410,79 @@ export interface AgentHookControl {
   triggerSessionStart(): Promise<void>;
   triggerSessionEnd(): Promise<void>;
   clear(): void;
+  // @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004
+  listHooks(): readonly HookInfo[];
+  getDisabledHooks(): readonly string[];
+  setDisabledHooks(names: readonly string[]): void;
+  enable(name: string): void;
+  disable(name: string): void;
+}
+
+/**
+ * Projected public view of a registered hook (REQ-004.1). Mirrors a live
+ * HookRegistryEntry's identifying fields without exposing the engine type.
+ * @plan:PLAN-20260622-COREAPIGAP.P10
+ * @requirement:REQ-004
+ */
+export interface HookInfo {
+  readonly name: string;
+  readonly eventName: string;
+  readonly enabled: boolean;
+  readonly source?: string;
+}
+
+/**
+ * Read-only projection of a policy rule (REQ-002.1). `argsPattern` is the
+ * RegExp source STRING (JSON-safe), never a RegExp.
+ * @plan:PLAN-20260622-COREAPIGAP.P06
+ * @requirement:REQ-002
+ */
+export interface PolicyRuleView {
+  readonly priority?: number;
+  readonly toolName?: string;
+  readonly decision: PolicyDecision;
+  readonly argsPattern?: string;
+  readonly source?: string;
+}
+
+/**
+ * Read-only inspection of the engine policy (REQ-002).
+ * @plan:PLAN-20260622-COREAPIGAP.P06
+ * @requirement:REQ-002
+ */
+export interface AgentPolicyControl {
+  getRules(): readonly PolicyRuleView[];
+  getDefaultDecision(): PolicyDecision;
+  isNonInteractive(): boolean;
+}
+
+/**
+ * Projected public view of an async task. OMITS abortController and any
+ * non-serializable internal (REQ-003.7).
+ * @plan:PLAN-20260622-COREAPIGAP.P08
+ * @requirement:REQ-003
+ */
+export interface AgentTaskInfo {
+  readonly id: string;
+  readonly subagentName: string;
+  readonly goalPrompt: string;
+  readonly status: 'running' | 'completed' | 'failed' | 'cancelled';
+  readonly launchedAt: number;
+  readonly completedAt?: number;
+  readonly error?: string;
+}
+
+/**
+ * Undefined-safe async-task administration (REQ-003).
+ * @plan:PLAN-20260622-COREAPIGAP.P08
+ * @requirement:REQ-003
+ */
+export interface AgentTasksControl {
+  list(): readonly AgentTaskInfo[];
+  listRunning(): readonly AgentTaskInfo[];
+  get(id: string): AgentTaskInfo | undefined;
+  cancel(id: string): boolean;
+  cancelAllRunning(): number;
 }
 
 export interface Agent {
@@ -330,6 +495,19 @@ export interface Agent {
   getModel(): string;
   setModel(model: string): Promise<void>;
   getCurrentSequenceModel(): string | null;
+  /**
+   * Reads the live approval mode from the bound Config (no caching).
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   */
+  getApprovalMode(): ApprovalMode;
+  /**
+   * Sets the approval mode via the bound Config. Delegates directly: the
+   * untrusted-folder guard throw (config.ts:404) propagates unchanged.
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   */
+  setApprovalMode(mode: ApprovalMode): void;
   /**
    * Returns the bound runtime-context runtimeId (REQ-005.1).
    * @plan:PLAN-20260621-COREAPIREMED.P18
@@ -355,6 +533,9 @@ export interface Agent {
   readonly ide: AgentIdeControl;
   readonly session: AgentSessionControl;
   readonly hooks: AgentHookControl;
+  readonly policy: AgentPolicyControl;
+  /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
+  readonly tasks: AgentTasksControl;
 
   getHistory(): Promise<readonly AgentMessage[]>;
   setHistory(

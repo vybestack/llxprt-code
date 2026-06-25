@@ -21,6 +21,8 @@
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type { EditorCallbacks } from '../../config-types.js';
 import type { ToolControlDeps } from '../../control/toolControl.js';
 
@@ -95,6 +97,8 @@ export function createToolControlDeps(
     messageBus,
     config,
     editorCallbacksHolder,
+    // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+    keysDeps: { getStorage: () => getToolKeyStorage() },
   };
 
   return {

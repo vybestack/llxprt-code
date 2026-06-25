@@ -24,12 +24,15 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../config-types.js';
 import type {
   AgentToolControl,
+  AgentToolKeyControl,
   ToolDecision,
   ToolInfo,
   Unsubscribe,
 } from '../agent.js';
 import type { ToolConfirmation, ToolUpdate } from '../event-types.js';
 import { buildToolInfos } from '../agentBootstrap.js';
+import { ToolKeysControl } from './toolKeysControl.js';
+import type { ToolKeysControlDeps } from './toolKeysControl.js';
 
 /**
  * Typed error thrown by {@link ToolControl.respondToConfirmation} when the
@@ -63,6 +66,9 @@ export interface ToolControlDeps {
    * `setEditorCallbacks` is observable by the next turn's scheduler.
    */
   readonly editorCallbacksHolder: { editorCallbacks: EditorCallbacks };
+  // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+  /** The deps bundle for the constructed ToolKeysControl. */
+  readonly keysDeps: ToolKeysControlDeps;
 }
 
 type ConfirmationCallback = (req: ToolConfirmation) => void;
@@ -80,8 +86,12 @@ export class ToolControl implements AgentToolControl {
   private readonly confirmationCallbacks = new Set<ConfirmationCallback>();
   private readonly toolUpdateCallbacks = new Set<ToolUpdateCallback>();
   private readonly seen = new Set<string>();
+  // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+  readonly keys: AgentToolKeyControl;
 
-  constructor(private readonly deps: ToolControlDeps) {}
+  constructor(private readonly deps: ToolControlDeps) {
+    this.keys = new ToolKeysControl(deps.keysDeps);
+  }
 
   /**
    * Returns a frozen snapshot of the registered tools (name/source/enabled),

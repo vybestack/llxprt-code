@@ -38,8 +38,6 @@ import {
 import {
   StreamEventType,
   type StreamEvent,
-  InvalidStreamError,
-  EmptyStreamError,
   isThoughtPart,
   isSchemaDepthError,
   INVALID_CONTENT_RETRY_OPTIONS,
@@ -52,6 +50,7 @@ import {
   getHookRestrictedAllowedTools,
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
+import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -290,11 +289,7 @@ export class TurnProcessor {
         }
         return { error: null, action: 'stop' };
       }
-      if (
-        (error instanceof InvalidStreamError ||
-          error instanceof EmptyStreamError) &&
-        attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts - 1
-      ) {
+      if (shouldRetryStreamAttempt(error, params, attempt)) {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
