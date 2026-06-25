@@ -512,7 +512,6 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
       logger: deps.logger,
       shellModeActive: deps.shellModeActive,
       scheduleToolCalls: deps.scheduleToolCalls,
-      turnCancelledRef: deps.turnCancelledRef,
     }),
     [
       deps.config,
@@ -523,7 +522,6 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
       deps.logger,
       deps.shellModeActive,
       deps.scheduleToolCalls,
-      deps.turnCancelledRef,
     ],
   );
 }
