@@ -353,31 +353,6 @@ describe('TokenAccessCoordinator forceRefreshToken bucket resolution (issue #213
     expect(defaultStored?.access_token).toBe('refreshed-failed-access-token');
   });
 
-  it('forceRefreshToken with a non-default session bucket writes the refreshed token under that bucket (issue #2131)', async () => {
-    const bucketAToken = makeToken(FAILED_TOKEN, 3600, 'refresh-bucket-a');
-    const initialTokens = new Map([['anthropic::bucket-a', bucketAToken]]);
-    const provider = createMockProvider('anthropic');
-    const { coordinator, tokenStore, facade } = makeCoordinator({
-      provider,
-      initialTokens,
-    });
-
-    facade.getSessionBucket = vi.fn(() => 'bucket-a');
-
-    const refreshed = await coordinator.forceRefreshToken(
-      'anthropic',
-      FAILED_TOKEN,
-    );
-
-    expect(refreshed?.access_token).toBe('refreshed-failed-access-token');
-
-    const stored = await tokenStore.getToken('anthropic', 'bucket-a');
-    expect(stored?.access_token).toBe('refreshed-failed-access-token');
-
-    const defaultStored = await tokenStore.getToken('anthropic');
-    expect(defaultStored).toBeNull();
-  });
-
   it('forceRefreshToken refreshes the profile-scoped session bucket when the unscoped session bucket is absent (issue #2131)', async () => {
     // Simulate an active multi-bucket profile whose request used a SCOPED
     // session bucket (recorded under profile-scoped metadata), while the

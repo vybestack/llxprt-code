@@ -917,11 +917,6 @@ export class TokenAccessCoordinator {
     failedAccessToken: string,
     bucket?: string,
   ): Promise<OAuthToken | null> {
-    logger.debug(
-      () =>
-        `[FLOW] forceRefreshToken() called for provider: ${providerName}, bucket: ${bucket ?? 'default'}`,
-    );
-
     if (!this.providerRegistry.getProvider(providerName)) {
       logger.debug(
         () =>
@@ -937,6 +932,11 @@ export class TokenAccessCoordinator {
     const effectiveBucket = await this.resolveForceRefreshEffectiveBucket(
       providerName,
       bucket,
+    );
+
+    logger.debug(
+      () =>
+        `[FLOW] forceRefreshToken() called for provider: ${providerName}, effectiveBucket: ${effectiveBucket ?? 'default'} (requested bucket: ${bucket ?? 'none'})`,
     );
 
     // @fix issue2035: capture the baseline BEFORE acquiring the lock so the
