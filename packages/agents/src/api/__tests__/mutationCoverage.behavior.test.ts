@@ -423,6 +423,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
           await cleanup();
         }
       }),
+      { numRuns: Math.max(names.length, 1) },
     );
   }, 30000);
 });

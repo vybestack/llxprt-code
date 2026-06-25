@@ -252,6 +252,13 @@ describe('Storage – getSystemSettingsPath env override hardening', () => {
     );
   });
 
+  it('ignores an empty-string override in favor of platform default', () => {
+    process.env[ENV_KEY] = '';
+    expect(Storage.getSystemSettingsPath()).toBe(
+      expectedDefaultSystemSettingsPath(),
+    );
+  });
+
   it('rejects raw env input: resolved path differs from raw when traversal present', () => {
     const raw = `${os.tmpdir()}/x/../settings.json`;
     process.env[ENV_KEY] = raw;
