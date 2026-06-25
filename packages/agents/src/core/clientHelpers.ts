@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Content } from '@google/genai';
+import { type PartListUnion, type Part, type Content } from '@google/genai';
 
 export function isThinkingSupported(model: string) {
   return !model.startsWith('gemini-2.0');
@@ -137,4 +137,68 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
     }
   }
   return textLength;
+}
+
+/**
+ * Structured, payload-aware token estimate for a pending request, used as a
+ * fallback when the model-aware tokenizer (ChatSession.estimatePendingTokens)
+ * is unavailable — e.g. with minimal test doubles.
+ *
+ * Unlike `estimateTextOnlyLength`, this accounts for `functionResponse` and
+ * `functionCall` payloads by serializing their JSON, so a bare
+ * functionResponse continuation is no longer estimated as 0 tokens. Binary
+ * payloads (`inlineData`/`fileData`) are intentionally ignored so that large
+ * base64 blobs do not produce false-positive overflow estimates.
+ */
+export function estimateRequestTokensStructured(
+  request: PartListUnion,
+): number {
+  const parts = normalizeToParts(request);
+  let charLength = 0;
+  for (const part of parts) {
+    charLength += charLengthForPart(part);
+  }
+  return Math.floor(charLength / 4);
+}
+
+/**
+ * Computes the character length contribution of a single part for the
+ * structured fallback. Returns 0 for binary payloads (inlineData/fileData)
+ * so large base64 blobs do not inflate the estimate.
+ */
+function charLengthForPart(part: Part | string): number {
+  if (typeof part === 'string') {
+    return part.length;
+  }
+  const record = part as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.includes('inlineData') || keys.includes('fileData')) {
+    return 0;
+  }
+  if (typeof record.text === 'string') {
+    return record.text.length;
+  }
+  if (
+    record.functionResponse !== undefined &&
+    record.functionResponse !== null
+  ) {
+    return safeJsonLength(record.functionResponse);
+  }
+  if (record.functionCall !== undefined && record.functionCall !== null) {
+    return safeJsonLength(record.functionCall);
+  }
+  return 0;
+}
+
+function normalizeToParts(request: PartListUnion): Array<Part | string> {
+  if (typeof request === 'string') return [request];
+  return Array.isArray(request) ? request : [request];
+}
+
+function safeJsonLength(value: unknown): number {
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return 0;
+  }
 }
