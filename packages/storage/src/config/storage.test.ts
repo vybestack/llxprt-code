@@ -181,4 +181,9 @@ describe('Storage – additional helpers', () => {
     const expected = path.join(os.homedir(), '.llxprt', 'tmp');
     expect(Storage.getGlobalTempDir()).toBe(expected);
   });
+
+  it('getMachineSecretPath returns ~/.llxprt/machine_secret', () => {
+    const expected = path.join(os.homedir(), '.llxprt', 'machine_secret');
+    expect(Storage.getMachineSecretPath()).toBe(expected);
+  });
 });
