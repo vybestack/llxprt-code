@@ -193,6 +193,55 @@ describe('FileDiscoveryService', () => {
         fsSync.realpathSync(visiblePath),
       ]);
     });
+
+    it('should treat a symlink into an ignored directory consistently between fast path and non-fast path', async () => {
+      await createTestFile('.gitignore', 'ignored-target/\n');
+      await createTestFile('ignored-target/real.txt', 'data');
+      const symlinkPath = path.join(projectRoot, 'link-to-ignored.txt');
+      await fs.symlink(
+        path.join(projectRoot, 'ignored-target', 'real.txt'),
+        symlinkPath,
+      );
+
+      const service = new FileDiscoveryService(projectRoot);
+      const fastPath = service.filterFiles([symlinkPath], {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      });
+      const nonFastPath = service.filterFiles([symlinkPath], {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: false,
+      });
+
+      expect(fastPath).toStrictEqual([]);
+      expect(nonFastPath).toStrictEqual([]);
+      expect(fastPath).toStrictEqual(nonFastPath);
+    });
+
+    it('should resolve relative symlink input paths against projectRoot consistently in both branches', async () => {
+      await createTestFile('.gitignore', 'ignored-target/\n');
+      await createTestFile('ignored-target/real.txt', 'data');
+      await fs.symlink(
+        path.join(projectRoot, 'ignored-target'),
+        path.join(projectRoot, 'linked-target'),
+        'dir',
+      );
+      const relativeSymlinkPath = path.join('linked-target', 'real.txt');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const fastPath = service.filterFiles([relativeSymlinkPath], {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      });
+      const nonFastPath = service.filterFiles([relativeSymlinkPath], {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: false,
+      });
+
+      expect(fastPath).toStrictEqual([]);
+      expect(nonFastPath).toStrictEqual([]);
+      expect(fastPath).toStrictEqual(nonFastPath);
+    });
   });
 
   describe('filterFilesWithReport', () => {
