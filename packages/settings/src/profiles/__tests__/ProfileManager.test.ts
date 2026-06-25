@@ -15,6 +15,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { ProfileManager } from '../ProfileManager.js';
+import { parseProfile } from '../../settings/validation.js';
 
 async function makeTempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-profile-test-'));
@@ -284,6 +285,72 @@ describe('ProfileManager — save and load with SettingsService', () => {
     expect(appliedData['currentProfile']).toBe('load-target');
   });
 
+  it('load normalizes tool array entries before applying settings', async () => {
+    const profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {
+        'tools.allowed': [1, 'read_file', false],
+        'tools.disabled': [2, 'shell'],
+      },
+    };
+    await pm.saveProfile('tool-normalization', profile);
+
+    const appliedData: Record<string, unknown> = {};
+    const mockSettingsService = {
+      setCurrentProfileName: () => {},
+      importFromProfile: async () => {},
+      set: (key: string, value: unknown) => {
+        appliedData[key] = value;
+      },
+    };
+
+    await pm.load('tool-normalization', mockSettingsService);
+
+    expect(appliedData['tools.allowed']).toStrictEqual([
+      '1',
+      'read_file',
+      'false',
+    ]);
+    expect(appliedData['tools.disabled']).toStrictEqual(['2', 'shell']);
+    expect(appliedData['disabled-tools']).toStrictEqual(['2', 'shell']);
+  });
+
+  it('load normalizes legacy disabled-tools entries before applying settings', async () => {
+    const profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {
+        'disabled-tools': [3, 'read_many_files'],
+      },
+    };
+    await pm.saveProfile('legacy-tool-normalization', profile);
+
+    const appliedData: Record<string, unknown> = {};
+    const mockSettingsService = {
+      setCurrentProfileName: () => {},
+      importFromProfile: async () => {},
+      set: (key: string, value: unknown) => {
+        appliedData[key] = value;
+      },
+    };
+
+    await pm.load('legacy-tool-normalization', mockSettingsService);
+
+    expect(appliedData['tools.disabled']).toStrictEqual([
+      '3',
+      'read_many_files',
+    ]);
+    expect(appliedData['disabled-tools']).toStrictEqual([
+      '3',
+      'read_many_files',
+    ]);
+  });
+
   it('save persists auth-keyfile in ephemeralSettings', async () => {
     const mockSettingsService = {
       exportForProfile: async () => ({
@@ -341,5 +408,475 @@ describe('ProfileManager — save and load with SettingsService', () => {
     >;
     expect(providers.openai['auth-key']).toBe('sk-roundtrip');
     expect(providers.openai['auth-keyfile']).toBe('/roundtrip/keyfile');
+  });
+});
+
+describe('ProfileManager — corrupted and malformed profile JSON', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('maps JSON null to invalid missing required fields (not raw TypeError)', async () => {
+    const filePath = path.join(tempDir, 'null-profile.json');
+    await fs.writeFile(filePath, 'null', 'utf8');
+
+    await expect(pm.loadProfile('null-profile')).rejects.toThrow(
+      "Profile 'null-profile' is invalid: missing required fields",
+    );
+  });
+
+  it('maps a JSON array to invalid missing required fields', async () => {
+    const filePath = path.join(tempDir, 'array-profile.json');
+    await fs.writeFile(filePath, '[1, 2, 3]', 'utf8');
+
+    await expect(pm.loadProfile('array-profile')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('maps a JSON number to invalid missing required fields', async () => {
+    const filePath = path.join(tempDir, 'number-profile.json');
+    await fs.writeFile(filePath, '42', 'utf8');
+
+    await expect(pm.loadProfile('number-profile')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('maps an empty JSON object to invalid missing required fields', async () => {
+    const filePath = path.join(tempDir, 'empty-profile.json');
+    await fs.writeFile(filePath, '{}', 'utf8');
+
+    await expect(pm.loadProfile('empty-profile')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+});
+
+describe('ProfileManager — malformed loadbalancer profile shapes', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('reports unsupported version for a loadbalancer with version 2 and no profiles', async () => {
+    const filePath = path.join(tempDir, 'lb-v2.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({ type: 'loadbalancer', version: 2 }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-v2')).rejects.toThrow(
+      'unsupported profile version',
+    );
+  });
+
+  it('reports unsupported version for a loadbalancer with version 2 and valid profiles', async () => {
+    const filePath = path.join(tempDir, 'lb-v2-profiles.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: 'loadbalancer',
+        version: 2,
+        profiles: ['p1'],
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-v2-profiles')).rejects.toThrow(
+      'unsupported profile version',
+    );
+  });
+
+  it('reports missing profiles for a version-1 loadbalancer without profiles', async () => {
+    const filePath = path.join(tempDir, 'lb-no-profiles.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({ type: 'loadbalancer', version: 1 }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-no-profiles')).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('reports missing profiles for a version-1 loadbalancer with empty profiles array', async () => {
+    const filePath = path.join(tempDir, 'lb-empty-profiles.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: 'loadbalancer',
+        version: 1,
+        profiles: [],
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-empty-profiles')).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('reports unsupported version (not missing profiles) when version is 2 and profiles is missing', async () => {
+    const filePath = path.join(tempDir, 'lb-v2-missing-profiles.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({ type: 'loadbalancer', version: 2 }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-v2-missing-profiles')).rejects.toThrow(
+      'unsupported profile version',
+    );
+  });
+});
+
+describe('ProfileManager — malformed standard profile modelParams/ephemeralSettings', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('rejects a standard profile with primitive modelParams', async () => {
+    const filePath = path.join(tempDir, 'primitive-modelparams.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: 'not-an-object',
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('primitive-modelparams')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with array modelParams', async () => {
+    const filePath = path.join(tempDir, 'array-modelparams.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: [],
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('array-modelparams')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with null modelParams', async () => {
+    const filePath = path.join(tempDir, 'null-modelparams.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: null,
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('null-modelparams')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with primitive ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'primitive-ephemeral.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: 42,
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('primitive-ephemeral')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with array ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'array-ephemeral.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: ['not', 'an', 'object'],
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('array-ephemeral')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects a standard profile with null ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'null-ephemeral.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: null,
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('null-ephemeral')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects standard profile fields with custom prototypes', () => {
+    const customPrototype = { inherited: true };
+    const modelParams: Record<string, unknown> = Object.create(customPrototype);
+    modelParams.temperature = 0.7;
+
+    const profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams,
+      ephemeralSettings: {},
+    };
+
+    expect(() => parseProfile(profile)).toThrow('missing required fields');
+  });
+
+  it('accepts a well-formed standard profile with object modelParams and ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'valid-profile.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: { temperature: 0.7 },
+        ephemeralSettings: { 'base-url': 'https://api.openai.com' },
+      }),
+      'utf8',
+    );
+
+    const loaded = await pm.loadProfile('valid-profile');
+    expect(loaded.provider).toBe('openai');
+    expect(loaded.model).toBe('gpt-4');
+  });
+});
+
+describe('ProfileManager — parse boundary rejects unsafe object shapes', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('rejects prototype-pollution keys in standard profile modelParams', async () => {
+    const filePath = path.join(tempDir, 'polluted-modelparams.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: { constructor: { prototype: { polluted: true } } },
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('polluted-modelparams')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+
+  it('rejects prototype-pollution keys in standard profile ephemeralSettings', async () => {
+    const filePath = path.join(tempDir, 'polluted-ephemeral.json');
+    await fs.writeFile(
+      filePath,
+      '{"version":1,"provider":"openai","model":"gpt-4","modelParams":{},"ephemeralSettings":{"__proto__":{"polluted":true}}}',
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('polluted-ephemeral')).rejects.toThrow(
+      'missing required fields',
+    );
+  });
+});
+
+describe('ProfileManager — saveLoadBalancerProfile type discriminant validation', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('rejects a runtime-shaped value with missing type', async () => {
+    const profile = {
+      version: 1,
+      policy: 'roundrobin',
+      profiles: ['p1'],
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    await expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('rejects a runtime-shaped value with wrong type', async () => {
+    const profile = {
+      version: 1,
+      type: 'standard',
+      policy: 'roundrobin',
+      profiles: ['p1'],
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    await expect(pm.saveLoadBalancerProfile('bad', profile)).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('does not write a file when the type discriminant is missing', async () => {
+    const profile = {
+      version: 1,
+      policy: 'roundrobin',
+      profiles: ['p1'],
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    await expect(
+      pm.saveLoadBalancerProfile('no-write', profile),
+    ).rejects.toThrow('must reference at least one profile');
+
+    const filePath = path.join(tempDir, 'no-write.json');
+    await expect(fs.access(filePath)).rejects.toThrow('ENOENT');
+  });
+});
+
+describe('ProfileManager — loadbalancer profile entry validation', () => {
+  let tempDir: string;
+  let pm: ProfileManager;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+    pm = new ProfileManager(tempDir);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('rejects loadbalancer profiles with non-string profile entries', async () => {
+    const filePath = path.join(tempDir, 'lb-non-string-profile.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: 'loadbalancer',
+        version: 1,
+        profiles: ['p1', 2],
+        policy: 'roundrobin',
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-non-string-profile')).rejects.toThrow(
+      /must reference at least one profile/,
+    );
+  });
+
+  it('rejects loadbalancer profiles with empty profile names', async () => {
+    const filePath = path.join(tempDir, 'lb-empty-profile-name.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: 'loadbalancer',
+        version: 1,
+        profiles: [''],
+        policy: 'roundrobin',
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {},
+      }),
+      'utf8',
+    );
+
+    await expect(pm.loadProfile('lb-empty-profile-name')).rejects.toThrow(
+      /must reference at least one profile/,
+    );
   });
 });
