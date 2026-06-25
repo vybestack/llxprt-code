@@ -321,6 +321,39 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
     }
   });
 
+  it('T25b details() with BOTH closures omitted is undefined-safe per server: requiresAuth:false, oauthStatus:not-required, authenticated:false, sessionAuthenticated from the marker @requirement:REQ-003,REQ-004 @scenario:details-undefined-safe', async () => {
+    const callLog: string[] = [];
+    const deps = buildProjectionDeps(callLog, {
+      omitOAuthStatus: true,
+      omitRequiresAuth: true,
+      authenticated: ['gamma'],
+      servers: {
+        gamma: fakeServerConfig({}),
+        delta: fakeServerConfig({}),
+      },
+    });
+    const control = new McpControl(deps);
+    const detail = await control.details();
+    const gamma = detail.servers.find((s) => s.name === 'gamma');
+    const delta = detail.servers.find((s) => s.name === 'delta');
+    expect(gamma).toStrictEqual({
+      name: 'gamma',
+      authenticated: false,
+      requiresAuth: false,
+      oauthStatus: 'not-required',
+      sessionAuthenticated: true,
+      tools: [],
+    });
+    expect(delta).toStrictEqual({
+      name: 'delta',
+      authenticated: false,
+      requiresAuth: false,
+      oauthStatus: 'not-required',
+      sessionAuthenticated: false,
+      tools: [],
+    });
+  });
+
   it('T26 authenticate("s") happy path re-reads real status post-handshake and preserves orchestration order @requirement:REQ-002 @scenario:authenticate-rereads-real', async () => {
     const callLog: string[] = [];
     const deps = buildProjectionDeps(callLog, {

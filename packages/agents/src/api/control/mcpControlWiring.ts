@@ -11,7 +11,11 @@
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { MCPOAuthProvider } from '@vybestack/llxprt-code-core';
+import {
+  MCPOAuthProvider,
+  getMcpServerOAuthStatus,
+  mcpServerRequiresOAuth,
+} from '@vybestack/llxprt-code-core';
 import type { McpControlDeps } from './mcpControl.js';
 
 /**
@@ -35,6 +39,7 @@ export interface McpControlWiringArgs {
  *
  * @plan:PLAN-20260622-COREAPIGAP.P14
  * @requirement:REQ-006
+ * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003,REQ-004 @pseudocode agents-projection.md lines 80-93
  */
 export function buildMcpControlDeps(
   args: McpControlWiringArgs,
@@ -63,5 +68,15 @@ export function buildMcpControlDeps(
         undefined,
       );
     },
+    // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003 @pseudocode agents-projection.md lines 86-88
+    getRequiresAuth: (server: string) =>
+      config.getMcpServers()?.[server]?.oauth?.enabled === true ||
+      mcpServerRequiresOAuth.has(server),
+    // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md lines 89-92
+    getOAuthStatus: (server: string) =>
+      getMcpServerOAuthStatus(server, {
+        requiresOAuth:
+          config.getMcpServers()?.[server]?.oauth?.enabled === true,
+      }),
   };
 }
