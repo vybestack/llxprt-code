@@ -13,7 +13,20 @@
  * 3. Delegation markers are stripped from final prompts
  */
 
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  vi,
+} from 'vitest';
+
+vi.hoisted(() => {
+  delete globalThis.process.env.LLXPRT_PROMPT_MANIFEST;
+});
+
 import {
   getCoreSystemPromptAsync,
   initializePromptSystem,
@@ -49,10 +62,7 @@ describe('prompts async integration', () => {
     // Create a temporary directory for test prompts
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-test-'));
     process.env.LLXPRT_PROMPTS_DIR = tempDir;
-    process.env.LLXPRT_PROMPT_MANIFEST = path.join(
-      process.cwd(),
-      'src/prompt-config/defaults/default-prompts.json',
-    );
+    delete process.env.LLXPRT_PROMPT_MANIFEST;
     __resetManifestCacheForTests();
 
     // Initialize the prompt system once for all tests
