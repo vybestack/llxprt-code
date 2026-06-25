@@ -25,11 +25,10 @@ export interface RetryOptions {
   maxAttempts: number;
   initialDelayMs: number;
   maxDelayMs: number;
-  shouldRetryOnError: (error: Error, retryFetchErrors?: boolean) => boolean;
+  shouldRetryOnError: (error: Error) => boolean;
   shouldRetryOnContent?: (content: GenerateContentResponse) => boolean;
   onPersistent429?: (error?: unknown) => Promise<string | boolean | null>;
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
-  retryFetchErrors?: boolean;
   signal?: AbortSignal;
   /**
    * Callback invoked on 401/403 auth errors before retry.
@@ -228,7 +227,7 @@ export function isNetworkTransientError(error: unknown): boolean {
  *
  * Decision precedence (CRITICAL - do not reorder):
  * 1. Network transient conditions (ETIMEDOUT, ECONNRESET, "fetch failed", etc.) → ALWAYS retry
- *    (centralized in isNetworkTransientError; regardless of retryFetchErrors)
+ *    (centralized in isNetworkTransientError)
  * 2. RetryableQuotaError → retry
  * 3. Anthropic body-level errors (overloaded_error, rate_limit_error, api_error, no HTTP status) → retry
  * 4. ApiError with status 400 → NEVER retry; ApiError 401/403/429/5xx → retry
@@ -236,16 +235,10 @@ export function isNetworkTransientError(error: unknown): boolean {
  * 6. All others → do not retry
  *
  * @param error The error object.
- * @param retryFetchErrors Retained for type-contract compatibility; "fetch failed"
- *   is now handled centrally by isNetworkTransientError (PRIORITY 1).
  * @returns True if the error is retryable, false otherwise.
  */
-export function isRetryableError(
-  error: Error | unknown,
-  _retryFetchErrors?: boolean,
-): boolean {
+export function isRetryableError(error: Error | unknown): boolean {
   // PRIORITY 1: Network error codes are ALWAYS retryable (transient infrastructure failures)
-  // This check MUST come before retryFetchErrors to ensure network errors retry unconditionally
   if (isNetworkTransientError(error)) {
     return true;
   }
@@ -591,8 +584,7 @@ interface RetryContext {
   maxAttempts: number;
   initialDelayMs: number;
   maxDelayMs: number;
-  shouldRetryOnError: (error: Error, retryFetchErrors?: boolean) => boolean;
-  retryFetchErrors: boolean | undefined;
+  shouldRetryOnError: (error: Error) => boolean;
   signal: AbortSignal | undefined;
   options: Partial<RetryOptions> | undefined;
   logger: DebugLogger;
@@ -635,10 +627,7 @@ async function runRetryGuards(
     throw error;
   }
 
-  const shouldRetry = context.shouldRetryOnError(
-    error as Error,
-    context.retryFetchErrors,
-  );
+  const shouldRetry = context.shouldRetryOnError(error as Error);
   if (shouldRetry !== true && !shouldAttemptRefreshRetry) {
     throw error;
   }
@@ -745,7 +734,6 @@ export async function retryWithBackoff<T>(
     maxDelayMs,
     shouldRetryOnError,
     shouldRetryOnContent,
-    retryFetchErrors,
     signal,
   } = {
     ...DEFAULT_RETRY_OPTIONS,
@@ -758,7 +746,6 @@ export async function retryWithBackoff<T>(
     initialDelayMs,
     maxDelayMs,
     shouldRetryOnError,
-    retryFetchErrors,
     signal,
     options,
     logger,

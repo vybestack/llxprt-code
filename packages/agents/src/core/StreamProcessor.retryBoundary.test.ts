@@ -320,17 +320,12 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
 
   describe('execute stream call retry classification', () => {
     it('should classify EmptyStreamError as retryable in the retry policy', async () => {
-      let capturedShouldRetryOnError:
-        | ((error: unknown, retryFetchErrors?: boolean) => boolean)
-        | undefined;
+      let capturedShouldRetryOnError: ((error: unknown) => boolean) | undefined;
       (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
         async <T>(
           fn: () => Promise<T>,
           options?: {
-            shouldRetryOnError?: (
-              error: unknown,
-              retryFetchErrors?: boolean,
-            ) => boolean;
+            shouldRetryOnError?: (error: unknown) => boolean;
           },
         ) => {
           capturedShouldRetryOnError = options?.shouldRetryOnError;
@@ -372,24 +367,16 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
       ).toBe(true);
     });
 
-    it('should pass retryFetchErrors through the retry policy classifier', async () => {
-      let capturedRetryFetchErrors: boolean | undefined;
-      let capturedShouldRetryOnError:
-        | ((error: unknown, retryFetchErrors?: boolean) => boolean)
-        | undefined;
+    it('should classify fetch-failed errors as retryable via centralized transient detection', async () => {
+      let capturedShouldRetryOnError: ((error: unknown) => boolean) | undefined;
 
       (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
         async <T>(
           fn: () => Promise<T>,
           options?: {
-            retryFetchErrors?: boolean;
-            shouldRetryOnError?: (
-              error: unknown,
-              retryFetchErrors?: boolean,
-            ) => boolean;
+            shouldRetryOnError?: (error: unknown) => boolean;
           },
         ) => {
-          capturedRetryFetchErrors = options?.retryFetchErrors;
           capturedShouldRetryOnError = options?.shouldRetryOnError;
           return fn();
         },
@@ -398,12 +385,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
       const executeStreamApiCall = (
         processor as unknown as {
           _executeStreamApiCall: (
-            params: {
-              config?: {
-                abortSignal?: AbortSignal;
-                retryFetchErrors?: boolean;
-              };
-            },
+            params: { config?: { abortSignal?: AbortSignal } },
             promptId: string,
             userContent: Content | Content[],
             provider: { name: string },
@@ -415,7 +397,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
       await executeStreamApiCall
         .call(
           processor,
-          { config: { retryFetchErrors: true } },
+          { config: {} },
           'test-prompt',
           { role: 'user', parts: [{ text: 'test' }] },
           providerStub,
@@ -424,29 +406,15 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           // ignore - _buildAndSendStreamRequest internals are not relevant to this assertion
         });
 
-      expect(capturedRetryFetchErrors).toBe(true);
       expect(capturedShouldRetryOnError).toBeDefined();
       // "fetch failed" is now classified as a network-transient condition
-      // centrally (issue #2161), so it is always retryable regardless of the
-      // retryFetchErrors flag.
+      // centrally (issue #2161), so it is always retryable.
       expect(
-        capturedShouldRetryOnError?.(
-          new Error('fetch failed sending request'),
-          false,
-        ),
-      ).toBe(true);
-      expect(
-        capturedShouldRetryOnError?.(
-          new Error('fetch failed sending request'),
-          true,
-        ),
+        capturedShouldRetryOnError?.(new Error('fetch failed sending request')),
       ).toBe(true);
       // A genuinely non-transient error is still not retryable.
       expect(
-        capturedShouldRetryOnError?.(
-          new Error('totally unrelated error'),
-          true,
-        ),
+        capturedShouldRetryOnError?.(new Error('totally unrelated error')),
       ).toBe(false);
     });
   });
