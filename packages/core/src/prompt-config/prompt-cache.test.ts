@@ -117,6 +117,33 @@ describe('PromptCache', () => {
       expect(key).not.toContain('subagent-delegation');
     });
 
+    it('should differentiate keys by async subagent guidance state (issue #2109)', () => {
+      const enabled = cache.generateKey(
+        createContext({
+          includeSubagentDelegation: true,
+          asyncSubagentsEnabled: true,
+          profileAsyncEnabled: true,
+        }),
+      );
+      const globalDisabled = cache.generateKey(
+        createContext({
+          includeSubagentDelegation: true,
+          asyncSubagentsEnabled: false,
+          profileAsyncEnabled: true,
+        }),
+      );
+      const profileDisabled = cache.generateKey(
+        createContext({
+          includeSubagentDelegation: true,
+          asyncSubagentsEnabled: true,
+          profileAsyncEnabled: false,
+        }),
+      );
+
+      expect(enabled).not.toBe(globalDisabled);
+      expect(enabled).not.toBe(profileDisabled);
+      expect(globalDisabled).not.toBe(profileDisabled);
+    });
     it('should handle null or undefined context', () => {
       const key = cache.generateKey(null as unknown as PromptContext);
       expect(key).toBe('');

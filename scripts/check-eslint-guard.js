@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 
 const DEFAULT_BASE = process.env.GITHUB_BASE_REF
@@ -109,15 +109,6 @@ function isAllowedPolicyOff(line) {
   return line.includes('eslint-policy-allow-off:');
 }
 
-function isCommentLine(line) {
-  const trimmed = line.trim();
-  return (
-    trimmed.startsWith('//') ||
-    trimmed.startsWith('*') ||
-    trimmed.startsWith('/*')
-  );
-}
-
 function isNewOffRule(line) {
   return (
     /:\s*['"]off['"]/.test(line) ||
@@ -127,19 +118,101 @@ function isNewOffRule(line) {
 }
 
 function isStandaloneOffRuleValue(line) {
-  // Allows optional trailing inline comments, e.g. `'off', // comment` or `0, // x`
   return /^\s*(?:['"]off['"]|0),?\s*(?:\/\/.*)?$/.test(line);
 }
 
-function shouldCheckInlineDisable(file) {
+function shouldCheckInlineDirective(file) {
   if (isGeneratedGuardFixture(file)) {
     return false;
   }
   return /\.(?:cjs|mjs|js|jsx|ts|tsx)$/.test(file);
 }
 
-function containsInlineEslintDirective(content) {
-  return /eslint-(?:disable(?:-next-line|-line)?|enable)\b/.test(content);
+function previousCodeChar(line, index) {
+  for (let i = index - 1; i >= 0; i--) {
+    const ch = line[i];
+    if (!/\s/.test(ch)) {
+      return ch;
+    }
+  }
+  return '';
+}
+
+function canStartRegex(line, index) {
+  const previous = previousCodeChar(line, index);
+  return previous === '' || /[({[=,:;!&|?+\-*%^~<>]/.test(previous);
+}
+
+function skipQuoted(line, start, quote) {
+  for (let i = start + 1; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === quote) {
+      return i;
+    }
+  }
+  return line.length;
+}
+
+function skipRegex(line, start) {
+  let inCharacterClass = false;
+  for (let i = start + 1; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '[') {
+      inCharacterClass = true;
+      continue;
+    }
+    if (ch === ']') {
+      inCharacterClass = false;
+      continue;
+    }
+    if (ch === '/' && !inCharacterClass) {
+      return i;
+    }
+  }
+  return line.length;
+}
+
+const DIRECTIVE_PATTERN = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
+
+export function hasInlineEslintDirective(line) {
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"' || ch === "'" || ch === '`') {
+      i = skipQuoted(line, i, ch);
+      continue;
+    }
+    if (ch !== '/') {
+      continue;
+    }
+    const next = line[i + 1];
+    if (next === '/') {
+      return DIRECTIVE_PATTERN.test(line.slice(i + 2));
+    }
+    if (next === '*') {
+      const end = line.indexOf('*/', i + 2);
+      const comment = line.slice(i + 2, end === -1 ? undefined : end);
+      if (DIRECTIVE_PATTERN.test(comment)) {
+        return true;
+      }
+      if (end === -1) {
+        return false;
+      }
+      i = end + 1;
+      continue;
+    }
+    if (canStartRegex(line, i)) {
+      i = skipRegex(line, i);
+    }
+  }
+  return false;
 }
 
 function addViolation(violations, file, lineNumber, message, content) {
@@ -183,8 +256,8 @@ export function checkDiff(diff) {
       const currentLine = newLine;
 
       if (
-        shouldCheckInlineDisable(file) &&
-        containsInlineEslintDirective(content)
+        shouldCheckInlineDirective(file) &&
+        hasInlineEslintDirective(content)
       ) {
         addViolation(
           violations,
@@ -198,7 +271,7 @@ export function checkDiff(diff) {
       if (
         file === 'eslint.config.js' &&
         content.includes('packages/cli/src') &&
-        !isCommentLine(content)
+        !isCommentOnlyLine(content)
       ) {
         addViolation(
           violations,
@@ -294,60 +367,6 @@ export function checkDiff(diff) {
   return violations;
 }
 
-function listCliSourceFiles(dir = 'packages/cli/src') {
-  if (!existsSync(dir)) {
-    return [];
-  }
-
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const file = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return listCliSourceFiles(file);
-    }
-    return /\.(?:ts|tsx)$/.test(file) ? [file] : [];
-  });
-}
-
-export function checkCliSourcePolicy() {
-  const violations = [];
-
-  for (const file of listCliSourceFiles()) {
-    const content = readFileSync(file, 'utf8');
-    if (containsInlineEslintDirective(content)) {
-      addViolation(
-        violations,
-        file,
-        1,
-        'packages/cli/src must not contain inline ESLint disable/enable directives.',
-        file,
-      );
-    }
-  }
-
-  const eslintConfig = readFileSync('eslint.config.js', 'utf8');
-  const directiveCleanupScopes = [
-    /const legacyDirectiveCleanupScopes = \[[\s\S]*?\];/.exec(
-      eslintConfig,
-    )?.[0] ?? '',
-    /const completedDirectiveCleanupScopes = \[[\s\S]*?\];/.exec(
-      eslintConfig,
-    )?.[0] ?? '',
-  ].join('\n');
-  if (directiveCleanupScopes.includes('packages/cli/src')) {
-    addViolation(
-      violations,
-      'eslint.config.js',
-      1,
-      'packages/cli/src must not appear in ESLint directive cleanup scopes.',
-      'packages/cli/src',
-    );
-  }
-
-  return violations;
-}
-
-const DIRECTIVE_PATTERN = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
-
 const GENERATED_DIRECTORIES = new Set([
   'node_modules',
   'dist',
@@ -398,7 +417,7 @@ function scanFileForDirectives(filePath, modulePath, issueNumber) {
   const lines = contents.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (DIRECTIVE_PATTERN.test(line)) {
+    if (hasInlineEslintDirective(line)) {
       violations.push({
         file: relative(process.cwd(), filePath),
         lineNumber: i + 1,
@@ -407,6 +426,23 @@ function scanFileForDirectives(filePath, modulePath, issueNumber) {
       });
     }
   }
+  return violations;
+}
+export function checkCliSourcePolicy() {
+  const violations = scanModuleDirectives('packages/cli/src', '2114');
+  const configPath = join(process.cwd(), 'eslint.config.js');
+  if (!existsSync(configPath)) {
+    return violations;
+  }
+
+  const configSource = readFileSync(configPath, 'utf8');
+  violations.push(
+    ...checkModuleDirectiveScopesInConfig(
+      configSource,
+      'packages/cli/src',
+      '2114',
+    ),
+  );
   return violations;
 }
 
@@ -928,7 +964,12 @@ export function formatViolations(violations) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const diff = diffFromGit(args.base, args.head);
-  const violations = [...checkDiff(diff), ...checkCliSourcePolicy()];
+  const violations = checkDiff(diff);
+
+  // Issue #2114 durable guard: packages/cli/src must contain zero inline ESLint
+  // disable/enable directives and must not be present in central directive
+  // cleanup scope lists.
+  violations.push(...checkCliSourcePolicy());
 
   // Issue #2115 durable guard: packages/core must contain zero inline ESLint
   // disable/enable directives and must not be present in central directive

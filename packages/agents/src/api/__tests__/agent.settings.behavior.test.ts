@@ -27,6 +27,19 @@ import * as fc from 'fast-check';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 
+const dangerousPathSegments = new Set([
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
+
+function isInertSettingKey(key: string): boolean {
+  return (
+    key !== 'streaming' &&
+    key.split('.').every((segment) => !dangerousPathSegments.has(segment))
+  );
+}
+
 describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requirement:REQ-002 @requirement:REQ-INT-003', () => {
   it('T3 getConfig() returns the SAME caller-supplied Config instance (identity) @requirement:REQ-002 @scenario:identity @given:a real CLI-style Config wrapped by fromConfig @when:agent.getConfig() @then:the returned Config is the SAME instance supplied to fromConfig', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
@@ -190,9 +203,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
   it('PROP-1 for any inert string key + JSON-serializable value (excluding the throwing streaming path), agent get-then-get strictly equals the Config get-then-get after setting the SAME value through the agent @requirement:REQ-002 @scenario:property-round-trip @given:any inert string key and any JSON-serializable value @when:set via the agent then read via the agent AND read the same key directly off the Config @then:agent.getEphemeralSetting(k) strictly equals built.config.getEphemeralSetting(k) for every generated (key, value)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 20 })
-          .filter((k) => k !== 'streaming'),
+        fc.string({ minLength: 1, maxLength: 20 }).filter(isInertSettingKey),
         fc.json(),
         async (key, jsonValue) => {
           const built = await buildCliStyleConfig('plain-text.jsonl');
@@ -215,9 +226,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
   it('PROP-2 for any inert string key, after a set through the agent, agent.getEphemeralSettings()[key] strictly equals built.config.getEphemeralSettings()[key] @requirement:REQ-002 @scenario:property-settings-map @given:any inert string key and any JSON-serializable value @when:set via the agent then read both full maps @then:agent.getEphemeralSettings()[key] strictly equals built.config.getEphemeralSettings()[key] for every generated (key, value)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 20 })
-          .filter((k) => k !== 'streaming'),
+        fc.string({ minLength: 1, maxLength: 20 }).filter(isInertSettingKey),
         fc.json(),
         async (key, jsonValue) => {
           const built = await buildCliStyleConfig('plain-text.jsonl');
@@ -278,9 +287,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
   it('PROP-5 for any inert string key, a value set directly on the Config is visible via agent.getEphemeralSetting (no parallel store — the agent reads through to the SAME Config) @requirement:REQ-002 @scenario:property-no-parallel-store @given:any inert string key and any JSON-serializable value written directly on the Config @when:agent.getEphemeralSetting(k) is read @then:it strictly equals built.config.getEphemeralSetting(k) for every generated (key, value)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 20 })
-          .filter((k) => k !== 'streaming'),
+        fc.string({ minLength: 1, maxLength: 20 }).filter(isInertSettingKey),
         fc.json(),
         async (key, jsonValue) => {
           const built = await buildCliStyleConfig('plain-text.jsonl');

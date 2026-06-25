@@ -38,14 +38,14 @@ const legacyDirectiveCleanupScopes = [
   // packages/policy/src is locked in completedDirectiveCleanupScopes (#2122).
   // packages/storage/src is locked in completedDirectiveCleanupScopes (#2119).
   // packages/auth/src is locked in completedDirectiveCleanupScopes (#2121).
+  // packages/settings/src is locked in completedDirectiveCleanupScopes (#2120).
   // packages/a2a-server/src is locked in completedDirectiveCleanupScopes (#2123).
-  // #2089 scope: the three remaining target packages (settings/telemetry/
-  // ide-integration) still contain other files with legacy inline lint
-  // directives. Those packages are kept in legacy scope so existing directives
-  // do not break lint. The target files and extracted modules are locked in
+  // #2089 scope: the remaining target packages (telemetry/ide-integration)
+  // still contain other files with legacy inline lint directives. Those
+  // packages are kept in legacy scope so existing directives do not break lint.
+  // The target files and extracted modules are locked in
   // completedDirectiveCleanupScopes below, which overrides this block for those
   // specific files.
-  'packages/settings/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/telemetry/src/**/*.{ts,tsx}', // #2089 (non-target files)
   'packages/ide-integration/src/**/*.{ts,tsx}', // #2089 (non-target files)
 ];
@@ -78,6 +78,7 @@ const completedDirectiveCleanupScopes = [
   'packages/settings/src/settings/registry/registry-entries-1.ts', // #2089
   'packages/settings/src/settings/registry/registry-entries-2.ts', // #2089
   'packages/settings/src/settings/registry/registry-entries-3.ts', // #2089
+  'packages/settings/src/**/*.{ts,tsx}', // #2120
   'packages/telemetry/src/telemetry/types.ts', // #2089
   'packages/telemetry/src/telemetry/events/*.ts', // #2089
   // #2116: #2084 provider entries removed — covered by global rule block.

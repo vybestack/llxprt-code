@@ -42,7 +42,6 @@ export interface PrepareQueryDeps {
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
   ) => Promise<void>;
-  turnCancelledRef: React.MutableRefObject<boolean>;
 }
 
 export async function prepareQueryForGemini(
@@ -52,8 +51,12 @@ export async function prepareQueryForGemini(
   promptId: string,
   deps: PrepareQueryDeps,
 ): Promise<{ queryToSend: PartListUnion | null; shouldProceed: boolean }> {
-  const { turnCancelledRef, onDebugMessage } = deps;
-  if (turnCancelledRef.current) {
+  const { onDebugMessage } = deps;
+  // Gate on THIS turn's own abort signal, not the shared turnCancelledRef: a
+  // turn's own signal is the precise indicator of whether that specific turn
+  // was cancelled (including abort paths that don't flip turnCancelledRef), so
+  // it is more exact than the shared flag. See issue #2136.
+  if (abortSignal.aborted) {
     return { queryToSend: null, shouldProceed: false };
   }
   if (typeof query === 'string' && query.trim().length === 0) {

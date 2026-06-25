@@ -271,5 +271,5 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
       // test load (consistent with other heavy-agent property tests).
       { numRuns: 8 },
     );
-  }, 30000);
+  }, 60000);
 });

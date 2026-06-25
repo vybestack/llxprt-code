@@ -6,12 +6,18 @@
  */
 
 import { EventEmitter } from 'events';
+import {
+  createTrustedProviderRecord,
+  isDangerousPropertyKey,
+  isPlainObject,
+  parseProfileImport,
+  parseProviderSettingsRecord,
+  type TrustedProviderRecord,
+  type TrustedProvidersMap,
+} from './validation.js';
 
-/**
- * In-memory ephemeral settings structure
- */
 interface EphemeralSettings {
-  providers: Record<string, Record<string, unknown>>;
+  providers: TrustedProvidersMap;
   global: Record<string, unknown>;
   activeProvider: string | null;
   tools?: {
@@ -20,7 +26,6 @@ interface EphemeralSettings {
     apiKeys?: Record<string, string>;
     apiKeyFiles?: Record<string, string>;
   };
-  n?: unknown;
 }
 
 interface SettingsChangeEvent {
@@ -39,6 +44,10 @@ type SettingsEventListener =
   | (() => void)
   | ((...args: unknown[]) => void);
 
+function copyStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((name) => String(name)) : [];
+}
+
 export class SettingsService extends EventEmitter {
   private settings: EphemeralSettings;
   private eventEmitter: EventEmitter;
@@ -55,7 +64,7 @@ export class SettingsService extends EventEmitter {
 
   get(key: string): unknown {
     if (key.includes('.')) {
-      return this.getNestedValue(this.settings, key);
+      return this.getNestedValue(key);
     }
     return this.settings.global[key];
   }
@@ -64,24 +73,7 @@ export class SettingsService extends EventEmitter {
     const oldValue = this.get(key);
 
     if (key.includes('.')) {
-      const settingsRecord = this.settings as unknown as Record<
-        string,
-        unknown
-      >;
-
-      this.setNestedValue(settingsRecord, key, value);
-
-      const [root, ...rest] = key.split('.');
-      if (root && root !== 'providers') {
-        const rootValue = settingsRecord[root];
-        if (rootValue !== undefined) {
-          this.settings.global[root] = rootValue;
-        }
-
-        if (rest.length === 0) {
-          this.settings.global[root] = rootValue;
-        }
-      }
+      this.setNestedValue(key, value);
     } else {
       this.settings.global[key] = value;
     }
@@ -94,37 +86,19 @@ export class SettingsService extends EventEmitter {
   }
 
   getProviderSettings(provider: string): Record<string, unknown> {
-    const entry = this.settings.providers[provider] as unknown;
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      entry !== null &&
-      entry !== undefined &&
-      entry !== false &&
-      entry !== 0 &&
-      entry !== '' &&
-      !(typeof entry === 'number' && Number.isNaN(entry))
-    ) {
-      return entry as Record<string, unknown>;
-    }
-    return {};
+    return this.settings.providers[provider] ?? {};
   }
 
   setProviderSetting(provider: string, key: string, value: unknown): void {
-    const entry = this.settings.providers[provider] as unknown;
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      entry === null ||
-      entry === undefined ||
-      entry === false ||
-      entry === 0 ||
-      entry === '' ||
-      (typeof entry === 'number' && Number.isNaN(entry))
-    ) {
-      this.settings.providers[provider] = {};
-    }
-
-    const oldValue = this.settings.providers[provider][key];
-    this.settings.providers[provider][key] = value;
+    this.assertSafePath([provider]);
+    const entry = this.getOrCreateProvider(provider);
+    const oldValue = entry[key];
+    Object.defineProperty(entry, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
 
     this.eventEmitter.emit('provider-change', {
       provider,
@@ -163,52 +137,119 @@ export class SettingsService extends EventEmitter {
     return snapshot;
   }
 
-  private getNestedValue(obj: unknown, key: string): unknown {
+  private getNestedValue(key: string): unknown {
     const keys = key.split('.');
-    let current = obj as Record<string, unknown>;
+    if (keys[0] === 'providers') {
+      return this.getProviderPathValue(keys);
+    }
 
-    for (const k of keys) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Settings values cross persisted/plugin boundaries despite declared types.
-      if (current !== null && typeof current === 'object' && k in current) {
-        current = current[k] as Record<string, unknown>;
+    let current: unknown = this.settings.global;
+    for (const part of keys) {
+      if (isPlainObject(current) && part in current) {
+        current = current[part];
       } else {
         return undefined;
       }
     }
-
     return current;
   }
 
-  private setNestedValue(
-    obj: Record<string, unknown>,
-    key: string,
-    value: unknown,
-  ): void {
+  private getProviderPathValue(keys: string[]): unknown {
+    if (keys.length === 1) {
+      return this.settings.providers;
+    }
+    const provider = keys[1];
+    const providerSettings = this.settings.providers[provider];
+    if (providerSettings === undefined) {
+      return undefined;
+    }
+    if (keys.length === 2) {
+      return providerSettings;
+    }
+    let current: unknown = providerSettings;
+    for (const part of keys.slice(2)) {
+      if (isPlainObject(current) && part in current) {
+        current = current[part];
+      } else {
+        return undefined;
+      }
+    }
+    return current;
+  }
+
+  private setNestedValue(key: string, value: unknown): void {
     const keys = key.split('.');
+    this.assertSafePath(keys);
 
-    // Security: Check for dangerous keys that can pollute prototypes
-    const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
-    for (const k of keys) {
-      if (dangerousKeys.includes(k)) {
-        throw new Error(`Cannot set dangerous property: ${k}`);
-      }
+    if (keys[0] === 'providers') {
+      this.setProviderPathValue(keys, value);
+      return;
     }
 
-    let current = obj;
-
-    for (let i = 0; i < keys.length - 1; i++) {
-      const k = keys[i];
-      if (
-        current[k] === null ||
-        current[k] === undefined ||
-        typeof current[k] !== 'object'
-      ) {
-        current[k] = {};
-      }
-      current = current[k] as Record<string, unknown>;
+    let current = this.settings.global;
+    for (const part of keys.slice(0, -1)) {
+      current = this.getObjectChild(current, part);
     }
 
-    current[keys[keys.length - 1]] = value;
+    const finalKey = keys[keys.length - 1];
+    Object.defineProperty(current, finalKey, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  private getObjectChild(
+    container: Record<string, unknown>,
+    key: string,
+  ): Record<string, unknown> {
+    const next = container[key];
+    if (isPlainObject(next)) {
+      return next;
+    }
+    const child: Record<string, unknown> = {};
+    container[key] = child;
+    return child;
+  }
+
+  private setProviderPathValue(keys: string[], value: unknown): void {
+    if (keys.length <= 2) {
+      return;
+    }
+    const provider = keys[1];
+
+    const entry = this.getOrCreateProvider(provider);
+    let current: Record<string, unknown> = entry;
+    for (const part of keys.slice(2, -1)) {
+      current = this.getObjectChild(current, part);
+    }
+
+    const finalKey = keys[keys.length - 1];
+    Object.defineProperty(current, finalKey, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  private getOrCreateProvider(provider: string): TrustedProviderRecord {
+    const existing = this.settings.providers[provider];
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = createTrustedProviderRecord();
+    this.settings.providers[provider] = created;
+    return created;
+  }
+
+  private assertSafePath(keys: string[]): void {
+    for (const key of keys) {
+      if (isDangerousPropertyKey(key)) {
+        throw new Error(`Cannot set dangerous property: ${key}`);
+      }
+    }
   }
 
   override on(
@@ -262,27 +303,15 @@ export class SettingsService extends EventEmitter {
     provider: string,
     changes: Record<string, unknown>,
   ): Promise<void>;
-  updateSettings(
-    providerOrChanges?: string | Record<string, unknown>,
-    changes?: Record<string, unknown>,
-  ): Promise<void> {
-    const runtimeChanges = changes as
-      | Record<string, unknown>
-      | null
-      | undefined;
-    if (
-      typeof providerOrChanges === 'string' &&
-      runtimeChanges !== undefined &&
-      runtimeChanges !== null
-    ) {
-      for (const [key, value] of Object.entries(runtimeChanges)) {
-        this.setProviderSetting(providerOrChanges, key, value);
+  updateSettings(providerOrChanges: unknown, changes?: unknown): Promise<void> {
+    if (typeof providerOrChanges === 'string') {
+      const providerChanges = parseProviderSettingsRecord(changes);
+      if (providerChanges !== undefined) {
+        for (const [key, value] of Object.entries(providerChanges)) {
+          this.setProviderSetting(providerOrChanges, key, value);
+        }
       }
-    } else if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Settings values cross persisted/plugin boundaries despite declared types.
-      providerOrChanges !== null &&
-      typeof providerOrChanges === 'object'
-    ) {
+    } else if (isPlainObject(providerOrChanges)) {
       for (const [key, value] of Object.entries(providerOrChanges)) {
         this.set(key, value);
       }
@@ -296,30 +325,46 @@ export class SettingsService extends EventEmitter {
   }
 
   exportForProfile() {
-    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty activeProvider string should fall through to default */
-    const activeProvider =
-      (this.settings.global.activeProvider as string) ||
-      this.settings.activeProvider ||
-      'openai';
-    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    const globalActive = this.settings.global.activeProvider;
+    let activeProvider: string;
+    if (typeof globalActive === 'string' && globalActive !== '') {
+      activeProvider = globalActive;
+    } else if (
+      typeof this.settings.activeProvider === 'string' &&
+      this.settings.activeProvider !== ''
+    ) {
+      activeProvider = this.settings.activeProvider;
+    } else {
+      activeProvider = 'openai';
+    }
 
     const allowedValue = this.get('tools.allowed');
     const disabledValue = this.get('tools.disabled');
     const legacyDisabled = this.get('disabled-tools');
 
-    const allowedTools = Array.isArray(allowedValue)
-      ? (allowedValue as string[]).slice()
-      : [];
-    const disabledTools = Array.isArray(disabledValue)
-      ? (disabledValue as string[]).slice()
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        Array.isArray(legacyDisabled)
-        ? (legacyDisabled as string[]).slice()
-        : [];
+    const allowedTools = copyStringArray(allowedValue);
+
+    let disabledTools: string[];
+    if (Array.isArray(disabledValue)) {
+      disabledTools = copyStringArray(disabledValue);
+    } else if (Array.isArray(legacyDisabled)) {
+      disabledTools = copyStringArray(legacyDisabled);
+    } else {
+      disabledTools = [];
+    }
+
+    const providers: Record<string, Record<string, unknown>> = {};
+    for (const [provider, settings] of Object.entries(
+      this.settings.providers,
+    )) {
+      if (settings !== undefined) {
+        providers[provider] = settings;
+      }
+    }
 
     return Promise.resolve({
       defaultProvider: activeProvider,
-      providers: { ...this.settings.providers },
+      providers,
       tools: {
         allowed: allowedTools,
         disabled: disabledTools,
@@ -328,58 +373,31 @@ export class SettingsService extends EventEmitter {
   }
 
   importFromProfile(profileData: unknown) {
+    const data = parseProfileImport(profileData);
+    if (data === null) {
+      return Promise.resolve();
+    }
+
     this.settings.providers = {};
 
-    if (
-      profileData !== null &&
-      profileData !== undefined &&
-      typeof profileData === 'object'
-    ) {
-      const data = profileData as {
-        defaultProvider?: string;
-        providers?: Record<string, Record<string, unknown>>;
-        tools?: {
-          allowed?: unknown;
-          disabled?: unknown;
-        };
-      };
-
-      if (data.defaultProvider) {
-        this.set('activeProvider', data.defaultProvider);
-        this.settings.activeProvider = data.defaultProvider;
-      }
-
-      if (data.providers) {
-        for (const [provider, settings] of Object.entries(data.providers)) {
-          // eslint-disable-next-line sonarjs/nested-control-flow, @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- Existing nested import path handles persisted/plugin settings across declared types.
-          if (settings !== null && typeof settings === 'object') {
-            for (const [key, value] of Object.entries(settings)) {
-              this.setProviderSetting(provider, key, value);
-            }
-          }
-        }
-      }
-
-      const toolsAllowed = Array.isArray(data.tools?.allowed)
-        ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
-          (data.tools?.allowed as unknown[]).map((name) => String(name))
-        : [];
-      const toolsDisabled = Array.isArray(data.tools?.disabled)
-        ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
-          (data.tools?.disabled as unknown[]).map((name) => String(name))
-        : [];
-
-      this.settings.tools = this.settings.tools ?? {};
-      (this.settings.tools as Record<string, unknown>)['allowed'] =
-        toolsAllowed;
-      (this.settings.tools as Record<string, unknown>)['disabled'] =
-        toolsDisabled;
-      this.settings.global['tools'] = {
-        allowed: toolsAllowed,
-        disabled: toolsDisabled,
-      };
-      this.settings.global['disabled-tools'] = toolsDisabled;
+    if (data.defaultProvider !== undefined) {
+      this.set('activeProvider', data.defaultProvider);
+      this.settings.activeProvider = data.defaultProvider;
     }
+
+    this.settings.providers = data.providers;
+
+    const toolsAllowed = data.tools.allowed;
+    const toolsDisabled = data.tools.disabled;
+
+    this.settings.tools = this.settings.tools ?? {};
+    this.settings.tools.allowed = toolsAllowed;
+    this.settings.tools.disabled = toolsDisabled;
+    this.settings.global['tools'] = {
+      allowed: toolsAllowed,
+      disabled: toolsDisabled,
+    };
+    this.settings.global['disabled-tools'] = toolsDisabled;
 
     return Promise.resolve();
   }
@@ -395,10 +413,15 @@ export class SettingsService extends EventEmitter {
 
   getDiagnosticsData(): Promise<Record<string, unknown>> {
     const globalActiveProvider = this.settings.global.activeProvider;
+    const fallbackActiveProvider =
+      typeof this.settings.activeProvider === 'string' &&
+      this.settings.activeProvider !== ''
+        ? this.settings.activeProvider
+        : 'openai';
     const activeProvider =
       typeof globalActiveProvider === 'string' && globalActiveProvider !== ''
         ? globalActiveProvider
-        : (this.settings.activeProvider ?? 'openai');
+        : fallbackActiveProvider;
     const providerSettings = this.getProviderSettings(activeProvider);
 
     const model = (providerSettings.model as string) || 'unknown';

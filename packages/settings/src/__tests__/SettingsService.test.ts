@@ -41,7 +41,7 @@ describe('SettingsService — global reads and writes', () => {
   it('overwrites a previously set value', () => {
     const svc = new SettingsService();
     svc.set('shell-replacement', 'none');
-    // eslint-disable-next-line sonarjs/no-element-overwrite -- intentionally testing value overwrite
+    expect(svc.get('shell-replacement')).toBe('none');
     svc.set('shell-replacement', 'all');
     expect(svc.get('shell-replacement')).toBe('all');
   });
@@ -272,5 +272,172 @@ describe('SettingsService — getSettings / updateSettings', () => {
     const svc = new SettingsService();
     await svc.updateSettings({ temperature: 0.5 });
     expect(svc.get('temperature')).toBe(0.5);
+  });
+});
+
+describe('SettingsService — empty-string activeProvider fallback', () => {
+  it('exportForProfile falls back to openai when imported activeProvider is empty', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: '',
+      providers: {},
+      tools: { allowed: [], disabled: [] },
+    });
+    const exported = (await svc.exportForProfile()) as {
+      defaultProvider: string;
+    };
+    expect(exported.defaultProvider).toBe('openai');
+  });
+
+  it('exportForProfile uses a non-empty imported activeProvider', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: 'anthropic',
+      providers: {},
+      tools: { allowed: [], disabled: [] },
+    });
+    const exported = (await svc.exportForProfile()) as {
+      defaultProvider: string;
+    };
+    expect(exported.defaultProvider).toBe('anthropic');
+  });
+
+  it('exportForProfile falls back to openai when switchProvider sets empty string', async () => {
+    const svc = new SettingsService();
+    svc.setProviderSetting('openai', 'model', 'gpt-4');
+    await svc.switchProvider('');
+    const exported = (await svc.exportForProfile()) as {
+      defaultProvider: string;
+    };
+    expect(exported.defaultProvider).toBe('openai');
+  });
+
+  it('getDiagnosticsData falls back to openai when imported activeProvider is empty', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: '',
+      providers: {},
+      tools: { allowed: [], disabled: [] },
+    });
+    const diag = (await svc.getDiagnosticsData()) as {
+      provider: string;
+    };
+    expect(diag.provider).toBe('openai');
+  });
+
+  it('getDiagnosticsData uses a non-empty imported activeProvider', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      defaultProvider: 'anthropic',
+      providers: {},
+      tools: { allowed: [], disabled: [] },
+    });
+    const diag = (await svc.getDiagnosticsData()) as {
+      provider: string;
+    };
+    expect(diag.provider).toBe('anthropic');
+  });
+
+  it('exportForProfile defaults to openai with no provider set at all', async () => {
+    const svc = new SettingsService();
+    const exported = (await svc.exportForProfile()) as {
+      defaultProvider: string;
+    };
+    expect(exported.defaultProvider).toBe('openai');
+  });
+
+  it('getDiagnosticsData defaults to openai with no provider set at all', async () => {
+    const svc = new SettingsService();
+    const diag = (await svc.getDiagnosticsData()) as {
+      provider: string;
+    };
+    expect(diag.provider).toBe('openai');
+  });
+});
+
+describe('SettingsService — provider trust boundary', () => {
+  it('does not allow dotted provider root writes to store non-record values', () => {
+    const svc = new SettingsService();
+
+    svc.set('providers.openai', 'not-a-record');
+
+    expect(svc.get('providers.openai')).toBeUndefined();
+    expect(svc.getProviderSettings('openai')).toStrictEqual({});
+  });
+
+  it('routes dotted provider leaf writes through provider settings storage', () => {
+    const svc = new SettingsService();
+
+    svc.set('providers.openai.model', 'gpt-4');
+
+    expect(svc.getProviderSettings('openai')).toStrictEqual({ model: 'gpt-4' });
+    expect(svc.get('providers.openai.model')).toBe('gpt-4');
+  });
+
+  it('rejects dangerous provider path segments before writing', () => {
+    const svc = new SettingsService();
+
+    expect(() => svc.set('providers.__proto__.model', 'polluted')).toThrow(
+      'Cannot set dangerous property: __proto__',
+    );
+    expect(svc.getProviderSettings('__proto__')).toStrictEqual({});
+  });
+
+  it('allows provider setting keys that would be dangerous path segments', () => {
+    const svc = new SettingsService();
+
+    svc.setProviderSetting('openai', '__proto__', false);
+    svc.setProviderSetting('openai', 'constructor', 'safe-value');
+
+    const settings = svc.getProviderSettings('openai');
+    expect(settings['__proto__']).toBe(false);
+    expect(settings.constructor).toBe('safe-value');
+  });
+  it('imports only record-shaped provider entries from profile data', async () => {
+    const svc = new SettingsService();
+
+    await svc.importFromProfile({
+      defaultProvider: 'openai',
+      providers: {
+        openai: { model: 'gpt-4' },
+        broken: 'not-a-record',
+      },
+      tools: { allowed: ['read_file'], disabled: ['shell'] },
+    });
+
+    expect(svc.getProviderSettings('openai')).toStrictEqual({ model: 'gpt-4' });
+    expect(svc.getProviderSettings('broken')).toStrictEqual({});
+    expect(svc.get('tools.allowed')).toStrictEqual(['read_file']);
+    expect(svc.get('tools.disabled')).toStrictEqual(['shell']);
+  });
+
+  it('keeps existing provider settings when profile import payload is invalid', async () => {
+    const svc = new SettingsService();
+    svc.setProviderSetting('openai', 'model', 'gpt-4');
+
+    await svc.importFromProfile(null);
+
+    expect(svc.getProviderSettings('openai')).toStrictEqual({ model: 'gpt-4' });
+  });
+
+  it('does not trust provider entries with custom prototypes', async () => {
+    const svc = new SettingsService();
+    const providerSettings: Record<string, unknown> = Object.create({
+      inherited: true,
+    });
+    providerSettings.model = 'gpt-4';
+
+    await svc.importFromProfile({
+      defaultProvider: 'openai',
+      providers: {
+        openai: providerSettings,
+      },
+      tools: { allowed: [], disabled: [] },
+    });
+    const exported = (await svc.exportForProfile()) as {
+      providers: Record<string, Record<string, unknown>>;
+    };
+
+    expect(exported.providers).not.toHaveProperty('openai');
   });
 });

@@ -733,4 +733,120 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     // callback: continuation does not depend on (or trigger) display clearing.
     expect(markedDisplayCleared.flat()).not.toContain('primary-call');
   });
+
+  it('does not route a stale UserCancelled from an aborted turn to the stream handler (issue #2136)', async () => {
+    // #2136 (a cancelled turn's stale "User cancelled the request." leaking
+    // into the next turn) is prevented by iterateLoop's `if (signal.aborted)
+    // break` guard (added in #2050): when a turn is aborted, iteration stops
+    // before routing ANY further event, so the engine's trailing UserCancelled
+    // never reaches the CLI stream handler. This locks that behavior in.
+    let releaseA: () => void = () => {};
+    const aGate = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+
+    const abortedClient: AgentClientContract = {
+      async initialize() {},
+      isInitialized: () => true,
+      hasChatInitialized: () => true,
+      async getHistory() {
+        return [];
+      },
+      getChat: () =>
+        ({
+          recordCompletedToolCalls: vi.fn(),
+        }) as never,
+      getHistoryService: () => null,
+      storeHistoryServiceForReuse: () => {},
+      storeHistoryForLaterUse: () => {},
+      dispose: () => {},
+      setTools: async () => {},
+      clearTools: () => {},
+      updateSystemInstruction: async () => {},
+      addHistory: async () => {},
+      resetChat: async () => {},
+      resumeChat: async () => {},
+      setHistory: async () => {},
+      restoreHistory: async () => {},
+      addDirectoryContext: async () => {},
+      getContentGenerator: () => {
+        throw new Error('not used');
+      },
+      startChat: async () => {
+        throw new Error('not used');
+      },
+      generateDirectMessage: () => {
+        throw new Error('not used');
+      },
+      generateJson: async () => ({}),
+      generateContent: () => {
+        throw new Error('not used');
+      },
+      generateEmbedding: async () => [],
+      async *sendMessageStream(
+        _req: PartListUnion,
+        signal: AbortSignal,
+        _promptId: string,
+      ): AsyncGenerator<ServerGeminiStreamEvent> {
+        yield { type: GeminiEventType.Content, value: 'A-content' };
+        // Park until aborted, then emit the engine's trailing UserCancelled.
+        await Promise.race([
+          aGate,
+          new Promise<void>((resolve) => {
+            if (signal.aborted) {
+              resolve();
+              return;
+            }
+            signal.addEventListener('abort', () => resolve(), { once: true });
+          }),
+        ]);
+        yield { type: GeminiEventType.UserCancelled };
+      },
+      getUserTier: () => undefined,
+      getCurrentSequenceModel: () => 'test-model',
+    } as unknown as AgentClientContract;
+
+    const routedTypes: string[] = [];
+    const { result } = renderHook(() =>
+      useAgenticLoop({
+        config,
+        agentClient: abortedClient,
+        messageBus,
+        interactiveMode: true,
+        addItem: vi.fn(),
+        onToolCallsUpdate: () => {},
+        outputUpdateHandler: () => {},
+        getPreferredEditor: () => undefined,
+        onEditorOpen: () => {},
+        onEditorClose: () => {},
+        onTodoPause: () => {},
+        processStreamEventRef: {
+          current: (event: ServerGeminiStreamEvent) => {
+            routedTypes.push(event.type);
+          },
+        },
+        flushPendingHistoryItem: () => {},
+        clearPendingHistoryItem: () => {},
+        performMemoryRefresh: async () => {},
+      }),
+    );
+
+    const controllerA = new AbortController();
+    await act(async () => {
+      const aPromise = result.current.runLoop('A', controllerA.signal, 'p1');
+      await Promise.race([
+        aPromise,
+        new Promise((resolve) => setTimeout(resolve, 50)),
+      ]);
+      controllerA.abort();
+      releaseA();
+      await aPromise.catch(() => {});
+    });
+
+    // A's pre-abort Content WAS routed (legitimate), but the stale trailing
+    // UserCancelled was NOT routed — proving the duplicate-message symptom is
+    // suppressed at iteration time.
+    expect(routedTypes).toContain(GeminiEventType.Content);
+    expect(routedTypes).not.toContain(GeminiEventType.UserCancelled);
+  });
 });

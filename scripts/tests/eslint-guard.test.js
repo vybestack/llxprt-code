@@ -6,23 +6,25 @@
 
 import { describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
+  checkDiff,
   checkCliSourcePolicy,
   checkCoreCentralBypassesInConfig,
   checkCoreDirectiveScopesInConfig,
-  checkDiff,
   checkModuleCentralBypassesInConfig,
   checkModuleDirectiveScopesInConfig,
   extractScopeArray,
   formatViolations,
+  hasInlineEslintDirective,
   scanCoreDirectives,
   scanModuleDirectives,
   scanPackageDirectives,
 } from '../check-eslint-guard.js';
 
-const repoRoot = process.cwd();
+const repoRoot = resolve(__dirname, '..', '..');
+
 function diffFor(file, addedLine) {
   return [
     'diff --git a/' + file + ' b/' + file,
@@ -138,13 +140,47 @@ describe('check-eslint-guard', () => {
     expect(violations[0].file).toBe('scripts/example.js');
   });
 
-  it('rejects inline ESLint enable directives', () => {
+  it('rejects newly added inline ESLint enable directives', () => {
     const violations = checkDiff(
       diffFor('packages/core/src/example.ts', '/* eslint-enable no-console */'),
     );
 
     expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain('disable/enable');
+    expect(violations[0].message).toContain(
+      'Inline ESLint disable/enable directives are forbidden',
+    );
+  });
+
+  it('allows directive text in strings and regular expressions', () => {
+    const stringViolations = checkDiff(
+      diffFor(
+        'packages/core/src/example.ts',
+        'const msg = "https://example.test// eslint-disable-next-line";',
+      ),
+    );
+    const regexViolations = checkDiff(
+      diffFor(
+        'packages/core/src/example.ts',
+        'const re = /eslint-disable(?:-next-line|-line)?/;',
+      ),
+    );
+
+    expect(stringViolations).toEqual([]);
+    expect(regexViolations).toEqual([]);
+  });
+
+  it('rejects regex-related inline ESLint disables instead of allowing policy bypasses', () => {
+    const violations = checkDiff(
+      diffFor(
+        'packages/core/src/example.ts',
+        '// eslint-disable-next-line sonarjs/regular-expr, sonarjs/slow-regex',
+      ),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain(
+      'Inline ESLint disable/enable directives are forbidden',
+    );
   });
 
   it('rejects packages/cli entries added to eslint config', () => {
@@ -198,7 +234,7 @@ describe('check-eslint-guard', () => {
       const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-core-text-'));
       writeFileSync(
         join(tmpDir, 'fixture.md'),
-        'This fixture must not contain eslint-disable-line directives.\n',
+        '// eslint-disable-line no-console\n',
       );
 
       const violations = scanCoreDirectives(tmpDir);
@@ -271,6 +307,7 @@ describe('check-eslint-guard', () => {
 
       expect(checkCoreDirectiveScopesInConfig(config)).toEqual([]);
     });
+
     it('flags packages/core central rule-off blocks', () => {
       const config = [
         '{',
@@ -341,7 +378,6 @@ describe('check-eslint-guard', () => {
         '{',
         "  files: ['packages/core/src/**/*.ts'],",
         "  ignores: ['**/*.test.ts'],",
-
         '  rules: {},',
         '}',
       ].join('\n');
@@ -406,6 +442,93 @@ describe('check-eslint-guard', () => {
   });
 });
 
+describe('hasInlineEslintDirective', () => {
+  it('detects directives in line comments', () => {
+    expect(
+      hasInlineEslintDirective(
+        '  // eslint-disable-next-line @typescript-eslint/no-explicit-any',
+      ),
+    ).toBe(true);
+    expect(
+      hasInlineEslintDirective('code(); // eslint-disable-line no-console'),
+    ).toBe(true);
+    expect(hasInlineEslintDirective('// eslint-disable no-console')).toBe(true);
+    expect(hasInlineEslintDirective('// eslint-enable')).toBe(true);
+  });
+
+  it('detects directives in block comments', () => {
+    expect(hasInlineEslintDirective('/* eslint-disable no-console */')).toBe(
+      true,
+    );
+    expect(
+      hasInlineEslintDirective(
+        'const x = 1; /* eslint-disable-next-line no-console */',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not match directive text inside string literals', () => {
+    expect(
+      hasInlineEslintDirective(
+        "const msg = 'eslint-disable-next-line is banned';",
+      ),
+    ).toBe(false);
+    expect(
+      hasInlineEslintDirective(
+        'const url = "https://example.test// eslint-disable-line";',
+      ),
+    ).toBe(false);
+    expect(
+      hasInlineEslintDirective(
+        'const blockText = "/* eslint-disable no-console */";',
+      ),
+    ).toBe(false);
+    expect(
+      hasInlineEslintDirective(
+        'const template = `eslint-enable and // eslint-disable`;',
+      ),
+    ).toBe(false);
+  });
+
+  it('does not match directive text inside regular expressions', () => {
+    expect(
+      hasInlineEslintDirective(
+        'const re = /eslint-disable(?:-next-line|-line)?/;',
+      ),
+    ).toBe(false);
+  });
+
+  it('does not match unrelated lines', () => {
+    expect(hasInlineEslintDirective('const x = 1;')).toBe(false);
+    expect(hasInlineEslintDirective('')).toBe(false);
+  });
+});
+
+describe('packages/agents directive cleanup (#2117)', () => {
+  const agentsSrcDir = join(repoRoot, 'packages', 'agents', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const offenders = scanPackageDirectives(agentsSrcDir, '2117').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/agents/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const agentsEntries = legacy.filter((e) => e.startsWith('packages/agents'));
+    expect(
+      agentsEntries,
+      'Legacy agents entries: ' + agentsEntries.join(', '),
+    ).toEqual([]);
+  });
+});
+
 describe('packages/storage directive cleanup (#2119)', () => {
   const storageSrcDir = join(repoRoot, 'packages', 'storage', 'src');
 
@@ -454,6 +577,33 @@ describe('packages/auth directive cleanup (#2121)', () => {
     expect(
       authEntries,
       'Legacy auth entries: ' + authEntries.join(', '),
+    ).toEqual([]);
+  });
+});
+
+describe('packages/settings directive cleanup (#2120)', () => {
+  const settingsSrcDir = join(repoRoot, 'packages', 'settings', 'src');
+
+  it('has zero inline ESLint disable/enable directives', () => {
+    const offenders = scanPackageDirectives(settingsSrcDir, '2120').map(
+      (v) => `${v.file}:${v.lineNumber}`,
+    );
+    expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
+  });
+
+  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+    const completed = extractScopeArray('completedDirectiveCleanupScopes');
+    expect(completed).toContain('packages/settings/src/**/*.{ts,tsx}');
+  });
+
+  it('is no longer in legacyDirectiveCleanupScopes', () => {
+    const legacy = extractScopeArray('legacyDirectiveCleanupScopes');
+    const settingsEntries = legacy.filter((e) =>
+      e.startsWith('packages/settings'),
+    );
+    expect(
+      settingsEntries,
+      'Legacy settings entries: ' + settingsEntries.join(', '),
     ).toEqual([]);
   });
 });
