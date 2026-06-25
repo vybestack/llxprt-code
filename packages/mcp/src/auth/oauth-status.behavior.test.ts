@@ -73,13 +73,16 @@ async function seedToken(
 
 describe('getMcpServerOAuthStatus — REQ-001 canonical helper', () => {
   let store: MockTokenStorage;
+  let priorStore: TokenStorage;
 
   beforeEach(() => {
+    priorStore = MCPOAuthTokenStorage.getTokenStore();
     store = new MockTokenStorage();
     MCPOAuthTokenStorage.setTokenStore(store);
   });
 
   afterEach(() => {
+    MCPOAuthTokenStorage.setTokenStore(priorStore);
     mcpServerRequiresOAuth.clear();
   });
 

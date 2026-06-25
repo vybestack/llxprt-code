@@ -325,7 +325,7 @@ agent.mcp.details(opts?: McpDetailsOptions): Promise<McpDetailStatus>
 
 - `McpServerAuthStatus` = `{ server: string; authenticated: boolean; requiresAuth: boolean; oauthStatus: McpOAuthStatus; sessionAuthenticated: boolean; authUrl?: string }`.
 - `McpOAuthStatus` = `'authenticated' | 'expired' | 'none' | 'not-required'` — the real persisted OAuth state surfaced from the engine helper.
-- `sessionAuthenticated: boolean` — the in-session marker (set by `agent.auth.mcpLogin(server)`), distinct from `authenticated`.
+- `sessionAuthenticated: boolean` — the in-session marker, distinct from `authenticated`. It is set by either `agent.auth.mcpLogin(server)` or a successful `agent.mcp.authenticate(server)` (both mark the server authenticated for the current session); it is NOT persisted and does not by itself imply a valid stored OAuth token.
 - `McpServerDetail` carries the same `oauthStatus` / `sessionAuthenticated` / `requiresAuth` fields on each entry of `McpDetailStatus.servers`.
 - **CORRECTION (#2165):** `authenticated` now means "a valid persisted OAuth token exists" (i.e. `oauthStatus === 'authenticated'`) — it is NO LONGER derived from the in-session marker; `requiresAuth` is now the real per-server value (no longer hardcoded `true`).
 - `McpDetailsOptions` = `{ includeTools?: boolean; includePrompts?: boolean; includeResources?: boolean }`.

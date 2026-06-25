@@ -45,6 +45,10 @@ export function buildMcpControlDeps(
   args: McpControlWiringArgs,
 ): McpControlDeps {
   const { config, isMcpAuthenticated, markAuthenticated, resolveClient } = args;
+  // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003,REQ-004 @pseudocode agents-projection.md lines 86-92 — one per-server requires-OAuth predicate feeding BOTH getRequiresAuth and the getOAuthStatus hint so a server that requires auth can never resolve to 'not-required'.
+  const requiresOAuth = (server: string): boolean =>
+    config.getMcpServers()?.[server]?.oauth?.enabled === true ||
+    mcpServerRequiresOAuth.has(server);
   return {
     isMcpAuthenticated,
     markAuthenticated,
@@ -69,14 +73,11 @@ export function buildMcpControlDeps(
       );
     },
     // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003 @pseudocode agents-projection.md lines 86-88
-    getRequiresAuth: (server: string) =>
-      config.getMcpServers()?.[server]?.oauth?.enabled === true ||
-      mcpServerRequiresOAuth.has(server),
+    getRequiresAuth: (server: string) => requiresOAuth(server),
     // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md lines 89-92
     getOAuthStatus: (server: string) =>
       getMcpServerOAuthStatus(server, {
-        requiresOAuth:
-          config.getMcpServers()?.[server]?.oauth?.enabled === true,
+        requiresOAuth: requiresOAuth(server),
       }),
   };
 }

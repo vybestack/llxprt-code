@@ -24,7 +24,7 @@
  * so the control is constructed plainly with no type-defeating cast.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fc from 'fast-check';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';
@@ -191,7 +191,14 @@ async function seedToken(
 }
 
 describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-20260622-MCPOAUTHTRUTH.P05 @requirement:REQ-002,REQ-003,REQ-004,REQ-INT-001,REQ-INT-002', () => {
+  let priorStore: ReturnType<typeof MCPOAuthTokenStorage.getTokenStore>;
+
+  beforeEach(() => {
+    priorStore = MCPOAuthTokenStorage.getTokenStore();
+  });
+
   afterEach(() => {
+    MCPOAuthTokenStorage.setTokenStore(priorStore);
     mcpServerRequiresOAuth.clear();
   });
 

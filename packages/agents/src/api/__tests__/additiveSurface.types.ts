@@ -101,6 +101,8 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 
 // McpOAuthStatus must remain a 4-member union (additive quad-state).
+// This array anchor catches member REMOVAL: a dropped member is no longer
+// assignable to the narrowed union, breaking `npm run typecheck`.
 const _mcpOAuthStatusAnchor: McpOAuthStatus[] = [
   'authenticated',
   'expired',
@@ -108,6 +110,19 @@ const _mcpOAuthStatusAnchor: McpOAuthStatus[] = [
   'not-required',
 ];
 void _mcpOAuthStatusAnchor;
+
+// Exhaustiveness helper: only `never` satisfies the `extends never` constraint.
+type _AssertNever<T extends never> = T;
+
+// Complementary anchor that catches union GROWTH (the array anchor above only
+// catches removal): while McpOAuthStatus is EXACTLY the 4-member quad-state,
+// `Exclude<...>` resolves to `never` and satisfies `_AssertNever`. Adding a 5th
+// member makes `Exclude<...>` resolve to that member, which fails
+// `extends never` => `npm run typecheck` error. `export type` keeps it
+// noUnusedLocals-safe (root tsconfig) without a runtime binding.
+export type _McpOAuthStatusExhaustive = _AssertNever<
+  Exclude<McpOAuthStatus, 'authenticated' | 'expired' | 'none' | 'not-required'>
+>;
 
 // New fields must exist on both projected shapes (removal => compile error).
 const _mcpAuthShapeAnchor: Pick<
