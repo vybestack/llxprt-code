@@ -27,6 +27,7 @@ import {
   SecureStoreError,
   type KeyringAdapter,
 } from './secure-store.js';
+import { resetMachineSecretCache } from './machine-secret.js';
 /**
  * Inline helper replaces core-owned tool masking behavior without importing
  * core-owned tool modules into the storage package.
@@ -603,5 +604,50 @@ describe('SecureStore — Legacy Format Detection', () => {
     expect(err).toBeDefined();
     expect(err).toBeInstanceOf(SecureStoreError);
     expect((err as SecureStoreError).code).toBe('CORRUPT');
+  });
+});
+
+// ─── Default getMachineSecret integration (machine secret root of trust) ─────
+
+describe('SecureStore — Default machine secret integration', () => {
+  let tempDir: string;
+  let machineSecretPath: string;
+
+  beforeEach(async () => {
+    tempDir = await createTempFallbackDir();
+    machineSecretPath = path.join(tempDir, '.machine_secret');
+    resetMachineSecretCache();
+  });
+
+  afterEach(async () => {
+    resetMachineSecretCache();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('uses the default getMachineSecret (no injected loader) to write and read a v:2 fallback', async () => {
+    // No injected machineSecretLoader: the default loader in SecureStore
+    // calls getMachineSecret({ filePath: machineSecretPath }). This
+    // exercises the real provider end-to-end (keyring-preferred with file
+    // fallback) against a temp path. The machine secret is resolved from
+    // either the real OS keyring or the file fallback; either way the
+    // fallback .enc file must be a v:2 envelope and round-trip correctly.
+    const store = new SecureStore('test-service-default-secret', {
+      keyringLoader: async () => null,
+      fallbackDir: tempDir,
+      fallbackPolicy: 'allow',
+      machineSecretPath,
+    });
+
+    await store.set('integration-key', 'integration-value');
+
+    // The fallback file should be a v:2 envelope (machine secret resolved).
+    const filePath = path.join(tempDir, 'integration-key.enc');
+    const content = await fs.readFile(filePath, 'utf8');
+    const envelope = JSON.parse(content);
+    expect(envelope.v).toBe(2);
+
+    // The value must round-trip using the same default loader.
+    const result = await store.get('integration-key');
+    expect(result).toBe('integration-value');
   });
 });

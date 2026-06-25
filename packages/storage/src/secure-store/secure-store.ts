@@ -17,10 +17,20 @@
 import * as crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import envPaths from 'env-paths';
 import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
+import { getMachineSecret } from './machine-secret.js';
+import {
+  deriveV1KdfInput,
+  deriveV2KdfInput,
+  ENVELOPE_VERSIONS,
+  isValidEnvelope,
+  scryptAsync,
+  SCRYPT_PARAMS,
+  SALT_LEN,
+  type Envelope,
+} from './envelope.js';
 
 // Platform-standard paths for llxprt-code app data (no suffix to match documented paths)
 const platformPaths = envPaths('llxprt-code', { suffix: '' });
@@ -79,17 +89,11 @@ export interface SecureStoreOptions {
   fallbackPolicy?: 'allow' | 'deny';
   keyringLoader?: () => Promise<KeyringAdapter | null>;
   logger?: StorageLogger;
+  machineSecretLoader?: () => Promise<Buffer | null>;
+  machineSecretPath?: string;
 }
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
-
-function safeUsername(): string {
-  try {
-    return os.userInfo().username;
-  } catch {
-    return String(process.getuid?.() ?? 'unknown');
-  }
-}
 
 function isErrorWithCode(value: unknown): value is { code: string } {
   return (
@@ -161,35 +165,9 @@ function isTransientError(error: unknown): boolean {
   return classifyError(error) === 'TIMEOUT';
 }
 
-interface Envelope {
-  v: number;
-  crypto: {
-    alg: string;
-    kdf: string;
-    N: number;
-    r: number;
-    p: number;
-    saltLen: number;
-  };
-  data: string;
-}
-
 type FindCredentialsFunction = (
   service: string,
 ) => Promise<Array<{ account: string; password: string }>>;
-
-function isValidEnvelope(envelope: unknown): envelope is Envelope {
-  if (typeof envelope !== 'object' || envelope === null) return false;
-  const env = envelope as Record<string, unknown>;
-  if (env.v !== 1) return false;
-  if (typeof env.crypto !== 'object' || env.crypto === null) return false;
-  const c = env.crypto as Record<string, unknown>;
-  if (c.alg !== 'aes-256-gcm') return false;
-
-  if (c.kdf !== 'scrypt') return false;
-  if (typeof env.data !== 'string') return false;
-  return true;
-}
 
 function withFindCredentials(
   adapter: KeyringAdapter,
@@ -263,20 +241,6 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
   }
 }
 
-function scryptAsync(
-  password: string,
-  salt: Buffer,
-  keyLen: number,
-  options: { N: number; r: number; p: number },
-): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, keyLen, options, (err, key) => {
-      if (err) reject(err);
-      else resolve(key);
-    });
-  });
-}
-
 // ─── SecureStore Class ───────────────────────────────────────────────────────
 
 /**
@@ -291,6 +255,8 @@ export class SecureStore {
   private readonly keyringLoaderFn: () => Promise<KeyringAdapter | null>;
   private readonly fallbackDir: string;
   private readonly logger: StorageLogger;
+  private readonly machineSecretLoaderFn: () => Promise<Buffer | null>;
+  private readonly machineSecretFilePath: string | undefined;
 
   private keyringInstance: KeyringAdapter | null | undefined = undefined;
   private keyringLoadAttempted = false;
@@ -308,8 +274,16 @@ export class SecureStore {
     this.keyringLoaderFn =
       options?.keyringLoader ?? createDefaultKeyringAdapter;
     this.logger = options?.logger ?? new NullStorageLoggerImpl();
+    this.machineSecretLoaderFn =
+      options?.machineSecretLoader ?? this.defaultMachineSecretLoader;
+    this.machineSecretFilePath = options?.machineSecretPath;
     setSecureStoreModuleLogger(this.logger);
   }
+
+  private defaultMachineSecretLoader = async (): Promise<Buffer | null> =>
+    getMachineSecret({
+      filePath: this.machineSecretFilePath,
+    });
 
   // ─── Keyring Loading ──────────────────────────────────────────────────────
 
@@ -786,17 +760,33 @@ export class SecureStore {
   private async writeFallbackFile(key: string, value: string): Promise<void> {
     await fs.mkdir(this.fallbackDir, { recursive: true, mode: 0o700 });
 
-    const salt = crypto.randomBytes(16);
-    const machineId = crypto
-      .createHash('sha256')
-      .update(os.hostname() + safeUsername())
-      .digest('hex');
-    const kdfInput = this.serviceName + '-' + machineId;
-    const encKey = await scryptAsync(kdfInput, salt, 32, {
-      N: 16384,
-      r: 8,
-      p: 1,
-    });
+    const salt = crypto.randomBytes(SALT_LEN);
+
+    const machineSecret = await this.machineSecretLoaderFn();
+    const useV2 = machineSecret !== null;
+
+    // Never downgrade an existing v:2 file to v:1. If the machine secret is
+    // unavailable, inspect the existing target envelope; if it is v:2, refuse
+    // to overwrite it with a weaker v:1 envelope rather than silently
+    // destroying the stronger root of trust. v:1 fallback is still allowed for
+    // new files or existing v:1 files.
+    if (!useV2) {
+      const finalPathForCheck = this.getFallbackFilePath(key);
+      const existingVersion =
+        await this.readExistingEnvelopeVersion(finalPathForCheck);
+      if (existingVersion === 2) {
+        throw new SecureStoreError(
+          'Refusing to overwrite v:2 fallback file with a weaker v:1 envelope while the machine secret is unavailable',
+          'UNAVAILABLE',
+          'Restore the machine secret and re-save the key, or remove the existing file if intentional.',
+        );
+      }
+    }
+
+    const kdfInput = useV2
+      ? deriveV2KdfInput(this.serviceName, machineSecret)
+      : deriveV1KdfInput(this.serviceName);
+    const encKey = await scryptAsync(kdfInput, salt, 32, SCRYPT_PARAMS);
 
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', encKey, iv);
@@ -808,14 +798,14 @@ export class SecureStore {
 
     const ciphertext = Buffer.concat([salt, iv, authTag, encrypted]);
     const envelope: Envelope = {
-      v: 1,
+      v: useV2 ? 2 : 1,
       crypto: {
         alg: 'aes-256-gcm',
         kdf: 'scrypt',
-        N: 16384,
-        r: 8,
-        p: 1,
-        saltLen: 16,
+        N: SCRYPT_PARAMS.N,
+        r: SCRYPT_PARAMS.r,
+        p: SCRYPT_PARAMS.p,
+        saltLen: SALT_LEN,
       },
       data: ciphertext.toString('base64'),
     };
@@ -836,6 +826,37 @@ export class SecureStore {
       await fs.unlink(tempPath).catch(() => {});
       throw error;
     }
+  }
+
+  /**
+   * Reads only the version field of an existing fallback envelope without
+   * attempting decryption. Returns the version (1 or 2) if the file exists
+   * and parses as a valid envelope, or null if it does not exist or is not
+   * a recognized envelope. Used by writeFallbackFile to detect v:2 files
+   * that must not be downgraded to v:1.
+   */
+  private async readExistingEnvelopeVersion(
+    filePath: string,
+  ): Promise<number | null> {
+    let content: string;
+    try {
+      content = await fs.readFile(filePath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw error;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return null;
+    }
+    if (!isValidEnvelope(parsed)) {
+      return null;
+    }
+    return parsed.v;
   }
 
   private async renameWithRetry(
@@ -894,7 +915,7 @@ export class SecureStore {
     }
 
     const env = envelope as Record<string, unknown>;
-    if (env.v !== 1) {
+    if (typeof env.v !== 'number' || !ENVELOPE_VERSIONS.has(env.v)) {
       throw new SecureStoreError(
         'Unrecognized envelope version: ' +
           String(env.v) +
@@ -913,21 +934,26 @@ export class SecureStore {
     }
 
     const ciphertext = Buffer.from(envelope.data, 'base64');
-    const salt = ciphertext.subarray(0, 16);
-    const iv = ciphertext.subarray(16, 28);
+    const salt = ciphertext.subarray(0, SALT_LEN);
+    const iv = ciphertext.subarray(SALT_LEN, SALT_LEN + 12);
     const authTag = ciphertext.subarray(28, 44);
     const encryptedData = ciphertext.subarray(44);
 
-    const machineId = crypto
-      .createHash('sha256')
-      .update(os.hostname() + safeUsername())
-      .digest('hex');
-    const kdfInput = this.serviceName + '-' + machineId;
-    const decKey = await scryptAsync(kdfInput, salt, 32, {
-      N: 16384,
-      r: 8,
-      p: 1,
-    });
+    let kdfInput: string;
+    if (envelope.v === 2) {
+      const machineSecret = await this.machineSecretLoaderFn();
+      if (machineSecret === null) {
+        throw new SecureStoreError(
+          'v:2 fallback file requires a machine secret that is unavailable',
+          'CORRUPT',
+          'Re-save the key or re-authenticate. The machine secret may have changed or been removed.',
+        );
+      }
+      kdfInput = deriveV2KdfInput(this.serviceName, machineSecret);
+    } else {
+      kdfInput = deriveV1KdfInput(this.serviceName);
+    }
+    const decKey = await scryptAsync(kdfInput, salt, 32, SCRYPT_PARAMS);
 
     try {
       const decipher = crypto.createDecipheriv('aes-256-gcm', decKey, iv);
