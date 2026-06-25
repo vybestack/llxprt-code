@@ -37,6 +37,7 @@ const TRANSIENT_ERROR_PHRASES = [
   'stream prematurely closed',
   'read econnreset',
   'write econnreset',
+  'fetch failed',
 ];
 
 const TRANSIENT_ERROR_REGEXES = [
@@ -198,17 +199,10 @@ function isRetryableStatus(status: number | undefined): boolean {
 
 export function isRetryableError(
   error: Error | unknown,
-  retryFetchErrors?: boolean,
+  _retryFetchErrors?: boolean,
 ): boolean {
   if (isNetworkTransientError(error)) {
     return true;
-  }
-
-  if (retryFetchErrors === true) {
-    const { messages } = collectErrorDetails(error);
-    if (messages.some((msg) => msg.toLowerCase().includes('fetch failed'))) {
-      return true;
-    }
   }
 
   const status = getErrorStatus(error);
