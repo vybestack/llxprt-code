@@ -376,7 +376,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
           await withHandler.cleanup();
         }
       }),
-      { numRuns: 5 },
+      { numRuns: 20 },
     );
   }, 30000);
 
@@ -411,9 +411,9 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
           }
         },
       ),
-      { numRuns: 20 },
+      { numRuns: 50 },
     );
-  }, 30000);
+  }, 60000);
 });
 
 // ─── Target 7: agentImpl.ts:1192-1193 rebuild approvalHandler propagation ──
