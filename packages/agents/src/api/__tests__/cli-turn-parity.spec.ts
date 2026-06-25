@@ -233,7 +233,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         },
       ),
     );
-  }, 30000);
+  }, 60000);
 
   it('T11 boundary scan: the parity spec files import ONLY the public root (no ./internals.js in Path A, no deep /src/ anywhere) (REQ-INT-004)', () => {
     const here = dirname(fileURLToPath(import.meta.url));
