@@ -312,8 +312,9 @@ export class MessageStreamOrchestrator {
     const fallback = estimateRequestTokensStructured(initialRequest);
     const estimatedRequestTokenCount =
       typeof est === 'function' && typeof conv === 'function'
-        ? await est
-            .call(chat, [conv.call(chat, initialRequest)])
+        ? await Promise.resolve()
+            .then(() => conv.call(chat, initialRequest))
+            .then((content) => est.call(chat, [content]))
             .catch(() => fallback)
         : fallback;
 

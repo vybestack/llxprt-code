@@ -116,39 +116,16 @@ export function extractPromptText(request: PartListUnion): string {
   return '';
 }
 
-export function estimateTextOnlyLength(request: PartListUnion): number {
-  if (typeof request === 'string') {
-    return request.length;
-  }
-
-  if (!Array.isArray(request)) {
-    if (hasTextProperty(request) && request.text) {
-      return request.text.length;
-    }
-    return 0;
-  }
-
-  let textLength = 0;
-  for (const part of request) {
-    if (typeof part === 'string') {
-      textLength += part.length;
-    } else if (hasTextProperty(part) && part.text) {
-      textLength += part.text.length;
-    }
-  }
-  return textLength;
-}
-
 /**
  * Structured, payload-aware token estimate for a pending request, used as a
  * fallback when the model-aware tokenizer (ChatSession.estimatePendingTokens)
  * is unavailable — e.g. with minimal test doubles.
  *
- * Unlike `estimateTextOnlyLength`, this accounts for `functionResponse` and
- * `functionCall` payloads by serializing their JSON, so a bare
- * functionResponse continuation is no longer estimated as 0 tokens. Binary
- * payloads (`inlineData`/`fileData`) are intentionally ignored so that large
- * base64 blobs do not produce false-positive overflow estimates.
+ * This accounts for `functionResponse` and `functionCall` payloads by
+ * serializing their JSON, so a bare functionResponse continuation is no longer
+ * estimated as 0 tokens. Binary payloads (`inlineData`/`fileData`) are
+ * intentionally ignored so that large base64 blobs do not produce
+ * false-positive overflow estimates.
  */
 export function estimateRequestTokensStructured(
   request: PartListUnion,
@@ -170,22 +147,17 @@ function charLengthForPart(part: Part | string): number {
   if (typeof part === 'string') {
     return part.length;
   }
-  const record = part as Record<string, unknown>;
-  const keys = Object.keys(record);
-  if (keys.includes('inlineData') || keys.includes('fileData')) {
+  if ('inlineData' in part || 'fileData' in part) {
     return 0;
   }
-  if (typeof record.text === 'string') {
-    return record.text.length;
+  if ('text' in part && typeof part.text === 'string') {
+    return part.text.length;
   }
-  if (
-    record.functionResponse !== undefined &&
-    record.functionResponse !== null
-  ) {
-    return safeJsonLength(record.functionResponse);
+  if ('functionResponse' in part && part.functionResponse != null) {
+    return safeJsonLength(part.functionResponse);
   }
-  if (record.functionCall !== undefined && record.functionCall !== null) {
-    return safeJsonLength(record.functionCall);
+  if ('functionCall' in part && part.functionCall != null) {
+    return safeJsonLength(part.functionCall);
   }
   return 0;
 }

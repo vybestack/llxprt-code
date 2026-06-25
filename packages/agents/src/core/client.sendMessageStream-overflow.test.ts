@@ -239,7 +239,7 @@ describe('Gemini Client (client.ts)', () => {
       // A string of length 400 is roughly 100 tokens.
       const longText = 'a'.repeat(400);
       const request: Part[] = [{ text: longText }];
-      // estimateTextOnlyLength counts only text content (400 chars), not JSON structure
+      // Structured fallback counts the text content (400 chars), not JSON structure.
       const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
 
@@ -531,6 +531,53 @@ describe('Gemini Client (client.ts)', () => {
       ).toBeGreaterThan(950);
     });
 
+    it('should use structured fallback when request conversion throws before tokenizer sizing', async () => {
+      // Arrange — convertPartListUnionToIContent is synchronous. If it throws,
+      // the fallback still needs to run instead of rejecting the stream.
+      const MOCKED_TOKEN_LIMIT = 1000;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      const lastPromptTokenCount = 0;
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        lastPromptTokenCount,
+      );
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        convertPartListUnionToIContent: vi.fn(() => {
+          throw new Error('conversion unavailable');
+        }),
+        estimatePendingTokens: vi.fn().mockResolvedValue(1),
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const request: Part[] = [
+        {
+          functionResponse: {
+            name: 'someTool',
+            response: { result: 'x'.repeat(4000) },
+          },
+        },
+      ];
+
+      // Act
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-conversion-fallback',
+      );
+      const events = await fromAsync(stream);
+
+      // Assert — fallback counted the functionResponse payload and emitted the
+      // same preflight overflow event rather than throwing.
+      const overflow = events.find(
+        (e) => e.type === GeminiEventType.ContextWindowWillOverflow,
+      );
+      expect(overflow).toBeDefined();
+      expect(mockTurnRunFn).not.toHaveBeenCalled();
+    });
+
     it('should ignore inlineData/fileData in the structured fallback to avoid false positives', async () => {
       // Arrange — large binary payloads must not inflate the fallback estimate.
       const MOCKED_TOKEN_LIMIT = 1000;
@@ -617,7 +664,7 @@ describe('Gemini Client (client.ts)', () => {
       // We need a request > 95 tokens.
       const longText = 'a'.repeat(400);
       const request: Part[] = [{ text: longText }];
-      // estimateTextOnlyLength counts only text content (400 chars), not JSON structure
+      // Structured fallback counts the text content (400 chars), not JSON structure.
       const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = STICKY_MODEL_LIMIT - lastPromptTokenCount;
 
