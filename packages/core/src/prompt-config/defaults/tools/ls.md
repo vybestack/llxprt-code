@@ -1,1 +1,1 @@
-- When asked to list files or directories, use the '${LSTool.Name}' tool
+- When asked to list files or directories, use the '{{LSTool.Name}}' tool

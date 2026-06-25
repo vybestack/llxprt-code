@@ -1,4 +1,15 @@
 import path from 'node:path';
+import {
+  ApplyPatchTool,
+  EditTool,
+  GlobTool,
+  GrepTool,
+  LSTool,
+  ReadFileTool,
+  ReadManyFilesTool,
+  ShellTool,
+  WriteFileTool,
+} from '@vybestack/llxprt-code-tools';
 import { CORE_DEFAULTS } from './defaults/core-defaults.js';
 import {
   type TemplateVariables,
@@ -7,6 +18,27 @@ import {
   type PromptEnvironment,
 } from './types.js';
 import { debugLogger } from '../utils/debugLogger.js';
+
+/**
+ * Canonical tool-name template variables (issue #2109).
+ *
+ * Prompt templates reference workflow tools by class name (for example
+ * `{{GrepTool.Name}}`). These must resolve to the canonical tool names the
+ * model can actually call. Sourcing the values directly from each tool class'
+ * `Name` constant keeps the prompt in sync with the tool registry and prevents
+ * the names from drifting if a tool is renamed.
+ */
+const TOOL_NAME_VARIABLES: Readonly<Record<string, string>> = {
+  'GrepTool.Name': GrepTool.Name,
+  'GlobTool.Name': GlobTool.Name,
+  'LSTool.Name': LSTool.Name,
+  'ReadFileTool.Name': ReadFileTool.Name,
+  'ReadManyFilesTool.Name': ReadManyFilesTool.Name,
+  'EditTool.Name': EditTool.Name,
+  'WriteFileTool.Name': WriteFileTool.Name,
+  'ShellTool.Name': ShellTool.Name,
+  'ApplyPatchTool.Name': ApplyPatchTool.Name,
+};
 
 /**
  * TemplateEngine - Handles variable substitution in prompt templates
@@ -162,6 +194,9 @@ export class TemplateEngine {
       variables['TOOL_NAME'] = currentTool;
     }
 
+    // Add canonical tool-name variables (issue #2109)
+    this.addToolNameVariables(variables);
+
     // Add environment variables
     this.addEnvironmentVariables(variables, context.environment);
 
@@ -273,6 +308,13 @@ export class TemplateEngine {
     variables['PLATFORM'] = process.platform;
   }
 
+  /** Add canonical tool-name variables (issue #2109) */
+  private addToolNameVariables(variables: TemplateVariables): void {
+    for (const [name, value] of Object.entries(TOOL_NAME_VARIABLES)) {
+      variables[name] = value;
+    }
+  }
+
   /** Add subagent delegation and async subagent guidance variables */
   private addSubagentVariables(
     variables: TemplateVariables,
@@ -289,31 +331,39 @@ export class TemplateEngine {
       hasTaskTool &&
       hasListSubagentsTool;
 
+    const globalAsyncEnabled = context.asyncSubagentsEnabled !== false;
+    const profileAsyncEnabled = context.profileAsyncEnabled !== false;
+    const includeAsyncGuidance =
+      includeSubagentDelegation && globalAsyncEnabled && profileAsyncEnabled;
+
+    let asyncGuidance = '';
+    if (includeAsyncGuidance) {
+      try {
+        asyncGuidance = this.loadAsyncSubagentGuidanceContent();
+      } catch {
+        asyncGuidance = '';
+      }
+    }
+    variables['ASYNC_SUBAGENT_GUIDANCE'] = asyncGuidance;
+
     if (includeSubagentDelegation) {
       try {
-        variables['SUBAGENT_DELEGATION'] = this.loadSubagentDelegationContent();
+        // The subagent delegation partial embeds a nested
+        // {{ASYNC_SUBAGENT_GUIDANCE}} token. processTemplate is single-pass and
+        // does not re-resolve tokens introduced by a substitution, so the
+        // partial is rendered here (with the variables resolved so far,
+        // including ASYNC_SUBAGENT_GUIDANCE) before it is injected into the main
+        // template (issue #2109).
+        const delegation = this.loadSubagentDelegationContent();
+        variables['SUBAGENT_DELEGATION'] = this.processTemplate(
+          delegation,
+          variables,
+        );
       } catch {
         variables['SUBAGENT_DELEGATION'] = '';
       }
     } else {
       variables['SUBAGENT_DELEGATION'] = '';
-    }
-
-    const globalAsyncEnabled = context.asyncSubagentsEnabled !== false;
-    const profileAsyncEnabled = context.profileAsyncEnabled !== false;
-    if (
-      includeSubagentDelegation &&
-      globalAsyncEnabled &&
-      profileAsyncEnabled
-    ) {
-      try {
-        variables['ASYNC_SUBAGENT_GUIDANCE'] =
-          this.loadAsyncSubagentGuidanceContent();
-      } catch {
-        variables['ASYNC_SUBAGENT_GUIDANCE'] = '';
-      }
-    } else {
-      variables['ASYNC_SUBAGENT_GUIDANCE'] = '';
     }
   }
 

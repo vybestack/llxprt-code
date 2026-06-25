@@ -1,0 +1,145 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 100000,
+    "scrollbackLines": 20000,
+    "initialWaitMs": 8000
+  },
+  "startCommand": [
+    "node",
+    "scripts/start.js",
+    "--profile-load",
+    "ollamaqwen3coder"
+  ],
+  "yolo": true,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "capture",
+      "label": "00-startup",
+      "scope": "screen"
+    },
+
+    {
+      "type": "line",
+      "text": "What tools do you have access to? List every tool you can call by name.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "esc to cancel",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "01-list-tools-screen",
+      "scope": "screen"
+    },
+    {
+      "type": "capture",
+      "label": "01-list-tools-scrollback",
+      "scope": "scrollback"
+    },
+
+    {
+      "type": "line",
+      "text": "Can you access the web? Answer yes or no, and name the specific tool you would use to do it.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "esc to cancel",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "02-web-access-screen",
+      "scope": "screen"
+    },
+    {
+      "type": "capture",
+      "label": "02-web-access-scrollback",
+      "scope": "scrollback"
+    },
+
+    {
+      "type": "line",
+      "text": "Use exa_web_search right now to find the latest stable version of the Vite build tool, then tell me the version number.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "esc to cancel",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "capture",
+      "label": "03-web-search-tool-call-scrollback",
+      "scope": "scrollback"
+    },
+    {
+      "type": "capture",
+      "label": "03-web-search-tool-call-screen",
+      "scope": "screen"
+    },
+
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 20000
+    }
+  ]
+}

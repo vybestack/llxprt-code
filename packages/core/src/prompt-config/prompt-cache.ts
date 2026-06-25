@@ -107,6 +107,17 @@ export class PromptCache {
     // Include subagent delegation flag in cache key
     if (context.includeSubagentDelegation === true) {
       envFlags.push('subagent-delegation');
+
+      // Async subagent guidance is only rendered when delegation is enabled,
+      // and its presence depends on both the global and profile async flags.
+      // These must be part of the key so prompts with and without the async
+      // guidance block are cached separately (issue #2109).
+      if (context.asyncSubagentsEnabled === false) {
+        envFlags.push('no-async-global');
+      }
+      if (context.profileAsyncEnabled === false) {
+        envFlags.push('no-async-profile');
+      }
     } else if (context.includeSubagentDelegation === false) {
       envFlags.push('no-subagent-delegation');
     }
