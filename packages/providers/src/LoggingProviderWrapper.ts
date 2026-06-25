@@ -727,7 +727,7 @@ export class LoggingProviderWrapper implements IProvider {
         success,
         error,
       );
-      this.writeConversationLog(
+      await this.writeConversationLog(
         config,
         redactedContent,
         promptId,
@@ -770,15 +770,15 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   /** Write conversation response event to telemetry and disk. */
-  private writeConversationLog(
+  private async writeConversationLog(
     config: Config,
     redactedContent: string,
     promptId: string,
     duration: number,
     success: boolean,
     error: unknown,
-  ): void {
-    writeConversationLog(
+  ): Promise<void> {
+    await writeConversationLog(
       config,
       redactedContent,
       promptId,
