@@ -50,6 +50,67 @@ export interface RipGrepToolParams {
    * File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")
    */
   include?: string;
+
+  /**
+   * Whether to respect .gitignore and .llxprtignore patterns (optional, defaults to true)
+   */
+  file_filtering_options?: {
+    respect_git_ignore?: boolean;
+    respect_llxprt_ignore?: boolean;
+  };
+}
+
+export interface RipgrepIgnoreOptions {
+  respectGitIgnore: boolean;
+  respectLlxprtIgnore: boolean;
+  llxprtIgnoreFilePath: string | null;
+}
+
+const BASELINE_EXCLUDES: readonly string[] = Object.freeze([
+  '.git',
+  'node_modules',
+  'bower_components',
+  '*.log',
+  '*.tmp',
+  'build',
+  'dist',
+  'coverage',
+]);
+
+export function buildRipgrepArgs(
+  pattern: string,
+  absolutePath: string,
+  include: string | undefined,
+  ignoreOptions: RipgrepIgnoreOptions,
+): string[] {
+  const rgArgs = [
+    '--line-number',
+    '--no-heading',
+    '--with-filename',
+    '--ignore-case',
+    '--regexp',
+    pattern,
+  ];
+
+  if (include) {
+    rgArgs.push('--glob', include);
+  }
+
+  BASELINE_EXCLUDES.forEach((exclude) => {
+    rgArgs.push('--glob', `!${exclude}`);
+  });
+
+  if (ignoreOptions.respectGitIgnore === false) {
+    rgArgs.push('--no-ignore');
+  }
+
+  if (ignoreOptions.respectLlxprtIgnore && ignoreOptions.llxprtIgnoreFilePath) {
+    rgArgs.push('--ignore-file', ignoreOptions.llxprtIgnoreFilePath);
+  }
+
+  rgArgs.push('--threads', '4');
+  rgArgs.push(absolutePath);
+  return rgArgs;
 }
 
 /**
@@ -130,6 +191,24 @@ File: ${resolved.basename}
     return [searchDirAbs];
   }
 
+  private resolveIgnoreOptions(): RipgrepIgnoreOptions {
+    const defaults = this.host.getFileFilteringOptions();
+    const respectGitIgnore =
+      this.params.file_filtering_options?.respect_git_ignore ??
+      defaults.respectGitIgnore;
+    const respectLlxprtIgnore =
+      this.params.file_filtering_options?.respect_llxprt_ignore ??
+      defaults.respectLlxprtIgnore;
+    const llxprtIgnoreFilePath = respectLlxprtIgnore
+      ? this.host.getLlxprtIgnoreFilePath()
+      : null;
+    return {
+      respectGitIgnore,
+      respectLlxprtIgnore,
+      llxprtIgnoreFilePath,
+    };
+  }
+
   private collectDirectoryMatches(
     searchDirectories: readonly string[],
     signal: AbortSignal,
@@ -138,6 +217,7 @@ File: ${resolved.basename}
       searchDirectories,
       signal,
       DEFAULT_TOTAL_MAX_MATCHES,
+      this.resolveIgnoreOptions(),
     );
   }
 
@@ -145,6 +225,7 @@ File: ${resolved.basename}
     searchDirectories: readonly string[],
     signal: AbortSignal,
     totalMaxMatches: number,
+    ignoreOptions: RipgrepIgnoreOptions,
   ): Promise<GrepMatch[]> {
     let allMatches: GrepMatch[] = [];
 
@@ -158,6 +239,7 @@ File: ${resolved.basename}
         path: searchDir,
         include: this.params.include,
         signal,
+        ignoreOptions,
       });
 
       if (searchDirectories.length > 1) {
@@ -304,14 +386,6 @@ File: ${resolved.basename}
     return results;
   }
 
-  /**
-   * Returns the path to .llxprtignore file if it exists and has patterns.
-   * Only returns path if patterns are non-empty (excluding comments/blank lines).
-   */
-  private getLlxprtIgnorePath(): string | null {
-    return this.host.getLlxprtIgnoreFilePath();
-  }
-
   private async runRipgrepProcess(
     rgArgs: string[],
     signal: AbortSignal,
@@ -362,59 +436,27 @@ File: ${resolved.basename}
     });
   }
 
-  private buildRipgrepArgs(
-    pattern: string,
-    absolutePath: string,
-    include: string | undefined,
-  ): string[] {
-    const rgArgs = [
-      '--line-number',
-      '--no-heading',
-      '--with-filename',
-      '--ignore-case',
-      '--regexp',
-      pattern,
-    ];
-
-    if (include) {
-      rgArgs.push('--glob', include);
-    }
-
-    const excludes = [
-      '.git',
-      'node_modules',
-      'bower_components',
-      '*.log',
-      '*.tmp',
-      'build',
-      'dist',
-      'coverage',
-    ];
-    excludes.forEach((exclude) => {
-      rgArgs.push('--glob', `!${exclude}`);
-    });
-
-    if (this.host.getFileFilteringRespectLlxprtIgnore()) {
-      const llxprtIgnorePath = this.getLlxprtIgnorePath();
-      if (llxprtIgnorePath) {
-        rgArgs.push('--ignore-file', llxprtIgnorePath);
-      }
-    }
-
-    rgArgs.push('--threads', '4');
-    rgArgs.push(absolutePath);
-    return rgArgs;
-  }
-
   private async performRipgrepSearch(options: {
     pattern: string;
     path: string;
     include?: string;
     signal: AbortSignal;
+    ignoreOptions: RipgrepIgnoreOptions;
   }): Promise<GrepMatch[]> {
-    const { pattern, path: absolutePath, include, signal } = options;
+    const {
+      pattern,
+      path: absolutePath,
+      include,
+      signal,
+      ignoreOptions,
+    } = options;
 
-    const rgArgs = this.buildRipgrepArgs(pattern, absolutePath, include);
+    const rgArgs = buildRipgrepArgs(
+      pattern,
+      absolutePath,
+      include,
+      ignoreOptions,
+    );
 
     try {
       const output = await this.runRipgrepProcess(rgArgs, signal);
@@ -516,7 +558,7 @@ export class RipGrepTool extends BaseDeclarativeTool<
     super(
       RipGrepTool.Name,
       'SearchText',
-      'Searches for a regular expression pattern within the content of files in a specified directory (or current working directory). Can filter files by a glob pattern. Returns the lines containing matches, along with their file paths and line numbers. Total results limited to 20,000 matches like VSCode.',
+      'Searches for a regular expression pattern within the content of files in a specified directory (or current working directory). Can filter files by a glob pattern. Returns the lines containing matches, along with their file paths and line numbers. Total results limited to 20,000 matches like VSCode. Ignore patterns from .gitignore and .llxprtignore are respected by default and can be overridden via file_filtering_options.',
       Kind.Search,
       {
         properties: {
@@ -534,6 +576,23 @@ export class RipGrepTool extends BaseDeclarativeTool<
             description:
               "Optional: A glob pattern to filter which files are searched (e.g., '*.js', '*.{ts,tsx}', 'src/**'). If omitted, searches all files (respecting potential global ignores).",
             type: 'string',
+          },
+          file_filtering_options: {
+            description:
+              'Optional: Whether to respect ignore patterns from .gitignore or .llxprtignore',
+            type: 'object',
+            properties: {
+              respect_git_ignore: {
+                description:
+                  'Optional: Whether to respect .gitignore patterns when searching files. Only available in git repositories. Defaults to true.',
+                type: 'boolean',
+              },
+              respect_llxprt_ignore: {
+                description:
+                  'Optional: Whether to respect .llxprtignore patterns when searching files. Defaults to true.',
+                type: 'boolean',
+              },
+            },
           },
         },
         required: ['pattern'],

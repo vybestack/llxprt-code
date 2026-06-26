@@ -42,6 +42,7 @@ import {
   LSTool,
   ReadFileTool,
   ReadLineRangeTool,
+  RipGrepTool,
   WriteFileTool,
 } from '../index.js';
 import {
@@ -106,6 +107,24 @@ function _createFakeFileHost(targetDir: string): IToolHost {
     getLlxprtIgnorePatterns: () => [],
     getEphemeralSettings: () => ({}),
     getDebugMode: () => false,
+  };
+}
+
+function createGrepHost(
+  targetDir: string,
+  options: {
+    respectGitIgnore: boolean;
+    respectLlxprtIgnore: boolean;
+    llxprtIgnoreFilePath: string | null;
+  },
+): IToolHost {
+  return {
+    ..._createFakeFileHost(targetDir),
+    getFileFilteringOptions: () => ({
+      respectGitIgnore: options.respectGitIgnore,
+      respectLlxprtIgnore: options.respectLlxprtIgnore,
+    }),
+    getLlxprtIgnoreFilePath: () => options.llxprtIgnoreFilePath,
   };
 }
 
@@ -303,6 +322,40 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
       expect(result.error).toBeUndefined();
       expect(result.llmContent).toContain('Hello World');
       expect(result.llmContent).toContain('Hello Again');
+    });
+
+    it('respects .llxprtignore by default and overrides via file_filtering_options', async () => {
+      writeFileSync(join(tempDir, 'keep.ts'), 'needle found', 'utf-8');
+      writeFileSync(join(tempDir, 'skip.ts'), 'needle skip', 'utf-8');
+      const ignoreFilePath = join(tempDir, '.llxprtignore');
+      writeFileSync(ignoreFilePath, 'skip.ts', 'utf-8');
+
+      const host = createGrepHost(tempDir, {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+        llxprtIgnoreFilePath: ignoreFilePath,
+      });
+
+      const defaultResult = await executeDeclarativeToolForBehavioralAssertion(
+        new RipGrepTool(host),
+        { pattern: 'needle', path: tempDir },
+      );
+
+      expect(defaultResult.llmContent).toContain('keep.ts');
+      expect(defaultResult.llmContent).not.toContain('skip.ts');
+
+      const overriddenResult =
+        await executeDeclarativeToolForBehavioralAssertion(
+          new RipGrepTool(host),
+          {
+            pattern: 'needle',
+            path: tempDir,
+            file_filtering_options: { respect_llxprt_ignore: false },
+          },
+        );
+
+      expect(overriddenResult.llmContent).toContain('keep.ts');
+      expect(overriddenResult.llmContent).toContain('skip.ts');
     });
   });
 
