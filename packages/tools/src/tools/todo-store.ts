@@ -7,9 +7,41 @@
 import { type Todo, TodoArraySchema } from '../types/todo-schemas.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { homedir, platform, tmpdir } from 'os';
 
 export const DEFAULT_AGENT_ID = 'primary';
+
+/**
+ * Inline platform data dir matching envPaths('llxprt-code', { suffix: '' }).data
+ * without importing the package (tools is a leaf package with no Storage dep).
+ * Respects LLXPRT_DATA_HOME and LLXPRT_CONFIG_HOME env overrides.
+ */
+function getPlatformDataDir(): string {
+  const dataHome = process.env['LLXPRT_DATA_HOME']?.trim();
+  if (dataHome && path.isAbsolute(dataHome)) {
+    return path.resolve(dataHome);
+  }
+  const configHome = process.env['LLXPRT_CONFIG_HOME']?.trim();
+  if (configHome && path.isAbsolute(configHome)) {
+    return path.resolve(configHome);
+  }
+  const home = homedir() || tmpdir();
+  if (platform() === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'llxprt-code');
+  }
+  if (platform() === 'win32') {
+    const rawLocalAppData = process.env['LOCALAPPDATA'] ?? '';
+    const localAppData =
+      rawLocalAppData !== ''
+        ? rawLocalAppData
+        : path.join(home, 'AppData', 'Local');
+    return path.join(localAppData, 'llxprt-code', 'Data');
+  }
+  const rawXdgData = process.env['XDG_DATA_HOME'] ?? '';
+  const xdgData =
+    rawXdgData !== '' ? rawXdgData : path.join(home, '.local', 'share');
+  return path.join(xdgData, 'llxprt-code');
+}
 
 /**
  * File format for task storage.
@@ -24,7 +56,7 @@ export class TodoStore {
   private readonly filePath: string;
 
   constructor(sessionId: string, agentId?: string) {
-    const todoDir = path.join(Storage.getGlobalDataDir(), 'todos');
+    const todoDir = path.join(getPlatformDataDir(), 'todos');
     // Ensure directory exists
     fs.mkdirSync(todoDir, { recursive: true });
 
