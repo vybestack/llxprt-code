@@ -35,14 +35,11 @@ export function validateVariables(
   }
 }
 
-// Matches ${var} template syntax. Constructed via RegExp so the pattern is not
-// a static literal flagged by sonarjs/regular-expr.
-const TEMPLATE_VAR_PATTERN = '\\${(.*?)}';
+const TEMPLATE_VAR_REGEX = /\$\{(.*?)}/g;
 
 export function hydrateString(str: string, context: VariableContext): string {
   validateVariables(context, VARIABLE_SCHEMA);
-  const regex = new RegExp(TEMPLATE_VAR_PATTERN, 'g');
-  return str.replace(regex, (match, key) =>
+  return str.replace(TEMPLATE_VAR_REGEX, (match, key) =>
     context[key as keyof VariableContext] == null
       ? match
       : (context[key as keyof VariableContext] as string),

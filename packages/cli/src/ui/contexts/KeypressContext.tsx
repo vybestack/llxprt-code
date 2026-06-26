@@ -342,12 +342,8 @@ function parseNonEscapeKey(
   return false;
 }
 
-// CSI numbered code: 1-3 semicolon-separated numbers + a suffix. The pattern is
-// passed to RegExp via an identifier so it is not a static literal flagged by
-// sonarjs/regular-expr.
-const NUMBERED_CODE_PATTERN =
-  '^(?<first>\\d+)(?:;(?<second>\\d+))?(?:;(?<third>\\d+))?(?<suffix>[~^$u])$';
-const NUMBERED_CODE_REGEX = new RegExp(NUMBERED_CODE_PATTERN);
+const NUMBERED_CODE_REGEX =
+  /^(?<first>\d+)(?:;(?<second>\d+))?(?:;(?<third>\d+))?(?<suffix>[~^$u])$/;
 
 function parseNumberedCode(
   cmd: string,
@@ -366,12 +362,8 @@ function parseNumberedCode(
   return { code: first + suffix, modifier: parseInt(second ?? '1', 10) - 1 };
 }
 
-// CSI letter code: optional numbers + a single letter. The pattern is passed to
-// RegExp via an identifier so it is not a static literal flagged by
-// sonarjs/regular-expr.
-const LETTER_CODE_PATTERN =
-  '^(?<first>\\d+)?(?:;(?<second>\\d+))?(?<letter>[A-Za-z])$';
-const LETTER_CODE_REGEX = new RegExp(LETTER_CODE_PATTERN);
+const LETTER_CODE_REGEX =
+  /^(?<first>\d+)?(?:;(?<second>\d+))?(?<letter>[A-Za-z])$/;
 
 function parseLetterCode(
   cmd: string,

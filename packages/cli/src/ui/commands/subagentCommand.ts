@@ -30,12 +30,8 @@ import { generateAutoPrompt } from '../utils/autoPromptGenerator.js';
  * @requirement:REQ-011
  * @pseudocode SubagentCommand.md lines 1-17
  */
-// Parses `name profile mode "quoted input"` save arguments. The pattern is
-// passed to RegExp via an identifier so it is not a static literal flagged by
-// sonarjs/regular-expr.
-const SAVE_ARGS_PATTERN =
-  '^(\\S+)\\s+(\\S+)\\s+(auto|manual)\\s+"((?:[^"\\\\]|\\\\.)*)("|"?)';
-const SAVE_ARGS_REGEX = new RegExp(SAVE_ARGS_PATTERN);
+const SAVE_ARGS_REGEX =
+  /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("|"?)/;
 
 function parseSaveArgs(args: string): {
   name: string;
