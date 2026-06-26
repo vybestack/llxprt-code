@@ -307,7 +307,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Requires restart:** No
 
 - **`ui.dynamicWindowTitle`** (boolean):
-  - **Description:** Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )
+  - **Description:** Update the terminal window title with current status prefixes (Ready: ◇, Action Required: no leading glyph, Working: no leading glyph)
   - **Default:** `true`
   - **Requires restart:** No
 

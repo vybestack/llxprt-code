@@ -388,8 +388,8 @@
         },
         "dynamicWindowTitle": {
           "title": "Dynamic Window Title",
-          "description": "Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )",
-          "markdownDescription": "Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
+          "description": "Update the terminal window title with current status prefixes (Ready: ◇, Action Required: no leading glyph, Working: no leading glyph)",
+          "markdownDescription": "Update the terminal window title with current status prefixes (Ready: ◇, Action Required: no leading glyph, Working: no leading glyph)\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
           "default": true,
           "type": "boolean"
         },
