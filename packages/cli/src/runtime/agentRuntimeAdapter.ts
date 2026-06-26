@@ -218,13 +218,7 @@ export class AgentRuntimeAdapter {
       throw new Error('Provider manager not initialized');
     }
 
-    const provider = (
-      providerManager as unknown as {
-        getProviderByName: (
-          name: string,
-        ) => { getDefaultModel: () => string } | undefined;
-      }
-    ).getProviderByName(providerName);
+    const provider = providerManager.getProviderByName(providerName);
     if (!provider) {
       const available = providerManager.listProviders().join(', ');
       throw new Error(
@@ -233,7 +227,12 @@ export class AgentRuntimeAdapter {
     }
 
     // Get default model for provider
-    const defaultModel = provider.getDefaultModel();
+    const defaultModel = provider.getDefaultModel?.();
+    if (!defaultModel) {
+      throw new Error(
+        `Provider '${providerName}' has no default model configured.`,
+      );
+    }
 
     // Batch update: provider + model + clear baseUrl
     const updates: Partial<RuntimeStateParams> = {
@@ -308,13 +307,7 @@ export class AgentRuntimeAdapter {
       throw new Error('Provider manager not initialized');
     }
 
-    const provider = (
-      providerManager as unknown as {
-        getProviderByName: (
-          name: string,
-        ) => { getDefaultModel: () => string } | undefined;
-      }
-    ).getProviderByName(providerName);
+    const provider = providerManager.getProviderByName(providerName);
     if (!provider) {
       const available = providerManager.listProviders().join(', ');
       throw new Error(
@@ -323,7 +316,12 @@ export class AgentRuntimeAdapter {
     }
 
     // Determine model (explicit or default)
-    const targetModel = options?.model ?? provider.getDefaultModel();
+    const targetModel = options?.model ?? provider.getDefaultModel?.();
+    if (!targetModel) {
+      throw new Error(
+        `Provider '${providerName}' has no default model configured.`,
+      );
+    }
 
     // Build batch update
     const updates: Partial<RuntimeStateParams> = {

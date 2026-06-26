@@ -17,6 +17,7 @@ import {
   type ToolCallsUpdateHandler,
   type ToolCall,
   type EditorType,
+  type SubagentSchedulerFactory,
   DEFAULT_AGENT_ID,
   DebugLogger,
   type AnsiOutput,
@@ -27,18 +28,6 @@ import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
-
-type ExternalSchedulerFactory = (args: {
-  schedulerConfig: Config;
-  onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
-  outputUpdateHandler: OutputUpdateHandler;
-  onToolCallsUpdate?: ToolCallsUpdateHandler;
-}) => {
-  schedule(
-    request: ToolCallRequestInfo | ToolCallRequestInfo[],
-    signal: AbortSignal,
-  ): Promise<void> | void;
-};
 
 type SchedulerConfigWithExplicitMessageBus = Config & {
   getOrCreateScheduler(
@@ -305,7 +294,7 @@ function createMainSchedulerCallbacks(
 function createSubagentCallbacks(
   schedulerId: symbol,
   refs: SchedulerRefs,
-  args: Parameters<ExternalSchedulerFactory>[0],
+  args: Parameters<SubagentSchedulerFactory>[0],
 ): Parameters<
   SchedulerConfigWithExplicitMessageBus['getOrCreateScheduler']
 >[1] {
@@ -524,9 +513,9 @@ function useScheduler(
 function useExternalSchedulerFactoryCreator(
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
-): ExternalSchedulerFactory {
+): SubagentSchedulerFactory {
   const factory = useCallback(
-    async (args: Parameters<ExternalSchedulerFactory>[0]) => {
+    async (args: Parameters<SubagentSchedulerFactory>[0]) => {
       const schedulerId = Symbol('subagent-scheduler');
       const schedulerSessionId = args.schedulerConfig.getSessionId();
       const instance = await (
@@ -548,7 +537,7 @@ function useExternalSchedulerFactoryCreator(
     },
     [refs, runtimeMessageBus],
   );
-  return factory as unknown as ExternalSchedulerFactory;
+  return factory;
 }
 
 /**
@@ -556,12 +545,12 @@ function useExternalSchedulerFactoryCreator(
  */
 function useExternalSchedulerSetup(
   config: Config,
-  createExternalScheduler: ExternalSchedulerFactory,
+  createExternalScheduler: SubagentSchedulerFactory,
   setExternalSchedulerRegistered: (registered: boolean) => void,
 ): void {
   type ConfigWithSchedulerFactory = Config & {
     setInteractiveSubagentSchedulerFactory?: (
-      factory: ExternalSchedulerFactory | undefined,
+      factory: SubagentSchedulerFactory | undefined,
     ) => void;
   };
 
