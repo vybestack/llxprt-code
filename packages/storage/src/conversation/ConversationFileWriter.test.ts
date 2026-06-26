@@ -441,3 +441,42 @@ describe('ConversationFileWriter — Multiple Writes', () => {
     }
   });
 });
+
+// ─── Never-Rejects Contract ─────────────────────────────────────────────────
+
+describe('ConversationFileWriter — Never-Rejects Contract', () => {
+  it('resolves (never rejects) when the injected logger throws during a failed write, and does not poison the chain', async () => {
+    const { parentIsFilePath, cleanup } = await createInvalidParentPath();
+    // A real logger whose error() throws. In the buggy chain this rejected the
+    // write promise and permanently poisoned the chain so every later write was
+    // silently dropped (its .then callback skipped on the rejected chain).
+    const throwingLogger: StorageLogger = {
+      debug: () => {},
+      warn: () => {},
+      error: () => {
+        throw new Error('logger exploded');
+      },
+    };
+
+    try {
+      const writer = new ConversationFileWriter(
+        parentIsFilePath,
+        throwingLogger,
+      );
+
+      // First failing write: the filesystem op fails and logger.error() throws,
+      // but the returned promise must still resolve (best-effort, never rejects).
+      await expect(
+        writer.writeEntry({ type: 'doomed-first' }),
+      ).resolves.toBeUndefined();
+
+      // Second write must also resolve — the prior failure must not have
+      // poisoned the chain. (Pre-fix this rejected and skipped appendEntry.)
+      await expect(
+        writer.writeEntry({ type: 'doomed-second' }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  });
+});

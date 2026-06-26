@@ -39,8 +39,12 @@ export class ConversationFileWriter {
   async writeEntry(entry: Record<string, unknown>): Promise<void> {
     // Serialize writes through a per-instance chain so concurrent callers
     // append in invocation order, preserving the guarantee the synchronous
-    // implementation had implicitly.
-    this.writeChain = this.writeChain.then(() => this.appendEntry(entry));
+    // implementation had implicitly. The trailing .catch() guarantees the
+    // chain and the returned promise never reject — a throwing logger or a
+    // filesystem error cannot poison subsequent writes.
+    this.writeChain = this.writeChain
+      .then(() => this.appendEntry(entry))
+      .catch(() => {});
     return this.writeChain;
   }
 
