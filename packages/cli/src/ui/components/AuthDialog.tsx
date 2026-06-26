@@ -14,6 +14,7 @@ import { SettingScope } from '../../config/settings.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { AuthStatus } from '@vybestack/llxprt-code-providers/auth.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 interface AuthDialogProps {
   onSelect: (authMethod: string | undefined, scope: SettingScope) => void;
@@ -270,8 +271,7 @@ export function AuthDialog({
   const runtime = useRuntimeApi();
   const mountedRef = useMountedRef();
   const [errorMessage, setErrorMessage] = useState<string | null>(
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error message should be treated as null
-    initialErrorMessage || null,
+    firstNonEmptyString(initialErrorMessage) ?? null,
   );
   const {
     enabledProviders,

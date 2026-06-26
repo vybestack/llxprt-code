@@ -35,6 +35,7 @@ import {
 } from '../streamUtils.js';
 import { splitPartsByRole } from '@vybestack/llxprt-code-agents';
 import { getActiveProviderNameForApiError } from '../../../../utils/apiErrorFormatting.js';
+import { testRegex } from '../../../../test-utils/regex.js';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -264,7 +265,7 @@ describe('buildFinishReasonMessage', () => {
 
   it('returns message for MAX_TOKENS', () => {
     expect(buildFinishReasonMessage(FinishReason.MAX_TOKENS)).toMatch(
-      /truncated/i,
+      testRegex('truncated', 'i'),
     );
   });
 
@@ -274,7 +275,7 @@ describe('buildFinishReasonMessage', () => {
 
   it('returns message for RECITATION', () => {
     expect(buildFinishReasonMessage(FinishReason.RECITATION)).toMatch(
-      /recitation/i,
+      testRegex('recitation', 'i'),
     );
   });
 

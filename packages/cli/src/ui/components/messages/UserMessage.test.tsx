@@ -10,6 +10,7 @@ import { UserMessage } from './UserMessage.js';
 import { themeManager } from '../../themes/theme-manager.js';
 import { AtomOneDark } from '../../themes/atom-one-dark.js';
 import { Text } from 'ink';
+import { assertTrue } from '../../../test-utils/assertions.js';
 
 type TextNode = {
   color?: string;
@@ -65,9 +66,7 @@ describe('<UserMessage /> colors', () => {
 
   beforeAll(() => {
     const set = themeManager.setActiveTheme(AtomOneDark.name);
-    if (!set) {
-      throw new Error('Failed to set Atom One theme for tests');
-    }
+    assertTrue(set, 'AtomOneDark theme should activate');
   });
 
   afterAll(() => {

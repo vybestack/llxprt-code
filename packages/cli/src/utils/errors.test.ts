@@ -56,7 +56,7 @@ describe('errors', () => {
     // Reset mocks
     vi.clearAllMocks();
 
-    // Mock console.error
+    // Mock globalThis.console.error
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Mock process.exit to throw instead of actually exiting

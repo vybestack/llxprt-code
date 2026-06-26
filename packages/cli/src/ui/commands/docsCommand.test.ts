@@ -10,6 +10,7 @@ import { docsCommand } from './docsCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 // Mock the 'open' library
 vi.mock('open', () => ({
@@ -31,10 +32,7 @@ describe('docsCommand', () => {
   });
 
   it("should add an info message and call 'open' in a non-sandbox environment", async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!docsCommand.action) {
-      throw new Error('docsCommand must have an action.');
-    }
+    assertDefined(docsCommand.action);
 
     const docsUrl =
       'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
@@ -53,10 +51,7 @@ describe('docsCommand', () => {
   });
 
   it('should only add an info message in a sandbox environment', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!docsCommand.action) {
-      throw new Error('docsCommand must have an action.');
-    }
+    assertDefined(docsCommand.action);
 
     // Simulate a sandbox environment
     process.env.SANDBOX = 'gemini-sandbox';
@@ -78,10 +73,7 @@ describe('docsCommand', () => {
   });
 
   it("should not open browser for 'sandbox-exec'", async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!docsCommand.action) {
-      throw new Error('docsCommand must have an action.');
-    }
+    assertDefined(docsCommand.action);
 
     // Simulate the specific 'sandbox-exec' environment
     process.env.SANDBOX = 'sandbox-exec';

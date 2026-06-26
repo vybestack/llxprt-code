@@ -16,7 +16,7 @@ export async function handleUninstall(args: UninstallArgs): Promise<void> {
   const uniqueNames = [...new Set(args.names)];
 
   if (uniqueNames.length === 0) {
-    console.error('No valid extension names provided to uninstall.');
+    globalThis.console.error('No valid extension names provided to uninstall.');
     await exitCli(1);
     return;
   }
@@ -26,7 +26,7 @@ export async function handleUninstall(args: UninstallArgs): Promise<void> {
   for (const name of uniqueNames) {
     try {
       await uninstallExtension(name, false);
-      console.log(`Extension "${name}" successfully uninstalled.`);
+      globalThis.console.log(`Extension "${name}" successfully uninstalled.`);
     } catch (error) {
       errors.push({ name, error: (error as Error).message });
     }
@@ -34,7 +34,7 @@ export async function handleUninstall(args: UninstallArgs): Promise<void> {
 
   if (errors.length > 0) {
     for (const { name, error } of errors) {
-      console.error(`Failed to uninstall "${name}": ${error}`);
+      globalThis.console.error(`Failed to uninstall "${name}": ${error}`);
     }
     await exitCli(1);
   }

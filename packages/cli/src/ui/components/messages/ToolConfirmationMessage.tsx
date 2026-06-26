@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type React from 'react';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
@@ -355,17 +353,15 @@ function buildInfoBodyContent(
 
   return (
     <Box flexDirection="column">
-      <Text color={theme.text.link}>
-        <RenderInline text={infoProps.prompt} defaultColor={theme.text.link} />
-      </Text>
+      <RenderInline text={infoProps.prompt} defaultColor={theme.text.link} />
       {displayUrls && infoProps.urls !== undefined && (
         <Box flexDirection="column" marginTop={1}>
           <Text color={theme.text.primary}>URLs to fetch:</Text>
           {infoProps.urls.map((url) => (
-            <Text key={url} color={theme.text.primary}>
-              {' '}
-              - <RenderInline text={url} />
-            </Text>
+            <Box key={url} flexDirection="row">
+              <Text color={theme.text.primary}> - </Text>
+              <RenderInline text={url} />
+            </Box>
           ))}
         </Box>
       )}
@@ -440,8 +436,7 @@ function useIdeClientState(config: Config): {
           setIsDiffingEnabled(client.isDiffingEnabled());
         }
       };
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      getIdeClient();
+      void getIdeClient();
     }
     return () => {
       isMounted = false;
@@ -531,6 +526,33 @@ export interface ToolConfirmationMessageProps {
   terminalWidth: number;
 }
 
+/**
+ * Resolves the confirmation outcome, including IDE diff resolution when
+ * applicable, then delegates to the caller's onConfirm callback.
+ */
+async function performConfirm(
+  outcome: ToolConfirmationOutcome,
+  confirmationDetails: ToolCallConfirmationDetails,
+  config: Config,
+  ideClient: IdeClient | null,
+  isDiffingEnabled: boolean | null,
+  onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>,
+): Promise<void> {
+  if (
+    confirmationDetails.type === 'edit' &&
+    config.getIdeMode() &&
+    isDiffingEnabled === true
+  ) {
+    const cliOutcome =
+      outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
+    await ideClient?.resolveDiffFromCli(
+      confirmationDetails.filePath,
+      cliOutcome,
+    );
+  }
+  await onConfirm(outcome);
+}
+
 export const ToolConfirmationMessage: React.FC<
   ToolConfirmationMessageProps
 > = ({
@@ -543,27 +565,28 @@ export const ToolConfirmationMessage: React.FC<
   const { onConfirm } = confirmationDetails;
   const { ideClient, isDiffingEnabled } = useIdeClientState(config);
 
-  const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
-    if (
-      confirmationDetails.type === 'edit' &&
-      config.getIdeMode() &&
-      isDiffingEnabled === true
-    ) {
-      const cliOutcome =
-        outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
-      await ideClient?.resolveDiffFromCli(
-        confirmationDetails.filePath,
-        cliOutcome,
+  const handleConfirm = useCallback(
+    async (outcome: ToolConfirmationOutcome) => {
+      await performConfirm(
+        outcome,
+        confirmationDetails,
+        config,
+        ideClient,
+        isDiffingEnabled,
+        onConfirm,
       );
-    }
-    await onConfirm(outcome);
-  };
+    },
+    [confirmationDetails, config, ideClient, isDiffingEnabled, onConfirm],
+  );
 
   useCancelKeypress(isFocused, handleConfirm);
 
-  const handleSelect = (item: ToolConfirmationOutcome) => {
-    void handleConfirm(item);
-  };
+  const handleSelect = useCallback(
+    (item: ToolConfirmationOutcome) => {
+      void handleConfirm(item);
+    },
+    [handleConfirm],
+  );
 
   const { question, bodyContent, options } = useConfirmationContent(
     confirmationDetails,
@@ -606,7 +629,6 @@ export const ToolConfirmationMessage: React.FC<
       <Box flexShrink={0}>
         <RadioButtonSelect
           items={options}
-          // eslint-disable-next-line react/jsx-no-bind
           onSelect={handleSelect}
           isFocused={isFocused}
         />

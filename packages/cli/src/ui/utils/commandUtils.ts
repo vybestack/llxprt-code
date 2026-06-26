@@ -132,37 +132,20 @@ const pickTty = (): Promise<TtyTarget> =>
     resolve(getStdioTty());
   });
 
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var checks (empty string means not set) */
+const hasEnvValue = (...names: string[]): boolean =>
+  names.some((name) => Boolean(process.env[name]));
+
 const inTmux = (): boolean =>
-  Boolean(
-    process.env['TMUX'] || (process.env['TERM'] ?? '').startsWith('tmux'),
-  );
-/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+  hasEnvValue('TMUX') || (process.env['TERM'] ?? '').startsWith('tmux');
 
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var checks (empty string means not set) */
 const inScreen = (): boolean =>
-  Boolean(
-    process.env['STY'] || (process.env['TERM'] ?? '').startsWith('screen'),
-  );
-/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+  hasEnvValue('STY') || (process.env['TERM'] ?? '').startsWith('screen');
 
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var checks (empty string means not set) */
 const isSSH = (): boolean =>
-  Boolean(
-    process.env['SSH_TTY'] ||
-      process.env['SSH_CONNECTION'] ||
-      process.env['SSH_CLIENT'],
-  );
-/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+  hasEnvValue('SSH_TTY', 'SSH_CONNECTION', 'SSH_CLIENT');
 
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var checks (empty string means not set) */
 const isWSL = (): boolean =>
-  Boolean(
-    process.env['WSL_DISTRO_NAME'] ||
-      process.env['WSLENV'] ||
-      process.env['WSL_INTEROP'],
-  );
-/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+  hasEnvValue('WSL_DISTRO_NAME', 'WSLENV', 'WSL_INTEROP');
 
 const isWindowsTerminal = (): boolean =>
   process.platform === 'win32' && Boolean(process.env['WT_SESSION']);
@@ -221,12 +204,20 @@ const wrapOsc52Payload = (osc: string): string => {
   return osc;
 };
 
+function getStreamFileDescriptor(stream: Writable): number | undefined {
+  if (!('fd' in stream)) {
+    return undefined;
+  }
+  const fd = stream.fd;
+  return typeof fd === 'number' ? fd : undefined;
+}
+
 const writeAll = (stream: Writable, data: string): Promise<void> =>
   new Promise<void>((resolve, reject) => {
     // On Windows, writing directly to the underlying file descriptor bypasses
     // application-level stream interception (e.g., by the Ink UI framework).
     // This ensures the raw OSC-52 escape sequence reaches the terminal host uncorrupted.
-    const fd = (stream as unknown as { fd?: number }).fd;
+    const fd = getStreamFileDescriptor(stream);
     if (
       process.platform === 'win32' &&
       typeof fd === 'number' &&

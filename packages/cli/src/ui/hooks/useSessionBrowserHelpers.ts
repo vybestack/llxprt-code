@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy session browser behavior is being decomposed without changing behavior. */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   SessionDiscovery,

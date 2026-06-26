@@ -33,6 +33,7 @@ import type {
   Config,
   AgentClientContract as AgentClient,
 } from '@vybestack/llxprt-code-core';
+import { assertDefined } from '../../test-utils/assertions.js';
 import {
   uiTelemetryService,
   triggerSessionEndHook,
@@ -42,9 +43,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 const clearAction = clearCommand.action;
-if (clearAction === undefined) {
-  throw new Error('clearCommand must have an action.');
-}
+assertDefined(clearAction);
 
 describe('clearCommand', () => {
   let mockContext: CommandContext;

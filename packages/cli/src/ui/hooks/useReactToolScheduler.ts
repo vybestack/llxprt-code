@@ -17,6 +17,7 @@ import {
   type ToolCallsUpdateHandler,
   type ToolCall,
   type EditorType,
+  type SubagentSchedulerFactory,
   DEFAULT_AGENT_ID,
   DebugLogger,
   type AnsiOutput,
@@ -27,18 +28,6 @@ import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
-
-type ExternalSchedulerFactory = (args: {
-  schedulerConfig: Config;
-  onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
-  outputUpdateHandler: OutputUpdateHandler;
-  onToolCallsUpdate?: ToolCallsUpdateHandler;
-}) => {
-  schedule(
-    request: ToolCallRequestInfo | ToolCallRequestInfo[],
-    signal: AbortSignal,
-  ): Promise<void> | void;
-};
 
 type SchedulerConfigWithExplicitMessageBus = Config & {
   getOrCreateScheduler(
@@ -305,7 +294,7 @@ function createMainSchedulerCallbacks(
 function createSubagentCallbacks(
   schedulerId: symbol,
   refs: SchedulerRefs,
-  args: Parameters<ExternalSchedulerFactory>[0],
+  args: Parameters<SubagentSchedulerFactory>[0],
 ): Parameters<
   SchedulerConfigWithExplicitMessageBus['getOrCreateScheduler']
 >[1] {
@@ -524,9 +513,9 @@ function useScheduler(
 function useExternalSchedulerFactoryCreator(
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
-): ExternalSchedulerFactory {
+): SubagentSchedulerFactory {
   const factory = useCallback(
-    async (args: Parameters<ExternalSchedulerFactory>[0]) => {
+    async (args: Parameters<SubagentSchedulerFactory>[0]) => {
       const schedulerId = Symbol('subagent-scheduler');
       const schedulerSessionId = args.schedulerConfig.getSessionId();
       const instance = await (
@@ -548,7 +537,7 @@ function useExternalSchedulerFactoryCreator(
     },
     [refs, runtimeMessageBus],
   );
-  return factory as unknown as ExternalSchedulerFactory;
+  return factory;
 }
 
 /**
@@ -556,12 +545,12 @@ function useExternalSchedulerFactoryCreator(
  */
 function useExternalSchedulerSetup(
   config: Config,
-  createExternalScheduler: ExternalSchedulerFactory,
+  createExternalScheduler: SubagentSchedulerFactory,
   setExternalSchedulerRegistered: (registered: boolean) => void,
 ): void {
   type ConfigWithSchedulerFactory = Config & {
     setInteractiveSubagentSchedulerFactory?: (
-      factory: ExternalSchedulerFactory | undefined,
+      factory: SubagentSchedulerFactory | undefined,
     ) => void;
   };
 
@@ -803,18 +792,16 @@ function useBoundDisplayUpdaters(
   replaceToolCalls: ReplaceToolCallsFn;
   updateToolOutput: UpdateToolOutputFn;
 } {
+  const { replaceToolCallsForScheduler, updateToolCallOutput } =
+    toolCallUpdaters;
   const replaceToolCalls = useCallback(
-    (calls: ToolCall[]) =>
-      toolCallUpdaters.replaceToolCallsForScheduler(mainSchedulerId, calls),
-    // Deps reference specific methods on the toolCallUpdaters object.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [toolCallUpdaters.replaceToolCallsForScheduler, mainSchedulerId],
+    (calls: ToolCall[]) => replaceToolCallsForScheduler(mainSchedulerId, calls),
+    [replaceToolCallsForScheduler, mainSchedulerId],
   );
   const updateToolOutput = useCallback(
     (toolCallId: string, chunk: string | AnsiOutput) =>
-      toolCallUpdaters.updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [toolCallUpdaters.updateToolCallOutput, mainSchedulerId],
+      updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
+    [updateToolCallOutput, mainSchedulerId],
   );
   return { replaceToolCalls, updateToolOutput };
 }

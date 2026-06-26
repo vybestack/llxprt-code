@@ -163,14 +163,10 @@ describe('RadioButtonSelect', () => {
       expect(result.props.color).toBe(mockContext.titleColor);
       expect(result.props.wrap).toBe('truncate');
 
-      const children = result.props.children;
+      const children = result.props.children as React.ReactNode[];
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!Array.isArray(children) || children.length < 3) {
-        throw new Error(
-          'Expected children to be an array with at least 3 elements for theme display',
-        );
-      }
+      expect(Array.isArray(children)).toBe(true);
+      expect(children.length).toBeGreaterThanOrEqual(3);
 
       expect(children[0]).toBe('Theme A');
       expect(children[1]).toBe(' ');

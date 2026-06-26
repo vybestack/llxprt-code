@@ -147,13 +147,12 @@ function useTaskManagement(sessionId: string, agentId: string | undefined) {
     state.setError,
   );
 
-  // Load initial data
+  // Load data on mount and whenever the session identity changes.
+  // refreshTodos is stable via useCallback (keyed on sessionId/agentId).
+  const { refreshTodos } = state;
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    state.refreshTodos();
-    // Only run on mount - refreshTodos is stable via useCallback
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void refreshTodos();
+  }, [refreshTodos]);
 
   return {
     todos: state.todos,

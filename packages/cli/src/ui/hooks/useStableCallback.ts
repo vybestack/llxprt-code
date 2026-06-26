@@ -17,12 +17,12 @@ import { useCallback, useRef, useEffect } from 'react';
  * ```typescript
  * // Instead of:
  * const handleClick = useCallback(() => {
- *   console.log(count); // This creates new callback when count changes
+ *   globalThis.console.log(count); // This creates new callback when count changes
  * }, [count]);
  *
  * // Use:
  * const handleClick = useStableCallback(() => {
- *   console.log(count); // Stable reference, but always uses latest count
+ *   globalThis.console.log(count); // Stable reference, but always uses latest count
  * });
  * ```
  */

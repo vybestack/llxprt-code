@@ -49,6 +49,7 @@ vi.mock('node:v8', () => ({
 }));
 
 import { useResponsive } from '../hooks/useResponsive.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 const mockUseResponsive = vi.mocked(useResponsive);
 
@@ -137,7 +138,7 @@ describe('Footer', () => {
       // render strictly fewer characters of it and include the truncation
       // ellipsis from truncateMiddle.
       expect(textContent).not.toContain(longBranchName);
-      expect(textContent).toMatch(/feature\/.+\.\.\..+/);
+      expect(textContent).toMatch(testRegex('feature\\/.+\\.\\.\\..+', ''));
     });
 
     it('should handle missing branch name gracefully', () => {
@@ -161,38 +162,43 @@ describe('Footer', () => {
   });
 
   describe('responsive layout', () => {
-    it('should adapt branch truncation length based on breakpoint', () => {
-      const scenarios = [
-        {
-          breakpoint: 'NARROW' as const,
-          width: 70,
-          isNarrow: true,
-          isStandard: false,
-          isWide: false,
-          expectedMaxLength: 15,
-        },
-        {
-          breakpoint: 'STANDARD' as const,
-          width: 100,
-          isNarrow: false,
-          isStandard: true,
-          isWide: false,
-          expectedMaxLength: 35,
-        },
-        {
-          breakpoint: 'WIDE' as const,
-          width: 180,
-          isNarrow: false,
-          isStandard: false,
-          isWide: true,
-          expectedMaxLength: 100,
-        },
-      ];
+    const longBranchName =
+      'feature/very-long-branch-name-that-needs-truncation-handling';
 
-      const longBranchName =
-        'feature/very-long-branch-name-that-needs-truncation-handling';
+    // NARROW/STANDARD breakpoints have a max length shorter than the branch
+    // name, so truncateMiddle must shorten it.
+    const truncatingScenarios = [
+      {
+        breakpoint: 'NARROW' as const,
+        width: 70,
+        isNarrow: true,
+        isStandard: false,
+        isWide: false,
+        expectedMaxLength: 15,
+      },
+      {
+        breakpoint: 'STANDARD' as const,
+        width: 100,
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+        expectedMaxLength: 35,
+      },
+    ];
 
-      scenarios.forEach((scenario) => {
+    // WIDE's max length (100) exceeds the branch name, so it is preserved.
+    const preservingScenario = {
+      breakpoint: 'WIDE' as const,
+      width: 180,
+      isNarrow: false,
+      isStandard: false,
+      isWide: true,
+      expectedMaxLength: 100,
+    };
+
+    it.each(truncatingScenarios)(
+      'truncates the branch name at the $breakpoint breakpoint',
+      (scenario) => {
         mockUseResponsive.mockReturnValue(scenario);
 
         const { container } = render(
@@ -200,14 +206,20 @@ describe('Footer', () => {
         );
         const textContent = container.textContent ?? '';
 
-        const isWide = scenario.breakpoint === 'WIDE';
-        const hasFullBranchName = textContent.includes(longBranchName);
-        const hasTruncatedBranchName = /feature\/.+\.\.\..+/.test(textContent);
+        expect(textContent).not.toContain(longBranchName);
+        expect(textContent).toMatch(testRegex('feature\\/.+\\.\\.\\..+', ''));
+      },
+    );
 
-        // WIDE preserves the full branch; NARROW/STANDARD truncate it.
-        expect(hasFullBranchName).toBe(isWide);
-        expect(hasTruncatedBranchName).toBe(!isWide);
-      });
+    it('preserves the full branch name at the WIDE breakpoint', () => {
+      mockUseResponsive.mockReturnValue(preservingScenario);
+
+      const { container } = render(
+        <Footer {...defaultProps} branchName={longBranchName} />,
+      );
+      const textContent = container.textContent ?? '';
+
+      expect(textContent).toContain(longBranchName);
     });
 
     it('should show different information based on breakpoint', () => {

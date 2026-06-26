@@ -15,6 +15,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { testRegex } from '../test-utils/regex.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,7 +95,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
         ),
       );
       const messagePrefixMatches = proxyFailureSection.match(
-        /Failed to start credential proxy:/g,
+        testRegex('Failed to start credential proxy:', 'g'),
       );
 
       expect(proxyFailureIndex).toBeGreaterThan(-1);
@@ -106,8 +107,9 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
 
     it('wraps createAndStartProxy in try-catch', () => {
       // Verify the pattern: try { credentialProxyHandle = await createAndStartProxy
-      const pattern =
-        /try\s*\{\s*credentialProxyHandle\s*=\s*await\s+createAndStartProxy/;
+      const pattern = testRegex(
+        'try\\s*\\{\\s*credentialProxyHandle\\s*=\\s*await\\s+createAndStartProxy',
+      );
       expect(sandboxSource).toMatch(pattern);
     });
   });
@@ -142,7 +144,10 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
 
       // Should not have any mount specifically for credential socket
       expect(dockerPath).not.toMatch(
-        /--volume.*LLXPRT_CREDENTIAL_SOCKET|--volume.*llxprt-cred/,
+        testRegex(
+          '--volume.*LLXPRT_CREDENTIAL_SOCKET|--volume.*llxprt-cred',
+          '',
+        ),
       );
     });
   });

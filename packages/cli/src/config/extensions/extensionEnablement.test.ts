@@ -38,8 +38,11 @@ describe('ExtensionEnablementManager', () => {
   afterEach(() => {
     testDir.cleanup();
     // Reset the singleton instance for test isolation
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (ExtensionEnablementManager as any).instance = undefined;
+    (
+      ExtensionEnablementManager as unknown as {
+        instance: ExtensionEnablementManager | undefined;
+      }
+    ).instance = undefined;
   });
 
   describe('isEnabled', () => {

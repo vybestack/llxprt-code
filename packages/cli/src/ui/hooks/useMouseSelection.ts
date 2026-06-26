@@ -33,6 +33,21 @@ type BoundingBox = {
   height: number;
 };
 
+type ScrollableInkElement = DOMElement & {
+  internal_scrollState?: { scrollTop?: number; scrollLeft?: number };
+  style?: {
+    scrollTop?: number;
+    scrollLeft?: number;
+    overflow?: string;
+    overflowX?: string;
+    overflowY?: string;
+  };
+};
+
+type NotifyingSelection = {
+  notifyChange?: () => void;
+};
+
 function isInsideBox(
   point: { x: number; y: number },
   box: BoundingBox,
@@ -49,16 +64,15 @@ function getScrollOffsets(node: DOMElement): {
   scrollTop: number;
   scrollLeft: number;
 } {
-  const anyNode = node as unknown as {
-    internal_scrollState?: { scrollTop?: number; scrollLeft?: number };
-    style?: { scrollTop?: number; scrollLeft?: number };
-  };
+  const scrollableNode = node as ScrollableInkElement;
   return {
     scrollTop:
-      anyNode.internal_scrollState?.scrollTop ?? anyNode.style?.scrollTop ?? 0,
+      scrollableNode.internal_scrollState?.scrollTop ??
+      scrollableNode.style.scrollTop ??
+      0,
     scrollLeft:
-      anyNode.internal_scrollState?.scrollLeft ??
-      anyNode.style?.scrollLeft ??
+      scrollableNode.internal_scrollState?.scrollLeft ??
+      scrollableNode.style.scrollLeft ??
       0,
   };
 }
@@ -74,12 +88,10 @@ function findInnermostScrollableAtPoint(
   }> = [];
 
   const visit = (node: DOMElement) => {
-    const anyNode = node as unknown as {
-      style?: { overflow?: string; overflowX?: string; overflowY?: string };
-    };
-    const overflow = anyNode.style?.overflow;
-    const overflowX = anyNode.style?.overflowX ?? overflow;
-    const overflowY = anyNode.style?.overflowY ?? overflow;
+    const scrollableNode = node as ScrollableInkElement;
+    const overflow = scrollableNode.style.overflow;
+    const overflowX = scrollableNode.style.overflowX ?? overflow;
+    const overflowY = scrollableNode.style.overflowY ?? overflow;
     const isScrollable = overflowX === 'scroll' || overflowY === 'scroll';
 
     if (isScrollable) {
@@ -251,9 +263,8 @@ function useRangeUpdater(
   selectionRangeRef: React.RefObject<Range | null>,
 ) {
   const notifySelectionChanged = useCallback(() => {
-    (
-      selection as unknown as { notifyChange?: () => void } | undefined
-    )?.notifyChange?.();
+    const notifyingSelection = selection as NotifyingSelection | undefined;
+    notifyingSelection?.notifyChange?.();
   }, [selection]);
 
   const updateSelectionRange = useCallback(

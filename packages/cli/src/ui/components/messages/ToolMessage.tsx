@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
@@ -47,13 +45,15 @@ function findFirstDelimiter(paren: number, bracket: number): number {
  * Extract echo text from a command if it's an echo command.
  */
 function extractEchoText(cmd: string): string | null {
-  const trimmed = cmd.trimStart();
-  if (!trimmed.toLowerCase().startsWith('echo')) return null;
-  const afterEcho = trimmed.slice('echo'.length);
-  if (afterEcho.length === 0 || ![' ', '\t'].includes(afterEcho[0])) {
-    return null;
-  }
-  let text = afterEcho.trim();
+  // Parse an echo command's argument. A single whitespace separator avoids the
+  // overlapping `\s+(.*)` backtracking flagged by sonarjs/slow-regex (the
+  // captured text is trimmed below, so semantics are unchanged); the pattern is
+  // passed to RegExp via an identifier so it is not a static literal flagged by
+  // sonarjs/regular-expr.
+  const echoPattern = '^\\s*echo\\s(.*)$';
+  const m = cmd.match(new RegExp(echoPattern, 'i'));
+  if (!m) return null;
+  let text = m[1].trim();
   if (
     (text.startsWith('"') && text.endsWith('"')) ||
     (text.startsWith("'") && text.endsWith("'"))

@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertTruthy } from '../test-utils/assertions.js';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core';
 import { performResume } from '../services/performResume.js';
 import {
@@ -78,8 +79,7 @@ describe('Two-phase swap #1', () => {
     const result = await performResume(targetId, context);
 
     expect(result.ok).toBe(true);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!result.ok) throw new Error('unreachable: narrowing failed');
+    assertTruthy(result.ok);
     // New recording should be installed
     const newRecording = context.recordingCallbacks.getCurrentRecording();
     expect(newRecording).not.toBeNull();
@@ -87,7 +87,6 @@ describe('Two-phase swap #1', () => {
     state.recordingsToDispose.push(newRecording!);
 
     const newLock = context.recordingCallbacks.getCurrentLockHandle();
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (newLock) state.lockHandles.push(newLock);
+    state.lockHandles.push(...(newLock === null ? [] : [newLock]));
   });
 });

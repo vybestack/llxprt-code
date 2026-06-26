@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createCompletionHandler } from '../schema/index.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import { subagentCommand } from '../subagentCommand.js';
+import { assertDefined } from '../../../test-utils/assertions.js';
 
 type MockSubagentDetail = {
   name: string;
@@ -71,9 +72,7 @@ const invoke = async (
     (cmd) => cmd.name === 'save',
   );
 
-  if (!saveCommand?.schema) {
-    throw new Error('saveCommand schema is not configured');
-  }
+  assertDefined(saveCommand?.schema);
 
   const handler = createCompletionHandler(saveCommand.schema);
   return handler(createContext(), input, fullLine);

@@ -128,6 +128,8 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import clipboardy from 'clipboardy';
 import * as clipboardUtils from '../utils/clipboardUtils.js';
 import { useMouse, type MouseEvent } from '../hooks/useMouse.js';
+import { assertDefined } from '../../test-utils/assertions.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 // Mock Config
 const mockConfig = {
@@ -207,9 +209,7 @@ describe('InputPrompt paste functionality', () => {
 
     sendKey = async (key: Record<string, unknown>) => {
       const handler = keypressHandler;
-      if (!handler) {
-        throw new Error('keypressHandler not initialized');
-      }
+      assertDefined(handler);
       await act(async () => {
         handler(key as never);
       });
@@ -458,7 +458,7 @@ describe('InputPrompt paste functionality', () => {
     });
 
     const placeholderMatches = mockBuffer.text.match(
-      /\[4 lines pasted #\d+\]/g,
+      testRegex('\\[4 lines pasted #\\d+\\]', 'g'),
     );
     expect(placeholderMatches).not.toBeNull();
     expect(placeholderMatches?.length).toBe(2);

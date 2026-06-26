@@ -18,6 +18,10 @@
 
 import { useEffect } from 'react';
 import type { AppAction } from '../reducers/appReducer.js';
+import {
+  getOAuthGlobalState,
+  getPendingOAuthProvider,
+} from '../oauthGlobalState.js';
 
 interface UseOAuthOrchestrationOptions {
   appDispatch: React.Dispatch<AppAction>;
@@ -26,15 +30,11 @@ interface UseOAuthOrchestrationOptions {
   setAuthError: (error: string | null) => void;
 }
 
-function getOAuthGlobalState(): Record<string, unknown> {
-  return global as Record<string, unknown>;
-}
-
 function oauthProviderMatchesActive(
   getActiveProviderName: (() => string) | undefined,
 ): boolean {
-  const pendingProvider = getOAuthGlobalState().__oauth_provider;
-  if (typeof pendingProvider !== 'string') {
+  const pendingProvider = getPendingOAuthProvider();
+  if (pendingProvider === undefined) {
     return true;
   }
   if (!getActiveProviderName) {

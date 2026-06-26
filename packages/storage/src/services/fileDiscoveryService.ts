@@ -78,7 +78,8 @@ export class FileDiscoveryService {
         respectLlxprtIgnore &&
         this.combinedIgnoreFilter
       ) {
-        return !this.combinedIgnoreFilter.isIgnored(filePath);
+        const absolutePath = this.resolveAbsolutePath(filePath);
+        return !this.combinedIgnoreFilter.isIgnored(absolutePath);
       }
 
       const absolutePath = this.resolveAbsolutePath(filePath);

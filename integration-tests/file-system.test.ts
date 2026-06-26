@@ -22,6 +22,10 @@ describe('file-system', () => {
   it('should be able to read a file', async () => {
     await rig.setup('should be able to read a file', {
       settings: { tools: { core: ['read_file'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'file-system.read.responses.jsonl',
+      ),
     });
     rig.createFile('test.txt', 'hello world');
 
@@ -51,6 +55,10 @@ describe('file-system', () => {
   it('should be able to write a file', async () => {
     await rig.setup('should be able to write a file', {
       settings: { tools: { core: ['write_file', 'replace', 'read_file'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'file-system.write.responses.jsonl',
+      ),
     });
     rig.createFile('test.txt', '');
 
@@ -109,6 +117,10 @@ describe('file-system', () => {
   it('should correctly handle file paths with spaces', async () => {
     await rig.setup('should correctly handle file paths with spaces', {
       settings: { tools: { core: ['write_file', 'read_file'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'file-system.spaces.responses.jsonl',
+      ),
     });
     const fileName = 'my test file.txt';
 
@@ -132,6 +144,10 @@ describe('file-system', () => {
   it('should perform a read-then-write sequence', async () => {
     await rig.setup('should perform a read-then-write sequence', {
       settings: { tools: { core: ['read_file', 'replace', 'write_file'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'file-system.read-then-write.responses.jsonl',
+      ),
     });
     const fileName = 'version.txt';
     rig.createFile(fileName, '1.0.0');

@@ -23,7 +23,7 @@ describe('mcp command', () => {
 
     const parser = yargsInstance.command(mcpCommand).help();
 
-    // Mock console.log and console.error to catch help output
+    // Mock globalThis.console.log and globalThis.console.error to catch help output
     const consoleLogMock = vi
       .spyOn(console, 'log')
       .mockImplementation(() => {});

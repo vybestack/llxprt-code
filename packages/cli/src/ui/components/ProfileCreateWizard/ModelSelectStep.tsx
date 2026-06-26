@@ -111,8 +111,7 @@ const useProviderModels = (provider: string | null) => {
       }
       setIsLoading(false);
     };
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    loadModels();
+    void loadModels();
   }, [runtime, provider]);
 
   return { models, isLoading };

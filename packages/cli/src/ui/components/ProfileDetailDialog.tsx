@@ -79,11 +79,11 @@ function isLoadBalancerProfile(profile: Profile): profile is Profile & {
   profiles: string[];
   policy: string;
 } {
-  const p = profile as unknown as Record<string, unknown>;
+  const record = asRenderableRecord(profile);
   return (
     profile.type === 'loadbalancer' &&
-    Array.isArray(p.profiles) &&
-    typeof p.policy === 'string'
+    Array.isArray(record?.profiles) &&
+    typeof record.policy === 'string'
   );
 }
 

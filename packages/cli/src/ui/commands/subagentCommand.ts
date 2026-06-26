@@ -30,16 +30,16 @@ import { generateAutoPrompt } from '../utils/autoPromptGenerator.js';
  * @requirement:REQ-011
  * @pseudocode SubagentCommand.md lines 1-17
  */
+const SAVE_ARGS_REGEX =
+  /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("|"?)/;
+
 function parseSaveArgs(args: string): {
   name: string;
   profile: string;
   mode: 'auto' | 'manual';
   input: string;
 } | null {
-  // Static regex for parsing save args with quoted input - no dynamic parts
-  const match = args.match(
-    /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("|"?)/,
-  );
+  const match = args.match(SAVE_ARGS_REGEX);
 
   if (!match) {
     return null;

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -38,24 +37,24 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 });
 
 // Mock console methods to avoid noise in tests
-const originalConsoleError = console.error;
-const originalConsoleWarn = console.warn;
-const originalConsoleDebug = console.debug;
+const originalConsoleError = globalThis.console.error;
+const originalConsoleWarn = globalThis.console.warn;
+const originalConsoleDebug = globalThis.console.debug;
 
 describe('DynamicSettingsRegistry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    console.error = vi.fn();
-    console.warn = vi.fn();
-    console.debug = vi.fn();
+    globalThis.console.error = vi.fn();
+    globalThis.console.warn = vi.fn();
+    globalThis.console.debug = vi.fn();
     // Reset registry for each test
     dynamicSettingsRegistry.reset();
   });
 
   afterEach(() => {
-    console.error = originalConsoleError;
-    console.warn = originalConsoleWarn;
-    console.debug = originalConsoleDebug;
+    globalThis.console.error = originalConsoleError;
+    globalThis.console.warn = originalConsoleWarn;
+    globalThis.console.debug = originalConsoleDebug;
   });
 
   describe('register', () => {
@@ -111,18 +110,21 @@ describe('DynamicSettingsRegistry', () => {
     });
 
     it('should throw error for non-object settings', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(() => dynamicSettingsRegistry.register(null as any)).toThrow(
-        'Settings must be a valid object',
-      );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(() => dynamicSettingsRegistry.register(undefined as any)).toThrow(
-        'Settings must be a valid object',
-      );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(() => dynamicSettingsRegistry.register('string' as any)).toThrow(
-        'Settings must be a valid object',
-      );
+      expect(() =>
+        dynamicSettingsRegistry.register(
+          null as unknown as Record<string, unknown>,
+        ),
+      ).toThrow('Settings must be a valid object');
+      expect(() =>
+        dynamicSettingsRegistry.register(
+          undefined as unknown as Record<string, unknown>,
+        ),
+      ).toThrow('Settings must be a valid object');
+      expect(() =>
+        dynamicSettingsRegistry.register(
+          'string' as unknown as Record<string, unknown>,
+        ),
+      ).toThrow('Settings must be a valid object');
     });
   });
 
@@ -263,8 +265,9 @@ describe('DynamicSettingsRegistry', () => {
 });
 
 describe('generateDynamicToolSettings', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockConfig: any;
+  let mockConfig: { getToolRegistryInfo: ReturnType<typeof vi.fn> };
+  const asConfig = (value: typeof mockConfig): Config =>
+    value as unknown as Config;
   const originalEnv = process.env;
 
   const mockRegisteredTools = [
@@ -312,8 +315,8 @@ describe('generateDynamicToolSettings', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    console.error = vi.fn();
-    console.debug = vi.fn();
+    globalThis.console.error = vi.fn();
+    globalThis.console.debug = vi.fn();
     process.env = { ...originalEnv }; // Reset env vars
 
     mockConfig = {
@@ -325,13 +328,13 @@ describe('generateDynamicToolSettings', () => {
   });
 
   afterEach(() => {
-    console.error = originalConsoleError;
-    console.debug = originalConsoleDebug;
+    globalThis.console.error = originalConsoleError;
+    globalThis.console.debug = originalConsoleDebug;
     process.env = originalEnv;
   });
 
   it('should generate settings for registered tools', () => {
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(toolSettings).toHaveProperty('ReadFile');
     expect(toolSettings).toHaveProperty('WriteFile');
@@ -347,7 +350,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should generate settings for unregistered tools', () => {
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(toolSettings).toHaveProperty('Task');
     expect(toolSettings).toHaveProperty('ListSubagents');
@@ -365,7 +368,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should handle tools with spaces in names correctly', () => {
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
 
     // Spaces should be removed from setting keys
     expect(toolSettings).toHaveProperty('ShellCommand');
@@ -383,7 +386,7 @@ describe('generateDynamicToolSettings', () => {
       unregistered: [],
     });
 
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
     expect(toolSettings).toStrictEqual({});
   });
 
@@ -393,7 +396,7 @@ describe('generateDynamicToolSettings', () => {
       unregistered: mockUnregisteredTools,
     });
 
-    const toolSettings = generateDynamicToolSettings(mockConfig);
+    const toolSettings = generateDynamicToolSettings(asConfig(mockConfig));
     expect(Object.keys(toolSettings)).toHaveLength(2);
     expect(toolSettings).toHaveProperty('Task');
     expect(toolSettings).toHaveProperty('ListSubagents');
@@ -415,7 +418,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should log basic debug information', () => {
-    generateDynamicToolSettings(mockConfig);
+    generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(mockLog).toHaveBeenCalledWith(
       'Processing 3 registered and 2 unregistered tools',
@@ -425,7 +428,7 @@ describe('generateDynamicToolSettings', () => {
 
   it('should NOT log detailed tool info when DEBUG is not verbose', () => {
     process.env.DEBUG = ''; // Ensure verbose is not set
-    generateDynamicToolSettings(mockConfig);
+    generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(mockLog).not.toHaveBeenCalledWith(
       expect.stringContaining('✅ REGISTERED'),
@@ -437,7 +440,7 @@ describe('generateDynamicToolSettings', () => {
 
   it('should log detailed tool info when DEBUG includes verbose', () => {
     process.env.DEBUG = 'verbose'; // Set verbose mode
-    generateDynamicToolSettings(mockConfig);
+    generateDynamicToolSettings(asConfig(mockConfig));
 
     expect(mockLog).toHaveBeenCalledWith('✅ REGISTERED: Read File');
     expect(mockLog).toHaveBeenCalledWith('✅ REGISTERED: Write File');

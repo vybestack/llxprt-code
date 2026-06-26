@@ -8,6 +8,27 @@ import { describe, it, expect } from 'vitest';
 import { type Direction, type TextBufferAction } from './buffer-types.js';
 
 /**
+ * Returns the value typed as the wide `TextBufferAction` union so that
+ * subsequent `action.type` checks perform genuine runtime narrowing rather
+ * than relying on the literal type inferred at the assignment site.
+ */
+const asAction = (action: TextBufferAction): TextBufferAction => action;
+
+/**
+ * Assertion helper that narrows a `TextBufferAction` to a specific variant by
+ * its discriminant. Throws (failing the test) if the runtime type differs,
+ * and narrows `action` for the type checker on success.
+ */
+function assertActionType<T extends TextBufferAction['type']>(
+  action: TextBufferAction,
+  type: T,
+): asserts action is Extract<TextBufferAction, { type: T }> {
+  if (action.type !== type) {
+    throw new Error(`Expected action type "${type}", got "${action.type}"`);
+  }
+}
+
+/**
  * Phase 2.1: Buffer Types Tests
  *
  * These tests verify types and constants that will be moved to buffer-types.ts.
@@ -32,47 +53,32 @@ describe('buffer-types', () => {
 
   describe('TextBufferAction discriminated union', () => {
     it('should narrow insert action correctly', () => {
-      const action: TextBufferAction = { type: 'insert', payload: 'hello' };
+      const action = asAction({ type: 'insert', payload: 'hello' });
       expect(action.type).toBe('insert');
       // Intentional test: TypeScript should narrow the discriminated union
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-      /* eslint-disable vitest/no-conditional-in-test */
-      if (action.type !== 'insert')
-        throw new Error('unreachable: narrowing failed');
-      /* eslint-enable vitest/no-conditional-in-test */
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+      assertActionType(action, 'insert');
       expect(action.payload).toBe('hello');
     });
 
     it('should narrow move action correctly', () => {
-      const action: TextBufferAction = {
+      const action = asAction({
         type: 'move',
         payload: { dir: 'right' },
-      };
+      });
       expect(action.type).toBe('move');
       // Intentional test: TypeScript should narrow the discriminated union
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-      /* eslint-disable vitest/no-conditional-in-test */
-      if (action.type !== 'move')
-        throw new Error('unreachable: narrowing failed');
-      /* eslint-enable vitest/no-conditional-in-test */
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+      assertActionType(action, 'move');
       expect(action.payload.dir).toBe('right');
     });
 
     it('should narrow set_text action correctly', () => {
-      const action: TextBufferAction = {
+      const action = asAction({
         type: 'set_text',
         payload: 'hello world',
-      };
+      });
       expect(action.type).toBe('set_text');
       // Intentional test: TypeScript should narrow the discriminated union
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-      /* eslint-disable vitest/no-conditional-in-test */
-      if (action.type !== 'set_text')
-        throw new Error('unreachable: narrowing failed');
-      /* eslint-enable vitest/no-conditional-in-test */
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
+      assertActionType(action, 'set_text');
       expect(action.payload).toBe('hello world');
     });
 

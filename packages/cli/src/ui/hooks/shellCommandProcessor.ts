@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import {
   type HistoryItemWithoutId,
   type IndividualToolCallDisplay,
@@ -74,8 +72,7 @@ function addShellCommandToAgentHistory(
       : resultText;
 
   if (agentClient) {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    agentClient.addHistory({
+    void agentClient.addHistory({
       role: 'user',
       parts: [
         {
@@ -611,8 +608,7 @@ export const useShellCommandProcessor = (
       const initialToolDisplay = buildInitialToolDisplay(callId, rawQuery);
 
       const execPromise = new Promise<void>((resolve) => {
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        runShellExecution({
+        void runShellExecution({
           commandToExecute,
           targetDir,
           callId,

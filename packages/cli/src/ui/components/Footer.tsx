@@ -7,9 +7,6 @@
  * @requirement REQ-INT-001.1
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
-/* eslint-disable react/prop-types */
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { Colors, SemanticColors } from '../colors.js';
@@ -30,6 +27,34 @@ import { ThemedGradient } from './ThemedGradient.js';
 const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
 const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
 const heapSizeLimit = rawHeapLimit > 0 ? rawHeapLimit : DEFAULT_HEAP_LIMIT;
+
+function areFooterStablePropsEqual(
+  prevProps: FooterProps,
+  nextProps: FooterProps,
+): boolean {
+  const stableProps: Array<keyof FooterProps> = [
+    'model',
+    'targetDir',
+    'branchName',
+    'debugMode',
+    'debugMessage',
+    'errorCount',
+    'showErrorDetails',
+    'showMemoryUsage',
+    'historyTokenCount',
+    'isPaidMode',
+    'nightly',
+    'vimMode',
+    'contextLimit',
+    'isTrustedFolder',
+    'hideCWD',
+    'hideSandboxStatus',
+    'hideModelInfo',
+    'themeName',
+  ];
+
+  return stableProps.every((prop) => prevProps[prop] === nextProps[prop]);
+}
 
 interface FooterProps {
   model: string;
@@ -59,157 +84,179 @@ interface FooterProps {
 }
 
 // Responsive Memory Usage Display - Memoized to prevent re-renders
-const ResponsiveMemoryDisplay = React.memo<{
+interface ResponsiveMemoryDisplayProps {
   compact: boolean;
   detailed: boolean;
-}>(({ compact, detailed }) => {
-  const initialUsage = process.memoryUsage().rss;
-  const initialPercentage = Math.round((initialUsage / heapSizeLimit) * 100);
+}
 
-  let initialText: string;
-  if (detailed) {
-    const usageGB = (initialUsage / (1024 * 1024 * 1024)).toFixed(1);
-    const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
-    initialText = `Memory: ${initialPercentage}% (${usageGB}GB/${totalGB}GB)`;
-  } else if (compact) {
-    initialText = `Mem: ${initialPercentage}%`;
-  } else {
-    initialText = `Memory: ${initialPercentage}%`;
-  }
+const ResponsiveMemoryDisplay = React.memo(
+  ({ compact, detailed }: ResponsiveMemoryDisplayProps) => {
+    const initialUsage = process.memoryUsage().rss;
+    const initialPercentage = Math.round((initialUsage / heapSizeLimit) * 100);
 
-  const [memoryUsage, setMemoryUsage] = useState<string>(initialText);
-  const [memoryUsageColor, setMemoryUsageColor] = useState<string>(
-    initialUsage >= 2 * 1024 * 1024 * 1024
-      ? SemanticColors.status.error
-      : SemanticColors.text.secondary,
-  );
+    let initialText: string;
+    if (detailed) {
+      const usageGB = (initialUsage / (1024 * 1024 * 1024)).toFixed(1);
+      const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
+      initialText = `Memory: ${initialPercentage}% (${usageGB}GB/${totalGB}GB)`;
+    } else if (compact) {
+      initialText = `Mem: ${initialPercentage}%`;
+    } else {
+      initialText = `Memory: ${initialPercentage}%`;
+    }
 
-  useEffect(() => {
-    const updateMemory = () => {
-      const usage = process.memoryUsage().rss;
-      const percentage = Math.round((usage / heapSizeLimit) * 100);
+    const [memoryUsage, setMemoryUsage] = useState<string>(initialText);
+    const [memoryUsageColor, setMemoryUsageColor] = useState<string>(
+      initialUsage >= 2 * 1024 * 1024 * 1024
+        ? SemanticColors.status.error
+        : SemanticColors.text.secondary,
+    );
 
-      if (detailed) {
-        const usageGB = (usage / (1024 * 1024 * 1024)).toFixed(1);
-        const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
-        setMemoryUsage(`Memory: ${percentage}% (${usageGB}GB/${totalGB}GB)`);
-      } else if (compact) {
-        setMemoryUsage(`Mem: ${percentage}%`);
-      } else {
-        setMemoryUsage(`Memory: ${percentage}%`);
-      }
+    useEffect(() => {
+      const updateMemory = () => {
+        const usage = process.memoryUsage().rss;
+        const percentage = Math.round((usage / heapSizeLimit) * 100);
 
-      setMemoryUsageColor(
-        usage >= 2 * 1024 * 1024 * 1024
-          ? SemanticColors.status.error
-          : SemanticColors.text.secondary,
-      );
-    };
+        if (detailed) {
+          const usageGB = (usage / (1024 * 1024 * 1024)).toFixed(1);
+          const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
+          setMemoryUsage(`Memory: ${percentage}% (${usageGB}GB/${totalGB}GB)`);
+        } else if (compact) {
+          setMemoryUsage(`Mem: ${percentage}%`);
+        } else {
+          setMemoryUsage(`Memory: ${percentage}%`);
+        }
 
-    const intervalId = setInterval(updateMemory, 2000);
-    return () => clearInterval(intervalId);
-  }, [compact, detailed]);
+        setMemoryUsageColor(
+          usage >= 2 * 1024 * 1024 * 1024
+            ? SemanticColors.status.error
+            : SemanticColors.text.secondary,
+        );
+      };
 
-  return <Text color={memoryUsageColor}>{memoryUsage}</Text>;
-});
+      const intervalId = setInterval(updateMemory, 2000);
+      return () => clearInterval(intervalId);
+    }, [compact, detailed]);
+
+    return <Text color={memoryUsageColor}>{memoryUsage}</Text>;
+  },
+);
 ResponsiveMemoryDisplay.displayName = 'ResponsiveMemoryDisplay';
 
 // Responsive Context Usage Display - Memoized to prevent re-renders
-const ResponsiveContextDisplay = React.memo<{
+interface ResponsiveContextDisplayProps {
   historyTokenCount: number;
   model: string;
   contextLimit?: number;
   compact: boolean;
   detailed: boolean;
-}>(({ historyTokenCount, model, contextLimit, compact, detailed }) => {
-  const limit = tokenLimit(model, contextLimit);
-  const percentage = historyTokenCount / limit;
-  const remainingPercentage = (1 - percentage) * 100;
+}
 
-  // Use semantic colors based on how much context is left
-  let color: string;
-  if (remainingPercentage < 10) {
-    color = SemanticColors.status.error;
-  } else if (remainingPercentage < 25) {
-    color = SemanticColors.status.warning;
-  } else {
-    color = SemanticColors.text.secondary;
-  }
+const ResponsiveContextDisplay = React.memo(
+  ({
+    historyTokenCount,
+    model,
+    contextLimit,
+    compact,
+    detailed,
+  }: ResponsiveContextDisplayProps) => {
+    const limit = tokenLimit(model, contextLimit);
+    const percentage = historyTokenCount / limit;
+    const remainingPercentage = (1 - percentage) * 100;
 
-  let displayText: string;
-  if (detailed) {
-    displayText = `Context: ${historyTokenCount.toLocaleString()}/${limit.toLocaleString()} tokens`;
-  } else if (compact) {
-    displayText = `Ctx: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
-  } else {
-    displayText = `Context: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
-  }
+    // Use semantic colors based on how much context is left
+    let color: string;
+    if (remainingPercentage < 10) {
+      color = SemanticColors.status.error;
+    } else if (remainingPercentage < 25) {
+      color = SemanticColors.status.warning;
+    } else {
+      color = SemanticColors.text.secondary;
+    }
 
-  return <Text color={color}>{displayText}</Text>;
-});
+    let displayText: string;
+    if (detailed) {
+      displayText = `Context: ${historyTokenCount.toLocaleString()}/${limit.toLocaleString()} tokens`;
+    } else if (compact) {
+      displayText = `Ctx: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
+    } else {
+      displayText = `Context: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
+    }
+
+    return <Text color={color}>{displayText}</Text>;
+  },
+);
 ResponsiveContextDisplay.displayName = 'ResponsiveContextDisplay';
 
 // Debounced TPM Display - Updates less frequently to reduce flicker
-const DebouncedTPMDisplay = React.memo<{
+interface DebouncedTPMDisplayProps {
   tokensPerMinute?: number;
   themeName?: string;
-}>(({ tokensPerMinute }) => {
-  const [displayTPM, setDisplayTPM] = useState<number | undefined>(
-    tokensPerMinute,
-  );
+}
 
-  useEffect(() => {
-    // Debounce TPM updates to reduce flicker
-    const timeoutId = setTimeout(() => {
-      setDisplayTPM(tokensPerMinute);
-    }, 500); // 500ms debounce
+const DebouncedTPMDisplay = React.memo(
+  ({ tokensPerMinute }: DebouncedTPMDisplayProps) => {
+    const [displayTPM, setDisplayTPM] = useState<number | undefined>(
+      tokensPerMinute,
+    );
 
-    return () => clearTimeout(timeoutId);
-  }, [tokensPerMinute]);
+    useEffect(() => {
+      // Debounce TPM updates to reduce flicker
+      const timeoutId = setTimeout(() => {
+        setDisplayTPM(tokensPerMinute);
+      }, 500); // 500ms debounce
 
-  if (displayTPM === undefined) return null;
+      return () => clearTimeout(timeoutId);
+    }, [tokensPerMinute]);
 
-  return (
-    <Text color={SemanticColors.text.accent}>
-      {displayTPM < 1000
-        ? `TPM: ${displayTPM.toFixed(2)}`
-        : `TPM: ${(displayTPM / 1000).toFixed(2)}k`}
-    </Text>
-  );
-});
+    if (displayTPM === undefined) return null;
+
+    return (
+      <Text color={SemanticColors.text.accent}>
+        {displayTPM < 1000
+          ? `TPM: ${displayTPM.toFixed(2)}`
+          : `TPM: ${(displayTPM / 1000).toFixed(2)}k`}
+      </Text>
+    );
+  },
+);
 DebouncedTPMDisplay.displayName = 'DebouncedTPMDisplay';
 
 // Debounced Wait Time Display
-const DebouncedWaitDisplay = React.memo<{
+interface DebouncedWaitDisplayProps {
   throttleWaitTimeMs?: number;
   themeName?: string;
-}>(({ throttleWaitTimeMs }) => {
-  const [displayWait, setDisplayWait] = useState<number | undefined>(
-    throttleWaitTimeMs,
-  );
+}
 
-  useEffect(() => {
-    // Debounce wait time updates
-    const timeoutId = setTimeout(() => {
-      setDisplayWait(throttleWaitTimeMs);
-    }, 300); // 300ms debounce
+const DebouncedWaitDisplay = React.memo(
+  ({ throttleWaitTimeMs }: DebouncedWaitDisplayProps) => {
+    const [displayWait, setDisplayWait] = useState<number | undefined>(
+      throttleWaitTimeMs,
+    );
 
-    return () => clearTimeout(timeoutId);
-  }, [throttleWaitTimeMs]);
+    useEffect(() => {
+      // Debounce wait time updates
+      const timeoutId = setTimeout(() => {
+        setDisplayWait(throttleWaitTimeMs);
+      }, 300); // 300ms debounce
 
-  if (displayWait === undefined) return null;
+      return () => clearTimeout(timeoutId);
+    }, [throttleWaitTimeMs]);
 
-  return (
-    <Text color={SemanticColors.status.warning}>
-      {displayWait < 1000
-        ? `Wait: ${displayWait}ms`
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          displayWait < 60000
-          ? `Wait: ${(displayWait / 1000).toFixed(1)}s`
-          : `Wait: ${(displayWait / 60000).toFixed(1)}m`}
-    </Text>
-  );
-});
+    if (displayWait === undefined) return null;
+
+    let waitText: string;
+    if (displayWait < 1000) {
+      waitText = `Wait: ${displayWait}ms`;
+    } else if (displayWait < 60000) {
+      waitText = `Wait: ${(displayWait / 1000).toFixed(1)}s`;
+    } else {
+      waitText = `Wait: ${(displayWait / 60000).toFixed(1)}m`;
+    }
+
+    return <Text color={SemanticColors.status.warning}>{waitText}</Text>;
+  },
+);
 DebouncedWaitDisplay.displayName = 'DebouncedWaitDisplay';
 
 // Responsive Timestamp Display - Isolated component for clock updates
@@ -234,38 +281,46 @@ const ResponsiveTimestamp = React.memo(() => {
 ResponsiveTimestamp.displayName = 'ResponsiveTimestamp';
 
 // Branch display sub-component
-const BranchDisplay = React.memo<{
+interface BranchDisplayProps {
   branchName: string;
   nightly: boolean;
   maxBranchLength: number;
-}>(({ branchName, nightly, maxBranchLength }) => {
-  const displayBranch =
-    branchName.length > maxBranchLength
-      ? truncateMiddle(branchName, maxBranchLength)
-      : branchName;
-  if (nightly) {
-    return (
-      <ThemedGradient colors={Colors.GradientColors}>
-        <Text color={Colors.Foreground}>({displayBranch}*)</Text>
-      </ThemedGradient>
-    );
-  }
-  return <Text color={SemanticColors.text.accent}>({displayBranch}*)</Text>;
-});
+}
+
+const BranchDisplay = React.memo(
+  ({ branchName, nightly, maxBranchLength }: BranchDisplayProps) => {
+    const displayBranch =
+      branchName.length > maxBranchLength
+        ? truncateMiddle(branchName, maxBranchLength)
+        : branchName;
+    if (nightly) {
+      return (
+        <ThemedGradient colors={Colors.GradientColors}>
+          <Text color={Colors.Foreground}>({displayBranch}*)</Text>
+        </ThemedGradient>
+      );
+    }
+    return <Text color={SemanticColors.text.accent}>({displayBranch}*)</Text>;
+  },
+);
 BranchDisplay.displayName = 'BranchDisplay';
 
 // Model name sub-component with load-balancer logic
-const ModelNameDisplay = React.memo<{
+interface ModelNameDisplayProps {
   model: string;
   showModelName: boolean;
   runtime: ReturnType<typeof useRuntimeApi>;
-}>(({ model, showModelName, runtime }) => {
-  if (!showModelName) return null;
-  const providerStatus = runtime.getActiveProviderStatus();
-  const lbDisplay = tryGetLBDisplayName(runtime, providerStatus);
-  if (lbDisplay !== null) return lbDisplay;
-  return <Text color={SemanticColors.text.primary}>{model}</Text>;
-});
+}
+
+const ModelNameDisplay = React.memo(
+  ({ model, showModelName, runtime }: ModelNameDisplayProps) => {
+    if (!showModelName) return null;
+    const providerStatus = runtime.getActiveProviderStatus();
+    const lbDisplay = tryGetLBDisplayName(runtime, providerStatus);
+    if (lbDisplay !== null) return lbDisplay;
+    return <Text color={SemanticColors.text.primary}>{model}</Text>;
+  },
+);
 ModelNameDisplay.displayName = 'ModelNameDisplay';
 
 function tryGetLBDisplayName(
@@ -311,45 +366,56 @@ function tryGetLBDisplayName(
 }
 
 // Paid/free mode sub-component
-const PaidModeDisplay = React.memo<{
+interface PaidModeDisplayProps {
   isPaidMode: boolean | undefined;
   showModelName: boolean;
   runtime: ReturnType<typeof useRuntimeApi>;
-}>(({ isPaidMode, showModelName, runtime }) => {
-  if (isPaidMode === undefined) return null;
-  const status = runtime.getActiveProviderStatus();
-  if (status.providerName !== 'gemini') return null;
-  return (
-    <>
-      {showModelName && <Text color={SemanticColors.text.secondary}> | </Text>}
-      <Text
-        color={
-          isPaidMode
-            ? SemanticColors.status.warning
-            : SemanticColors.status.success
-        }
-      >
-        {isPaidMode ? 'paid mode' : 'free mode'}
-      </Text>
-    </>
-  );
-});
+}
+
+const PaidModeDisplay = React.memo(
+  ({ isPaidMode, showModelName, runtime }: PaidModeDisplayProps) => {
+    if (isPaidMode === undefined) return null;
+    const status = runtime.getActiveProviderStatus();
+    if (status.providerName !== 'gemini') return null;
+    return (
+      <>
+        {showModelName && (
+          <Text color={SemanticColors.text.secondary}> | </Text>
+        )}
+        <Text
+          color={
+            isPaidMode
+              ? SemanticColors.status.warning
+              : SemanticColors.status.success
+          }
+        >
+          {isPaidMode ? 'paid mode' : 'free mode'}
+        </Text>
+      </>
+    );
+  },
+);
 PaidModeDisplay.displayName = 'PaidModeDisplay';
 
 // Sandbox status sub-component
-const SandboxStatusDisplay = React.memo<{
+interface SandboxStatusDisplayProps {
   hideSandboxStatus: boolean;
   isCompact: boolean;
-}>(({ hideSandboxStatus, isCompact }) => {
-  if (isCompact || hideSandboxStatus) return null;
-  return (
-    <Box marginLeft={2}>
-      {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
+}
+
+const SandboxStatusDisplay = React.memo(
+  ({ hideSandboxStatus, isCompact }: SandboxStatusDisplayProps) => {
+    if (isCompact || hideSandboxStatus) return null;
+
+    let sandboxStatus: React.ReactNode;
+    if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
+      sandboxStatus = (
         <Text color={SemanticColors.status.success}>
           [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
         </Text>
-      ) : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      process.env.SANDBOX === 'sandbox-exec' ? (
+      );
+    } else if (process.env.SANDBOX === 'sandbox-exec') {
+      sandboxStatus = (
         <Text color={SemanticColors.status.warning}>
           [macOS Seatbelt{' '}
           <Text color={SemanticColors.text.secondary}>
@@ -357,19 +423,23 @@ const SandboxStatusDisplay = React.memo<{
           </Text>
           ]
         </Text>
-      ) : (
+      );
+    } else {
+      sandboxStatus = (
         <Text color={SemanticColors.status.error}>
           [no sandbox{' '}
           <Text color={SemanticColors.text.secondary}>(see /docs)</Text>]
         </Text>
-      )}
-    </Box>
-  );
-});
+      );
+    }
+
+    return <Box marginLeft={2}>{sandboxStatus}</Box>;
+  },
+);
 SandboxStatusDisplay.displayName = 'SandboxStatusDisplay';
 
 // Right side: Memory | Context | TPM | Wait Time | Time
-const FooterMetricsRow = React.memo<{
+interface FooterMetricsRowProps {
   hideModelInfo: boolean;
   showMemoryUsage?: boolean;
   isCompact: boolean;
@@ -381,7 +451,9 @@ const FooterMetricsRow = React.memo<{
   throttleWaitTimeMs?: number;
   themeName?: string;
   showTimestamp: boolean;
-}>(
+}
+
+const FooterMetricsRow = React.memo(
   ({
     hideModelInfo,
     showMemoryUsage,
@@ -394,7 +466,7 @@ const FooterMetricsRow = React.memo<{
     throttleWaitTimeMs,
     themeName,
     showTimestamp,
-  }) => {
+  }: FooterMetricsRowProps) => {
     if (hideModelInfo) return null;
     return (
       <Box flexDirection="row" alignItems="center">
@@ -445,7 +517,7 @@ const FooterMetricsRow = React.memo<{
 FooterMetricsRow.displayName = 'FooterMetricsRow';
 
 // Footer first line: Branch (left) | Memory | Context | Time (right)
-const FooterFirstLine = React.memo<{
+interface FooterFirstLineProps {
   branchName?: string;
   nightly: boolean;
   isTrustedFolder?: boolean;
@@ -464,7 +536,9 @@ const FooterFirstLine = React.memo<{
   throttleWaitTimeMs?: number;
   themeName?: string;
   showTimestamp: boolean;
-}>((props) => {
+}
+
+const FooterFirstLine = React.memo((props: FooterFirstLineProps) => {
   const {
     branchName,
     nightly,
@@ -529,7 +603,7 @@ const FooterFirstLine = React.memo<{
 FooterFirstLine.displayName = 'FooterFirstLine';
 
 // Footer second line: Path (left) | Model | Session Tokens (right)
-const FooterSecondLine = React.memo<{
+interface FooterSecondLineProps {
   hideCWD: boolean;
   nightly: boolean;
   targetDir: string;
@@ -543,7 +617,9 @@ const FooterSecondLine = React.memo<{
   sessionTokenTotal: number | undefined;
   showErrorDetails: boolean;
   errorCount: number;
-}>((props) => {
+}
+
+const FooterSecondLine = React.memo((props: FooterSecondLineProps) => {
   const {
     hideCWD,
     nightly,
@@ -619,7 +695,7 @@ function getMaxBranchLength(breakpoint: string): number {
   return 100;
 }
 
-export const Footer = React.memo<FooterProps>(
+export const Footer = React.memo(
   ({
     model,
     targetDir,
@@ -642,7 +718,7 @@ export const Footer = React.memo<FooterProps>(
     hideCWD = false,
     hideSandboxStatus = false,
     hideModelInfo = false,
-  }) => {
+  }: FooterProps) => {
     const { breakpoint } = useResponsive();
     const runtime = useRuntimeApi();
     const showTimestamp = breakpoint === 'WIDE';
@@ -691,28 +767,6 @@ export const Footer = React.memo<FooterProps>(
       </Box>
     );
   },
-  (prevProps, nextProps) =>
-    // Custom comparison function - ignore rapidly changing values
-    // Only re-render if important props change
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    prevProps.model === nextProps.model &&
-    prevProps.targetDir === nextProps.targetDir &&
-    prevProps.branchName === nextProps.branchName &&
-    prevProps.debugMode === nextProps.debugMode &&
-    prevProps.debugMessage === nextProps.debugMessage &&
-    prevProps.errorCount === nextProps.errorCount &&
-    prevProps.showErrorDetails === nextProps.showErrorDetails &&
-    prevProps.showMemoryUsage === nextProps.showMemoryUsage &&
-    prevProps.historyTokenCount === nextProps.historyTokenCount &&
-    prevProps.isPaidMode === nextProps.isPaidMode &&
-    prevProps.nightly === nextProps.nightly &&
-    prevProps.vimMode === nextProps.vimMode &&
-    prevProps.contextLimit === nextProps.contextLimit &&
-    prevProps.isTrustedFolder === nextProps.isTrustedFolder &&
-    prevProps.hideCWD === nextProps.hideCWD &&
-    prevProps.hideSandboxStatus === nextProps.hideSandboxStatus &&
-    prevProps.hideModelInfo === nextProps.hideModelInfo &&
-    prevProps.themeName === nextProps.themeName,
-  // Ignore rapidly changing values - TPM, wait time, and session tokens
+  areFooterStablePropsEqual,
 );
 Footer.displayName = 'Footer';

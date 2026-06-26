@@ -12,6 +12,7 @@ import { profileCommand } from '../profileCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../types.js';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+import { testRegex } from '../../../test-utils/regex.js';
 
 const runtimeMocks = vi.hoisted(() => ({
   saveLoadBalancerProfile: vi.fn(),
@@ -320,7 +321,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       // Gets usage error since parts.length < 5
-      expect(content).toMatch(/Usage.*roundrobin.*failover/i);
+      expect(content).toMatch(testRegex('Usage.*roundrobin.*failover', 'i'));
     });
 
     it('validates that referenced profiles exist', async () => {

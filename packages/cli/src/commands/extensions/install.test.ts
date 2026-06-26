@@ -95,25 +95,21 @@ describe('handleInstall', () => {
       type: 'local path',
       needsStat: true,
     },
-  ])(
-    'should install an extension from a $type',
-    async ({ source, name, needsStat }) => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (needsStat === true) {
-        mockStat.mockResolvedValue({} as Stats);
-      }
-      mockInstallOrUpdateExtension.mockResolvedValue(name);
-      mockLoadExtensionByName.mockReturnValue({
-        name,
-      } as unknown as GeminiCLIExtension);
+  ])('should install an extension from a $type', async ({ source, name }) => {
+    // Only the local-path case stats the source; resolving the stat mock for
+    // every row is harmless for the remote sources that never call it.
+    mockStat.mockResolvedValue({} as Stats);
+    mockInstallOrUpdateExtension.mockResolvedValue(name);
+    mockLoadExtensionByName.mockReturnValue({
+      name,
+    } as unknown as GeminiCLIExtension);
 
-      await handleInstall({ source });
+    await handleInstall({ source });
 
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        `Extension "${name}" installed successfully and enabled.`,
-      );
-    },
-  );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      `Extension "${name}" installed successfully and enabled.`,
+    );
+  });
 
   it('throws an error from an unknown source', async () => {
     mockStat.mockRejectedValue(new Error('ENOENT: no such file or directory'));

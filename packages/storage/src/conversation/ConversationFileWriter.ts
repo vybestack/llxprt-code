@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fs from 'fs';
+import { promises as fsp } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { StorageLogger } from '../types/logger.js';
@@ -25,6 +25,7 @@ export class ConversationFileWriter {
   private logPath: string;
   private currentLogFile: string;
   private logger: StorageLogger;
+  private writeChain: Promise<void> = Promise.resolve();
 
   constructor(logPath?: string, logger?: StorageLogger) {
     this.logPath = resolveConversationLogPath(logPath);
@@ -35,26 +36,38 @@ export class ConversationFileWriter {
     this.logger = logger ?? new NullStorageLoggerImpl();
   }
 
-  writeEntry(entry: Record<string, unknown>): void {
+  async writeEntry(entry: Record<string, unknown>): Promise<void> {
+    // Serialize writes through a per-instance chain so concurrent callers
+    // append in invocation order, preserving the guarantee the synchronous
+    // implementation had implicitly. The trailing .catch() guarantees the
+    // chain and the returned promise never reject — a throwing logger or a
+    // filesystem error cannot poison subsequent writes.
+    this.writeChain = this.writeChain
+      .then(() => this.appendEntry(entry))
+      .catch(() => {});
+    return this.writeChain;
+  }
+
+  private async appendEntry(entry: Record<string, unknown>): Promise<void> {
     try {
       const logEntry = {
         timestamp: new Date().toISOString(),
         ...entry,
       };
       const line = JSON.stringify(logEntry) + '\n';
-      fs.mkdirSync(this.logPath, { recursive: true });
-      fs.appendFileSync(this.currentLogFile, line);
+      await fsp.mkdir(this.logPath, { recursive: true });
+      await fsp.appendFile(this.currentLogFile, line);
     } catch (error) {
       this.logger.error('Failed to write log entry:', error);
     }
   }
 
-  writeRequest(
+  async writeRequest(
     provider: string,
     messages: unknown[],
     context?: Record<string, unknown>,
-  ): void {
-    this.writeEntry({
+  ): Promise<void> {
+    await this.writeEntry({
       type: 'request',
       provider,
       messages,
@@ -62,12 +75,12 @@ export class ConversationFileWriter {
     });
   }
 
-  writeResponse(
+  async writeResponse(
     provider: string,
     response: unknown,
     metadata?: Record<string, unknown>,
-  ): void {
-    this.writeEntry({
+  ): Promise<void> {
+    await this.writeEntry({
       type: 'response',
       provider,
       response,
@@ -75,12 +88,12 @@ export class ConversationFileWriter {
     });
   }
 
-  writeToolCall(
+  async writeToolCall(
     provider: string,
     toolName: string,
     context?: Record<string, unknown>,
-  ): void {
-    this.writeEntry({
+  ): Promise<void> {
+    await this.writeEntry({
       type: 'tool_call',
       provider,
       tool: toolName,

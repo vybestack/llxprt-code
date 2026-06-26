@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertTruthy } from '../test-utils/assertions.js';
 import { performResume } from '../services/performResume.js';
 import {
   cleanupSessionBrowserTestState,
@@ -50,8 +51,7 @@ describe('Session locking #2', () => {
     const result = await performResume(sessionId, context);
 
     expect(result.ok).toBe(true);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!result.ok) throw new Error('unreachable: narrowing failed');
+    assertTruthy(result.ok);
     const newLock = context.recordingCallbacks.getCurrentLockHandle();
     expect(newLock).not.toBeNull();
     expect(newLock!.lockPath).toContain(state.chatsDir);

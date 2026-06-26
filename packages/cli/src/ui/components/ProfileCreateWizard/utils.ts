@@ -117,6 +117,15 @@ export function buildProfileJSON(state: WizardState): Record<string, unknown> {
   return profile;
 }
 
+function isExistingFileError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'EEXIST'
+  );
+}
+
 export async function saveProfile(
   name: string,
   config: Record<string, unknown>,
@@ -144,14 +153,7 @@ export async function saveProfile(
 
     return { success: true, path: profilePath };
   } catch (error) {
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      error !== null &&
-      error !== undefined &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'EEXIST'
-    ) {
+    if (isExistingFileError(error)) {
       return {
         success: false,
         alreadyExists: true,
@@ -162,6 +164,19 @@ export async function saveProfile(
       success: false,
       error: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+function formatAuthDisplay(auth: WizardState['config']['auth']): string {
+  switch (auth.type) {
+    case 'apikey':
+      return 'API key (stored in profile)';
+    case 'keyfile':
+      return `Key file (${auth.value})`;
+    case 'oauth':
+      return 'OAuth (lazy authentication)';
+    default:
+      return 'None';
   }
 }
 
@@ -184,17 +199,7 @@ export function formatConfigSummary(state: WizardState): string {
   lines.push(`Model: ${state.config.model}`);
 
   // Auth
-  const authDisplay =
-    state.config.auth.type === 'apikey'
-      ? 'API key (stored in profile)'
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        state.config.auth.type === 'keyfile'
-        ? `Key file (${state.config.auth.value})`
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          state.config.auth.type === 'oauth'
-          ? 'OAuth (lazy authentication)'
-          : 'None';
-  lines.push(`Auth: ${authDisplay}`);
+  lines.push(`Auth: ${formatAuthDisplay(state.config.auth)}`);
 
   // Parameters (if configured)
   if (state.config.params) {
@@ -350,8 +355,7 @@ export function getNextStep(
 
 export function getPreviousStep(state: WizardState): WizardStep {
   // Pop from step history
-  const prevStep = state.stepHistory[state.stepHistory.length - 2];
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for potentially undefined array access
+  const prevStep = state.stepHistory.at(-2);
   return prevStep ?? WizardStep.PROVIDER_SELECT;
 }
 

@@ -31,9 +31,12 @@ export const InfoMessage: React.FC<InfoMessageProps> = ({
       </Box>
       <Box flexGrow={1} flexDirection="column">
         {text.split('\n').map((line, index) => (
-          <Text wrap="wrap" key={index} color={color}>
-            <RenderInline text={line} defaultColor={color} />
-          </Text>
+          <RenderInline
+            key={index}
+            text={line}
+            defaultColor={color}
+            wrap="wrap"
+          />
         ))}
       </Box>
     </Box>

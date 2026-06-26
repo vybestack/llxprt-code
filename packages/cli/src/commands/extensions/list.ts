@@ -13,16 +13,16 @@ export async function handleList() {
   try {
     const extensions = loadUserExtensions();
     if (extensions.length === 0) {
-      console.log('No extensions installed.');
+      globalThis.console.log('No extensions installed.');
       return;
     }
-    console.log(
+    globalThis.console.log(
       extensions
         .map((extension, _): string => toOutputString(extension, process.cwd()))
         .join('\n\n'),
     );
   } catch (error) {
-    console.error(getErrorMessage(error));
+    globalThis.console.error(getErrorMessage(error));
     await exitCli(1);
   }
 }

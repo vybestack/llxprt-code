@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import React, { useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
@@ -106,25 +104,27 @@ function ProviderListItem({
   isWide: boolean;
   colWidth: number;
 }) {
-  const displayName = isWide
-    ? name
-    : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      name.length > 20
-      ? truncateEnd(name, 20)
-      : name;
+  const getDisplayName = () => {
+    if (isWide) {
+      return name;
+    }
+    return name.length > 20 ? truncateEnd(name, 20) : name;
+  };
+  const displayName = getDisplayName();
+
+  const getTextColor = () => {
+    if (selected) {
+      return SemanticColors.text.accent;
+    }
+    if (isSearching && !isNarrow) {
+      return SemanticColors.text.secondary;
+    }
+    return SemanticColors.text.primary;
+  };
 
   return (
     <Box key={name} width={isWide ? undefined : colWidth} marginRight={2}>
-      <Text
-        color={
-          selected
-            ? SemanticColors.text.accent
-            : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              isSearching && !isNarrow
-              ? SemanticColors.text.secondary
-              : SemanticColors.text.primary
-        }
-      >
+      <Text color={getTextColor()}>
         {selected ? '● ' : '○ '}
         {displayName}
       </Text>

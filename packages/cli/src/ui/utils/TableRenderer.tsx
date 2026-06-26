@@ -54,6 +54,50 @@ const getClosingSequence = (stack: MarkerState[]): string => {
   return closing;
 };
 
+const applyCloseMarker = (marker: MarkerDef, updated: MarkerState[]): void => {
+  const matchIndex = [...updated]
+    .reverse()
+    .findIndex((entry) => entry.def === marker);
+  if (matchIndex !== -1) {
+    updated.splice(updated.length - matchIndex - 1);
+  }
+};
+
+const applyOpenMarker = (marker: MarkerDef, updated: MarkerState[]): void => {
+  const isClosingSymmetric =
+    marker.symmetric &&
+    updated.length > 0 &&
+    updated[updated.length - 1]?.def === marker;
+  if (isClosingSymmetric) {
+    updated.pop();
+  } else {
+    updated.push({ def: marker });
+  }
+};
+
+/**
+ * Consumes a single marker (open or close) at the given pointer position,
+ * mutating the marker stack. Returns the number of characters consumed, or
+ * 0 when no marker matches at that position.
+ */
+const consumeMarkerAt = (
+  segment: string,
+  pointer: number,
+  updated: MarkerState[],
+): number => {
+  for (const marker of SORTED_MARKERS) {
+    if (!marker.symmetric && segment.startsWith(marker.close, pointer)) {
+      applyCloseMarker(marker, updated);
+      return marker.close.length;
+    }
+    if (segment.startsWith(marker.open, pointer)) {
+      applyOpenMarker(marker, updated);
+      return marker.open.length;
+    }
+  }
+  return 0;
+};
+
 const updateMarkerStack = (
   segment: string,
   stack: MarkerState[],
@@ -64,46 +108,8 @@ const updateMarkerStack = (
   let pointer = 0;
 
   while (pointer < segment.length) {
-    let matched = false;
-
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    for (const marker of SORTED_MARKERS) {
-      if (!marker.symmetric && segment.startsWith(marker.close, pointer)) {
-        const matchIndex = [...updated]
-          .reverse()
-          .findIndex((entry) => entry.def === marker);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (matchIndex !== -1) {
-          updated.splice(updated.length - matchIndex - 1);
-        }
-        pointer += marker.close.length;
-        matched = true;
-        break;
-      }
-
-      if (segment.startsWith(marker.open, pointer)) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (marker.symmetric) {
-          if (
-            updated.length > 0 &&
-            updated[updated.length - 1]?.def === marker
-          ) {
-            updated.pop();
-          } else {
-            updated.push({ def: marker });
-          }
-        } else {
-          updated.push({ def: marker });
-        }
-        pointer += marker.open.length;
-        matched = true;
-        break;
-      }
-    }
-
-    if (!matched) {
-      pointer += 1;
-    }
+    const consumed = consumeMarkerAt(segment, pointer, updated);
+    pointer += consumed > 0 ? consumed : 1;
   }
 
   return updated;
@@ -351,9 +357,11 @@ const renderRow = (
             const displayWidth = getPlainTextLength(lineContent);
             const padding = Math.max(0, data.contentWidth - displayWidth);
             const contentNode = isHeader ? (
-              <Text bold color={theme.text.accent}>
-                <RenderInline text={lineContent} />
-              </Text>
+              <RenderInline
+                text={lineContent}
+                defaultColor={theme.text.accent}
+                bold
+              />
             ) : (
               <RenderInline text={lineContent} />
             );

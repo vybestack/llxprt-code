@@ -64,8 +64,8 @@ export interface BootstrapRuntimeState {
 }
 
 export interface ProfileApplicationResult {
-  providerName: string;
-  modelName: string;
+  providerName: string | null;
+  modelName: string | null;
   baseUrl?: string;
   warnings: string[];
   error?: string;
@@ -634,14 +634,6 @@ function getMaxNestingDepth(obj: unknown, currentDepth = 1): number {
   );
 }
 
-/**
- * @plan PLAN-20251118-ISSUE533.P06
- * @requirement REQ-PROF-003.2
- */
-// @ts-expect-error - Stub function, will be implemented in later phase
-function _formatValidationErrors(_errors: unknown[]): string {
-  return '';
-}
 interface FullBootstrapResultInput {
   runtime: BootstrapRuntimeState['runtime'];
   providerManager: BootstrapRuntimeState['providerManager'];
@@ -661,16 +653,21 @@ ${baseProfile.error}`);
   return applyOverridesToProfile(baseProfile, bootstrapArgs);
 }
 
+interface ProfileLookupService {
+  getProfile?(
+    name: string | null,
+  ): { provider?: string; model?: string } | null | undefined;
+}
+
 function createLoadedProfileBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
   runtimeMetadata: RuntimeBootstrapMetadata,
 ): ProfileApplicationResult {
-  const settingsService = runtimeMetadata.settingsService;
+  const settingsService = runtimeMetadata.settingsService as
+    | ProfileLookupService
+    | undefined;
   if (settingsService) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const profile = (settingsService as any).getProfile(
-      bootstrapArgs.profileName,
-    );
+    const profile = settingsService.getProfile?.(bootstrapArgs.profileName);
     if (profile !== null && profile !== undefined) {
       return applyOverridesToProfile(
         {
@@ -702,8 +699,8 @@ function createOverrideOnlyBootstrapResult(
 
 function createEmptyProfileBootstrapResult(): ProfileApplicationResult {
   return {
-    providerName: null as unknown as string,
-    modelName: null as unknown as string,
+    providerName: null,
+    modelName: null,
     warnings: [],
   };
 }

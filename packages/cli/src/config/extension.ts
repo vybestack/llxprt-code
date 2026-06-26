@@ -26,7 +26,7 @@ import { ExtensionEnablementManager } from './extensions/extensionEnablement.js'
 import type { ConfirmationRequest } from '../ui/types.js';
 import {
   recursivelyHydrateStrings,
-  type JsonObject,
+  type JsonValue,
 } from './extensions/variables.js';
 
 import { maybeRequestConsentOrFail } from './extensions/extensionConsent.js';
@@ -88,6 +88,18 @@ export interface ExtensionConfig {
   }>;
 }
 
+function isExtensionConfig(value: unknown): value is ExtensionConfig {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { name?: unknown }).name === 'string' &&
+    typeof (value as { version?: unknown }).version === 'string'
+  );
+}
+
+function parseJsonValue(content: string): JsonValue {
+  return JSON.parse(content) as JsonValue;
+}
 export interface ExtensionInstallMetadata {
   source: string;
   type: 'git' | 'local' | 'link' | 'github-release';
@@ -245,8 +257,8 @@ const extensionLoaderDeps = {
   installMetadataFileName: INSTALL_METADATA_FILENAME,
   loadSettings,
   validateName,
-  reportError: (message: string) => console.error(message),
-  reportWarning: (message: string) => console.warn(message),
+  reportError: (message: string) => globalThis.console.error(message),
+  reportWarning: (message: string) => globalThis.console.warn(message),
 };
 
 export function loadExtension(
@@ -396,7 +408,7 @@ async function cloneFromGit(
 export async function requestConsentNonInteractive(
   consentDescription: string,
 ): Promise<boolean> {
-  console.info(consentDescription);
+  globalThis.console.info(consentDescription);
   const result = await promptForConsentNonInteractive(
     'Do you want to continue? [Y/n]: ',
   );
@@ -639,7 +651,7 @@ async function warnMissingExtensionSettings(
   const settingNames = missingSettings
     .map((setting) => setting.name)
     .join(', ');
-  console.warn(
+  globalThis.console.warn(
     `Extension "${extensionConfig.name}" has missing settings: ${settingNames}. Please run "llxprt extensions config ${extensionConfig.name}" to configure them.`,
   );
 }
@@ -757,30 +769,34 @@ export async function loadExtensionConfig(
     );
   }
   if (!fs.existsSync(configFilePath)) {
-    console.warn(
+    globalThis.console.warn(
       `Extension config file not found at ${extensionDir}. Expected ${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK}.`,
     );
     return null;
   }
   try {
     const configContent = fs.readFileSync(configFilePath, 'utf-8');
-    const rawConfig = JSON.parse(configContent) as ExtensionConfig;
-    if (!rawConfig.name || !rawConfig.version) {
-      console.warn(
-        `Invalid extension configuration in ${configFilePath}: missing ${!rawConfig.name ? '"name"' : '"version"'}`,
+    const rawConfig = parseJsonValue(configContent);
+    if (!isExtensionConfig(rawConfig)) {
+      globalThis.console.warn(
+        `Invalid extension configuration in ${configFilePath}: missing name or version`,
       );
       return null;
     }
     const installDir = new ExtensionStorage(rawConfig.name).getExtensionDir();
-    const config = recursivelyHydrateStrings(
-      rawConfig as unknown as JsonObject,
-      {
-        extensionPath: installDir,
-        workspacePath: workspaceDir,
-        '/': path.sep,
-        pathSeparator: path.sep,
-      },
-    ) as unknown as ExtensionConfig;
+    const hydratedConfig = recursivelyHydrateStrings(rawConfig, {
+      extensionPath: installDir,
+      workspacePath: workspaceDir,
+      '/': path.sep,
+      pathSeparator: path.sep,
+    });
+    if (!isExtensionConfig(hydratedConfig)) {
+      globalThis.console.warn(
+        `Invalid extension configuration in ${configFilePath}: missing name or version`,
+      );
+      return null;
+    }
+    const config = hydratedConfig;
 
     validateName(config.name);
 
@@ -800,7 +816,7 @@ export async function loadExtensionConfig(
     ) {
       throw e;
     }
-    console.warn(
+    globalThis.console.warn(
       `Failed to load extension config from ${configFilePath}: ${e instanceof Error ? e.message : String(e)}`,
     );
     return null;

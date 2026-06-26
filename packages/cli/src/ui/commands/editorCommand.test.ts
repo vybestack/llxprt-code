@@ -8,13 +8,11 @@ import { describe, it, expect } from 'vitest';
 import { editorCommand } from './editorCommand.js';
 // 1. Import the mock context utility
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 describe('editorCommand', () => {
   it('should return a dialog action to open the editor dialog', () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!editorCommand.action) {
-      throw new Error('The editor command must have an action.');
-    }
+    assertDefined(editorCommand.action);
     const mockContext = createMockCommandContext();
     const result = editorCommand.action(mockContext, '');
 

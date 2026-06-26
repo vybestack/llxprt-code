@@ -18,6 +18,7 @@ import { TodoContext } from '../contexts/TodoContext.js';
 import { ToolCallContext } from '../contexts/ToolCallContext.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
+import { testRegex } from '../../test-utils/regex.js';
 
 vi.mock('../hooks/useTerminalSize.js');
 
@@ -92,15 +93,15 @@ describe('TodoPanel Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show status indicators but not full content
-      expect(output).toMatch(/\[\*\]/); // completed marker
-      expect(output).toMatch(/→/); // in_progress marker
-      expect(output).toMatch(/\[ \]/); // pending marker
+      expect(output).toMatch(testRegex('\\[\\*\\]', '')); // completed marker
+      expect(output).toMatch(testRegex('→', '')); // in_progress marker
+      expect(output).toMatch(testRegex('\\[ \\]', '')); // pending marker
 
       // Should show task count summary
-      expect(output).toMatch(/3 tasks/i);
-      expect(output).toMatch(/1 completed/i);
-      expect(output).toMatch(/1 in progress/i);
-      expect(output).toMatch(/1 pending/i);
+      expect(output).toMatch(testRegex('3 tasks', 'i'));
+      expect(output).toMatch(testRegex('1 completed', 'i'));
+      expect(output).toMatch(testRegex('1 in progress', 'i'));
+      expect(output).toMatch(testRegex('1 pending', 'i'));
 
       // Should NOT show full task content
       expect(output).not.toContain('This is a very long todo item');
@@ -126,9 +127,9 @@ describe('TodoPanel Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show status indicators
-      expect(output).toMatch(/✔/);
-      expect(output).toMatch(/→/);
-      expect(output).toMatch(/○/);
+      expect(output).toMatch(testRegex('✔', ''));
+      expect(output).toMatch(testRegex('→', ''));
+      expect(output).toMatch(testRegex('○', ''));
 
       // With improved truncation (85% width), more content should be visible
       // At 100px width, the long content should now fit or be less aggressively truncated
@@ -139,14 +140,14 @@ describe('TodoPanel Responsive Behavior', () => {
         'This is a very long todo item that should be truncated at different widths',
       );
       const hasTruncatedContent = output!.match(
-        /This is a very long todo.*\.\.\./,
+        testRegex('This is a very long todo.*\\.\\.\\.', ''),
       );
 
       // Either full content is shown or it's truncated but with much more content visible
       expect(hasFullContent || hasTruncatedContent).toBe(true);
 
       // Should NOT show task count summary (that's only for narrow)
-      expect(output).not.toMatch(/3 tasks/i);
+      expect(output).not.toMatch(testRegex('3 tasks', 'i'));
     });
   });
 
@@ -167,9 +168,9 @@ describe('TodoPanel Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show status indicators
-      expect(output).toMatch(/✔/);
-      expect(output).toMatch(/→/);
-      expect(output).toMatch(/○/);
+      expect(output).toMatch(testRegex('✔', ''));
+      expect(output).toMatch(testRegex('→', ''));
+      expect(output).toMatch(testRegex('○', ''));
 
       // Should show full task content
       expect(output).toContain(
@@ -181,7 +182,7 @@ describe('TodoPanel Responsive Behavior', () => {
       );
 
       // Should show full "current" indicator for in-progress tasks
-      expect(output).toMatch(/Short task.*← current/);
+      expect(output).toMatch(testRegex('Short task.*← current', ''));
     });
   });
 
@@ -200,7 +201,7 @@ describe('TodoPanel Responsive Behavior', () => {
 
       const narrowOutput = narrowFrame();
       // At exactly 80, should be STANDARD behavior (not NARROW)
-      expect(narrowOutput).not.toMatch(/3 tasks/i);
+      expect(narrowOutput).not.toMatch(testRegex('3 tasks', 'i'));
       expect(narrowOutput).toContain('Short task');
 
       // Test exactly at STANDARD threshold (120 cols)
@@ -233,7 +234,7 @@ describe('TodoPanel Responsive Behavior', () => {
         </TodoContext.Provider>,
       );
 
-      expect(lastFrame()).toMatch(/3 tasks/i);
+      expect(lastFrame()).toMatch(testRegex('3 tasks', 'i'));
 
       // Change to wide
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
@@ -282,7 +283,9 @@ describe('TodoPanel Responsive Behavior', () => {
       // This means more of the content should be visible before truncation
 
       // Count visible characters before truncation
-      const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
+      const contentMatch = output!.match(
+        testRegex('○\\s+([^.]+(?:\\.\\.\\.)?)(?:\\s|$)', ''),
+      );
       expect(contentMatch).toBeDefined();
       const visibleContent = contentMatch![1];
 
@@ -328,7 +331,9 @@ describe('TodoPanel Responsive Behavior', () => {
         );
 
         const output = lastFrame();
-        const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
+        const contentMatch = output!.match(
+          testRegex('○\\s+([^.]+(?:\\.\\.\\.)?)(?:\\s|$)', ''),
+        );
 
         expect(contentMatch).toBeDefined();
         const visibleContent = contentMatch![1];
