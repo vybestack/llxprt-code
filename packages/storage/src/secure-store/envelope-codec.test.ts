@@ -276,13 +276,15 @@ describe('envelope-codec — decryptEnvelopeString', () => {
     expect(plaintext).toBe('');
   });
 
-  it('fails closed (CORRUPT) when the machine-secret loader rejects on a v:2 read', async () => {
+  it('propagates an unexpected loader rejection unchanged on a v:2 read (does not mask it as CORRUPT)', async () => {
     // Seal a v:2 envelope with a working secret, then attempt to decrypt it
-    // with a loader that rejects (e.g. keyring/file I/O failure). The codec
-    // must normalize this to a fail-closed EnvelopeCodecError(CORRUPT) rather
-    // than leaking a raw, non-EnvelopeCodecError exception — callers branch on
-    // `instanceof EnvelopeCodecError`, so a raw throw would bypass their
-    // fail-closed handling.
+    // with a loader that rejects (e.g. the keyring backend is transiently
+    // broken). A rejection signals an unexpected infrastructure fault, not an
+    // unreadable/corrupt envelope, so the original error must propagate
+    // unchanged. This lets callers distinguish a transient fault from genuine
+    // corruption instead of misreporting "fix your data" for a backend outage.
+    // (A loader that *resolves to null* — secret genuinely unavailable — is the
+    // case that fails closed as CORRUPT; that is covered by the test above.)
     const envelopeJson = await encryptEnvelopeString('secret', 'svc', {
       machineSecretLoader: secretLoader(FIXED_SECRET_A),
     });
@@ -295,12 +297,12 @@ describe('envelope-codec — decryptEnvelopeString', () => {
       decryptEnvelopeString(envelopeJson, 'svc', {
         machineSecretLoader: rejectingLoader,
       }),
-    ).rejects.toMatchObject({ code: 'CORRUPT' });
+    ).rejects.toThrow(/keyring unavailable/);
     await expect(
       decryptEnvelopeString(envelopeJson, 'svc', {
         machineSecretLoader: rejectingLoader,
       }),
-    ).rejects.toBeInstanceOf(EnvelopeCodecError);
+    ).rejects.not.toBeInstanceOf(EnvelopeCodecError);
   });
 });
 

@@ -280,20 +280,12 @@ export async function decryptEnvelopeString(
     // correct outcome is to fail closed, not to mint a fresh secret that
     // cannot decrypt this envelope.
     const loader = resolveLoader(options, false);
-    let machineSecret: Buffer | null;
-    try {
-      machineSecret = await loader();
-    } catch {
-      // A loader that rejects (e.g. keyring or file I/O failure) must fail
-      // closed as CORRUPT rather than propagating a raw, non-EnvelopeCodecError
-      // exception that callers' `instanceof EnvelopeCodecError` guards would
-      // not normalize to fail-closed behavior.
-      throw new EnvelopeCodecError(
-        'Failed to load the machine secret required to decrypt a v:2 envelope',
-        'CORRUPT',
-        'Re-save the value or re-authenticate. The machine secret could not be loaded.',
-      );
-    }
+    // A loader that *rejects* signals an unexpected infrastructure fault (for
+    // example the keyring backend is temporarily broken). That error must
+    // propagate unchanged so callers can distinguish a transient fault from a
+    // genuinely unreadable/corrupt envelope. Only a loader that *resolves to
+    // null* (secret genuinely unavailable) fails closed as CORRUPT below.
+    const machineSecret = await loader();
     if (machineSecret === null) {
       throw new EnvelopeCodecError(
         'v:2 envelope requires a machine secret that is unavailable',
@@ -306,10 +298,14 @@ export async function decryptEnvelopeString(
     kdfInput = deriveV1KdfInput(serviceName);
   }
 
+  // Mirror SecureStore.readFallbackFileAtPath exactly: KDF derivation stays
+  // outside the try so an unexpected scrypt fault (e.g. resource exhaustion)
+  // propagates unchanged, while only an authentication/decrypt failure — the
+  // signal of a genuinely corrupt or foreign-machine envelope — fails closed as
+  // CORRUPT.
+  const decKey = await scryptAsync(kdfInput, salt, 32, SCRYPT_PARAMS);
+
   try {
-    // scryptAsync is inside the try so any KDF failure (e.g. resource limits)
-    // also fails closed as CORRUPT, honoring the documented contract.
-    const decKey = await scryptAsync(kdfInput, salt, 32, SCRYPT_PARAMS);
     const decipher = crypto.createDecipheriv('aes-256-gcm', decKey, iv);
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([
