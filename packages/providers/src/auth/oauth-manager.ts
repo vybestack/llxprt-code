@@ -109,9 +109,10 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       runtimeDeps?.config,
       runtimeDeps?.messageBus,
     );
-    // Assign the message bus AFTER authFlowOrchestrator exists so the setter's
-    // propagation to the orchestrator takes effect during construction.
-    this._runtimeMessageBus = runtimeDeps?.messageBus;
+    // Assign AFTER authFlowOrchestrator exists so the setter can propagate the
+    // bus to the orchestrator. Idempotent with the constructor argument above,
+    // and keeps propagation correct if that argument is ever dropped.
+    this.runtimeMessageBus = runtimeDeps?.messageBus;
     this.tokenAccessCoordinator = new TokenAccessCoordinator(
       tokenStore,
       this.providerRegistry,
