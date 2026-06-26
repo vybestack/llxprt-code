@@ -59,13 +59,11 @@ function getPlatformDataDir(): string {
   return join(xdgData, 'llxprt-code');
 }
 
-/** Lazily resolved to avoid computing the path at import time. */
-let _lockDir: string | undefined;
+/** Resolved on each call so LLXPRT_CONFIG_HOME changes take effect. */
 function getLockDir(): string {
-  if (_lockDir) return _lockDir;
   const configHome = process.env['LLXPRT_CONFIG_HOME'];
   const baseDir = configHome ?? join(getPlatformDataDir(), 'configuration');
-  return (_lockDir = join(baseDir, 'oauth', 'locks'));
+  return join(baseDir, 'oauth', 'locks');
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
