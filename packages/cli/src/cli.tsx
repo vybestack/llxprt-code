@@ -449,11 +449,12 @@ export async function main() {
   // then ensure the platform directory exists.
   const migrationResult = runStartupMigration();
   if (!migrationResult.migrated && migrationResult.error === true) {
+    const legacyDir = Storage.getLegacyLlxprtDir();
     process.stderr.write(
       `Warning: configuration migration failed (${migrationResult.reason}). ` +
-        `Your existing data in ~/.llxprt/ was preserved but the new location may be empty.
-`,
+        `Falling back to legacy directory ${legacyDir} for this session.\n`,
     );
+    process.env['LLXPRT_CONFIG_HOME'] = legacyDir;
   }
   const llxprtDir = Storage.getGlobalLlxprtDir();
   if (!existsSync(llxprtDir)) {

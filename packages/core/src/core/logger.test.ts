@@ -35,6 +35,7 @@ const CHECKPOINT_FILE_NAME = 'checkpoint.json';
 
 // Set a test-specific config home before any Storage call so
 // getGlobalLlxprtDir resolves inside the sandbox, not the real user dir.
+const ORIGINAL_CONFIG_HOME = process.env['LLXPRT_CONFIG_HOME'];
 const TEST_CONFIG_HOME = path.join(
   os.tmpdir(),
   `llxprt-logger-test-${process.pid}`,
@@ -109,6 +110,11 @@ describe('Logger', () => {
     await fs
       .rm(TEST_CONFIG_HOME, { recursive: true, force: true })
       .catch(() => {});
+    if (ORIGINAL_CONFIG_HOME !== undefined) {
+      process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
+    } else {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    }
   });
 
   describe('initialize', () => {

@@ -405,9 +405,14 @@ export function loadEnvironment(settings: Settings): void {
 
       const excludedVars =
         settings.excludedProjectEnvVars ?? DEFAULT_EXCLUDED_ENV_VARS;
-      const isProjectEnvFile =
-        !envFilePath.includes(LLXPRT_DIR) &&
-        !envFilePath.includes(Storage.getGlobalLlxprtDir());
+      const resolvedEnvPath = path.resolve(envFilePath);
+      const pathSegments = resolvedEnvPath.split(path.sep);
+      const isInLlxprtDir = pathSegments.includes(LLXPRT_DIR);
+      const globalDirResolved = path.resolve(Storage.getGlobalLlxprtDir());
+      const isInGlobalDir =
+        resolvedEnvPath === globalDirResolved ||
+        resolvedEnvPath.startsWith(globalDirResolved + path.sep);
+      const isProjectEnvFile = !isInLlxprtDir && !isInGlobalDir;
 
       for (const key in parsedEnv) {
         // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
