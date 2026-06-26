@@ -5,28 +5,29 @@
  */
 
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const coreEntry = resolve(__dirname, '../core/index.ts');
 const coreSrcDir = resolve(__dirname, '../core/src/') + '/';
 const providersEntry = resolve(__dirname, '../providers/index.ts');
 const providersSrcDir = resolve(__dirname, '../providers/src/') + '/';
-const ajv2020Entry = resolve(
-  __dirname,
-  '../../node_modules/ajv-formats/node_modules/ajv/dist/2020.js',
-);
-const ajvCjsEntry = resolve(
-  __dirname,
-  '../../node_modules/ajv-formats/node_modules/ajv/dist/ajv.js',
-);
+// Resolve these dependencies dynamically rather than hardcoding nested
+// node_modules paths. npm may hoist or nest ajv/fdir differently depending on
+// the rest of the dependency tree (e.g. after security-driven version bumps),
+// so a fixed relative path is brittle. createRequire walks the normal Node
+// resolution chain and finds them wherever they end up installed.
+const ajv2020Entry = require.resolve('ajv/dist/2020.js');
+const ajvCjsEntry = require.resolve('ajv/dist/ajv.js');
 const fdirEntry = resolve(
-  __dirname,
-  '../../node_modules/vite/node_modules/fdir/dist/index.mjs',
+  dirname(require.resolve('fdir/package.json')),
+  'dist/index.mjs',
 );
 
 function resolveTsSource(baseDir: string, specifier: string): string {

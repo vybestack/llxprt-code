@@ -46,6 +46,12 @@ class FileExporter {
     // Nothing to do for sync writes
     return Promise.resolve();
   }
+
+  forceFlush(): Promise<void> {
+    // Writes are synchronous (appendFileSync), so there is never any
+    // pending/buffered data to flush.
+    return Promise.resolve();
+  }
 }
 
 export class FileSpanExporter extends FileExporter implements SpanExporter {
@@ -114,7 +120,7 @@ export class FileMetricExporter
     return AggregationTemporality.CUMULATIVE;
   }
 
-  async forceFlush(): Promise<void> {
+  override forceFlush(): Promise<void> {
     return Promise.resolve();
   }
 }

@@ -8,9 +8,11 @@
 import { existsSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const inkStubPath = resolve(__dirname, './test-utils/ink-stub.ts');
 const inkTestingLibraryPath = resolve(
   __dirname,
@@ -20,10 +22,10 @@ const inkTestingLibraryActualPath = resolve(
   __dirname,
   '../../node_modules/ink-testing-library/build/index.js',
 );
-const ajvCjsEntry = resolve(
-  __dirname,
-  '../../node_modules/ajv-formats/node_modules/ajv/dist/ajv.js',
-);
+// Resolve ajv/fdir dynamically (see ajv2020Entry/fdirEntry below) instead of
+// hardcoding nested node_modules paths, which break when npm hoists these
+// packages differently after dependency version changes.
+const ajvCjsEntry = require.resolve('ajv/dist/ajv.js');
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
@@ -152,13 +154,10 @@ const workspaceAliasPlugin = {
   },
 };
 
-const ajv2020Entry = resolve(
-  __dirname,
-  '../../node_modules/ajv-formats/node_modules/ajv/dist/2020.js',
-);
+const ajv2020Entry = require.resolve('ajv/dist/2020.js');
 const fdirEntry = resolve(
-  __dirname,
-  '../../node_modules/vite/node_modules/fdir/dist/index.mjs',
+  dirname(require.resolve('fdir/package.json')),
+  'dist/index.mjs',
 );
 
 const isMultiRuntimeGuardrailRun =

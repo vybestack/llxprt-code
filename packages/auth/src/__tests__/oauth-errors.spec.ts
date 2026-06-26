@@ -126,16 +126,16 @@ describe('OAuthError', () => {
       provider: 'test-provider',
       isRetryable: true,
       retryAfterMs: 1000,
-      message: 'Network failed',
+      message: '[redacted]',
       userMessage:
         'Unable to connect to Test-provider. Please check your internet connection.',
       actionRequired: 'Check your internet connection and try again.',
-      technicalDetails: { timeout: 5000 },
-      stack: error.stack,
+      technicalDetails: { timeout: '[redacted]' },
+      stack: '[redacted]',
       originalError: {
         name: 'Error',
-        message: 'Original error',
-        stack: originalError.stack,
+        message: '[redacted]',
+        stack: '[redacted]',
       },
     });
   });
@@ -685,12 +685,13 @@ describe('Integration Tests', () => {
       userMessage: 'Connection to Anthropic timed out. Please try again.',
       actionRequired: 'Wait a few minutes and try again.',
       technicalDetails: {
-        context: 'token refresh',
-        originalErrorType: 'object',
+        context: '[redacted]',
+        originalErrorType: '[redacted]',
       },
       originalError: {
         name: 'Error',
-        message: 'Request timeout exceeded',
+        message: '[redacted]',
+        stack: '[redacted]',
       },
     });
   });

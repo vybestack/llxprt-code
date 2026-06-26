@@ -243,17 +243,12 @@ export class StreamProcessor {
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const apiCall = () =>
       this._buildAndSendStreamRequest(params, promptId, userContent, provider);
-    const retryFetchErrors = (
-      params.config as { retryFetchErrors?: boolean } | undefined
-    )?.retryFetchErrors;
 
     return retryWithBackoff(apiCall, {
       onPersistent429: () => this._handleBucketFailover(),
       signal: params.config?.abortSignal,
-      retryFetchErrors,
-      shouldRetryOnError: (error, currentRetryFetchErrors) =>
-        error instanceof EmptyStreamError ||
-        isRetryableError(error, currentRetryFetchErrors),
+      shouldRetryOnError: (error) =>
+        error instanceof EmptyStreamError || isRetryableError(error),
     });
   }
 

@@ -41,6 +41,10 @@ export class Storage {
     return path.join(Storage.getGlobalLlxprtDir(), 'installation_id');
   }
 
+  static getMachineSecretPath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'machine_secret');
+  }
+
   static getProviderAccountsPath(): string {
     return path.join(Storage.getGlobalLlxprtDir(), PROVIDER_ACCOUNTS_FILENAME);
   }

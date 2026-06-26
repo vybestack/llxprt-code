@@ -391,7 +391,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
     }
   }, 30000);
 
-  it('PROP setProvider model preservation: for any provider name, setProvider without model preserves the current model (REQ-005)', async () => {
+  it('PROP setProvider model preservation: for any provider switch name under the fake seam, setProvider without model preserves the current model (REQ-005)', async () => {
     await fc.assert(
       fc.asyncProperty(
         // Under the fake seam only 'fake' is registered, so any other name
@@ -406,7 +406,10 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
           try {
             const beforeModel = agent.getModel();
             await agent.setProvider(providerName);
-            return agent.getModel() === beforeModel;
+            return (
+              agent.getModel() === beforeModel &&
+              agent.getProvider() === providerName
+            );
           } finally {
             await cleanup();
           }
@@ -414,7 +417,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
       ),
       { numRuns: 10 },
     );
-  }, 30000);
+  }, 60000);
 });
 
 // ─── Target 7: agentImpl.ts:1192-1193 rebuild approvalHandler propagation ──

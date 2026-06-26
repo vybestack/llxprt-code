@@ -272,6 +272,32 @@ describe('RetryOrchestrator', () => {
       expect(result).toHaveLength(1);
     });
 
+    it('should retry on bare TypeError("fetch failed") connection-phase error', async () => {
+      const fetchError = new TypeError('fetch failed');
+      const provider = createTestProvider({
+        responses: [{ error: fetchError }, 'success'],
+      });
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+      };
+
+      const result = await consumeStream(
+        orchestrator.generateChatCompletion(options),
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'test response',
+      });
+    });
+
     it('should respect maxAttempts configuration', async () => {
       const rateLimitError = createRateLimitError();
       const provider = createTestProvider({
