@@ -25,6 +25,7 @@ import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { maskKeyForDisplay, debugLogger } from '@vybestack/llxprt-code-core';
 import { SecureStoreError } from '@vybestack/llxprt-code-storage';
 import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 /**
  * @plan PLAN-20260211-SECURESTORE.P13
@@ -113,8 +114,10 @@ async function handleSave(
           type: 'confirm_action',
           prompt: `Key '${name}' already exists. Overwrite?`,
           originalInvocation: {
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string raw command fallback
-            raw: context.invocation?.raw || `/key save ${name} ***`,
+            raw: firstNonEmptyString(
+              context.invocation?.raw,
+              `/key save ${name} ***`,
+            ),
           },
         };
       }
@@ -370,8 +373,10 @@ async function handleDelete(
         type: 'confirm_action',
         prompt: `Delete key '${name}'?`,
         originalInvocation: {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string raw command fallback
-          raw: context.invocation?.raw || `/key delete ${name}`,
+          raw: firstNonEmptyString(
+            context.invocation?.raw,
+            `/key delete ${name}`,
+          ),
         },
       };
     }

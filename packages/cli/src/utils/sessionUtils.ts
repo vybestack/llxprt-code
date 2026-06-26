@@ -12,6 +12,7 @@ import {
 } from '@vybestack/llxprt-code-storage';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import { isRecord } from './typeGuards.js';
 
 /**
  * Session information for display and selection purposes.
@@ -81,13 +82,16 @@ export const getAllSessionFiles = async (
             : false;
 
           const userMsg = content.messages.find(
-            (m: { role?: string }) => m.role === 'user',
-          ) as unknown as Record<string, unknown> | undefined;
-          // Session files may have extended message records with parts/text
-          const firstUserMessage = (userMsg?.text ??
-            (userMsg?.parts as Array<{ text?: string }> | undefined)?.[0]
-              ?.text ??
-            '(no message)') as string;
+            (message) => isRecord(message) && message.role === 'user',
+          );
+          const userRecord = isRecord(userMsg) ? userMsg : undefined;
+          const parts = Array.isArray(userRecord?.parts)
+            ? userRecord.parts
+            : undefined;
+          const firstPart = parts?.find(isRecord);
+          const text = userRecord?.text ?? firstPart?.text;
+          const firstUserMessage =
+            typeof text === 'string' ? text : '(no message)';
 
           const sessionInfo: SessionInfo = {
             id: content.sessionId,

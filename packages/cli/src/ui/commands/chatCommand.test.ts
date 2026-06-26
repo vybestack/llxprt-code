@@ -15,6 +15,7 @@ import * as fsPromises from 'fs/promises';
 import { chatCommand } from './chatCommand.js';
 import type { Stats } from 'fs';
 import { createCompletionHandler } from './schema/index.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 vi.mock('fs/promises', () => ({
   default: {
@@ -51,9 +52,7 @@ describe('chatCommand', () => {
     const subCommand = chatCommand.subCommands?.find(
       (cmd) => cmd.name === name,
     );
-    if (!subCommand) {
-      throw new Error(`/chat ${name} command not found.`);
-    }
+    assertDefined(subCommand);
     return subCommand;
   };
 

@@ -195,7 +195,7 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     };
 
     const writer = new ConversationFileWriter(badLogPath, testLogger);
-    writer.writeRequest('test-provider', []);
+    await writer.writeRequest('test-provider', []);
 
     expect(errors.length).toBeGreaterThan(0);
     expect(errors[0].message).toContain('Failed to write log entry');

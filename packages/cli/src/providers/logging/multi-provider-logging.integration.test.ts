@@ -12,6 +12,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { IContent, Config } from '@vybestack/llxprt-code-core';
+import { testRegex } from '../../test-utils/regex.js';
 import type {
   IProvider,
   GenerateChatOptions,
@@ -205,7 +206,7 @@ class MockConversationDataRedactor implements ConversationDataRedactor {
           return {
             ...block,
             text: block.text.replace(
-              /sk-[a-zA-Z0-9]{48}/g,
+              testRegex('sk-[a-zA-Z0-9]{48}', 'g'),
               '[REDACTED-API-KEY]',
             ),
           };

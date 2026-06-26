@@ -6,6 +6,8 @@
 import type { McpClientManager } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
 import type { MCPOAuthConfig } from '@vybestack/llxprt-code-core';
+// @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md lines 01-04
+import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -103,6 +105,18 @@ export interface McpControlDeps {
     oauthConfig: MCPOAuthConfig,
     mcpServerUrl: string | undefined,
   ) => Promise<void>;
+  /**
+   * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 02
+   * Resolves the REAL persisted OAuth quad-state for a server. Optional +
+   * undefined-safe: when absent the projection yields 'not-required'.
+   */
+  readonly getOAuthStatus?: (server: string) => Promise<McpOAuthStatus>;
+  /**
+   * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003 @pseudocode agents-projection.md line 03
+   * Resolves whether the server really requires OAuth. Optional + undefined-safe:
+   * when absent the projection yields false.
+   */
+  readonly getRequiresAuth?: (server: string) => boolean;
 }
 
 /**
@@ -124,7 +138,6 @@ function mapDiscoveryState(
   if (state === MCPDiscoveryState.IN_PROGRESS) {
     return 'pending';
   }
-  // COMPLETED
   if (failures.size === 0) {
     return 'ready';
   }
@@ -245,17 +258,42 @@ export class McpControl implements AgentMcpControl {
   }
 
   /**
-   * Returns the auth status for a named MCP server. Reads the per-agent mcpAuth
-   * set (populated by auth.mcpLogin) to determine `authenticated`.
+   * Returns the auth status for a named MCP server. `authenticated` is now
+   * DERIVED from the resolved persisted OAuth quad-state (oauthStatus ===
+   * 'authenticated'), NOT from the in-session marker Set. The in-session signal
+   * is projected independently as `sessionAuthenticated`.
+   *
    * @plan:PLAN-20260617-COREAPI.P18
    * @requirement:REQ-013
+   * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-002 @pseudocode agents-projection.md lines 10-19
    */
   async auth(server: string): Promise<McpServerAuthStatus> {
-    const authenticated = this.deps?.isMcpAuthenticated(server) ?? false;
+    return this.buildAuthStatus(server);
+  }
+
+  /**
+   * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-002 @pseudocode agents-projection.md lines 10-19
+   *
+   * Single shared projection used by `auth()` and both `authenticate()` exits.
+   * Derives `authenticated` from the resolved persisted OAuth status; preserves
+   * the in-session marker as the independent `sessionAuthenticated` field.
+   * Never throws: absent closures yield 'not-required' / false.
+   */
+  private async buildAuthStatus(server: string): Promise<McpServerAuthStatus> {
+    const sessionAuthenticated = this.deps?.isMcpAuthenticated(server) ?? false;
+    const oauthStatus: McpOAuthStatus = this.deps?.getOAuthStatus
+      ? await this.deps.getOAuthStatus(server)
+      : 'not-required';
+    const requiresAuth = this.deps?.getRequiresAuth
+      ? this.deps.getRequiresAuth(server)
+      : false;
+    const authenticated = oauthStatus === 'authenticated';
     return {
       server,
       authenticated,
-      requiresAuth: true,
+      requiresAuth,
+      oauthStatus,
+      sessionAuthenticated,
     };
   }
 
@@ -307,18 +345,20 @@ export class McpControl implements AgentMcpControl {
    * @plan:PLAN-20260622-COREAPIGAP.P14
    * @requirement:REQ-006
    * @pseudocode lines 1-16
+   * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-002 @pseudocode agents-projection.md lines 20-36
    *
    * Real OAuth flow: orchestrates performOAuth -> restartServer ->
    * refreshClientTools. An unknown server or unwired performOAuth is a no-op
-   * returning authenticated:false. A performOAuth rejection PROPAGATES (no
-   * restart, no setTools) — the control does NOT catch.
+   * returning the REAL persisted status (no fabricated requiresAuth). A
+   * performOAuth rejection PROPAGATES (no restart, no setTools) — the control
+   * does NOT catch. Both exits re-read the REAL status via buildAuthStatus.
    */
   async authenticate(server: string): Promise<McpServerAuthStatus> {
     const configs = this.deps?.getServerConfigs?.();
     const serverConfig = configs ? configs[server] : undefined;
     const performOAuth = this.deps?.performOAuth;
     if (serverConfig === undefined || performOAuth === undefined) {
-      return { server, authenticated: false, requiresAuth: true };
+      return this.buildAuthStatus(server);
     }
     const oauthConfig = serverConfig.oauth ?? { enabled: false };
     const mcpServerUrl = serverConfig.httpUrl ?? serverConfig.url;
@@ -330,38 +370,48 @@ export class McpControl implements AgentMcpControl {
     if (this.deps?.refreshClientTools !== undefined) {
       await this.deps.refreshClientTools();
     }
-    // Reconcile the per-agent auth marker so a later auth(server) / details()
-    // read agrees with this success (undefined-safe when no writer is wired).
+    // @pseudocode agents-projection.md 40-72 — reconcile the per-agent auth marker so a later auth(server)/details() read agrees with this success (undefined-safe when no writer is wired).
     this.deps?.markAuthenticated?.(server);
-    return { server, authenticated: true, requiresAuth: true };
+    return this.buildAuthStatus(server);
   }
 
   /**
    * @plan:PLAN-20260622-COREAPIGAP.P14
    * @requirement:REQ-006
    * @pseudocode lines 50-78
+   * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003 @pseudocode agents-projection.md lines 40-72
    *
    * Deep per-server projection. includeTools defaults true;
    * includePrompts/includeResources default false. Projects prompts/resources
    * to named-field-only public types. Undefined-safe via ?. + ?? []/?? {}.
+   * OAuth statuses are resolved UP FRONT via Promise.all so buildServerDetail
+   * stays synchronous (R-ASYNC-DETAIL).
    */
   async details(opts?: McpDetailsOptions): Promise<McpDetailStatus> {
     const includeTools = opts?.includeTools ?? true;
     const includePrompts = opts?.includePrompts ?? false;
     const includeResources = opts?.includeResources ?? false;
-    // details() projects the CONFIGURED server set (getServerConfigs ->
-    // config.getMcpServers()), mirroring the CLI `/mcp list` which lists
-    // configured + blocked servers. This intentionally differs from
-    // listServers(), which projects the LIVE discovered set
-    // (manager.getMcpServers()); a configured server absent from the live
-    // manager still appears here.
+    // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004
     const configs = this.deps?.getServerConfigs?.() ?? {};
     const toolsByServer = this.toolsByServer();
     const resourcesAll = includeResources
       ? (this.deps?.getResourceRegistry?.()?.getAllResources() ?? [])
       : [];
+    const names = Object.keys(configs);
+    const statusEntries = await Promise.all(
+      names.map(
+        async (name): Promise<[string, McpOAuthStatus]> => [
+          name,
+          this.deps?.getOAuthStatus
+            ? await this.deps.getOAuthStatus(name)
+            : 'not-required',
+        ],
+      ),
+    );
+    const oauthStatusByServer: Record<string, McpOAuthStatus> =
+      Object.fromEntries(statusEntries);
     const servers: McpServerDetail[] = [];
-    for (const name of Object.keys(configs)) {
+    for (const name of names) {
       servers.push(
         this.buildServerDetail(
           name,
@@ -370,6 +420,7 @@ export class McpControl implements AgentMcpControl {
           includeResources,
           toolsByServer,
           resourcesAll,
+          oauthStatusByServer[name],
         ),
       );
     }
@@ -380,6 +431,7 @@ export class McpControl implements AgentMcpControl {
   }
 
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 @pseudocode lines 60-74
+  // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003,REQ-004 @pseudocode agents-projection.md lines 63-72
   private buildServerDetail(
     name: string,
     includeTools: boolean,
@@ -391,16 +443,25 @@ export class McpControl implements AgentMcpControl {
       name?: string;
       uri: string;
     }>,
+    oauthStatus: McpOAuthStatus,
   ): McpServerDetail {
     const detail: {
       name: string;
       authenticated: boolean;
+      requiresAuth: boolean;
+      oauthStatus: McpOAuthStatus;
+      sessionAuthenticated: boolean;
       tools?: readonly ToolInfo[];
       prompts?: readonly McpPromptInfo[];
       resources?: readonly McpResourceInfo[];
     } = {
       name,
-      authenticated: this.deps?.isMcpAuthenticated(name) ?? false,
+      authenticated: oauthStatus === 'authenticated',
+      requiresAuth: this.deps?.getRequiresAuth
+        ? this.deps.getRequiresAuth(name)
+        : false,
+      oauthStatus,
+      sessionAuthenticated: this.deps?.isMcpAuthenticated(name) ?? false,
     };
     if (includeTools) {
       detail.tools = toolsByServer[name] ?? [];

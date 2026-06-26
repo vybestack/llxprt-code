@@ -50,8 +50,7 @@ function useScreenReaderNudge(
         setHasSeenScreenReaderNudge(false);
       }
     };
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    checkScreenReaderNudge();
+    void checkScreenReaderNudge();
   }, []);
 
   useEffect(() => {
@@ -67,8 +66,7 @@ function useScreenReaderNudge(
         }
       }
     };
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    writeScreenReaderNudgeFile();
+    void writeScreenReaderNudgeFile();
   }, [isScreenReaderEnabled, hasSeenScreenReaderNudge]);
 
   return [hasSeenScreenReaderNudge, () => setHasSeenScreenReaderNudge(true)];

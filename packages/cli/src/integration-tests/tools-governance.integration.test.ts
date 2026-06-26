@@ -15,6 +15,7 @@ import {
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { assertDefined } from '../test-utils/assertions.js';
 
 const PROFILE_NAME = 'dev-profile';
 
@@ -108,10 +109,7 @@ describe('tools governance integration', () => {
       ui: { addItem: uiAddItem },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) {
-      throw new Error('toolsCommand action not defined');
-    }
+    assertDefined(toolsCommand.action);
 
     await toolsCommand.action(context, 'list');
 

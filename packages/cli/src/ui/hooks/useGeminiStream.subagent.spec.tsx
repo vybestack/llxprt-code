@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
@@ -21,6 +20,8 @@ import type {
   AgentClientContract as AgentClient,
   EditorType,
   AnyToolInvocation,
+  ToolRegistry,
+  AnyDeclarativeTool,
 } from '@vybestack/llxprt-code-core';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
 import type { Part, PartListUnion } from '@google/genai';
@@ -127,7 +128,10 @@ const mockSendMessageStream = vi
 const mockStartChat = vi.fn();
 
 const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (this: any, _config: any) {
+  vi.fn().mockImplementation(function (
+    this: Record<string, unknown>,
+    _config: unknown,
+  ) {
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
     this.addHistory = vi.fn();
@@ -196,7 +200,8 @@ describe('useGeminiStream subagent isolation', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () => ({ getToolSchemaList: vi.fn(() => []) }) as any,
+        () =>
+          ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
       ),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       getCheckpointingEnabled: vi.fn(() => false),
@@ -317,7 +322,7 @@ describe('useGeminiStream subagent isolation', () => {
         displayName: 'Task',
         description: 'Launch subagent',
         build: vi.fn(),
-      } as any,
+      } as unknown as AnyDeclarativeTool,
     };
 
     await act(async () => {
@@ -366,7 +371,7 @@ describe('useGeminiStream subagent isolation', () => {
         displayName: 'Task',
         description: 'Launch subagent',
         build: vi.fn(),
-      } as any,
+      } as unknown as AnyDeclarativeTool,
     };
 
     mockUseReactToolScheduler.mockReturnValue([
@@ -435,7 +440,7 @@ describe('useGeminiStream subagent isolation', () => {
         displayName: 'Task',
         description: 'Launch subagent',
         build: vi.fn(),
-      } as any,
+      } as unknown as AnyDeclarativeTool,
     };
 
     mockUseReactToolScheduler.mockReturnValue([
@@ -551,7 +556,7 @@ describe('useGeminiStream subagent isolation', () => {
         displayName: 'List Directory',
         description: 'List files',
         build: vi.fn(),
-      } as any,
+      } as unknown as AnyDeclarativeTool,
     };
 
     await act(async () => {

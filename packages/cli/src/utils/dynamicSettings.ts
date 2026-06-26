@@ -78,7 +78,26 @@ class DynamicSettingsRegistry {
         );
       }
 
-      validatedSettings[key] = definition as unknown as SettingDefinition;
+      if (typeof definition.category !== 'string') {
+        throw new Error(
+          `Setting definition for key '${key}' must have a valid category`,
+        );
+      }
+
+      if (typeof definition.requiresRestart !== 'boolean') {
+        throw new Error(
+          `Setting definition for key '${key}' must specify requiresRestart`,
+        );
+      }
+
+      validatedSettings[key] = {
+        ...definition,
+        type: definition.type,
+        label: definition.label,
+        category: definition.category,
+        requiresRestart: definition.requiresRestart,
+        default: definition.default as SettingDefinition['default'],
+      };
     }
 
     return validatedSettings;

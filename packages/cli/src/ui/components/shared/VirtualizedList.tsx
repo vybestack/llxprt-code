@@ -82,8 +82,12 @@ function VirtualizedList<T>(
         state.setIsStickingToBottom,
         state.getAnchorForScrollTop,
       ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setScrollAnchor and setIsStickingToBottom are stable React state dispatchers
-    [imperativeCtx, state.getAnchorForScrollTop],
+    [
+      imperativeCtx,
+      state.getAnchorForScrollTop,
+      state.setScrollAnchor,
+      state.setIsStickingToBottom,
+    ],
   );
 
   return (
@@ -107,12 +111,14 @@ function VirtualizedList<T>(
   );
 }
 
-const VirtualizedListWithForwardRef = forwardRef(VirtualizedList) as <T>(
+type VirtualizedListComponent = (<T>(
   props: VirtualizedListProps<T> & { ref?: React.Ref<VirtualizedListRef<T>> },
-) => React.ReactElement;
+) => React.ReactElement) & { displayName?: string };
+
+const VirtualizedListWithForwardRef = forwardRef(
+  VirtualizedList,
+) as VirtualizedListComponent;
 
 export { VirtualizedListWithForwardRef as VirtualizedList };
 
-(
-  VirtualizedListWithForwardRef as unknown as { displayName?: string }
-).displayName = 'VirtualizedList';
+VirtualizedListWithForwardRef.displayName = 'VirtualizedList';

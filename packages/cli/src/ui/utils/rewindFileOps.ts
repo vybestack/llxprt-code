@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable sonarjs/nested-control-flow, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type {
   ConversationRecord,
   BaseMessageRecord,
@@ -29,6 +27,30 @@ export interface FileChangeStats {
   removedLines: number;
   fileCount: number;
   details?: FileChangeDetail[];
+}
+
+type ConversationMessage = ConversationRecord['messages'][number];
+type ResolvedFileDiff = NonNullable<
+  ReturnType<typeof getFileDiffFromResultDisplay>
+>;
+
+/**
+ * Extracts every resolvable file diff from a single conversation message.
+ * Returns an empty array for non-model messages or messages without tool
+ * calls, allowing callers to iterate file diffs without nested type guards.
+ */
+function getFileDiffsFromMessage(msg: ConversationMessage): ResolvedFileDiff[] {
+  if (msg.type !== 'gemini' || !msg.toolCalls) {
+    return [];
+  }
+  const diffs: ResolvedFileDiff[] = [];
+  for (const toolCall of msg.toolCalls) {
+    const fileDiff = getFileDiffFromResultDisplay(toolCall.resultDisplay);
+    if (fileDiff) {
+      diffs.push(fileDiff);
+    }
+  }
+  return diffs;
 }
 
 /**
@@ -57,19 +79,12 @@ export function calculateTurnStats(
     const msg = conversation.messages[i];
     if (msg.type === 'user') break; // Stop at next user message
 
-    if (msg.type === 'gemini' && msg.toolCalls) {
-      for (const toolCall of msg.toolCalls) {
-        const fileDiff = getFileDiffFromResultDisplay(toolCall.resultDisplay);
-        if (fileDiff) {
-          hasEdits = true;
-          const stats = fileDiff.diffStat;
-          const calculations = computeAddedAndRemovedLines(stats);
-          addedLines += calculations.addedLines;
-          removedLines += calculations.removedLines;
-
-          files.add(fileDiff.fileName);
-        }
-      }
+    for (const fileDiff of getFileDiffsFromMessage(msg)) {
+      hasEdits = true;
+      const calculations = computeAddedAndRemovedLines(fileDiff.diffStat);
+      addedLines += calculations.addedLines;
+      removedLines += calculations.removedLines;
+      files.add(fileDiff.fileName);
     }
   }
 
@@ -108,22 +123,16 @@ export function calculateRewindImpact(
     const msg = conversation.messages[i];
     // Do NOT break on user message - we want total impact
 
-    if (msg.type === 'gemini' && msg.toolCalls) {
-      for (const toolCall of msg.toolCalls) {
-        const fileDiff = getFileDiffFromResultDisplay(toolCall.resultDisplay);
-        if (fileDiff) {
-          hasEdits = true;
-          const stats = fileDiff.diffStat;
-          const calculations = computeAddedAndRemovedLines(stats);
-          addedLines += calculations.addedLines;
-          removedLines += calculations.removedLines;
-          files.add(fileDiff.fileName);
-          details.push({
-            fileName: fileDiff.fileName,
-            diff: fileDiff.fileDiff,
-          });
-        }
-      }
+    for (const fileDiff of getFileDiffsFromMessage(msg)) {
+      hasEdits = true;
+      const calculations = computeAddedAndRemovedLines(fileDiff.diffStat);
+      addedLines += calculations.addedLines;
+      removedLines += calculations.removedLines;
+      files.add(fileDiff.fileName);
+      details.push({
+        fileName: fileDiff.fileName,
+        diff: fileDiff.fileDiff,
+      });
     }
   }
 
@@ -167,6 +176,38 @@ async function readCurrentContent(
 }
 
 /**
+ * Attempts a smart (patch-based) revert when the on-disk content no longer
+ * matches the model-written content. Applies the inverse patch when it
+ * succeeds, otherwise emits a warning that the revert could not be applied.
+ */
+async function smartRevertFile(
+  filePath: string,
+  fileName: string,
+  newContent: string,
+  originalContent: string | null,
+  isNewFile: boolean | undefined,
+  currentContent: string,
+): Promise<void> {
+  const originalText = originalContent ?? '';
+  const undoPatch = Diff.createPatch(fileName, newContent, originalText);
+  const patchedContent = Diff.applyPatch(currentContent, undoPatch);
+
+  if (typeof patchedContent !== 'string') {
+    coreEvents.emitFeedback(
+      'warning',
+      `Smart revert for ${fileName} failed. The file may have been modified in a way that conflicts with the undo operation.`,
+    );
+    return;
+  }
+
+  if (patchedContent === '' && isNewFile === true) {
+    await fs.unlink(filePath);
+  } else {
+    await fs.writeFile(filePath, patchedContent);
+  }
+}
+
+/**
  * Attempts to revert a single file to its original content.
  * Handles exact-match revert, smart-patch revert, and missing-file scenarios.
  */
@@ -192,22 +233,14 @@ async function revertSingleFile(
 
     // 2. Mismatch: Attempt Smart Revert (Patch)
     if (currentContent !== null) {
-      const originalText = originalContent ?? '';
-      const undoPatch = Diff.createPatch(fileName, newContent, originalText);
-      const patchedContent = Diff.applyPatch(currentContent, undoPatch);
-
-      if (typeof patchedContent === 'string') {
-        if (patchedContent === '' && isNewFile === true) {
-          await fs.unlink(filePath);
-        } else {
-          await fs.writeFile(filePath, patchedContent);
-        }
-      } else {
-        coreEvents.emitFeedback(
-          'warning',
-          `Smart revert for ${fileName} failed. The file may have been modified in a way that conflicts with the undo operation.`,
-        );
-      }
+      await smartRevertFile(
+        filePath,
+        fileName,
+        newContent,
+        originalContent,
+        isNewFile,
+        currentContent,
+      );
       return;
     }
 
@@ -250,29 +283,23 @@ export async function revertFileChanges(
   }
 
   for (let i = conversation.messages.length - 1; i > messageIndex; i--) {
-    const msg = conversation.messages[i];
-    if (msg.type === 'gemini' && msg.toolCalls) {
-      for (let j = msg.toolCalls.length - 1; j >= 0; j--) {
-        const toolCall = msg.toolCalls[j];
-        const fileDiff = getFileDiffFromResultDisplay(toolCall.resultDisplay);
-        if (fileDiff) {
-          const { filePath, fileName, newContent, originalContent, isNewFile } =
-            fileDiff;
-          if (!filePath) {
-            debugLogger.debug(
-              `Skipping revert for ${fileName}: no file path available`,
-            );
-            continue;
-          }
-          await revertSingleFile(
-            filePath,
-            fileName,
-            newContent,
-            originalContent,
-            isNewFile,
-          );
-        }
+    const fileDiffs = getFileDiffsFromMessage(conversation.messages[i]);
+    for (let j = fileDiffs.length - 1; j >= 0; j--) {
+      const { filePath, fileName, newContent, originalContent, isNewFile } =
+        fileDiffs[j];
+      if (!filePath) {
+        debugLogger.debug(
+          `Skipping revert for ${fileName}: no file path available`,
+        );
+        continue;
       }
+      await revertSingleFile(
+        filePath,
+        fileName,
+        newContent,
+        originalContent,
+        isNewFile,
+      );
     }
   }
 }

@@ -36,14 +36,36 @@ import { debugLogger } from '@vybestack/llxprt-code-core';
 const execAsync = promisify(exec);
 
 /**
- * Removes single-line JSON comments (// ...) from a string to allow parsing
- * VS Code style JSON files that may contain comments.
+ * Removes leading single-line JSON comments (// ...) from a string to allow
+ * parsing VS Code style JSON files that may contain comments.
+ *
+ * Exported for characterization testing (issue #2114). Implemented without a
+ * regex so arbitrarily long comment lines are stripped without ReDoS risk.
  */
-function stripJsonComments(content: string): string {
-  return content
-    .split('\n')
-    .filter((line) => !line.trimStart().startsWith('//'))
-    .join('\n');
+export function stripJsonComments(content: string): string {
+  let stripped = '';
+  let lineStart = 0;
+
+  while (lineStart < content.length) {
+    const newlineIndex = content.indexOf('\n', lineStart);
+    const hasNewline = newlineIndex !== -1;
+    const lineEnd = hasNewline ? newlineIndex : content.length;
+    const line = content.slice(lineStart, lineEnd);
+    const newline = hasNewline ? '\n' : '';
+
+    if (!line.trimStart().startsWith('//')) {
+      stripped += `${line}${newline}`;
+    } else {
+      stripped += newline;
+    }
+
+    if (!hasNewline) {
+      break;
+    }
+    lineStart = newlineIndex + 1;
+  }
+
+  return stripped;
 }
 
 export interface TerminalSetupResult {

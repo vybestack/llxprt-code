@@ -21,7 +21,10 @@ import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { IdeContextTracker } from './IdeContextTracker.js';
 import type { AgentHookManager } from './AgentHookManager.js';
 import type { AfterAgentHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { estimateTextOnlyLength, extractPromptText } from './clientHelpers.js';
+import {
+  estimateRequestTokensStructured,
+  extractPromptText,
+} from './clientHelpers.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
@@ -281,13 +284,39 @@ export class MessageStreamOrchestrator {
       );
     }
 
-    const modelForLimitCheck = getEffectiveModel();
-    const estimatedRequestTokenCount = Math.floor(
-      estimateTextOnlyLength(initialRequest) / 4,
-    );
+    const chat = getChat();
     const remainingTokenCount =
-      getTokenLimitForConfiguredContext(modelForLimitCheck, config) -
-      getChat().getLastPromptTokenCount();
+      getTokenLimitForConfiguredContext(getEffectiveModel(), config) -
+      chat.getLastPromptTokenCount();
+
+    // When history already exceeds the current model's limit (e.g. after a
+    // provider/profile switch to a smaller context window), remaining capacity
+    // is zero or negative. The preflight guard must NOT short-circuit: even a
+    // 0-token tool-response continuation would otherwise trip it
+    // (0 > negative * 0.95), emitting a bogus ContextWindowWillOverflow before
+    // the downstream compression path can resolve the overflow with the
+    // switched model's tokenizer. Defer to the normal send path.
+    if (remainingTokenCount <= 0) {
+      return undefined;
+    }
+
+    // Use the model-aware tokenizer for request sizing rather than a naive
+    // text-only estimate, which under-counts functionResponse-only
+    // continuations as 0 tokens. When the chat session does not expose the
+    // tokenizer-backed methods (e.g. a minimal test double), or the tokenizer
+    // throws (e.g. uninitialized internals during early preflight), fall back
+    // to the structured payload-aware estimate so the guard still functions
+    // while counting functionResponse/functionCall JSON payloads.
+    const { estimatePendingTokens: est, convertPartListUnionToIContent: conv } =
+      chat;
+    const fallback = estimateRequestTokensStructured(initialRequest);
+    const estimatedRequestTokenCount =
+      typeof est === 'function' && typeof conv === 'function'
+        ? await Promise.resolve()
+            .then(() => conv.call(chat, initialRequest))
+            .then((content) => est.call(chat, [content]))
+            .catch(() => fallback)
+        : fallback;
 
     if (estimatedRequestTokenCount > remainingTokenCount * 0.95) {
       yield {

@@ -16,6 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { formatSessionSection } from '../formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../../types/SessionRecordingMetadata.js';
+import { testRegex } from '../../../test-utils/regex.js';
 
 describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
   let tempDir: string;
@@ -84,7 +85,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
 
       expect(result.length).toBeGreaterThan(0);
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/Session:/i);
+      expect(joinedOutput).toMatch(testRegex('Session:', 'i'));
     });
 
     /**
@@ -134,9 +135,11 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/Started:/i);
+      expect(joinedOutput).toMatch(testRegex('Started:', 'i'));
       // Should contain some relative time indicator (ago, minutes, etc.)
-      expect(joinedOutput).toMatch(/ago|just now|minutes?|hours?/i);
+      expect(joinedOutput).toMatch(
+        testRegex('ago|just now|minutes?|hours?', 'i'),
+      );
     });
 
     /**
@@ -150,14 +153,9 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput.toLowerCase()).toContain('file size:');
+      expect(joinedOutput).toMatch(testRegex('File size:', 'i'));
       // Should contain some byte representation (B, KB, MB, etc.)
-      expect(
-        ['B', 'KB', 'MB', 'bytes'].some((unit) => joinedOutput.includes(unit)),
-      ).toBe(true);
-      expect([...joinedOutput].some((char) => char >= '0' && char <= '9')).toBe(
-        true,
-      );
+      expect(joinedOutput).toMatch(testRegex('\\d+.*(?:B|KB|MB|bytes)', 'i'));
     });
 
     /**
@@ -204,7 +202,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/Resumed:\s*yes/i);
+      expect(joinedOutput).toMatch(testRegex('Resumed:\\s*yes', 'i'));
     });
 
     /**
@@ -218,7 +216,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
       const result = await formatSessionSection(metadata);
 
       const joinedOutput = result.join('\n');
-      expect(joinedOutput).toMatch(/Resumed:\s*no/i);
+      expect(joinedOutput).toMatch(testRegex('Resumed:\\s*no', 'i'));
     });
   });
 
@@ -246,11 +244,11 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
             // The output should contain the truncated ID
             expect(joinedOutput).toContain(truncated);
 
-            // If the original ID is longer than 12, it should NOT appear in full
-            if (sessionId.length > 12) {
-              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-              expect(joinedOutput).not.toContain(sessionId);
-            }
+            // The full ID should appear only when it was short enough that
+            // truncation is a no-op (length <= 12).
+            expect(joinedOutput.includes(sessionId)).toBe(
+              sessionId.length <= 12,
+            );
           },
         ),
         { numRuns: 50 },
@@ -270,13 +268,10 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
           const result = await formatSessionSection(metadata);
           const joinedOutput = result.join('\n').toLowerCase();
 
-          if (isResumed) {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect(joinedOutput).toMatch(/resumed:\s*yes/);
-          } else {
-            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-            expect(joinedOutput).toMatch(/resumed:\s*no/);
-          }
+          const expectedLabel = isResumed ? 'yes' : 'no';
+          expect(joinedOutput).toMatch(
+            testRegex(`resumed:\\s*${expectedLabel}`, ''),
+          );
         }),
         { numRuns: 20 },
       );
@@ -313,7 +308,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
 
           // Should contain Session header
           const joinedOutput = result.join('\n');
-          expect(joinedOutput).toMatch(/Session:/i);
+          expect(joinedOutput).toMatch(testRegex('Session:', 'i'));
         }),
         { numRuns: 30 },
       );

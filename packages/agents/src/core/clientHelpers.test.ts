@@ -9,7 +9,7 @@ import type { Content } from '@google/genai';
 import {
   isThinkingSupported,
   findCompressSplitPoint,
-  estimateTextOnlyLength,
+  estimateRequestTokensStructured,
 } from './clientHelpers.js';
 
 describe('isThinkingSupported', () => {
@@ -111,86 +111,64 @@ describe('findCompressSplitPoint', () => {
   });
 });
 
-describe('estimateTextOnlyLength', () => {
-  it('returns string length for string input', () => {
-    expect(estimateTextOnlyLength('hello world')).toBe(11);
+describe('estimateRequestTokensStructured', () => {
+  it('estimates string input from character length', () => {
+    expect(estimateRequestTokensStructured('hello world')).toBe(2);
   });
 
-  it('returns 0 for empty string', () => {
-    expect(estimateTextOnlyLength('')).toBe(0);
-  });
-
-  it('returns 0 for a single non-text Part object (not array)', () => {
+  it('estimates text parts from text length', () => {
     expect(
-      estimateTextOnlyLength({
-        inlineData: { mimeType: 'image/png', data: 'abc' },
-      }),
-    ).toBe(0);
-  });
-
-  it('returns 0 for empty array', () => {
-    expect(estimateTextOnlyLength([])).toBe(0);
-  });
-
-  it('sums text lengths from Part array', () => {
-    expect(
-      estimateTextOnlyLength([{ text: 'hello' }, { text: ' world' }]),
-    ).toBe(11);
-  });
-
-  it('handles string elements within array', () => {
-    expect(estimateTextOnlyLength(['hello', ' ', 'world'])).toBe(11);
-  });
-
-  it('handles mixed text Parts and string elements', () => {
-    expect(estimateTextOnlyLength(['hello', { text: ' world' }])).toBe(11);
-  });
-
-  it('ignores non-text Parts such as inlineData', () => {
-    expect(
-      estimateTextOnlyLength([
-        { text: 'hi' },
-        { inlineData: { mimeType: 'image/png', data: 'binary-data' } },
-      ]),
+      estimateRequestTokensStructured([{ text: 'hello' }, { text: ' world' }]),
     ).toBe(2);
   });
 
-  it('ignores functionCall parts', () => {
-    expect(
-      estimateTextOnlyLength([
-        { text: 'result: ' },
-        { functionCall: { name: 'myFn', args: {} } },
-      ]),
-    ).toBe(8);
+  it('handles single-object text input', () => {
+    expect(estimateRequestTokensStructured({ text: 'hello world' })).toBe(2);
   });
 
-  it('ignores fileData parts', () => {
+  it('counts functionResponse JSON payloads', () => {
+    const payload = {
+      name: 'toolResult',
+      response: { result: 'x'.repeat(40) },
+    };
+
+    expect(estimateRequestTokensStructured({ functionResponse: payload })).toBe(
+      Math.floor(JSON.stringify(payload).length / 4),
+    );
+  });
+
+  it('counts functionCall JSON payloads', () => {
+    const payload = {
+      name: 'toolCall',
+      args: { query: 'x'.repeat(40) },
+    };
+
+    expect(estimateRequestTokensStructured({ functionCall: payload })).toBe(
+      Math.floor(JSON.stringify(payload).length / 4),
+    );
+  });
+
+  it('ignores inlineData and fileData payloads', () => {
     expect(
-      estimateTextOnlyLength([
-        { text: 'check this: ' },
+      estimateRequestTokensStructured([
+        { text: 'abcd' },
+        { inlineData: { mimeType: 'image/png', data: 'x'.repeat(10_000) } },
         { fileData: { fileUri: 'gs://bucket/file' } },
       ]),
-    ).toBe(12);
+    ).toBe(1);
   });
 
-  it('handles array with only non-text parts', () => {
+  it('sums mixed strings, text parts, and function payloads', () => {
+    const response = { name: 'tool', response: { value: 'abcd' } };
+    const expectedChars =
+      'hello'.length + 'world'.length + JSON.stringify(response).length;
+
     expect(
-      estimateTextOnlyLength([
-        { inlineData: { mimeType: 'image/jpeg', data: 'data' } },
-        { functionCall: { name: 'fn', args: {} } },
+      estimateRequestTokensStructured([
+        'hello',
+        { text: 'world' },
+        { functionResponse: response },
       ]),
-    ).toBe(0);
-  });
-
-  it('handles singular {text} object (non-array)', () => {
-    expect(estimateTextOnlyLength({ text: 'hello world' })).toBe(11);
-  });
-
-  it('returns 0 for singular non-text object', () => {
-    expect(
-      estimateTextOnlyLength({
-        inlineData: { mimeType: 'image/png', data: 'binary' },
-      }),
-    ).toBe(0);
+    ).toBe(Math.floor(expectedChars / 4));
   });
 });

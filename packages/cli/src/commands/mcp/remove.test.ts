@@ -20,6 +20,7 @@ import { removeCommand } from './remove.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { testRegex } from '../../test-utils/regex.js';
 
 vi.mock('fs/promises', async () => {
   const actual = await vi.importActual('fs/promises');
@@ -199,7 +200,9 @@ describe('mcp remove command', () => {
       const updatedContent = fs.readFileSync(settingsPath, 'utf-8');
       expect(updatedContent).toContain('"mcpServers"');
       expect(updatedContent).not.toContain('"only-server"');
-      expect(updatedContent).toMatch(/"mcpServers"\s*:\s*\{\s*\}/);
+      expect(updatedContent).toMatch(
+        testRegex('"mcpServers"\\s*:\\s*\\{\\s*\\}', ''),
+      );
 
       consoleSpy.mockRestore();
     });

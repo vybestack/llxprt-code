@@ -29,6 +29,7 @@ import type React from 'react';
 import { type HistoryItemWithoutId, MessageType } from '../../types.js';
 import { StreamProcessingStatus } from './types.js';
 import { applyThoughtToState } from './thoughtState.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 export interface StreamEventDeps {
   config: Config;
@@ -110,8 +111,10 @@ function dispatchAgentExecutionEvent(
   deps.addItem(
     {
       type: MessageType.INFO,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty system message should fall back to reason
-      text: `${prefix}${event.systemMessage?.trim() || event.reason}`,
+      text: `${prefix}${firstNonEmptyString(
+        event.systemMessage?.trim(),
+        event.reason,
+      )}`,
     },
     userMessageTimestamp,
   );

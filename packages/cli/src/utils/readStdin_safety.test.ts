@@ -17,16 +17,20 @@ vi.mock('@vybestack/llxprt-code-core', () => ({
 
 describe('readStdin EIO Reproduction', () => {
   let originalStdin: typeof process.stdin;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let fakeStdin: EventEmitter & { setEncoding: any; read: any; destroy: any };
+  type FakeStdin = EventEmitter & {
+    setEncoding: ReturnType<typeof vi.fn>;
+    read: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+  };
+  let fakeStdin: FakeStdin;
 
   beforeEach(() => {
     originalStdin = process.stdin;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    fakeStdin = new EventEmitter() as any;
-    fakeStdin.setEncoding = vi.fn();
-    fakeStdin.read = vi.fn().mockReturnValue(null); // Return null to simulate end of reading or no data
-    fakeStdin.destroy = vi.fn();
+    fakeStdin = Object.assign(new EventEmitter(), {
+      setEncoding: vi.fn(),
+      read: vi.fn().mockReturnValue(null),
+      destroy: vi.fn(),
+    });
 
     Object.defineProperty(process, 'stdin', {
       value: fakeStdin,

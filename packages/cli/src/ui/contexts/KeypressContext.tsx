@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { useStdin } from 'ink';
@@ -173,12 +171,12 @@ function bufferBackslashEnter(
   keypressHandler: KeypressHandler,
 ): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure preserved
     for (;;) {
       const key = yield;
-      if (key == null) continue;
-      if (key.sequence !== '\\') {
-        keypressHandler(key);
+      if (key == null || key.sequence !== '\\') {
+        if (key != null) {
+          keypressHandler(key);
+        }
         continue;
       }
       const timeoutId = setTimeout(
@@ -203,12 +201,12 @@ function bufferBackslashEnter(
 
 function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
-    // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure preserved
     for (;;) {
       let key = yield;
-      if (key === null) continue;
-      if (key.name !== 'paste-start') {
-        keypressHandler(key);
+      if (key === null || key.name !== 'paste-start') {
+        if (key !== null) {
+          keypressHandler(key);
+        }
         continue;
       }
       let buffer = '';
@@ -344,13 +342,13 @@ function parseNonEscapeKey(
   return false;
 }
 
+const NUMBERED_CODE_REGEX =
+  /^(?<first>\d+)(?:;(?<second>\d+))?(?:;(?<third>\d+))?(?<suffix>[~^$u])$/;
+
 function parseNumberedCode(
   cmd: string,
 ): { code: string; modifier: number } | null {
-  const match =
-    /^(?<first>\d+)(?:;(?<second>\d+))?(?:;(?<third>\d+))?(?<suffix>[~^$u])$/.exec(
-      cmd,
-    );
+  const match = NUMBERED_CODE_REGEX.exec(cmd);
   if (!match?.groups) return null;
   const { first, second, third, suffix } = match.groups as {
     first: string;
@@ -364,12 +362,13 @@ function parseNumberedCode(
   return { code: first + suffix, modifier: parseInt(second ?? '1', 10) - 1 };
 }
 
+const LETTER_CODE_REGEX =
+  /^(?<first>\d+)?(?:;(?<second>\d+))?(?<letter>[A-Za-z])$/;
+
 function parseLetterCode(
   cmd: string,
 ): { code: string; modifier: number } | null {
-  const match = /^(?<first>\d+)?(?:;(?<second>\d+))?(?<letter>[A-Za-z])$/.exec(
-    cmd,
-  );
+  const match = LETTER_CODE_REGEX.exec(cmd);
   if (!match?.groups) return null;
   const { first, second, letter } = match.groups as {
     first?: string;
@@ -381,17 +380,21 @@ function parseLetterCode(
 
 function* readOscBuffer(): Generator<void, string, string> {
   let buffer = '';
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure preserved
-  for (;;) {
+  let done = false;
+  while (!done) {
     const next = yield;
-    if (next === '' || next === '\u0007') break;
-    if (next === ESC) {
+    if (next === '' || next === '\u0007') {
+      done = true;
+    } else if (next === ESC) {
       const afterEsc = yield;
-      if (afterEsc === '' || afterEsc === '\\') break;
-      buffer += next + afterEsc;
-      continue;
+      if (afterEsc === '' || afterEsc === '\\') {
+        done = true;
+      } else {
+        buffer += next + afterEsc;
+      }
+    } else {
+      buffer += next;
     }
-    buffer += next;
   }
   return buffer;
 }
@@ -496,7 +499,6 @@ function* readBracketSequence(): Generator<
 function* emitKeys(
   keypressHandler: KeypressHandler,
 ): Generator<void, void, string> {
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure preserved
   for (;;) {
     let ch = yield;
     let sequence = ch;
@@ -512,13 +514,14 @@ function* emitKeys(
       }
     }
 
-    if (escaped && (ch === 'O' || ch === '[' || ch === ']')) {
-      if (ch === ']') {
-        const result = yield* readOscBuffer();
-        processOscBuffer(result, keypressHandler);
-        continue;
-      }
-
+    const isEscapeIntroducer =
+      escaped && (ch === 'O' || ch === '[' || ch === ']');
+    if (!isEscapeIntroducer) {
+      parseNonEscapeKey(ch, escaped, sequence, keypressHandler);
+    } else if (ch === ']') {
+      const result = yield* readOscBuffer();
+      processOscBuffer(result, keypressHandler);
+    } else {
       const parsed =
         ch === 'O' ? yield* readOCodeSequence() : yield* readBracketSequence();
       const { name, shift, meta, ctrl } = applyKeyCodeModifier(
@@ -539,10 +542,7 @@ function* emitKeys(
         sequence: seq,
         insertable,
       });
-      continue;
     }
-
-    parseNonEscapeKey(ch, escaped, sequence, keypressHandler);
   }
 }
 

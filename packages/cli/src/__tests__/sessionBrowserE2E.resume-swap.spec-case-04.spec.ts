@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertTrue } from '../test-utils/assertions.js';
 import * as fs from 'node:fs/promises';
 import { performResume } from '../services/performResume.js';
 import {
@@ -63,9 +64,7 @@ describe('Two-phase swap #4', () => {
 
     const result = await performResume(targetId, context);
     expect(result.ok).toBe(true);
-
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!result.ok) throw new Error('unreachable: narrowing failed');
+    assertTrue(result.ok);
     const newRecording = context.recordingCallbacks.getCurrentRecording();
     expect(newRecording).not.toBeNull();
     state.recordingsToDispose.push(newRecording!);
@@ -83,7 +82,6 @@ describe('Two-phase swap #4', () => {
     }
 
     const newLock = context.recordingCallbacks.getCurrentLockHandle();
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (newLock) state.lockHandles.push(newLock);
+    state.lockHandles.push(...(newLock === null ? [] : [newLock]));
   });
 });

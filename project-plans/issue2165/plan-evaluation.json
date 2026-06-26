@@ -1,0 +1,18 @@
+{
+  "plan_id": "PLAN-20260622-MCPOAUTHTRUTH",
+  "issue": 2165,
+  "compliant": true,
+  "has_integration_plan": true,
+  "builds_in_isolation": false,
+  "gaps_closed": { "D1": true, "D2": true, "D3": true },
+  "additive_only_non_breaking": true,
+  "enables_1595": true,
+  "public_root_only_reachable": true,
+  "no_rederivation_engine_truth": true,
+  "reverse_testing_found": false,
+  "mock_theater_found": false,
+  "property_ge_30": true,
+  "mutation_ge_80": true,
+  "docs_updated": true,
+  "violations": []
+}

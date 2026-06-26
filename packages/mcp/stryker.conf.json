@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "mutate": ["src/auth/oauth-status.ts"],
+  "testRunner": "vitest",
+  "inPlace": true,
+  "vitest": {},
+  "coverageAnalysis": "perTest",
+  "reporters": ["json", "clear-text", "progress"],
+  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
+  "thresholds": { "high": 80, "low": 60, "break": 80 }
+}

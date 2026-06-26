@@ -19,6 +19,7 @@ import type { CommandContext, MessageActionReturn } from './types.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 // ─── In-memory store for mock ToolKeyStorage ─────────────────────────────────
 
@@ -77,10 +78,7 @@ describe('toolkeyfileCommand', () => {
   describe('schema completion', () => {
     it('suggests tool names for first argument with descriptions', async () => {
       const schema = toolkeyfileCommand.schema;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!schema) {
-        throw new Error('toolkeyfile schema missing');
-      }
+      assertDefined(schema);
 
       const handler = createCompletionHandler(schema);
       const result = await handler(
@@ -102,10 +100,7 @@ describe('toolkeyfileCommand', () => {
 
     it('suggests none and shows filepath hint after selecting tool', async () => {
       const schema = toolkeyfileCommand.schema;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!schema) {
-        throw new Error('toolkeyfile schema missing');
-      }
+      assertDefined(schema);
 
       const handler = createCompletionHandler(schema);
       const result = await handler(

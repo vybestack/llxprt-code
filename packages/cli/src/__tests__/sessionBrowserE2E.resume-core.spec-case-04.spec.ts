@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertFalse } from '../test-utils/assertions.js';
 import { SessionLockManager } from '@vybestack/llxprt-code-core';
 import { performResume } from '../services/performResume.js';
 import {
@@ -64,8 +65,7 @@ describe('Core resume flow #4', () => {
     const result = await performResume(targetId, context);
 
     expect(result.ok).toBe(false);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (result.ok) throw new Error('unreachable: narrowing failed');
+    assertFalse(result.ok);
     expect(result.error.toLowerCase()).toContain('in use');
   });
 });

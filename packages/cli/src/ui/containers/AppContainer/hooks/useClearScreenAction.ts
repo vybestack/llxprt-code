@@ -29,8 +29,7 @@ export function useClearScreenAction({
     clearItems();
     clearConsoleMessagesState();
     if (!useAlternateBuffer) {
-      // eslint-disable-next-line no-console
-      console.clear();
+      globalThis.console.clear();
     }
     refreshStatic();
   }, [

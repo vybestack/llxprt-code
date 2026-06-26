@@ -37,11 +37,11 @@ export async function handleLink(args: InstallArgs) {
       workspaceDir,
     );
     const extension = loadExtensionByName(extensionName, workspaceDir);
-    console.log(
+    globalThis.console.log(
       `Extension "${extension?.name ?? extensionName}" linked successfully and enabled.`,
     );
   } catch (error) {
-    console.error(getErrorMessage(error));
+    globalThis.console.error(getErrorMessage(error));
     await exitCli(1);
   }
 }

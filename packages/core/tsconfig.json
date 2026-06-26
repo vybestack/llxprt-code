@@ -22,6 +22,7 @@
   "include": [
     "index.ts",
     "src/**/*.ts",
+    "src/prompts/*.d.ts",
     "src/**/*.json",
     "../settings/index.ts",
     "../settings/src/**/*.ts",

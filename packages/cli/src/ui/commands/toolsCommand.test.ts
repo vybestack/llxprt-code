@@ -38,9 +38,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'list');
+    await toolsCommand.action!(mockContext, 'list');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -66,9 +64,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'list');
+    await toolsCommand.action!(mockContext, 'list');
 
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
     expect(output).toContain('File Reader [disabled]');
@@ -89,9 +85,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'disable "File Reader"');
+    await toolsCommand.action!(mockContext, 'disable "File Reader"');
 
     expect(settings.get('tools.disabled')).toStrictEqual(['file-reader']);
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
@@ -114,9 +108,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'disable code-editor');
+    await toolsCommand.action!(mockContext, 'disable code-editor');
 
     expect(setToolsSpy).toHaveBeenCalled();
   });
@@ -136,9 +128,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'enable code-editor');
+    await toolsCommand.action!(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toStrictEqual([]);
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
@@ -158,9 +148,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'disable missing');
+    await toolsCommand.action!(mockContext, 'disable missing');
 
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0];
     expect(output.type).toBe(MessageType.ERROR);
@@ -182,9 +170,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'enable code-editor');
+    await toolsCommand.action!(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toStrictEqual([]);
     expect(settings.get('tools.allowed')).toStrictEqual([]);
@@ -209,9 +195,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'enable code-editor');
+    await toolsCommand.action!(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toStrictEqual([]);
     expect(settings.get('tools.allowed')).toStrictEqual(
@@ -234,12 +218,10 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'enable file-reader');
+    await toolsCommand.action!(mockContext, 'enable file-reader');
 
     (mockContext.ui.addItem as vi.Mock).mockClear();
-    await toolsCommand.action(mockContext, 'list');
+    await toolsCommand.action!(mockContext, 'list');
 
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
     expect(output).toContain('File Reader [enabled]');

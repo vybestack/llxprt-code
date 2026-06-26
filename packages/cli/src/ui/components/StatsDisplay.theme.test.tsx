@@ -4,19 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable react/prop-types */
-
 import React from 'react';
 import { render } from 'ink-testing-library';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
 
 const recordedTextProps: Array<{ text: string; color?: string }> = [];
+const testPropValidator = () => null;
 
 vi.mock('ink', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ink')>();
-  const InstrumentedText: typeof actual.Text = (props) => {
-    const textContent = React.Children.toArray(props.children)
+  type InstrumentedTextProps = React.ComponentProps<typeof actual.Text>;
+  const InstrumentedText = (props: InstrumentedTextProps) => {
+    const { children, color } = props;
+    const textContent = React.Children.toArray(children)
       .map((child) => {
         if (typeof child === 'string' || typeof child === 'number') {
           return child.toString();
@@ -27,7 +28,7 @@ vi.mock('ink', async (importOriginal) => {
 
     recordedTextProps.push({
       text: textContent,
-      color: props.color,
+      color,
     });
 
     return React.createElement(actual.Text, props);
@@ -35,9 +36,10 @@ vi.mock('ink', async (importOriginal) => {
 
   (
     InstrumentedText as React.ComponentType & { propTypes?: unknown }
-  ).propTypes = (
-    actual.Text as React.ComponentType & { propTypes?: unknown }
-  ).propTypes;
+  ).propTypes = {
+    children: testPropValidator,
+    color: testPropValidator,
+  };
 
   return {
     ...actual,

@@ -12,6 +12,10 @@ import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
+
+// Matches a single printable ASCII character (space through tilde).
+const PRINTABLE_ASCII = /[\x20-\x7E]/;
 
 export interface CapabilityFilters {
   vision: boolean;
@@ -119,8 +123,7 @@ function useModelsData(
     };
 
     setIsLoading(true);
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    loadModels();
+    void loadModels();
     return () => {
       cancelled = true;
     };
@@ -146,14 +149,10 @@ function useFilteredModels(
     }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      models = models.filter(
-        (m) =>
-          // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          m.id.toLowerCase().includes(term) ||
-          m.name.toLowerCase().includes(term) ||
-          (m.modelId?.toLowerCase().includes(term) ?? false) ||
-          m.provider.toLowerCase().includes(term),
-      );
+      models = models.filter((m) => {
+        const haystacks = [m.id, m.name, m.modelId ?? '', m.provider];
+        return haystacks.some((value) => value.toLowerCase().includes(term));
+      });
     }
     if (filters.vision) {
       models = models.filter((m) => m.capabilities?.vision === true);
@@ -208,6 +207,21 @@ function handleFilterModeKeys(
   return false;
 }
 
+function isPrintableCharacterKey(key: {
+  sequence?: string;
+  ctrl?: boolean;
+  meta?: boolean;
+}): key is { sequence: string } {
+  if (key.ctrl === true || key.meta === true) {
+    return false;
+  }
+  const sequence = key.sequence;
+  if (sequence === undefined || sequence.length !== 1) {
+    return false;
+  }
+  return PRINTABLE_ASCII.test(sequence);
+}
+
 function handleSearchModeKeys(
   key: { name?: string; sequence?: string; ctrl?: boolean; meta?: boolean },
   setState: React.Dispatch<React.SetStateAction<ModelsDialogState>>,
@@ -219,14 +233,7 @@ function handleSearchModeKeys(
     }));
     return true;
   }
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    key.sequence &&
-    key.sequence.length === 1 &&
-    key.ctrl !== true &&
-    key.meta !== true &&
-    key.sequence.match(/[\x20-\x7E]/)
-  ) {
+  if (isPrintableCharacterKey(key)) {
     setState((prev) => ({
       ...prev,
       searchTerm: prev.searchTerm + key.sequence,
@@ -406,8 +413,7 @@ const ModelRows: React.FC<{
           ? SemanticColors.text.accent
           : SemanticColors.text.primary;
 
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string modelId fallback to id
-        const displayId = model.modelId || model.id;
+        const displayId = firstNonEmptyString(model.modelId, model.id);
 
         return (
           <Box key={`${model.provider}:${model.id}:${i}`}>
@@ -448,18 +454,28 @@ const HelpBar: React.FC<{
   isNarrow: boolean;
   currentProvider: string | null;
   providerFilter: string | null;
-}> = ({ isNarrow, currentProvider, providerFilter }) => (
-  <Box marginTop={1}>
-    <Text color={SemanticColors.text.secondary}>
-      {/* eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice. */}
-      {isNarrow
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          `\u2191/\u2193 Enter${currentProvider ? ' ^A' : ''} Tab Esc`
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  ^A ${providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
-    </Text>
-  </Box>
-);
+}> = ({ isNarrow, currentProvider, providerFilter }) => {
+  const buildHint = (): string => {
+    if (isNarrow) {
+      const narrowApply = currentProvider !== null ? ' ^A' : '';
+      return `\u2191/\u2193 Enter${narrowApply} Tab Esc`;
+    }
+
+    let applyHint = '';
+    if (currentProvider !== null) {
+      const scope =
+        providerFilter === null ? `${currentProvider} only` : 'all providers';
+      applyHint = `  ^A ${scope}`;
+    }
+    return `\u2191/\u2193 select  Enter copy ID${applyHint}  Tab filters  Esc close`;
+  };
+
+  return (
+    <Box marginTop={1}>
+      <Text color={SemanticColors.text.secondary}>{buildHint()}</Text>
+    </Box>
+  );
+};
 
 const ModelsDialogHeader: React.FC<{
   providerFilter: string | null;
@@ -567,10 +583,7 @@ function useColumnWidths(
   const maxModelIdLen = useMemo(() => {
     if (filteredModels.length === 0) return 20;
     return Math.max(
-      ...filteredModels.map(
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string modelId fallback to id
-        (m) => (m.modelId || m.id).length,
-      ),
+      ...filteredModels.map((m) => firstNonEmptyString(m.modelId, m.id).length),
     );
   }, [filteredModels]);
 

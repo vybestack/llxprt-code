@@ -19,6 +19,8 @@ import type {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { PolicyDecision } from '@vybestack/llxprt-code-core';
+// @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
+import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
 import type { EditorCallbacks } from './config-types.js';
 import type {
   AgentEvent,
@@ -147,10 +149,14 @@ export interface McpServerInfo {
   readonly transport?: string;
 }
 
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+// @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 93
 export interface McpServerAuthStatus {
   readonly server: string;
-  readonly authenticated: boolean;
-  readonly requiresAuth: boolean;
+  readonly authenticated: boolean; // corrected: oauthStatus === 'authenticated'
+  readonly requiresAuth: boolean; // corrected: real per-server
+  readonly oauthStatus: McpOAuthStatus;
+  readonly sessionAuthenticated: boolean;
   readonly authUrl?: string;
 }
 
@@ -185,9 +191,13 @@ export interface McpBlockedServer {
 }
 
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+// @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003,REQ-004 @pseudocode agents-projection.md line 94
 export interface McpServerDetail {
   readonly name: string;
-  readonly authenticated: boolean;
+  readonly authenticated: boolean; // corrected
+  readonly requiresAuth: boolean;
+  readonly oauthStatus: McpOAuthStatus;
+  readonly sessionAuthenticated: boolean;
   readonly tools?: readonly ToolInfo[];
   readonly prompts?: readonly McpPromptInfo[];
   readonly resources?: readonly McpResourceInfo[];
@@ -565,4 +575,6 @@ export interface Agent {
   dispose(): Promise<void>;
 }
 
+// @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
 export type { ApprovalMode };
+export type { McpOAuthStatus };

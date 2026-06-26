@@ -121,7 +121,7 @@ export function emitResponseTelemetry(
 }
 
 /** Write conversation response event to telemetry and disk. */
-export function writeConversationLog(
+export async function writeConversationLog(
   config: Config,
   redactedContent: string,
   promptId: string,
@@ -129,7 +129,7 @@ export function writeConversationLog(
   success: boolean,
   error: unknown,
   ctx: ResponseTelemetryContext,
-): void {
+): Promise<void> {
   const event = new ConversationResponseEvent(
     ctx.providerName,
     ctx.conversationId,
@@ -143,7 +143,7 @@ export function writeConversationLog(
   logConversationResponse(config, event);
 
   const fileWriter = getConversationFileWriter(config.getConversationLogPath());
-  fileWriter.writeResponse(ctx.providerName, redactedContent, {
+  await fileWriter.writeResponse(ctx.providerName, redactedContent, {
     conversationId: ctx.conversationId,
     turnNumber: ctx.turnNumber,
     promptId,

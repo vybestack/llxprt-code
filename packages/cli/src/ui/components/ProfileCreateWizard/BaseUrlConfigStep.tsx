@@ -14,6 +14,7 @@ import { PROVIDER_OPTIONS } from './constants.js';
 import { validateBaseUrl } from './validation.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState } from './types.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 const CustomProviderExamples: React.FC = () => (
   <>
@@ -53,8 +54,7 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
   const defaultBaseUrl = providerOption?.defaultBaseUrl ?? '';
 
   const [inputValue, setInputValue] = useState(
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (empty string baseUrl means "not set")
-    state.config.baseUrl || defaultBaseUrl,
+    firstNonEmptyString(state.config.baseUrl, defaultBaseUrl),
   );
   const [validationError, setValidationError] = useState<string | null>(null);
 

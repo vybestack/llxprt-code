@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
 import { SettingScope } from '../config/settings.js';
 import type { SkillActionResult } from './skillSettings.js';
 import {
@@ -18,6 +16,7 @@ import extract from 'extract-zip';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { firstNonEmptyString } from './coalesce.js';
 
 /**
  * Shared logic for building the core skill action message while allowing the
@@ -35,10 +34,9 @@ export function renderSkillActionFeedback(
   const { skillName, action, status, error } = result;
 
   if (status === 'error') {
-    return (
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall back to generic message
-      error ||
-      `An error occurred while attempting to ${action} skill "${skillName}".`
+    return firstNonEmptyString(
+      error,
+      `An error occurred while attempting to ${action} skill "${skillName}".`,
     );
   }
 
@@ -102,7 +100,6 @@ async function resolveSkillSource(
   if (isSkillFile) {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-skill-'));
     onLog(`Extracting skill from ${source}...`);
-    // eslint-disable-next-line sonarjs/no-unsafe-unzip -- Skill archives are extracted into a fresh temp directory and validated before copy.
     await extract(path.resolve(source), { dir: tempDir });
     return { sourcePath: tempDir, tempDirToClean: tempDir };
   }

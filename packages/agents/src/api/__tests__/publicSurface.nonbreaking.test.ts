@@ -21,7 +21,12 @@ import * as fc from 'fast-check';
 
 import * as root from '@vybestack/llxprt-code-agents';
 import * as internals from '@vybestack/llxprt-code-agents/internals.js';
-import type { Agent, AgentConfig } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentConfig,
+  McpOAuthStatus,
+  McpServerAuthStatus,
+} from '@vybestack/llxprt-code-agents';
 
 // Type-level compile anchor: a signature change to createAgent would break
 // typecheck. The shipped shape is `createAgent(AgentConfig): Promise<Agent>`.
@@ -252,4 +257,54 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
       ),
     );
   }, 30000);
+});
+
+describe('REQ-004 @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 — additive MCP OAuth surface', () => {
+  it('exposes McpOAuthStatus as a type-only export (no runtime root key)', () => {
+    // type-only: must NOT appear as a runtime key (mirrors the ApprovalMode/type-only precedent)
+    expect(Object.prototype.hasOwnProperty.call(root, 'McpOAuthStatus')).toBe(
+      false,
+    );
+  });
+
+  it('preserves every previously-public MCP field name (additive only)', () => {
+    const sample: McpServerAuthStatus = {
+      server: 's',
+      authenticated: false,
+      requiresAuth: false,
+      oauthStatus: 'not-required',
+      sessionAuthenticated: false,
+    };
+    expect(Object.keys(sample).sort()).toStrictEqual(
+      [
+        'authenticated',
+        'oauthStatus',
+        'requiresAuth',
+        'server',
+        'sessionAuthenticated',
+      ].sort(),
+    );
+  });
+
+  it('PROP: each McpOAuthStatus member is a valid oauthStatus on the projected shape', () => {
+    const members: readonly McpOAuthStatus[] = [
+      'authenticated',
+      'expired',
+      'none',
+      'not-required',
+    ];
+    fc.assert(
+      fc.property(fc.constantFrom(...members), (status) => {
+        const sample: McpServerAuthStatus = {
+          server: 's',
+          authenticated: status === 'authenticated',
+          requiresAuth: false,
+          oauthStatus: status,
+          sessionAuthenticated: false,
+        };
+        expect(sample.oauthStatus).toBe(status);
+        return true;
+      }),
+    );
+  });
 });

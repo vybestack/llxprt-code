@@ -59,9 +59,7 @@ describe('bugCommand', () => {
       },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!bugCommand.action) throw new Error('Action is not defined');
-    await bugCommand.action(mockContext, 'A test bug');
+    await bugCommand.action!(mockContext, 'A test bug');
 
     const expectedInfo = `
 * **CLI Version:** 0.1.0
@@ -97,9 +95,7 @@ describe('bugCommand', () => {
         },
       },
     });
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!bugCommand.action) throw new Error('Action is not defined');
-    await bugCommand.action(mockContext, 'A custom bug');
+    await bugCommand.action!(mockContext, 'A custom bug');
 
     const expectedInfo = `
 * **CLI Version:** 0.1.0

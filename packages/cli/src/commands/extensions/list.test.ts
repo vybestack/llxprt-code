@@ -166,9 +166,9 @@ describe('handleList', () => {
   });
 
   it('should handle non-Error exceptions', async () => {
+    const nonErrorValue: unknown = 'String error';
     mockLoadUserExtensions.mockImplementation(() => {
-      // eslint-disable-next-line no-restricted-syntax
-      throw 'String error';
+      throw nonErrorValue;
     });
 
     await handleList();

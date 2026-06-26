@@ -8,6 +8,7 @@ import type React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import type { HookRegistryEntry } from '@vybestack/llxprt-code-core';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 interface HooksListProps {
   hooks: readonly HookRegistryEntry[];
@@ -56,9 +57,11 @@ interface HookEntryProps {
 }
 
 const HookEntry: React.FC<HookEntryProps> = ({ entry, index, eventName }) => {
-  const commandName =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing
-    entry.config.name || entry.config.command || `${entry.config.type} hook`;
+  const commandName = firstNonEmptyString(
+    entry.config.name,
+    entry.config.command,
+    `${entry.config.type} hook`,
+  );
   const statusColor = entry.enabled ? Colors.AccentGreen : Colors.DimComment;
   const statusText = entry.enabled ? 'enabled' : 'disabled';
   const details = buildHookDetails(entry);

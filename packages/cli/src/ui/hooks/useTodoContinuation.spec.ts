@@ -27,6 +27,7 @@ import {
   type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import { AgentClient as AgentClientClass } from '@vybestack/llxprt-code-agents';
+import { testRegex } from '../../test-utils/regex.js';
 
 // Mock dependencies
 vi.mock('../contexts/TodoContext.js');
@@ -152,7 +153,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Complete feature implementation'),
         expect.any(AbortSignal),
-        expect.stringMatching(/^todo-continuation-/),
+        expect.stringMatching(testRegex('^todo-continuation-', '')),
       );
     });
 
@@ -287,7 +288,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Fix critical bug'),
         expect.any(AbortSignal),
-        expect.stringMatching(/^todo-continuation-/),
+        expect.stringMatching(testRegex('^todo-continuation-', '')),
       );
     });
 
@@ -317,9 +318,11 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       // Then: Should use YOLO-specific prompt
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
-        expect.stringMatching(/(continue|proceed).*without.*confirmation/i),
+        expect.stringMatching(
+          testRegex('(continue|proceed).*without.*confirmation', 'i'),
+        ),
         expect.any(AbortSignal),
-        expect.stringMatching(/^todo-continuation-/),
+        expect.stringMatching(testRegex('^todo-continuation-', '')),
       );
     });
 
@@ -348,7 +351,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(AbortSignal),
-        expect.stringMatching(/^todo-continuation-/),
+        expect.stringMatching(testRegex('^todo-continuation-', '')),
       );
     });
   });
@@ -391,7 +394,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('New active task'),
         expect.any(AbortSignal),
-        expect.stringMatching(/^todo-continuation-/),
+        expect.stringMatching(testRegex('^todo-continuation-', '')),
       );
     });
 
@@ -668,7 +671,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Active task'),
         expect.any(AbortSignal),
-        expect.stringMatching(/^todo-continuation-/),
+        expect.stringMatching(testRegex('^todo-continuation-', '')),
       );
     });
   });
@@ -764,7 +767,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
         expect.stringContaining('Active task'),
         expect.any(AbortSignal),
-        expect.stringMatching(/^todo-continuation-/),
+        expect.stringMatching(testRegex('^todo-continuation-', '')),
       );
     });
 

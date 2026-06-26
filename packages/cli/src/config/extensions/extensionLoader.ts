@@ -8,17 +8,34 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveEnvVarsInObject } from '../../utils/envVarResolver.js';
-import { recursivelyHydrateStrings, type JsonObject } from './variables.js';
+import {
+  hydrateString,
+  recursivelyHydrateStrings,
+  type JsonValue,
+  type VariableContext,
+} from './variables.js';
 import type { LoadExtensionContext } from './variableSchema.js';
 import type {
   ExtensionConfig,
   ExtensionInstallMetadata,
-  ResolvedExtensionSetting,
 } from '../extension.js';
 
+function isExtensionConfig(value: unknown): value is ExtensionConfig {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { name?: unknown }).name === 'string' &&
+    typeof (value as { version?: unknown }).version === 'string'
+  );
+}
+
+function parseJsonValue(content: string): JsonValue {
+  return JSON.parse(content) as JsonValue;
+}
 interface LoadExtensionDeps {
   configFileName: string;
   fallbackConfigFileName: string;
+
   installMetadataFileName: string;
   loadSettings: (workspaceDir: string) => { merged: Record<string, unknown> };
   validateName: (name: string) => void;
@@ -26,6 +43,18 @@ interface LoadExtensionDeps {
   reportWarning: (message: string) => void;
 }
 
+function hydrateSkillDefinition(
+  skill: SkillDefinition,
+  context: VariableContext,
+): SkillDefinition {
+  return {
+    ...skill,
+    name: hydrateString(skill.name, context),
+    description: hydrateString(skill.description, context),
+    location: hydrateString(skill.location, context),
+    body: hydrateString(skill.body, context),
+  };
+}
 export function loadInstallMetadataFromDir(
   extensionDir: string,
   installMetadataFileName: string,
@@ -40,8 +69,7 @@ export function loadInstallMetadataFromDir(
 }
 
 function filterMcpConfig(original: MCPServerConfig): MCPServerConfig {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { trust, ...rest } = original;
+  const { trust: _trust, ...rest } = original;
   return Object.freeze(rest);
 }
 
@@ -103,12 +131,22 @@ function readExtensionConfig(
   deps: LoadExtensionDeps,
 ): ExtensionConfig | null {
   const configContent = fs.readFileSync(configFilePath, 'utf-8');
-  let config = recursivelyHydrateStrings(JSON.parse(configContent), {
-    extensionPath: effectiveExtensionPath,
-    workspacePath: workspaceDir,
-    '/': path.sep,
-    pathSeparator: path.sep,
-  }) as unknown as ExtensionConfig;
+  const hydratedConfig = recursivelyHydrateStrings(
+    parseJsonValue(configContent),
+    {
+      extensionPath: effectiveExtensionPath,
+      workspacePath: workspaceDir,
+      '/': path.sep,
+      pathSeparator: path.sep,
+    },
+  );
+  if (!isExtensionConfig(hydratedConfig)) {
+    deps.reportError(
+      `Invalid extension config in ${configFilePath}: missing name or version.`,
+    );
+    return null;
+  }
+  let config = hydratedConfig;
   if (!config.name || !config.version) {
     deps.reportError(
       `Invalid extension config in ${configFilePath}: missing name or version.`,
@@ -157,12 +195,8 @@ function loadExtensionSkills(
   const rawSkills = loadSkillsFromDirSync(
     path.join(effectiveExtensionPath, 'skills'),
   );
-  return rawSkills.map(
-    (skill) =>
-      recursivelyHydrateStrings(
-        skill as unknown as JsonObject,
-        hydrationContext,
-      ) as unknown as SkillDefinition,
+  return rawSkills.map((skill) =>
+    hydrateSkillDefinition(skill, hydrationContext),
   );
 }
 
@@ -208,7 +242,8 @@ export function loadExtensionFromDir(
     if (config === null) {
       return null;
     }
-    const resolvedSettings: ResolvedExtensionSetting[] = [];
+    const resolvedSettings: Array<Record<string, unknown>> = [];
+
     return {
       name: config.name,
       version: config.version,
@@ -221,9 +256,7 @@ export function loadExtensionFromDir(
       subagents: config.subagents ?? [],
       isActive: true,
       settings: config.settings as Array<Record<string, unknown>> | undefined,
-      resolvedSettings: resolvedSettings as unknown as Array<
-        Record<string, unknown>
-      >,
+      resolvedSettings,
     };
   } catch (error) {
     deps.reportError(

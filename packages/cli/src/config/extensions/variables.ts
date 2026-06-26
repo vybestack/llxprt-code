@@ -35,11 +35,11 @@ export function validateVariables(
   }
 }
 
+const TEMPLATE_VAR_REGEX = /\$\{(.*?)}/g;
+
 export function hydrateString(str: string, context: VariableContext): string {
   validateVariables(context, VARIABLE_SCHEMA);
-  // Static regex for ${var} template syntax - no dynamic parts
-  const regex = /\${(.*?)}/g;
-  return str.replace(regex, (match, key) =>
+  return str.replace(TEMPLATE_VAR_REGEX, (match, key) =>
     context[key as keyof VariableContext] == null
       ? match
       : (context[key as keyof VariableContext] as string),

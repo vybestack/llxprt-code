@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
+import type { Stats } from 'fs';
 import { saveClipboardImage } from './clipboardUtils.js';
 
 // Mock dependencies
@@ -45,8 +46,7 @@ describe('saveClipboardImage Windows Path Escaping', () => {
 
     // Mock fs calls to succeed
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(fs.stat).mockResolvedValue({ size: 100 } as any);
+    vi.mocked(fs.stat).mockResolvedValue({ size: 100 } as Stats);
   });
 
   afterEach(() => {

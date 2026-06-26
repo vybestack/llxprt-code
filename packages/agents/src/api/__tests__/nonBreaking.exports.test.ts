@@ -57,4 +57,13 @@ describe('REQ-006: agents public export surface is non-breaking', () => {
       Object.prototype.hasOwnProperty.call(root, 'AgentClientContract'),
     ).toBe(false);
   });
+
+  it('Test D (REQ-004): curated barrel adds NO runtime value named McpOAuthStatus', () => {
+    // @plan:PLAN-20260622-MCPOAUTHTRUTH.P07
+    // McpOAuthStatus is a type-only union re-export; it must NOT surface as a
+    // runtime key on the root barrel (mirrors the AgentClientContract precedent).
+    expect(Object.prototype.hasOwnProperty.call(root, 'McpOAuthStatus')).toBe(
+      false,
+    );
+  });
 });

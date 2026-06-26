@@ -49,10 +49,7 @@ describe('statsCommand', () => {
   });
 
   it('should display general session stats when run with no subcommand', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!statsCommand.action) throw new Error('Command has no action');
-
-    await statsCommand.action(mockContext, '');
+    await statsCommand.action!(mockContext, '');
 
     const expectedDuration = formatDuration(
       endTime.getTime() - startTime.getTime(),
@@ -68,11 +65,8 @@ describe('statsCommand', () => {
     const modelSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'model',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!modelSubCommand?.action) throw new Error('Subcommand has no action');
 
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    modelSubCommand.action(mockContext, '');
+    void modelSubCommand.action!(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -86,11 +80,8 @@ describe('statsCommand', () => {
     const toolsSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'tools',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!toolsSubCommand?.action) throw new Error('Subcommand has no action');
 
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    toolsSubCommand.action(mockContext, '');
+    void toolsSubCommand.action!(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -104,11 +95,8 @@ describe('statsCommand', () => {
     const cacheSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'cache',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!cacheSubCommand?.action) throw new Error('Subcommand has no action');
 
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    cacheSubCommand.action(mockContext, '');
+    void cacheSubCommand.action!(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -146,10 +134,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     expect(oauthManager.getAllAnthropicUsageInfo).toHaveBeenCalledTimes(1);
     expect(oauthManager.getAllCodexUsageInfo).toHaveBeenCalledTimes(1);
@@ -211,10 +197,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     expect(oauthManager.getAllAnthropicUsageInfo).toHaveBeenCalledTimes(1);
     expect(oauthManager.getAllCodexUsageInfo).toHaveBeenCalledTimes(1);
@@ -270,10 +254,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -296,10 +278,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -369,10 +349,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -409,10 +387,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -463,10 +439,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -500,10 +474,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -557,10 +529,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (cmd) => cmd.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
     const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -596,10 +566,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (cmd) => cmd.name === 'quota',
     );
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-    await quotaSubCommand.action(mockContext, '');
+    await quotaSubCommand.action!(mockContext, '');
 
     // Should not crash — graceful failure results in no quota section or "no quota available"
     const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
@@ -659,10 +627,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-      await quotaSubCommand.action(mockContext, '');
+      await quotaSubCommand.action!(mockContext, '');
 
       const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -706,10 +672,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-      await quotaSubCommand.action(mockContext, '');
+      await quotaSubCommand.action!(mockContext, '');
 
       const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -753,10 +717,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-      await quotaSubCommand.action(mockContext, '');
+      await quotaSubCommand.action!(mockContext, '');
 
       const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -800,10 +762,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-      await quotaSubCommand.action(mockContext, '');
+      await quotaSubCommand.action!(mockContext, '');
 
       const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -846,10 +806,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-      await quotaSubCommand.action(mockContext, '');
+      await quotaSubCommand.action!(mockContext, '');
 
       const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -893,10 +851,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-      await quotaSubCommand.action(mockContext, '');
+      await quotaSubCommand.action!(mockContext, '');
 
       const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -953,10 +909,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-      await quotaSubCommand.action(mockContext, '');
+      await quotaSubCommand.action!(mockContext, '');
 
       const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
@@ -999,10 +953,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
 
-      await quotaSubCommand.action(mockContext, '');
+      await quotaSubCommand.action!(mockContext, '');
 
       const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
       const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {

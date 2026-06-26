@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertHasType } from '../test-utils/assertions.js';
 import { continueCommand } from '../ui/commands/continueCommand.js';
 import type {
   CommandContext,
@@ -89,10 +90,7 @@ describe('Continue command integration #2', () => {
 
     expect(result).toBeDefined();
     expect(result.type).toBe('perform_resume');
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (result.type === 'perform_resume') {
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(result.sessionRef).toBe('latest');
-    }
+    assertHasType(result, 'perform_resume');
+    expect(result.sessionRef).toBe('latest');
   });
 });

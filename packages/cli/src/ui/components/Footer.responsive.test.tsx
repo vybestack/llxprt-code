@@ -15,6 +15,7 @@ import {
 } from 'vitest';
 import { Footer } from './Footer.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 vi.mock('../hooks/useTerminalSize.js');
 vi.mock('../../providers/providerManagerInstance.js', () => ({
@@ -67,9 +68,9 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show abbreviated memory format
-      expect(output).toMatch(/Mem:/);
+      expect(output).toMatch(testRegex('Mem:', ''));
       // Should NOT show full "Memory:" text
-      expect(output).not.toMatch(/Memory:/);
+      expect(output).not.toMatch(testRegex('Memory:', ''));
     });
 
     it('should show abbreviated context indicator', () => {
@@ -77,9 +78,9 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show abbreviated context format
-      expect(output).toMatch(/Ctx:/);
+      expect(output).toMatch(testRegex('Ctx:', ''));
       // Should NOT show full "Context:" text
-      expect(output).not.toMatch(/Context:/);
+      expect(output).not.toMatch(testRegex('Context:', ''));
     });
 
     it('should NOT show model name at narrow width', () => {
@@ -88,7 +89,7 @@ describe('Footer Responsive Behavior', () => {
 
       // Should NOT show model name
       expect(output).not.toContain('gpt-4');
-      expect(output).not.toMatch(/Model:/);
+      expect(output).not.toMatch(testRegex('Model:', ''));
     });
 
     it('should NOT show timestamp at narrow width', () => {
@@ -96,7 +97,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should NOT show timestamp
-      expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/);
+      expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', ''));
     });
 
     it('should truncate long branch names', () => {
@@ -108,7 +109,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Branch name appears (may be truncated with ... or shown in full)
-      expect(output).toMatch(/(feature|featur)/); // May be truncated
+      expect(output).toMatch(testRegex('(feature|featur)', '')); // May be truncated
       // Should NOT show the complete full branch name
       expect(output).not.toContain(
         'feature/very-long-branch-name-that-needs-truncation-handling-for-narrow-display-mode',
@@ -126,9 +127,11 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show full "Memory:" label
-      expect(output).toMatch(/Memory:/);
+      expect(output).toMatch(testRegex('Memory:', ''));
       // Should NOT show percentage details in parens
-      expect(output).not.toMatch(/Memory: \d+% \(\d+\.\d+GB\/\d+\.\d+GB\)/);
+      expect(output).not.toMatch(
+        testRegex('Memory: \\d+% \\(\\d+\\.\\d+GB\\/\\d+\\.\\d+GB\\)', ''),
+      );
     });
 
     it('should show full context indicator label', () => {
@@ -136,9 +139,11 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show full "Context:" label
-      expect(output).toMatch(/Context:/);
+      expect(output).toMatch(testRegex('Context:', ''));
       // Should NOT show fully expanded token counts
-      expect(output).not.toMatch(/Context: \d+,\d+\/\d+,\d+ tokens/);
+      expect(output).not.toMatch(
+        testRegex('Context: \\d+,\\d+\\/\\d+,\\d+ tokens', ''),
+      );
     });
 
     it('should show model name at standard width', () => {
@@ -155,7 +160,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should NOT show timestamp
-      expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/);
+      expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', ''));
     });
   });
 
@@ -169,8 +174,10 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show detailed memory format (may wrap across lines in two-line layout)
-      expect(output).toMatch(/Memory: \d+%/);
-      expect(output).toMatch(/\(\d+\.\d+GB\/\d+\.\d+GB\)/);
+      expect(output).toMatch(testRegex('Memory: \\d+%', ''));
+      expect(output).toMatch(
+        testRegex('\\(\\d+\\.\\d+GB\\/\\d+\\.\\d+GB\\)', ''),
+      );
     });
 
     it('should show detailed context usage with comma-separated numbers', () => {
@@ -178,7 +185,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show detailed context format (shows as 8,234/100,000 tokens)
-      expect(output).toMatch(/Context: \d+,\d+\/\d+,\d+/);
+      expect(output).toMatch(testRegex('Context: \\d+,\\d+\\/\\d+,\\d+', ''));
     });
 
     it('should show model name at wide width', () => {
@@ -195,7 +202,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show timestamp in HH:MM:SS format (may wrap across lines)
-      expect(output).toMatch(/\d{1,2}:\d{2}:\d/);
+      expect(output).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', ''));
     });
 
     it('should show full branch name when space allows', () => {
@@ -220,9 +227,9 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // At exactly 80, should be STANDARD behavior
-      expect(output).toMatch(/Memory:/); // Not abbreviated
+      expect(output).toMatch(testRegex('Memory:', '')); // Not abbreviated
       expect(output).toContain('gemini-2.5-pro'); // Model shown
-      expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // No timestamp
+      expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', '')); // No timestamp
     });
 
     it('should transition properly at STANDARD threshold', () => {
@@ -233,9 +240,9 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // At exactly 120, should be STANDARD behavior (not WIDE)
-      expect(output).toMatch(/Memory:/);
+      expect(output).toMatch(testRegex('Memory:', ''));
       expect(output).toContain('gemini-2.5-pro');
-      expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // Still no timestamp
+      expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', '')); // Still no timestamp
     });
   });
 
@@ -249,8 +256,8 @@ describe('Footer Responsive Behavior', () => {
         const output = lastFrame();
 
         // Memory and context should always be visible
-        expect(output).toMatch(/(Mem:|Memory:)/);
-        expect(output).toMatch(/(Ctx:|Context:)/);
+        expect(output).toMatch(testRegex('(Mem:|Memory:)', ''));
+        expect(output).toMatch(testRegex('(Ctx:|Context:)', ''));
       });
     });
 
@@ -267,7 +274,7 @@ describe('Footer Responsive Behavior', () => {
         const output = lastFrame();
 
         // Branch should always be visible (even if truncated)
-        expect(output).toMatch(/(feature|featur|\.\.\.)/);
+        expect(output).toMatch(testRegex('(feature|featur|\\.\\.\\.)', ''));
       });
     });
   });
@@ -286,10 +293,12 @@ describe('Footer Responsive Behavior', () => {
         }
 
         // Should have status info (Memory|Context) separate from path info
-        expect(output).toMatch(/(Mem:|Memory:)/);
-        expect(output).toMatch(/(Ctx:|Context:)/);
+        expect(output).toMatch(testRegex('(Mem:|Memory:)', ''));
+        expect(output).toMatch(testRegex('(Ctx:|Context:)', ''));
         // Path check - should contain path elements (may be truncated)
-        expect(output).toMatch(/(home|user|projects|project-name)/); // Path (may be truncated)
+        expect(output).toMatch(
+          testRegex('(home|user|projects|project-name)', ''),
+        ); // Path (may be truncated)
         // Model only shown at standard+ widths
         expect(width < 80 || output.includes('gemini-2.5-pro')).toBe(true);
       });
@@ -302,12 +311,14 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should have Memory, Context, and Time displayed
-      expect(output).toMatch(/Memory:/);
-      expect(output).toMatch(/Context:/);
-      expect(output).toMatch(/\d{1,2}:\d{2}:\d/); // Timestamp (may wrap)
+      expect(output).toMatch(testRegex('Memory:', ''));
+      expect(output).toMatch(testRegex('Context:', ''));
+      expect(output).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', '')); // Timestamp (may wrap)
 
       // Should also have path and model displayed
-      expect(output).toMatch(/home.*user.*projects|long-project-name/);
+      expect(output).toMatch(
+        testRegex('home.*user.*projects|long-project-name', ''),
+      );
       expect(output).toContain('gemini-2.5-pro');
     });
 
@@ -318,13 +329,15 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should contain path and model information
-      expect(output).toMatch(/home.*user.*projects|long-project-name/);
+      expect(output).toMatch(
+        testRegex('home.*user.*projects|long-project-name', ''),
+      );
       expect(output).toContain('gemini-2.5-pro');
       expect(output).toContain('feature'); // Branch name (from defaultProps)
 
       // Should also have memory and context (they can be on separate logical lines)
-      expect(output).toMatch(/Memory:/);
-      expect(output).toMatch(/Context:/);
+      expect(output).toMatch(testRegex('Memory:', ''));
+      expect(output).toMatch(testRegex('Context:', ''));
     });
 
     it('should adapt content appropriately across width breakpoints', () => {
@@ -333,27 +346,27 @@ describe('Footer Responsive Behavior', () => {
       let { lastFrame } = render(<Footer {...defaultProps} />);
       let output = lastFrame();
 
-      expect(output).toMatch(/Mem:/); // Abbreviated
-      expect(output).toMatch(/Ctx:/); // Abbreviated
-      expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // No timestamp at narrow
+      expect(output).toMatch(testRegex('Mem:', '')); // Abbreviated
+      expect(output).toMatch(testRegex('Ctx:', '')); // Abbreviated
+      expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', '')); // No timestamp at narrow
 
       // Test standard width
       mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
       ({ lastFrame } = render(<Footer {...defaultProps} />));
       output = lastFrame();
 
-      expect(output).toMatch(/Memory:/); // Full label
-      expect(output).toMatch(/Context:/); // Full label
-      expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // Still no timestamp at standard
+      expect(output).toMatch(testRegex('Memory:', '')); // Full label
+      expect(output).toMatch(testRegex('Context:', '')); // Full label
+      expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', '')); // Still no timestamp at standard
 
       // Test wide width
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
       ({ lastFrame } = render(<Footer {...defaultProps} />));
       output = lastFrame();
 
-      expect(output).toMatch(/Memory:/); // Full label
-      expect(output).toMatch(/Context:/); // Full label
-      expect(output).toMatch(/\d{1,2}:\d{2}:\d/); // Timestamp at wide (may wrap)
+      expect(output).toMatch(testRegex('Memory:', '')); // Full label
+      expect(output).toMatch(testRegex('Context:', '')); // Full label
+      expect(output).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', '')); // Timestamp at wide (may wrap)
     });
   });
 });

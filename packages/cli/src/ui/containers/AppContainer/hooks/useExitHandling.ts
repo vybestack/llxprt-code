@@ -113,8 +113,7 @@ export function useExitHandling({
           clearTimeout(timerRef.current);
         }
         // Directly invoke the central command handler.
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        handleSlashCommand('/quit');
+        void handleSlashCommand('/quit');
         return;
       }
 

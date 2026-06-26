@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import React from 'react';
 import { Box, type DOMElement, Static } from 'ink';
 import type { Config } from '@vybestack/llxprt-code-core';
