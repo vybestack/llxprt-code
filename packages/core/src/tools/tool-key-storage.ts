@@ -241,13 +241,28 @@ export class ToolKeyStorage {
       // The key was written but its permissions could not be tightened. Remove
       // the just-written file so a secret is never left on disk with overly
       // permissive modes, and surface an error distinct from a write failure.
-      await fs.unlink(filePath).catch(() => {
-        // Best-effort cleanup; the file may remain with loose permissions.
-      });
+      let unlinkFailed = false;
+      try {
+        await fs.unlink(filePath);
+      } catch (unlinkError) {
+        // The over-permissive file could not be removed either. Log the path
+        // and error so an operator can investigate and manually remove the
+        // file, and report it so the thrown message does not falsely claim the
+        // file was removed.
+        unlinkFailed = true;
+        debugLogger.warn(
+          `Key file for ${toolName} at ${filePath} could not be removed after chmod failure; the file may remain with overly permissive permissions:`,
+          unlinkError instanceof Error
+            ? unlinkError.message
+            : String(unlinkError),
+        );
+      }
       const detail =
         chmodError instanceof Error ? chmodError.message : String(chmodError);
       throw new Error(
-        `Key file for ${toolName} was written but permissions could not be tightened to 0o600; the file was removed to avoid leaving an over-permissive secret on disk: ${detail}`,
+        unlinkFailed
+          ? `Key file for ${toolName} was written but permissions could not be tightened to 0o600, and the over-permissive file could not be removed; a secret may remain on disk with overly permissive permissions. chmod error: ${detail}`
+          : `Key file for ${toolName} was written but permissions could not be tightened to 0o600; the file was removed to avoid leaving an over-permissive secret on disk: ${detail}`,
       );
     }
   }
@@ -370,6 +385,11 @@ export class ToolKeyStorage {
     await fs.writeFile(this.keyfilesJsonPath, JSON.stringify(map, null, 2), {
       mode: 0o600,
     });
+    // writeFile's `mode` only applies on creation; overwriting a pre-existing
+    // keyfiles.json (which maps tool names to plaintext keyfile paths) leaves
+    // its prior permissions intact. Tighten explicitly on POSIX so the map is
+    // never left group/world-readable, mirroring saveToFile.
+    await this.chmodIfPosix(this.keyfilesJsonPath);
   }
 
   async setKeyfilePath(toolName: string, filePath: string): Promise<void> {

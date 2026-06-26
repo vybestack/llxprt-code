@@ -230,7 +230,7 @@ describe('envelope-codec — decryptEnvelopeString', () => {
     ).rejects.toMatchObject({ code: 'CORRUPT' });
   });
 
-  it('uses serviceName in key derivation (cross-service isolation)', async () => {
+  it('uses serviceName in v:2 key derivation (cross-service isolation)', async () => {
     const envelopeJson = await encryptEnvelopeString('value', 'service-a', {
       machineSecretLoader: secretLoader(FIXED_SECRET_A),
     });
@@ -238,6 +238,24 @@ describe('envelope-codec — decryptEnvelopeString', () => {
     await expect(
       decryptEnvelopeString(envelopeJson, 'service-b', {
         machineSecretLoader: secretLoader(FIXED_SECRET_A),
+      }),
+    ).rejects.toMatchObject({ code: 'CORRUPT' });
+  });
+
+  it('uses serviceName in v:1 key derivation (cross-service isolation)', async () => {
+    // Even without a machine secret (v:1), deriveV1KdfInput mixes in the
+    // serviceName, so a value sealed under one service must not be readable
+    // under another. This pins cross-service isolation for the legacy/no-secret
+    // path, not just the v:2 path above.
+    const envelopeJson = await encryptEnvelopeString('value', 'service-a', {
+      machineSecretLoader: nullSecretLoader(),
+    });
+    const parsed = JSON.parse(envelopeJson) as { v: number };
+    expect(parsed.v).toBe(1);
+
+    await expect(
+      decryptEnvelopeString(envelopeJson, 'service-b', {
+        machineSecretLoader: nullSecretLoader(),
       }),
     ).rejects.toMatchObject({ code: 'CORRUPT' });
   });
@@ -340,14 +358,50 @@ describe('envelope-codec — anti-downgrade (existingEnvelopeVersion)', () => {
     const parsed = JSON.parse(envelopeJson) as { v: number };
     expect(parsed.v).toBe(2);
   });
+
+  it('allows overwriting an existing v:2 envelope with v:2 when the secret is available', async () => {
+    // The anti-downgrade guard only refuses v:2 -> v:1 when the secret is
+    // missing. The normal, healthy re-write path (existing v:2 + secret still
+    // available) must succeed and stay v:2; this pins that the guard does not
+    // accidentally block legitimate v:2 overwrites.
+    const existing = await encryptEnvelopeString('orig', 'svc', {
+      machineSecretLoader: secretLoader(FIXED_SECRET_A),
+    });
+    const version = readEnvelopeVersion(existing);
+    expect(version).toBe(2);
+
+    const envelopeJson = await encryptEnvelopeString('new', 'svc', {
+      machineSecretLoader: secretLoader(FIXED_SECRET_A),
+      existingEnvelopeVersion: version,
+    });
+    const parsed = JSON.parse(envelopeJson) as { v: number };
+    expect(parsed.v).toBe(2);
+
+    // And it must round-trip with the same secret.
+    const plaintext = await decryptEnvelopeString(envelopeJson, 'svc', {
+      machineSecretLoader: secretLoader(FIXED_SECRET_A),
+    });
+    expect(plaintext).toBe('new');
+  });
 });
 
 describe('envelope-codec — readEnvelopeVersion', () => {
-  it('returns the version for a valid envelope JSON', async () => {
+  it('returns 2 for a valid v:2 envelope JSON', async () => {
     const envelopeJson = await encryptEnvelopeString('x', 'svc', {
       machineSecretLoader: secretLoader(FIXED_SECRET_A),
     });
     expect(readEnvelopeVersion(envelopeJson)).toBe(2);
+  });
+
+  it('returns 1 for a valid v:1 envelope JSON', async () => {
+    // A v:1 envelope (written without a machine secret) is still a valid
+    // envelope, so readEnvelopeVersion must report 1 — not null. This is what
+    // lets the anti-downgrade guard recognize an existing v:1 file and allow a
+    // same-version overwrite while still refusing a v:2 -> v:1 downgrade.
+    const envelopeJson = await encryptEnvelopeString('x', 'svc', {
+      machineSecretLoader: nullSecretLoader(),
+    });
+    expect(readEnvelopeVersion(envelopeJson)).toBe(1);
   });
 
   it('returns null for non-JSON content', () => {

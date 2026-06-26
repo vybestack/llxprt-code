@@ -80,6 +80,19 @@ export class FileTokenStorage extends BaseTokenStorage {
   }
 
   /**
+   * Validates that content matches the exact legacy `iv:authTag:ciphertext`
+   * shape: a 32-hex IV, a 32-hex auth tag, then (possibly empty) hex
+   * ciphertext. The anchored pattern enforces the part count, the exact
+   * IV/auth-tag lengths, and hex-only content in a single check so short or
+   * garbage `a:b:c` content is not routed into the crypto API with an
+   * invalid-length IV. Mirrors `ToolKeyStorage.isLegacyHexColonFormat` so the
+   * sibling stores classify legacy content consistently.
+   */
+  private isLegacyHexColonFormat(data: string): boolean {
+    return /^[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:[0-9a-fA-F]*$/.test(data);
+  }
+
+  /**
    * Legacy AES-256-GCM decrypt for the `iv:authTag:ciphertext` (hex) format.
    * Used only to read pre-existing token files that predate the versioned
    * envelope codec. New writes go through the codec.
@@ -140,21 +153,29 @@ export class FileTokenStorage extends BaseTokenStorage {
         if (error instanceof EnvelopeCodecError) {
           // v:2 missing/different secret, tampering, or malformed envelope —
           // fail closed consistently with prior "Token file corrupted" behavior.
-          throw new Error('Token file corrupted');
+          // Preserve the structured error as `cause` so callers/debuggers can
+          // still distinguish failure modes (e.g. UNAVAILABLE vs CORRUPT) and
+          // recover the remediation hint.
+          throw new Error('Token file corrupted', { cause: error });
         }
         throw error;
       }
-    } else {
+    } else if (this.isLegacyHexColonFormat(data)) {
       try {
         plaintext = this.decrypt(data);
       } catch {
-        // Any failure decrypting a legacy hex-colon token file (malformed
-        // format, bad IV/authTag, authentication failure, tampering) is
-        // normalized to a single fail-closed error so raw crypto details do
-        // not leak and the caller observes consistent behavior with the
-        // versioned-envelope path above.
+        // Any failure decrypting a legacy hex-colon token file (bad IV/authTag,
+        // authentication failure, tampering) is normalized to a single
+        // fail-closed error so raw crypto details do not leak and the caller
+        // observes consistent behavior with the versioned-envelope path above.
         throw new Error('Token file corrupted');
       }
+    } else {
+      // Content is neither a versioned envelope nor the exact legacy hex-colon
+      // shape. Fail closed without passing structurally invalid data into the
+      // crypto API, consistent with ToolKeyStorage's "unrecognized format"
+      // handling.
+      throw new Error('Token file corrupted');
     }
 
     try {
@@ -213,13 +234,21 @@ export class FileTokenStorage extends BaseTokenStorage {
         // restricted. Remove it so OAuth credentials are never left on disk
         // with overly permissive modes, and surface an error distinct from a
         // write failure.
-        await fs.unlink(this.tokenFilePath).catch(() => {
-          // Best-effort cleanup; the file may remain with loose permissions.
-        });
+        let unlinkFailed = false;
+        try {
+          await fs.unlink(this.tokenFilePath);
+        } catch {
+          // The over-permissive file could not be removed either; report this
+          // so the caller knows credentials may still be on disk rather than
+          // trusting a message that falsely claims the file was removed.
+          unlinkFailed = true;
+        }
         const detail =
           chmodError instanceof Error ? chmodError.message : String(chmodError);
         throw new Error(
-          `Token file was written but permissions could not be restricted to 0o600; the file was removed to avoid leaving over-permissive credentials on disk: ${detail}`,
+          unlinkFailed
+            ? `Token file was written but permissions could not be restricted to 0o600, and the over-permissive file could not be removed; OAuth credentials may remain on disk with overly permissive permissions. chmod error: ${detail}`
+            : `Token file was written but permissions could not be restricted to 0o600; the file was removed to avoid leaving over-permissive credentials on disk: ${detail}`,
         );
       }
     }

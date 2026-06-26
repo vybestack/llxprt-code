@@ -78,6 +78,15 @@ function fixedSecretLoader(): () => Promise<Buffer | null> {
  * Builds legacy `iv:authTag:ciphertext` (hex) content using the same
  * derivation the old FileTokenStorage used, so mock-fs read tests can feed
  * legacy data through the legacy decrypt path.
+ *
+ * The magic strings below must stay in lockstep with production
+ * `FileTokenStorage.getLegacyEncryptionKey` (file-token-storage.ts): the salt
+ * is `${os.hostname()}-${os.userInfo().username}-llxprt-cli` and the scrypt
+ * password is the literal `'llxprt-cli-oauth'`. The hostname/username here
+ * (`test-host`/`test-user`) come from the `node:os` mock at the top of this
+ * file; if either the production derivation or that mock changes, this helper
+ * must be updated to match or the legacy read tests will silently stop
+ * exercising the real legacy path.
  */
 function buildLegacyHexColon(plaintext: string): string {
   const salt = `test-host-test-user-llxprt-cli`;
@@ -150,6 +159,31 @@ describe('FileTokenStorage', () => {
       expect(result).toStrictEqual(credentials);
     });
 
+    it('should return expired credentials without filtering them out', async () => {
+      // The storage layer is intentionally a dumb persistence layer: it returns
+      // whatever is stored and does NOT apply expiry filtering (that is the
+      // caller's responsibility via isTokenExpired). This test pins that
+      // contract so a future change that silently drops expired tokens at read
+      // time would be caught.
+      const expiredCredentials: MCPOAuthCredentials = {
+        serverName: 'test-server',
+        token: {
+          accessToken: 'expired-token',
+          tokenType: 'Bearer',
+          expiresAt: Date.now() - 3600000,
+        },
+        updatedAt: Date.now() - 7200000,
+      };
+
+      const encryptedData = buildLegacyHexColon(
+        JSON.stringify({ 'test-server': expiredCredentials }),
+      );
+      mockFs.readFile.mockResolvedValue(encryptedData);
+
+      const result = await storage.getCredentials('test-server');
+      expect(result).toStrictEqual(expiredCredentials);
+    });
+
     it('should throw error for corrupted (non-envelope, non-legacy) files', async () => {
       mockFs.readFile.mockResolvedValue('corrupted-data');
 
@@ -188,6 +222,13 @@ describe('FileTokenStorage', () => {
       const parsed = JSON.parse(written) as { v: number };
       expect(parsed.v).toBe(2);
       expect(writeCall[2]).toStrictEqual({ mode: 0o600 });
+
+      // Decrypt the persisted envelope and verify the credential map actually
+      // round-trips (a write that produced a v:2 envelope of the *wrong*
+      // content would pass the version check above but fail here).
+      const stored = await decryptWrittenEnvelope(written);
+      expect(Object.keys(stored)).toStrictEqual(['new-server']);
+      expect(stored['new-server'].token.accessToken).toBe('new-token');
     });
 
     it('should save credentials as a v:2 envelope (not legacy hex-colon)', async () => {
@@ -254,6 +295,58 @@ describe('FileTokenStorage', () => {
       ]);
       expect(stored['existing-server']).toStrictEqual(existingCredentials);
       expect(stored['test-server'].token.accessToken).toBe('new-token');
+    });
+
+    it('should remove the file and throw when post-write chmod fails', async () => {
+      // The file is written, but tightening its permissions fails. Production
+      // must remove the just-written file (so credentials are never left on
+      // disk with loose permissions) and surface an error distinct from a
+      // write failure.
+      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.chmod.mockRejectedValue(new Error('EACCES'));
+      mockFs.unlink.mockResolvedValue(undefined);
+
+      const credentials: MCPOAuthCredentials = {
+        serverName: 'new-server',
+        token: {
+          accessToken: 'new-token',
+          tokenType: 'Bearer',
+        },
+        updatedAt: Date.now(),
+      };
+
+      await expect(storage.setCredentials(credentials)).rejects.toThrow(
+        /permissions could not be restricted/,
+      );
+      expect(mockFs.unlink).toHaveBeenCalledWith(
+        path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
+      );
+    });
+
+    it('should report when cleanup unlink also fails after chmod failure', async () => {
+      // Worst case: chmod fails AND the cleanup unlink fails. The thrown error
+      // must NOT falsely claim the file was removed; it must warn that
+      // credentials may remain on disk with overly permissive permissions.
+      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.chmod.mockRejectedValue(new Error('EACCES'));
+      mockFs.unlink.mockRejectedValue(new Error('EPERM'));
+
+      const credentials: MCPOAuthCredentials = {
+        serverName: 'new-server',
+        token: {
+          accessToken: 'new-token',
+          tokenType: 'Bearer',
+        },
+        updatedAt: Date.now(),
+      };
+
+      await expect(storage.setCredentials(credentials)).rejects.toThrow(
+        /could not be removed/,
+      );
     });
   });
 

@@ -604,6 +604,26 @@ describe('Machine Secret Provider — Permission repair', () => {
       });
     });
 
+    it('returns null (fails closed) when the keyring loader throws and no file exists', async () => {
+      // A keyring backend that throws (transiently broken / unavailable) must
+      // be swallowed as "no keyring secret" rather than propagating. With no
+      // file fallback present and generateIfMissing: false, the provider must
+      // fail closed (return null) WITHOUT minting or persisting a replacement.
+      const secret = await getMachineSecret({
+        filePath: tempFilePath,
+        keyringLoader: async () => {
+          throw new Error('keyring unavailable');
+        },
+        generateIfMissing: false,
+      });
+
+      expect(secret).toBeNull();
+      // Nothing was persisted to the file fallback.
+      await expect(fs.readFile(tempFilePath, 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    });
+
     it('returns an existing keyring secret without generating', async () => {
       const keyring = createMockKeyring();
       const existing = crypto.randomBytes(32);
