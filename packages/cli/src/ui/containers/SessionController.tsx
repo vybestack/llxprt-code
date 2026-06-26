@@ -189,8 +189,7 @@ function usePerformMemoryRefresh(
         settings.merged,
         config.getExtensions(),
         config.getFolderTrust(),
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string memory import format
-        settings.merged.ui.memoryImportFormat || 'tree',
+        settings.merged.ui.memoryImportFormat ?? 'tree',
         config.getFileFilteringOptions(),
       );
       config.setUserMemory(memoryContent);

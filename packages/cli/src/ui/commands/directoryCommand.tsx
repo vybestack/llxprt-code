@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type { SlashCommand, CommandContext } from './types.js';
 import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';

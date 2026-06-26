@@ -22,6 +22,7 @@ import type { Todo } from '@vybestack/llxprt-code-core';
 import { themeManager } from '../themes/theme-manager.js';
 import { DefaultDark } from '../themes/default.js';
 import { DefaultLight } from '../themes/default-light.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 vi.mock('../hooks/useTerminalSize.js');
 
@@ -86,8 +87,8 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    expect(output).toContain('\u2714');
-    expect(output).toContain('Completed task');
+    // Check for the marker and content pattern in the rendered output
+    expect(output).toMatch(testRegex('✔.*Completed task', ''));
 
     // Verify the output contains the task text - exact color testing is hard with ink
     // but we can verify the component renders correctly
@@ -112,9 +113,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    expect(output).toContain('\u2192');
-    expect(output).toContain('Current task');
-    expect(output).toContain('← current');
+    expect(output).toMatch(testRegex('→.*Current task.*← current', ''));
   });
 
   it('should use semantic secondary color for pending todos', () => {
@@ -135,8 +134,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    expect(output).toContain('\u25cb');
-    expect(output).toContain('Pending task');
+    expect(output).toMatch(testRegex('○.*Pending task', ''));
   });
 
   it('should adapt colors when theme changes', () => {
@@ -159,8 +157,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const darkOutput = darkFrame();
-    expect(darkOutput).toContain('\u2714');
-    expect(darkOutput).toContain('Test task');
+    expect(darkOutput).toMatch(testRegex('✔.*Test task', ''));
 
     // Test with light theme
     themeManager.setActiveTheme(DefaultLight.name);
@@ -173,8 +170,7 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const lightOutput = lightFrame();
-    expect(lightOutput).toContain('\u2714');
-    expect(lightOutput).toContain('Test task');
+    expect(lightOutput).toMatch(testRegex('✔.*Test task', ''));
 
     // Both should render correctly even though colors might be different
     expect(darkOutput).toBeTruthy();
@@ -217,12 +213,8 @@ describe('TodoPanel Semantic Colors', () => {
     );
 
     const output = lastFrame();
-    expect(output).toContain('\u2192');
-    expect(output).toContain('Main task');
-    expect(output).toContain('← current');
-    expect(output).toContain('\u2022');
-    expect(output).toContain('Subtask 1');
-    expect(output).toContain('\u2022');
-    expect(output).toContain('Subtask 2');
+    expect(output).toMatch(testRegex('→.*Main task.*← current', ''));
+    expect(output).toMatch(testRegex('•.*Subtask 1', ''));
+    expect(output).toMatch(testRegex('•.*Subtask 2', ''));
   });
 });

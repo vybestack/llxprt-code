@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type React from 'react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text } from 'ink';
@@ -13,6 +11,7 @@ import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 /**
  * Get border color based on editor state.
@@ -228,8 +227,7 @@ const ErrorDisplay: React.FC<{
 }> = ({ validationError, externalError, validateJson }) => {
   // intentional falsy coalescing for error display (empty string means no error)
   const error: string | null | undefined =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-    validationError || externalError || validateJson;
+    firstNonEmptyString(validationError, externalError) ?? validateJson;
   if (error == null) return null;
 
   return (

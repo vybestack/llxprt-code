@@ -280,7 +280,7 @@ describe('git extension helpers', () => {
       expect(result).toBe(ExtensionUpdateState.ERROR);
     });
 
-    it('should return NOT_UPDATABLE and use console.warn when loadExtension returns null for local extension', async () => {
+    it('should return NOT_UPDATABLE and use globalThis.console.warn when loadExtension returns null for local extension', async () => {
       const extension: GeminiCLIExtension = {
         name: 'local-test',
         path: '/ext',
@@ -530,7 +530,8 @@ describe('git extension helpers', () => {
     statusCode: number,
     headers: Record<string, string> = {},
   ) {
-    const events: Record<string, (...args: unknown[]) => void> = {};
+    const events: Record<string, ((...args: unknown[]) => void) | undefined> =
+      {};
     const response = {
       statusCode,
       headers,
@@ -542,7 +543,6 @@ describe('git extension helpers', () => {
         on: (event: string, cb: (...args: unknown[]) => void) => void;
         close: (cb: () => void) => void;
       }) => {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mock helper: event may not be registered
         setImmediate(() => events['finish']?.());
         return dest;
       },
@@ -666,7 +666,7 @@ describe('git extension helpers', () => {
 
       // Mock https.get to return a response that errors mid-stream
       mockHttpsGet.mockImplementation((_url, _options, callback) => {
-        const events: Record<string, (error: Error) => void> = {};
+        const events: Record<string, ((error: Error) => void) | undefined> = {};
         const response = {
           statusCode: 200,
           headers: {},
@@ -681,7 +681,6 @@ describe('git extension helpers', () => {
             ),
           pipe: vi.fn().mockImplementation((dest: unknown) => {
             // Simulate error after piping starts
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mock helper: event may not be registered
             setImmediate(() => events['error']?.(new Error('Stream error')));
             return dest;
           }),

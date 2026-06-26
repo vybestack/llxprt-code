@@ -86,6 +86,19 @@ function getSettingsService(
 }
 
 /**
+ * Reads a `disabled` flag from a hooks settings object, returning null when
+ * the container is absent or does not define the property.
+ */
+function readDisabledFlag(
+  container: { disabled?: unknown } | undefined,
+): unknown {
+  if (container && 'disabled' in container) {
+    return container.disabled;
+  }
+  return null;
+}
+
+/**
  * Step 10: Set CLI runtime context.
  * Step 11: Re-register provider infrastructure (conditional, dynamic import).
  * This is the SECOND call to registerCliProviderInfrastructure — the first
@@ -113,9 +126,7 @@ async function setupRuntimeContext(
     | { disabled?: unknown }
     | undefined;
   const disabledHooks =
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    (hooksConfig && 'disabled' in hooksConfig ? hooksConfig.disabled : null) ??
-    (hooksLegacy && 'disabled' in hooksLegacy ? hooksLegacy.disabled : null);
+    readDisabledFlag(hooksConfig) ?? readDisabledFlag(hooksLegacy);
   if (Array.isArray(disabledHooks)) {
     config.setDisabledHooks(disabledHooks as string[]);
   }
@@ -209,6 +220,25 @@ async function activateProviderAndProfile(
 }
 
 /**
+ * Returns true when any provider key/keyfile/base-url/set override was passed
+ * on the CLI and therefore needs to be reapplied after a provider switch.
+ */
+function isNonEmptyString(value: string | null): boolean {
+  return value !== null && value.length > 0;
+}
+
+function hasCliArgumentOverrides(args: BootstrapProfileArgs): boolean {
+  const hasSetOverrides =
+    args.setOverrides !== null && args.setOverrides.length > 0;
+  return (
+    isNonEmptyString(args.keyOverride) ||
+    isNonEmptyString(args.keyfileOverride) ||
+    isNonEmptyString(args.baseurlOverride) ||
+    hasSetOverrides
+  );
+}
+
+/**
  * Step 14: Reapply CLI model override + CLI arg overrides after provider switch.
  * switchActiveProvider clears ephemerals, so we reapply CLI args here.
  */
@@ -246,13 +276,7 @@ async function reapplyCliOverrides(
     );
   }
 
-  if (
-    // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-    bootstrapArgs.keyOverride ||
-    bootstrapArgs.keyfileOverride ||
-    bootstrapArgs.baseurlOverride ||
-    (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0)
-  ) {
+  if (hasCliArgumentOverrides(bootstrapArgs)) {
     const { applyCliArgumentOverrides } = await import(
       '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
     );

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 /**
  * Unit tests for toolCompletionHandler.ts display-side helpers.
  *
@@ -65,14 +63,14 @@ function makeCompletedTool(overrides: {
       error: undefined,
       errorType: undefined,
     },
-    invocation: { getDescription: () => 'test' } as any,
+    invocation: { getDescription: () => 'test' },
     tool: {
       name: overrides.name ?? 'test_tool',
       displayName: 'Test',
       description: 'test',
       build: vi.fn(),
-    } as any,
-  } as TrackedCompletedToolCall;
+    },
+  } as unknown as TrackedCompletedToolCall;
 }
 
 // ─── classifyCompletedTools ───────────────────────────────────────────────────
@@ -131,14 +129,14 @@ describe('classifyCompletedTools', () => {
         agentId: DEFAULT_AGENT_ID,
       },
       status: 'executing',
-      invocation: { getDescription: () => 'test' } as any,
+      invocation: { getDescription: () => 'test' },
       tool: {
         name: 'test_tool',
         displayName: 'Test',
         description: 'test',
         build: vi.fn(),
-      } as any,
-    } as TrackedToolCall;
+      },
+    } as unknown as TrackedToolCall;
     const result = classifyCompletedTools([executingTool]);
     expect(result.primaryTools).toHaveLength(0);
   });
@@ -146,10 +144,12 @@ describe('classifyCompletedTools', () => {
   it('filters out terminal tools with no responseParts', () => {
     const toolWithNoResponse = makeCompletedTool({
       callId: 'no-response',
-      responseParts: undefined as any,
+      responseParts: undefined,
     });
     // Force undefined responseParts
-    (toolWithNoResponse.response as any).responseParts = undefined;
+    (
+      toolWithNoResponse as unknown as { response: { responseParts: Part[] } }
+    ).response.responseParts = undefined as unknown as Part[];
     const result = classifyCompletedTools([toolWithNoResponse]);
     expect(result.primaryTools).toHaveLength(0);
   });
@@ -157,7 +157,8 @@ describe('classifyCompletedTools', () => {
   it('uses DEFAULT_AGENT_ID when agentId is undefined', () => {
     const tool = makeCompletedTool({ callId: 'call-1' });
     // Force agentId to undefined to exercise the fallback in classifyCompletedTools
-    (tool.request as any).agentId = undefined;
+    (tool as unknown as { request: { agentId: string } }).request.agentId =
+      undefined as unknown as string;
     const result = classifyCompletedTools([tool]);
     expect(result.primaryTools).toHaveLength(1);
     expect(result.externalTools).toHaveLength(0);
@@ -269,7 +270,7 @@ describe('processMemoryToolResults', () => {
       callId: 'mem-3',
       name: 'save_memory',
     });
-    (failedTool as any).status = 'error';
+    (failedTool as unknown as { status: string }).status = 'error';
     processMemoryToolResults(
       [failedTool],
       processedMemoryToolsRef,

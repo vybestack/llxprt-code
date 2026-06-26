@@ -349,11 +349,14 @@ function displayToolResult(
 ): void {
   if (toolResponse.error != null) {
     if (context.jsonOutput === false && context.streamJsonOutput === false) {
-      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing, @typescript-eslint/strict-boolean-expressions -- intentional falsy coalescing: empty resultDisplay should fall back to error message */
+      const display = toolResponse.resultDisplay;
+      const hasDisplay =
+        typeof display === 'string' ? display.length > 0 : display != null;
       debugLogger.error(
-        `Error executing tool ${toolName}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
+        `Error executing tool ${toolName}: ${
+          hasDisplay ? display : toolResponse.error.message
+        }`,
       );
-      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing, @typescript-eslint/strict-boolean-expressions */
     }
     return;
   }

@@ -85,7 +85,7 @@ describe('handleAtCommand (filtering)', () => {
       const relativePath = path.join('src', 'index.ts');
       await createTestFile(
         path.join(testRootDir, relativePath),
-        'console.log("Hello world");',
+        'globalThis.console.log("Hello world");',
       );
       const query = `@${relativePath}`;
 
@@ -103,7 +103,7 @@ describe('handleAtCommand (filtering)', () => {
           { text: `@${relativePath}` },
           { text: '\n--- Content from referenced files ---' },
           { text: `\nContent from @${relativePath}:\n` },
-          { text: 'console.log("Hello world");' },
+          { text: 'globalThis.console.log("Hello world");' },
           { text: '\n--- End of content ---' },
         ],
       });
@@ -209,7 +209,7 @@ describe('handleAtCommand (filtering)', () => {
       );
       await createTestFile(
         path.join(testRootDir, 'build', 'output.js'),
-        'console.log("Hello");',
+        'globalThis.console.log("Hello");',
       );
       const query = '@build/output.js';
 
@@ -242,7 +242,7 @@ describe('handleAtCommand (filtering)', () => {
     const relativePath = path.join('src', 'index.ts');
     await createTestFile(
       path.join(testRootDir, relativePath),
-      'console.log("Hello world");',
+      'globalThis.console.log("Hello world");',
     );
     const query = `@${relativePath}`;
 
@@ -260,7 +260,7 @@ describe('handleAtCommand (filtering)', () => {
         { text: `@${relativePath}` },
         { text: '\n--- Content from referenced files ---' },
         { text: `\nContent from @${relativePath}:\n` },
-        { text: 'console.log("Hello world");' },
+        { text: 'globalThis.console.log("Hello world");' },
         { text: '\n--- End of content ---' },
       ],
     });
@@ -279,7 +279,7 @@ describe('handleAtCommand (filtering)', () => {
     const relativePath2 = path.join('dist', 'bundle.js');
     await createTestFile(
       path.join(testRootDir, relativePath2),
-      'console.log("bundle");',
+      'globalThis.console.log("bundle");',
     );
     const query = `@${relativePath1} @${relativePath2}`;
 

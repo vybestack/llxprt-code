@@ -177,13 +177,19 @@ const baseExcludePatterns = [
   '**/test-utils/**/*.test.tsx',
   '**/ui/App.e2e.test.tsx',
   '**/ui/App.test.tsx',
+  // App.test.tsx split into cohesive shards (issue #2114, max-lines); all
+  // share the same ink reconciler setup and remain lint-only like the parent.
+  '**/ui/App.context.test.tsx',
+  '**/ui/App.components.test.tsx',
+  '**/ui/App.dialogs.test.tsx',
+  '**/ui/App.behavior.test.tsx',
   // '**/ui/commands/directoryCommand.test.tsx', // Temporarily enabled for trust gating implementation (9786c4dcf)
   // React 19 / ink-stub incompatible — ALL ui/components/*.test.tsx render empty in jsdom
   '**/ui/components/*.test.tsx',
   '**/ui/components/__tests__/*.test.tsx',
   // SessionBrowserDialog - ink-testing-library/ink-stub reconciler conflict (issue #1385)
   // Tests pass individually but fail when run in sequence due to global ink mock
-  '**/ui/components/__tests__/SessionBrowserDialog.spec.tsx',
+  '**/ui/components/__tests__/SessionBrowserDialog*.spec.tsx',
   '**/ui/components/messages/DiffRenderer.test.tsx',
   // GeminiMessage/ToolMessage - behavioral tests excluded due to ink-testing-library/ink-stub
   // incompatibility in CI (renders empty string). Tests pass locally but fail in CI.
@@ -204,6 +210,20 @@ const baseExcludePatterns = [
   '**/ui/hooks/useReverseSearchCompletion.test.tsx',
   '**/ui/hooks/useGeminiStream.integration.test.tsx',
   '**/ui/hooks/useGeminiStream.test.tsx',
+  // useGeminiStream.test.tsx split into cohesive shards (issue #2114,
+  // max-lines); all share the same React 19 setup and remain lint-only like
+  // the parent. Exact paths so the runnable dedup/subagent/thinking/ordering
+  // siblings are not matched.
+  '**/ui/hooks/useGeminiStream.cancellation.test.tsx',
+  '**/ui/hooks/useGeminiStream.usercancel.test.tsx',
+  '**/ui/hooks/useGeminiStream.commands.test.tsx',
+  '**/ui/hooks/useGeminiStream.approval.test.tsx',
+  '**/ui/hooks/useGeminiStream.finished.test.tsx',
+  '**/ui/hooks/useGeminiStream.include.test.tsx',
+  '**/ui/hooks/useGeminiStream.thought.test.tsx',
+  '**/ui/hooks/useGeminiStream.loopdetect.test.tsx',
+  '**/ui/hooks/useGeminiStream.hooks.test.tsx',
+  '**/ui/hooks/useGeminiStream.mcp.test.tsx',
   '**/ui/hooks/useKeypress.test.tsx',
   '**/ui/hooks/usePermissionsModifyTrust.test.tsx',
   '**/ui/privacy/**/*.test.tsx',
@@ -259,9 +279,11 @@ export default defineConfig({
       'config.test.ts',
       // Temporarily include KeypressContext test for issue #263
       'src/ui/contexts/KeypressContext.test.tsx',
+      'src/ui/contexts/KeypressContext.parsing.test.tsx',
       // ThinkingBlockDisplay test excluded - ink-testing-library doesn't render styled Text in NO_COLOR mode
       // Include useGeminiStream thinking test for Phase P07
       'src/ui/hooks/useGeminiStream.thinking.test.tsx',
+      'src/ui/hooks/useGeminiStream.ordering.test.tsx',
       // Include useGeminiStream dedup test for issue #1040
       'src/ui/hooks/useGeminiStream.dedup.test.tsx',
       // Include useToolScheduler test for issue #1055 - Phase 2

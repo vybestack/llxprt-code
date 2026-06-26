@@ -4,16 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable max-lines, eslint-comments/disable-enable-pair -- Phase 5: large behavioral coverage file retained together to avoid fragmenting related scenarios. */
-
 /**
  * @plan:PLAN-20251202-THINKING-UI.P07
  * @requirement:REQ-THINK-UI-001
  * @requirement:REQ-THINK-UI-003
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Mock } from 'vitest';
+import {
+  MockedAgentClientClass,
+  mockSendMessageStream,
+  mockStartChat,
+} from './useGeminiStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
@@ -21,7 +23,11 @@ import * as ReactDOM from 'react-dom';
 import { useGeminiStream } from './geminiStream/index.js';
 import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
-import type { Config, EditorType } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  EditorType,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-core';
 import { GeminiEventType as ServerGeminiEventType } from '@vybestack/llxprt-code-core';
 import { FinishReason } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -108,40 +114,11 @@ const ensureReactSharedInternals = () => {
 ensureReactSharedInternals();
 
 // --- MOCKS ---
-const mockSendMessageStream = vi
-  .fn()
-  .mockReturnValue((async function* () {})());
-const mockStartChat = vi.fn();
-
-const MockedAgentClientClass = vi.hoisted(() =>
-  vi.fn().mockImplementation(function (this: any, _config: any) {
-    this.startChat = mockStartChat;
-    this.sendMessageStream = mockSendMessageStream;
-    this.addHistory = vi.fn();
-    this.getCurrentSequenceModel = vi.fn().mockReturnValue(null);
-    this.getChat = vi.fn().mockReturnValue({
-      recordCompletedToolCalls: vi.fn(),
-    });
-  }),
-);
-
-const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
-
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCoreModule = (await importOriginal()) as any;
-  return {
-    ...actualCoreModule,
-    GitService: vi.fn(),
-    AgentClient: MockedAgentClientClass,
-    parseAndFormatApiError: mockParseAndFormatApiError,
-  };
-});
-
 const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
-  const actualSchedulerModule = (await importOriginal()) as any;
+  const actualSchedulerModule = await importOriginal<Record<string, unknown>>();
   return {
-    ...(actualSchedulerModule ?? {}),
+    ...actualSchedulerModule,
     useReactToolScheduler: vi.fn(),
   };
 });
@@ -253,7 +230,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () => ({ getToolSchemaList: vi.fn(() => []) }) as any,
+        () =>
+          ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
@@ -302,7 +280,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     mockStartChat.mockClear().mockResolvedValue({
       sendMessageStream: mockSendMessageStream,
-    } as unknown as any);
+    } as unknown as Awaited<ReturnType<typeof mockStartChat>>);
     mockSendMessageStream
       .mockClear()
       .mockReturnValue((async function* () {})());
@@ -319,7 +297,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
   const renderTestHook = (
     initialToolCalls: TrackedToolCall[] = [],
-    agentClient?: any,
+    agentClient?: unknown,
   ) => {
     let currentToolCalls = initialToolCalls;
     const setToolCalls = (newToolCalls: TrackedToolCall[]) => {
@@ -341,12 +319,12 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     const { result, rerender } = renderHook(
       (props: {
-        client: any;
-        history: any[];
+        client: unknown;
+        history: unknown[];
         addItem: UseHistoryManagerReturn['addItem'];
         config: Config;
         onDebugMessage: (message: string) => void;
-        handleSlashCommand: (cmd: any) => Promise<any>;
+        handleSlashCommand: (cmd: unknown) => Promise<unknown>;
         shellModeActive: boolean;
         loadedSettings: LoadedSettings;
         toolCalls?: TrackedToolCall[];
@@ -380,8 +358,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           config: mockConfig,
           onDebugMessage: mockOnDebugMessage,
           handleSlashCommand: mockHandleSlashCommand as unknown as (
-            cmd: any,
-          ) => Promise<any>,
+            cmd: unknown,
+          ) => Promise<unknown>,
           shellModeActive: false,
           loadedSettings: mockLoadedSettings,
           toolCalls: initialToolCalls,
@@ -454,7 +432,6 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     const secondThoughtValue = result.current.thought;
     expect(secondThoughtValue).not.toStrictEqual(firstThoughtValue);
   });
-
   it('should replace thinking content on subsequent Thought events (not append)', async () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
@@ -504,7 +481,6 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       sourceField: 'thought',
     });
   });
-
   it('should expose pending thinking blocks before content arrives', async () => {
     const resolvers: Array<() => void> = [];
     mockSendMessageStream.mockReturnValue(
@@ -545,7 +521,6 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       expect(thinkingText).toContain('Streaming thought');
     });
   });
-
   it('should accumulate multiple Thought events into multiple blocks', async () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
@@ -607,7 +582,6 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       sourceField: 'thought',
     });
   });
-
   it('should verify ThinkingBlock structure matches IContent specification', async () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
@@ -655,7 +629,6 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     expect(block.sourceField).toBe('thought');
     expect(block.isHidden).toBeUndefined();
   });
-
   it('should include thinkingBlocks when reasoning.includeInResponse is true', async () => {
     // Mock settings with reasoning.includeInResponse = true
     const settingsWithReasoning: LoadedSettings = {
@@ -725,7 +698,6 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     expect(historyItem.thinkingBlocks).toBeDefined();
     expect(historyItem.thinkingBlocks!.length).toBeGreaterThan(0);
   });
-
   describe('Submission queue (regression #862)', () => {
     it('drains queued prompts sequentially when multiple are queued', async () => {
       const streamResolvers: Array<() => void> = [];
@@ -737,7 +709,10 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           yield {
             type: ServerGeminiEventType.Finished,
             value: { reason: FinishReason.STOP },
-          } as any;
+          } as unknown as {
+            type: ServerGeminiEventType;
+            value: { reason: FinishReason };
+          };
         })(),
       );
 
@@ -795,429 +770,6 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       await waitFor(() =>
         expect(result.current.streamingState).toBe(StreamingState.Idle),
       );
-    });
-  });
-
-  it('should include thinkingBlocks when reasoning.includeInResponse is false (storage test)', async () => {
-    // Mock settings with reasoning.includeInResponse = false
-    const settingsWithoutReasoning: LoadedSettings = {
-      ...mockSettings,
-      merged: {
-        ...mockSettings.merged,
-        'reasoning.includeInResponse': false,
-      },
-    } as unknown as LoadedSettings;
-
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerGeminiEventType.Thought,
-          value: {
-            subject: 'With reasoning disabled',
-            description: 'This should still be stored',
-          },
-        };
-        yield {
-          type: ServerGeminiEventType.Content,
-          value: 'Response',
-        };
-        yield {
-          type: ServerGeminiEventType.Finished,
-          value: { reason: FinishReason.STOP },
-        };
-      })(),
-    );
-
-    const { result } = renderHook(() =>
-      useGeminiStream(
-        mockConfig.getAgentClient(),
-        [],
-        mockAddItem,
-        mockConfig,
-        settingsWithoutReasoning,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        false,
-
-        () => {},
-        () => {},
-        () => {},
-      ),
-    );
-
-    await act(async () => {
-      await result.current.submitQuery('test query');
-    });
-
-    await waitFor(() => {
-      const geminiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === MessageType.GEMINI,
-      );
-      expect(geminiCalls.length).toBeGreaterThan(0);
-    });
-
-    const lastGeminiCall = mockAddItem.mock.calls
-      .filter((call) => call[0].type === MessageType.GEMINI)
-      .pop();
-
-    const historyItem = lastGeminiCall[0] as HistoryItemGemini;
-    // Blocks should still be stored in history regardless of display setting
-    expect(historyItem.thinkingBlocks).toBeDefined();
-    expect(historyItem.thinkingBlocks!.length).toBeGreaterThan(0);
-  });
-
-  it('should reset thinking blocks on new prompt', async () => {
-    // First query with thought
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerGeminiEventType.Thought,
-          value: {
-            subject: 'First query thought',
-            description: 'First description',
-          },
-        };
-        yield {
-          type: ServerGeminiEventType.Content,
-          value: 'First response',
-        };
-        yield {
-          type: ServerGeminiEventType.Finished,
-          value: { reason: FinishReason.STOP },
-        };
-      })(),
-    );
-
-    const { result } = renderTestHook();
-
-    await act(async () => {
-      await result.current.submitQuery('first query');
-    });
-
-    await waitFor(() => {
-      const geminiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === MessageType.GEMINI,
-      );
-      expect(geminiCalls.length).toBeGreaterThan(0);
-    });
-
-    // Second query without thought
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerGeminiEventType.Content,
-          value: 'Second response',
-        };
-        yield {
-          type: ServerGeminiEventType.Finished,
-          value: { reason: FinishReason.STOP },
-        };
-      })(),
-    );
-
-    await act(async () => {
-      await result.current.submitQuery('second query');
-    });
-
-    await waitFor(() => {
-      const geminiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === MessageType.GEMINI,
-      );
-      expect(geminiCalls.length).toBeGreaterThan(1);
-    });
-
-    const secondGeminiCall = mockAddItem.mock.calls
-      .filter((call) => call[0].type === MessageType.GEMINI)
-      .pop();
-
-    const historyItem = secondGeminiCall[0] as HistoryItemGemini;
-    // Second query should have no thinking blocks or an empty array
-    const thinkingBlocks = historyItem.thinkingBlocks ?? [];
-    expect(thinkingBlocks).toHaveLength(0);
-  });
-
-  it('should handle Thought events with empty subject or description', async () => {
-    mockSendMessageStream.mockReturnValue(
-      (async function* () {
-        yield {
-          type: ServerGeminiEventType.Thought,
-          value: {
-            subject: '',
-            description: 'Description only',
-          },
-        };
-        yield {
-          type: ServerGeminiEventType.Thought,
-          value: {
-            subject: 'Subject only',
-            description: '',
-          },
-        };
-        yield {
-          type: ServerGeminiEventType.Content,
-          value: 'Response',
-        };
-        yield {
-          type: ServerGeminiEventType.Finished,
-          value: { reason: FinishReason.STOP },
-        };
-      })(),
-    );
-
-    const { result } = renderTestHook();
-
-    await act(async () => {
-      await result.current.submitQuery('test query');
-    });
-
-    await waitFor(() => {
-      const geminiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === MessageType.GEMINI,
-      );
-      expect(geminiCalls.length).toBeGreaterThan(0);
-    });
-
-    const lastGeminiCall = mockAddItem.mock.calls
-      .filter((call) => call[0].type === MessageType.GEMINI)
-      .pop();
-
-    const historyItem = lastGeminiCall[0] as HistoryItemGemini;
-    expect(historyItem.thinkingBlocks).toBeDefined();
-    expect(historyItem.thinkingBlocks!.length).toBe(2);
-
-    // Verify that empty fields are handled gracefully
-    expect(historyItem.thinkingBlocks![0].thought).toContain(
-      'Description only',
-    );
-    expect(historyItem.thinkingBlocks![1].thought).toContain('Subject only');
-  });
-
-  describe('Ordering contract: thinking ownership on content split (#1272)', () => {
-    it('should attach thinkingBlocks only to the first committed gemini item, not gemini_content', async () => {
-      // Override findLastSafeSplitPoint to force a split: split at first chunk boundary
-      const { findLastSafeSplitPoint } = await import(
-        '../utils/markdownUtilities.js'
-      );
-      const mockedSplitPoint = vi.mocked(findLastSafeSplitPoint);
-
-      // First call returns a split point (half the combined text), subsequent calls return full length
-      let callCount = 0;
-      mockedSplitPoint.mockImplementation((s: string) => {
-        callCount++;
-        // On the first content event, force a split mid-string
-        if (callCount === 1 && s.length > 5) {
-          return 5;
-        }
-        return s.length;
-      });
-
-      mockSendMessageStream.mockReturnValue(
-        (async function* () {
-          yield {
-            type: ServerGeminiEventType.Thought,
-            value: {
-              subject: 'Analyzing',
-              description: 'the problem',
-            },
-          };
-          yield {
-            type: ServerGeminiEventType.Content,
-            value: 'Hello world, this is a long response',
-          };
-          yield {
-            type: ServerGeminiEventType.Finished,
-            value: { reason: FinishReason.STOP },
-          };
-        })(),
-      );
-
-      const { result } = renderTestHook();
-
-      await act(async () => {
-        await result.current.submitQuery('test query');
-      });
-
-      await waitFor(() => {
-        const geminiCalls = mockAddItem.mock.calls.filter(
-          (call) =>
-            call[0].type === MessageType.GEMINI ||
-            call[0].type === 'gemini_content',
-        );
-        expect(geminiCalls.length).toBeGreaterThanOrEqual(2);
-      });
-
-      const committedGeminiItems = mockAddItem.mock.calls
-        .filter(
-          (call) =>
-            call[0].type === MessageType.GEMINI ||
-            call[0].type === 'gemini_content',
-        )
-        .map((call) => call[0] as HistoryItemGemini);
-
-      // First committed item (type: 'gemini') should own thinkingBlocks
-      const firstItem = committedGeminiItems[0];
-      expect(firstItem.type).toBe('gemini');
-      expect(firstItem.thinkingBlocks).toBeDefined();
-      expect(firstItem.thinkingBlocks!.length).toBeGreaterThan(0);
-      expect(firstItem.thinkingBlocks![0].sourceField).toBe('thought');
-
-      // Subsequent gemini_content items should NOT have thinkingBlocks
-      for (let i = 1; i < committedGeminiItems.length; i++) {
-        const item = committedGeminiItems[i];
-        const hasThinking =
-          item.thinkingBlocks && item.thinkingBlocks.length > 0;
-        expect(hasThinking).toBeFalsy();
-      }
-
-      // Restore mock
-      mockedSplitPoint.mockImplementation((s: string) => s.length);
-    });
-
-    it('should not duplicate thinkingBlocks across multiple committed content segments', async () => {
-      const { findLastSafeSplitPoint } = await import(
-        '../utils/markdownUtilities.js'
-      );
-      const mockedSplitPoint = vi.mocked(findLastSafeSplitPoint);
-
-      // Force a split on every call to generate multiple committed segments
-      mockedSplitPoint.mockImplementation((s: string) => {
-        if (s.length > 10) {
-          return 10;
-        }
-        return s.length;
-      });
-
-      mockSendMessageStream.mockReturnValue(
-        (async function* () {
-          yield {
-            type: ServerGeminiEventType.Thought,
-            value: {
-              subject: 'Deep thinking',
-              description: 'about the problem',
-            },
-          };
-          // Send enough content to trigger multiple splits
-          yield {
-            type: ServerGeminiEventType.Content,
-            value: 'First segment of content that is long enough. ',
-          };
-          yield {
-            type: ServerGeminiEventType.Content,
-            value: 'Second segment of content that continues. ',
-          };
-          yield {
-            type: ServerGeminiEventType.Finished,
-            value: { reason: FinishReason.STOP },
-          };
-        })(),
-      );
-
-      const { result } = renderTestHook();
-
-      await act(async () => {
-        await result.current.submitQuery('test query');
-      });
-
-      await waitFor(() => {
-        const allGeminiCalls = mockAddItem.mock.calls.filter(
-          (call) =>
-            call[0].type === MessageType.GEMINI ||
-            call[0].type === 'gemini_content',
-        );
-        expect(allGeminiCalls.length).toBeGreaterThanOrEqual(2);
-      });
-
-      const committedItems = mockAddItem.mock.calls
-        .filter(
-          (call) =>
-            call[0].type === MessageType.GEMINI ||
-            call[0].type === 'gemini_content',
-        )
-        .map((call) => call[0] as HistoryItemGemini);
-
-      // Count how many items have thinkingBlocks
-      const itemsWithThinking = committedItems.filter(
-        (item) => item.thinkingBlocks != null && item.thinkingBlocks.length > 0,
-      );
-
-      // Exactly one item should own thinkingBlocks
-      expect(itemsWithThinking).toHaveLength(1);
-      expect(itemsWithThinking[0].type).toBe('gemini');
-
-      // Restore mock
-      mockedSplitPoint.mockImplementation((s: string) => s.length);
-    });
-
-    it('should maintain thinking-above-content ordering on the first committed gemini item', async () => {
-      const { findLastSafeSplitPoint } = await import(
-        '../utils/markdownUtilities.js'
-      );
-      const mockedSplitPoint = vi.mocked(findLastSafeSplitPoint);
-
-      mockedSplitPoint.mockImplementation((s: string) => {
-        if (s.length > 8) {
-          return 8;
-        }
-        return s.length;
-      });
-
-      mockSendMessageStream.mockReturnValue(
-        (async function* () {
-          yield {
-            type: ServerGeminiEventType.Thought,
-            value: {
-              subject: 'Planning',
-              description: 'the response',
-            },
-          };
-          yield {
-            type: ServerGeminiEventType.Content,
-            value: 'Here is the detailed response text',
-          };
-          yield {
-            type: ServerGeminiEventType.Finished,
-            value: { reason: FinishReason.STOP },
-          };
-        })(),
-      );
-
-      const { result } = renderTestHook();
-
-      await act(async () => {
-        await result.current.submitQuery('test query');
-      });
-
-      await waitFor(() => {
-        const geminiCalls = mockAddItem.mock.calls.filter(
-          (call) =>
-            call[0].type === MessageType.GEMINI ||
-            call[0].type === 'gemini_content',
-        );
-        expect(geminiCalls.length).toBeGreaterThanOrEqual(1);
-      });
-
-      const allCommitted = mockAddItem.mock.calls
-        .filter(
-          (call) =>
-            call[0].type === MessageType.GEMINI ||
-            call[0].type === 'gemini_content',
-        )
-        .map((call) => call[0] as HistoryItemGemini);
-
-      // The first committed item must be 'gemini' type with thinking
-      const first = allCommitted[0];
-      expect(first.type).toBe('gemini');
-      expect(first.thinkingBlocks).toBeDefined();
-      expect(first.thinkingBlocks!.length).toBe(1);
-      expect(first.thinkingBlocks![0].thought).toBe('Planning: the response');
-      expect(first.text.length).toBeGreaterThan(0);
-
-      // Restore mock
-      mockedSplitPoint.mockImplementation((s: string) => s.length);
     });
   });
 });

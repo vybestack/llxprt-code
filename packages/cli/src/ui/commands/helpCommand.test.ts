@@ -8,6 +8,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { helpCommand } from './helpCommand';
 import { type CommandContext } from './types.js';
 import { MessageType } from '../types.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 describe('helpCommand', () => {
   let mockContext: CommandContext;
@@ -23,11 +24,8 @@ describe('helpCommand', () => {
   });
 
   it("should add a HELP history item for '/help'", async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (helpCommand.action === undefined) {
-      throw new Error('Help command has no action');
-    }
-    await helpCommand.action(mockContext, '');
+    assertDefined(helpCommand.action);
+    await helpCommand.action!(mockContext, '');
 
     expect(mockAddItem).toHaveBeenCalledTimes(1);
     const [historyItem] = mockAddItem.mock.calls[0];

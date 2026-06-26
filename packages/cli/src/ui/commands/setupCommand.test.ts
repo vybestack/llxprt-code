@@ -16,6 +16,7 @@ vi.mock('../../config/welcomeConfig.js', () => ({
 }));
 
 import { saveWelcomeConfig } from '../../config/welcomeConfig.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 describe('setupCommand', () => {
   let mockContext: CommandContext;
@@ -33,10 +34,7 @@ describe('setupCommand', () => {
   });
 
   it('should reset welcome config and return dialog action', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!setupCommand.action) {
-      throw new Error('setupCommand must have an action.');
-    }
+    assertDefined(setupCommand.action);
 
     const result = await setupCommand.action(mockContext, '');
 

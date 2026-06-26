@@ -15,6 +15,7 @@ import {
 } from './BaseSelectionList.js';
 import { useSelectionList } from '../../hooks/useSelectionList.js';
 import { Text } from 'ink';
+import { testRegex } from '../../../test-utils/regex.js';
 
 type Theme = typeof import('../../semantic-colors.js').theme;
 
@@ -99,13 +100,10 @@ describe('BaseSelectionList', () => {
       const { lastFrame } = renderComponent({}, 0);
       const output = lastFrame();
 
-      expect(output).toContain('\u25cf');
-      expect(output).toContain('1.');
-      expect(output).toContain('Item A');
-      expect(output).toContain('2.');
-      expect(output).toContain('Item B');
-      expect(output).toContain('3.');
-      expect(output).toContain('Item C');
+      // Use regex to assert the structure: Indicator + Whitespace + Number + Label
+      expect(output).toMatch(testRegex('●\\s+1\\.\\s+Item A', ''));
+      expect(output).toMatch(testRegex('\\s+2\\.\\s+Item B', ''));
+      expect(output).toMatch(testRegex('\\s+3\\.\\s+Item C', ''));
     });
 
     it('should handle an empty list gracefully', () => {

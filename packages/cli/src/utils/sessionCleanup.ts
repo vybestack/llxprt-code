@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable sonarjs/nested-control-flow, eslint-comments/disable-enable-pair -- Phase 5: legacy CLI boundary retained while larger decomposition continues. */
-
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { homedir } from 'node:os';
@@ -13,6 +11,7 @@ import { type Config, debugLogger } from '@vybestack/llxprt-code-core';
 import { LLXPRT_DIR } from '@vybestack/llxprt-code-storage';
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
 import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';
+import { firstNonEmptyString } from './coalesce.js';
 
 // Constants
 export const DEFAULT_MIN_RETENTION = '1d' as string;
@@ -117,19 +116,19 @@ async function deleteSingleSession(
     }
     result.deleted++;
 
-    if (sessionToDelete.sessionInfo !== null) {
-      const debugLogsDeleted = await cleanupDebugLogsForSession(
-        sessionToDelete.sessionInfo.id,
+    const sessionInfo = sessionToDelete.sessionInfo;
+    if (sessionInfo === null) {
+      return;
+    }
+    const debugLogsDeleted = await cleanupDebugLogsForSession(sessionInfo.id);
+    if (debugLogsDeleted <= 0) {
+      return;
+    }
+    result.debugLogsDeleted = (result.debugLogsDeleted ?? 0) + debugLogsDeleted;
+    if (config.getDebugMode()) {
+      debugLogger.debug(
+        `Deleted ${debugLogsDeleted} debug log file(s) for session ${sessionInfo.id}`,
       );
-      if (debugLogsDeleted > 0) {
-        result.debugLogsDeleted =
-          (result.debugLogsDeleted ?? 0) + debugLogsDeleted;
-        if (config.getDebugMode()) {
-          debugLogger.debug(
-            `Deleted ${debugLogsDeleted} debug log file(s) for session ${sessionToDelete.sessionInfo.id}`,
-          );
-        }
-      }
     }
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
@@ -342,8 +341,10 @@ function validateRetentionConfig(
     }
 
     // Enforce minimum retention period
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string minRetention should fall back to default
-    const minRetention = retentionConfig.minRetention || DEFAULT_MIN_RETENTION;
+    const minRetention = firstNonEmptyString(
+      retentionConfig.minRetention,
+      DEFAULT_MIN_RETENTION,
+    );
     let minRetentionMs: number;
     try {
       minRetentionMs = parseRetentionPeriod(minRetention);

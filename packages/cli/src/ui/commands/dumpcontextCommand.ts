@@ -65,8 +65,13 @@ function getHistoryService(
   if (!hasCallableGetAgentClient(config)) {
     return null;
   }
-  const agentClient = config.getAgentClient();
-  /* eslint-disable @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison -- callers may return null/undefined at runtime */
+  // The real Config type declares a non-null return, but at runtime the agent
+  // client may be absent before a session starts. Re-type the result honestly
+  // so the nullish guard below is meaningful rather than a no-op.
+  const agentClient = config.getAgentClient() as
+    | AgentClientWithHistory
+    | null
+    | undefined;
   if (
     agentClient === null ||
     agentClient === undefined ||
@@ -74,8 +79,7 @@ function getHistoryService(
   ) {
     return null;
   }
-  /* eslint-enable @typescript-eslint/no-unnecessary-condition, sonarjs/different-types-comparison */
-  return agentClient.getHistoryService() as HistoryService | null;
+  return agentClient.getHistoryService();
 }
 
 function getProviderDumpMetadata(

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type React from 'react';
 import { useState, useMemo, useEffect } from 'react';
 import { Box, Text } from 'ink';
@@ -13,6 +11,7 @@ import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 interface LogEntry {
   timestamp: string;
@@ -84,28 +83,30 @@ const formatTokenCount = (tokens?: {
   return parts.length > 0 ? `[${parts.join(' ')}]` : '';
 };
 
+const ENTRY_TYPE_ICONS: Record<string, string> = {
+  request: '→',
+  tool_call: '[TOOL]',
+};
+
+const getEntryTypeColor = (type: LogEntry['type']) => {
+  if (type === 'request') {
+    return SemanticColors.text.accent;
+  }
+  if (type === 'tool_call') {
+    return SemanticColors.status.warning;
+  }
+  return SemanticColors.status.success;
+};
+
 function getEntryMetadata(entry: LogEntry, isNarrow: boolean) {
   const timestamp = formatTimestamp(entry.timestamp, isNarrow);
-  const typeIcon =
-    entry.type === 'request'
-      ? '→'
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        entry.type === 'tool_call'
-        ? '[TOOL]'
-        : '←';
-  const typeColor =
-    entry.type === 'request'
-      ? SemanticColors.text.accent
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        entry.type === 'tool_call'
-        ? SemanticColors.status.warning
-        : SemanticColors.status.success;
+  const typeIcon = ENTRY_TYPE_ICONS[entry.type] ?? '←';
+  const typeColor = getEntryTypeColor(entry.type);
   return { timestamp, typeIcon, typeColor };
 }
 
 function buildToolCallContent(entry: LogEntry): string {
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty tool name should fall back to 'Unknown tool'
-  let toolContent = `${entry.tool || 'Unknown tool'}`;
+  let toolContent = `${firstNonEmptyString(entry.tool, 'Unknown tool')}`;
   if (entry.duration !== undefined && entry.duration > 0) {
     toolContent += ` (${entry.duration}ms)`;
   }

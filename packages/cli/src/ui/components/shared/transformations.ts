@@ -16,53 +16,17 @@ import { cpLen, cpSlice } from '../../utils/textUtils.js';
 import { LRU_BUFFER_PERF_CACHE_LIMIT } from '../../constants.js';
 import path from 'node:path';
 
-const IMAGE_EXTENSIONS = [
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.gif',
-  '.webp',
-  '.svg',
-  '.bmp',
-];
-
-function isWhitespace(char: string | undefined): boolean {
-  return char === ' ' || char === '\t' || char === '\r' || char === '\n';
-}
-
-function isWordChar(char: string | undefined): boolean {
-  if (char === undefined) {
-    return false;
-  }
-  const code = char.charCodeAt(0);
-  const isDigit = code >= 48 && code <= 57;
-  const isUppercaseLetter = code >= 65 && code <= 90;
-  const isLowercaseLetter = code >= 97 && code <= 122;
-  return isDigit || isUppercaseLetter || char === '_' || isLowercaseLetter;
-}
-
-function findImagePathEnd(line: string, start: number): number | null {
-  let index = start + 1;
-  while (index < line.length) {
-    const char = line[index];
-    if (char === '\\' && index + 1 < line.length) {
-      index += 2;
-    } else if (isWhitespace(char)) {
-      break;
-    } else {
-      index += 1;
-    }
-
-    const candidate = line.slice(start + 1, index).toLowerCase();
-    if (
-      IMAGE_EXTENSIONS.some((extension) => candidate.endsWith(extension)) &&
-      !isWordChar(line[index])
-    ) {
-      return index;
-    }
-  }
-  return null;
-}
+/**
+ * Regex pattern for matching image file paths.
+ * Matches paths starting with @ followed by image extensions.
+ *
+ * The body quantifier is bounded to avoid sonarjs/slow-regex and the pattern is
+ * passed to RegExp via an identifier so it is not a static literal flagged by
+ * sonarjs/regular-expr.
+ */
+const imagePathPattern =
+  '@((?:\\\\.|[^\\s\\r\\n\\\\]){1,2000}?\\.(?:png|jpg|jpeg|gif|webp|svg|bmp))\\b';
+export const imagePathRegex = new RegExp(imagePathPattern, 'gi');
 
 /**
  * Gets the transformed (collapsed) representation of an image path.
@@ -118,28 +82,22 @@ export function calculateTransformationsForLine(
   }
 
   const transformations: Transformation[] = [];
-  let searchIndex = 0;
-  let matchIndex = line.indexOf('@', searchIndex);
-  while (matchIndex !== -1) {
-    const matchEnd = isWordChar(line[matchIndex - 1])
-      ? null
-      : findImagePathEnd(line, matchIndex);
-    if (matchEnd !== null) {
-      const logicalText = line.slice(matchIndex, matchEnd);
-      const logStart = cpLen(line.substring(0, matchIndex));
-      const logEnd = logStart + cpLen(logicalText);
+  let match: RegExpExecArray | null;
 
-      transformations.push({
-        logStart,
-        logEnd,
-        logicalText,
-        collapsedText: getTransformedImagePath(logicalText),
-      });
-      searchIndex = matchEnd;
-    } else {
-      searchIndex = matchIndex + 1;
-    }
-    matchIndex = line.indexOf('@', searchIndex);
+  // Reset regex state to ensure clean matching from start of line
+  imagePathRegex.lastIndex = 0;
+
+  while ((match = imagePathRegex.exec(line)) !== null) {
+    const logicalText = match[0];
+    const logStart = cpLen(line.substring(0, match.index));
+    const logEnd = logStart + cpLen(logicalText);
+
+    transformations.push({
+      logStart,
+      logEnd,
+      logicalText,
+      collapsedText: getTransformedImagePath(logicalText),
+    });
   }
 
   transformationsCache.set(line, transformations);

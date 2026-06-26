@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { lspCommand } from './lspCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { MessageActionReturn, SlashCommand } from './types.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 const isMessageAction = (result: unknown): result is MessageActionReturn =>
   result !== null &&
@@ -61,9 +62,7 @@ describe('lspCommand (P34)', () => {
       vi.clearAllMocks();
       context = createMockCommandContext();
       const command = lspCommand.subCommands?.find((c) => c.name === 'status');
-      if (!command) {
-        throw new Error('status command not found');
-      }
+      assertDefined(command);
       statusCommand = command;
     });
 

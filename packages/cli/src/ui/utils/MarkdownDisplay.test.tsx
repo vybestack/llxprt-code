@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MarkdownDisplay } from './MarkdownDisplay.js';
 import { LoadedSettings } from '../../config/settings.js';
 import { renderWithProviders } from '../../test-utils/render.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 describe('<MarkdownDisplay />', () => {
   const baseProps = {
@@ -56,7 +57,7 @@ describe('<MarkdownDisplay />', () => {
 
     it('renders a fenced code block with a language', () => {
       const text = '```javascript\nconst x = 1;\nconsole.log(x);\n```'.replace(
-        /\n/g,
+        testRegex('\\n', 'g'),
         eol,
       );
       const { lastFrame } = renderWithProviders(

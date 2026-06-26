@@ -58,6 +58,7 @@ interface FakeManagerInternal extends FakeMcpManagerView {
   getMcpServers(): Record<string, MCPServerConfig>;
   getDiscoveryFailures(): ReadonlyMap<string, string>;
   getDiscoveryState(): MCPDiscoveryState;
+  whenDiscoverySettled(): Promise<void>;
   restart(): Promise<void>;
   restartServer(name: string): Promise<void>;
 }
@@ -103,6 +104,12 @@ class FakeManager implements FakeManagerInternal {
 
   getDiscoveryState(): MCPDiscoveryState {
     return this.state;
+  }
+
+  async whenDiscoverySettled(): Promise<void> {
+    if (this.state === MCPDiscoveryState.IN_PROGRESS) {
+      this.state = MCPDiscoveryState.COMPLETED;
+    }
   }
 
   async restart(): Promise<void> {

@@ -181,6 +181,37 @@ function skipRegex(line, start) {
 }
 
 const DIRECTIVE_PATTERN = /eslint-(?:disable|enable)(?:-next-line|-line)?\b/;
+const TYPE_ESCAPE_PATTERNS = [
+  { pattern: /@ts-expect-error\b/, label: '@ts-expect-error' },
+  { pattern: /@ts-ignore\b/, label: '@ts-ignore' },
+  { pattern: /@ts-nocheck\b/, label: '@ts-nocheck' },
+  { pattern: /\bas\s+any\b/, label: 'as any' },
+  { pattern: /\bas\s+unknown\s+as\b/, label: 'as unknown as' },
+];
+
+const CLI_TYPE_ESCAPE_ALLOWLIST = [
+  {
+    file: 'packages/cli/src/runtime/agentRuntimeAdapter.ts',
+    label: 'as unknown as',
+    content: 'providerManager as unknown as {',
+    issue: '2171',
+    max: 2,
+  },
+  {
+    file: 'packages/cli/src/ui/commands/mcpDisplay.ts',
+    label: 'as unknown as',
+    content: 'MCPOAuthTokenStorage as unknown as TokenStorageStatic,',
+    issue: '2173',
+    max: 1,
+  },
+  {
+    file: 'packages/cli/src/ui/hooks/useReactToolScheduler.ts',
+    label: 'as unknown as',
+    content: 'return factory as unknown as ExternalSchedulerFactory;',
+    issue: '2172',
+    max: 1,
+  },
+];
 
 export function hasInlineEslintDirective(line) {
   for (let i = 0; i < line.length; i++) {
@@ -264,6 +295,20 @@ export function checkDiff(diff) {
           file,
           currentLine,
           'Inline ESLint disable/enable directives are forbidden by #2079/#2080.',
+          content,
+        );
+      }
+
+      if (
+        file === 'eslint.config.js' &&
+        content.includes('packages/cli/src') &&
+        !isCommentOnlyLine(content)
+      ) {
+        addViolation(
+          violations,
+          file,
+          currentLine,
+          'packages/cli directive cleanup scopes are forbidden by #2114; fix CLI code instead.',
           content,
         );
       }
@@ -376,6 +421,88 @@ function isScannableTextFile(fileName) {
   return !BINARY_EXTENSIONS.has(extname(fileName).toLowerCase());
 }
 
+function isCliProductionTypeScriptFile(filePath) {
+  if (!/\.(?:ts|tsx)$/.test(filePath)) {
+    return false;
+  }
+  const normalized = filePath.replace(/\\/g, '/');
+  const parts = normalized.split('/');
+  const fileName = parts[parts.length - 1];
+  return (
+    !parts.includes('__tests__') &&
+    !parts.includes('test-utils') &&
+    !fileName.endsWith('.test.ts') &&
+    !fileName.endsWith('.test.tsx') &&
+    !fileName.endsWith('.spec.ts') &&
+    !fileName.endsWith('.spec.tsx') &&
+    !fileName.endsWith('-test-helpers.ts') &&
+    !fileName.endsWith('-test-helpers.tsx')
+  );
+}
+
+function detectTypeEscape(line) {
+  for (const { pattern, label } of TYPE_ESCAPE_PATTERNS) {
+    if (pattern.test(line)) {
+      return label;
+    }
+  }
+  return null;
+}
+
+function matchingCliTypeEscapeAllowlistEntry(relativePath, label, content) {
+  return CLI_TYPE_ESCAPE_ALLOWLIST.find(
+    (entry) =>
+      entry.file === relativePath &&
+      entry.label === label &&
+      content.trim() === entry.content,
+  );
+}
+
+export function scanCliProductionTypeEscapes(baseDir = process.cwd()) {
+  const cliSource = join(baseDir, 'packages', 'cli', 'src');
+  if (!existsSync(cliSource)) {
+    return [];
+  }
+  const allowCounts = new Map();
+  const violations = [];
+  for (const file of listTsFiles(cliSource)) {
+    const relativePath = relative(baseDir, file).replace(/\\/g, '/');
+    if (!isCliProductionTypeScriptFile(relativePath)) {
+      continue;
+    }
+    const lines = readFileSync(file, 'utf8').split(String.fromCharCode(10));
+    for (let i = 0; i < lines.length; i++) {
+      const content = lines[i];
+      const label = detectTypeEscape(content);
+      if (label === null) {
+        continue;
+      }
+      const allowEntry = matchingCliTypeEscapeAllowlistEntry(
+        relativePath,
+        label,
+        content,
+      );
+      if (allowEntry !== undefined) {
+        const key = `${allowEntry.issue}:${allowEntry.file}:${allowEntry.content}`;
+        const nextCount = (allowCounts.get(key) ?? 0) + 1;
+        allowCounts.set(key, nextCount);
+        if (nextCount <= allowEntry.max) {
+          continue;
+        }
+      }
+      violations.push({
+        file: relativePath,
+        lineNumber: i + 1,
+        message:
+          `Production CLI TypeScript escape hatch '${label}' is forbidden by #2174; ` +
+          'use a real type, type guard, validator, or shared adapter.',
+        content,
+      });
+    }
+  }
+  return violations;
+}
+
 function scanDirectoryForDirectives(rootDir, modulePath, issueNumber) {
   const violations = [];
   const entries = readdirSync(rootDir, { withFileTypes: true });
@@ -412,6 +539,23 @@ function scanFileForDirectives(filePath, modulePath, issueNumber) {
       });
     }
   }
+  return violations;
+}
+export function checkCliSourcePolicy() {
+  const violations = scanModuleDirectives('packages/cli/src', '2114');
+  const configPath = join(process.cwd(), 'eslint.config.js');
+  if (!existsSync(configPath)) {
+    return violations;
+  }
+
+  const configSource = readFileSync(configPath, 'utf8');
+  violations.push(
+    ...checkModuleDirectiveScopesInConfig(
+      configSource,
+      'packages/cli/src',
+      '2114',
+    ),
+  );
   return violations;
 }
 
@@ -934,6 +1078,12 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const diff = diffFromGit(args.base, args.head);
   const violations = checkDiff(diff);
+
+  // Issue #2114 durable guard: packages/cli/src must contain zero inline ESLint
+  // disable/enable directives and must not be present in central directive
+  // cleanup scope lists.
+  violations.push(...checkCliSourcePolicy());
+  violations.push(...scanCliProductionTypeEscapes());
 
   // Issue #2115 durable guard: packages/core must contain zero inline ESLint
   // disable/enable directives and must not be present in central directive

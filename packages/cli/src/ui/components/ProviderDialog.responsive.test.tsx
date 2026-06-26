@@ -15,6 +15,7 @@ import {
 } from 'vitest';
 import { ProviderDialog } from './ProviderDialog.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 vi.mock('../hooks/useTerminalSize.js');
 
@@ -58,14 +59,14 @@ describe('ProviderDialog Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should have search input prominently displayed
-      expect(output).toMatch(/search:/i);
-      expect(output).toMatch(/type to filter/i);
+      expect(output).toMatch(testRegex('search:', 'i'));
+      expect(output).toMatch(testRegex('type to filter', 'i'));
 
       // Should have help text below search
-      expect(output).toMatch(/enter to select.*esc to cancel/i);
+      expect(output).toMatch(testRegex('enter to select.*esc to cancel', 'i'));
 
       // Should have minimal or no borders
-      expect(output).not.toMatch(/┌─+┐/); // No fancy borders
+      expect(output).not.toMatch(testRegex('┌─+┐', '')); // No fancy borders
 
       // Should show abbreviated provider names
       expect(output).toContain('anthropic');
@@ -73,7 +74,7 @@ describe('ProviderDialog Responsive Behavior', () => {
       expect(output).not.toContain(
         'very-long-provider-name-that-should-be-truncated',
       ); // Should be truncated
-      expect(output).toMatch(/very-long.*\.\.\./); // Should show truncated version
+      expect(output).toMatch(testRegex('very-long.*\\.\\.\\.', '')); // Should show truncated version
     });
 
     it('should focus on search functionality over grid layout', () => {
@@ -89,10 +90,10 @@ describe('ProviderDialog Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should not show complex grid layout
-      expect(output).not.toMatch(/├|┤|│.*│.*│/); // No multi-column separators
+      expect(output).not.toMatch(testRegex('├|┤|│.*│.*│', '')); // No multi-column separators
 
       // Should show results in single column or minimal columns
-      expect(output).toMatch(/● openai/); // Selected item should be visible
+      expect(output).toMatch(testRegex('● openai', '')); // Selected item should be visible
     });
   });
 
@@ -114,7 +115,7 @@ describe('ProviderDialog Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should have proper borders
-      expect(output).toMatch(/┌─+┐|╭─+╮/); // Should have borders
+      expect(output).toMatch(testRegex('┌─+┐|╭─+╮', '')); // Should have borders
 
       // Should show providers in a grid layout but condensed
       expect(output).toContain('anthropic');
@@ -122,13 +123,13 @@ describe('ProviderDialog Responsive Behavior', () => {
       expect(output).toContain('gemini');
 
       // Should show abbreviated long names
-      expect(output).toMatch(/very-long.*\.\.\./);
+      expect(output).toMatch(testRegex('very-long.*\\.\\.\\.', ''));
       expect(output).not.toContain(
         'very-long-provider-name-that-should-be-truncated',
       );
 
       // Should have navigation instructions
-      expect(output).toMatch(/←\/→\/↑\/↓.*enter.*esc/i);
+      expect(output).toMatch(testRegex('←\\/→\\/↑\\/↓.*enter.*esc', 'i'));
     });
 
     it('should optimize for multi-column layout within width constraints', () => {
@@ -144,7 +145,7 @@ describe('ProviderDialog Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show multiple providers per row when possible
-      expect(output).toMatch(/● anthropic.*○/); // Selected and another on same line or nearby
+      expect(output).toMatch(testRegex('● anthropic.*○', '')); // Selected and another on same line or nearby
 
       // Should show reasonable number of columns (2-3 for standard width)
       const lines = output!.split('\n');
@@ -179,11 +180,14 @@ describe('ProviderDialog Responsive Behavior', () => {
       expect(output).toContain('another-moderately-long-provider-name');
 
       // Should have full decorative borders
-      expect(output).toMatch(/┌─+┐|╭─+╮/);
+      expect(output).toMatch(testRegex('┌─+┐|╭─+╮', ''));
 
       // Should show full instructions
       expect(output).toMatch(
-        /select provider.*←\/→\/↑\/↓.*enter to choose.*esc to cancel/i,
+        testRegex(
+          'select provider.*←\\/→\\/↑\\/↓.*enter to choose.*esc to cancel',
+          'i',
+        ),
       );
 
       // Should have optimal multi-column layout
@@ -235,8 +239,8 @@ describe('ProviderDialog Responsive Behavior', () => {
 
       const standardOutput = standardFrame();
       // At 80 columns, should be STANDARD behavior (not NARROW)
-      expect(standardOutput).toMatch(/┌─+┐|╭─+╮/); // Should have borders
-      expect(standardOutput).not.toMatch(/type to filter/i); // No search-first approach
+      expect(standardOutput).toMatch(testRegex('┌─+┐|╭─+╮', '')); // Should have borders
+      expect(standardOutput).not.toMatch(testRegex('type to filter', 'i')); // No search-first approach
 
       // Test exactly at STANDARD/WIDE boundary (120 cols)
       mockUseTerminalSize.mockReturnValue({ columns: 120, rows: 20 });
@@ -252,7 +256,7 @@ describe('ProviderDialog Responsive Behavior', () => {
 
       const wideOutput = wideFrame();
       // At 120 columns, should be STANDARD behavior (not WIDE yet)
-      expect(wideOutput).toMatch(/very-long.*\.\.\./); // Should still truncate at boundary
+      expect(wideOutput).toMatch(testRegex('very-long.*\\.\\.\\.', '')); // Should still truncate at boundary
       expect(wideOutput).not.toContain(
         'very-long-provider-name-that-should-be-truncated',
       );
@@ -279,10 +283,10 @@ describe('ProviderDialog Responsive Behavior', () => {
         const output = lastFrame();
 
         // Should show selected provider with accent color (●)
-        expect(output).toMatch(/● openai/);
+        expect(output).toMatch(testRegex('● openai', ''));
 
         // Should show unselected providers with primary color (○)
-        expect(output).toMatch(/○ anthropic/);
+        expect(output).toMatch(testRegex('○ anthropic', ''));
       });
     });
   });

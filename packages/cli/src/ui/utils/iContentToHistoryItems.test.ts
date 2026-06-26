@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { ToolCallStatus } from '../types.js';
 import { iContentToHistoryItems } from './iContentToHistoryItems.js';
+import { assertHasType } from '../../test-utils/assertions.js';
 
 describe('iContentToHistoryItems', () => {
   it('maps human text to user history item', () => {
@@ -76,9 +77,7 @@ describe('iContentToHistoryItems', () => {
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
     expect(output[0]).toMatchObject({ type: 'tool_group' });
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (output[0].type !== 'tool_group')
-      throw new Error('unreachable: narrowing failed');
+    assertHasType(output[0], 'tool_group');
     expect(output[0].tools[0]).toMatchObject({
       callId: 'c1',
       name: 'read_file',
@@ -142,9 +141,7 @@ describe('iContentToHistoryItems', () => {
 
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (output[0].type !== 'tool_group')
-      throw new Error('unreachable: narrowing failed');
+    assertHasType(output[0], 'tool_group');
     expect(output[0].tools[0].status).toBe(ToolCallStatus.Error);
   });
 
@@ -172,9 +169,7 @@ describe('iContentToHistoryItems', () => {
 
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (output[0].type !== 'tool_group')
-      throw new Error('unreachable: narrowing failed');
+    assertHasType(output[0], 'tool_group');
     expect(typeof output[0].tools[0].resultDisplay).toBe('string');
   });
 

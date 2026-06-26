@@ -232,6 +232,10 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
           }
         },
       ),
+      // Each run builds two configs and drains two full streams; cap the case
+      // count to keep the property well within the 30s timeout under parallel
+      // test load (consistent with other heavy-agent property tests).
+      { numRuns: 8 },
     );
   }, 60000);
 

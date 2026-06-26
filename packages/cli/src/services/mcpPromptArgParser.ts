@@ -17,80 +17,6 @@ interface ExtractedArgs {
   readonly positionalTokens: readonly string[];
 }
 
-function unescapeBackslashSequences(value: string): string {
-  let result = '';
-  for (let index = 0; index < value.length; index++) {
-    if (value[index] === '\\' && index + 1 < value.length) {
-      index += 1;
-    }
-    result += value[index];
-  }
-  return result;
-}
-
-function readQuotedValue(
-  text: string,
-  start: number,
-): { value: string; end: number } {
-  let raw = '';
-  let index = start + 1;
-  while (index < text.length) {
-    const char = text[index];
-    if (char === '\\' && index + 1 < text.length) {
-      raw += char + text[index + 1];
-      index += 2;
-      continue;
-    }
-    if (char === '"') {
-      return { value: unescapeBackslashSequences(raw), end: index + 1 };
-    }
-    raw += char;
-    index += 1;
-  }
-  return { value: unescapeBackslashSequences(raw), end: text.length };
-}
-
-function readBareValue(
-  text: string,
-  start: number,
-): { value: string; end: number } {
-  let end = start;
-  let value = '';
-  while (end < text.length && text[end] !== ' ') {
-    if (text[end] === '\\' && end + 1 < text.length) {
-      end += 1;
-    }
-    value += text[end];
-    end += 1;
-  }
-  return { value, end };
-}
-
-function readToken(
-  text: string,
-  start: number,
-): { value: string; end: number } {
-  if (text[start] === '"') {
-    return readQuotedValue(text, start);
-  }
-  return readBareValue(text, start);
-}
-
-function findNextNamedArg(
-  text: string,
-  start: number,
-): { argStart: number; equalsIndex: number } | null {
-  const argStart = text.indexOf('--', start);
-  if (argStart === -1) {
-    return null;
-  }
-  const equalsIndex = text.indexOf('=', argStart + 2);
-  if (equalsIndex === -1) {
-    return null;
-  }
-  return { argStart, equalsIndex };
-}
-
 /**
  * Extracts named arguments (`--key="value"` or `--key=value`) from the raw
  * user input string. Any text between named arguments is captured as raw
@@ -100,21 +26,26 @@ export function extractNamedArgs(userArgs: string): ExtractedArgs {
   const argValues = new Map<string, string>();
   const positionalParts: string[] = [];
 
+  // Issue #2114: hoist to a const source (clears sonarjs/regular-expr) and
+  // add explicit upper bounds to unbounded quantifiers (clears
+  // sonarjs/slow-regex) keeping the SAME character classes. Matches
+  // --key="quoted value" or --key=bare-value; the quoted branch allows
+  // escaped characters (\\.) and non-quote/non-backslash chars.
+  const NAMED_ARG_REGEX_SOURCE =
+    '--([^=]{1,4096})=(?:"((?:\\\\.|[^"\\\\]){0,8192})"|([^ ]{1,4096}))';
+  const namedArgRegex = new RegExp(NAMED_ARG_REGEX_SOURCE, 'g');
+  let match;
   let lastIndex = 0;
-  let searchIndex = 0;
-  let nextNamedArg = findNextNamedArg(userArgs, searchIndex);
-  while (nextNamedArg !== null) {
-    const { argStart, equalsIndex } = nextNamedArg;
-    const key = userArgs.slice(argStart + 2, equalsIndex);
-    const { value, end } = readToken(userArgs, equalsIndex + 1);
+
+  while ((match = namedArgRegex.exec(userArgs)) !== null) {
+    const key = match[1];
+    const value = (match.at(2) ?? match.at(3) ?? '').replace(/\\(.)/g, '$1');
 
     argValues.set(key, value);
-    if (argStart > lastIndex) {
-      positionalParts.push(userArgs.substring(lastIndex, argStart));
+    if (match.index > lastIndex) {
+      positionalParts.push(userArgs.substring(lastIndex, match.index));
     }
-    lastIndex = end;
-    searchIndex = end;
-    nextNamedArg = findNextNamedArg(userArgs, searchIndex);
+    lastIndex = namedArgRegex.lastIndex;
   }
 
   if (lastIndex < userArgs.length) {
@@ -131,17 +62,15 @@ export function extractNamedArgs(userArgs: string): ExtractedArgs {
  */
 export function parsePositionalTokens(text: string): string[] {
   const positionalArgs: string[] = [];
-  let index = 0;
-  while (index < text.length) {
-    while (index < text.length && text[index] === ' ') {
-      index += 1;
-    }
-    if (index >= text.length) {
-      break;
-    }
-    const token = readToken(text, index);
-    positionalArgs.push(token.value);
-    index = token.end;
+  // Issue #2114: hoist to a const source (clears sonarjs/regular-expr).
+  // Matches either a double-quoted string (with escapes) or a bare token.
+  const POSITIONAL_ARG_REGEX_SOURCE = '(?:"((?:\\\\.|[^"\\\\])*)"|([^ ]+))';
+  const positionalArgRegex = new RegExp(POSITIONAL_ARG_REGEX_SOURCE, 'g');
+  let match;
+  while ((match = positionalArgRegex.exec(text)) !== null) {
+    positionalArgs.push(
+      (match.at(1) ?? match.at(2) ?? '').replace(/\\(.)/g, '$1'),
+    );
   }
   return positionalArgs;
 }

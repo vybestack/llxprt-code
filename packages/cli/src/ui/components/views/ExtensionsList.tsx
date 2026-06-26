@@ -77,8 +77,8 @@ export const ExtensionsList: React.FC<ExtensionsListProps> = ({
                   <Text color={Colors.DimComment}>settings:</Text>
                   {ext.resolvedSettings.map(
                     (setting: Record<string, unknown>) => {
-                      // eslint-disable-next-line no-extra-boolean-cast -- Preserve old falsy suppression for '', 0, false, NaN, null, undefined
-                      const source = Boolean(setting.source)
+                      const hasSource = Boolean(setting.source);
+                      const source = hasSource
                         ? ` (${String(setting.source)})`
                         : '';
                       return (

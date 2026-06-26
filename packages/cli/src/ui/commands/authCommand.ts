@@ -184,6 +184,53 @@ const authCommandSchema: CommandArgumentSchema = [
   },
 ];
 
+interface BucketStatus {
+  bucket: string;
+  authenticated: boolean;
+  expiry?: number;
+  isSessionBucket: boolean;
+}
+
+function formatAuthInfo(
+  authenticated: boolean,
+  expiresIn: number | undefined,
+): string {
+  if (!authenticated) {
+    return 'not authenticated';
+  }
+  if (expiresIn != null) {
+    return `authenticated (expires in ${Math.floor(expiresIn / 60)}m)`;
+  }
+  return 'authenticated';
+}
+
+function formatOAuthStatus(oauthEnabled: boolean | undefined): string {
+  if (oauthEnabled === undefined) {
+    return '';
+  }
+  return ` [OAuth ${oauthEnabled ? 'enabled' : 'disabled'}]`;
+}
+
+function formatBucketStatusLine(bucket: BucketStatus): string {
+  const marker = bucket.isSessionBucket ? '* ' : '  ';
+
+  if (!bucket.authenticated || bucket.expiry == null) {
+    const statusStr = bucket.authenticated
+      ? 'authenticated'
+      : 'not authenticated';
+    return `${marker}- ${bucket.bucket} (${statusStr})`;
+  }
+
+  const now = Date.now() / 1000;
+  if (bucket.expiry <= now) {
+    return `${marker}- ${bucket.bucket} (expired)`;
+  }
+
+  const expiryDate = new Date(bucket.expiry * 1000);
+  const activeStr = bucket.isSessionBucket ? 'active, ' : '';
+  return `${marker}- ${bucket.bucket} (${activeStr}expires: ${expiryDate.toLocaleString()})`;
+}
+
 export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
 
@@ -192,8 +239,7 @@ export class AuthCommandExecutor {
     args?: string,
   ): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string fallback for undefined/whitespace args
-    const trimmedArgs = args?.trim() || '';
+    const trimmedArgs = args?.trim() ?? '';
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0); // Remove empty parts
     const provider = parts[0];
     const action = parts[1];
@@ -535,28 +581,7 @@ export class AuthCommandExecutor {
       lines.push('  OAuth Buckets:');
 
       for (const bucket of buckets) {
-        const marker = bucket.isSessionBucket ? '* ' : '  ';
-        const statusStr = bucket.authenticated
-          ? 'authenticated'
-          : 'not authenticated';
-
-        if (bucket.authenticated && bucket.expiry != null) {
-          const expiryDate = new Date(bucket.expiry * 1000);
-          const now = Date.now() / 1000;
-          const isExpired = bucket.expiry <= now;
-
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (isExpired) {
-            lines.push(`${marker}- ${bucket.bucket} (expired)`);
-          } else {
-            const activeStr = bucket.isSessionBucket ? 'active, ' : '';
-            lines.push(
-              `${marker}- ${bucket.bucket} (${activeStr}expires: ${expiryDate.toLocaleString()})`,
-            );
-          }
-        } else {
-          lines.push(`${marker}- ${bucket.bucket} (${statusStr})`);
-        }
+        lines.push(formatBucketStatusLine(bucket));
       }
 
       return {
@@ -636,15 +661,8 @@ export class AuthCommandExecutor {
       const statuses = await this.oauthManager.getAuthStatus();
       return statuses.map((status) => {
         const indicator = status.authenticated ? '[✓]' : '[]';
-        const authInfo = status.authenticated
-          ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            `authenticated${status.expiresIn != null ? ` (expires in ${Math.floor(status.expiresIn / 60)}m)` : ''}`
-          : 'not authenticated';
-        const oauthStatus =
-          status.oauthEnabled !== undefined
-            ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-              ` [OAuth ${status.oauthEnabled ? 'enabled' : 'disabled'}]`
-            : '';
+        const authInfo = formatAuthInfo(status.authenticated, status.expiresIn);
+        const oauthStatus = formatOAuthStatus(status.oauthEnabled);
         return `${indicator} ${status.provider}: ${authInfo}${oauthStatus}`;
       });
     } catch (error) {

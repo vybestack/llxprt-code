@@ -19,6 +19,7 @@ import {
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
+import { firstNonEmptyString } from '../utils/coalesce.js';
 
 const logger = new DebugLogger('llxprt:config:intermediateConfig');
 
@@ -99,10 +100,9 @@ export async function resolveIntermediateConfig(
     allowedToolsSet,
   );
 
-  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall back to next source, empty array should join to empty string */
   const question =
-    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
-  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    firstNonEmptyString(argv.promptInteractive, argv.prompt) ??
+    (argv.promptWords ?? []).join(' ');
 
   return {
     screenReader,
@@ -159,12 +159,10 @@ function resolveAllowedTools(
   profileMergedSettings: Settings,
   settings: Settings,
 ): string[] {
-  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing preserves existing precedence for legacy settings */
   const profileTools =
-    profileMergedSettings.tools?.allowed || profileMergedSettings.allowedTools;
+    profileMergedSettings.tools?.allowed ?? profileMergedSettings.allowedTools;
 
-  const globalTools = settings.tools?.allowed || settings.allowedTools;
-  const tools = argv.allowedTools || profileTools || globalTools;
+  const globalTools = settings.tools?.allowed ?? settings.allowedTools;
+  const tools = argv.allowedTools ?? profileTools ?? globalTools;
   return [...(tools ?? [])];
-  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 }

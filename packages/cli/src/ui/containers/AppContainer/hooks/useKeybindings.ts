@@ -180,10 +180,8 @@ function handleDisplayKeys(
     const newValue = !display.showToolDescriptions;
     display.setShowToolDescriptions(newValue);
     const mcpServers = mcp.getMcpServers();
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing to handle undefined/null server objects
-    if (Object.keys(mcpServers || {}).length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      display.handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
+    if (Object.keys(mcpServers ?? {}).length > 0) {
+      void display.handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
     }
     return;
   }
@@ -294,8 +292,7 @@ export function useKeybindings(params: UseKeybindingsParams): void {
         ideContext.ideContextState !== undefined &&
         ideContext.ideContextState !== null
       ) {
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        display.handleSlashCommand('/ide status');
+        void display.handleSlashCommand('/ide status');
       }
     },
     [exit, display, shell, copyMode, ideContext, mcp],

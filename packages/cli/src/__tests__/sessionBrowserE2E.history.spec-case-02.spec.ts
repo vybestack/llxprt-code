@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertTruthy } from '../test-utils/assertions.js';
 import { performResume } from '../services/performResume.js';
 import {
   cleanupSessionBrowserTestState,
@@ -65,8 +66,7 @@ describe('History conversion #2', () => {
     const result = await performResume(targetId, context);
 
     expect(result.ok).toBe(true);
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!result.ok) throw new Error('unreachable: narrowing failed');
+    assertTruthy(result.ok);
     expect(result.history).toHaveLength(4);
     expect(result.history[0].speaker).toBe('human');
     expect(result.history[0].blocks[0]).toMatchObject({
@@ -90,7 +90,6 @@ describe('History conversion #2', () => {
     });
 
     const newLock = context.recordingCallbacks.getCurrentLockHandle();
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (newLock) state.lockHandles.push(newLock);
+    state.lockHandles.push(...(newLock === null ? [] : [newLock]));
   });
 });

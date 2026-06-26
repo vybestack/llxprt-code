@@ -190,8 +190,7 @@ describe('ThemeDialog', () => {
       },
       setValue: vi.fn(),
       getEffectiveValue: vi.fn(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    } as unknown as LoadedSettings;
   };
 
   const mockSettings = createMockSettings();
@@ -202,16 +201,15 @@ describe('ThemeDialog', () => {
     terminalBackgroundColor,
     terminalWidth: 120,
     terminalHeight: 40,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    config: {} as any,
+    config: {} as unknown as UIState['config'],
     settings: mockSettings,
     history: [],
     pendingHistoryItems: [],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    streamingState: { isStreaming: false } as any,
+    streamingState: {
+      isStreaming: false,
+    } as unknown as UIState['streamingState'],
     thought: null,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    buffer: {} as any,
+    buffer: {} as unknown as UIState['buffer'],
     shellModeActive: false,
     isThemeDialogOpen: true,
     isSettingsDialogOpen: false,
@@ -270,8 +268,8 @@ describe('ThemeDialog', () => {
     consoleMessages: [],
     elapsedTime: 0,
     currentLoadingPhrase: undefined,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    showAutoAcceptIndicator: 'off' as any,
+    showAutoAcceptIndicator:
+      'off' as unknown as UIState['showAutoAcceptIndicator'],
     tokenMetrics: {
       tokensPerMinute: 0,
       throttleWaitTimeMs: 0,
@@ -288,15 +286,13 @@ describe('ThemeDialog', () => {
     rootUiRef: { current: null },
     pendingHistoryItemRef: { current: null },
     slashCommands: undefined,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    commandContext: {} as any,
+    commandContext: {} as unknown as UIState['commandContext'],
     shouldShowIdePrompt: false,
     currentIDE: undefined,
     isRestarting: false,
     isTrustedFolder: true,
     isWelcomeDialogOpen: false,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    welcomeState: 'initial' as any,
+    welcomeState: 'initial' as unknown as UIState['welcomeState'],
     welcomeAvailableProviders: [],
     welcomeAvailableModels: [],
     inputHistory: [],

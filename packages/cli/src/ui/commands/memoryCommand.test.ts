@@ -17,6 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
@@ -60,9 +61,7 @@ describe('memoryCommand', () => {
     const subCommand = memoryCommand.subCommands?.find(
       (cmd) => cmd.name === name,
     );
-    if (!subCommand) {
-      throw new Error(`/memory ${name} command not found.`);
-    }
+    assertDefined(subCommand);
     return subCommand;
   };
 
@@ -88,13 +87,10 @@ describe('memoryCommand', () => {
     });
 
     it('should display a message if memory is empty', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!showCommand.action) throw new Error('Command has no action');
-
       mockGetUserMemory.mockReturnValue('');
       mockGetLlxprtMdFileCount.mockReturnValue(0);
 
-      await showCommand.action(mockContext, '');
+      await showCommand.action!(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -106,15 +102,12 @@ describe('memoryCommand', () => {
     });
 
     it('should display the memory content and file count if it exists', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!showCommand.action) throw new Error('Command has no action');
-
       const memoryContent = 'This is a test memory.';
 
       mockGetUserMemory.mockReturnValue(memoryContent);
       mockGetLlxprtMdFileCount.mockReturnValue(1);
 
-      await showCommand.action(mockContext, '');
+      await showCommand.action!(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -135,10 +128,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if no arguments are provided', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
-      const result = addCommand.action(mockContext, '  ');
+      const result = addCommand.action!(mockContext, '  ');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -150,10 +140,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if only scope is provided without text', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
-      const result = addCommand.action(mockContext, 'global');
+      const result = addCommand.action!(mockContext, 'global');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -165,10 +152,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if only "project" is provided without text', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
-      const result = addCommand.action(mockContext, 'project');
+      const result = addCommand.action!(mockContext, 'project');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
@@ -180,11 +164,8 @@ describe('memoryCommand', () => {
     });
 
     it('should default to global scope when no scope keyword is provided', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
       const fact = 'remember this';
-      const result = addCommand.action(mockContext, `  ${fact}  `);
+      const result = addCommand.action!(mockContext, `  ${fact}  `);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -202,11 +183,8 @@ describe('memoryCommand', () => {
     });
 
     it('should return a tool action with scope "global" when "global" is specified', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
       const fact = 'remember this globally';
-      const result = addCommand.action(mockContext, `global ${fact}`);
+      const result = addCommand.action!(mockContext, `global ${fact}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -224,11 +202,8 @@ describe('memoryCommand', () => {
     });
 
     it('should return a tool action with scope "project" when "project" is specified', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
       const fact = 'remember this for the project';
-      const result = addCommand.action(mockContext, `project ${fact}`);
+      const result = addCommand.action!(mockContext, `project ${fact}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -246,11 +221,8 @@ describe('memoryCommand', () => {
     });
 
     it('should handle uppercase scope keywords', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
       const fact = 'test fact';
-      const result = addCommand.action(mockContext, `PROJECT ${fact}`);
+      const result = addCommand.action!(mockContext, `PROJECT ${fact}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -268,11 +240,8 @@ describe('memoryCommand', () => {
     });
 
     it('should handle mixed case scope keywords', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
       const fact = 'test fact';
-      const result = addCommand.action(mockContext, `Global ${fact}`);
+      const result = addCommand.action!(mockContext, `Global ${fact}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -290,11 +259,8 @@ describe('memoryCommand', () => {
     });
 
     it('should treat non-scope first words as part of the fact', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
       const fact = 'globally important fact';
-      const result = addCommand.action(mockContext, fact);
+      const result = addCommand.action!(mockContext, fact);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -312,10 +278,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return error when core.project is provided without content', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
-      const result = addCommand.action(mockContext, 'core.project');
+      const result = addCommand.action!(mockContext, 'core.project');
 
       expect(result).toStrictEqual({
         type: 'message',
@@ -325,10 +288,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return error when core.global is provided without content', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
-      const result = addCommand.action(mockContext, 'core.global');
+      const result = addCommand.action!(mockContext, 'core.global');
 
       expect(result).toStrictEqual({
         type: 'message',
@@ -338,9 +298,6 @@ describe('memoryCommand', () => {
     });
 
     it('should handle core.project scope and write directly (async)', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
       mockContext = createMockCommandContext({
         services: {
           config: {
@@ -350,7 +307,7 @@ describe('memoryCommand', () => {
       });
 
       // core.project scope returns void (writes directly)
-      const result = addCommand.action(
+      const result = addCommand.action!(
         mockContext,
         'core.project Always use strict mode',
       );
@@ -359,9 +316,6 @@ describe('memoryCommand', () => {
     });
 
     it('should handle core.global scope and write directly (async)', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!addCommand.action) throw new Error('Command has no action');
-
       mockContext = createMockCommandContext({
         services: {
           config: {
@@ -370,7 +324,7 @@ describe('memoryCommand', () => {
         },
       });
 
-      const result = addCommand.action(
+      const result = addCommand.action!(
         mockContext,
         'core.global Prefer TypeScript',
       );
@@ -437,9 +391,6 @@ describe('memoryCommand', () => {
     });
 
     it('should display success message when memory is refreshed with content', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!refreshCommand.action) throw new Error('Command has no action');
-
       const refreshResult: LoadServerHierarchicalMemoryResponse = {
         memoryContent: 'new memory content',
         fileCount: 2,
@@ -447,7 +398,7 @@ describe('memoryCommand', () => {
       };
       mockLoadHierarchicalLlxprtMemory.mockResolvedValue(refreshResult);
 
-      await refreshCommand.action(mockContext, '');
+      await refreshCommand.action!(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -481,13 +432,10 @@ describe('memoryCommand', () => {
     });
 
     it('should display success message when memory is refreshed with no content', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!refreshCommand.action) throw new Error('Command has no action');
-
       const refreshResult = { memoryContent: '', fileCount: 0, filePaths: [] };
       mockLoadHierarchicalLlxprtMemory.mockResolvedValue(refreshResult);
 
-      await refreshCommand.action(mockContext, '');
+      await refreshCommand.action!(mockContext, '');
 
       expect(mockLoadHierarchicalLlxprtMemory).toHaveBeenCalledOnce();
       expect(mockSetUserMemory).toHaveBeenCalledWith('');
@@ -504,13 +452,10 @@ describe('memoryCommand', () => {
     });
 
     it('should display an error message if refreshing fails', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!refreshCommand.action) throw new Error('Command has no action');
-
       const error = new Error('Failed to read memory files.');
       mockLoadHierarchicalLlxprtMemory.mockRejectedValue(error);
 
-      await refreshCommand.action(mockContext, '');
+      await refreshCommand.action!(mockContext, '');
 
       expect(mockLoadHierarchicalLlxprtMemory).toHaveBeenCalledOnce();
       expect(mockSetUserMemory).not.toHaveBeenCalled();
@@ -529,15 +474,12 @@ describe('memoryCommand', () => {
     });
 
     it('should not throw if config service is unavailable', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!refreshCommand.action) throw new Error('Command has no action');
-
       const nullConfigContext = createMockCommandContext({
         services: { config: null },
       });
 
       await expect(
-        refreshCommand.action(nullConfigContext, ''),
+        refreshCommand.action!(nullConfigContext, ''),
       ).resolves.toBeUndefined();
 
       expect(nullConfigContext.ui.addItem).toHaveBeenCalledWith(
@@ -552,9 +494,6 @@ describe('memoryCommand', () => {
     });
 
     it('should use ContextManager.refresh() when JIT context is enabled', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!refreshCommand.action) throw new Error('Command has no action');
-
       const mockRefresh = vi.fn().mockResolvedValue(undefined);
       const jitConfig = {
         isJitContextEnabled: () => true,
@@ -580,7 +519,7 @@ describe('memoryCommand', () => {
         },
       });
 
-      await refreshCommand.action(jitContext, '');
+      await refreshCommand.action!(jitContext, '');
 
       expect(mockRefresh).toHaveBeenCalledExactlyOnceWith();
       expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
@@ -612,12 +551,9 @@ describe('memoryCommand', () => {
     });
 
     it('should display a message if no LLXPRT.md files are found', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!listCommand.action) throw new Error('Command has no action');
-
       mockGetLlxprtMdFilePaths.mockReturnValue([]);
 
-      await listCommand.action(mockContext, '');
+      await listCommand.action!(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -629,13 +565,10 @@ describe('memoryCommand', () => {
     });
 
     it('should display the file count and paths if they exist', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!listCommand.action) throw new Error('Command has no action');
-
       const filePaths = ['/path/one/LLXPRT.md', '/path/two/LLXPRT.md'];
       mockGetLlxprtMdFilePaths.mockReturnValue(filePaths);
 
-      await listCommand.action(mockContext, '');
+      await listCommand.action!(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {

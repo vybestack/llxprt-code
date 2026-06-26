@@ -13,6 +13,7 @@ import {
   createTempKeyfile,
 } from './test-utils.js';
 import { runCli } from './cli-args-test-helpers.js';
+import { testRegex } from '../test-utils/regex.js';
 
 async function saveProfile(name: string, profile: Profile): Promise<void> {
   await new ProfileManager().saveProfile(name, profile);
@@ -131,7 +132,7 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toMatch(
-        /Failed to parse inline profile|Invalid JSON/i,
+        testRegex('Failed to parse inline profile|Invalid JSON', 'i'),
       );
     });
   });
@@ -168,7 +169,7 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toMatch(
-        /Cannot use both --profile.+--profile-load/is,
+        testRegex('Cannot use both --profile.+--profile-load', 'is'),
       );
     });
 
@@ -190,7 +191,7 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toMatch(
-        /Cannot use both --profile.+--profile-load/is,
+        testRegex('Cannot use both --profile.+--profile-load', 'is'),
       );
       expect(result.stderr).toMatch(/Use one at a time/i);
     });

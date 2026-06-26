@@ -10,8 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type {
   SlashCommand,
   CommandContext,
@@ -30,6 +28,12 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
+import {
+  getOptionalString,
+  hasFunction,
+  hasObject,
+} from '../../utils/typeGuards.js';
 
 type WrappedProvider = IProvider & { wrappedProvider: IProvider };
 
@@ -60,25 +64,26 @@ function resolveBaseProviderId(provider: IProvider): string {
 }
 
 function getProviderBaseUrl(provider: IProvider): string | undefined {
-  const configBaseUrl = (
-    provider as unknown as { providerConfig?: { baseUrl?: string } }
-  ).providerConfig?.baseUrl;
-  if (configBaseUrl && configBaseUrl !== 'none') {
-    return configBaseUrl;
+  if (hasObject(provider, 'providerConfig')) {
+    const configBaseUrl = getOptionalString(provider.providerConfig, 'baseUrl');
+    if (configBaseUrl && configBaseUrl !== 'none') {
+      return configBaseUrl;
+    }
   }
 
-  const baseConfigUrl = (
-    provider as unknown as { baseProviderConfig?: { baseURL?: string } }
-  ).baseProviderConfig?.baseURL;
-  if (baseConfigUrl && baseConfigUrl !== 'none') {
-    return baseConfigUrl;
+  if (hasObject(provider, 'baseProviderConfig')) {
+    const baseConfigUrl = getOptionalString(
+      provider.baseProviderConfig,
+      'baseURL',
+    );
+    if (baseConfigUrl && baseConfigUrl !== 'none') {
+      return baseConfigUrl;
+    }
   }
 
-  const getBaseUrlFn = (
-    provider as unknown as { getBaseURL?: () => string | undefined }
-  ).getBaseURL;
-  if (typeof getBaseUrlFn === 'function') {
-    return getBaseUrlFn.call(provider);
+  if (hasFunction(provider, 'getBaseURL')) {
+    const baseUrl = provider.getBaseURL();
+    return typeof baseUrl === 'string' ? baseUrl : undefined;
   }
 
   return undefined;
@@ -91,18 +96,19 @@ function buildAliasConfig(
   const unwrapped = unwrapProvider(provider);
   const baseProviderId = resolveBaseProviderId(unwrapped);
 
-  const resolvedBaseUrl =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: filter out 'none' and empty string
-    (configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined) ||
-    getProviderBaseUrl(unwrapped);
+  const resolvedBaseUrl = firstNonEmptyString(
+    configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined,
+    getProviderBaseUrl(unwrapped),
+  );
 
   if (!resolvedBaseUrl) {
     return null;
   }
 
-  const defaultModel =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- provider boundary: empty model from runtime should fall back to the provider default
-    unwrapped.getCurrentModel?.() || unwrapped.getDefaultModel();
+  const defaultModel = firstNonEmptyString(
+    unwrapped.getCurrentModel?.(),
+    unwrapped.getDefaultModel(),
+  );
 
   const aliasConfig: ProviderAliasConfig = {
     baseProvider: baseProviderId,
@@ -228,8 +234,7 @@ async function switchProvider(
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: null and empty string should both fall back to 'none'
-  const fromProvider = currentProvider || 'none';
+  const fromProvider = firstNonEmptyString(currentProvider, 'none');
 
   let switchResult;
   try {

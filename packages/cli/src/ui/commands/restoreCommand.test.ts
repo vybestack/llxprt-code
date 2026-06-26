@@ -13,6 +13,7 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { Config, GitService } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 describe('restoreCommand', () => {
   let mockContext: CommandContext;
@@ -235,9 +236,7 @@ describe('restoreCommand', () => {
       fullLine: string = `/restore ${partialArg}`,
     ): Promise<string[]> => {
       const command = restoreCommand(mockConfig);
-      if (!command?.schema) {
-        throw new Error('restore command schema missing');
-      }
+      assertDefined(command?.schema);
 
       const handler = createCompletionHandler(command.schema);
       const result = await handler(

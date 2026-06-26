@@ -164,29 +164,32 @@ const useConfigUpdaters = (
         config: { ...prev.config, [key]: value },
       }));
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState is stable from useState
-    [],
+    [setState],
   );
-  const handleUpdateProvider = useCallback((provider: string) => {
-    setState((prev) => {
-      const newConfig = { ...prev.config, provider };
-      const nextStep = getNextStep(WizardStep.PROVIDER_SELECT, {
-        ...prev,
-        config: newConfig,
+  const handleUpdateProvider = useCallback(
+    (provider: string) => {
+      setState((prev) => {
+        const newConfig = { ...prev.config, provider };
+        const nextStep = getNextStep(WizardStep.PROVIDER_SELECT, {
+          ...prev,
+          config: newConfig,
+        });
+        return {
+          ...prev,
+          config: newConfig,
+          currentStep: nextStep,
+          stepHistory: [...prev.stepHistory, nextStep],
+        };
       });
-      return {
-        ...prev,
-        config: newConfig,
-        currentStep: nextStep,
-        stepHistory: [...prev.stepHistory, nextStep],
-      };
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState is stable from useState
-  }, []);
-  const handleUpdateProfileName = useCallback((name: string) => {
-    setState((prev) => ({ ...prev, profileName: name }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setState is stable from useState
-  }, []);
+    },
+    [setState],
+  );
+  const handleUpdateProfileName = useCallback(
+    (name: string) => {
+      setState((prev) => ({ ...prev, profileName: name }));
+    },
+    [setState],
+  );
   return { updateConfig, handleUpdateProvider, handleUpdateProfileName };
 };
 

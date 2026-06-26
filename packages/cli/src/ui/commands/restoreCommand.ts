@@ -23,7 +23,7 @@ type LoadHistory = CommandContext['ui']['loadHistory'];
 function getRuntimeLoadHistory(
   ui: CommandContext['ui'],
 ): LoadHistory | undefined {
-  return (ui as unknown as { loadHistory?: LoadHistory }).loadHistory;
+  return ui.loadHistory;
 }
 
 const restoreSchema: CommandArgumentSchema = [

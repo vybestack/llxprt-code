@@ -186,6 +186,10 @@ export class ConfigurationManager {
     this.mergeConfigurations();
   }
 
+  hasEphemeralConfig(): boolean {
+    return this.ephemeralConfig !== null;
+  }
+
   /**
    * Reset the singleton instance (for testing)
    */

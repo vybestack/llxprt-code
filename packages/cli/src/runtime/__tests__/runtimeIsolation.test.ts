@@ -35,6 +35,7 @@ import {
   cleanupTempDirectory,
   createTempDirectory,
 } from '../../integration-tests/test-utils.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 interface RuntimeFixture {
   id: string;
@@ -49,28 +50,25 @@ interface RuntimeFixture {
 
 const runtimeFixtures: RuntimeFixture[] = [];
 
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-beforeEach(() => {
-  resetCliProviderInfrastructure();
-});
-
-// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
-afterEach(async () => {
-  resetCliProviderInfrastructure();
-  while (runtimeFixtures.length > 0) {
-    const fixture = runtimeFixtures.pop();
-    if (!fixture) {
-      continue;
-    }
-    try {
-      await fixture.handle.cleanup();
-    } finally {
-      await cleanupTempDirectory(fixture.tempDir);
-    }
-  }
-});
-
 describe('CLI runtime isolation', () => {
+  beforeEach(() => {
+    resetCliProviderInfrastructure();
+  });
+
+  afterEach(async () => {
+    resetCliProviderInfrastructure();
+    while (runtimeFixtures.length > 0) {
+      const fixture = runtimeFixtures.pop();
+      if (!fixture) {
+        continue;
+      }
+      try {
+        await fixture.handle.cleanup();
+      } finally {
+        await cleanupTempDirectory(fixture.tempDir);
+      }
+    }
+  });
   it('isolates concurrent runtime activations across sessions @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003 @pseudocode cli-runtime-isolation.md lines 1-3', async () => {
     const runtimeA = await bootstrapRuntimeFixture({
       id: 'runtime-a',
@@ -369,7 +367,10 @@ describe('CLI runtime isolation', () => {
 
     try {
       await expect(setActiveModel('stateless-model')).rejects.toThrow(
-        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+        testRegex(
+          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'i',
+        ),
       );
     } finally {
       configureCliStatelessHardening(previousPreference);
@@ -390,7 +391,10 @@ describe('CLI runtime isolation', () => {
       // Try to get context with stateless mode enabled but no runtime registered
       // This simulates missing SettingsService scenario
       expect(() => getCliRuntimeContext()).toThrow(
-        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+        testRegex(
+          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'i',
+        ),
       );
     } finally {
       configureCliStatelessHardening(previousPreference);
@@ -410,7 +414,10 @@ describe('CLI runtime isolation', () => {
 
       // Try to get context without any runtime registration
       expect(() => getCliRuntimeContext()).toThrow(
-        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+        testRegex(
+          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'i',
+        ),
       );
     } finally {
       configureCliStatelessHardening(previousPreference);
@@ -466,7 +473,10 @@ describe('CLI runtime isolation', () => {
 
       // Try to ensure ready with no runtime registered - should throw
       expect(() => ensureStatelessProviderReady()).toThrow(
-        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+        testRegex(
+          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'i',
+        ),
       );
     } finally {
       configureCliStatelessHardening(previousPreference);

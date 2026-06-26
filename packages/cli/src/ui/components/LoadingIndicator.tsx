@@ -13,6 +13,7 @@ import { StreamingState } from '../types.js';
 import { GeminiRespondingSpinner } from './GeminiRespondingSpinner.js';
 import { formatDuration } from '../utils/formatters.js';
 import { INTERACTIVE_SHELL_WAITING_PHRASE } from '../hooks/usePhraseCycler.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 /**
  * Format timer text for display.
@@ -42,6 +43,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     return null;
   }
 
+  const hasRightContent = Boolean(rightContent);
   const isShellFocusHint =
     currentLoadingPhrase === INTERACTIVE_SHELL_WAITING_PHRASE;
   const isActionRequired =
@@ -49,8 +51,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     isShellFocusHint;
   const primaryText = isActionRequired
     ? currentLoadingPhrase
-    : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty subject should fall back to loading phrase
-      thought?.subject || currentLoadingPhrase;
+    : firstNonEmptyString(thought?.subject, currentLoadingPhrase);
 
   const timerText =
     streamingState === StreamingState.WaitingForConfirmation
@@ -84,8 +85,8 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
             </Text>
           )}
         </Box>
-        {/* eslint-disable-next-line @typescript-eslint/strict-boolean-expressions -- Preserve React conditional rendering semantics for ReactNode values. */}
-        {rightContent ? (
+        {}
+        {hasRightContent ? (
           <Box marginLeft={1} flexShrink={0}>
             {rightContent}
           </Box>

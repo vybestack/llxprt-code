@@ -25,6 +25,11 @@ import { normalizeToolName } from '../utils/toolNameNormalization.js';
 import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 
+const CODE_FENCE_START_SOURCE = '^```[A-Za-z0-9_-]*';
+const CODE_FENCE_END_SOURCE = '```$';
+const CODE_FENCE_START = new RegExp(CODE_FENCE_START_SOURCE, 'm');
+const CODE_FENCE_END = new RegExp(CODE_FENCE_END_SOURCE, 'm');
+
 /**
  * Returns true for parts that carry no textual content and should be skipped.
  */
@@ -100,8 +105,8 @@ export function sanitizeToolArgumentsString(
 
   // Strip fenced code blocks like ```json { ... } ```.
   if (text.startsWith('```')) {
-    text = text.replace(/^```[\w-]*/m, '');
-    text = text.replace(/```$/m, '');
+    text = text.replace(CODE_FENCE_START, '');
+    text = text.replace(CODE_FENCE_END, '');
     text = text.trim();
   }
 

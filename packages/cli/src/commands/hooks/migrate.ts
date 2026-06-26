@@ -15,6 +15,13 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+function isHookDefinition(value: unknown): value is HookDefinition {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as { hooks?: unknown }).hooks)
+  );
+}
 interface MigrateOptions {
   dryRun?: boolean;
   confirm?: boolean;
@@ -79,7 +86,10 @@ function mergeHookDefinitions(
       changesMade = true;
     }
 
-    for (const definition of definitions as unknown as HookDefinition[]) {
+    for (const definition of definitions) {
+      if (!isHookDefinition(definition)) {
+        continue;
+      }
       const exists = mergedHooks[typedEventName].some(
         (existing) => JSON.stringify(existing) === JSON.stringify(definition),
       );
