@@ -29,6 +29,12 @@ import {
   SecureStoreError,
   type KeyringAdapter,
 } from '../storage/secure-store.js';
+import {
+  decryptEnvelopeString,
+  encryptEnvelopeString,
+  readEnvelopeVersion,
+  type EnvelopeCodecOptions,
+} from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -90,6 +96,18 @@ export type { KeyringAdapter };
 export interface ToolKeyStorageOptions {
   toolsDir?: string;
   keyringLoader?: () => Promise<KeyringAdapter | null>;
+  /**
+   * Injectable machine-secret loader backing the v:2 envelope codec used for
+   * the encrypted .key file fallback. Defaults to the production
+   * machine-secret resolution (keyring → file → generate). Returning `null`
+   * means "no machine secret available" (v:1 only).
+   */
+  machineSecretLoader?: () => Promise<Buffer | null>;
+  /**
+   * Optional path for the default machine-secret loader. Ignored when
+   * `machineSecretLoader` is provided.
+   */
+  machineSecretPath?: string;
 }
 
 // ─── ToolKeyStorage Class ────────────────────────────────────────────────────
@@ -111,6 +129,7 @@ export class ToolKeyStorage {
   private readonly keyfilesJsonPath: string;
   private readonly secureStore: SecureStore;
   private readonly encryptionKey: Buffer;
+  private readonly codecOptions: EnvelopeCodecOptions;
 
   constructor(options?: ToolKeyStorageOptions) {
     this.toolsDir = options?.toolsDir ?? DEFAULT_TOOLS_DIR();
@@ -120,6 +139,14 @@ export class ToolKeyStorage {
       keyringLoader: options?.keyringLoader,
     });
     this.encryptionKey = this.deriveEncryptionKey();
+    // When no explicit machineSecretLoader is injected, leave it undefined so
+    // the codec falls back to its own production resolver
+    // (getMachineSecret). When a path is supplied, pass it through so the
+    // default resolver uses that file location.
+    this.codecOptions = {
+      machineSecretLoader: options?.machineSecretLoader,
+      machineSecretPath: options?.machineSecretPath,
+    };
   }
 
   private assertValidToolName(toolName: string): void {
@@ -130,22 +157,18 @@ export class ToolKeyStorage {
     }
   }
 
-  // ─── Encryption (backward-compatible .key file format) ──────────────────
+  // ─── Encryption (legacy .key file format — read-only compatibility) ────
 
   private deriveEncryptionKey(): Buffer {
     const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
     return crypto.scryptSync('llxprt-cli-tool-keys', salt, 32);
   }
 
-  private encrypt(text: string): string {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    const authTag = cipher.getAuthTag();
-    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
-  }
-
+  /**
+   * Legacy AES-256-GCM decrypt for the `iv:authTag:ciphertext` (hex) format.
+   * Used only to read pre-existing .key files that predate the versioned
+   * envelope codec.
+   */
   private decrypt(data: string): string {
     const parts = data.split(':');
     if (parts.length !== 3) {
@@ -179,24 +202,95 @@ export class ToolKeyStorage {
     return path.join(this.toolsDir, `${toolName}.key`);
   }
 
+  /**
+   * Writes the key to a versioned envelope (v:2 when a machine secret is
+   * available, v:1 otherwise). Enforces anti-downgrade: an existing v:2 file
+   * is never silently overwritten with a weaker v:1 envelope when the machine
+   * secret is unavailable.
+   */
   private async saveToFile(toolName: string, key: string): Promise<void> {
     await this.ensureToolsDir();
     const filePath = this.getEncryptedFilePath(toolName);
-    const encrypted = this.encrypt(key);
-    await fs.writeFile(filePath, encrypted, { mode: 0o600 });
+
+    // Detect an existing envelope version for anti-downgrade protection.
+    // Non-envelope (legacy) files and missing files yield null. Non-ENOENT
+    // read errors are rethrown so we fail closed rather than silently
+    // clobbering an unreadable file.
+    let existingVersion: number | null = null;
+    try {
+      const existing = await fs.readFile(filePath, 'utf-8');
+      existingVersion = readEnvelopeVersion(existing);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
+    const envelopeJson = await encryptEnvelopeString(key, KEYCHAIN_SERVICE, {
+      ...this.codecOptions,
+      existingEnvelopeVersion: existingVersion,
+    });
+    await fs.writeFile(filePath, envelopeJson, { mode: 0o600 });
   }
 
+  /**
+   * Reads and decrypts the .key file.
+   *
+   * - Versioned envelope (v:1 or v:2): decrypt via the codec. v:2 read errors
+   *   (missing/different machine secret, tampering) propagate — fail closed.
+   * - Legacy `iv:authTag:ciphertext` (hex): decrypt with the legacy key for
+   *   backward compatibility. A recognized legacy file that fails to decrypt
+   *   (authentication failure/tampering) throws — fail closed.
+   * - Unrecognized content (neither a valid envelope nor legacy hex-colon):
+   *   throws — fail closed (a corrupted/forged .key is never silently treated
+   *   as "no key").
+   * - Missing file (ENOENT): returns null.
+   */
   private async getFromFile(toolName: string): Promise<string | null> {
     const filePath = this.getEncryptedFilePath(toolName);
+    let data: string;
     try {
-      const data = await fs.readFile(filePath, 'utf-8');
-      return this.decrypt(data);
+      data = await fs.readFile(filePath, 'utf-8');
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') return null;
-      debugLogger.warn('Encrypted key file corrupt for', toolName);
-      return null;
+      throw error;
     }
+
+    // Route versioned envelopes through the codec. readEnvelopeVersion returns
+    // a version number for valid envelopes and null otherwise (including for
+    // legacy hex-colon content).
+    if (readEnvelopeVersion(data) !== null) {
+      // Versioned envelope: v:2 missing/different secret errors must
+      // propagate (fail closed), not turn into null.
+      return decryptEnvelopeString(data, KEYCHAIN_SERVICE, this.codecOptions);
+    }
+
+    // Legacy hex-colon format: positively recognize it before attempting
+    // decryption. Recognized legacy content that fails to authenticate must
+    // fail closed (throw), not return null; unrecognized content (neither
+    // envelope nor legacy hex-colon) also fails closed.
+    if (this.isLegacyHexColonFormat(data)) {
+      return this.decrypt(data);
+    }
+    throw new Error(
+      `Encrypted key file for ${toolName} is corrupted or in an unrecognized format`,
+    );
+  }
+
+  /**
+   * Recognizes the legacy `iv:authTag:ciphertext` (hex) shape WITHOUT
+   * attempting decryption. Requires exactly three colon-separated parts that
+   * are all non-empty hex strings.
+   */
+  private isLegacyHexColonFormat(data: string): boolean {
+    const parts = data.split(':');
+    if (parts.length !== 3) {
+      return false;
+    }
+    const hex = /^[0-9a-fA-F]+$/;
+    return parts.every((p) => p.length > 0 && hex.test(p));
   }
 
   private async deleteFile(toolName: string): Promise<void> {

@@ -35,6 +35,10 @@
       "types": "./dist/src/secure-store/provider-key-storage.d.ts",
       "import": "./dist/src/secure-store/provider-key-storage.js"
     },
+    "./storage/envelope-codec.js": {
+      "types": "./dist/src/secure-store/envelope-codec.d.ts",
+      "import": "./dist/src/secure-store/envelope-codec.js"
+    },
     "./storage/sessionTypes.js": {
       "types": "./dist/src/session/sessionTypes.d.ts",
       "import": "./dist/src/session/sessionTypes.js"

@@ -10,16 +10,52 @@ import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
+import {
+  decryptEnvelopeString,
+  encryptEnvelopeString,
+  readEnvelopeVersion,
+  EnvelopeCodecError,
+  type EnvelopeCodecOptions,
+} from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
+
+/**
+ * Options for {@link FileTokenStorage}.
+ */
+export interface FileTokenStorageOptions {
+  /**
+   * Overrides the on-disk token file path. Defaults to
+   * `~/.llxprt/mcp-oauth-tokens-v2.json`. Exposed for deterministic tests.
+   */
+  tokenFilePath?: string;
+  /**
+   * Injectable machine-secret loader backing the v:2 envelope codec. Defaults
+   * to the production machine-secret resolution (keyring → file → generate).
+   * Returning `null` means "no machine secret available" (v:1 only).
+   */
+  machineSecretLoader?: () => Promise<Buffer | null>;
+  /**
+   * Optional path for the default machine-secret loader. Ignored when
+   * `machineSecretLoader` is provided.
+   */
+  machineSecretPath?: string;
+}
 
 export class FileTokenStorage extends BaseTokenStorage {
   private readonly tokenFilePath: string;
   private readonly encryptionKey: Buffer;
+  private readonly codecOptions: EnvelopeCodecOptions;
 
-  constructor(serviceName: string) {
+  constructor(serviceName: string, options?: FileTokenStorageOptions) {
     super(serviceName);
     const configDir = path.join(os.homedir(), '.llxprt');
-    this.tokenFilePath = path.join(configDir, 'mcp-oauth-tokens-v2.json');
+    this.tokenFilePath =
+      options?.tokenFilePath ??
+      path.join(configDir, 'mcp-oauth-tokens-v2.json');
     this.encryptionKey = this.deriveEncryptionKey();
+    this.codecOptions = {
+      machineSecretLoader: options?.machineSecretLoader,
+      machineSecretPath: options?.machineSecretPath,
+    };
   }
 
   private deriveEncryptionKey(): Buffer {
@@ -27,18 +63,11 @@ export class FileTokenStorage extends BaseTokenStorage {
     return crypto.scryptSync('llxprt-cli-oauth', salt, 32);
   }
 
-  private encrypt(text: string): string {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
-
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-
-    const authTag = cipher.getAuthTag();
-
-    return iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
-  }
-
+  /**
+   * Legacy AES-256-GCM decrypt for the `iv:authTag:ciphertext` (hex) format.
+   * Used only to read pre-existing token files that predate the versioned
+   * envelope codec. New writes go through the codec.
+   */
   private decrypt(encryptedData: string): string {
     const parts = encryptedData.split(':');
     if (parts.length !== 3) {
@@ -68,27 +97,62 @@ export class FileTokenStorage extends BaseTokenStorage {
   }
 
   private async loadTokens(): Promise<Map<string, MCPOAuthCredentials>> {
+    let data: string;
     try {
-      const data = await fs.readFile(this.tokenFilePath, 'utf-8');
-      const decrypted = this.decrypt(data);
-      const tokens = JSON.parse(decrypted) as Record<
-        string,
-        MCPOAuthCredentials
-      >;
-      return new Map(Object.entries(tokens));
+      data = await fs.readFile(this.tokenFilePath, 'utf-8');
     } catch (error: unknown) {
-      const err = error as NodeJS.ErrnoException & { message?: string };
+      const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') {
         // No token file exists yet - return empty collection
         return new Map();
       }
-      if (
-        err.message.includes('Invalid encrypted data format') ||
-        err.message.includes('Unsupported state or unable to authenticate data')
-      ) {
-        throw new Error('Token file corrupted');
-      }
       throw error;
+    }
+
+    // Route versioned envelopes through the codec. readEnvelopeVersion returns
+    // a version number for valid envelopes and null otherwise (including for
+    // legacy hex-colon content).
+    let plaintext: string;
+    if (readEnvelopeVersion(data) !== null) {
+      try {
+        plaintext = await decryptEnvelopeString(
+          data,
+          this.serviceName,
+          this.codecOptions,
+        );
+      } catch (error) {
+        if (error instanceof EnvelopeCodecError) {
+          // v:2 missing/different secret, tampering, or malformed envelope —
+          // fail closed consistently with prior "Token file corrupted" behavior.
+          throw new Error('Token file corrupted');
+        }
+        throw error;
+      }
+    } else {
+      try {
+        plaintext = this.decrypt(data);
+      } catch (error: unknown) {
+        const err = error as Error;
+        if (
+          err.message.includes('Invalid encrypted data format') ||
+          err.message.includes(
+            'Unsupported state or unable to authenticate data',
+          )
+        ) {
+          throw new Error('Token file corrupted');
+        }
+        throw error;
+      }
+    }
+
+    try {
+      const tokens = JSON.parse(plaintext) as Record<
+        string,
+        MCPOAuthCredentials
+      >;
+      return new Map(Object.entries(tokens));
+    } catch {
+      throw new Error('Token file corrupted');
     }
   }
 
@@ -97,9 +161,25 @@ export class FileTokenStorage extends BaseTokenStorage {
   ): Promise<void> {
     await this.ensureDirectoryExists();
 
+    // Detect an existing envelope version for anti-downgrade protection.
+    // Non-envelope (legacy) files and missing files yield null.
+    let existingVersion: number | null = null;
+    try {
+      const existing = await fs.readFile(this.tokenFilePath, 'utf-8');
+      existingVersion = readEnvelopeVersion(existing);
+    } catch (error: unknown) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
     const data = Object.fromEntries(tokens);
     const json = JSON.stringify(data, null, 2);
-    const encrypted = this.encrypt(json);
+    const encrypted = await encryptEnvelopeString(json, this.serviceName, {
+      ...this.codecOptions,
+      existingEnvelopeVersion: existingVersion,
+    });
 
     await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
   }

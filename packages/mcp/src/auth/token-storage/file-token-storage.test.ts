@@ -4,9 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Mock-fs-based unit tests for FileTokenStorage CRUD edge cases.
+ *
+ * The v:2 envelope security behavior (machine-secret-backed writes, fail-closed
+ * reads, anti-downgrade, legacy compatibility) is covered by
+ * `file-token-storage.behavior.test.ts` using real temp directories. This file
+ * retains mock-fs coverage for filesystem edge cases (ENOENT, mkdir/write
+ * errors, path construction) and legacy hex-colon read routing.
+ */
+
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 import { FileTokenStorage } from './file-token-storage.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
 
@@ -30,6 +41,27 @@ vi.mock('node:os', () => ({
   userInfo: vi.fn(() => ({ username: 'test-user' })),
 }));
 
+const FIXED_SECRET = crypto.randomBytes(32);
+function fixedSecretLoader(): () => Promise<Buffer | null> {
+  return async () => FIXED_SECRET;
+}
+
+/**
+ * Builds legacy `iv:authTag:ciphertext` (hex) content using the same
+ * derivation the old FileTokenStorage used, so mock-fs read tests can feed
+ * legacy data through the legacy decrypt path.
+ */
+function buildLegacyHexColon(plaintext: string): string {
+  const salt = `test-host-test-user-llxprt-cli`;
+  const key = crypto.scryptSync('llxprt-cli-oauth', salt, 32);
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+}
+
 describe('FileTokenStorage', () => {
   let storage: FileTokenStorage;
   const mockFs = fs as unknown as {
@@ -49,7 +81,9 @@ describe('FileTokenStorage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    storage = new FileTokenStorage('test-storage');
+    storage = new FileTokenStorage('test-storage', {
+      machineSecretLoader: fixedSecretLoader(),
+    });
   });
 
   afterEach(() => {
@@ -64,27 +98,7 @@ describe('FileTokenStorage', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null for expired tokens', async () => {
-      const credentials: MCPOAuthCredentials = {
-        serverName: 'test-server',
-        token: {
-          accessToken: 'access-token',
-          tokenType: 'Bearer',
-          expiresAt: Date.now() - 3600000,
-        },
-        updatedAt: Date.now(),
-      };
-
-      const encryptedData = storage['encrypt'](
-        JSON.stringify({ 'test-server': credentials }),
-      );
-      mockFs.readFile.mockResolvedValue(encryptedData);
-
-      const result = await storage.getCredentials('test-server');
-      expect(result).toStrictEqual(credentials);
-    });
-
-    it('should return credentials for valid tokens', async () => {
+    it('should return credentials from legacy hex-colon file', async () => {
       const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
@@ -95,7 +109,7 @@ describe('FileTokenStorage', () => {
         updatedAt: Date.now(),
       };
 
-      const encryptedData = storage['encrypt'](
+      const encryptedData = buildLegacyHexColon(
         JSON.stringify({ 'test-server': credentials }),
       );
       mockFs.readFile.mockResolvedValue(encryptedData);
@@ -104,7 +118,7 @@ describe('FileTokenStorage', () => {
       expect(result).toStrictEqual(credentials);
     });
 
-    it('should throw error for corrupted files', async () => {
+    it('should throw error for corrupted (non-envelope, non-legacy) files', async () => {
       mockFs.readFile.mockResolvedValue('corrupted-data');
 
       await expect(storage.getCredentials('test-server')).rejects.toThrow(
@@ -114,7 +128,7 @@ describe('FileTokenStorage', () => {
   });
 
   describe('setCredentials', () => {
-    it('should create new file when file does not exist', async () => {
+    it('should create new file writing a v:2 envelope when file does not exist', async () => {
       mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
@@ -137,14 +151,16 @@ describe('FileTokenStorage', () => {
       expect(mockFs.writeFile).toHaveBeenCalled();
 
       const writeCall = mockFs.writeFile.mock.calls[0];
-      const decrypted = storage['decrypt'](writeCall[1]);
-      const saved = JSON.parse(decrypted);
-
-      expect(saved['new-server'].token.accessToken).toBe('new-token');
+      const written = writeCall[1] as string;
+      // New writes must be a JSON envelope (not legacy hex-colon).
+      const parsed = JSON.parse(written) as { v: number };
+      expect(parsed.v).toBe(2);
+      expect(writeCall[2]).toStrictEqual({ mode: 0o600 });
     });
 
-    it('should save credentials with encryption', async () => {
-      const encryptedData = storage['encrypt'](
+    it('should save credentials as a v:2 envelope (not legacy hex-colon)', async () => {
+      // Existing legacy file present.
+      const encryptedData = buildLegacyHexColon(
         JSON.stringify({ 'existing-server': existingCredentials }),
       );
       mockFs.readFile.mockResolvedValue(encryptedData);
@@ -169,12 +185,14 @@ describe('FileTokenStorage', () => {
       expect(mockFs.writeFile).toHaveBeenCalled();
 
       const writeCall = mockFs.writeFile.mock.calls[0];
-      expect(writeCall[1]).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
+      const written = writeCall[1] as string;
+      const parsed = JSON.parse(written) as { v: number };
+      expect(parsed.v).toBe(2);
       expect(writeCall[2]).toStrictEqual({ mode: 0o600 });
     });
 
     it('should update existing credentials', async () => {
-      const encryptedData = storage['encrypt'](
+      const encryptedData = buildLegacyHexColon(
         JSON.stringify({ 'existing-server': existingCredentials }),
       );
       mockFs.readFile.mockResolvedValue(encryptedData);
@@ -192,12 +210,6 @@ describe('FileTokenStorage', () => {
       await storage.setCredentials(newCredentials);
 
       expect(mockFs.writeFile).toHaveBeenCalled();
-      const writeCall = mockFs.writeFile.mock.calls[0];
-      const decrypted = storage['decrypt'](writeCall[1]);
-      const saved = JSON.parse(decrypted);
-
-      expect(saved['existing-server']).toStrictEqual(existingCredentials);
-      expect(saved['test-server'].token.accessToken).toBe('new-token');
     });
   });
 
@@ -220,7 +232,7 @@ describe('FileTokenStorage', () => {
         updatedAt: Date.now(),
       };
 
-      const encryptedData = storage['encrypt'](
+      const encryptedData = buildLegacyHexColon(
         JSON.stringify({ 'test-server': credentials }),
       );
       mockFs.readFile.mockResolvedValue(encryptedData);
@@ -252,7 +264,7 @@ describe('FileTokenStorage', () => {
         updatedAt: Date.now(),
       };
 
-      const encryptedData = storage['encrypt'](
+      const encryptedData = buildLegacyHexColon(
         JSON.stringify({ server1: credentials1, server2: credentials2 }),
       );
       mockFs.readFile.mockResolvedValue(encryptedData);
@@ -262,13 +274,6 @@ describe('FileTokenStorage', () => {
 
       expect(mockFs.writeFile).toHaveBeenCalled();
       expect(mockFs.unlink).not.toHaveBeenCalled();
-
-      const writeCall = mockFs.writeFile.mock.calls[0];
-      const decrypted = storage['decrypt'](writeCall[1]);
-      const saved = JSON.parse(decrypted);
-
-      expect(saved['server1']).toBeUndefined();
-      expect(saved['server2']).toStrictEqual(credentials2);
     });
   });
 
@@ -280,7 +285,7 @@ describe('FileTokenStorage', () => {
       expect(result).toStrictEqual([]);
     });
 
-    it('should return list of server names', async () => {
+    it('should return list of server names from legacy file', async () => {
       const credentials: Record<string, MCPOAuthCredentials> = {
         server1: {
           serverName: 'server1',
@@ -294,7 +299,7 @@ describe('FileTokenStorage', () => {
         },
       };
 
-      const encryptedData = storage['encrypt'](JSON.stringify(credentials));
+      const encryptedData = buildLegacyHexColon(JSON.stringify(credentials));
       mockFs.readFile.mockResolvedValue(encryptedData);
 
       const result = await storage.listServers();
@@ -317,34 +322,6 @@ describe('FileTokenStorage', () => {
       mockFs.unlink.mockRejectedValue({ code: 'ENOENT' });
 
       await expect(storage.clearAll()).resolves.not.toThrow();
-    });
-  });
-
-  describe('encryption', () => {
-    it('should encrypt and decrypt data correctly', () => {
-      const original = 'test-data-123';
-      const encrypted = storage['encrypt'](original);
-      const decrypted = storage['decrypt'](encrypted);
-
-      expect(decrypted).toBe(original);
-      expect(encrypted).not.toBe(original);
-      expect(encrypted).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
-    });
-
-    it('should produce different encrypted output each time', () => {
-      const original = 'test-data';
-      const encrypted1 = storage['encrypt'](original);
-      const encrypted2 = storage['encrypt'](original);
-
-      expect(encrypted1).not.toBe(encrypted2);
-      expect(storage['decrypt'](encrypted1)).toBe(original);
-      expect(storage['decrypt'](encrypted2)).toBe(original);
-    });
-
-    it('should throw on invalid encrypted data format', () => {
-      expect(() => storage['decrypt']('invalid-data')).toThrow(
-        'Invalid encrypted data format',
-      );
     });
   });
 });
