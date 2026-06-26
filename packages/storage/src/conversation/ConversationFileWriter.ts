@@ -6,12 +6,12 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
+import { Storage } from '../config/storage.js';
 
 function defaultConversationLogPath(): string {
-  return path.join(os.homedir(), '.llxprt', 'conversations');
+  return path.join(Storage.getGlobalLlxprtDir(), 'conversations');
 }
 
 function resolveConversationLogPath(logPath?: string): string {

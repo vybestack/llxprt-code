@@ -29,6 +29,7 @@ import {
   SecureStoreError,
   type KeyringAdapter,
 } from '../storage/secure-store.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -36,9 +37,10 @@ import { debugLogger } from '../utils/debugLogger.js';
 const KEYCHAIN_SERVICE = 'llxprt-code-tool-keys';
 const KEYFILES_JSON_NAME = 'keyfiles.json';
 const DEFAULT_TOOLS_DIR = (): string => {
-  const homeDir = os.homedir();
-  if (typeof homeDir === 'string' && homeDir.length > 0) {
-    return path.join(homeDir, '.llxprt', 'tools');
+  try {
+    return path.join(Storage.getGlobalLlxprtDir(), 'tools');
+  } catch {
+    // Fall through to fallbacks if getGlobalLlxprtDir() throws
   }
 
   try {

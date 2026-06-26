@@ -28,6 +28,7 @@
     "dist"
   ],
   "dependencies": {
+    "env-paths": "^4.0.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

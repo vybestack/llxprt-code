@@ -12,6 +12,7 @@
  */
 
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
+import * as path from 'node:path';
 import { orUndefined } from '../utils/falsyFallback.js';
 import {
   OAuthErrorFactory,
@@ -27,8 +28,7 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import type { Credentials } from 'google-auth-library';
 import { InitializationGuard, AuthCodeDialog } from './oauth-provider-base.js';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
@@ -404,7 +404,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
     return this.errorHandler.handleGracefully(
       async () => {
         // Try to read from the existing OAuth credentials file
-        const credPath = path.join(os.homedir(), '.llxprt', 'oauth_creds.json');
+        const credPath = Storage.getOAuthCredsPath();
         const credsJson = await fs.readFile(credPath, 'utf8');
         const creds = JSON.parse(credsJson) as Credentials;
 
@@ -431,7 +431,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
         if (token) {
           this.logger.debug(
-            () => 'Found Gemini token in legacy location (read-only)',
+            () => 'Found Gemini token in OAuth credentials file (read-only)',
           );
           return token;
         }
@@ -449,10 +449,10 @@ export class GeminiOAuthProvider implements OAuthProvider {
    */
   private async clearLegacyTokens(): Promise<void> {
     const legacyPaths = [
-      // Legacy OAuth credentials file
-      path.join(os.homedir(), '.llxprt', 'oauth_creds.json'),
-      // Legacy Google accounts file
-      path.join(os.homedir(), '.llxprt', 'google_accounts.json'),
+      // Legacy OAuth credentials file (pre-migration ~/.llxprt/)
+      path.join(Storage.getLegacyLlxprtDir(), 'oauth_creds.json'),
+      // Legacy Google accounts file (pre-migration ~/.llxprt/)
+      path.join(Storage.getLegacyLlxprtDir(), 'google_accounts.json'),
     ];
 
     // Use Promise.allSettled to continue even if some paths fail

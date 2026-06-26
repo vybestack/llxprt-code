@@ -49,14 +49,17 @@ async function withTempHome<T>(
 ): Promise<T> {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
+  const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
   const tmpHome = await createTempDir('cfw-home-');
   process.env.HOME = tmpHome;
   process.env.USERPROFILE = tmpHome;
+  process.env['LLXPRT_CONFIG_HOME'] = path.join(tmpHome, '.llxprt');
   try {
     return await action(tmpHome);
   } finally {
     restoreEnvValue('HOME', originalHome);
     restoreEnvValue('USERPROFILE', originalUserProfile);
+    restoreEnvValue('LLXPRT_CONFIG_HOME', originalConfigHome);
     await fsp.rm(tmpHome, { recursive: true, force: true });
   }
 }

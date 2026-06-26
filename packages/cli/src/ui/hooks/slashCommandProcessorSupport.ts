@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import process from 'node:process';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import type {
   Config,
   RecordingIntegration,
@@ -137,12 +136,14 @@ export function useManagers(config: Config | null): {
   );
   const profileManager = useMemo(() => {
     if (!config) return undefined;
-    return new ProfileManager(path.join(os.homedir(), '.llxprt', 'profiles'));
+    return new ProfileManager(
+      path.join(Storage.getGlobalLlxprtDir(), 'profiles'),
+    );
   }, [config]);
   const subagentManager = useMemo(() => {
     if (!config || !profileManager) return undefined;
     return new SubagentManager(
-      path.join(os.homedir(), '.llxprt', 'subagents'),
+      path.join(Storage.getGlobalLlxprtDir(), 'subagents'),
       profileManager,
     );
   }, [config, profileManager]);

@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { dumpContext, redactSensitiveData, shouldDump } from './dumpContext.js';
 
 function matchesDumpBaseIdFormat(baseId: string, provider: string): boolean {
@@ -33,7 +33,7 @@ function matchesDumpBaseIdFormat(baseId: string, provider: string): boolean {
 }
 
 describe('dumpContext', () => {
-  const testDumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
+  const testDumpDir = path.join(Storage.getGlobalLlxprtDir(), 'dumps');
   const createdFiles: string[] = [];
 
   beforeEach(async () => {

@@ -16,6 +16,7 @@ import {
   type FileFilteringOptions,
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
@@ -43,10 +44,13 @@ function findEnvFile(startDir: string): string | null {
     }
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir || !parentDir) {
-      // check .env under home as fallback, again preferring gemini-specific .env
-      const homeGeminiEnvPath = path.join(os.homedir(), LLXPRT_DIR, '.env');
-      if (fs.existsSync(homeGeminiEnvPath)) {
-        return homeGeminiEnvPath;
+      // check .env under the platform config dir as fallback
+      const globalGeminiEnvPath = path.join(
+        Storage.getGlobalLlxprtDir(),
+        '.env',
+      );
+      if (fs.existsSync(globalGeminiEnvPath)) {
+        return globalGeminiEnvPath;
       }
       const homeEnvPath = path.join(os.homedir(), '.env');
       if (fs.existsSync(homeEnvPath)) {

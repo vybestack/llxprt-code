@@ -16,7 +16,8 @@
 
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { tmpdir } from 'node:os';
+import envPaths from 'env-paths';
 import {
   OAuthTokenSchema,
   type OAuthToken,
@@ -43,10 +44,21 @@ const DEFAULT_STALE_THRESHOLD_MS = 30_000;
 const LOCK_POLL_INTERVAL_MS = 100;
 const LOCK_WRITE_GRACE_MS = 750;
 
-/** Lazily resolved to avoid crashing when homedir() is undefined at import time. */
+// Platform-standard config path for OAuth lock files.
+const platformPaths = envPaths('llxprt-code', { suffix: '' });
+
+/** Lazily resolved to avoid computing the path at import time. */
 let _lockDir: string | undefined;
 function getLockDir(): string {
-  return (_lockDir ??= join(homedir(), '.llxprt', 'oauth', 'locks'));
+  if (_lockDir) return _lockDir;
+  const configHome = process.env['LLXPRT_CONFIG_HOME'];
+  const dataDir = platformPaths.data;
+  const baseDir =
+    configHome ??
+    (dataDir
+      ? join(dataDir, 'configuration')
+      : join(tmpdir(), 'llxprt-code', 'configuration'));
+  return (_lockDir = join(baseDir, 'oauth', 'locks'));
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

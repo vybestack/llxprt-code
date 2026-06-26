@@ -118,9 +118,14 @@ describe('handleAutoUpdate', () => {
 
     // Default mock behavior
     mockHomedir.mockReturnValue('/home/test');
+    process.env['LLXPRT_CONFIG_HOME'] = '/home/test/.llxprt';
     mockExistsSync.mockReturnValue(false);
     mockReaddirSync.mockReturnValue([]);
     mockOpenSync.mockReturnValue(42); // Mock file descriptor
+  });
+
+  afterEach(() => {
+    delete process.env['LLXPRT_CONFIG_HOME'];
   });
 
   afterEach(() => {

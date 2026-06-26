@@ -30,6 +30,7 @@ describe('Provider alias integration', () => {
   let originalOpenAIApiKey: string | undefined;
   let originalHome: string | undefined;
   let originalUserProfile: string | undefined;
+  let originalConfigHome: string | undefined;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-alias-test-'));
@@ -62,8 +63,10 @@ describe('Provider alias integration', () => {
     process.env.OPENAI_API_KEY = 'test-key';
     originalHome = process.env.HOME;
     originalUserProfile = process.env.USERPROFILE;
+    originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
     process.env.HOME = tempDir;
     process.env.USERPROFILE = tempDir;
+    process.env['LLXPRT_CONFIG_HOME'] = llxprtDir;
 
     resetProviderManager();
     setFileSystem(new NodeFileSystem());
@@ -90,6 +93,11 @@ describe('Provider alias integration', () => {
       delete process.env.USERPROFILE;
     } else {
       process.env.USERPROFILE = originalUserProfile;
+    }
+    if (originalConfigHome === undefined) {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    } else {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
     }
 
     resetProviderManager();

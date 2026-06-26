@@ -6,7 +6,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type {
   CommandContext,
   SlashCommand,
@@ -14,6 +13,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { PromptService, debugLogger } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 /**
  * Get the init command prompt from the prompt service
@@ -23,7 +23,7 @@ async function getInitCommandPrompt(): Promise<string> {
     const baseDir =
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string LLXPRT_PROMPTS_DIR means "unset"
       process.env.LLXPRT_PROMPTS_DIR ||
-      path.join(os.homedir(), '.llxprt', 'prompts');
+      path.join(Storage.getGlobalLlxprtDir(), 'prompts');
     const promptService = new PromptService({
       baseDir,
       debugMode: process.env.DEBUG === 'true',

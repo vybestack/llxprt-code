@@ -6,6 +6,7 @@ import { PromptInstaller, type DefaultsMap } from './prompt-installer.js';
 import type { PromptContext } from './types.js';
 import { ALL_DEFAULTS } from './defaults/index.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
@@ -15,7 +16,7 @@ import { existsSync } from 'node:fs';
  * Configuration options for PromptService
  */
 export interface PromptServiceConfig {
-  /** Base directory for prompts (defaults to ~/.llxprt/prompts) */
+  /** Base directory for prompts (defaults to the platform-standard llxprt configuration directory/prompts) */
   baseDir?: string;
   /** Maximum cache size in MB (defaults to 100) */
   maxCacheSizeMB?: number;
@@ -58,7 +59,7 @@ export class PromptService {
    */
   constructor(config?: PromptServiceConfig) {
     // Set default configuration
-    const defaultBaseDir = path.join(os.homedir(), '.llxprt', 'prompts');
+    const defaultBaseDir = path.join(Storage.getGlobalLlxprtDir(), 'prompts');
     this.baseDir = this.expandPath(config?.baseDir ?? defaultBaseDir);
 
     this.config = {

@@ -27,9 +27,7 @@ import type { Content } from '@google/genai';
 import { debugLogger } from '../utils/debugLogger.js';
 
 import crypto from 'node:crypto';
-import os from 'node:os';
 
-const LLXPRT_DIR_NAME = '.llxprt';
 const TMP_DIR_NAME = 'tmp';
 const LOG_FILE_NAME = 'logs.json';
 const CHECKPOINT_FILE_NAME = 'checkpoint.json';
@@ -37,8 +35,7 @@ const CHECKPOINT_FILE_NAME = 'checkpoint.json';
 const projectDir = process.cwd();
 const hash = crypto.createHash('sha256').update(projectDir).digest('hex');
 const TEST_LLXPRT_DIR = path.join(
-  os.homedir(),
-  LLXPRT_DIR_NAME,
+  Storage.getGlobalLlxprtDir(),
   TMP_DIR_NAME,
   hash,
 );

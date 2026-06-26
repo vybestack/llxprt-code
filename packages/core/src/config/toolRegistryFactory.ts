@@ -6,9 +6,9 @@
  */
 
 import path from 'node:path';
-import os from 'node:os';
 
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   DeleteLineRangeTool,
   GlobTool,
@@ -424,14 +424,14 @@ function resolveManagers(host: ToolRegistryHost): {
 } {
   let profileManager = host.getProfileManager();
   if (!profileManager) {
-    const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
+    const profilesDir = path.join(Storage.getGlobalLlxprtDir(), 'profiles');
     profileManager = new ProfileManager(profilesDir);
     host.setProfileManager(profileManager);
   }
 
   let subagentManager = host.getSubagentManager();
   if (subagentManager === undefined) {
-    const subagentsDir = path.join(os.homedir(), '.llxprt', 'subagents');
+    const subagentsDir = path.join(Storage.getGlobalLlxprtDir(), 'subagents');
     subagentManager = new SubagentManager(subagentsDir, profileManager);
     host.setSubagentManager(subagentManager);
   }

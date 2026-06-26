@@ -5,9 +5,9 @@
  */
 
 import path from 'node:path';
-import os from 'node:os';
 import process from 'node:process';
 import * as fs from 'node:fs/promises';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import { getRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
@@ -64,7 +64,7 @@ export class PromptServiceManager {
     const baseDir =
       envDir !== undefined && envDir !== ''
         ? envDir
-        : path.join(os.homedir(), '.llxprt', 'prompts');
+        : path.join(Storage.getGlobalLlxprtDir(), 'prompts');
     const instance = new PromptService({
       baseDir,
       debugMode: process.env.DEBUG === 'true',

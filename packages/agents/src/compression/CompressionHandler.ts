@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import os from 'node:os';
 import path from 'node:path';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import type { GenerateContentConfig } from '@google/genai';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -804,7 +804,7 @@ export class CompressionHandler {
    */
   async buildCompressionContext(promptId: string): Promise<CompressionContext> {
     const promptResolver = new PromptResolver();
-    const promptBaseDir = path.join(os.homedir(), '.llxprt', 'prompts');
+    const promptBaseDir = path.join(Storage.getGlobalLlxprtDir(), 'prompts');
 
     let activeTodos: string | undefined;
     if (this.activeTodosProvider) {

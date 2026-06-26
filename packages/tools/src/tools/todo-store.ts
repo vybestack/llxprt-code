@@ -7,7 +7,7 @@
 import { type Todo, TodoArraySchema } from '../types/todo-schemas.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { Storage } from '@vybestack/llxprt-code-storage';
 
 export const DEFAULT_AGENT_ID = 'primary';
 
@@ -24,7 +24,7 @@ export class TodoStore {
   private readonly filePath: string;
 
   constructor(sessionId: string, agentId?: string) {
-    const todoDir = path.join(os.homedir(), '.llxprt', 'todos');
+    const todoDir = path.join(Storage.getGlobalLlxprtDir(), 'todos');
     // Ensure directory exists
     fs.mkdirSync(todoDir, { recursive: true });
 

@@ -46,14 +46,17 @@ describe('FileTokenStorage', () => {
     },
     updatedAt: Date.now() - 10000,
   };
+  const CONFIG_HOME = '/home/test/.llxprt';
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env['LLXPRT_CONFIG_HOME'] = CONFIG_HOME;
     storage = new FileTokenStorage('test-storage');
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    delete process.env['LLXPRT_CONFIG_HOME'];
   });
 
   describe('getCredentials', () => {
@@ -130,10 +133,10 @@ describe('FileTokenStorage', () => {
 
       await storage.setCredentials(credentials);
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt'),
-        { recursive: true, mode: 0o700 },
-      );
+      expect(mockFs.mkdir).toHaveBeenCalledWith(CONFIG_HOME, {
+        recursive: true,
+        mode: 0o700,
+      });
       expect(mockFs.writeFile).toHaveBeenCalled();
 
       const writeCall = mockFs.writeFile.mock.calls[0];
@@ -162,10 +165,10 @@ describe('FileTokenStorage', () => {
 
       await storage.setCredentials(credentials);
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt'),
-        { recursive: true, mode: 0o700 },
-      );
+      expect(mockFs.mkdir).toHaveBeenCalledWith(CONFIG_HOME, {
+        recursive: true,
+        mode: 0o700,
+      });
       expect(mockFs.writeFile).toHaveBeenCalled();
 
       const writeCall = mockFs.writeFile.mock.calls[0];
@@ -229,7 +232,7 @@ describe('FileTokenStorage', () => {
       await storage.deleteCredentials('test-server');
 
       expect(mockFs.unlink).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
+        path.join(CONFIG_HOME, 'mcp-oauth-tokens-v2.json'),
       );
     });
 
@@ -309,7 +312,7 @@ describe('FileTokenStorage', () => {
       await storage.clearAll();
 
       expect(mockFs.unlink).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
+        path.join(CONFIG_HOME, 'mcp-oauth-tokens-v2.json'),
       );
     });
 

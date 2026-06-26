@@ -20,15 +20,36 @@ async function makeTempDir(): Promise<string> {
 }
 
 describe('Storage — static path methods', () => {
-  it('getGlobalLlxprtDir returns a path ending with .llxprt', () => {
-    const result = Storage.getGlobalLlxprtDir();
-    expect(result).toContain('.llxprt');
+  const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+
+  beforeEach(() => {
+    delete process.env['LLXPRT_CONFIG_HOME'];
   });
 
-  it('getGlobalLlxprtDir includes the home directory', () => {
+  afterEach(() => {
+    if (originalConfigHome !== undefined) {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+    } else {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    }
+  });
+
+  it('getGlobalLlxprtDir returns the platform configuration path', () => {
     const result = Storage.getGlobalLlxprtDir();
-    const homeDir = os.homedir();
-    expect(result).toContain(homeDir);
+    expect(result.endsWith(path.join('llxprt-code', 'configuration'))).toBe(
+      true,
+    );
+  });
+
+  it('getGlobalLlxprtDir respects the LLXPRT_CONFIG_HOME override', () => {
+    const override = '/tmp/llxprt-override-test';
+    process.env['LLXPRT_CONFIG_HOME'] = override;
+    expect(Storage.getGlobalLlxprtDir()).toBe(override);
+  });
+
+  it('getLegacyLlxprtDir returns ~/.llxprt', () => {
+    const result = Storage.getLegacyLlxprtDir();
+    expect(result).toBe(path.join(os.homedir(), '.llxprt'));
   });
 
   it('getGlobalSettingsPath ends with settings.json', () => {
@@ -46,9 +67,9 @@ describe('Storage — static path methods', () => {
     expect(result).toContain('provider_accounts.json');
   });
 
-  it('getGlobalTempDir returns a path under .llxprt/tmp', () => {
+  it('getGlobalTempDir returns a path under the configuration dir', () => {
     const result = Storage.getGlobalTempDir();
-    expect(result).toContain('.llxprt');
+    expect(result).toContain('configuration');
     expect(result).toContain('tmp');
   });
 

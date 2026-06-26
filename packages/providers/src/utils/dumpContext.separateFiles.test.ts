@@ -7,14 +7,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   dumpRequestContext,
   dumpResponseContext,
   generateDumpBaseId,
 } from './dumpContext.js';
 
-const DUMP_DIR = path.join(os.homedir(), '.llxprt', 'dumps');
+const DUMP_DIR = path.join(Storage.getGlobalLlxprtDir(), 'dumps');
 
 describe('dumpContext separate request/response files', () => {
   const createdFiles: string[] = [];

@@ -115,6 +115,7 @@ import {
 import {
   ProfileManager,
   SettingsService,
+  Storage,
 } from '@vybestack/llxprt-code-settings';
 import { theme } from './ui/colors.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -122,6 +123,7 @@ import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
 import { ExtensionStorage, loadExtensions } from './config/extension.js';
+import { runStartupMigration } from './config/pathMigration.js';
 import {
   cleanupCheckpoints,
   registerCleanup,
@@ -257,7 +259,6 @@ import {
   mkdirSync,
   promises as fsPromises,
 } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
@@ -444,8 +445,10 @@ export async function main() {
 
   setupUnhandledRejectionHandler();
 
-  // Create .llxprt directory if it doesn't exist
-  const llxprtDir = join(homedir(), '.llxprt');
+  // Migrate legacy ~/.llxprt/ to platform-standard path (if needed),
+  // then ensure the platform directory exists.
+  runStartupMigration();
+  const llxprtDir = Storage.getGlobalLlxprtDir();
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }

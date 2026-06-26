@@ -13,6 +13,7 @@ import {
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
   coreEvents,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import * as commentJson from 'comment-json';
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 import {
@@ -342,7 +343,7 @@ function findEnvFile(startDir: string): string | null {
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) {
       // check .env under home as fallback, again preferring gemini-specific .env
-      const homeGeminiEnvPath = path.join(homedir(), LLXPRT_DIR, '.env');
+      const homeGeminiEnvPath = path.join(Storage.getGlobalLlxprtDir(), '.env');
       if (fs.existsSync(homeGeminiEnvPath)) {
         return homeGeminiEnvPath;
       }

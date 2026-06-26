@@ -16,7 +16,7 @@ import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import process from 'node:process';
-import * as os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
 
 interface LoadBalancerStatsResult {
@@ -264,7 +264,9 @@ function appendDumpContextInfo(
   if (dumpcontextMode !== 'off') {
     diagnostics.push(`\n## Context Dumping`);
     diagnostics.push(`- Mode: ${dumpcontextMode}`);
-    diagnostics.push(`- Dump Directory: ${os.homedir()}/.llxprt/dumps/`);
+    diagnostics.push(
+      `- Dump Directory: ${Storage.getGlobalLlxprtDir()}/dumps/`,
+    );
   }
 }
 

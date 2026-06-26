@@ -8,11 +8,17 @@ import * as path from 'node:path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import envPaths from 'env-paths';
 
 export const LLXPRT_DIR = '.llxprt';
 export const PROVIDER_ACCOUNTS_FILENAME = 'provider_accounts.json';
 export const OAUTH_FILE = 'oauth_creds.json';
 const TMP_DIR_NAME = 'tmp';
+
+// Platform-standard paths for llxprt-code app data (no suffix to match the
+// secure-store.ts pattern). Configuration lives under `.data/configuration`
+// so that it is a sibling of the secure-store directory.
+const platformPaths = envPaths('llxprt-code', { suffix: '' });
 
 export class Storage {
   private readonly targetDir: string;
@@ -21,7 +27,35 @@ export class Storage {
     this.targetDir = targetDir;
   }
 
+  /**
+   * Returns the platform-standard directory for global llxprt configuration
+   * and data. Resolves in the following order:
+   *
+   * 1. `LLXPRT_CONFIG_HOME` environment variable (explicit override)
+   * 2. `envPaths('llxprt-code').data` joined with `'configuration'`
+   *
+   * On macOS this is `~/Library/Application Support/llxprt-code/configuration`,
+   * on Linux `~/.local/share/llxprt-code/configuration`, and on Windows
+   * `%LOCALAPPDATA%\llxprt-code\configuration`.
+   */
   static getGlobalLlxprtDir(): string {
+    const override = process.env['LLXPRT_CONFIG_HOME'];
+    if (override) {
+      return override;
+    }
+    const dataDir = platformPaths.data;
+    if (!dataDir) {
+      return path.join(os.tmpdir(), 'llxprt-code', 'configuration');
+    }
+    return path.join(dataDir, 'configuration');
+  }
+
+  /**
+   * Returns the legacy global configuration directory (`~/.llxprt`).
+   * Used solely by the startup migration logic to detect and copy
+   * pre-migration configuration into the new platform-standard path.
+   */
+  static getLegacyLlxprtDir(): string {
     const homeDir = os.homedir();
     if (!homeDir) {
       return path.join(os.tmpdir(), '.llxprt');
