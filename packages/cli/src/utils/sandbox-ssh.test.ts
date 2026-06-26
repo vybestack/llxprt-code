@@ -9,6 +9,7 @@ import * as child_process from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { testRegex } from '../test-utils/regex.js';
 
 vi.mock('node:child_process');
 vi.mock('node:fs/promises');
@@ -486,7 +487,7 @@ describe('setupCredentialProxyPodmanMacOS', () => {
     expect(sshArgs).toContain('-R');
     const rIdx = sshArgs.indexOf('-R');
     expect(sshArgs[rIdx + 1]).toMatch(
-      /^127\.0\.0\.1:\d+:\/tmp\/cred-proxy\.sock$/,
+      testRegex('^127\\.0\\.0\\.1:\\d+:\\/tmp\\/cred-proxy\\.sock$', ''),
     );
   }, 10000);
 

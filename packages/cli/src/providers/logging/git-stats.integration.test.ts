@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -47,16 +46,17 @@ describe('Git Stats Integration', () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     } catch (error) {
       // Ignore cleanup errors in tests
-      console.warn('Failed to cleanup temp directory:', error);
+      globalThis.console.warn('Failed to cleanup temp directory:', error);
     }
   });
 
   it('should track stats during actual file edits', async () => {
     const testFile = join(tempDir, 'test.ts');
-    const initialContent = 'function hello() {\n  console.log("Hello");\n}';
+    const initialContent =
+      'function hello() {\n  globalThis.console.log("Hello");\n}';
     const modifiedContent =
       initialContent +
-      '\n\n// Added comment\nfunction goodbye() {\n  console.log("Goodbye");\n}';
+      '\n\n// Added comment\nfunction goodbye() {\n  globalThis.console.log("Goodbye");\n}';
 
     // Create the initial file
     await fs.writeFile(testFile, initialContent, 'utf8');
@@ -250,7 +250,7 @@ describe('Git Stats Integration', () => {
     const generateContent = (lines: number, prefix: string) =>
       Array.from(
         { length: lines },
-        (_, i) => `${prefix}${i}: console.log('Line ${i}');`,
+        (_, i) => `${prefix}${i}: globalThis.console.log('Line ${i}');`,
       ).join('\n');
 
     const originalContent = generateContent(1000, 'original_');

@@ -84,6 +84,23 @@ const nodeModulePlugin = {
   },
 };
 
+// Stub plugin for the `is-in-ci` package. The original npm package detects CI
+// environments, which causes ink to suppress its UI rendering. We always return
+// false so the interactive CLI UI renders even under CI runners. See issue #1563.
+const isInCiStubPlugin = {
+  name: 'is-in-ci-stub',
+  setup(build) {
+    build.onResolve({ filter: /^is-in-ci$/ }, () => ({
+      path: 'is-in-ci',
+      namespace: 'is-in-ci-stub',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'is-in-ci-stub' }, () => ({
+      contents: 'export default false;',
+      loader: 'js',
+    }));
+  },
+};
+
 // Shared base configuration
 const baseConfig = {
   bundle: true,
@@ -133,10 +150,7 @@ const cliConfig = {
   ...baseConfig,
   entryPoints: ['packages/cli/index.ts'],
   outfile: 'bundle/llxprt.js', // LLxprt branding
-  plugins: [nodeModulePlugin, ...createWasmPlugins()], // LLxprt-specific: module redirect + WASM embedding
-  alias: {
-    'is-in-ci': path.resolve(__dirname, 'packages/cli/src/patches/is-in-ci.ts'),
-  },
+  plugins: [nodeModulePlugin, isInCiStubPlugin, ...createWasmPlugins()], // LLxprt-specific: module redirect + is-in-ci stub + WASM embedding
   define: {
     'process.env.CLI_VERSION': JSON.stringify(pkg.version),
     'process.env.NODE_ENV': '"production"', // LLxprt-specific: production mode

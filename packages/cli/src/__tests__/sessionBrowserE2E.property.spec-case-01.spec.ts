@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { assertTruthy } from '../test-utils/assertions.js';
 import fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -82,7 +83,7 @@ describe('Property-based tests #1', () => {
           const result = await performResume(String(validIndex), context);
 
           expect(result.ok).toBe(true);
-          if (!result.ok) throw new Error('unreachable: narrowing failed');
+          assertTruthy(result.ok);
           // Index is 1-based, newest first
           const expectedSessionId = sessionIds[sessionCount - validIndex];
           expect(result.metadata.sessionId).toBe(expectedSessionId);

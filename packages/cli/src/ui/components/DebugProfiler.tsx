@@ -137,10 +137,8 @@ export const DebugProfiler = () => {
     // Register handlers for all core and app events to ensure they are
     // considered "actions" and don't trigger spurious idle frame warnings.
     // These events are expected to trigger UI renders.
-    // Cast to base EventEmitter to allow generic event name iteration.
-    const coreEventsBase = coreEvents as unknown as EventEmitter;
-
-    const appEventsBase = appEvents as unknown as EventEmitter;
+    const coreEventsBase = coreEvents as EventEmitter;
+    const appEventsBase = appEvents as EventEmitter;
     for (const eventName of Object.values(CoreEvent)) {
       coreEventsBase.on(eventName, handler);
     }

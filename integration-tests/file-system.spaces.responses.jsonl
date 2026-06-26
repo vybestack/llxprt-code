@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_write_spaces","name":"write_file","parameters":{"file_path":"{{CWD}}/my test file.txt","content":"hello"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Wrote hello to my test file.txt."}],"metadata":{"usage":{"promptTokens":220,"completionTokens":10,"totalTokens":230}}}]}

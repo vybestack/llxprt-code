@@ -29,6 +29,30 @@ function getGitHubToken(): string | undefined {
 }
 
 /**
+ * Returns a clone URL with the GitHub token injected as the username for
+ * https github.com URLs that do not already specify credentials. If the
+ * source is not a parseable URL or does not target github.com over https,
+ * the original source is returned unchanged so git can handle it as-is.
+ */
+function injectGitHubToken(source: string, token: string): string {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(source);
+  } catch {
+    return source;
+  }
+  const isGitHubHttps =
+    parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'github.com';
+  if (!isGitHubHttps) {
+    return source;
+  }
+  if (!parsedUrl.username) {
+    parsedUrl.username = token;
+  }
+  return parsedUrl.toString();
+}
+
+/**
  * Clones a Git repository to a specified local path.
  * @param installMetadata The metadata for the extension to install.
  * @param destination The destination path to clone the repository to.
@@ -39,26 +63,10 @@ export async function cloneFromGit(
 ): Promise<void> {
   try {
     const git = simpleGit(destination);
-    let sourceUrl = installMetadata.source;
     const token = getGitHubToken();
-    if (token) {
-      try {
-        const parsedUrl = new URL(sourceUrl);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (
-          parsedUrl.protocol === 'https:' &&
-          parsedUrl.hostname === 'github.com'
-        ) {
-          if (!parsedUrl.username) {
-            parsedUrl.username = token;
-          }
-          sourceUrl = parsedUrl.toString();
-        }
-      } catch {
-        // If source is not a valid URL, we don't inject the token.
-        // We let git handle the source as is.
-      }
-    }
+    const sourceUrl = token
+      ? injectGitHubToken(installMetadata.source, token)
+      : installMetadata.source;
     await git.clone(sourceUrl, './', ['--depth', '1']);
 
     const remotes = await git.getRemotes(true);

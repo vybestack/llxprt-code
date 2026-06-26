@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { themeCommand } from './themeCommand';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 describe('themeCommand', () => {
   let mockContext: CommandContext;
@@ -18,12 +19,9 @@ describe('themeCommand', () => {
 
   it('should return a dialog action to open the theme dialog', () => {
     // Ensure the command has an action to test.
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (themeCommand.action === undefined) {
-      throw new Error('The theme command must have an action.');
-    }
+    assertDefined(themeCommand.action);
 
-    const result = themeCommand.action(mockContext, '');
+    const result = themeCommand.action!(mockContext, '');
 
     // Assert that the action returns the correct object to trigger the theme dialog.
     expect(result).toStrictEqual({

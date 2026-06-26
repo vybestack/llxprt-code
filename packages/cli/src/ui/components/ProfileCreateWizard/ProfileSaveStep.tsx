@@ -21,6 +21,7 @@ import {
   getStepPosition,
 } from './utils.js';
 import type { WizardState } from './types.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 const useExistingProfiles = () => {
   const [existingProfiles, setExistingProfiles] = useState<string[]>([]);
@@ -38,8 +39,7 @@ const useExistingProfiles = () => {
         setExistingProfiles([]);
       }
     };
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    loadExistingProfiles();
+    void loadExistingProfiles();
   }, []);
 
   return existingProfiles;
@@ -162,8 +162,7 @@ const executeSave = async (
     setValidationError('Profile name already exists');
     setFocusedComponent('conflict');
   } else {
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string error fallback
-    setSaveError(result.error || 'Failed to save profile');
+    setSaveError(firstNonEmptyString(result.error, 'Failed to save profile'));
     setFocusedComponent('input');
   }
 };
@@ -325,8 +324,7 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
   >('input');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [profileNameInput, setProfileNameInput] = useState(
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string profile name
-    state.profileName || '',
+    state.profileName ?? '',
   );
   const [validationError, setValidationError] = useState<string | null>(null);
   const existingProfiles = useExistingProfiles();

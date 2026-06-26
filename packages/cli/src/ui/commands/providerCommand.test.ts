@@ -48,6 +48,7 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 
 // Import after mocks are set up
 import { providerCommand } from './providerCommand.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 describe('providerCommand /provider save', () => {
   let tempDir: string;
@@ -125,10 +126,7 @@ describe('providerCommand /provider save', () => {
       },
     });
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!providerCommand.action) {
-      throw new Error('providerCommand must have an action');
-    }
+    assertDefined(providerCommand.action);
 
     const result = await providerCommand.action(context, 'save myalias');
 
@@ -179,10 +177,7 @@ describe('providerCommand /provider switch', () => {
 
     const context = createMockCommandContext();
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!providerCommand.action) {
-      throw new Error('providerCommand must have an action');
-    }
+    assertDefined(providerCommand.action);
 
     const result = await providerCommand.action(context, 'qwen');
 
@@ -215,10 +210,7 @@ describe('providerCommand /provider switch', () => {
 
     const context = createMockCommandContext();
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!providerCommand.action) {
-      throw new Error('providerCommand must have an action');
-    }
+    assertDefined(providerCommand.action);
 
     const result = await providerCommand.action(context, 'unknown');
 

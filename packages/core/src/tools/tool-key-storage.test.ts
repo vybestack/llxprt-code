@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as crypto from 'node:crypto';
 import { ToolKeyStorage, type KeyringAdapter } from './tool-key-storage.js';
 import {
   isValidToolKeyName,
@@ -21,6 +22,7 @@ import {
   getSupportedToolNames,
   maskKeyForDisplay,
 } from '@vybestack/llxprt-code-tools';
+import { isValidEnvelope } from '@vybestack/llxprt-code-storage';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
@@ -30,7 +32,7 @@ function isHexChar(ch: string): boolean {
   return HEX_CHARS.has(ch);
 }
 
-/** Validates `hex:hex:hex` format (e.g. AES-256-GCM iv:authTag:encrypted). */
+/** Validates `hex:hex:hex` format (legacy AES-256-GCM iv:authTag:encrypted). */
 function isHexColonFormat(value: string): boolean {
   const parts = value.split(':');
   if (parts.length !== 3) {
@@ -75,6 +77,62 @@ async function createTempToolsDir(): Promise<string> {
     path.join(os.tmpdir(), 'tool-key-storage-test-'),
   );
   return tmpDir;
+}
+
+/**
+ * Fixed machine secrets used to drive the envelope codec deterministically
+ * without touching the real keyring or machine_secret file.
+ */
+const MACHINE_SECRET_A = crypto.randomBytes(32);
+const MACHINE_SECRET_B = crypto.randomBytes(32);
+
+function secretLoaderA(): () => Promise<Buffer | null> {
+  return async () => MACHINE_SECRET_A;
+}
+
+function secretLoaderB(): () => Promise<Buffer | null> {
+  return async () => MACHINE_SECRET_B;
+}
+
+function nullSecretLoader(): () => Promise<Buffer | null> {
+  return async () => null;
+}
+
+/**
+ * FROZEN LEGACY KDF SPEC — DO NOT CHANGE.
+ *
+ * These constants describe the `iv:authTag:ciphertext` (hex) format written by
+ * pre-envelope versions of ToolKeyStorage. The current implementation no longer
+ * *writes* this format (it writes versioned envelopes), so this helper exists
+ * only to synthesize pre-existing on-disk files and prove backward-compatible
+ * reads still work.
+ *
+ * The duplication of `deriveEncryptionKey`'s logic
+ * (tool-key-storage.ts) is intentional and unavoidable:
+ *   - A static cross-machine ciphertext fixture is impossible because the legacy
+ *     salt is derived from `os.hostname()`/`os.userInfo().username`, so the key
+ *     differs per machine and must be derived at test time.
+ *   - The public API can no longer produce this format, so it cannot be
+ *     generated through a v:1-only storage instance (that path emits a v:1
+ *     *envelope*, which is covered by separate tests).
+ *
+ * Both this helper and the production `deriveEncryptionKey` are pinned to this
+ * frozen spec. If the production KDF ever diverges from these exact constants,
+ * it would silently break reads of real legacy files in the wild — neither side
+ * may change.
+ */
+const LEGACY_KDF_PASSWORD = 'llxprt-cli-tool-keys';
+const legacyKdfSalt = (): string =>
+  `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
+
+function buildLegacyHexColonCiphertext(plaintext: string): string {
+  const key = crypto.scryptSync(LEGACY_KDF_PASSWORD, legacyKdfSalt(), 32);
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
 }
 
 // ─── Registry Tests ──────────────────────────────────────────────────────────
@@ -311,19 +369,51 @@ describe('ToolKeyStorage', () => {
      * @plan PLAN-20260206-TOOLKEY.P04
      * @requirement REQ-001.2
      */
-    it('encrypted file content is not plaintext', async () => {
+    it('encrypted file content is a valid v:2 JSON envelope (not plaintext, not legacy hex-colon)', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
         keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
       });
 
       await storage.saveKey('exa', 'sk-secret-value');
       const filePath = path.join(tempDir, 'exa.key');
       const content = await fs.readFile(filePath, 'utf-8');
       expect(content).not.toContain('sk-secret-value');
-      // AES-256-GCM format: iv:authTag:encrypted (hex strings)
-      expect(isHexColonFormat(content)).toBe(true);
+      // Must NOT be the legacy hex:hex:hex format anymore.
+      expect(isHexColonFormat(content)).toBe(false);
+      // Must parse as a valid versioned envelope.
+      const parsed = JSON.parse(content) as unknown;
+      expect(isValidEnvelope(parsed)).toBe(true);
+      expect((parsed as { v: number }).v).toBe(2);
     });
+
+    /**
+     * @plan PLAN-20260206-TOOLKEY.P04
+     * @requirement REQ-001.2
+     */
+    it.skipIf(process.platform === 'win32')(
+      'tightens permissions to 0o600 when overwriting a pre-existing loose-mode .key file',
+      async () => {
+        // Simulate a key file left behind with group/world-readable
+        // permissions. writeFile's `mode` only applies when the file is
+        // created, so an overwrite must explicitly chmod to avoid leaving a
+        // secret world-readable.
+        const filePath = path.join(tempDir, 'exa.key');
+        await fs.writeFile(filePath, 'placeholder', { mode: 0o644 });
+        await fs.chmod(filePath, 0o644);
+
+        const storage = new ToolKeyStorage({
+          toolsDir: tempDir,
+          keyringLoader: async () => null,
+          machineSecretLoader: secretLoaderA(),
+        });
+        await storage.saveKey('exa', 'sk-perm-check');
+
+        const stat = await fs.stat(filePath);
+        expect(stat.mode & 0o777).toBe(0o600);
+      },
+    );
 
     /**
      * @plan PLAN-20260206-TOOLKEY.P04
@@ -358,6 +448,231 @@ describe('ToolKeyStorage', () => {
 
       // File should be gone
       await expect(fs.stat(filePath)).rejects.toThrow(/ENOENT/);
+    });
+  });
+
+  // ─── v:2 Envelope Security Behavior ─────────────────────────────────────
+
+  describe('v:2 envelope security (machine-secret-backed)', () => {
+    it('round-trips through the encrypted file with the same machine secret', async () => {
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      await storage.saveKey('exa', 'sk-roundtrip');
+      const result = await storage.getKey('exa');
+      expect(result).toBe('sk-roundtrip');
+    });
+
+    it('read with a different machine secret fails closed (rejects, does not return null)', async () => {
+      const writer = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+      await writer.saveKey('exa', 'sk-written-with-A');
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderB(),
+      });
+
+      // Must reject (fail closed) — never silently return null.
+      await expect(reader.getKey('exa')).rejects.toThrow(
+        /Failed to decrypt envelope/,
+      );
+    });
+
+    it('read of a v:2 file with no machine secret fails closed (rejects)', async () => {
+      const writer = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+      await writer.saveKey('exa', 'sk-written-with-A');
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: nullSecretLoader(),
+      });
+
+      await expect(reader.getKey('exa')).rejects.toThrow(
+        /v:2 envelope requires a machine secret/,
+      );
+    });
+
+    it('reads legacy hex-colon .key files (backward compatibility)', async () => {
+      // Write a legacy-format file directly.
+      const filePath = path.join(tempDir, 'exa.key');
+      const legacyContent = buildLegacyHexColonCiphertext('sk-legacy-value');
+      expect(isHexColonFormat(legacyContent)).toBe(true);
+      await fs.writeFile(filePath, legacyContent, { mode: 0o600 });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      const result = await reader.getKey('exa');
+      expect(result).toBe('sk-legacy-value');
+    });
+
+    it('reads a legacy empty-key .key file whose ciphertext is empty (iv:authTag:)', async () => {
+      // AES-256-GCM is a stream cipher, so encrypting an empty plaintext yields
+      // an empty ciphertext: a genuine legacy file for an empty key is
+      // `iv:authTag:` with an empty third part. It must still be recognized as
+      // legacy and round-trip to '' rather than being rejected as unrecognized.
+      const filePath = path.join(tempDir, 'exa.key');
+      const legacyContent = buildLegacyHexColonCiphertext('');
+      expect(legacyContent.endsWith(':')).toBe(true);
+      await fs.writeFile(filePath, legacyContent, { mode: 0o600 });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      const result = await reader.getKey('exa');
+      expect(result).toBe('');
+    });
+
+    /**
+     * @plan PLAN-20260206-TOOLKEY.P04
+     * @requirement REQ-001.2
+     */
+    it('fails closed on unrecognized (non-envelope, non-legacy) .key content', async () => {
+      // Write raw garbage that is neither a valid envelope nor legacy
+      // hex-colon format directly to the .key file.
+      const filePath = path.join(tempDir, 'exa.key');
+      await fs.writeFile(filePath, 'this-is-not-a-valid-key-file', {
+        mode: 0o600,
+      });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      // Must reject (fail closed) — must NOT resolve to null (which would
+      // let resolveKey fall through to other sources).
+      await expect(reader.getKey('exa')).rejects.toThrow(
+        /corrupted or in an unrecognized format/,
+      );
+    });
+
+    /**
+     * @plan PLAN-20260206-TOOLKEY.P04
+     * @requirement REQ-001.2
+     */
+    it('fails closed on a recognized legacy hex-colon file that does not authenticate', async () => {
+      // Write a hex-colon-shaped but bogus value (valid format, invalid
+      // ciphertext/auth tag) so isLegacyHexColonFormat → true but decrypt
+      // throws. This proves recognized-legacy decryption failures fail
+      // closed rather than returning null.
+      const filePath = path.join(tempDir, 'exa.key');
+      const bogusLegacy = `${'00'.repeat(16)}:${'11'.repeat(16)}:${'2222'}`;
+      await fs.writeFile(filePath, bogusLegacy, { mode: 0o600 });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      // Assert only that it fails closed (rejects with an Error). The legacy
+      // decrypt path lets Node's raw GCM authentication error propagate; its
+      // exact wording is not a stable API contract, so matching the message
+      // string would make this test brittle across Node versions.
+      await expect(reader.getKey('exa')).rejects.toThrow(Error);
+    });
+
+    /**
+     * @plan PLAN-20260206-TOOLKEY.P04
+     * @requirement REQ-001.2
+     */
+    it('does not misclassify short hex-colon content as legacy and fails closed as unrecognized', async () => {
+      // `a:b:c`-style content has three hex parts but the IV/authTag are far
+      // too short to be a genuine legacy file (which always has a 32-hex-char
+      // IV and 32-hex-char auth tag). It must be treated as unrecognized and
+      // fail closed with the "unrecognized format" error — NOT routed into the
+      // legacy decrypt path (which would surface a raw crypto error instead).
+      const filePath = path.join(tempDir, 'exa.key');
+      await fs.writeFile(filePath, 'aa:bb:cc', { mode: 0o600 });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      await expect(reader.getKey('exa')).rejects.toThrow(
+        /corrupted or in an unrecognized format/,
+      );
+    });
+
+    /**
+     * @plan PLAN-20260206-TOOLKEY.P04
+     * @requirement REQ-001.2
+     */
+    it('does not misclassify a wrong-length-IV hex-colon file as legacy', async () => {
+      // Correct 32-hex authTag and non-empty ciphertext, but a 30-hex-char IV
+      // (15 bytes) — not a real legacy file. Must fail closed as unrecognized
+      // rather than being routed to the legacy decrypt path.
+      const filePath = path.join(tempDir, 'exa.key');
+      const shortIv = '00'.repeat(15); // 30 hex chars
+      const authTag = '11'.repeat(16); // 32 hex chars
+      await fs.writeFile(filePath, `${shortIv}:${authTag}:2222`, {
+        mode: 0o600,
+      });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      await expect(reader.getKey('exa')).rejects.toThrow(
+        /corrupted or in an unrecognized format/,
+      );
+    });
+
+    it('anti-downgrade: refuses to overwrite existing v:2 with v:1 and leaves file unchanged', async () => {
+      const writer = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+      await writer.saveKey('exa', 'sk-original');
+
+      const filePath = path.join(tempDir, 'exa.key');
+      const beforeContent = await fs.readFile(filePath, 'utf-8');
+      const beforeEnvelope = JSON.parse(beforeContent) as { v: number };
+      expect(beforeEnvelope.v).toBe(2);
+
+      // Attempt to save with no machine secret (would produce v:1) — must reject.
+      const degradedWriter = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: nullSecretLoader(),
+      });
+      await expect(
+        degradedWriter.saveKey('exa', 'sk-attacker'),
+      ).rejects.toThrow(/Refusing to overwrite an existing v:2 envelope/);
+
+      // File must be byte-identical (not overwritten/downgraded).
+      const afterContent = await fs.readFile(filePath, 'utf-8');
+      expect(afterContent).toBe(beforeContent);
+
+      // Original secret still decrypts the original value.
+      const result = await writer.getKey('exa');
+      expect(result).toBe('sk-original');
     });
   });
 

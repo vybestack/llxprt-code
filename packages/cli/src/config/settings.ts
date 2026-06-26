@@ -414,24 +414,50 @@ export function loadEnvironment(settings: Settings): void {
         resolvedEnvPath.startsWith(globalDirResolved + path.sep);
       const isProjectEnvFile = !isInLlxprtDir && !isInGlobalDir;
 
-      for (const key in parsedEnv) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (Object.hasOwn(parsedEnv, key)) {
-          // If it's a project .env file, skip loading excluded variables.
-          if (isProjectEnvFile && excludedVars.includes(key)) {
-            continue;
-          }
-
-          // Load variable only if it's not already set in the environment.
-          if (!Object.hasOwn(process.env, key)) {
-            process.env[key] = parsedEnv[key];
-          }
-        }
-      }
+      applyParsedEnv(parsedEnv, excludedVars, isProjectEnvFile);
     } catch {
       // Errors are ignored to match the behavior of `dotenv.config({ quiet: true })`.
     }
   }
+}
+
+/**
+ * Loads parsed .env entries into process.env, skipping excluded variables for
+ * project-level env files and never overwriting variables already set in the
+ * shell environment.
+ */
+function applyParsedEnv(
+  parsedEnv: Record<string, string>,
+  excludedVars: string[],
+  isProjectEnvFile: boolean,
+): void {
+  for (const key in parsedEnv) {
+    if (!shouldLoadEnvVar(parsedEnv, key, excludedVars, isProjectEnvFile)) {
+      continue;
+    }
+    process.env[key] = parsedEnv[key];
+  }
+}
+
+function shouldLoadEnvVar(
+  parsedEnv: Record<string, string>,
+  key: string,
+  excludedVars: string[],
+  isProjectEnvFile: boolean,
+): boolean {
+  if (!Object.hasOwn(parsedEnv, key)) {
+    return false;
+  }
+  // If it's a project .env file, skip loading excluded variables.
+  if (isProjectEnvFile && excludedVars.includes(key)) {
+    return false;
+  }
+  // Load variable only if it's not already set in the environment.
+  return !Object.hasOwn(process.env, key);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function deepMergeWithComments(target: unknown, source: unknown): unknown {
@@ -453,15 +479,7 @@ function deepMergeWithComments(target: unknown, source: unknown): unknown {
 
   // Add or update keys from source
   Object.keys(sourceObj).forEach((key) => {
-    if (
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      typeof result[key] === 'object' &&
-      result[key] !== null &&
-      !Array.isArray(result[key]) &&
-      typeof sourceObj[key] === 'object' &&
-      sourceObj[key] !== null &&
-      !Array.isArray(sourceObj[key])
-    ) {
+    if (isPlainObject(result[key]) && isPlainObject(sourceObj[key])) {
       result[key] = deepMergeWithComments(result[key], sourceObj[key]);
     } else {
       result[key] = sourceObj[key];

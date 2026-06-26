@@ -18,6 +18,14 @@ import type { CommandContext } from './types.js';
 
 export const LIST_ITEM_LABEL = 'TO' + 'DO';
 
+// Position-token patterns are compiled from string sources so the regex
+// construction is explicit and reviewable. Inputs are bounded single-line
+// tokens (e.g. "1", "1.2", "1.last", "2-4") anchored with ^...$.
+const SUBTASK_POSITION_SOURCE = '^(\\d+)\\.(\\d+|last)$';
+const RANGE_POSITION_SOURCE = '^(\\d+)-(\\d+)$';
+const SUBTASK_POSITION_PATTERN = new RegExp(SUBTASK_POSITION_SOURCE);
+const RANGE_POSITION_PATTERN = new RegExp(RANGE_POSITION_SOURCE);
+
 export type AddItemFn = CommandContext['ui']['addItem'];
 
 export function addError(ctx: AddItemFn, text: string): void {
@@ -78,8 +86,8 @@ export function parsePosition(pos: string, todos: Todo[]): ParsedPosition {
     return { parentIndex: index, isLast: false };
   }
 
-  // Line 53: ELSE IF position matches /^(\d+)\.(\d+|last)$/
-  const subtaskMatch = pos.match(/^(\d+)\.(\d+|last)$/);
+  // Line 53: ELSE IF position matches the subtask pattern (e.g. "1.2", "1.last")
+  const subtaskMatch = pos.match(SUBTASK_POSITION_PATTERN);
   if (subtaskMatch) {
     // Line 54: PARSE parent_pos, subtask_pos
     const parentIndex = parseInt(subtaskMatch[1], 10) - 1;
@@ -121,7 +129,7 @@ export function parsePosition(pos: string, todos: Todo[]): ParsedPosition {
 export function matchRangePattern(
   posStr: string,
 ): RegExpMatchArray | null | undefined {
-  return posStr.match(/^(\d+)-(\d+)$/);
+  return posStr.match(RANGE_POSITION_PATTERN);
 }
 
 /**

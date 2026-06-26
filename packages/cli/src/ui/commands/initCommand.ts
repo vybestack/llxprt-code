@@ -14,16 +14,17 @@ import type {
 import { CommandKind } from './types.js';
 import { PromptService, debugLogger } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 /**
  * Get the init command prompt from the prompt service
  */
 async function getInitCommandPrompt(): Promise<string> {
   try {
-    const baseDir =
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string LLXPRT_PROMPTS_DIR means "unset"
-      process.env.LLXPRT_PROMPTS_DIR ||
-      path.join(Storage.getGlobalLlxprtDir(), 'prompts');
+    const baseDir = firstNonEmptyString(
+      process.env.LLXPRT_PROMPTS_DIR,
+      path.join(Storage.getGlobalLlxprtDir(), 'prompts'),
+    );
     const promptService = new PromptService({
       baseDir,
       debugMode: process.env.DEBUG === 'true',

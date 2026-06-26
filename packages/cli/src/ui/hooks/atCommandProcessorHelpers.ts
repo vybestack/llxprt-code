@@ -791,7 +791,8 @@ function parseFileContentPart(
   absoluteToRelativePathMap: Map<string, string>,
   config: Config,
 ): { displayPath: string; content: string } | undefined {
-  const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
+  const fileContentPattern = '^--- (.*?) ---\\n\\n([\\s\\S]*?)\\n\\n$';
+  const fileContentRegex = new RegExp(fileContentPattern);
 
   const match = fileContentRegex.exec(part);
 

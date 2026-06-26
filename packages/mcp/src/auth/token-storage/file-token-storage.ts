@@ -11,35 +11,93 @@ import * as crypto from 'node:crypto';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
+import {
+  decryptEnvelopeString,
+  encryptEnvelopeString,
+  readEnvelopeVersion,
+  EnvelopeCodecError,
+  type EnvelopeCodecOptions,
+} from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
+
+/**
+ * Options for {@link FileTokenStorage}.
+ */
+export interface FileTokenStorageOptions {
+  /**
+   * Overrides the on-disk token file path. Defaults to
+   * `~/.llxprt/mcp-oauth-tokens-v2.json`. Exposed for deterministic tests.
+   */
+  tokenFilePath?: string;
+  /**
+   * Injectable machine-secret loader backing the v:2 envelope codec. Defaults
+   * to the production machine-secret resolution (keyring → file → generate).
+   * Returning `null` means "no machine secret available" (v:1 only).
+   */
+  machineSecretLoader?: () => Promise<Buffer | null>;
+  /**
+   * Optional path for the default machine-secret loader. Ignored when
+   * `machineSecretLoader` is provided.
+   */
+  machineSecretPath?: string;
+}
 
 export class FileTokenStorage extends BaseTokenStorage {
   private readonly tokenFilePath: string;
-  private readonly encryptionKey: Buffer;
+  /**
+   * Cached legacy KDF key. Lazily derived only when a legacy
+   * `iv:authTag:ciphertext` token file is actually read, so the common paths
+   * (writing, or reading versioned envelopes) never pay for the scrypt cost.
+   */
+  private legacyEncryptionKey: Buffer | null = null;
+  private readonly codecOptions: EnvelopeCodecOptions;
 
-  constructor(serviceName: string) {
+  constructor(serviceName: string, options?: FileTokenStorageOptions) {
     super(serviceName);
     const configDir = Storage.getGlobalLlxprtDir();
-    this.tokenFilePath = path.join(configDir, 'mcp-oauth-tokens-v2.json');
-    this.encryptionKey = this.deriveEncryptionKey();
+    this.tokenFilePath =
+      options?.tokenFilePath ??
+      path.join(configDir, 'mcp-oauth-tokens-v2.json');
+    this.codecOptions = {
+      machineSecretLoader: options?.machineSecretLoader,
+      machineSecretPath: options?.machineSecretPath,
+    };
   }
 
-  private deriveEncryptionKey(): Buffer {
-    const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
-    return crypto.scryptSync('llxprt-cli-oauth', salt, 32);
+  /**
+   * Lazily derives and caches the legacy KDF key used only to read pre-existing
+   * `iv:authTag:ciphertext` token files. New writes use the versioned envelope
+   * codec, so this is never computed unless a legacy file is encountered.
+   */
+  private getLegacyEncryptionKey(): Buffer {
+    if (this.legacyEncryptionKey === null) {
+      const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
+      this.legacyEncryptionKey = crypto.scryptSync(
+        'llxprt-cli-oauth',
+        salt,
+        32,
+      );
+    }
+    return this.legacyEncryptionKey;
   }
 
-  private encrypt(text: string): string {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
-
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-
-    const authTag = cipher.getAuthTag();
-
-    return iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
+  /**
+   * Validates that content matches the exact legacy `iv:authTag:ciphertext`
+   * shape: a 32-hex IV, a 32-hex auth tag, then (possibly empty) hex
+   * ciphertext. The anchored pattern enforces the part count, the exact
+   * IV/auth-tag lengths, and hex-only content in a single check so short or
+   * garbage `a:b:c` content is not routed into the crypto API with an
+   * invalid-length IV. Mirrors `ToolKeyStorage.isLegacyHexColonFormat` so the
+   * sibling stores classify legacy content consistently.
+   */
+  private isLegacyHexColonFormat(data: string): boolean {
+    return /^[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:[0-9a-fA-F]*$/.test(data);
   }
 
+  /**
+   * Legacy AES-256-GCM decrypt for the `iv:authTag:ciphertext` (hex) format.
+   * Used only to read pre-existing token files that predate the versioned
+   * envelope codec. New writes go through the codec.
+   */
   private decrypt(encryptedData: string): string {
     const parts = encryptedData.split(':');
     if (parts.length !== 3) {
@@ -52,7 +110,7 @@ export class FileTokenStorage extends BaseTokenStorage {
 
     const decipher = crypto.createDecipheriv(
       'aes-256-gcm',
-      this.encryptionKey,
+      this.getLegacyEncryptionKey(),
       iv,
     );
     decipher.setAuthTag(authTag);
@@ -69,27 +127,66 @@ export class FileTokenStorage extends BaseTokenStorage {
   }
 
   private async loadTokens(): Promise<Map<string, MCPOAuthCredentials>> {
+    let data: string;
     try {
-      const data = await fs.readFile(this.tokenFilePath, 'utf-8');
-      const decrypted = this.decrypt(data);
-      const tokens = JSON.parse(decrypted) as Record<
-        string,
-        MCPOAuthCredentials
-      >;
-      return new Map(Object.entries(tokens));
+      data = await fs.readFile(this.tokenFilePath, 'utf-8');
     } catch (error: unknown) {
-      const err = error as NodeJS.ErrnoException & { message?: string };
+      const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') {
         // No token file exists yet - return empty collection
         return new Map();
       }
-      if (
-        err.message.includes('Invalid encrypted data format') ||
-        err.message.includes('Unsupported state or unable to authenticate data')
-      ) {
+      throw error;
+    }
+
+    // Route versioned envelopes through the codec. readEnvelopeVersion returns
+    // a version number for valid envelopes and null otherwise (including for
+    // legacy hex-colon content).
+    let plaintext: string;
+    if (readEnvelopeVersion(data) !== null) {
+      try {
+        plaintext = await decryptEnvelopeString(
+          data,
+          this.serviceName,
+          this.codecOptions,
+        );
+      } catch (error) {
+        if (error instanceof EnvelopeCodecError) {
+          // v:2 missing/different secret, tampering, or malformed envelope —
+          // fail closed consistently with prior "Token file corrupted" behavior.
+          // Preserve the structured error as `cause` so callers/debuggers can
+          // still distinguish failure modes (e.g. UNAVAILABLE vs CORRUPT) and
+          // recover the remediation hint.
+          throw new Error('Token file corrupted', { cause: error });
+        }
+        throw error;
+      }
+    } else if (this.isLegacyHexColonFormat(data)) {
+      try {
+        plaintext = this.decrypt(data);
+      } catch {
+        // Any failure decrypting a legacy hex-colon token file (bad IV/authTag,
+        // authentication failure, tampering) is normalized to a single
+        // fail-closed error so raw crypto details do not leak and the caller
+        // observes consistent behavior with the versioned-envelope path above.
         throw new Error('Token file corrupted');
       }
-      throw error;
+    } else {
+      // Content is neither a versioned envelope nor the exact legacy hex-colon
+      // shape. Fail closed without passing structurally invalid data into the
+      // crypto API, consistent with ToolKeyStorage's "unrecognized format"
+      // handling.
+      throw new Error('Token file corrupted');
+    }
+
+    try {
+      const tokens = JSON.parse(plaintext) as Record<
+        string,
+        MCPOAuthCredentials
+      >;
+      return new Map(Object.entries(tokens));
+    } catch {
+      throw new Error('Token file corrupted');
     }
   }
 
@@ -98,11 +195,64 @@ export class FileTokenStorage extends BaseTokenStorage {
   ): Promise<void> {
     await this.ensureDirectoryExists();
 
+    // Detect an existing envelope version for anti-downgrade protection.
+    // Non-envelope (legacy) files and missing files yield null. This is a
+    // defense-in-depth read: the codec's own anti-downgrade guard
+    // (existingEnvelopeVersion) is the authoritative refusal point, but reading
+    // the current version here lets us pass it through so a v:2 file is never
+    // silently overwritten with a weaker v:1 envelope when the machine secret
+    // is unavailable. The read/write pair is inherently TOCTOU (a concurrent
+    // writer could change the file in between), so the guard is best-effort
+    // hardening rather than a lock; the single-writer assumption holds for the
+    // CLI's normal usage.
+    let existingVersion: number | null = null;
+    try {
+      const existing = await fs.readFile(this.tokenFilePath, 'utf-8');
+      existingVersion = readEnvelopeVersion(existing);
+    } catch (error: unknown) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
     const data = Object.fromEntries(tokens);
     const json = JSON.stringify(data, null, 2);
-    const encrypted = this.encrypt(json);
+    const encrypted = await encryptEnvelopeString(json, this.serviceName, {
+      ...this.codecOptions,
+      existingEnvelopeVersion: existingVersion,
+    });
 
     await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
+    // writeFile's `mode` only applies on creation; overwriting a pre-existing
+    // file leaves its (possibly looser) permissions intact. Tighten explicitly
+    // on POSIX so the token file is never left group/world-readable.
+    if (process.platform !== 'win32') {
+      try {
+        await fs.chmod(this.tokenFilePath, 0o600);
+      } catch (chmodError) {
+        // The token file was written but its permissions could not be
+        // restricted. Remove it so OAuth credentials are never left on disk
+        // with overly permissive modes, and surface an error distinct from a
+        // write failure.
+        let unlinkFailed = false;
+        try {
+          await fs.unlink(this.tokenFilePath);
+        } catch {
+          // The over-permissive file could not be removed either; report this
+          // so the caller knows credentials may still be on disk rather than
+          // trusting a message that falsely claims the file was removed.
+          unlinkFailed = true;
+        }
+        const detail =
+          chmodError instanceof Error ? chmodError.message : String(chmodError);
+        throw new Error(
+          unlinkFailed
+            ? `Token file was written but permissions could not be restricted to 0o600, and the over-permissive file could not be removed; OAuth credentials may remain on disk with overly permissive permissions. chmod error: ${detail}`
+            : `Token file was written but permissions could not be restricted to 0o600; the file was removed to avoid leaving over-permissive credentials on disk: ${detail}`,
+        );
+      }
+    }
   }
 
   async getCredentials(

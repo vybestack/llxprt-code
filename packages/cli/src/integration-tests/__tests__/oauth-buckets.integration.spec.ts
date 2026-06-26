@@ -27,6 +27,7 @@ import {
 import type { StandardProfile } from '@vybestack/llxprt-code-settings';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { OAuthProvider } from '@vybestack/llxprt-code-providers/auth.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -567,16 +568,11 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       const token1 = await tokenStore.getToken('anthropic', 'bucket1');
       const token2 = await tokenStore.getToken('anthropic', 'bucket2');
 
-      expect(token1).not.toBeNull();
-      expect(token2).not.toBeNull();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (token1 && token2) {
-        const now = Math.floor(Date.now() / 1000);
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(token1.expiry).toBeLessThan(now);
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(token2.expiry).toBeLessThan(now);
-      }
+      assertDefined(token1);
+      assertDefined(token2);
+      const nowExpired = Math.floor(Date.now() / 1000);
+      expect(token1.expiry).toBeLessThan(nowExpired);
+      expect(token2.expiry).toBeLessThan(nowExpired);
 
       // Attempting to use expired buckets should be detected
       // This would normally trigger re-authentication flow
@@ -960,18 +956,13 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       );
       const geminiWork = await tokenStore.getToken('gemini', 'work-company');
 
-      expect(anthropicWork).not.toBeNull();
-      expect(geminiWork).not.toBeNull();
+      assertDefined(anthropicWork);
+      assertDefined(geminiWork);
 
       // Verify expiry is tracked correctly
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (anthropicWork && geminiWork) {
-        const now = Math.floor(Date.now() / 1000);
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(anthropicWork.expiry).toBeGreaterThan(now); // Not expired
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(geminiWork.expiry).toBeGreaterThan(now); // Not expired
-      }
+      const nowActive = Math.floor(Date.now() / 1000);
+      expect(anthropicWork.expiry).toBeGreaterThan(nowActive); // Not expired
+      expect(geminiWork.expiry).toBeGreaterThan(nowActive); // Not expired
 
       // Verify personal bucket is expired
       const anthropicPersonal = await tokenStore.getToken(
@@ -979,8 +970,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
         'personal-gmail',
       );
       expect(anthropicPersonal).not.toBeNull();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!anthropicPersonal) throw new Error('unreachable: narrowing failed');
+      assertDefined(anthropicPersonal);
       const now = Math.floor(Date.now() / 1000);
       expect(anthropicPersonal.expiry).toBeLessThan(now); // Expired
     });

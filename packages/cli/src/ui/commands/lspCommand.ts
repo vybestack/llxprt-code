@@ -15,32 +15,6 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-type LspServerConfigLike = {
-  id: string;
-};
-
-type LspConfigLike = {
-  servers?: LspServerConfigLike[];
-};
-
-type LspServiceStatusLike = {
-  serverId: string;
-  healthy?: boolean;
-  detail?: string;
-  status?: string;
-  state?: string;
-};
-
-type LspServiceClientLike = {
-  isAlive(): boolean;
-  status(): Promise<LspServiceStatusLike[]>;
-  getUnavailableReason?(): string;
-};
-
-type LspConfigAccessor = {
-  getLspConfig?(): LspConfigLike | undefined;
-  getLspServiceClient?(): LspServiceClientLike | undefined;
-};
 
 const BUILTIN_SERVER_IDS = ['ts', 'eslint', 'gopls', 'python', 'rust'] as const;
 
@@ -81,7 +55,7 @@ async function statusAction(
   context: CommandContext,
   _args: string,
 ): Promise<MessageActionReturn> {
-  const config = context.services.config as unknown as LspConfigAccessor | null;
+  const config = context.services.config;
 
   if (!config) {
     return {
@@ -91,7 +65,7 @@ async function statusAction(
     };
   }
 
-  const lspConfig = config.getLspConfig?.();
+  const lspConfig = config.getLspConfig();
   if (!lspConfig) {
     return {
       type: 'message',
@@ -100,10 +74,13 @@ async function statusAction(
     };
   }
 
-  const lspClient = config.getLspServiceClient?.();
-  if (lspClient == null || lspClient.isAlive() !== true) {
+  const lspClient = config.getLspServiceClient();
+  if (lspClient === undefined || lspClient.isAlive() !== true) {
     const reason =
-      lspClient?.getUnavailableReason?.() ?? 'service startup failed';
+      lspClient !== undefined &&
+      typeof lspClient.getUnavailableReason === 'function'
+        ? (lspClient.getUnavailableReason() ?? 'service startup failed')
+        : 'service startup failed';
     return {
       type: 'message',
       messageType: 'info',
@@ -111,7 +88,7 @@ async function statusAction(
     };
   }
 
-  let statuses: LspServiceStatusLike[];
+  let statuses: Awaited<ReturnType<typeof lspClient.status>>;
   try {
     statuses = await lspClient.status();
   } catch {
@@ -122,7 +99,7 @@ async function statusAction(
     };
   }
 
-  const configuredIds = (lspConfig.servers ?? []).map((server) => server.id);
+  const configuredIds = lspConfig.servers.map((server) => server.id);
   const statusIds = statuses.map((status) => status.serverId);
 
   const universe = new Set<string>([
@@ -136,18 +113,17 @@ async function statusAction(
   );
   const sortedIds = [...universe].sort((a, b) => a.localeCompare(b));
 
+  const healthFallback = (healthy: boolean | undefined): string => {
+    if (typeof healthy !== 'boolean') {
+      return 'unavailable';
+    }
+    return healthy ? 'active' : 'broken';
+  };
+
   const lines = sortedIds.map((serverId: string) => {
     const status = statusMap.get(serverId);
     const rawStatus =
-      // eslint-disable-next-line sonarjs/expression-complexity -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-      status?.state ??
-      status?.status ??
-      (typeof status?.healthy === 'boolean'
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          status.healthy
-          ? 'active'
-          : 'broken'
-        : 'unavailable');
+      status?.state ?? status?.status ?? healthFallback(status?.healthy);
     const normalized = normalizeStatus(rawStatus);
     return `  ${serverId}: ${normalized}`;
   });

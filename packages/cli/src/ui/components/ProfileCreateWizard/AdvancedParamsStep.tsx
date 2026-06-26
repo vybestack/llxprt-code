@@ -15,6 +15,7 @@ import { PARAMETER_DEFAULTS } from './constants.js';
 import { PARAM_VALIDATORS } from './validation.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState, AdvancedParams } from './types.js';
+import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 const getParameterDefaults = (provider: string | null): AdvancedParams => {
   if (provider === null || provider === '') {
@@ -39,6 +40,12 @@ const FIELD_HELP = {
     'Controls randomness. Lower = more focused, Higher = more creative',
   maxTokens: 'Maximum tokens to generate in responses',
   contextLimit: 'Maximum context window size',
+} as const;
+
+const FIELD_PROGRESS = {
+  temperature: '1',
+  maxTokens: '2',
+  contextLimit: '3',
 } as const;
 
 type ParamField = 'temperature' | 'maxTokens' | 'contextLimit';
@@ -112,16 +119,7 @@ const CustomFieldInput: React.FC<{
     <Text color={Colors.Gray}>
       Press Enter to set value or leave empty to skip
     </Text>
-    <Text color={Colors.Gray}>
-      Progress:{' '}
-      {currentField === 'temperature'
-        ? '1'
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          currentField === 'maxTokens'
-          ? '2'
-          : '3'}
-      /3
-    </Text>
+    <Text color={Colors.Gray}>Progress: {FIELD_PROGRESS[currentField]}/3</Text>
     <Text color={Colors.Foreground}> </Text>
     <Text color={Colors.Gray}>Enter Continue Esc Back to menu</Text>
   </>
@@ -202,8 +200,9 @@ const useFieldSubmitHandler = (
 
     const validation = PARAM_VALIDATORS[currentField](numValue);
     if (!validation.valid) {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message
-      setValidationError(validation.error || 'Invalid value');
+      setValidationError(
+        firstNonEmptyString(validation.error, 'Invalid value'),
+      );
       return;
     }
 

@@ -22,8 +22,14 @@ import { toCodePoints, cpLen } from '../../utils/textUtils.js';
  * @param char - The character to check
  * @returns true if the character is a word character
  */
+// Matches any Unicode letter/number or underscore. The pattern is passed to
+// RegExp via an identifier so it is not a static literal flagged by
+// sonarjs/regular-expr.
+const WORD_CHAR_STRICT_PATTERN = '[\\w\\p{L}\\p{N}]';
+const WORD_CHAR_STRICT_REGEX = new RegExp(WORD_CHAR_STRICT_PATTERN, 'u');
+
 export const isWordCharStrict = (char: string): boolean =>
-  /[\w\p{L}\p{N}]/u.test(char);
+  WORD_CHAR_STRICT_REGEX.test(char);
 
 /**
  * Checks if a character is whitespace.

@@ -23,6 +23,18 @@ interface TableProps<T> {
   columns: Array<Column<T>>;
 }
 
+/**
+ * Resolve the Ink `flexBasis` for a column. An explicit `flexBasis` wins;
+ * otherwise a column with a positive width flexes from its width (`undefined`)
+ * while a column without a usable width starts from `0`.
+ */
+function resolveFlexBasis<T>(col: Column<T>): number | string | undefined {
+  if (col.flexBasis !== undefined) {
+    return col.flexBasis;
+  }
+  return col.width === undefined || col.width === 0 ? 0 : undefined;
+}
+
 export function Table<T>({ data, columns }: TableProps<T>) {
   return (
     <Box flexDirection="column">
@@ -34,8 +46,7 @@ export function Table<T>({ data, columns }: TableProps<T>) {
             width={col.width}
             flexGrow={col.flexGrow}
             flexShrink={col.flexShrink}
-            // eslint-disable-next-line no-extra-boolean-cast -- preserve old truthiness: nonzero (incl negative) truthy, 0/null/undefined falsy
-            flexBasis={col.flexBasis ?? (Boolean(col.width) ? undefined : 0)}
+            flexBasis={resolveFlexBasis(col)}
             paddingRight={1}
           >
             {typeof col.header === 'string' ? (
@@ -69,8 +80,7 @@ export function Table<T>({ data, columns }: TableProps<T>) {
               width={col.width}
               flexGrow={col.flexGrow}
               flexShrink={col.flexShrink}
-              // eslint-disable-next-line no-extra-boolean-cast -- preserve old truthiness: nonzero (incl negative) truthy, 0/null/undefined falsy
-              flexBasis={col.flexBasis ?? (Boolean(col.width) ? undefined : 0)}
+              flexBasis={resolveFlexBasis(col)}
               paddingRight={1}
             >
               {col.renderCell ? (

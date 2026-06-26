@@ -23,9 +23,11 @@ export const WarningMessage: React.FC<WarningMessageProps> = ({ text }) => {
         <Text color={theme.status.warning}>{prefix}</Text>
       </Box>
       <Box flexGrow={1}>
-        <Text wrap="wrap" color={theme.status.warning}>
-          <RenderInline text={text} defaultColor={theme.status.warning} />
-        </Text>
+        <RenderInline
+          text={text}
+          defaultColor={theme.status.warning}
+          wrap="wrap"
+        />
       </Box>
     </Box>
   );

@@ -153,7 +153,7 @@ describe('ConversationFileWriter — Request Write', () => {
 
   it('writes a request entry with type, provider, messages, context, and timestamp', async () => {
     const writer = new ConversationFileWriter(tmpDir);
-    writer.writeRequest('openai', [{ role: 'user', content: 'hi' }], {
+    await writer.writeRequest('openai', [{ role: 'user', content: 'hi' }], {
       sessionId: 's1',
     });
 
@@ -188,7 +188,7 @@ describe('ConversationFileWriter — Response Write', () => {
 
   it('writes a response entry with type, provider, response payload, metadata, and timestamp', async () => {
     const writer = new ConversationFileWriter(tmpDir);
-    writer.writeResponse('openai', { text: 'ok' }, { tokens: 2 });
+    await writer.writeResponse('openai', { text: 'ok' }, { tokens: 2 });
 
     const lines = await readJsonlLines(tmpDir);
     expect(lines).toHaveLength(1);
@@ -219,7 +219,7 @@ describe('ConversationFileWriter — Tool Call Write', () => {
 
   it('writes a tool_call entry with context spread at top level, not nested under context', async () => {
     const writer = new ConversationFileWriter(tmpDir);
-    writer.writeToolCall('openai', 'read_file', { path: 'README.md' });
+    await writer.writeToolCall('openai', 'read_file', { path: 'README.md' });
 
     const lines = await readJsonlLines(tmpDir);
     expect(lines).toHaveLength(1);
@@ -270,7 +270,7 @@ describe('ConversationFileWriter — Singleton Reuse', () => {
     expect(second).toBe(first);
 
     // Prove dirA wins by observing where output is actually written.
-    second.writeEntry({ type: 'probe' });
+    await second.writeEntry({ type: 'probe' });
 
     const today = new Date().toISOString().split('T')[0];
     const expectedFile = path.join(dirA, `conversation-${today}.jsonl`);
@@ -289,7 +289,7 @@ describe('ConversationFileWriter — Zero-Arg Backward Compat', () => {
   it('constructs without error and writes to the default .llxprt conversations path', async () => {
     await withTempHome(async (tmpHome) => {
       const writer = new ConversationFileWriter();
-      writer.writeEntry({ type: 'probe' });
+      await writer.writeEntry({ type: 'probe' });
 
       const lines = await readJsonlLines(
         path.join(tmpHome, '.llxprt', 'conversations'),
@@ -301,7 +301,7 @@ describe('ConversationFileWriter — Zero-Arg Backward Compat', () => {
   it('treats an empty log path as a request for the default path', async () => {
     await withTempHome(async (tmpHome) => {
       const writer = new ConversationFileWriter('');
-      writer.writeEntry({ type: 'empty-path-probe' });
+      await writer.writeEntry({ type: 'empty-path-probe' });
 
       const lines = await readJsonlLines(
         path.join(tmpHome, '.llxprt', 'conversations'),
@@ -326,7 +326,7 @@ describe('ConversationFileWriter — One-Arg Backward Compat', () => {
 
   it('constructs with a custom path and writes a valid JSONL entry', async () => {
     const writer = new ConversationFileWriter(tmpDir);
-    writer.writeResponse('anthropic', { text: 'hello' });
+    await writer.writeResponse('anthropic', { text: 'hello' });
 
     const lines = await readJsonlLines(tmpDir);
     expect(lines).toHaveLength(1);
@@ -351,7 +351,7 @@ describe('ConversationFileWriter — writeEntry Error Path', () => {
     try {
       // Construct with invalid path + injected logger
       const writer = new ConversationFileWriter(parentIsFilePath, logger);
-      writer.writeEntry({ type: 'test', data: 'hello' });
+      await writer.writeEntry({ type: 'test', data: 'hello' });
 
       // The error should have been logged via the injected logger
       expect(errorEntries.length).toBeGreaterThan(0);
@@ -371,7 +371,7 @@ describe('ConversationFileWriter — Logger Injection', () => {
 
     try {
       const writer = new ConversationFileWriter(parentIsFilePath, logger);
-      writer.writeEntry({ type: 'test', data: 'hello' });
+      await writer.writeEntry({ type: 'test', data: 'hello' });
 
       // Verify error was recorded in the observable array
       expect(errorEntries.length).toBeGreaterThan(0);
@@ -398,9 +398,9 @@ describe('ConversationFileWriter — Multiple Writes', () => {
 
   it('appends multiple entries as separate JSONL lines', async () => {
     const writer = new ConversationFileWriter(tmpDir);
-    writer.writeRequest('openai', [{ role: 'user', content: 'first' }]);
-    writer.writeResponse('openai', { text: 'first-response' });
-    writer.writeToolCall('openai', 'read_file', { path: 'test.txt' });
+    await writer.writeRequest('openai', [{ role: 'user', content: 'first' }]);
+    await writer.writeResponse('openai', { text: 'first-response' });
+    await writer.writeToolCall('openai', 'read_file', { path: 'test.txt' });
 
     const lines = await readJsonlLines(tmpDir);
     expect(lines).toHaveLength(3);
@@ -408,5 +408,78 @@ describe('ConversationFileWriter — Multiple Writes', () => {
     expect(lines[0].type).toBe('request');
     expect(lines[1].type).toBe('response');
     expect(lines[2].type).toBe('tool_call');
+  });
+
+  it('preserves order across sequential awaited writes (async flush behavior)', async () => {
+    // Awaited writes must flush in call order.
+    const writer = new ConversationFileWriter(tmpDir);
+    for (let i = 0; i < 10; i++) {
+      await writer.writeEntry({ type: 'ordered', seq: i });
+    }
+
+    const lines = await readJsonlLines(tmpDir);
+    expect(lines).toHaveLength(10);
+    for (let i = 0; i < 10; i++) {
+      expect(lines[i].type).toBe('ordered');
+      expect(lines[i].seq).toBe(i);
+    }
+  });
+
+  it('serializes concurrent un-awaited writes in invocation order', async () => {
+    // Concurrent writes fired without awaiting must still land on disk in the
+    // order they were invoked, matching the guarantee the synchronous
+    // implementation provided implicitly.
+    const writer = new ConversationFileWriter(tmpDir);
+    const promises: Array<Promise<void>> = [];
+    for (let i = 0; i < 50; i++) {
+      promises.push(writer.writeEntry({ type: 'concurrent', seq: i }));
+    }
+    await Promise.all(promises);
+
+    const lines = await readJsonlLines(tmpDir);
+    expect(lines).toHaveLength(50);
+    for (let i = 0; i < 50; i++) {
+      expect(lines[i].type).toBe('concurrent');
+      expect(lines[i].seq).toBe(i);
+    }
+  });
+});
+
+// ─── Never-Rejects Contract ─────────────────────────────────────────────────
+
+describe('ConversationFileWriter — Never-Rejects Contract', () => {
+  it('resolves (never rejects) when the injected logger throws during a failed write, and does not poison the chain', async () => {
+    const { parentIsFilePath, cleanup } = await createInvalidParentPath();
+    // A real logger whose error() throws. In the buggy chain this rejected the
+    // write promise and permanently poisoned the chain so every later write was
+    // silently dropped (its .then callback skipped on the rejected chain).
+    const throwingLogger: StorageLogger = {
+      debug: () => {},
+      warn: () => {},
+      error: () => {
+        throw new Error('logger exploded');
+      },
+    };
+
+    try {
+      const writer = new ConversationFileWriter(
+        parentIsFilePath,
+        throwingLogger,
+      );
+
+      // First failing write: the filesystem op fails and logger.error() throws,
+      // but the returned promise must still resolve (best-effort, never rejects).
+      await expect(
+        writer.writeEntry({ type: 'doomed-first' }),
+      ).resolves.toBeUndefined();
+
+      // Second write must also resolve — the prior failure must not have
+      // poisoned the chain. (Pre-fix this rejected and skipped appendEntry.)
+      await expect(
+        writer.writeEntry({ type: 'doomed-second' }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await cleanup();
+    }
   });
 });

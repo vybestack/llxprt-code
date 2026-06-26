@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable sonarjs/no-nested-incdec, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import {
   type IContent,
   type TextBlock,
@@ -27,6 +25,15 @@ function safeToolResultToString(result: unknown): string {
   } catch {
     return String(result);
   }
+}
+
+function toToolCallStatus(
+  response: { result: unknown; error?: string } | undefined,
+): ToolCallStatus {
+  if (!response) {
+    return ToolCallStatus.Pending;
+  }
+  return response.error ? ToolCallStatus.Error : ToolCallStatus.Success;
 }
 
 function buildResponseMap(
@@ -94,12 +101,7 @@ function processAiContent(
         resultDisplay: response
           ? safeToolResultToString(response.result)
           : undefined,
-        status: response
-          ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-            response.error
-            ? ToolCallStatus.Error
-            : ToolCallStatus.Success
-          : ToolCallStatus.Pending,
+        status: toToolCallStatus(response),
         confirmationDetails: undefined,
       };
     });

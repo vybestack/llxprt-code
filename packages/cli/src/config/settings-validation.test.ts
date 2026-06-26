@@ -13,6 +13,7 @@ import {
   settingsZodSchema,
 } from './settings-validation.js';
 import { z } from 'zod';
+import { assertDefined } from '../test-utils/assertions.js';
 
 describe('settings-validation', () => {
   describe('validateSettings - valid settings', () => {
@@ -111,9 +112,7 @@ describe('settings-validation', () => {
       const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues[0]?.path).toStrictEqual(['enableAutoUpdate']);
       expect(result.error.issues[0]?.code).toBe('invalid_type');
     });
@@ -122,9 +121,7 @@ describe('settings-validation', () => {
       const invalidSettings = { mcpServerCommand: 123 };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues[0]?.path).toStrictEqual(['mcpServerCommand']);
       expect(result.error.issues[0]?.code).toBe('invalid_type');
     });
@@ -143,8 +140,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues[0]?.path).toContain('args');
       expect(result.error.issues[0]?.path).toContain(1);
     });
@@ -163,8 +159,7 @@ describe('settings-validation', () => {
       const invalidSettings = { ui: 'invalid' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues[0]?.path).toStrictEqual(['ui']);
     });
 
@@ -172,8 +167,7 @@ describe('settings-validation', () => {
       const invalidSettings = { ui: { theme: 123 } };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues[0]?.path).toStrictEqual(['ui', 'theme']);
     });
 
@@ -183,8 +177,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues[0]?.path).toStrictEqual([
         'ui',
         'footer',
@@ -203,8 +196,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const issue = result.error.issues.find((i) => i.path.includes('command'));
       expect(issue).toBeDefined();
       expect(issue?.code).toBe('invalid_type');
@@ -237,8 +229,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues.length).toBeGreaterThan(1);
     });
 
@@ -271,8 +262,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
 
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues.map((issue) => issue.path)).toStrictEqual(
         expect.arrayContaining([
           ['ui', 'accessibility', 'screenReader'],
@@ -321,8 +311,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
 
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       expect(result.error.issues.length).toBeGreaterThan(0);
     });
 
@@ -446,8 +435,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const issue = result.error.issues.find(
         (i) => i.code === 'invalid_type' && i.message.includes('Required'),
       );
@@ -466,8 +454,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const issue = result.error.issues.find((i) => i.path.includes('env'));
       expect(issue).toBeDefined();
     });
@@ -626,8 +613,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(
         result.error,
         '/path/to/settings.json',
@@ -647,8 +633,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(result.error, 'settings.json');
       expect(formatted).toContain('ui.theme');
     });
@@ -662,8 +647,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(result.error, 'settings.json');
       expect(formatted).toContain('args');
       expect(formatted).toContain('[1]');
@@ -678,8 +662,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(result.error, 'settings.json');
       expect(formatted).toContain('mcpServers');
       expect(formatted).toContain('command');
@@ -690,8 +673,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(result.error, 'settings.json');
       expect(formatted).toContain('Expected: boolean');
       expect(formatted).toContain('but received: string');
@@ -705,8 +687,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(result.error, 'settings.json');
       expect(formatted).toContain('enableAutoUpdate');
       expect(formatted).toContain('ptyScrollbackLimit');
@@ -721,8 +702,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(result.error, 'settings.json');
       expect(formatted).toContain('args');
       expect(formatted).toContain('[0]');
@@ -737,8 +717,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(result.error, 'settings.json');
       expect(formatted).toContain('https://');
       expect(formatted).toContain('configuration');
@@ -750,8 +729,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(result.error, 'settings.json');
       expect(formatted).toContain('Error in: ui');
     });
@@ -761,8 +739,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!result.error) throw new Error('unreachable: narrowing failed');
+      assertDefined(result.error);
       const formatted = formatValidationError(
         result.error,
         '~/.llxprt/settings.json',

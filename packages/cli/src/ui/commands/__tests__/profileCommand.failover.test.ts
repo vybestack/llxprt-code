@@ -15,6 +15,7 @@ import { profileCommand } from '../profileCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../types.js';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
+import { testRegex } from '../../../test-utils/regex.js';
 
 const runtimeMocks = vi.hoisted(() => ({
   saveLoadBalancerProfile: vi.fn(),
@@ -86,7 +87,7 @@ describe('profileCommand - failover policy parsing', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       // Gets usage error since parts.length < 5
-      expect(content).toMatch(/Usage.*roundrobin.*failover/i);
+      expect(content).toMatch(testRegex('Usage.*roundrobin.*failover', 'i'));
     });
 
     it('should parse policy case-insensitively (FAILOVER)', async () => {
@@ -147,7 +148,7 @@ describe('profileCommand - failover policy parsing', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       // Gets usage error since parts.length < 5
-      expect(content).toMatch(/Usage.*roundrobin.*failover/i);
+      expect(content).toMatch(testRegex('Usage.*roundrobin.*failover', 'i'));
     });
 
     it('should succeed with 2 profiles and failover policy', async () => {
@@ -259,7 +260,7 @@ describe('profileCommand - failover policy parsing', () => {
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty('messageType', 'info');
       const content = (result as { content: string }).content;
-      expect(content).toMatch(/failover/i);
+      expect(content).toMatch(testRegex('failover', 'i'));
     });
 
     it('should include policy in success message (roundrobin)', async () => {
@@ -274,7 +275,7 @@ describe('profileCommand - failover policy parsing', () => {
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty('messageType', 'info');
       const content = (result as { content: string }).content;
-      expect(content).toMatch(/roundrobin/i);
+      expect(content).toMatch(testRegex('roundrobin', 'i'));
     });
   });
 
@@ -296,7 +297,7 @@ describe('profileCommand - failover policy parsing', () => {
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
-      expect(content).toMatch(/Invalid policy.*notapolicy/i);
+      expect(content).toMatch(testRegex('Invalid policy.*notapolicy', 'i'));
     });
 
     it('should error when not enough arguments provided', async () => {

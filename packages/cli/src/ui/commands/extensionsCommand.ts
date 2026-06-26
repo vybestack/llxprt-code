@@ -176,8 +176,7 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
     extensions,
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  updateComplete.then((updateInfos) =>
+  void updateComplete.then((updateInfos) =>
     handleUpdateComplete(context, updateInfos, historyItem),
   );
 

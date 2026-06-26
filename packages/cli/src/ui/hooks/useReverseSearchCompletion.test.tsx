@@ -23,213 +23,210 @@ describe('useReverseSearchCompletion', () => {
     });
   }
 
-  describe('Core Hook Behavior', () => {
-    describe('State Management', () => {
-      it('should initialize with default state', () => {
+  describe('State Management', () => {
+    it('should initialize with default state', () => {
+      const mockShellHistory = ['echo hello'];
+
+      const { result } = renderHook(() =>
+        useReverseSearchCompletion(
+          useTextBufferForTest(''),
+          mockShellHistory,
+          false,
+        ),
+      );
+
+      expect(result.current.suggestions).toStrictEqual([]);
+      expect(result.current.activeSuggestionIndex).toBe(-1);
+      expect(result.current.visibleStartIndex).toBe(0);
+      expect(result.current.showSuggestions).toBe(false);
+      expect(result.current.isLoadingSuggestions).toBe(false);
+    });
+
+    it('should reset state when reverseSearchActive becomes false', () => {
+      const mockShellHistory = ['echo hello'];
+      const { result, rerender } = renderHook(
+        ({ text, active }) => {
+          const textBuffer = useTextBufferForTest(text);
+          return useReverseSearchCompletion(
+            textBuffer,
+            mockShellHistory,
+            active,
+          );
+        },
+        { initialProps: { text: 'echo', active: true } },
+      );
+
+      // Simulate reverseSearchActive becoming false
+      rerender({ text: 'echo', active: false });
+
+      expect(result.current.suggestions).toStrictEqual([]);
+      expect(result.current.activeSuggestionIndex).toBe(-1);
+      expect(result.current.visibleStartIndex).toBe(0);
+      expect(result.current.showSuggestions).toBe(false);
+    });
+
+    describe('Navigation', () => {
+      it('should handle navigateUp with no suggestions', () => {
         const mockShellHistory = ['echo hello'];
 
         const { result } = renderHook(() =>
           useReverseSearchCompletion(
-            useTextBufferForTest(''),
+            useTextBufferForTest('grep'),
             mockShellHistory,
-            false,
+            true,
           ),
         );
 
-        expect(result.current.suggestions).toStrictEqual([]);
+        act(() => {
+          result.current.navigateUp();
+        });
+
         expect(result.current.activeSuggestionIndex).toBe(-1);
-        expect(result.current.visibleStartIndex).toBe(0);
-        expect(result.current.showSuggestions).toBe(false);
-        expect(result.current.isLoadingSuggestions).toBe(false);
       });
 
-      it('should reset state when reverseSearchActive becomes false', () => {
+      it('should handle navigateDown with no suggestions', () => {
         const mockShellHistory = ['echo hello'];
-        const { result, rerender } = renderHook(
-          ({ text, active }) => {
-            const textBuffer = useTextBufferForTest(text);
-            return useReverseSearchCompletion(
-              textBuffer,
-              mockShellHistory,
-              active,
-            );
-          },
-          { initialProps: { text: 'echo', active: true } },
+        const { result } = renderHook(() =>
+          useReverseSearchCompletion(
+            useTextBufferForTest('grep'),
+            mockShellHistory,
+            true,
+          ),
         );
 
-        // Simulate reverseSearchActive becoming false
-        rerender({ text: 'echo', active: false });
+        act(() => {
+          result.current.navigateDown();
+        });
 
-        expect(result.current.suggestions).toStrictEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
-        expect(result.current.visibleStartIndex).toBe(0);
-        expect(result.current.showSuggestions).toBe(false);
       });
 
-      // eslint-disable-next-line vitest/max-nested-describe -- intentional: semantic grouping requires this nesting depth
-      describe('Navigation', () => {
-        it('should handle navigateUp with no suggestions', () => {
-          const mockShellHistory = ['echo hello'];
+      it('should navigate up through suggestions with wrap-around', () => {
+        const mockShellHistory = [
+          'ls -l',
+          'ls -la',
+          'cd /some/path',
+          'git status',
+          'echo "Hello, World!"',
+          'echo Hi',
+        ];
 
-          const { result } = renderHook(() =>
-            useReverseSearchCompletion(
-              useTextBufferForTest('grep'),
-              mockShellHistory,
-              true,
-            ),
-          );
+        const { result } = renderHook(() =>
+          useReverseSearchCompletion(
+            useTextBufferForTest('echo'),
+            mockShellHistory,
+            true,
+          ),
+        );
 
-          act(() => {
-            result.current.navigateUp();
-          });
+        expect(result.current.suggestions.length).toBe(2);
+        expect(result.current.activeSuggestionIndex).toBe(0);
 
-          expect(result.current.activeSuggestionIndex).toBe(-1);
+        act(() => {
+          result.current.navigateUp();
         });
 
-        it('should handle navigateDown with no suggestions', () => {
-          const mockShellHistory = ['echo hello'];
-          const { result } = renderHook(() =>
-            useReverseSearchCompletion(
-              useTextBufferForTest('grep'),
-              mockShellHistory,
-              true,
-            ),
-          );
+        expect(result.current.activeSuggestionIndex).toBe(1);
+      });
 
-          act(() => {
-            result.current.navigateDown();
-          });
+      it('should navigate down through suggestions with wrap-around', () => {
+        const mockShellHistory = [
+          'ls -l',
+          'ls -la',
+          'cd /some/path',
+          'git status',
+          'echo "Hello, World!"',
+          'echo Hi',
+        ];
+        const { result } = renderHook(() =>
+          useReverseSearchCompletion(
+            useTextBufferForTest('ls'),
+            mockShellHistory,
+            true,
+          ),
+        );
 
-          expect(result.current.activeSuggestionIndex).toBe(-1);
+        expect(result.current.suggestions.length).toBe(2);
+        expect(result.current.activeSuggestionIndex).toBe(0);
+
+        act(() => {
+          result.current.navigateDown();
         });
 
-        it('should navigate up through suggestions with wrap-around', () => {
-          const mockShellHistory = [
-            'ls -l',
-            'ls -la',
-            'cd /some/path',
-            'git status',
-            'echo "Hello, World!"',
-            'echo Hi',
-          ];
+        expect(result.current.activeSuggestionIndex).toBe(1);
+      });
 
-          const { result } = renderHook(() =>
-            useReverseSearchCompletion(
-              useTextBufferForTest('echo'),
-              mockShellHistory,
-              true,
-            ),
-          );
+      it('should handle navigation with multiple suggestions', () => {
+        const mockShellHistory = [
+          'ls -l',
+          'ls -la',
+          'cd /some/path/l',
+          'git status',
+          'echo "Hello, World!"',
+          'echo "Hi all"',
+        ];
 
-          expect(result.current.suggestions.length).toBe(2);
-          expect(result.current.activeSuggestionIndex).toBe(0);
+        const { result } = renderHook(() =>
+          useReverseSearchCompletion(
+            useTextBufferForTest('l'),
+            mockShellHistory,
+            true,
+          ),
+        );
 
-          act(() => {
-            result.current.navigateUp();
-          });
+        expect(result.current.suggestions.length).toBe(5);
+        expect(result.current.activeSuggestionIndex).toBe(0);
 
-          expect(result.current.activeSuggestionIndex).toBe(1);
+        act(() => {
+          result.current.navigateDown();
+        });
+        expect(result.current.activeSuggestionIndex).toBe(1);
+
+        act(() => {
+          result.current.navigateDown();
+        });
+        expect(result.current.activeSuggestionIndex).toBe(2);
+
+        act(() => {
+          result.current.navigateUp();
+        });
+        expect(result.current.activeSuggestionIndex).toBe(1);
+
+        act(() => {
+          result.current.navigateUp();
+        });
+        expect(result.current.activeSuggestionIndex).toBe(0);
+
+        act(() => {
+          result.current.navigateUp();
+        });
+        expect(result.current.activeSuggestionIndex).toBe(4);
+      });
+
+      it('should handle navigation with large suggestion lists and scrolling', () => {
+        const largeMockCommands = Array.from(
+          { length: 15 },
+          (_, i) => `echo ${i}`,
+        );
+
+        const { result } = renderHook(() =>
+          useReverseSearchCompletion(
+            useTextBufferForTest('echo'),
+            largeMockCommands,
+            true,
+          ),
+        );
+
+        expect(result.current.suggestions.length).toBe(15);
+        expect(result.current.activeSuggestionIndex).toBe(0);
+        expect(result.current.visibleStartIndex).toBe(0);
+
+        act(() => {
+          result.current.navigateUp();
         });
 
-        it('should navigate down through suggestions with wrap-around', () => {
-          const mockShellHistory = [
-            'ls -l',
-            'ls -la',
-            'cd /some/path',
-            'git status',
-            'echo "Hello, World!"',
-            'echo Hi',
-          ];
-          const { result } = renderHook(() =>
-            useReverseSearchCompletion(
-              useTextBufferForTest('ls'),
-              mockShellHistory,
-              true,
-            ),
-          );
-
-          expect(result.current.suggestions.length).toBe(2);
-          expect(result.current.activeSuggestionIndex).toBe(0);
-
-          act(() => {
-            result.current.navigateDown();
-          });
-
-          expect(result.current.activeSuggestionIndex).toBe(1);
-        });
-
-        it('should handle navigation with multiple suggestions', () => {
-          const mockShellHistory = [
-            'ls -l',
-            'ls -la',
-            'cd /some/path/l',
-            'git status',
-            'echo "Hello, World!"',
-            'echo "Hi all"',
-          ];
-
-          const { result } = renderHook(() =>
-            useReverseSearchCompletion(
-              useTextBufferForTest('l'),
-              mockShellHistory,
-              true,
-            ),
-          );
-
-          expect(result.current.suggestions.length).toBe(5);
-          expect(result.current.activeSuggestionIndex).toBe(0);
-
-          act(() => {
-            result.current.navigateDown();
-          });
-          expect(result.current.activeSuggestionIndex).toBe(1);
-
-          act(() => {
-            result.current.navigateDown();
-          });
-          expect(result.current.activeSuggestionIndex).toBe(2);
-
-          act(() => {
-            result.current.navigateUp();
-          });
-          expect(result.current.activeSuggestionIndex).toBe(1);
-
-          act(() => {
-            result.current.navigateUp();
-          });
-          expect(result.current.activeSuggestionIndex).toBe(0);
-
-          act(() => {
-            result.current.navigateUp();
-          });
-          expect(result.current.activeSuggestionIndex).toBe(4);
-        });
-
-        it('should handle navigation with large suggestion lists and scrolling', () => {
-          const largeMockCommands = Array.from(
-            { length: 15 },
-            (_, i) => `echo ${i}`,
-          );
-
-          const { result } = renderHook(() =>
-            useReverseSearchCompletion(
-              useTextBufferForTest('echo'),
-              largeMockCommands,
-              true,
-            ),
-          );
-
-          expect(result.current.suggestions.length).toBe(15);
-          expect(result.current.activeSuggestionIndex).toBe(0);
-          expect(result.current.visibleStartIndex).toBe(0);
-
-          act(() => {
-            result.current.navigateUp();
-          });
-
-          expect(result.current.activeSuggestionIndex).toBe(14);
-          expect(result.current.visibleStartIndex).toBe(Math.max(0, 15 - 8));
-        });
+        expect(result.current.activeSuggestionIndex).toBe(14);
+        expect(result.current.visibleStartIndex).toBe(Math.max(0, 15 - 8));
       });
     });
   });

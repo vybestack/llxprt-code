@@ -10,8 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-/* eslint-disable max-lines, complexity, max-lines-per-function, sonarjs/cognitive-complexity, eslint-comments/disable-enable-pair -- Legacy CLI entrypoint remains a bootstrap orchestrator after other Phase 5 offenders were decomposed. */
-
 const wantWarningSuppression =
   process.env.LLXPRT_SUPPRESS_NODE_WARNINGS !== 'false';
 if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
@@ -28,12 +26,9 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
   process.removeAllListeners('warning');
   process.on('warning', (warning: WarningMessage) => {
     const warningCode =
-      typeof warning === 'string'
-        ? undefined
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          typeof warning.code === 'string'
-          ? warning.code
-          : undefined;
+      typeof warning !== 'string' && typeof warning.code === 'string'
+        ? warning.code
+        : undefined;
     if (warningCode && suppressedWarningCodes.has(warningCode)) {
       return;
     }
@@ -45,53 +40,20 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
   });
 }
 
-import React, { type ErrorInfo, useState, useEffect } from 'react';
-import { render, Box, Text } from 'ink';
-import Spinner from 'ink-spinner';
+import React, { type ErrorInfo } from 'react';
+import { render } from 'ink';
 import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
-import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
-import { parseBootstrapArgs } from './config/profileBootstrap.js';
-import { coerceDebugFlag } from './config/yargsOptions.js';
-import {
-  dynamicSettingsRegistry,
-  generateDynamicToolSettings,
-} from './utils/dynamicSettings.js';
-import type { SettingDefinition } from './config/settingsSchema.js';
-import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
-import dns from 'node:dns';
-import { start_sandbox } from './utils/sandbox.js';
-import {
-  shouldRelaunchForMemory,
-  isDebugMode,
-  computeSandboxMemoryArgs,
-  parseDockerMemoryToMB,
-} from './utils/bootstrap.js';
-import { relaunchAppInChildProcess } from './utils/relaunch.js';
-import chalk from 'chalk';
-import {
-  type DnsResolutionOrder,
-  type LoadedSettings,
-  loadSettings,
-} from './config/settings.js';
+import { type LoadedSettings, loadSettings } from './config/settings.js';
 import {
   type Config,
-  sessionId,
-  setGitStatsService,
-  FatalConfigError,
   JsonFormatter,
   OutputFormat,
-  uiTelemetryService, // IDE connection logging removed - telemetry disabled in llxprt
-  DebugLogger,
   parseAndFormatApiError,
-  SessionRecordingService,
-  RecordingIntegration,
-  resumeSession,
-  listSessions,
-  deleteSession,
-  getProjectHash,
+  type SessionRecordingService,
+  type RecordingIntegration,
   type IContent,
   type LockHandle,
   coreEvents,
@@ -106,23 +68,15 @@ import {
   triggerSessionEndHook,
   SessionStartSource,
   SessionEndReason,
-  MessageBus,
+  type MessageBus,
   debugLogger,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
-  ConfigurationManager,
 } from '@vybestack/llxprt-code-core';
-import {
-  ProfileManager,
-  SettingsService,
-  Storage,
-} from '@vybestack/llxprt-code-settings';
-import { theme } from './ui/colors.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
-import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
-import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import { runStartupMigration } from './config/pathMigration.js';
 import {
   cleanupCheckpoints,
@@ -132,40 +86,53 @@ import {
 } from './utils/cleanup.js';
 import { getCliVersion } from './utils/version.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
-// createProviderManager removed - provider manager now created in loadCliConfig()
 import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
-import { setupTerminalAndTheme } from './utils/terminalTheme.js';
 import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
-import { drainStdinBuffer } from './ui/utils/terminalContract.js';
 import { restoreTerminalProtocolsSync } from './ui/utils/terminalProtocolCleanup.js';
 import {
   DISABLE_BRACKETED_PASTE,
   DISABLE_FOCUS_TRACKING,
   SHOW_CURSOR,
 } from './ui/utils/terminalSequences.js';
-import { StdinRawModeManager } from './utils/stdinSafety.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
-import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import { computeTerminalTitle } from './utils/windowTitle.js';
 import { StreamingState } from './ui/types.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
+import { firstNonEmptyString } from './utils/coalesce.js';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import {
-  setCliRuntimeContext,
-  switchActiveProvider,
-  setActiveModel,
-  setActiveModelParam,
-  clearActiveModelParam,
-  getActiveModelParams,
-  loadProfileByName,
-  applyCliArgumentOverrides,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
-import { writeFileSync } from 'node:fs';
+  activateConfiguredProvider,
+  configureEarlyDebugLogging,
+  configureProvidersAndServices,
+  connectIdeClientIfEnabled,
+  createMemoizedStdinReader,
+  ensureAcpProviderActivated,
+  ensureStdinOrPromptProvided,
+  handleVersionAndHelpFlags,
+  initializeConfigWithSpinner,
+  maybeHopIntoSandbox,
+  maybeRelaunchForMemory,
+  prepareTerminalSession,
+  redirectConsoleForAcp,
+  rejectPromptInteractiveWithPipedStdin,
+  throwIfSettingsErrors,
+} from './cliBootstrap.js';
+import type { CliProviderManager } from './cliBootstrap.js';
+import {
+  bootstrapRuntimeAndConfig,
+  setupSessionRecording,
+} from './cliSessionBootstrap.js';
+import type { SessionRecordingSetup } from './cliSessionBootstrap.js';
+
+// Re-exported to preserve the public module API consumed by tests and tooling.
+export { validateDnsResolutionOrder } from './cliBootstrap.js';
 
 export function formatNonInteractiveError(error: unknown): string {
   const formatted = parseAndFormatApiError(error);
@@ -203,64 +170,6 @@ export function installNonInteractiveSigintHandler(): () => void {
     process.off('SIGINT', handler);
   };
 }
-
-export function validateDnsResolutionOrder(
-  order: string | undefined,
-): DnsResolutionOrder {
-  const defaultValue: DnsResolutionOrder = 'ipv4first';
-  if (order === undefined) {
-    return defaultValue;
-  }
-  if (order === 'ipv4first' || order === 'verbatim') {
-    return order;
-  }
-  // We don't want to throw here, just warn and use the default.
-  debugLogger.warn(
-    `Invalid value for dnsResolutionOrder in settings: "${order}". Using default "${defaultValue}".`,
-  );
-  return defaultValue;
-}
-
-const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
-  const [total, setTotal] = useState(initialTotal);
-  const [connected, setConnected] = useState(0);
-
-  useEffect(() => {
-    const onStart = ({ count }: { count: number }) => setTotal(count);
-    const onChange = () => {
-      setConnected((val) => val + 1);
-    };
-
-    appEvents.on(AppEvent.McpServersDiscoveryStart, onStart);
-    appEvents.on(AppEvent.McpServerConnected, onChange);
-    appEvents.on(AppEvent.McpServerError, onChange);
-
-    return () => {
-      appEvents.off(AppEvent.McpServersDiscoveryStart, onStart);
-      appEvents.off(AppEvent.McpServerConnected, onChange);
-      appEvents.off(AppEvent.McpServerError, onChange);
-    };
-  }, []);
-
-  const message = `Connecting to MCP servers... (${connected}/${total})`;
-
-  return (
-    <Box>
-      <Text color={theme.text.primary}>
-        <Spinner /> {message}
-      </Text>
-    </Box>
-  );
-};
-
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  promises as fsPromises,
-} from 'fs';
-import { join } from 'path';
-import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;
@@ -400,42 +309,11 @@ export async function startInteractiveUI(
   });
 }
 
-export async function main() {
-  // Handle debug mode as early as possible so that early logs are captured.
-  // Reuse the shared yargs coercion so the bootstrap path normalizes false-like
-  // values (false, 0, no, off) identically to the parsed `--debug` flag.
-  const bootstrapParsed = parseBootstrapArgs();
-  const debugArg = coerceDebugFlag(
-    bootstrapParsed.bootstrapArgs.debug ?? undefined,
-  );
-  const isDebugEnabled = debugArg === true || typeof debugArg === 'string';
-  if (isDebugEnabled) {
-    const namespaces = typeof debugArg === 'string' ? debugArg : 'llxprt:*';
-    ConfigurationManager.getInstance().setCliConfig({
-      enabled: true,
-      namespaces: namespaces
-        .split(',')
-        .map((ns) => ns.trim())
-        .filter((ns) => ns.length > 0),
-    });
-  }
-
-  // Handle --version and --help before patchStdio() redirects stdout.
-  // patchStdio() redirects process.stdout.write to an internal event bus,
-  // but no listeners are registered yet, so yargs output would be lost.
-  const rawArgs = process.argv.slice(2);
-  if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
-    writeToStdout(`${await getCliVersion()}
-`);
-    process.exit(0);
-  }
-  if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
-    // Show help without loading settings — help should always work even if
-    // the user's configuration file is invalid (fixes #1667).
-    await parseArguments({});
-    process.exit(0);
-  }
-
+/**
+ * Patch stdio, register flush-on-exit, install the unhandled-rejection handler,
+ * and ensure the user's ~/.llxprt directory exists. Returns the stdio cleanup.
+ */
+function setupProcessLifecycle(): () => void {
   const cleanupStdio = patchStdio();
   registerSyncCleanup(() => {
     // This is needed to ensure we don't lose any buffered output.
@@ -460,714 +338,52 @@ export async function main() {
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }
-
-  const workspaceRoot = process.cwd();
-  const settings = loadSettings(workspaceRoot);
-
-  if (
-    settings.merged.ui.autoConfigureMaxOldSpaceSize === true &&
-    !process.env.SANDBOX
-  ) {
-    // Only relaunch with a larger heap when the autosizing setting is enabled.
-    const debugMode = isDebugMode();
-    const maxHeapSizeMB = settings.merged.ui.maxHeapSizeMB;
-    const memoryArgs = shouldRelaunchForMemory(debugMode, maxHeapSizeMB);
-    if (memoryArgs.length > 0) {
-      const exitCode = await relaunchAppInChildProcess(memoryArgs);
-      process.exit(exitCode);
-    }
-  }
-
-  const argv = await parseArguments(settings.merged);
-
-  const hasPipedInput = !process.stdin.isTTY && argv.experimentalAcp !== true;
-  let cachedStdinData: string | null = null;
-  let stdinWasRead = false;
-
-  const readStdinOnce = async () => {
-    if (!stdinWasRead) {
-      stdinWasRead = true;
-      cachedStdinData = await readStdin();
-    }
-    return cachedStdinData ?? '';
-  };
-
-  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string and empty array should fall back to next source */
-  const questionFromArgs =
-    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
-  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
-
-  await cleanupCheckpoints();
-
-  if (hasPipedInput) {
-    const stdinSnapshot = await readStdinOnce();
-    if (!stdinSnapshot && !questionFromArgs) {
-      writeToStderr(
-        `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.\n`,
-      );
-      process.exit(1);
-    }
-  }
-  if (settings.errors.length > 0) {
-    const errorMessages = settings.errors.map(
-      (error) => `Error in ${error.path}: ${error.message}`,
-    );
-    throw new FatalConfigError(
-      `${errorMessages.join('\n')}\nPlease fix the configuration file(s) and try again.`,
-    );
-  }
-
-  // If we're in ACP mode, redirect console output IMMEDIATELY
-  // before any config loading that might write to stdout
-  if (argv.experimentalAcp === true) {
-    // eslint-disable-next-line no-console
-    console.log = console.error;
-    // eslint-disable-next-line no-console
-    console.info = console.error;
-    // eslint-disable-next-line no-console
-    console.debug = console.error;
-  }
-
-  /**
-   * @plan:PLAN-20250218-STATELESSPROVIDER.P06
-   * @requirement:REQ-SP-005
-   * Seed the CLI runtime context with a scoped SettingsService before Config
-   * construction, mirroring pseudocode/cli-runtime.md:2-5.
-   */
-  const runtimeSettingsService = new SettingsService();
-  setCliRuntimeContext(runtimeSettingsService, undefined, {
-    runtimeId: 'cli.runtime.bootstrap',
-    metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
-  });
-
-  const extensionEnablementManager = new ExtensionEnablementManager(
-    ExtensionStorage.getUserExtensionsDir(),
-    argv.extensions,
-  );
-  const extensions = loadExtensions(extensionEnablementManager, workspaceRoot);
-
-  const config = await loadCliConfig(
-    settings.merged,
-    extensions,
-    extensionEnablementManager,
-    sessionId,
-    argv,
-    workspaceRoot,
-    { settingsService: runtimeSettingsService },
-  );
-  const sessionMessageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
-  );
-  const profileManager = new ProfileManager();
-  setCliRuntimeContext(runtimeSettingsService, config, {
-    runtimeId: 'cli.runtime.bootstrap',
-    metadata: { source: 'cli-bootstrap', stage: 'post-config' },
-    profileManager,
-  });
-
-  // Check for invalid input combinations early to prevent crashes
-  if (argv.promptInteractive && !process.stdin.isTTY) {
-    writeToStderr(
-      'Error: The --prompt-interactive flag cannot be used when input is piped from stdin.\n',
-    );
-    await runExitCleanup();
-    process.exit(ExitCodes.FATAL_INPUT_ERROR);
-  }
-
-  const wasRaw = process.stdin.isRaw;
-  // Issue #1020: Create stdin manager with error handling to prevent EIO crashes
-  const stdinManager = new StdinRawModeManager({
-    debug: config.getDebugMode(),
-  });
-  if (config.isInteractive() && !wasRaw && process.stdin.isTTY) {
-    // Drain any garbage ANSI sequences that may be in the stdin buffer
-    // before we start processing input. This addresses #199 where garbage
-    // ANSI on startup can disrupt theme selection on some terminals (e.g., OCI).
-    await drainStdinBuffer(process.stdin, 50);
-
-    // Set this as early as possible to avoid spurious characters from
-    // input showing up in the output.
-    // Use stdinManager to safely enable raw mode with EIO error handling (Issue #1020)
-    stdinManager.enable();
-
-    // This cleanup isn't strictly needed but may help in certain situations.
-    process.on('SIGTERM', () => {
-      stdinManager.disable(true); // Restore to wasRaw
-      void (async () => {
-        await runExitCleanup();
-        process.exit(0);
-      })();
-    });
-    process.on('SIGINT', () => {
-      stdinManager.disable(true); // Restore to wasRaw
-      void (async () => {
-        await runExitCleanup();
-        process.exit(130); // Standard exit code for SIGINT
-      })();
-    });
-
-    // Register cleanup for the stdin manager to ensure error handler is removed
-    registerCleanup(() => {
-      stdinManager.disable(true);
-    });
-  }
-
-  await setupTerminalAndTheme(config, settings);
-
-  if (argv.sessionSummary) {
-    registerCleanup(() => {
-      const metrics = uiTelemetryService.getMetrics();
-      writeFileSync(
-        argv.sessionSummary!,
-        JSON.stringify({ sessionMetrics: metrics }, null, 2),
-      );
-    });
-  }
-
-  const consolePatcher = new ConsolePatcher({
-    stderr: !(
-      config.getOutputFormat() === OutputFormat.JSON && !config.isInteractive()
-    ),
-    debugMode:
-      config.getOutputFormat() === OutputFormat.JSON && !config.isInteractive()
-        ? false
-        : config.getDebugMode(),
-  });
-  consolePatcher.patch();
-  registerCleanup(consolePatcher.cleanup);
-
-  // Note: loadCliConfig() already creates and configures the provider manager with CLI args
-  // We just need to retrieve it from the config, not recreate it (which would lose CLI arg auth)
-  const providerManager = config.getProviderManager();
-  if (!providerManager) {
-    throw new Error(
-      '[cli] Provider manager should have been initialized by loadCliConfig',
-    );
-  }
-
-  const bootstrapProfileName =
-    argv.profileLoad?.trim() ??
-    (typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
-      ? process.env.LLXPRT_BOOTSTRAP_PROFILE.trim()
-      : '');
-  // Only reload profile if it wasn't already loaded in config.ts
-  // (checking if currentProfileName is null means no profile was loaded yet)
-  // If the profile was already loaded, don't reload - especially important for
-  // load balancer profiles where reloading advances the round-robin counter
-  const currentProfileName = runtimeSettingsService.getCurrentProfileName();
-  if (
-    !argv.provider &&
-    bootstrapProfileName !== '' &&
-    currentProfileName === null
-  ) {
-    try {
-      await loadProfileByName(bootstrapProfileName);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      debugLogger.warn(
-        `[bootstrap] Failed to reapply profile '${bootstrapProfileName}' after provider manager initialization: ${message}`,
-      );
-    }
-  }
-
-  // Initialize git stats service for tracking file changes when logging is enabled
-  if (config.getConversationLoggingEnabled()) {
-    const gitStatsService = new GitStatsServiceImpl(config);
-    setGitStatsService(gitStatsService);
-  }
-
-  // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
-  const serverToolsProvider = providerManager.getServerToolsProvider();
-  if (
-    serverToolsProvider &&
-    serverToolsProvider.name === 'gemini' &&
-    'setConfig' in serverToolsProvider &&
-    typeof serverToolsProvider.setConfig === 'function'
-  ) {
-    serverToolsProvider.setConfig(config);
-  }
-
-  // Set DNS resolution order (prefer IPv4 by default)
-  dns.setDefaultResultOrder(
-    validateDnsResolutionOrder(settings.merged.dnsResolutionOrder),
-  );
-
-  if (config.getListExtensions()) {
-    for (const _extension of extensions) {
-      // List extensions without debugLogger.log
-    }
-    process.exit(0);
-  }
-
-  setMaxSizedBoxDebugging(config.getDebugMode());
-
-  const mcpServers = config.getMcpServers();
-  const mcpServersCount = mcpServers ? Object.keys(mcpServers).length : 0;
-
-  let spinnerInstance;
-  if (
-    typeof config.isInteractive === 'function' &&
-    config.isInteractive() &&
-    mcpServersCount > 0
-  ) {
-    spinnerInstance = render(
-      <InitializingComponent initialTotal={mcpServersCount} />,
-    );
-  }
-
-  await (
-    config as typeof config & {
-      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
-    }
-  ).initialize({ messageBus: sessionMessageBus });
-
-  // Register dynamic settings after config is fully initialized
-  try {
-    const dynamicToolSettings = generateDynamicToolSettings(config);
-
-    // Convert to full path settings
-    const fullDynamicSettings: Record<string, SettingDefinition> = {};
-    for (const [toolName, definition] of Object.entries(dynamicToolSettings)) {
-      fullDynamicSettings[`coreToolSettings.${toolName}`] = definition;
-    }
-
-    dynamicSettingsRegistry.register(fullDynamicSettings);
-    const logger = new DebugLogger('llxprt:gemini');
-    logger.log(
-      `Registered ${Object.keys(fullDynamicSettings).length} dynamic settings`,
-    );
-  } catch (error) {
-    debugLogger.error('[gemini] Failed to register dynamic settings:', error);
-  }
-
-  if (spinnerInstance) {
-    // Small UX detail to show the completion message for a bit before unmounting.
-    await new Promise((f) => setTimeout(f, 100));
-    spinnerInstance.clear();
-    spinnerInstance.unmount();
-  }
-
-  if (config.getIdeMode()) {
-    const ideClient = config.getIdeClient();
-    if (ideClient) {
-      await ideClient.connect();
-      // IDE connection logging removed - telemetry disabled in llxprt
-    }
-  }
-
-  // If a provider is specified, activate it after initialization
-  let initialAuthFailed = false;
-  const configProvider = config.getProvider();
-  if (configProvider) {
-    try {
-      // Extract bootstrap args from config if available (for bundle compatibility)
-      const configWithBootstrapArgs = config as Config & {
-        _bootstrapArgs?: {
-          keyOverride?: string | null;
-          keyfileOverride?: string | null;
-          keyNameOverride?: string | null;
-          setOverrides?: string[] | null;
-          baseurlOverride?: string | null;
-        };
-      };
-
-      // Apply CLI argument overrides BEFORE provider switch
-      // This ensures --key, --keyfile, --baseurl, and --set are applied
-      // at the correct time and override profile settings
-      await applyCliArgumentOverrides(
-        argv,
-        configWithBootstrapArgs._bootstrapArgs,
-      );
-
-      await switchActiveProvider(configProvider);
-      await config.refreshAuth();
-
-      const activeProvider = providerManager.getActiveProvider();
-      const configWithCliOverride = config as Config & {
-        _cliModelOverride?: string;
-      };
-      const cliModelFromBootstrap =
-        typeof configWithCliOverride._cliModelOverride === 'string'
-          ? configWithCliOverride._cliModelOverride.trim()
-          : undefined;
-      let configModel =
-        cliModelFromBootstrap && cliModelFromBootstrap.length > 0
-          ? cliModelFromBootstrap
-          : config.getModel();
-
-      if (!configModel || configModel === 'placeholder-model') {
-        // No model specified or placeholder, get the provider's default
-        configModel = activeProvider?.getDefaultModel?.() ?? configModel;
-      }
-
-      if (configModel && configModel !== 'placeholder-model') {
-        await setActiveModel(configModel);
-      }
-
-      // Apply CLI and profile model params before first request
-      const configWithParams = config as Config & {
-        _profileModelParams?: Record<string, unknown>;
-        _cliModelParams?: Record<string, unknown>;
-      };
-      const mergedModelParams: Record<string, unknown> = {};
-
-      if (!argv.provider && configWithParams._profileModelParams) {
-        Object.assign(mergedModelParams, configWithParams._profileModelParams);
-      }
-
-      if (configWithParams._cliModelParams) {
-        Object.assign(mergedModelParams, configWithParams._cliModelParams);
-      }
-
-      const existingParams = getActiveModelParams();
-
-      for (const [key, value] of Object.entries(mergedModelParams)) {
-        setActiveModelParam(key, value);
-      }
-
-      for (const key of Object.keys(existingParams)) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!(key in mergedModelParams)) {
-          clearActiveModelParam(key);
-        }
-      }
-
-      // No need to set auth type when using a provider
-      // CLI arguments have already been applied by applyCliArgumentOverrides() above
-    } catch (e) {
-      debugLogger.error(chalk.red((e as Error).message));
-      initialAuthFailed = true;
-    }
-  } else {
-    // No explicit provider specified - ensure default provider (gemini) is activated
-    // This initializes contentGeneratorConfig to avoid runtime errors on first request
-    try {
-      const defaultProvider =
-        providerManager.getActiveProviderName() ?? 'gemini';
-      await switchActiveProvider(defaultProvider);
-      await config.refreshAuth();
-    } catch (e) {
-      // Log but don't exit - auth will be triggered lazily on first API call
-      const logger = new DebugLogger('llxprt:gemini');
-      logger.debug(
-        () => `Default provider activation skipped: ${(e as Error).message}`,
-      );
-    }
-  }
-
-  // hop into sandbox if we are outside and sandboxing is enabled
-  if (!process.env.SANDBOX) {
-    // For sandbox, always compute memory args for the new process.
-    // Unlike shouldRelaunchForMemory() which compares against the host's current heap,
-    // computeSandboxMemoryArgs() always returns args because the sandbox starts fresh
-    // with Node.js default ~950MB heap.
-    let sandboxMemoryArgs: string[] = [];
-    if (settings.merged.ui.autoConfigureMaxOldSpaceSize === true) {
-      const containerMemoryStr =
-        process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
-      let containerMemoryMB: number | undefined;
-      // Preserve old empty-string falsy behavior: only process non-empty strings
-      if (
-        typeof containerMemoryStr === 'string' &&
-        containerMemoryStr.length > 0
-      ) {
-        containerMemoryMB = parseDockerMemoryToMB(containerMemoryStr);
-      } else if (
-        typeof process.env.SANDBOX_FLAGS === 'string' &&
-        process.env.SANDBOX_FLAGS.length > 0
-      ) {
-        const match = process.env.SANDBOX_FLAGS.match(/--memory[= ](\S+)/);
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (match !== null) {
-          containerMemoryMB = parseDockerMemoryToMB(match[1]);
-        }
-      }
-      sandboxMemoryArgs = computeSandboxMemoryArgs(
-        config.getDebugMode(),
-        containerMemoryMB,
-        settings.merged.ui.maxHeapSizeMB,
-      );
-    }
-    const sandboxConfig = config.getSandbox();
-    if (sandboxConfig) {
-      if (initialAuthFailed) {
-        await runExitCleanup();
-        process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
-      }
-      // We intentionally omit the list of extensions here because extensions
-      // should not impact auth or setting up the sandbox.
-      // Follow-up (#1569, jacobr): refactor loadCliConfig so there is a minimal version
-      // that only initializes enough config to enable refreshAuth or find
-      // another way to decouple refreshAuth from requiring a config.
-      const partialConfig = await loadCliConfig(
-        settings.merged,
-        [],
-        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-        sessionId,
-        argv,
-        workspaceRoot,
-        { settingsService: runtimeSettingsService },
-      );
-
-      let stdinData = '';
-      if (hasPipedInput) {
-        stdinData = await readStdinOnce();
-      }
-
-      // Inject stdin data into args for the sandbox.
-      // We prepend stdin to the existing prompt (positional or --prompt flag).
-      // This avoids the "Cannot use both positional and --prompt" conflict.
-      const injectStdinIntoArgs = (
-        args: string[],
-        stdinData?: string,
-      ): string[] => {
-        if (!stdinData) {
-          return [...args];
-        }
-
-        const finalArgs = [...args];
-
-        // Check for --prompt or -p flag first
-        const promptFlagIndex = finalArgs.findIndex(
-          (arg) => arg === '--prompt' || arg === '-p',
-        );
-        if (promptFlagIndex > -1 && finalArgs.length > promptFlagIndex + 1) {
-          // Prepend stdin to the --prompt value
-          finalArgs[promptFlagIndex + 1] =
-            `${stdinData}\n\n${finalArgs[promptFlagIndex + 1]}`;
-          return finalArgs;
-        }
-
-        // Find positional arguments (args after all flags).
-        // Flags can be:
-        // - Boolean flags: --debug, --yolo, --sandbox (no value)
-        // - Value flags: --model gpt4, --key xyz (separate value)
-        // - Combined flags: --model=gpt4, --allowed-tools=run_shell_command(ls) (value in same arg)
-        // Positional args are anything after the last flag that doesn't start with '-'.
-
-        // Start scanning from index 2 (after 'node' and script path).
-        // Find the first argument after index 1 that doesn't start with '-'
-        // and isn't a value for a preceding flag.
-        let positionalStartIndex = -1;
-        // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (let i = 2; i < finalArgs.length; i++) {
-          const arg = finalArgs[i];
-          // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-          if (arg.startsWith('-')) {
-            // This is a flag. Check if it's a combined flag (contains '=')
-            if (arg.includes('=')) {
-              // Combined flag like --model=gpt4, no separate value to skip
-              continue;
-            }
-            // Check if next arg is a value for this flag (doesn't start with '-')
-            const nextArg = finalArgs[i + 1];
-            if (nextArg && !nextArg.startsWith('-')) {
-              // Skip the value
-              i++;
-            }
-          } else {
-            // This is a positional argument
-            positionalStartIndex = i;
-            break;
-          }
-        }
-
-        if (positionalStartIndex > -1) {
-          // There are positional arguments - prepend stdin to the first one
-          finalArgs[positionalStartIndex] =
-            `${stdinData}\n\n${finalArgs[positionalStartIndex]}`;
-          return finalArgs;
-        }
-
-        // No existing prompt - add stdin as a positional argument (not --prompt)
-        finalArgs.push(stdinData);
-        return finalArgs;
-      };
-
-      const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
-
-      const exitCode = await start_sandbox(
-        sandboxConfig,
-        sandboxMemoryArgs,
-        partialConfig,
-        sandboxArgs,
-      );
-      process.exit(exitCode);
-    }
-    // Note: Non-sandbox memory relaunch is now handled at the top of main()
-  }
-
-  if (initialAuthFailed) {
-    await runExitCleanup();
-    process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
-  }
-
-  // Cleanup sessions after config initialization
-  await cleanupExpiredSessions(config, settings.merged);
-
-  /**
-   * @plan:PLAN-20260211-SESSIONRECORDING.P26
-   * @pseudocode recording-integration.md lines 115-132
-   *
-   * Set up session recording: compute project hash, create chats directory,
-   * handle --list-sessions / --delete-session early exits, then create
-   * SessionRecordingService (new or resumed) and RecordingIntegration.
-   */
-  const projectHash = getProjectHash(config.getProjectRoot());
-  const chatsDir = join(config.getProjectTempDir(), 'chats');
-  await fsPromises.mkdir(chatsDir, { recursive: true });
-
-  // --list-sessions: display sessions and exit
-  if (argv.listSessions === true) {
-    const { sessions } = await listSessions(chatsDir, projectHash);
-    if (sessions.length === 0) {
-      debugLogger.log('No recorded sessions for this project.');
-    } else {
-      debugLogger.log(`Sessions for this project (${sessions.length}):
-`);
-      for (let i = 0; i < sessions.length; i++) {
-        const s = sessions[i];
-        const modified = s.lastModified.toLocaleString();
-        const sizeKb = (s.fileSize / 1024).toFixed(1);
-        debugLogger.log(
-          `  ${i + 1}. ${s.sessionId.slice(0, 8)}  ${modified}  ${sizeKb} KB  ${s.provider}/${s.model}`,
-        );
-      }
-    }
-    process.exit(0);
-  }
-
-  // --delete-session: delete session and exit
-  // Preserve old empty-string falsy behavior: only process non-empty strings
-  if (typeof argv.deleteSession === 'string' && argv.deleteSession.length > 0) {
-    const result = await deleteSession(
-      argv.deleteSession,
-      chatsDir,
-      projectHash,
-    );
-    if (result.ok) {
-      debugLogger.log(
-        chalk.green(`Deleted session ${result.deletedSessionId.slice(0, 8)}`),
-      );
-      process.exit(0);
-    } else {
-      debugLogger.error(chalk.red(result.error));
-      process.exit(1);
-    }
-  }
-
-  // Create recording service (resume or new)
-  let recordingService: SessionRecordingService;
-  let resumedHistory: IContent[] | null = null;
-  let resumedLockHandle: LockHandle | null = null;
-
-  const continueRef = config.getContinueSessionRef();
-  if (continueRef) {
-    const resumeResult = await resumeSession({
-      continueRef,
-      projectHash,
-      chatsDir,
-      currentProvider: config.getProvider() ?? 'unknown',
-      currentModel: config.getModel(),
-      workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
-    });
-    if (resumeResult.ok) {
-      recordingService = resumeResult.recording;
-      resumedHistory = resumeResult.history;
-      resumedLockHandle = resumeResult.lockHandle;
-      // FIX-1336: Adopt the restored session's ID so TodoStore uses the correct file
-      config.adoptSessionId(resumeResult.metadata.sessionId);
-      if (resumeResult.warnings.length > 0) {
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        for (const warning of resumeResult.warnings) {
-          debugLogger.warn(chalk.yellow(warning));
-        }
-      }
-    } else {
-      debugLogger.warn(
-        chalk.yellow(
-          `Could not resume session (ref: ${continueRef}): ${resumeResult.error}`,
-        ),
-      );
-      // Fall back to new session
-      recordingService = new SessionRecordingService({
-        sessionId,
-        projectHash,
-        chatsDir,
-        workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
-        provider: config.getProvider() ?? 'unknown',
-        model: config.getModel(),
-      });
-    }
-  } else {
-    recordingService = new SessionRecordingService({
-      sessionId,
-      projectHash,
-      chatsDir,
-      workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
-      provider: config.getProvider() ?? 'unknown',
-      model: config.getModel(),
-    });
-  }
-
-  const recordingIntegration = new RecordingIntegration(recordingService);
-
-  if (resumedHistory && resumedHistory.length > 0) {
-    try {
-      const agentClient = config.getAgentClient();
-      await agentClient.restoreHistory(resumedHistory);
-    } catch (err) {
-      const messageText = err instanceof Error ? err.message : String(err);
-      debugLogger.warn(
-        chalk.yellow('Could not restore conversation history: ' + messageText),
-      );
-    }
-  }
-
-  registerCleanup(async () => {
-    recordingIntegration.dispose();
-    try {
-      await recordingService.dispose();
-    } finally {
-      await resumedLockHandle?.release();
-    }
-  });
-
-  if (config.getListExtensions()) {
-    debugLogger.log('Installed extensions:');
-    for (const extension of extensions) {
-      debugLogger.log(`- ${extension.name}`);
-    }
-    process.exit(0);
-  }
-
-  if (config.getExperimentalZedIntegration()) {
-    // Restore real stdout/stderr — ACP uses stdout as its protocol pipe
-    cleanupStdio();
-
-    // In ACP mode, authentication happens through the protocol
-    // Just ensure the provider manager is set up if configured
-    const providerManagerForAcp = config.getProviderManager();
-    const configProvider = config.getProvider();
-
-    if (configProvider && providerManagerForAcp) {
-      try {
-        // Set the active provider if not already set
-        // eslint-disable-next-line sonarjs/nested-control-flow -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        if (!providerManagerForAcp.hasActiveProvider()) {
-          void providerManagerForAcp.setActiveProvider(configProvider);
-        }
-      } catch {
-        // Non-fatal - continue without provider
-        // Authentication can still happen via the ACP protocol
-      }
-    }
-
-    return runZedIntegration(config, settings);
-  }
-
-  let input = config.getQuestion();
+  return cleanupStdio;
+}
+
+interface NonInteractiveSessionOptions {
+  config: Config;
+  settings: LoadedSettings;
+  input: string;
+  prompt_id: string;
+  sessionMessageBus: MessageBus;
+}
+
+interface PipedOrPromptSessionOptions {
+  config: Config;
+  settings: LoadedSettings;
+  sessionMessageBus: MessageBus;
+  initialInput: string | undefined;
+  hasPipedInput: boolean;
+  readStdinData: () => Promise<string>;
+}
+
+interface SessionDispatchOptions {
+  config: Config;
+  settings: LoadedSettings;
+  workspaceRoot: string;
+  sessionMessageBus: MessageBus;
+  providerManager: CliProviderManager;
+  recording: SessionRecordingSetup;
+  hasPipedInput: boolean;
+  readStdinData: () => Promise<string>;
+}
+
+/**
+ * Collect startup warnings, then dispatch to either the interactive UI or the
+ * piped/prompt non-interactive session depending on the configured mode.
+ */
+async function dispatchInteractiveOrNonInteractive({
+  config,
+  settings,
+  workspaceRoot,
+  sessionMessageBus,
+  providerManager,
+  recording,
+  hasPipedInput,
+  readStdinData,
+}: SessionDispatchOptions): Promise<void> {
+  const input = config.getQuestion();
   const startupWarnings = [
     ...(await getStartupWarnings()),
     ...(await getUserStartupWarnings(settings.merged)),
@@ -1187,31 +403,86 @@ export async function main() {
       startupWarnings,
       workspaceRoot,
       sessionMessageBus,
-      recordingIntegration,
-      resumedHistory ?? undefined,
-      recordingService,
-      resumedLockHandle,
+      recording.recordingIntegration,
+      recording.resumedHistory ?? undefined,
+      recording.recordingService,
+      recording.resumedLockHandle,
     );
-    return undefined;
+    return;
   }
+
+  await runPipedOrPromptSession({
+    config,
+    settings,
+    sessionMessageBus,
+    initialInput: input,
+    hasPipedInput,
+    readStdinData,
+  });
+}
+
+/**
+ * Resolve the final non-interactive input (merging piped stdin with any prompt),
+ * run the non-interactive session, shut down telemetry, and exit the process.
+ */
+async function runPipedOrPromptSession({
+  config,
+  settings,
+  sessionMessageBus,
+  initialInput,
+  hasPipedInput,
+  readStdinData,
+}: PipedOrPromptSessionOptions): Promise<never> {
+  let input = initialInput;
   // If not a TTY, read from stdin
   // This is for cases where the user pipes input directly into the command
   if (hasPipedInput) {
-    const stdinData = await readStdinOnce();
+    const stdinData = await readStdinData();
     if (stdinData) {
       const existingInput = input ? `${input}` : '';
-      input = `${stdinData}\n\n${existingInput}`;
+      input = `${stdinData}
+
+${existingInput}`;
     }
   }
   if (!input) {
     writeToStderr(
-      `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.\n`,
+      `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.
+`,
     );
     process.exit(1);
   }
 
   const prompt_id = Math.random().toString(16).slice(2);
 
+  const nonInteractiveExitCode = await runNonInteractiveSession({
+    config,
+    settings,
+    input,
+    prompt_id,
+    sessionMessageBus,
+  });
+
+  if (isTelemetrySdkInitialized()) {
+    await shutdownTelemetry(config);
+  }
+
+  // Call cleanup before process.exit, which causes cleanup to not run
+  await runExitCleanup();
+  process.exit(nonInteractiveExitCode);
+}
+
+/**
+ * Drive a single non-interactive run: validate auth, fire session hooks,
+ * inject any SessionStart context, run the prompt, and report the exit code.
+ */
+async function runNonInteractiveSession({
+  config,
+  settings,
+  input,
+  prompt_id,
+  sessionMessageBus,
+}: NonInteractiveSessionOptions): Promise<number> {
   const removeSigintHandler = installNonInteractiveSigintHandler();
   let nonInteractiveExitCode = 0;
   try {
@@ -1228,23 +499,24 @@ export async function main() {
       nonInteractiveConfig,
       SessionStartSource.Startup,
     );
+    let finalInput = input;
     if (sessionStartOutput) {
-      // Display system message
       if (sessionStartOutput.systemMessage) {
-        writeToStderr(`${sessionStartOutput.systemMessage}\n`);
+        writeToStderr(`${sessionStartOutput.systemMessage}
+`);
       }
-
-      // Prepend additional context to input
       const additionalContext = sessionStartOutput.getAdditionalContext();
       if (additionalContext) {
-        input = `${additionalContext}\n\n${input}`;
+        finalInput = `${additionalContext}
+
+${finalInput}`;
       }
     }
 
     await runNonInteractive({
       config: nonInteractiveConfig,
       settings,
-      input,
+      input: finalInput,
       prompt_id,
       runtimeMessageBus: sessionMessageBus,
       deferTelemetryShutdown: true,
@@ -1263,7 +535,8 @@ export async function main() {
       const formatter = new JsonFormatter();
       const normalizedError =
         error instanceof Error ? error : new Error(String(error));
-      writeToStderr(`${formatter.formatError(normalizedError, 1)}\n`);
+      writeToStderr(`${formatter.formatError(normalizedError, 1)}
+`);
     } else {
       const printableError = formatNonInteractiveError(error);
       debugLogger.error(`Non-interactive run failed: ${printableError}`);
@@ -1271,14 +544,111 @@ export async function main() {
   } finally {
     removeSigintHandler();
   }
+  return nonInteractiveExitCode;
+}
 
-  if (isTelemetrySdkInitialized()) {
-    await shutdownTelemetry(config);
+export async function main() {
+  configureEarlyDebugLogging();
+
+  const rawArgs = process.argv.slice(2);
+  await handleVersionAndHelpFlags(rawArgs);
+
+  const cleanupStdio = setupProcessLifecycle();
+
+  const workspaceRoot = process.cwd();
+  const settings = loadSettings(workspaceRoot);
+
+  await maybeRelaunchForMemory(settings);
+
+  const argv = await parseArguments(settings.merged);
+
+  const hasPipedInput = !process.stdin.isTTY && argv.experimentalAcp !== true;
+  const readStdinOnce = createMemoizedStdinReader();
+
+  const questionFromArgs =
+    firstNonEmptyString(argv.promptInteractive, argv.prompt) ??
+    (argv.promptWords ?? []).join(' ');
+
+  await cleanupCheckpoints();
+
+  await ensureStdinOrPromptProvided(
+    hasPipedInput,
+    readStdinOnce,
+    questionFromArgs,
+  );
+  throwIfSettingsErrors(settings);
+  redirectConsoleForAcp(argv);
+
+  const { config, sessionMessageBus, runtimeSettingsService } =
+    await bootstrapRuntimeAndConfig(settings, argv, workspaceRoot);
+
+  await rejectPromptInteractiveWithPipedStdin(argv);
+
+  await prepareTerminalSession(config, settings, argv);
+
+  const providerManager = await configureProvidersAndServices(
+    config,
+    settings,
+    argv,
+    runtimeSettingsService,
+  );
+
+  if (config.getListExtensions()) {
+    process.exit(0);
   }
 
-  // Call cleanup before process.exit, which causes cleanup to not run
-  await runExitCleanup();
-  process.exit(nonInteractiveExitCode);
+  setMaxSizedBoxDebugging(config.getDebugMode());
+
+  await initializeConfigWithSpinner(config, sessionMessageBus);
+  await connectIdeClientIfEnabled(config);
+
+  // If a provider is specified, activate it after initialization
+  const initialAuthFailed = await activateConfiguredProvider(
+    config,
+    providerManager,
+    argv,
+  );
+
+  // hop into sandbox if we are outside and sandboxing is enabled
+  await maybeHopIntoSandbox({
+    config,
+    settings,
+    argv,
+    workspaceRoot,
+    runtimeSettingsService,
+    initialAuthFailed,
+    readStdin: readStdinOnce,
+    hasPipedInput,
+  });
+
+  if (initialAuthFailed) {
+    await runExitCleanup();
+    process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
+  }
+
+  // Cleanup sessions after config initialization
+  await cleanupExpiredSessions(config, settings.merged);
+
+  const recording = await setupSessionRecording(config, argv);
+
+  if (config.getExperimentalZedIntegration()) {
+    // Restore real stdout/stderr — ACP uses stdout as its protocol pipe
+    cleanupStdio();
+    ensureAcpProviderActivated(config);
+    await runZedIntegration(config, settings);
+    return;
+  }
+
+  await dispatchInteractiveOrNonInteractive({
+    config,
+    settings,
+    workspaceRoot,
+    sessionMessageBus,
+    providerManager,
+    recording,
+    hasPipedInput,
+    readStdinData: readStdinOnce,
+  });
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {

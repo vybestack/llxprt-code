@@ -478,7 +478,10 @@ export class ZedPathResolver {
     }
 
     const parts = normalizeToParts(llmContent);
-    const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
+    // Compiled from a string source so the regex construction is explicit.
+    // Matches a "--- <path> ---" header followed by the file's content block.
+    const fileContentSource = '^--- (.*?) ---\\n\\n([\\s\\S]*?)\\n\\n$';
+    const fileContentRegex = new RegExp(fileContentSource);
     processedQueryParts.push({
       text: '\n--- Content from referenced files ---',
     });

@@ -61,17 +61,11 @@ export const getResourceName = (resource: DiscoveredMCPResource): string => {
   return runtimeResource.name ?? runtimeResource.uri;
 };
 
-/** Narrow interface for the dynamically-imported token storage static method. */
-interface TokenStorageStatic {
-  isTokenExpired(token: unknown): boolean;
-}
-
-function resolveTokenStatus(
-  tokenStorage: TokenStorageStatic,
-  token: unknown,
-): { suffix: string; needsAuthHint: boolean } {
-  const isExpired = tokenStorage.isTokenExpired(token);
-  if (isExpired === true) {
+function resolveTokenStatus(isExpired: boolean): {
+  suffix: string;
+  needsAuthHint: boolean;
+} {
+  if (isExpired) {
     return {
       suffix: ` ${COLOR_YELLOW}(OAuth token expired)${RESET_COLOR}`,
       needsAuthHint: true,
@@ -99,11 +93,10 @@ async function buildOAuthStatusSuffix(
         '@vybestack/llxprt-code-core'
       );
       const tokenStorage = new MCPOAuthTokenStorage();
-      const credentials = await tokenStorage.getCredentials(serverName);
+      const credentials = await tokenStorage.getToken(serverName);
       if (credentials !== null) {
         ({ suffix, needsAuthHint } = resolveTokenStatus(
-          MCPOAuthTokenStorage as unknown as TokenStorageStatic,
-          credentials.token,
+          MCPOAuthTokenStorage.isTokenExpired(credentials.token),
         ));
       } else {
         suffix = ` ${COLOR_RED}(OAuth not authenticated)${RESET_COLOR}`;

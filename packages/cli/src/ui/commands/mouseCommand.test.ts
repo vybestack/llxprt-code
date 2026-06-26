@@ -8,13 +8,12 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { disableMouseEvents, isMouseEventsActive } from '../utils/mouse.js';
 import { mouseCommand } from './mouseCommand.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 describe('mouseCommand', () => {
   const runMouseCommand = async (args: string) => {
     const action = mouseCommand.action;
-    if (!action) {
-      throw new Error('mouseCommand must have an action.');
-    }
+    assertDefined(action);
 
     return action(createMockCommandContext(), args);
   };

@@ -12,6 +12,7 @@ import {
   type ContinuationContext,
   type ContinuationState,
 } from './todoContinuationService.js';
+import { testRegex } from '../../test-utils/regex.js';
 
 describe('TodoContinuationService', () => {
   let service: TodoContinuationService;
@@ -68,8 +69,10 @@ describe('TodoContinuationService', () => {
         const result = service.generateContinuationPrompt(config);
 
         expect(result).toContain('Implement user registration feature');
-        expect(result).toMatch(/continue|proceed|working/i);
-        expect(result).not.toMatch(/urgent|critical|immediately/i);
+        expect(result).toMatch(testRegex('continue|proceed|working', 'i'));
+        expect(result).not.toMatch(
+          testRegex('urgent|critical|immediately', 'i'),
+        );
       });
 
       it('includes specific task description in prompt', () => {
@@ -109,7 +112,9 @@ describe('TodoContinuationService', () => {
         const result = service.generateContinuationPrompt(config);
 
         expect(result).toContain('Deploy production hotfix');
-        expect(result).toMatch(/urgent|critical|immediately|essential/i);
+        expect(result).toMatch(
+          testRegex('urgent|critical|immediately|essential', 'i'),
+        );
         expect(result.length).toBeGreaterThan(50); // YOLO prompts should be more detailed
       });
 
@@ -125,8 +130,12 @@ describe('TodoContinuationService', () => {
         );
 
         expect(standardPrompt).not.toStrictEqual(yoloPrompt);
-        expect(yoloPrompt).toMatch(/urgent|critical|immediately/i);
-        expect(standardPrompt).not.toMatch(/urgent|critical|immediately/i);
+        expect(yoloPrompt).toMatch(
+          testRegex('urgent|critical|immediately', 'i'),
+        );
+        expect(standardPrompt).not.toMatch(
+          testRegex('urgent|critical|immediately', 'i'),
+        );
       });
     });
 
@@ -140,7 +149,7 @@ describe('TodoContinuationService', () => {
       const result = service.generateContinuationPrompt(config);
 
       expect(result).toContain('Fix failing tests');
-      expect(result).toMatch(/attempt|retry|try again/i);
+      expect(result).toMatch(testRegex('attempt|retry|try again', 'i'));
     });
 
     it('handles previous failure information in prompts', () => {
@@ -167,7 +176,7 @@ describe('TodoContinuationService', () => {
       const result = service.generateContinuationPrompt(config);
 
       expect(result.length).toBeLessThan(longTask.length + 100); // Should be truncated
-      expect(result).toMatch(/\.\.\./); // Should have ellipsis
+      expect(result).toMatch(testRegex('\\.\\.\\.', '')); // Should have ellipsis
     });
   });
 
@@ -188,7 +197,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(true);
-        expect(result.reason).toMatch(/active.*todo/i);
+        expect(result.reason).toMatch(testRegex('active.*todo', 'i'));
         expect(result.activeTodo).toBeDefined();
       });
 
@@ -208,7 +217,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(false);
-        expect(result.reason).toMatch(/disabled/i);
+        expect(result.reason).toMatch(testRegex('disabled', 'i'));
       });
 
       it('continues when tool calls were made in current turn and todos remain active', () => {
@@ -222,7 +231,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(true);
-        expect(result.reason).toMatch(/active.*todo/i);
+        expect(result.reason).toMatch(testRegex('active.*todo', 'i'));
       });
 
       it('should not continue when no active todos exist', () => {
@@ -239,7 +248,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(false);
-        expect(result.reason).toMatch(/no.*active.*todo/i);
+        expect(result.reason).toMatch(testRegex('no.*active.*todo', 'i'));
       });
 
       it('stops continuation when todo_pause was triggered', () => {
@@ -273,7 +282,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(false);
-        expect(result.reason).toMatch(/attempt.*limit/i);
+        expect(result.reason).toMatch(testRegex('attempt.*limit', 'i'));
       });
 
       it('should not continue when already in continuation state', () => {
@@ -292,7 +301,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(false);
-        expect(result.reason).toMatch(/already.*continuing/i);
+        expect(result.reason).toMatch(testRegex('already.*continuing', 'i'));
       });
 
       it('should respect time constraints between continuation attempts', () => {
@@ -311,7 +320,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(false);
-        expect(result.reason).toMatch(/time.*constraint/i);
+        expect(result.reason).toMatch(testRegex('time.*constraint', 'i'));
       });
     });
 
@@ -423,7 +432,7 @@ describe('TodoContinuationService', () => {
       const result = service.checkContinuationConditions(context);
 
       expect(result.shouldContinue).toBe(false);
-      expect(result.reason).toMatch(/no.*active.*todo/i);
+      expect(result.reason).toMatch(testRegex('no.*active.*todo', 'i'));
       expect(result.activeTodo).toBeUndefined();
     });
 

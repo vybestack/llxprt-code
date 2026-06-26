@@ -11,6 +11,7 @@ import { extensionsCommand } from './extensionsCommand.js';
 import { type CommandContext } from './types.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { type ExtensionUpdateAction } from '../state/extensions.js';
+import { assertDefined } from '../../test-utils/assertions.js';
 
 vi.mock('../../config/extensions/update.js', () => ({
   updateExtension: vi.fn(),
@@ -45,9 +46,7 @@ describe('extensionsCommand', () => {
       mockGetExtensions.mockReturnValue([
         { name: 'test-ext', version: '1.0.0' },
       ]);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!extensionsCommand.action) throw new Error('Action not defined');
-      await extensionsCommand.action(mockContext, '');
+      await extensionsCommand.action!(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith({
         type: MessageType.EXTENSIONS_LIST,
@@ -57,9 +56,7 @@ describe('extensionsCommand', () => {
 
     it('should show a message if no extensions are installed', async () => {
       mockGetExtensions.mockReturnValue([]);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (!extensionsCommand.action) throw new Error('Action not defined');
-      await extensionsCommand.action(mockContext, '');
+      await extensionsCommand.action!(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
@@ -76,9 +73,7 @@ describe('extensionsCommand', () => {
       (cmd) => cmd.name === 'update',
     )?.action;
 
-    if (!updateAction) {
-      throw new Error('Update action not found');
-    }
+    assertDefined(updateAction);
 
     it('should show usage if no args are provided', async () => {
       await updateAction(mockContext, '');
@@ -268,9 +263,7 @@ describe('extensionsCommand', () => {
         (cmd) => cmd.name === 'update',
       )?.completion;
 
-      if (!updateCompletion) {
-        throw new Error('Update completion not found');
-      }
+      assertDefined(updateCompletion);
 
       const extensionOne: GeminiCLIExtension = {
         name: 'ext-one',

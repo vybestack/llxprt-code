@@ -109,7 +109,6 @@ function usePathSuggestionFetcher(
         debounceTimerRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable and mutation-based
   }, [
     pathToken,
     cwd,
@@ -119,6 +118,8 @@ function usePathSuggestionFetcher(
     setVisibleStartIndex,
     setShowSuggestions,
     setIsLoadingSuggestions,
+    generationRef,
+    debounceTimerRef,
   ]);
 }
 

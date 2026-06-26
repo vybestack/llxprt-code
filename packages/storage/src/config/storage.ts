@@ -20,6 +20,20 @@ const TMP_DIR_NAME = 'tmp';
 // so that it is a sibling of the secure-store directory.
 const platformPaths = envPaths('llxprt-code', { suffix: '' });
 
+function resolveSystemSettingsEnv(raw: string | undefined): string | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return undefined;
+  }
+  if (!path.isAbsolute(trimmed)) {
+    return undefined;
+  }
+  return path.resolve(trimmed);
+}
+
 export class Storage {
   private readonly targetDir: string;
 
@@ -104,8 +118,11 @@ export class Storage {
   }
 
   static getSystemSettingsPath(): string {
-    if (process.env['LLXPRT_SYSTEM_SETTINGS_PATH']) {
-      return process.env['LLXPRT_SYSTEM_SETTINGS_PATH'];
+    const sanitized = resolveSystemSettingsEnv(
+      process.env['LLXPRT_SYSTEM_SETTINGS_PATH'],
+    );
+    if (sanitized !== undefined) {
+      return sanitized;
     }
     if (os.platform() === 'darwin') {
       return '/Library/Application Support/LlxprtCode/settings.json';

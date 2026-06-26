@@ -29,6 +29,7 @@ import {
   ConfirmationRequiredError,
   ShellProcessor,
 } from './prompt-processors/shellProcessor.js';
+import { firstNonEmptyString } from '../utils/coalesce.js';
 
 interface CommandDirectory {
   path: string;
@@ -259,8 +260,10 @@ export class FileCommandLoader implements ICommandLoader {
     extensionName?: string,
   ): string {
     const defaultDescription = `Custom command from ${path.basename(filePath)}`;
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string description sentinel
-    let description = promptDescription || defaultDescription;
+    let description = firstNonEmptyString(
+      promptDescription,
+      defaultDescription,
+    );
     if (extensionName) {
       description = `[${extensionName}] ${description}`;
     }

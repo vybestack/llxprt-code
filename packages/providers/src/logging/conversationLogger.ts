@@ -53,7 +53,7 @@ export async function logConversationRequestEntry(
   logConversationRequest(config, event);
 
   const fileWriter = getConversationFileWriter(config.getConversationLogPath());
-  fileWriter.writeRequest(ctx.providerName, redactedContent, {
+  await fileWriter.writeRequest(ctx.providerName, redactedContent, {
     conversationId: ctx.conversationId,
     turnNumber: ctx.turnNumber,
     promptId: resolvedPromptId,
@@ -96,7 +96,7 @@ export async function logToolCallEntry(
     : (params as object);
 
   const fileWriter = getConversationFileWriter(config.getConversationLogPath());
-  fileWriter.writeToolCall(ctx.providerName, toolName, {
+  await fileWriter.writeToolCall(ctx.providerName, toolName, {
     conversationId: ctx.conversationId,
     turnNumber: ctx.turnNumber,
     params: redactedParams,

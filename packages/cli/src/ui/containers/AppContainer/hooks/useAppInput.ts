@@ -20,6 +20,7 @@ import { useInputHistoryStore } from '../../../hooks/useInputHistoryStore.js';
 import { useTodoPausePreserver } from '../../../hooks/useTodoPausePreserver.js';
 import { StreamingState, type HistoryItem } from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
+import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
 import { isEditorAvailable } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../../../config/settings.js';
@@ -274,9 +275,7 @@ function useInputBuffer(
       submitOAuthCode(
         {
           getOAuthManager: () => runtime.getCliOAuthManager(),
-          getActiveProvider: () =>
-            (global as unknown as { __oauth_provider?: string })
-              .__oauth_provider,
+          getActiveProvider: getPendingOAuthProvider,
         },
         code,
       );
@@ -458,11 +457,9 @@ function useInputFinish(
     (result: IdeIntegrationNudgeResult) => {
       if (result.userSelection === 'yes') {
         if (result.isExtensionPreInstalled) {
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          handleSlashCommand('/ide enable');
+          void handleSlashCommand('/ide enable');
         } else {
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          handleSlashCommand('/ide install');
+          void handleSlashCommand('/ide install');
         }
         settings.setValue(
           SettingScope.User,
@@ -495,8 +492,7 @@ function useInputFinish(
     addItem: p.addItem,
   });
   const handleSettingsRestart = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    handleSlashCommand('/quit');
+    void handleSlashCommand('/quit');
   }, [handleSlashCommand]);
   const isStreamingIdleOrResponding =
     streamingState === StreamingState.Idle ||

@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable complexity, eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import React, { Fragment, useEffect, useId } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
@@ -635,13 +633,15 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
     };
   }, [id, totalHiddenLines, addOverflowingId, removeOverflowingId]);
 
-  const visibleStyledText =
-    hiddenLinesCount > 0
-      ? // eslint-disable-next-line sonarjs/no-nested-conditional -- Existing structure is intentionally preserved; refactoring this boundary is outside the lint slice.
-        overflowDirection === 'top'
-        ? laidOutStyledText.slice(hiddenLinesCount, laidOutStyledText.length)
-        : laidOutStyledText.slice(0, visibleContentHeight)
-      : laidOutStyledText;
+  const getVisibleStyledText = () => {
+    if (hiddenLinesCount <= 0) {
+      return laidOutStyledText;
+    }
+    return overflowDirection === 'top'
+      ? laidOutStyledText.slice(hiddenLinesCount, laidOutStyledText.length)
+      : laidOutStyledText.slice(0, visibleContentHeight);
+  };
+  const visibleStyledText = getVisibleStyledText();
 
   const visibleLines = visibleStyledText.map((line, index) => (
     <Box key={index}>

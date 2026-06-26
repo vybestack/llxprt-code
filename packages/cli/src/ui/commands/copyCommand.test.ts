@@ -46,9 +46,6 @@ describe('copyCommand', () => {
   });
 
   it('should return info message when no history is available', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     // Mock no chat initialized
     mockContext = createMockCommandContext({
       services: {
@@ -62,7 +59,7 @@ describe('copyCommand', () => {
       },
     });
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -74,12 +71,9 @@ describe('copyCommand', () => {
   });
 
   it('should return info message when history is empty', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     mockGetHistory.mockReturnValue([]);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -91,9 +85,6 @@ describe('copyCommand', () => {
   });
 
   it('should return info message when no AI messages are found in history', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const historyWithUserOnly = [
       {
         role: 'user',
@@ -103,7 +94,7 @@ describe('copyCommand', () => {
 
     mockGetHistory.mockReturnValue(historyWithUserOnly);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -115,9 +106,6 @@ describe('copyCommand', () => {
   });
 
   it('should copy last AI message to clipboard successfully', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const historyWithAiMessage = [
       {
         role: 'user',
@@ -132,7 +120,7 @@ describe('copyCommand', () => {
     mockGetHistory.mockReturnValue(historyWithAiMessage);
     mockCopyToClipboard.mockResolvedValue(undefined);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -146,9 +134,6 @@ describe('copyCommand', () => {
   });
 
   it('should handle multiple text parts in AI message', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const historyWithMultipleParts = [
       {
         role: 'model',
@@ -159,7 +144,7 @@ describe('copyCommand', () => {
     mockGetHistory.mockReturnValue(historyWithMultipleParts);
     mockCopyToClipboard.mockResolvedValue(undefined);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Part 1: Part 2: Part 3');
     expect(result).toStrictEqual({
@@ -170,9 +155,6 @@ describe('copyCommand', () => {
   });
 
   it('should filter out non-text parts', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const historyWithMixedParts = [
       {
         role: 'model',
@@ -187,7 +169,7 @@ describe('copyCommand', () => {
     mockGetHistory.mockReturnValue(historyWithMixedParts);
     mockCopyToClipboard.mockResolvedValue(undefined);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Text part more text');
     expect(result).toStrictEqual({
@@ -198,9 +180,6 @@ describe('copyCommand', () => {
   });
 
   it('should get the last AI message when multiple AI messages exist', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const historyWithMultipleAiMessages = [
       {
         role: 'model',
@@ -219,7 +198,7 @@ describe('copyCommand', () => {
     mockGetHistory.mockReturnValue(historyWithMultipleAiMessages);
     mockCopyToClipboard.mockResolvedValue(undefined);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Second AI response');
     expect(result).toStrictEqual({
@@ -230,9 +209,6 @@ describe('copyCommand', () => {
   });
 
   it('should handle clipboard copy error', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const historyWithAiMessage = [
       {
         role: 'model',
@@ -244,7 +220,7 @@ describe('copyCommand', () => {
     const clipboardError = new Error('Clipboard access denied');
     mockCopyToClipboard.mockRejectedValue(clipboardError);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -254,9 +230,6 @@ describe('copyCommand', () => {
   });
 
   it('should handle non-Error clipboard errors', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const historyWithAiMessage = [
       {
         role: 'model',
@@ -268,7 +241,7 @@ describe('copyCommand', () => {
     const rejectedValue = 'String error';
     mockCopyToClipboard.mockRejectedValue(rejectedValue);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -278,9 +251,6 @@ describe('copyCommand', () => {
   });
 
   it('should return info message when no text parts found in AI message', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const historyWithEmptyParts = [
       {
         role: 'model',
@@ -290,7 +260,7 @@ describe('copyCommand', () => {
 
     mockGetHistory.mockReturnValue(historyWithEmptyParts);
 
-    const result = await copyCommand.action(mockContext, '');
+    const result = await copyCommand.action!(mockContext, '');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -302,14 +272,11 @@ describe('copyCommand', () => {
   });
 
   it('should handle unavailable config service', async () => {
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!copyCommand.action) throw new Error('Command has no action');
-
     const nullConfigContext = createMockCommandContext({
       services: { config: null },
     });
 
-    const result = await copyCommand.action(nullConfigContext, '');
+    const result = await copyCommand.action!(nullConfigContext, '');
 
     expect(result).toStrictEqual({
       type: 'message',

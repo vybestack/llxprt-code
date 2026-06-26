@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable eslint-comments/disable-enable-pair -- Phase 5: legacy UI boundary retained while larger decomposition continues. */
-
 import type React from 'react';
 import {
   createContext,
@@ -47,31 +45,46 @@ const ScrollContext = createContext<ScrollContextType | null>(null);
 const getOptionalBoundingBox = (element: DOMElement) =>
   getBoundingBox(element) as ReturnType<typeof getBoundingBox> | undefined;
 
+const getFocusedBoundingBox = (entry: ScrollableEntry) => {
+  if (!entry.ref.current || !entry.hasFocus()) {
+    return undefined;
+  }
+  return getOptionalBoundingBox(entry.ref.current);
+};
+
+const toScrollableCandidate = (
+  mouseEvent: MouseEvent,
+  entry: ScrollableEntry,
+): (ScrollableEntry & { area: number }) | null => {
+  if (!entry.ref.current || !entry.hasFocus()) {
+    return null;
+  }
+
+  const boundingBox = getOptionalBoundingBox(entry.ref.current);
+  if (!boundingBox) {
+    return null;
+  }
+
+  const { x, y, width, height } = boundingBox;
+  const isInside =
+    mouseEvent.col >= x &&
+    mouseEvent.col < x + width + 1 &&
+    mouseEvent.row >= y &&
+    mouseEvent.row < y + height;
+
+  return isInside ? { ...entry, area: width * height } : null;
+};
+
 const findScrollableCandidates = (
   mouseEvent: MouseEvent,
   scrollables: Map<string, ScrollableEntry>,
 ) => {
   const candidates: Array<ScrollableEntry & { area: number }> = [];
 
-  // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure preserved
   for (const entry of scrollables.values()) {
-    if (!entry.ref.current || !entry.hasFocus()) {
-      continue;
-    }
-
-    const boundingBox = getOptionalBoundingBox(entry.ref.current);
-    if (!boundingBox) continue;
-
-    const { x, y, width, height } = boundingBox;
-
-    const isInside =
-      mouseEvent.col >= x &&
-      mouseEvent.col < x + width + 1 &&
-      mouseEvent.row >= y &&
-      mouseEvent.row < y + height;
-
-    if (isInside) {
-      candidates.push({ ...entry, area: width * height });
+    const candidate = toScrollableCandidate(mouseEvent, entry);
+    if (candidate) {
+      candidates.push(candidate);
     }
   }
 
@@ -340,16 +353,12 @@ function useDragState(
 
   const handleLeftPress = useCallback(
     (mouseEvent: MouseEvent) => {
-      // eslint-disable-next-line sonarjs/too-many-break-or-continue-in-loop -- Existing structure preserved
       for (const entry of scrollablesRef.current.values()) {
-        if (!entry.ref.current || !entry.hasFocus()) {
-          continue;
-        }
-
-        const boundingBox = getOptionalBoundingBox(entry.ref.current);
-        if (!boundingBox) continue;
-
-        if (handleThumbClick(entry, mouseEvent, boundingBox, dragStateRef)) {
+        const boundingBox = getFocusedBoundingBox(entry);
+        if (
+          boundingBox &&
+          handleThumbClick(entry, mouseEvent, boundingBox, dragStateRef)
+        ) {
           return true;
         }
       }

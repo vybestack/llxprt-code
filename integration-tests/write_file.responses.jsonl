@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_write_file","name":"write_file","parameters":{"file_path":"{{CWD}}/dad.txt","content":"I'm reading a book about anti-gravity. It's impossible to put down!"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Created dad.txt with a dad joke."}],"metadata":{"usage":{"promptTokens":220,"completionTokens":10,"totalTokens":230}}}]}

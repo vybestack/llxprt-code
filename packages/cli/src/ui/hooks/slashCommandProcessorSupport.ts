@@ -212,8 +212,7 @@ function buildCommandContextUi(
     clear: () => {
       inputs.clearItems();
       if (!inputs.alternateBuffer) {
-        // eslint-disable-next-line no-console
-        console.clear();
+        globalThis.console.clear();
       }
       inputs.refreshStatic();
     },

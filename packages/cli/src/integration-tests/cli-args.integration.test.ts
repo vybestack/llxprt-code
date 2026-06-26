@@ -15,6 +15,7 @@ import {
   createTempKeyfile,
 } from './test-utils.js';
 import { runCli } from './cli-args-test-helpers.js';
+import { testRegex } from '../test-utils/regex.js';
 
 // Asserts that stdout contains a semantic-version string like "1.2.3".
 function expectVersionOutput(stdout: string): void {
@@ -479,7 +480,7 @@ describe('CLI --profile-load Integration Tests', () => {
       const fullOutput = result.stdout + result.stderr;
       // Should show auth error but not browser-related messages
       expect(fullOutput.toLowerCase()).not.toMatch(
-        /(?:opening|browser).*(?:browser|auth)/i,
+        testRegex('(?:opening|browser).*(?:browser|auth)', 'i'),
       );
     });
   });

@@ -1020,12 +1020,8 @@ describe('AgentRuntimeAdapter - Error Handling', () => {
     // @requirement REQ-STAT5-001.1
     // @pseudocode cli-runtime-adapter.md lines 575-579
 
-    try {
-      adapter.setProvider('invalid-provider');
-      expect.fail('Should have thrown error');
-    } catch (error) {
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect((error as Error).message).toMatch(/gemini|anthropic|openai/);
-    }
+    expect(() => adapter.setProvider('invalid-provider')).toThrow(
+      /gemini|anthropic|openai/,
+    );
   });
 });

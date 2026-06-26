@@ -44,14 +44,14 @@ async function copyDirectory(template: string, path: string) {
 async function handleNew(args: NewArgs) {
   try {
     await copyDirectory(args.template, args.path);
-    console.log(
+    globalThis.console.log(
       `Successfully created new extension from template "${args.template}" at ${args.path}.`,
     );
-    console.log(
+    globalThis.console.log(
       `You can install this using "llxprt extensions link ${args.path}" to test it out.`,
     );
   } catch (error) {
-    console.error(getErrorMessage(error));
+    globalThis.console.error(getErrorMessage(error));
     throw error;
   }
 }

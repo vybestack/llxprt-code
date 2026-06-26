@@ -57,6 +57,15 @@ export interface MachineSecretOptions {
    * Exposed for deterministic tests.
    */
   keyringLoader?: () => Promise<KeyringAdapter | null>;
+  /**
+   * When false, the provider only loads an existing secret (keyring → file)
+   * and returns null if none is found, instead of generating and persisting a
+   * new one. Read/decrypt paths use this so a missing or rotated secret fails
+   * closed without minting a new root of trust as a side effect of a read
+   * (which would otherwise orphan existing v:2 envelopes sealed under the
+   * prior secret). Defaults to true.
+   */
+  generateIfMissing?: boolean;
 }
 
 /**
@@ -137,14 +146,37 @@ export async function getMachineSecret(
 ): Promise<Buffer | null> {
   const key = sourceKeyOf(options);
   const entry = cache.get(key);
-  // Resolved cache hit: return the durable secret.
-  if (entry?.inFlight === null) {
+  // Resolved cache hit with a durable secret: always safe to return for any
+  // caller, regardless of generate-vs-read-only mode.
+  if (entry?.inFlight === null && entry.secret !== null) {
     return entry.secret;
   }
-  // In-flight generation: piggyback on the existing promise so concurrent
-  // callers for the same source share a single resolution.
+  // In-flight resolution: piggyback on the existing promise so concurrent
+  // callers for the same source share a single resolution and converge on the
+  // durable winner.
   if (entry?.inFlight) {
     return entry.inFlight;
+  }
+
+  // Read-only resolution (decrypt paths) must neither generate a new secret
+  // nor poison the shared cache with a negative result: the absence of a
+  // secret is not a durable fact (a later generating writer may create one),
+  // and a cached null would cause a subsequent read to fail closed even after
+  // a secret has been persisted. Resolve directly; only promote a positive
+  // result to the cache.
+  if (options?.generateIfMissing === false) {
+    const secret = await resolveAndPersist(options);
+    if (secret !== null) {
+      cache.set(key, { secret, inFlight: null });
+    }
+    return secret;
+  }
+
+  // Generating path: a cached null from a prior generating attempt is returned
+  // as-is so repeated generating calls that cannot persist degrade
+  // consistently.
+  if (entry?.inFlight === null) {
+    return entry.secret;
   }
 
   const promise = resolveAndPersist(options);
@@ -186,6 +218,13 @@ async function resolveAndPersist(
   }
 
   if (keyringRead.status === 'unusable' || fileRead.status === 'unusable') {
+    return null;
+  }
+
+  // Read-only resolution: no existing secret was found and the caller opted
+  // out of generation (e.g. a decrypt path). Fail closed with null rather than
+  // minting a new root of trust as a side effect of a read.
+  if (options?.generateIfMissing === false) {
     return null;
   }
 

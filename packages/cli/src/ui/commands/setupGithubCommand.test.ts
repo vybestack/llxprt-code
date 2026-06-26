@@ -17,6 +17,7 @@ import {
 } from './setupGithubCommand.js';
 import type { CommandContext, ToolActionReturn } from './types.js';
 import * as commandUtils from '../utils/commandUtils.js';
+import { assertTruthy } from '../../test-utils/assertions.js';
 
 vi.mock('child_process');
 
@@ -113,8 +114,7 @@ describe('setupGithubCommand', async () => {
       .catch(() => false);
     expect(gitignoreExists).toBe(true);
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!gitignoreExists) throw new Error('unreachable: narrowing failed');
+    assertTruthy(gitignoreExists);
     const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
     expect(gitignoreContent).toContain('.llxprt/');
     expect(gitignoreContent).toContain('gha-creds-*.json');
@@ -183,8 +183,7 @@ describe('setupGithubCommand', async () => {
       .catch(() => false);
     expect(gitignoreExists).toBe(true);
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (!gitignoreExists) throw new Error('unreachable: narrowing failed');
+    assertTruthy(gitignoreExists);
     const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
     expect(gitignoreContent).toContain('.llxprt/');
     expect(gitignoreContent).toContain('gha-creds-*.json');
@@ -276,8 +275,7 @@ describe('updateGitignore', () => {
     expect(content).toBe('.llxprt/\nsome-other-file\n\ngha-creds-*.json\n');
     expect(content).toContain('gha-creds-*.json');
     // Should not duplicate .llxprt/ entry
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty array is valid fallback for match result
-    expect((content.match(/\.llxprt\//g) || []).length).toBe(1);
+    expect((content.match(/\.llxprt\//g) ?? []).length).toBe(1);
   });
 
   it('does not get confused by entries in comments or as substrings', async () => {
