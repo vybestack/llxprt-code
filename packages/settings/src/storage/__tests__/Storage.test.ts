@@ -21,30 +21,73 @@ async function makeTempDir(): Promise<string> {
 
 describe('Storage — static path methods', () => {
   const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+  const originalDataHome = process.env['LLXPRT_DATA_HOME'];
+  const originalCacheHome = process.env['LLXPRT_CACHE_HOME'];
+  const originalLogHome = process.env['LLXPRT_LOG_HOME'];
 
   beforeEach(() => {
     delete process.env['LLXPRT_CONFIG_HOME'];
+    delete process.env['LLXPRT_DATA_HOME'];
+    delete process.env['LLXPRT_CACHE_HOME'];
+    delete process.env['LLXPRT_LOG_HOME'];
   });
 
   afterEach(() => {
-    if (originalConfigHome !== undefined) {
-      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
-    } else {
-      delete process.env['LLXPRT_CONFIG_HOME'];
+    for (const [key, original] of Object.entries({
+      LLXPRT_CONFIG_HOME: originalConfigHome,
+      LLXPRT_DATA_HOME: originalDataHome,
+      LLXPRT_CACHE_HOME: originalCacheHome,
+      LLXPRT_LOG_HOME: originalLogHome,
+    })) {
+      if (original !== undefined) {
+        process.env[key] = original;
+      } else {
+        delete process.env[key];
+      }
     }
   });
 
-  it('getGlobalLlxprtDir returns the platform configuration path', () => {
-    const result = Storage.getGlobalLlxprtDir();
-    // On Windows env-paths inserts a `Data` segment, so only assert the
-    // last path component is `configuration`.
-    expect(path.basename(result)).toBe('configuration');
+  it('getGlobalConfigDir returns the platform configuration path', () => {
+    const result = Storage.getGlobalConfigDir();
+    // The app-name segment is always the basename; the parent identifies the
+    // category (Preferences on macOS, Config on Windows, .config on Linux).
+    expect(path.basename(result)).toBe('llxprt-code');
+    const PLATFORM_PARENTS: Record<string, string> = {
+      darwin: 'Preferences',
+      win32: 'Config',
+    };
+    const expectedParent = PLATFORM_PARENTS[process.platform] ?? '.config';
+    expect(result).toContain(expectedParent);
   });
 
-  it('getGlobalLlxprtDir respects the LLXPRT_CONFIG_HOME override', () => {
+  it('getGlobalConfigDir respects the LLXPRT_CONFIG_HOME override', () => {
     const override = '/tmp/llxprt-override-test';
     process.env['LLXPRT_CONFIG_HOME'] = override;
-    expect(Storage.getGlobalLlxprtDir()).toBe(path.resolve(override));
+    expect(Storage.getGlobalConfigDir()).toBe(path.resolve(override));
+  });
+
+  it('getGlobalDataDir respects the LLXPRT_DATA_HOME override', () => {
+    const override = '/tmp/llxprt-data-override-test';
+    process.env['LLXPRT_DATA_HOME'] = override;
+    expect(Storage.getGlobalDataDir()).toBe(path.resolve(override));
+  });
+
+  it('getGlobalDataDir falls back to LLXPRT_CONFIG_HOME (backward compat)', () => {
+    const override = '/tmp/llxprt-fallback-test';
+    process.env['LLXPRT_CONFIG_HOME'] = override;
+    expect(Storage.getGlobalDataDir()).toBe(path.resolve(override));
+  });
+
+  it('getGlobalCacheDir respects the LLXPRT_CACHE_HOME override', () => {
+    const override = '/tmp/llxprt-cache-override-test';
+    process.env['LLXPRT_CACHE_HOME'] = override;
+    expect(Storage.getGlobalCacheDir()).toBe(path.resolve(override));
+  });
+
+  it('getGlobalLogDir respects the LLXPRT_LOG_HOME override', () => {
+    const override = '/tmp/llxprt-log-override-test';
+    process.env['LLXPRT_LOG_HOME'] = override;
+    expect(Storage.getGlobalLogDir()).toBe(path.resolve(override));
   });
 
   it('getLegacyLlxprtDir returns ~/.llxprt', () => {
@@ -67,9 +110,11 @@ describe('Storage — static path methods', () => {
     expect(result).toContain('provider_accounts.json');
   });
 
-  it('getGlobalTempDir returns a path under the configuration dir', () => {
+  it('getGlobalTempDir returns a path under the log dir', () => {
+    const override = '/tmp/llxprt-log-override-test';
+    process.env['LLXPRT_LOG_HOME'] = override;
     const result = Storage.getGlobalTempDir();
-    expect(result.startsWith(Storage.getGlobalLlxprtDir())).toBe(true);
+    expect(result.startsWith(path.resolve(override))).toBe(true);
     expect(path.basename(result)).toBe('tmp');
   });
 

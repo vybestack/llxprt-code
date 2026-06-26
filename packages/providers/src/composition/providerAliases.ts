@@ -77,7 +77,7 @@ export interface ProviderAliasEntry {
 }
 
 export function getUserAliasDir(): string {
-  return path.join(Storage.getGlobalLlxprtDir(), 'providers');
+  return path.join(Storage.getGlobalDataDir(), 'providers');
 }
 
 function getAliasDirectories(): Array<{

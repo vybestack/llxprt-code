@@ -53,7 +53,7 @@ export class FileTokenStorage extends BaseTokenStorage {
 
   constructor(serviceName: string, options?: FileTokenStorageOptions) {
     super(serviceName);
-    const configDir = Storage.getGlobalLlxprtDir();
+    const configDir = Storage.getGlobalDataDir();
     this.tokenFilePath =
       options?.tokenFilePath ??
       path.join(configDir, 'mcp-oauth-tokens-v2.json');

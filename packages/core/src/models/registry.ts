@@ -63,7 +63,7 @@ export class ModelRegistry {
    * Get the cache file path
    */
   private static getCachePath(): string {
-    const cacheDir = path.join(Storage.getGlobalLlxprtDir(), 'cache');
+    const cacheDir = Storage.getGlobalCacheDir();
     return path.join(cacheDir, CACHE_FILENAME);
   }
 

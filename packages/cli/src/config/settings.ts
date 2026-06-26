@@ -343,7 +343,7 @@ function findEnvFile(startDir: string): string | null {
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) {
       // check .env under home as fallback, again preferring gemini-specific .env
-      const homeGeminiEnvPath = path.join(Storage.getGlobalLlxprtDir(), '.env');
+      const homeGeminiEnvPath = path.join(Storage.getGlobalConfigDir(), '.env');
       if (fs.existsSync(homeGeminiEnvPath)) {
         return homeGeminiEnvPath;
       }
@@ -408,10 +408,11 @@ export function loadEnvironment(settings: Settings): void {
       const resolvedEnvPath = path.resolve(envFilePath);
       const pathSegments = resolvedEnvPath.split(path.sep);
       const isInLlxprtDir = pathSegments.includes(LLXPRT_DIR);
-      const globalDirResolved = path.resolve(Storage.getGlobalLlxprtDir());
-      const isInGlobalDir = resolvedEnvPath.startsWith(
-        globalDirResolved + path.sep,
-      );
+      const configDirResolved = path.resolve(Storage.getGlobalConfigDir());
+      const dataDirResolved = path.resolve(Storage.getGlobalDataDir());
+      const isInGlobalDir =
+        resolvedEnvPath.startsWith(configDirResolved + path.sep) ||
+        resolvedEnvPath.startsWith(dataDirResolved + path.sep);
       const isProjectEnvFile = !isInLlxprtDir && !isInGlobalDir;
 
       applyParsedEnv(parsedEnv, excludedVars, isProjectEnvFile);

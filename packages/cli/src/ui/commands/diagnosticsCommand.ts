@@ -266,7 +266,7 @@ function appendDumpContextInfo(
     diagnostics.push(`\n## Context Dumping`);
     diagnostics.push(`- Mode: ${dumpcontextMode}`);
     diagnostics.push(
-      `- Dump Directory: ${path.join(Storage.getGlobalLlxprtDir(), 'dumps')}`,
+      `- Dump Directory: ${path.join(Storage.getGlobalCacheDir(), 'dumps')}`,
     );
   }
 }

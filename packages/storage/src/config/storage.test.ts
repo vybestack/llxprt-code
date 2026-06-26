@@ -23,6 +23,17 @@ import {
   OAUTH_FILE,
 } from './storage.js';
 
+/**
+ * Returns the expected path segment for the current platform, avoiding
+ * nested ternary expressions that trigger sonarjs/no-nested-conditional.
+ */
+function platformSegment(darwin: string, win32: string, linux: string): string {
+  const platform = os.platform();
+  if (platform === 'darwin') return darwin;
+  if (platform === 'win32') return win32;
+  return linux;
+}
+
 const expectedDefaultSystemSettingsPath = (): string => {
   if (os.platform() === 'darwin') {
     return '/Library/Application Support/LlxprtCode/settings.json';
@@ -53,105 +64,251 @@ describe('Path / storage constants', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Storage method behavioral tests
-// Global paths are tested via the LLXPRT_CONFIG_HOME override so results are
-// deterministic regardless of the host platform. The override dir is set in
-// beforeEach and cleaned up in afterEach.
-// ---------------------------------------------------------------------------
-
+// Override dirs (one per category). Setting the category-specific override
+// makes the dir diverge from the others; setting only LLXPRT_CONFIG_HOME makes
+// all four resolve to the same path (backward-compat behavior).
 const OVERRIDE_DIR = path.join(os.tmpdir(), 'llxprt-test-config-home');
-const ORIGINAL_CONFIG_HOME = process.env['LLXPRT_CONFIG_HOME'];
+const DATA_OVERRIDE_DIR = path.join(os.tmpdir(), 'llxprt-test-data-home');
+const CACHE_OVERRIDE_DIR = path.join(os.tmpdir(), 'llxprt-test-cache-home');
+const LOG_OVERRIDE_DIR = path.join(os.tmpdir(), 'llxprt-test-log-home');
 
-describe('Storage – global path resolution', () => {
-  beforeEach(() => {
-    process.env['LLXPRT_CONFIG_HOME'] = OVERRIDE_DIR;
-  });
+// Snapshot/restore every env var touched by these tests so they cannot leak
+// into other suites.
+const ENV_KEYS = [
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+const ORIGINAL_ENV: Record<string, string | undefined> = {};
+for (const key of ENV_KEYS) {
+  ORIGINAL_ENV[key] = process.env[key];
+}
 
-  afterEach(() => {
-    if (ORIGINAL_CONFIG_HOME === undefined) {
-      delete process.env['LLXPRT_CONFIG_HOME'];
+function restoreEnv(): void {
+  for (const key of ENV_KEYS) {
+    if (ORIGINAL_ENV[key] === undefined) {
+      delete process.env[key];
     } else {
-      process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
+      process.env[key] = ORIGINAL_ENV[key];
     }
+  }
+}
+
+describe('Storage – category dir override resolution', () => {
+  beforeEach(() => {
+    // Only the config override is set; the other three should fall back to it.
+    process.env['LLXPRT_CONFIG_HOME'] = OVERRIDE_DIR;
+    delete process.env['LLXPRT_DATA_HOME'];
+    delete process.env['LLXPRT_CACHE_HOME'];
+    delete process.env['LLXPRT_LOG_HOME'];
   });
 
-  it('getGlobalLlxprtDir respects LLXPRT_CONFIG_HOME override', () => {
-    expect(Storage.getGlobalLlxprtDir()).toBe(OVERRIDE_DIR);
+  afterEach(restoreEnv);
+
+  it('getGlobalConfigDir respects LLXPRT_CONFIG_HOME override', () => {
+    expect(Storage.getGlobalConfigDir()).toBe(OVERRIDE_DIR);
   });
 
-  it('getGlobalSettingsPath returns <override>/settings.json', () => {
-    const expected = path.join(OVERRIDE_DIR, 'settings.json');
-    expect(Storage.getGlobalSettingsPath()).toBe(expected);
+  it('getGlobalDataDir falls back to LLXPRT_CONFIG_HOME (backward compat)', () => {
+    expect(Storage.getGlobalDataDir()).toBe(OVERRIDE_DIR);
   });
 
-  it('getUserCommandsDir returns <override>/commands', () => {
-    const expected = path.join(OVERRIDE_DIR, 'commands');
-    expect(Storage.getUserCommandsDir()).toBe(expected);
+  it('getGlobalCacheDir falls back to LLXPRT_CONFIG_HOME (backward compat)', () => {
+    expect(Storage.getGlobalCacheDir()).toBe(OVERRIDE_DIR);
   });
 
-  it('getMcpOAuthTokensPath returns <override>/mcp-oauth-tokens.json', () => {
-    const expected = path.join(OVERRIDE_DIR, 'mcp-oauth-tokens.json');
-    expect(Storage.getMcpOAuthTokensPath()).toBe(expected);
+  it('getGlobalLogDir falls back to LLXPRT_CONFIG_HOME (backward compat)', () => {
+    expect(Storage.getGlobalLogDir()).toBe(OVERRIDE_DIR);
   });
 
-  it('getGlobalMemoryFilePath returns <override>/memory.md', () => {
-    const expected = path.join(OVERRIDE_DIR, 'memory.md');
-    expect(Storage.getGlobalMemoryFilePath()).toBe(expected);
-  });
-
-  it('getInstallationIdPath returns <override>/installation_id', () => {
-    const expected = path.join(OVERRIDE_DIR, 'installation_id');
-    expect(Storage.getInstallationIdPath()).toBe(expected);
-  });
-
-  it('getProviderAccountsPath returns <override>/provider_accounts.json', () => {
-    const expected = path.join(OVERRIDE_DIR, 'provider_accounts.json');
-    expect(Storage.getProviderAccountsPath()).toBe(expected);
-  });
-
-  it('getOAuthCredsPath returns <override>/oauth_creds.json', () => {
-    const expected = path.join(OVERRIDE_DIR, 'oauth_creds.json');
-    expect(Storage.getOAuthCredsPath()).toBe(expected);
-  });
-
-  it('getGlobalTempDir returns <override>/tmp', () => {
-    const expected = path.join(OVERRIDE_DIR, 'tmp');
-    expect(Storage.getGlobalTempDir()).toBe(expected);
-  });
-
-  it('getMachineSecretPath returns <override>/machine_secret', () => {
-    const expected = path.join(OVERRIDE_DIR, 'machine_secret');
-    expect(Storage.getMachineSecretPath()).toBe(expected);
+  it('deprecated getGlobalLlxprtDir delegates to getGlobalConfigDir', () => {
+    expect(Storage.getGlobalLlxprtDir()).toBe(Storage.getGlobalConfigDir());
   });
 });
 
-describe('Storage – default platform path (no override)', () => {
+describe('Storage – category-specific overrides take precedence', () => {
+  beforeEach(() => {
+    // Set the config override AND each category-specific override so the four
+    // dirs diverge.
+    process.env['LLXPRT_CONFIG_HOME'] = OVERRIDE_DIR;
+    process.env['LLXPRT_DATA_HOME'] = DATA_OVERRIDE_DIR;
+    process.env['LLXPRT_CACHE_HOME'] = CACHE_OVERRIDE_DIR;
+    process.env['LLXPRT_LOG_HOME'] = LOG_OVERRIDE_DIR;
+  });
+
+  afterEach(restoreEnv);
+
+  it('getGlobalConfigDir ignores other category overrides', () => {
+    expect(Storage.getGlobalConfigDir()).toBe(OVERRIDE_DIR);
+  });
+
+  it('getGlobalDataDir prefers LLXPRT_DATA_HOME over LLXPRT_CONFIG_HOME', () => {
+    expect(Storage.getGlobalDataDir()).toBe(DATA_OVERRIDE_DIR);
+  });
+
+  it('getGlobalCacheDir prefers LLXPRT_CACHE_HOME over LLXPRT_CONFIG_HOME', () => {
+    expect(Storage.getGlobalCacheDir()).toBe(CACHE_OVERRIDE_DIR);
+  });
+
+  it('getGlobalLogDir prefers LLXPRT_LOG_HOME over LLXPRT_CONFIG_HOME', () => {
+    expect(Storage.getGlobalLogDir()).toBe(LOG_OVERRIDE_DIR);
+  });
+});
+
+describe('Storage – config-category methods resolve under config dir', () => {
+  beforeEach(() => {
+    process.env['LLXPRT_CONFIG_HOME'] = OVERRIDE_DIR;
+    process.env['LLXPRT_DATA_HOME'] = DATA_OVERRIDE_DIR;
+    process.env['LLXPRT_CACHE_HOME'] = CACHE_OVERRIDE_DIR;
+    process.env['LLXPRT_LOG_HOME'] = LOG_OVERRIDE_DIR;
+  });
+
+  afterEach(restoreEnv);
+
+  it('getGlobalSettingsPath returns <configDir>/settings.json', () => {
+    expect(Storage.getGlobalSettingsPath()).toBe(
+      path.join(OVERRIDE_DIR, 'settings.json'),
+    );
+  });
+
+  it('getUserCommandsDir returns <configDir>/commands', () => {
+    expect(Storage.getUserCommandsDir()).toBe(
+      path.join(OVERRIDE_DIR, 'commands'),
+    );
+  });
+
+  it('getUserSkillsDir returns <configDir>/skills (NOT under tmp)', () => {
+    const result = Storage.getUserSkillsDir();
+    expect(result).toBe(path.join(OVERRIDE_DIR, 'skills'));
+    expect(result).not.toContain(`${path.sep}tmp${path.sep}`);
+  });
+
+  it('getUserPoliciesDir returns <configDir>/policies', () => {
+    expect(Storage.getUserPoliciesDir()).toBe(
+      path.join(OVERRIDE_DIR, 'policies'),
+    );
+  });
+});
+
+describe('Storage – data-category methods resolve under data dir', () => {
+  beforeEach(() => {
+    process.env['LLXPRT_CONFIG_HOME'] = OVERRIDE_DIR;
+    process.env['LLXPRT_DATA_HOME'] = DATA_OVERRIDE_DIR;
+    process.env['LLXPRT_CACHE_HOME'] = CACHE_OVERRIDE_DIR;
+    process.env['LLXPRT_LOG_HOME'] = LOG_OVERRIDE_DIR;
+  });
+
+  afterEach(restoreEnv);
+
+  it('getMcpOAuthTokensPath returns <dataDir>/mcp-oauth-tokens.json', () => {
+    expect(Storage.getMcpOAuthTokensPath()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'mcp-oauth-tokens.json'),
+    );
+  });
+
+  it('getInstallationIdPath returns <dataDir>/installation_id', () => {
+    expect(Storage.getInstallationIdPath()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'installation_id'),
+    );
+  });
+
+  it('getMachineSecretPath returns <dataDir>/machine_secret', () => {
+    expect(Storage.getMachineSecretPath()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'machine_secret'),
+    );
+  });
+
+  it('getProviderAccountsPath returns <dataDir>/provider_accounts.json', () => {
+    expect(Storage.getProviderAccountsPath()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'provider_accounts.json'),
+    );
+  });
+
+  it('getGoogleAccountsPath returns <dataDir>/google_accounts.json', () => {
+    expect(Storage.getGoogleAccountsPath()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'google_accounts.json'),
+    );
+  });
+
+  it('getOAuthCredsPath returns <dataDir>/oauth_creds.json', () => {
+    expect(Storage.getOAuthCredsPath()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'oauth_creds.json'),
+    );
+  });
+
+  it('getGlobalMemoryFilePath returns <dataDir>/memory.md', () => {
+    expect(Storage.getGlobalMemoryFilePath()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'memory.md'),
+    );
+  });
+});
+
+describe('Storage – log/state-category methods resolve under log dir', () => {
+  beforeEach(() => {
+    process.env['LLXPRT_CONFIG_HOME'] = OVERRIDE_DIR;
+    process.env['LLXPRT_DATA_HOME'] = DATA_OVERRIDE_DIR;
+    process.env['LLXPRT_CACHE_HOME'] = CACHE_OVERRIDE_DIR;
+    process.env['LLXPRT_LOG_HOME'] = LOG_OVERRIDE_DIR;
+  });
+
+  afterEach(restoreEnv);
+
+  it('getGlobalTempDir returns <logDir>/tmp (NOT under config dir)', () => {
+    const result = Storage.getGlobalTempDir();
+    expect(result).toBe(path.join(LOG_OVERRIDE_DIR, 'tmp'));
+    // Confirm it is NOT resolving to the config dir.
+    expect(result).not.toBe(path.join(OVERRIDE_DIR, 'tmp'));
+    // Sanity: it should be a child of the log dir.
+    expect(path.dirname(result)).toBe(LOG_OVERRIDE_DIR);
+  });
+});
+
+describe('Storage – default platform paths (no overrides)', () => {
   beforeEach(() => {
     delete process.env['LLXPRT_CONFIG_HOME'];
+    delete process.env['LLXPRT_DATA_HOME'];
+    delete process.env['LLXPRT_CACHE_HOME'];
+    delete process.env['LLXPRT_LOG_HOME'];
   });
 
-  afterEach(() => {
-    if (ORIGINAL_CONFIG_HOME === undefined) {
-      delete process.env['LLXPRT_CONFIG_HOME'];
-    } else {
-      process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
-    }
+  afterEach(restoreEnv);
+
+  it('getGlobalConfigDir returns the platform config path without override', () => {
+    const result = Storage.getGlobalConfigDir();
+    // The app-name segment is always the basename; the parent identifies the
+    // category (Preferences on macOS, Config on Windows, .config on Linux).
+    expect(path.basename(result)).toBe('llxprt-code');
+    const expectedParent = platformSegment('Preferences', 'Config', '.config');
+    expect(result).toContain(expectedParent);
   });
 
-  it('getGlobalLlxprtDir returns a "configuration" suffix without override', () => {
-    const result = Storage.getGlobalLlxprtDir();
-    expect(result.endsWith(path.join('llxprt-code', 'configuration'))).toBe(
-      true,
+  it('getGlobalDataDir returns the platform data path without override', () => {
+    const result = Storage.getGlobalDataDir();
+    const expectedBasename = platformSegment(
+      'Application Support',
+      'Data',
+      'data',
     );
+    expect(result).toContain(expectedBasename);
   });
 
-  it('getGlobalLlxprtDir falls through to platform path when override is empty', () => {
+  it('getGlobalCacheDir returns the platform cache path without override', () => {
+    const result = Storage.getGlobalCacheDir();
+    const expectedBasename = platformSegment('Caches', 'Cache', 'cache');
+    expect(result).toContain(expectedBasename);
+  });
+
+  it('getGlobalLogDir returns the platform log/state path without override', () => {
+    const result = Storage.getGlobalLogDir();
+    const expectedBasename = platformSegment('Logs', 'Log', 'state');
+    expect(result).toContain(expectedBasename);
+  });
+
+  it('getGlobalConfigDir falls through to platform path when override is empty', () => {
     process.env['LLXPRT_CONFIG_HOME'] = '';
-    const result = Storage.getGlobalLlxprtDir();
-    expect(result.endsWith(path.join('llxprt-code', 'configuration'))).toBe(
-      true,
-    );
+    const result = Storage.getGlobalConfigDir();
+    expect(path.basename(result)).toBe('llxprt-code');
   });
 });
 
@@ -160,13 +317,7 @@ describe('Storage – legacy path', () => {
     process.env['LLXPRT_CONFIG_HOME'] = '/tmp/some-override';
   });
 
-  afterEach(() => {
-    if (ORIGINAL_CONFIG_HOME === undefined) {
-      delete process.env['LLXPRT_CONFIG_HOME'];
-    } else {
-      process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
-    }
-  });
+  afterEach(restoreEnv);
 
   it('getLegacyLlxprtDir returns ~/.llxprt regardless of override', () => {
     const expected = path.join(os.homedir(), '.llxprt');
@@ -179,13 +330,17 @@ describe('Storage – instance (workspace-local) helpers', () => {
   let storage: Storage;
 
   beforeEach(() => {
+    // With only the config override set, all four category dirs collapse to
+    // the same path, so getGlobalTempDir() / getHistoryDir() behave exactly
+    // as the previous single-dir implementation did.
     process.env['LLXPRT_CONFIG_HOME'] = OVERRIDE_DIR;
+    delete process.env['LLXPRT_DATA_HOME'];
+    delete process.env['LLXPRT_CACHE_HOME'];
+    delete process.env['LLXPRT_LOG_HOME'];
     storage = new Storage(projectRoot);
   });
 
-  afterEach(() => {
-    delete process.env['LLXPRT_CONFIG_HOME'];
-  });
+  afterEach(restoreEnv);
 
   it('getWorkspaceSettingsPath returns project/.llxprt/settings.json', () => {
     const expected = path.join(projectRoot, '.llxprt', 'settings.json');
@@ -248,7 +403,7 @@ describe('Storage – instance (workspace-local) helpers', () => {
 
   it('getHistoryDir is located directly under the global history dir', () => {
     expect(path.dirname(storage.getHistoryDir())).toBe(
-      path.join(Storage.getGlobalLlxprtDir(), 'history'),
+      path.join(Storage.getGlobalDataDir(), 'history'),
     );
   });
 

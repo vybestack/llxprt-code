@@ -92,7 +92,7 @@ function resolveSettings(
 }
 
 function createFileStateStore(): ExtensionAutoUpdateStateStore {
-  const dir = Storage.getGlobalLlxprtDir();
+  const dir = Storage.getGlobalDataDir();
   const filePath = path.join(dir, STATE_FILENAME);
 
   return {

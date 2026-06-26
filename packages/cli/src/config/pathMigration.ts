@@ -11,11 +11,78 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:config:pathMigration');
 
+// ─── Legacy entry categorization ──────────────────────────────────────────
+
 /**
- * The `secure-store/` subdirectory is managed by a separate migration
- * (issue #1357) and must not be copied here.
+ * Top-level entries in legacy `~/.llxprt/` that belong to the **config**
+ * category (user-editable configuration files).
+ */
+const CONFIG_ENTRIES = new Set([
+  'settings.json',
+  'profiles',
+  'subagents',
+  'prompts',
+  'commands',
+  'policies',
+  'sandboxes',
+  'hooks',
+  '.env',
+  'LLXPRT.md',
+  '.LLXPRT_SYSTEM',
+]);
+
+/**
+ * Top-level entries in legacy `~/.llxprt/` that belong to the **data**
+ * category (app-managed state, credentials, runtime data).
+ */
+const DATA_ENTRIES = new Set([
+  'oauth_creds.json',
+  'google_accounts.json',
+  'provider_accounts.json',
+  'mcp-oauth-tokens.json',
+  'installation_id',
+  'machine_secret',
+  'memory.md',
+  'conversations',
+  'history',
+  'todos',
+  'tools',
+  'locks',
+  'providers',
+  'extensions',
+]);
+
+/**
+ * Top-level entries in legacy `~/.llxprt/` that belong to the **cache**
+ * category (non-essential, regenerable files).
+ */
+const CACHE_ENTRIES = new Set(['cache', 'dumps']);
+
+/**
+ * Top-level entries in legacy `~/.llxprt/` that belong to the **log/state**
+ * category (debug logs, undo checkpoints, runtime state).
+ */
+const LOG_ENTRIES = new Set(['debug', 'tmp']);
+
+/**
+ * Entries excluded from migration (managed by other migrations).
+ * `secure-store/` is handled by issue #1357.
  */
 const EXCLUDED_ENTRIES = new Set(['secure-store']);
+
+/**
+ * The `skills` subdirectory inside `tmp/` is a known historical misplacement
+ * (skills are user-installed configuration, not temporary state). During
+ * migration, `tmp/skills/` is routed to the config dir, not the log dir.
+ */
+const TMP_SKILLS_DIR = 'skills';
+
+export interface MigrationDestinations {
+  readonly configDir: string;
+  readonly dataDir: string;
+  readonly cacheDir: string;
+  readonly logDir: string;
+}
 
 export interface MigrationResult {
   readonly migrated: boolean;
@@ -24,15 +91,52 @@ export interface MigrationResult {
   readonly error?: boolean;
 }
 
+type Category = 'config' | 'data' | 'cache' | 'log' | 'exclude' | 'unknown';
+
+function categorizeEntry(name: string): Category {
+  if (EXCLUDED_ENTRIES.has(name)) return 'exclude';
+  if (CONFIG_ENTRIES.has(name)) return 'config';
+  if (DATA_ENTRIES.has(name)) return 'data';
+  if (CACHE_ENTRIES.has(name)) return 'cache';
+  if (LOG_ENTRIES.has(name)) return 'log';
+  // Unknown entries default to data (safest — preserves them)
+  return 'unknown';
+}
+
+function getDestDir(
+  category: Category,
+  destinations: MigrationDestinations,
+): string {
+  switch (category) {
+    case 'config':
+      return destinations.configDir;
+    case 'data':
+    case 'unknown':
+      return destinations.dataDir;
+    case 'cache':
+      return destinations.cacheDir;
+    case 'log':
+      return destinations.logDir;
+    default:
+      return destinations.dataDir;
+  }
+}
+
 /**
  * Returns true when the legacy `~/.llxprt/` directory has content and the
- * new platform-standard path does not yet exist (or is empty).
+ * config category directory does not yet exist (or is empty). The config
+ * dir is used as the primary indicator of whether migration was already
+ * performed, since it contains the most critical files (settings.json,
+ * profiles, etc.).
  *
  * Returns false when:
  * - The legacy directory does not exist or is empty (fresh install)
- * - The new directory already has content (migration already done)
+ * - The config directory already has content (migration already done)
  */
-export function shouldMigrate(legacyDir: string, newDir: string): boolean {
+export function shouldMigrate(
+  legacyDir: string,
+  destinations: MigrationDestinations,
+): boolean {
   if (!fs.existsSync(legacyDir)) {
     return false;
   }
@@ -41,7 +145,10 @@ export function shouldMigrate(legacyDir: string, newDir: string): boolean {
     return false;
   }
 
-  if (fs.existsSync(newDir) && directoryHasContent(newDir)) {
+  if (
+    fs.existsSync(destinations.configDir) &&
+    directoryHasContent(destinations.configDir)
+  ) {
     return false;
   }
 
@@ -49,16 +156,16 @@ export function shouldMigrate(legacyDir: string, newDir: string): boolean {
 }
 
 /**
- * Recursively copies the contents of the legacy directory to the new
- * platform-standard path, excluding `secure-store/`. The legacy directory
- * is left untouched so the user can verify the migration before removing it.
+ * Routes each legacy top-level entry to its correct category directory and
+ * copies it using merge semantics (never overwrites existing files).
  *
- * Uses a two-phase copy (stage → rename) so that a partially written copy
- * never appears at the final destination.
+ * The `tmp/` directory receives special treatment: its `skills/` subdirectory
+ * is copied to the config dir (fixing a historical misplacement), while the
+ * remaining contents go to the log dir.
  */
 export function performMigration(
   legacyDir: string,
-  newDir: string,
+  destinations: MigrationDestinations,
 ): MigrationResult {
   if (!fs.existsSync(legacyDir)) {
     return {
@@ -68,52 +175,102 @@ export function performMigration(
     };
   }
 
-  // Ensure the parent of newDir exists before creating a staging directory inside it.
-  fs.mkdirSync(path.dirname(newDir), { recursive: true });
+  let filesCopied = 0;
+  const visited = new Set<string>();
 
-  const stagingDir = fs.mkdtempSync(
-    path.join(path.dirname(newDir), '.llxprt-migration-staging-'),
-  );
-
+  let entries: fs.Dirent[];
   try {
-    const filesCopied = copyDirFiltered(
-      legacyDir,
-      stagingDir,
-      legacyDir,
-      newDir,
-    );
-
-    if (filesCopied === 0) {
-      fs.rmSync(stagingDir, { recursive: true, force: true });
-      return {
-        migrated: false,
-        reason: 'no files to migrate (only excluded entries)',
-        filesCopied: 0,
-      };
-    }
-
-    if (fs.existsSync(newDir)) {
-      const mergedCount = mergeDirectories(stagingDir, newDir);
-      fs.rmSync(stagingDir, { recursive: true, force: true });
-      return {
-        migrated: true,
-        reason: 'migration complete (merged)',
-        filesCopied: mergedCount,
-      };
-    }
-
-    fs.renameSync(stagingDir, newDir);
-
-    return {
-      migrated: true,
-      reason: 'migration complete',
-      filesCopied,
-    };
+    entries = fs.readdirSync(legacyDir, { withFileTypes: true });
   } catch (error) {
-    fs.rmSync(stagingDir, { recursive: true, force: true });
-    logger.error('Migration failed:', error);
-    throw error;
+    logger.debug(`Cannot read legacy directory ${legacyDir}: ${String(error)}`);
+    return {
+      migrated: false,
+      reason: 'cannot read legacy directory',
+      filesCopied: 0,
+    };
   }
+
+  for (const entry of entries) {
+    const category = categorizeEntry(entry.name);
+
+    if (category === 'exclude') {
+      continue;
+    }
+
+    if (entry.name === 'tmp' && entry.isDirectory()) {
+      filesCopied += migrateTmpDir(legacyDir, destinations, visited);
+    } else {
+      const destDir = getDestDir(category, destinations);
+      fs.mkdirSync(destDir, { recursive: true });
+
+      const srcPath = path.join(legacyDir, entry.name);
+      const destPath = path.join(destDir, entry.name);
+
+      filesCopied += copyEntry(srcPath, destPath, legacyDir, destDir, visited);
+    }
+  }
+
+  if (filesCopied === 0) {
+    return {
+      migrated: false,
+      reason: 'no files to migrate (only excluded entries)',
+      filesCopied: 0,
+    };
+  }
+
+  return {
+    migrated: true,
+    reason: 'migration complete',
+    filesCopied,
+  };
+}
+
+/**
+ * Copies the contents of `~/.llxprt/tmp/`, routing `skills/` to the config
+ * dir and everything else to `logDir/tmp/`.
+ */
+function migrateTmpDir(
+  legacyDir: string,
+  destinations: MigrationDestinations,
+  visited: Set<string>,
+): number {
+  let count = 0;
+  const tmpPath = path.join(legacyDir, 'tmp');
+
+  let tmpEntries: fs.Dirent[];
+  try {
+    tmpEntries = fs.readdirSync(tmpPath, { withFileTypes: true });
+  } catch (error) {
+    logger.debug(`Cannot read tmp directory ${tmpPath}: ${String(error)}`);
+    return 0;
+  }
+
+  for (const subEntry of tmpEntries) {
+    if (subEntry.name === TMP_SKILLS_DIR) {
+      // Route tmp/skills → configDir/skills
+      fs.mkdirSync(destinations.configDir, { recursive: true });
+      count += copyEntry(
+        path.join(tmpPath, TMP_SKILLS_DIR),
+        path.join(destinations.configDir, TMP_SKILLS_DIR),
+        legacyDir,
+        destinations.configDir,
+        visited,
+      );
+    } else {
+      // Route tmp/<x> → logDir/tmp/<x>
+      const logTmpDir = path.join(destinations.logDir, 'tmp');
+      fs.mkdirSync(logTmpDir, { recursive: true });
+      count += copyEntry(
+        path.join(tmpPath, subEntry.name),
+        path.join(logTmpDir, subEntry.name),
+        legacyDir,
+        destinations.logDir,
+        visited,
+      );
+    }
+  }
+
+  return count;
 }
 
 /**
@@ -122,7 +279,12 @@ export function performMigration(
  */
 export function runStartupMigration(): MigrationResult {
   const legacyDir = Storage.getLegacyLlxprtDir();
-  const newDir = Storage.getGlobalLlxprtDir();
+  const destinations: MigrationDestinations = {
+    configDir: Storage.getGlobalConfigDir(),
+    dataDir: Storage.getGlobalDataDir(),
+    cacheDir: Storage.getGlobalCacheDir(),
+    logDir: Storage.getGlobalLogDir(),
+  };
 
   if (process.env['LLXPRT_CONFIG_HOME']) {
     return {
@@ -132,8 +294,11 @@ export function runStartupMigration(): MigrationResult {
     };
   }
 
-  if (!shouldMigrate(legacyDir, newDir)) {
-    if (fs.existsSync(newDir) && directoryHasContent(newDir)) {
+  if (!shouldMigrate(legacyDir, destinations)) {
+    if (
+      fs.existsSync(destinations.configDir) &&
+      directoryHasContent(destinations.configDir)
+    ) {
       logger.debug(
         'Platform config already populated; skipping migration from legacy path.',
       );
@@ -141,11 +306,15 @@ export function runStartupMigration(): MigrationResult {
     return { migrated: false, reason: 'no migration needed', filesCopied: 0 };
   }
 
-  logger.debug(`Migrating configuration from ${legacyDir} to ${newDir}…`);
+  logger.debug(
+    `Migrating configuration from ${legacyDir} to platform-standard paths ` +
+      `(config: ${destinations.configDir}, data: ${destinations.dataDir}, ` +
+      `cache: ${destinations.cacheDir}, log: ${destinations.logDir})…`,
+  );
 
   try {
-    const result = performMigration(legacyDir, newDir);
-    logMigrationStatus(legacyDir, newDir, result);
+    const result = performMigration(legacyDir, destinations);
+    logMigrationStatus(legacyDir, destinations, result);
     return result;
   } catch (error) {
     logger.error('Configuration migration failed:', error);
@@ -163,13 +332,17 @@ export function runStartupMigration(): MigrationResult {
  */
 export function logMigrationStatus(
   legacyDir: string,
-  newDir: string,
+  destinations: MigrationDestinations,
   result: MigrationResult,
 ): void {
   if (result.migrated) {
     process.stderr.write(
       `Configuration migrated successfully (${result.filesCopied} files copied) ` +
-        `to ${newDir}. ` +
+        `to platform-standard paths.\n` +
+        `  Config: ${destinations.configDir}\n` +
+        `  Data:   ${destinations.dataDir}\n` +
+        `  Cache:  ${destinations.cacheDir}\n` +
+        `  Logs:   ${destinations.logDir}\n` +
         `The old directory at ${legacyDir} can be removed manually once verified.\n`,
     );
   }
@@ -226,17 +399,61 @@ function pathEntryExists(p: string): boolean {
 }
 
 /**
+ * Copies a single entry (file, directory, or symlink) from `srcPath` to
+ * `destPath`, using merge semantics — existing destination files are never
+ * overwritten. Returns the count of regular files copied.
+ */
+function copyEntry(
+  srcPath: string,
+  destPath: string,
+  legacyRoot: string,
+  destRoot: string,
+  visited: Set<string>,
+): number {
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(srcPath);
+  } catch (error) {
+    logger.debug(`Skipping inaccessible entry: ${srcPath}: ${String(error)}`);
+    return 0;
+  }
+
+  if (stat.isSymbolicLink()) {
+    if (pathEntryExists(destPath)) {
+      return 0;
+    }
+    createSymlinkClone(srcPath, destPath, legacyRoot, destRoot);
+    return 1;
+  }
+
+  if (stat.isFile()) {
+    if (pathEntryExists(destPath)) {
+      return 0;
+    }
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.copyFileSync(srcPath, destPath);
+    return 1;
+  }
+
+  if (stat.isDirectory()) {
+    return copyDirFiltered(srcPath, destPath, legacyRoot, destRoot, visited);
+  }
+
+  return 0;
+}
+
+/**
  * Recursively copies `src` into `dest`, skipping entries listed in
- * {@link EXCLUDED_ENTRIES}. Returns the count of regular files copied.
- * Tracks visited real paths to prevent infinite recursion via symlink cycles.
+ * {@link EXCLUDED_ENTRIES} at the root level. Returns the count of regular
+ * files copied. Tracks visited real paths to prevent infinite recursion via
+ * symlink cycles.
  */
 function copyDirFiltered(
   src: string,
   dest: string,
   legacyRoot: string,
   destRoot: string,
-  visited: Set<string> = new Set(),
-  depth: number = 0,
+  visited: Set<string>,
 ): number {
   let realSrc: string;
   try {
@@ -254,30 +471,25 @@ function copyDirFiltered(
   visited.add(realSrc);
 
   let count = 0;
+  fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (depth === 0 && EXCLUDED_ENTRIES.has(entry.name)) {
-      continue;
-    }
-
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
 
     if (entry.isDirectory()) {
-      fs.mkdirSync(destPath, { recursive: true });
       count += copyDirFiltered(
         srcPath,
         destPath,
         legacyRoot,
         destRoot,
         visited,
-        depth + 1,
       );
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !pathEntryExists(destPath)) {
       fs.copyFileSync(srcPath, destPath);
       count++;
-    } else if (entry.isSymbolicLink()) {
+    } else if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
       createSymlinkClone(srcPath, destPath, legacyRoot, destRoot);
       count++;
     }
@@ -311,38 +523,4 @@ function createSymlinkClone(
     const rebased = path.relative(path.dirname(destPath), resolvedTarget);
     fs.symlinkSync(rebased, destPath);
   }
-}
-
-/**
- * Merges `staging` into `dest` file by file, **never overwriting** existing
- * destination files. Used when the destination already exists (e.g. partially
- * populated from a prior interrupted run or concurrent process).
- */
-function mergeDirectories(staging: string, dest: string): number {
-  let count = 0;
-  const entries = fs.readdirSync(staging, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const stagingPath = path.join(staging, entry.name);
-    const destPath = path.join(dest, entry.name);
-
-    if (entry.isDirectory()) {
-      if (pathEntryExists(destPath) && !fs.lstatSync(destPath).isDirectory()) {
-        logger.debug(
-          `Skipping ${entry.name}: type mismatch (dir vs file) at ${destPath}`,
-        );
-        continue;
-      }
-      fs.mkdirSync(destPath, { recursive: true });
-      count += mergeDirectories(stagingPath, destPath);
-    } else if (entry.isFile() && !pathEntryExists(destPath)) {
-      fs.copyFileSync(stagingPath, destPath);
-      count++;
-    } else if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
-      const linkTarget = fs.readlinkSync(stagingPath);
-      fs.symlinkSync(linkTarget, destPath);
-      count++;
-    }
-  }
-  return count;
 }

@@ -334,7 +334,7 @@ function setupProcessLifecycle(): () => void {
     );
     process.env['LLXPRT_CONFIG_HOME'] = legacyDir;
   }
-  const llxprtDir = Storage.getGlobalLlxprtDir();
+  const llxprtDir = Storage.getGlobalConfigDir();
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }

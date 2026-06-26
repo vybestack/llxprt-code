@@ -44,10 +44,10 @@ const KEYCHAIN_SERVICE = 'llxprt-code-tool-keys';
 const KEYFILES_JSON_NAME = 'keyfiles.json';
 const DEFAULT_TOOLS_DIR = (): string => {
   try {
-    return path.join(Storage.getGlobalLlxprtDir(), 'tools');
+    return path.join(Storage.getGlobalDataDir(), 'tools');
   } catch (error) {
     debugLogger.warn(
-      `Storage.getGlobalLlxprtDir() threw, falling back: ${String(error)}`,
+      `Storage.getGlobalDataDir() threw, falling back: ${String(error)}`,
     );
   }
 

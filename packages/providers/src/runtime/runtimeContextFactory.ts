@@ -287,7 +287,7 @@ function resolveRuntimeConfig(
   // (registerAgentRuntimeFactories) to avoid a providers→agents cycle.
   attachAgentRuntimeFactories(config);
 
-  const llxprtDir = Storage.getGlobalLlxprtDir();
+  const llxprtDir = Storage.getGlobalConfigDir();
   const resolvedProfileManager =
     config.getProfileManager() ??
     new ProfileManager(path.join(llxprtDir, 'profiles'));

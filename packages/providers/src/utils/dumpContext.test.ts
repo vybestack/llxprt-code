@@ -11,7 +11,7 @@ import * as os from 'node:os';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { dumpContext, redactSensitiveData, shouldDump } from './dumpContext.js';
 
-// Sandbox the config home before Storage.getGlobalLlxprtDir() is evaluated,
+// Sandbox the config home before Storage.getGlobalCacheDir() is evaluated,
 // so tests do not write to the real user data directory.
 const TEST_CONFIG_HOME = path.join(
   os.tmpdir(),
@@ -20,7 +20,7 @@ const TEST_CONFIG_HOME = path.join(
 const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
 process.env['LLXPRT_CONFIG_HOME'] = TEST_CONFIG_HOME;
 
-const testDumpDir = path.join(Storage.getGlobalLlxprtDir(), 'dumps');
+const testDumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
 
 function matchesDumpBaseIdFormat(baseId: string, provider: string): boolean {
   const parts = baseId.split('-');

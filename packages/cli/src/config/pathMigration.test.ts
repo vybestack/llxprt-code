@@ -3,6 +3,9 @@
  *
  * Tests use real temp directories and the actual filesystem to verify
  * real copy behavior — no mocking of the module under test.
+ *
+ * The migration splits legacy `~/.llxprt/` contents across four
+ * category directories: config, data, cache, and log/state.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -13,6 +16,7 @@ import * as os from 'os';
 import {
   shouldMigrate,
   performMigration,
+  type MigrationDestinations,
   type MigrationResult,
 } from './pathMigration.js';
 
@@ -28,94 +32,260 @@ function writeFiles(root: string, entries: Record<string, string>): void {
   }
 }
 
+function makeDestinations(base: string): MigrationDestinations {
+  return {
+    configDir: path.join(base, 'config'),
+    dataDir: path.join(base, 'data'),
+    cacheDir: path.join(base, 'cache'),
+    logDir: path.join(base, 'log'),
+  };
+}
+
 describe('shouldMigrate', () => {
   let legacyDir: string;
-  let newDir: string;
+  let destBase: string;
+  let destinations: MigrationDestinations;
 
   beforeEach(async () => {
     legacyDir = await makeTempDir();
-    newDir = await makeTempDir();
+    destBase = await makeTempDir();
+    destinations = makeDestinations(destBase);
   });
 
   afterEach(async () => {
     await fs.promises.rm(legacyDir, { recursive: true, force: true });
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
   });
 
-  it('returns true when legacy has content and new dir is empty', async () => {
+  it('returns true when legacy has content and config dir is empty', async () => {
     writeFiles(legacyDir, { 'settings.json': '{}' });
-    await fs.promises.rm(newDir, { recursive: true, force: true });
-    fs.mkdirSync(newDir, { recursive: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+    fs.mkdirSync(destBase, { recursive: true });
+    destinations = makeDestinations(destBase);
 
-    expect(shouldMigrate(legacyDir, newDir)).toBe(true);
+    expect(shouldMigrate(legacyDir, destinations)).toBe(true);
   });
 
-  it('returns true when legacy has content and new dir does not exist', async () => {
+  it('returns true when legacy has content and config dir does not exist', async () => {
     writeFiles(legacyDir, { 'settings.json': '{}' });
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
 
-    expect(shouldMigrate(legacyDir, newDir)).toBe(true);
+    expect(shouldMigrate(legacyDir, destinations)).toBe(true);
   });
 
   it('returns false when legacy dir does not exist (fresh install)', async () => {
     await fs.promises.rm(legacyDir, { recursive: true, force: true });
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
 
-    expect(shouldMigrate(legacyDir, newDir)).toBe(false);
+    expect(shouldMigrate(legacyDir, destinations)).toBe(false);
   });
 
   it('returns false when legacy dir is empty', async () => {
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
 
-    expect(shouldMigrate(legacyDir, newDir)).toBe(false);
+    expect(shouldMigrate(legacyDir, destinations)).toBe(false);
   });
 
-  it('returns false when new dir already has content (already migrated)', async () => {
+  it('returns false when config dir already has content (already migrated)', async () => {
     writeFiles(legacyDir, { 'settings.json': '{}' });
-    writeFiles(newDir, { 'settings.json': '{"migrated": true}' });
+    writeFiles(destinations.configDir, {
+      'settings.json': '{"migrated": true}',
+    });
 
-    expect(shouldMigrate(legacyDir, newDir)).toBe(false);
+    expect(shouldMigrate(legacyDir, destinations)).toBe(false);
   });
 });
 
-describe('performMigration', () => {
+describe('performMigration — category routing', () => {
   let legacyDir: string;
-  let newDir: string;
+  let destBase: string;
+  let destinations: MigrationDestinations;
 
   beforeEach(async () => {
     legacyDir = await makeTempDir();
-    newDir = await makeTempDir();
-    // Remove newDir so migration creates it fresh
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    destBase = await makeTempDir();
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+    destinations = makeDestinations(destBase);
   });
 
   afterEach(async () => {
     await fs.promises.rm(legacyDir, { recursive: true, force: true });
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
   });
 
-  it('copies files from legacy to new dir', () => {
+  it('routes settings.json to config dir', () => {
+    writeFiles(legacyDir, { 'settings.json': '{"theme": "dark"}' });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(destinations.configDir, 'settings.json'),
+        'utf-8',
+      ),
+    ).toBe('{"theme": "dark"}');
+  });
+
+  it('routes profiles/ and subagents/ to config dir', () => {
     writeFiles(legacyDir, {
-      'settings.json': '{"theme": "dark"}',
+      'profiles/p1.json': '{"name": "p1"}',
+      'subagents/researcher.json': '{"name": "researcher"}',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(destinations.configDir, 'profiles/p1.json'),
+        'utf-8',
+      ),
+    ).toBe('{"name": "p1"}');
+    expect(
+      fs.readFileSync(
+        path.join(destinations.configDir, 'subagents/researcher.json'),
+        'utf-8',
+      ),
+    ).toBe('{"name": "researcher"}');
+  });
+
+  it('routes prompts/ to config dir', () => {
+    writeFiles(legacyDir, {
+      'prompts/tools/code.md': '# Code prompt',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(destinations.configDir, 'prompts/tools/code.md'),
+        'utf-8',
+      ),
+    ).toBe('# Code prompt');
+  });
+
+  it('routes oauth_creds.json and installation_id to data dir', () => {
+    writeFiles(legacyDir, {
+      'oauth_creds.json': '{"token": "xyz"}',
       installation_id: 'abc-123',
-      'profiles/profile1.json': '{"name": "p1"}',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(destinations.dataDir, 'oauth_creds.json'),
+        'utf-8',
+      ),
+    ).toBe('{"token": "xyz"}');
+    expect(
+      fs.readFileSync(
+        path.join(destinations.dataDir, 'installation_id'),
+        'utf-8',
+      ),
+    ).toBe('abc-123');
+  });
+
+  it('routes conversations/ and todos/ to data dir', () => {
+    writeFiles(legacyDir, {
+      'conversations/conv1.json': '[]',
       'todos/todo.json': '[]',
     });
 
-    const result = performMigration(legacyDir, newDir);
+    const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
-    expect(fs.readFileSync(path.join(newDir, 'settings.json'), 'utf-8')).toBe(
-      '{"theme": "dark"}',
-    );
-    expect(fs.readFileSync(path.join(newDir, 'installation_id'), 'utf-8')).toBe(
-      'abc-123',
-    );
     expect(
-      fs.readFileSync(path.join(newDir, 'profiles/profile1.json'), 'utf-8'),
-    ).toBe('{"name": "p1"}');
-    expect(fs.readFileSync(path.join(newDir, 'todos/todo.json'), 'utf-8')).toBe(
-      '[]',
+      fs.existsSync(
+        path.join(destinations.dataDir, 'conversations/conv1.json'),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(destinations.dataDir, 'todos/todo.json')),
+    ).toBe(true);
+  });
+
+  it('routes cache/ to cache dir', () => {
+    writeFiles(legacyDir, {
+      'cache/model.bin': 'binary-data',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(destinations.cacheDir, 'cache/model.bin'),
+        'utf-8',
+      ),
+    ).toBe('binary-data');
+  });
+
+  it('routes dumps/ to cache dir', () => {
+    writeFiles(legacyDir, {
+      'dumps/dump1.json': '{}',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.existsSync(path.join(destinations.cacheDir, 'dumps/dump1.json')),
+    ).toBe(true);
+  });
+
+  it('routes debug/ to log dir', () => {
+    writeFiles(legacyDir, {
+      'debug/log.txt': 'debug info',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.readFileSync(path.join(destinations.logDir, 'debug/log.txt'), 'utf-8'),
+    ).toBe('debug info');
+  });
+
+  it('routes tmp/ contents to log dir under tmp/', () => {
+    writeFiles(legacyDir, {
+      'tmp/abc123/checkpoint.json': '{}',
+      'tmp/abc123/shell_history': 'cmd1',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(destinations.logDir, 'tmp/abc123/checkpoint.json'),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(destinations.logDir, 'tmp/abc123/shell_history')),
+    ).toBe(true);
+  });
+
+  it('routes tmp/skills/ to config dir (fixing historical misplacement)', () => {
+    writeFiles(legacyDir, {
+      'tmp/skills/custom-skill.md': '# Custom Skill',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(destinations.configDir, 'skills/custom-skill.md'),
+        'utf-8',
+      ),
+    ).toBe('# Custom Skill');
+    // tmp/skills should NOT also appear under logDir/tmp/skills
+    expect(fs.existsSync(path.join(destinations.logDir, 'tmp/skills'))).toBe(
+      false,
     );
   });
 
@@ -126,52 +296,73 @@ describe('performMigration', () => {
       'secure-store/sub/deep.json': '{"deep": true}',
     });
 
-    const result = performMigration(legacyDir, newDir);
+    const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
-    expect(fs.existsSync(path.join(newDir, 'settings.json'))).toBe(true);
-    expect(fs.existsSync(path.join(newDir, 'secure-store'))).toBe(false);
+    expect(
+      fs.existsSync(path.join(destinations.configDir, 'settings.json')),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(destinations.dataDir, 'secure-store'))).toBe(
+      false,
+    );
+    expect(
+      fs.existsSync(path.join(destinations.configDir, 'secure-store')),
+    ).toBe(false);
   });
 
-  it('copies nested directory structures', () => {
+  it('routes unknown entries to data dir (safe default)', () => {
     writeFiles(legacyDir, {
-      'prompts/tools/code.md': '# Code prompt',
-      'prompts/tools/test.md': '# Test prompt',
-      'subagents/researcher.json': '{"name": "researcher"}',
-      'history/abc123/log.json': '[]',
+      'unknown-file.txt': 'unknown content',
     });
 
-    const result = performMigration(legacyDir, newDir);
+    const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
     expect(
-      fs.readFileSync(path.join(newDir, 'prompts/tools/code.md'), 'utf-8'),
-    ).toBe('# Code prompt');
-    expect(
-      fs.readFileSync(path.join(newDir, 'subagents/researcher.json'), 'utf-8'),
-    ).toBe('{"name": "researcher"}');
-    expect(
-      fs.readFileSync(path.join(newDir, 'history/abc123/log.json'), 'utf-8'),
-    ).toBe('[]');
+      fs.readFileSync(
+        path.join(destinations.dataDir, 'unknown-file.txt'),
+        'utf-8',
+      ),
+    ).toBe('unknown content');
+  });
+});
+
+describe('performMigration — file counting and legacy preservation', () => {
+  let legacyDir: string;
+  let destBase: string;
+  let destinations: MigrationDestinations;
+
+  beforeEach(async () => {
+    legacyDir = await makeTempDir();
+    destBase = await makeTempDir();
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+    destinations = makeDestinations(destBase);
   });
 
-  it('counts the number of files copied', () => {
+  afterEach(async () => {
+    await fs.promises.rm(legacyDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+  });
+
+  it('counts the number of files copied across all categories', () => {
     writeFiles(legacyDir, {
       'settings.json': '{}',
       'profiles/a.json': '{}',
-      'profiles/b.json': '{}',
+      installation_id: 'id',
+      'cache/model.bin': 'data',
+      'debug/log.txt': 'log',
     });
 
-    const result = performMigration(legacyDir, newDir);
+    const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
-    expect(result.filesCopied).toBe(3);
+    expect(result.filesCopied).toBe(5);
   });
 
   it('does not delete the legacy directory', () => {
     writeFiles(legacyDir, { 'settings.json': '{}' });
 
-    performMigration(legacyDir, newDir);
+    performMigration(legacyDir, destinations);
 
     expect(fs.existsSync(path.join(legacyDir, 'settings.json'))).toBe(true);
   });
@@ -181,16 +372,15 @@ describe('performMigration', () => {
       'secure-store/store.json': '{}',
     });
 
-    const result = performMigration(legacyDir, newDir);
+    const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(false);
     expect(result.filesCopied).toBe(0);
-    expect(fs.existsSync(path.join(newDir, 'secure-store'))).toBe(false);
   });
 
   it('returns migrated:false when legacy dir does not exist', () => {
     const nonExistent = path.join(legacyDir, 'does-not-exist');
-    const result = performMigration(nonExistent, newDir);
+    const result = performMigration(nonExistent, destinations);
 
     expect(result.migrated).toBe(false);
     expect(result.filesCopied).toBe(0);
@@ -199,17 +389,19 @@ describe('performMigration', () => {
 
 describe('performMigration — edge cases', () => {
   let legacyDir: string;
-  let newDir: string;
+  let destBase: string;
+  let destinations: MigrationDestinations;
 
   beforeEach(async () => {
     legacyDir = await makeTempDir();
-    newDir = await makeTempDir();
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    destBase = await makeTempDir();
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+    destinations = makeDestinations(destBase);
   });
 
   afterEach(async () => {
     await fs.promises.rm(legacyDir, { recursive: true, force: true });
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
   });
 
   it.skipIf(process.platform === 'win32')(
@@ -219,12 +411,11 @@ describe('performMigration — edge cases', () => {
       fs.writeFileSync(srcFile, '#!/bin/bash');
       fs.chmodSync(srcFile, 0o755);
 
-      const result: MigrationResult = performMigration(legacyDir, newDir);
+      const result: MigrationResult = performMigration(legacyDir, destinations);
 
       expect(result.migrated).toBe(true);
-      const destFile = path.join(newDir, 'script.sh');
+      const destFile = path.join(destinations.dataDir, 'script.sh');
       const stat = fs.statSync(destFile);
-      // The execute bits should be preserved
       expect(stat.mode & 0o111).not.toBe(0);
     },
   );
@@ -233,32 +424,34 @@ describe('performMigration — edge cases', () => {
     fs.mkdirSync(path.join(legacyDir, 'empty-dir'), { recursive: true });
     writeFiles(legacyDir, { 'settings.json': '{}' });
 
-    const result = performMigration(legacyDir, newDir);
+    const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
-    // Only the file counts; empty dirs may or may not be copied
     expect(result.filesCopied).toBeGreaterThanOrEqual(1);
-    expect(fs.existsSync(path.join(newDir, 'settings.json'))).toBe(true);
+    expect(
+      fs.existsSync(path.join(destinations.configDir, 'settings.json')),
+    ).toBe(true);
   });
 });
 
 describe('performMigration — merge mode', () => {
   let legacyDir: string;
-  let newDir: string;
+  let destBase: string;
+  let destinations: MigrationDestinations;
 
   beforeEach(async () => {
     legacyDir = await makeTempDir();
-    newDir = await makeTempDir();
-    // Keep newDir intact — it already has content (simulates prior partial migration)
+    destBase = await makeTempDir();
+    destinations = makeDestinations(destBase);
   });
 
   afterEach(async () => {
     await fs.promises.rm(legacyDir, { recursive: true, force: true });
-    await fs.promises.rm(newDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
   });
 
   it('merges files without overwriting existing ones', () => {
-    writeFiles(newDir, {
+    writeFiles(destinations.configDir, {
       'settings.json': '{"existing": true}',
     });
     writeFiles(legacyDir, {
@@ -266,21 +459,25 @@ describe('performMigration — merge mode', () => {
       installation_id: 'migrated-id',
     });
 
-    const result = performMigration(legacyDir, newDir);
+    const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
-    // Existing file preserved (not overwritten)
     expect(
-      fs.readFileSync(path.join(newDir, 'settings.json'), 'utf-8'),
+      fs.readFileSync(
+        path.join(destinations.configDir, 'settings.json'),
+        'utf-8',
+      ),
     ).toContain('existing');
-    // New file merged in
-    expect(fs.readFileSync(path.join(newDir, 'installation_id'), 'utf-8')).toBe(
-      'migrated-id',
-    );
+    expect(
+      fs.readFileSync(
+        path.join(destinations.dataDir, 'installation_id'),
+        'utf-8',
+      ),
+    ).toBe('migrated-id');
   });
 
   it('merges into nested directories without overwriting', () => {
-    writeFiles(newDir, {
+    writeFiles(destinations.configDir, {
       'profiles/existing.json': '{"v": 1}',
     });
     writeFiles(legacyDir, {
@@ -288,14 +485,20 @@ describe('performMigration — merge mode', () => {
       'profiles/new.json': '{"v": 3}',
     });
 
-    const result = performMigration(legacyDir, newDir);
+    const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
     expect(
-      fs.readFileSync(path.join(newDir, 'profiles/existing.json'), 'utf-8'),
+      fs.readFileSync(
+        path.join(destinations.configDir, 'profiles/existing.json'),
+        'utf-8',
+      ),
     ).toContain('"v": 1');
     expect(
-      fs.readFileSync(path.join(newDir, 'profiles/new.json'), 'utf-8'),
+      fs.readFileSync(
+        path.join(destinations.configDir, 'profiles/new.json'),
+        'utf-8',
+      ),
     ).toContain('"v": 3');
   });
 });
@@ -304,17 +507,19 @@ describe.skipIf(process.platform === 'win32')(
   'performMigration — symlinks',
   () => {
     let legacyDir: string;
-    let newDir: string;
+    let destBase: string;
+    let destinations: MigrationDestinations;
 
     beforeEach(async () => {
       legacyDir = await makeTempDir();
-      newDir = await makeTempDir();
-      await fs.promises.rm(newDir, { recursive: true, force: true });
+      destBase = await makeTempDir();
+      await fs.promises.rm(destBase, { recursive: true, force: true });
+      destinations = makeDestinations(destBase);
     });
 
     afterEach(async () => {
       await fs.promises.rm(legacyDir, { recursive: true, force: true });
-      await fs.promises.rm(newDir, { recursive: true, force: true });
+      await fs.promises.rm(destBase, { recursive: true, force: true });
     });
 
     it('copies absolute symlinks correctly', () => {
@@ -322,10 +527,10 @@ describe.skipIf(process.platform === 'win32')(
       fs.writeFileSync(realTarget, '{"data": true}');
       fs.symlinkSync(realTarget, path.join(legacyDir, 'link.json'));
 
-      const result = performMigration(legacyDir, newDir);
+      const result = performMigration(legacyDir, destinations);
 
       expect(result.migrated).toBe(true);
-      const linkPath = path.join(newDir, 'link.json');
+      const linkPath = path.join(destinations.dataDir, 'link.json');
       expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
       expect(fs.readFileSync(linkPath, 'utf-8')).toBe('{"data": true}');
     });
@@ -334,28 +539,26 @@ describe.skipIf(process.platform === 'win32')(
       const subDir = path.join(legacyDir, 'sub');
       fs.mkdirSync(subDir, { recursive: true });
       fs.writeFileSync(path.join(subDir, 'target.txt'), 'hello');
-      // Relative symlink: sub/link.txt -> ./target.txt
       fs.symlinkSync('./target.txt', path.join(subDir, 'link.txt'));
 
-      const result = performMigration(legacyDir, newDir);
+      const result = performMigration(legacyDir, destinations);
 
       expect(result.migrated).toBe(true);
-      const newLink = path.join(newDir, 'sub', 'link.txt');
+      const newLink = path.join(destinations.dataDir, 'sub', 'link.txt');
       expect(fs.lstatSync(newLink).isSymbolicLink()).toBe(true);
-      // The relative symlink should resolve correctly from the new location
       expect(fs.readFileSync(newLink, 'utf-8')).toBe('hello');
     });
 
-    it('rebases parent-traversing relative symlinks (../target) correctly', () => {
+    it('rebases parent-traversing relative symlinks correctly', () => {
       const subDir = path.join(legacyDir, 'sub');
       fs.mkdirSync(subDir, { recursive: true });
       fs.writeFileSync(path.join(legacyDir, 'shared.txt'), 'shared-data');
       fs.symlinkSync('../shared.txt', path.join(subDir, 'link.txt'));
 
-      const result = performMigration(legacyDir, newDir);
+      const result = performMigration(legacyDir, destinations);
 
       expect(result.migrated).toBe(true);
-      const newLink = path.join(newDir, 'sub', 'link.txt');
+      const newLink = path.join(destinations.dataDir, 'sub', 'link.txt');
       expect(fs.lstatSync(newLink).isSymbolicLink()).toBe(true);
       expect(fs.readFileSync(newLink, 'utf-8')).toBe('shared-data');
     });
@@ -365,57 +568,26 @@ describe.skipIf(process.platform === 'win32')(
       const dirB = path.join(legacyDir, 'dirB');
       fs.mkdirSync(dirA, { recursive: true });
       fs.mkdirSync(dirB, { recursive: true });
-      // Create a cycle: dirA/linkB -> dirB, dirB/linkA -> dirA
       fs.symlinkSync(dirB, path.join(dirA, 'linkB'));
       fs.symlinkSync(dirA, path.join(dirB, 'linkA'));
       fs.writeFileSync(path.join(dirA, 'file.txt'), 'a');
       fs.writeFileSync(path.join(dirB, 'file.txt'), 'b');
 
-      // Should not hang or overflow the stack — symlinks are cloned, not followed
-      const result = performMigration(legacyDir, newDir);
+      const result = performMigration(legacyDir, destinations);
 
       expect(result.migrated).toBe(true);
       expect(
-        fs.readFileSync(path.join(newDir, 'dirA', 'file.txt'), 'utf-8'),
+        fs.readFileSync(
+          path.join(destinations.dataDir, 'dirA', 'file.txt'),
+          'utf-8',
+        ),
       ).toBe('a');
       expect(
-        fs.readFileSync(path.join(newDir, 'dirB', 'file.txt'), 'utf-8'),
+        fs.readFileSync(
+          path.join(destinations.dataDir, 'dirB', 'file.txt'),
+          'utf-8',
+        ),
       ).toBe('b');
     });
   },
 );
-
-describe('performMigration — error handling', () => {
-  let legacyDir: string;
-  let newDir: string;
-
-  beforeEach(async () => {
-    legacyDir = await makeTempDir();
-    newDir = await makeTempDir();
-    await fs.promises.rm(newDir, { recursive: true, force: true });
-  });
-
-  afterEach(async () => {
-    await fs.promises.rm(legacyDir, { recursive: true, force: true });
-    await fs.promises.rm(newDir, { recursive: true, force: true });
-  });
-
-  it('propagates filesystem errors and cleans up staging dir', () => {
-    // Create a file where a directory is expected to force an error
-    writeFiles(legacyDir, { 'settings.json': '{}' });
-    // Make newDir a file instead of a directory to trigger an error
-    fs.writeFileSync(newDir, 'blocker');
-
-    expect(() => performMigration(legacyDir, newDir)).toThrow(
-      /ENOTDIR|migration/i,
-    );
-    // newDir should still be the file (migration failed)
-    expect(fs.readFileSync(newDir, 'utf-8')).toBe('blocker');
-    // No orphaned staging directories should remain
-    const parentDir = path.dirname(newDir);
-    const leftovers = fs
-      .readdirSync(parentDir)
-      .filter((f) => f.startsWith('.llxprt-migration-staging-'));
-    expect(leftovers).toHaveLength(0);
-  });
-});

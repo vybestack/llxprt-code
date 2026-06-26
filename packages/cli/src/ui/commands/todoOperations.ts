@@ -365,7 +365,7 @@ export interface TodoSessionFile {
  * @returns Array of saved session files sorted by modification time (newest first)
  */
 export function getTodoSessionFiles(): TodoSessionFile[] {
-  const todoDir = path.join(Storage.getGlobalLlxprtDir(), 'todos');
+  const todoDir = path.join(Storage.getGlobalDataDir(), 'todos');
 
   if (!fs.existsSync(todoDir)) {
     return [];

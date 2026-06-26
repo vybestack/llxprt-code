@@ -64,7 +64,7 @@ export class PromptServiceManager {
     const baseDir =
       envDir !== undefined && envDir !== ''
         ? envDir
-        : path.join(Storage.getGlobalLlxprtDir(), 'prompts');
+        : path.join(Storage.getGlobalConfigDir(), 'prompts');
     const instance = new PromptService({
       baseDir,
       debugMode: process.env.DEBUG === 'true',

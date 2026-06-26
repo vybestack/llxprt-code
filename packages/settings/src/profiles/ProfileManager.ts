@@ -80,13 +80,13 @@ export class ProfileManager {
   private profilesDir: string;
 
   /**
-   * @param profilesDir Optional custom directory for testing. If not provided, uses Storage.getGlobalLlxprtDir()/profiles.
+   * @param profilesDir Optional custom directory for testing. If not provided, uses Storage.getGlobalConfigDir()/profiles.
    */
   constructor(profilesDir?: string) {
     this.profilesDir =
       profilesDir !== undefined && profilesDir !== ''
         ? profilesDir
-        : path.join(Storage.getGlobalLlxprtDir(), 'profiles');
+        : path.join(Storage.getGlobalConfigDir(), 'profiles');
   }
 
   /**

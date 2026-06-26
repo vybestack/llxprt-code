@@ -16,7 +16,7 @@ import {
 } from './dumpContext.js';
 
 // Set a test-specific config home before any Storage call so
-// getGlobalLlxprtDir resolves inside the sandbox, not the real user dir.
+// getGlobalCacheDir resolves inside the sandbox, not the real user dir.
 const TEST_CONFIG_HOME = path.join(
   os.tmpdir(),
   `llxprt-dumpctx-sep-test-${process.pid}`,
@@ -24,7 +24,7 @@ const TEST_CONFIG_HOME = path.join(
 const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
 process.env['LLXPRT_CONFIG_HOME'] = TEST_CONFIG_HOME;
 
-const DUMP_DIR = path.join(Storage.getGlobalLlxprtDir(), 'dumps');
+const DUMP_DIR = path.join(Storage.getGlobalCacheDir(), 'dumps');
 
 describe('dumpContext separate request/response files', () => {
   const createdFiles: string[] = [];

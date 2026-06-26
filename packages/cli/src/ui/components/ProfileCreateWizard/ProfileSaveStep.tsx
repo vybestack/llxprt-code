@@ -29,7 +29,7 @@ const useExistingProfiles = () => {
   useEffect(() => {
     const loadExistingProfiles = async () => {
       try {
-        const profilesDir = path.join(Storage.getGlobalLlxprtDir(), 'profiles');
+        const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
         const files = await fs.readdir(profilesDir);
         const profileNames = files
           .filter((f) => f.endsWith('.json'))

@@ -11,7 +11,7 @@ import { NullStorageLoggerImpl } from '../types/logger.js';
 import { Storage } from '../config/storage.js';
 
 function defaultConversationLogPath(): string {
-  return path.join(Storage.getGlobalLlxprtDir(), 'conversations');
+  return path.join(Storage.getGlobalDataDir(), 'conversations');
 }
 
 function resolveConversationLogPath(logPath?: string): string {

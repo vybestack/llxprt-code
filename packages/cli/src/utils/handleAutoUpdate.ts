@@ -71,7 +71,7 @@ function removeLockFile(lockFilePath: string): void {
 }
 
 function tryAcquireLock(): string | null {
-  const locksDir = path.join(Storage.getGlobalLlxprtDir(), 'locks');
+  const locksDir = path.join(Storage.getGlobalDataDir(), 'locks');
   const lockFilePath = path.join(locksDir, LOCK_FILE_NAME);
 
   try {

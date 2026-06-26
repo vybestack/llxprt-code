@@ -46,7 +46,7 @@ function findEnvFile(startDir: string): string | null {
     if (parentDir === currentDir || !parentDir) {
       // check .env under the platform config dir as fallback
       const globalLlxprtEnvPath = path.join(
-        Storage.getGlobalLlxprtDir(),
+        Storage.getGlobalConfigDir(),
         '.env',
       );
       if (fs.existsSync(globalLlxprtEnvPath)) {

@@ -447,7 +447,7 @@ export class Config extends ConfigBase {
     }
 
     // Default path
-    return path.join(Storage.getGlobalLlxprtDir(), 'conversations');
+    return path.join(Storage.getGlobalDataDir(), 'conversations');
   }
 
   getRedactionConfig(): RedactionConfig {

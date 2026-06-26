@@ -122,7 +122,7 @@ export async function dumpRequestContext(
   provider: string,
   baseId?: string,
 ): Promise<DumpRequestResult> {
-  const dumpDir = path.join(Storage.getGlobalLlxprtDir(), 'dumps');
+  const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   await fs.mkdir(dumpDir, { recursive: true });
 
   const id = baseId ?? generateDumpBaseId(provider);
@@ -152,7 +152,7 @@ export async function dumpResponseContext(
   response: DumpResponse,
   provider: string,
 ): Promise<DumpResponseResult> {
-  const dumpDir = path.join(Storage.getGlobalLlxprtDir(), 'dumps');
+  const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   await fs.mkdir(dumpDir, { recursive: true });
 
   const id = baseId ?? generateDumpBaseId(provider);

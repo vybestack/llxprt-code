@@ -424,14 +424,14 @@ function resolveManagers(host: ToolRegistryHost): {
 } {
   let profileManager = host.getProfileManager();
   if (!profileManager) {
-    const profilesDir = path.join(Storage.getGlobalLlxprtDir(), 'profiles');
+    const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
     profileManager = new ProfileManager(profilesDir);
     host.setProfileManager(profileManager);
   }
 
   let subagentManager = host.getSubagentManager();
   if (subagentManager === undefined) {
-    const subagentsDir = path.join(Storage.getGlobalLlxprtDir(), 'subagents');
+    const subagentsDir = path.join(Storage.getGlobalConfigDir(), 'subagents');
     subagentManager = new SubagentManager(subagentsDir, profileManager);
     host.setSubagentManager(subagentManager);
   }

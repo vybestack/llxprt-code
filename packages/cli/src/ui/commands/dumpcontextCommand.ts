@@ -184,7 +184,7 @@ export const dumpcontextCommand: SlashCommand = {
         };
       }
 
-      const dumpDir = path.join(Storage.getGlobalLlxprtDir(), 'dumps');
+      const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
 
       // Handle status command
       if (mode === 'status') {

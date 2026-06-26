@@ -804,7 +804,7 @@ export class CompressionHandler {
    */
   async buildCompressionContext(promptId: string): Promise<CompressionContext> {
     const promptResolver = new PromptResolver();
-    const promptBaseDir = path.join(Storage.getGlobalLlxprtDir(), 'prompts');
+    const promptBaseDir = path.join(Storage.getGlobalConfigDir(), 'prompts');
 
     let activeTodos: string | undefined;
     if (this.activeTodosProvider) {

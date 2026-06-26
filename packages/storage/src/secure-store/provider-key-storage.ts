@@ -28,7 +28,7 @@ const SERVICE_NAME = 'llxprt-code-provider-keys';
 
 /** @pseudocode line 14 */
 const DEFAULT_FALLBACK_DIR = (): string =>
-  path.join(Storage.getGlobalLlxprtDir(), 'provider-keys');
+  path.join(Storage.getGlobalDataDir(), 'provider-keys');
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 

@@ -137,13 +137,13 @@ export function useManagers(config: Config | null): {
   const profileManager = useMemo(() => {
     if (!config) return undefined;
     return new ProfileManager(
-      path.join(Storage.getGlobalLlxprtDir(), 'profiles'),
+      path.join(Storage.getGlobalConfigDir(), 'profiles'),
     );
   }, [config]);
   const subagentManager = useMemo(() => {
     if (!config || !profileManager) return undefined;
     return new SubagentManager(
-      path.join(Storage.getGlobalLlxprtDir(), 'subagents'),
+      path.join(Storage.getGlobalConfigDir(), 'subagents'),
       profileManager,
     );
   }, [config, profileManager]);

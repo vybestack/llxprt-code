@@ -23,7 +23,7 @@ async function getInitCommandPrompt(): Promise<string> {
   try {
     const baseDir = firstNonEmptyString(
       process.env.LLXPRT_PROMPTS_DIR,
-      path.join(Storage.getGlobalLlxprtDir(), 'prompts'),
+      path.join(Storage.getGlobalConfigDir(), 'prompts'),
     );
     const promptService = new PromptService({
       baseDir,

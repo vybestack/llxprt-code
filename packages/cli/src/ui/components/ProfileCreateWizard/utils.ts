@@ -138,7 +138,7 @@ export async function saveProfile(
   alreadyExists?: boolean;
 }> {
   try {
-    const profilesDir = path.join(Storage.getGlobalLlxprtDir(), 'profiles');
+    const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
 
     // Ensure directory exists with restrictive permissions (owner-only)
     await fs.mkdir(profilesDir, { recursive: true, mode: 0o700 });

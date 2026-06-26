@@ -14,7 +14,7 @@ export const LLXPRT_DIR = '.llxprt';
 export const GOOGLE_ACCOUNTS_FILENAME = 'google_accounts.json';
 
 export function ensureLlxprtDirExists() {
-  const llxprtDir = Storage.getGlobalLlxprtDir();
+  const llxprtDir = Storage.getGlobalConfigDir();
   if (!fs.existsSync(llxprtDir)) {
     fs.mkdirSync(llxprtDir, { recursive: true });
   }

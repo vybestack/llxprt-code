@@ -59,7 +59,7 @@ export class PromptService {
    */
   constructor(config?: PromptServiceConfig) {
     // Set default configuration
-    const defaultBaseDir = path.join(Storage.getGlobalLlxprtDir(), 'prompts');
+    const defaultBaseDir = path.join(Storage.getGlobalConfigDir(), 'prompts');
     this.baseDir = this.expandPath(config?.baseDir ?? defaultBaseDir);
 
     this.config = {
