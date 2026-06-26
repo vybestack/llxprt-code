@@ -81,6 +81,7 @@ describe('handleAutoUpdate', () => {
   let mockUpdateInfo: UpdateObject;
   let mockSettings: LoadedSettings;
   let mockChildProcess: ChildProcess;
+  let originalConfigHome: string | undefined;
 
   beforeEach(() => {
     mockSpawn = vi.fn();
@@ -118,6 +119,7 @@ describe('handleAutoUpdate', () => {
 
     // Default mock behavior
     mockHomedir.mockReturnValue('/home/test');
+    originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
     process.env['LLXPRT_CONFIG_HOME'] = '/tmp/llxprt-test-config-home';
     mockExistsSync.mockReturnValue(false);
     mockReaddirSync.mockReturnValue([]);
@@ -125,7 +127,11 @@ describe('handleAutoUpdate', () => {
   });
 
   afterEach(() => {
-    delete process.env['LLXPRT_CONFIG_HOME'];
+    if (originalConfigHome !== undefined) {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+    } else {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    }
     vi.clearAllMocks();
   });
 

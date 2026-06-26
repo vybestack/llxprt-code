@@ -78,6 +78,18 @@ describe('Storage — static path methods', () => {
     expect(Storage.getGlobalDataDir()).toBe(path.resolve(override));
   });
 
+  it('getGlobalCacheDir falls back to LLXPRT_CONFIG_HOME (backward compat)', () => {
+    const override = '/tmp/llxprt-cache-fallback-test';
+    process.env['LLXPRT_CONFIG_HOME'] = override;
+    expect(Storage.getGlobalCacheDir()).toBe(path.resolve(override));
+  });
+
+  it('getGlobalLogDir falls back to LLXPRT_CONFIG_HOME (backward compat)', () => {
+    const override = '/tmp/llxprt-log-fallback-test';
+    process.env['LLXPRT_CONFIG_HOME'] = override;
+    expect(Storage.getGlobalLogDir()).toBe(path.resolve(override));
+  });
+
   it('getGlobalCacheDir respects the LLXPRT_CACHE_HOME override', () => {
     const override = '/tmp/llxprt-cache-override-test';
     process.env['LLXPRT_CACHE_HOME'] = override;
@@ -114,8 +126,7 @@ describe('Storage — static path methods', () => {
     const override = '/tmp/llxprt-log-override-test';
     process.env['LLXPRT_LOG_HOME'] = override;
     const result = Storage.getGlobalTempDir();
-    expect(result.startsWith(path.resolve(override))).toBe(true);
-    expect(path.basename(result)).toBe('tmp');
+    expect(result).toBe(path.join(path.resolve(override), 'tmp'));
   });
 
   it('getOAuthCredsPath ends with oauth_creds.json', () => {

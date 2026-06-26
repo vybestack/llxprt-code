@@ -22,6 +22,8 @@ const TEST_CONFIG_HOME = path.join(
   `llxprt-dumpctx-sep-test-${process.pid}`,
 );
 const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+const originalCacheHome = process.env['LLXPRT_CACHE_HOME'];
+delete process.env['LLXPRT_CACHE_HOME'];
 process.env['LLXPRT_CONFIG_HOME'] = TEST_CONFIG_HOME;
 
 const DUMP_DIR = path.join(Storage.getGlobalCacheDir(), 'dumps');
@@ -34,6 +36,11 @@ describe('dumpContext separate request/response files', () => {
       process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
     } else {
       delete process.env['LLXPRT_CONFIG_HOME'];
+    }
+    if (originalCacheHome !== undefined) {
+      process.env['LLXPRT_CACHE_HOME'] = originalCacheHome;
+    } else {
+      delete process.env['LLXPRT_CACHE_HOME'];
     }
     await fs
       .rm(TEST_CONFIG_HOME, { recursive: true, force: true })

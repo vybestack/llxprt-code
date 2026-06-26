@@ -25,7 +25,7 @@ import {
 export interface FileTokenStorageOptions {
   /**
    * Overrides the on-disk token file path. Defaults to
-   * `<global-config-dir>/mcp-oauth-tokens-v2.json`. Exposed for deterministic tests.
+   * `<global-data-dir>/mcp-oauth-tokens-v2.json`. Exposed for deterministic tests.
    */
   tokenFilePath?: string;
   /**

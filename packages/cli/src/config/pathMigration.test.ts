@@ -299,6 +299,7 @@ describe('performMigration — category routing', () => {
     const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
+    expect(result.filesCopied).toBe(1);
     expect(
       fs.existsSync(path.join(destinations.configDir, 'settings.json')),
     ).toBe(true);
@@ -532,6 +533,9 @@ describe.skipIf(process.platform === 'win32')(
       expect(result.migrated).toBe(true);
       const linkPath = path.join(destinations.dataDir, 'link.json');
       expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
+      expect(fs.readlinkSync(linkPath)).toBe(
+        path.join(destinations.dataDir, 'real-config.json'),
+      );
       expect(fs.readFileSync(linkPath, 'utf-8')).toBe('{"data": true}');
     });
 

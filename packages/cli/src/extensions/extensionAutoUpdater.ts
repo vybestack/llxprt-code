@@ -95,6 +95,19 @@ function createFileStateStore(): ExtensionAutoUpdateStateStore {
   const dir = Storage.getGlobalDataDir();
   const filePath = path.join(dir, STATE_FILENAME);
 
+  // One-time migration: move state file from config dir to data dir
+  const configDirPath = path.join(Storage.getGlobalConfigDir(), STATE_FILENAME);
+  if (!fs.existsSync(filePath) && fs.existsSync(configDirPath)) {
+    try {
+      fs.copyFileSync(configDirPath, filePath);
+      debugLogger.debug(
+        'Migrated extension auto-update state from config dir to data dir',
+      );
+    } catch {
+      // Non-critical — fresh state will be created on first write
+    }
+  }
+
   return {
     async read() {
       try {

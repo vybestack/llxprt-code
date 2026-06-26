@@ -57,7 +57,10 @@ function resolveDir(
       return fallback;
     }
   }
-  return platformDefault || path.join(os.tmpdir(), 'llxprt-code');
+  if (!platformDefault) {
+    throw new Error('platformDefault must not be empty for resolveDir');
+  }
+  return platformDefault;
 }
 
 export class Storage {

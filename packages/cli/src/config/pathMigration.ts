@@ -278,14 +278,6 @@ function migrateTmpDir(
  * class. Skipped entirely when `LLXPRT_CONFIG_HOME` is set (explicit override).
  */
 export function runStartupMigration(): MigrationResult {
-  const legacyDir = Storage.getLegacyLlxprtDir();
-  const destinations: MigrationDestinations = {
-    configDir: Storage.getGlobalConfigDir(),
-    dataDir: Storage.getGlobalDataDir(),
-    cacheDir: Storage.getGlobalCacheDir(),
-    logDir: Storage.getGlobalLogDir(),
-  };
-
   if (process.env['LLXPRT_CONFIG_HOME']) {
     return {
       migrated: false,
@@ -293,6 +285,14 @@ export function runStartupMigration(): MigrationResult {
       filesCopied: 0,
     };
   }
+
+  const legacyDir = Storage.getLegacyLlxprtDir();
+  const destinations: MigrationDestinations = {
+    configDir: Storage.getGlobalConfigDir(),
+    dataDir: Storage.getGlobalDataDir(),
+    cacheDir: Storage.getGlobalCacheDir(),
+    logDir: Storage.getGlobalLogDir(),
+  };
 
   if (!shouldMigrate(legacyDir, destinations)) {
     if (
@@ -432,6 +432,7 @@ function copyEntry(
     }
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     fs.copyFileSync(srcPath, destPath);
+    fs.chmodSync(destPath, stat.mode);
     return 1;
   }
 
@@ -472,7 +473,13 @@ function copyDirFiltered(
 
   let count = 0;
   fs.mkdirSync(dest, { recursive: true });
-  const entries = fs.readdirSync(src, { withFileTypes: true });
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(src, { withFileTypes: true });
+  } catch (error) {
+    logger.debug(`Cannot read directory ${src}: ${String(error)}`);
+    return count;
+  }
 
   for (const entry of entries) {
     const srcPath = path.join(src, entry.name);
@@ -488,6 +495,8 @@ function copyDirFiltered(
       );
     } else if (entry.isFile() && !pathEntryExists(destPath)) {
       fs.copyFileSync(srcPath, destPath);
+      const srcStat = fs.statSync(srcPath);
+      fs.chmodSync(destPath, srcStat.mode);
       count++;
     } else if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
       createSymlinkClone(srcPath, destPath, legacyRoot, destRoot);
@@ -510,17 +519,27 @@ function createSymlinkClone(
   legacyRoot: string,
   newRoot: string,
 ): void {
-  const target = fs.readlinkSync(srcPath);
-  if (path.isAbsolute(target)) {
-    const rel = path.relative(legacyRoot, target);
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
-      fs.symlinkSync(path.join(newRoot, rel), destPath);
+  let target: string;
+  try {
+    target = fs.readlinkSync(srcPath);
+  } catch (error) {
+    logger.debug(`Cannot read symlink ${srcPath}: ${String(error)}`);
+    return;
+  }
+  try {
+    if (path.isAbsolute(target)) {
+      const rel = path.relative(legacyRoot, target);
+      if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+        fs.symlinkSync(path.join(newRoot, rel), destPath);
+      } else {
+        fs.symlinkSync(target, destPath);
+      }
     } else {
-      fs.symlinkSync(target, destPath);
+      const resolvedTarget = path.resolve(path.dirname(srcPath), target);
+      const rebased = path.relative(path.dirname(destPath), resolvedTarget);
+      fs.symlinkSync(rebased, destPath);
     }
-  } else {
-    const resolvedTarget = path.resolve(path.dirname(srcPath), target);
-    const rebased = path.relative(path.dirname(destPath), resolvedTarget);
-    fs.symlinkSync(rebased, destPath);
+  } catch (error) {
+    logger.debug(`Cannot create symlink at ${destPath}: ${String(error)}`);
   }
 }
