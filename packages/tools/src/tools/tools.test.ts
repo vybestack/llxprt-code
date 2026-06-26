@@ -38,7 +38,7 @@ class TestToolInvocation extends BaseToolInvocation<TestParams, ToolResult> {
     return {
       error: undefined,
       result: 'ok',
-    } as unknown as ToolResult;
+    } as ToolResult;
   }
 
   // expose protected method for testing
@@ -100,6 +100,16 @@ class RealPublishSubscribeBus
 
   getPublishedMessages(): Array<Record<string, unknown>> {
     return this.published;
+  }
+
+  /** Delivers an event payload to all subscribers of the given event. */
+  deliver(event: string, payload: unknown): void {
+    const handlers = this.subscribers.get(event);
+    if (handlers) {
+      for (const handler of handlers) {
+        handler(payload);
+      }
+    }
   }
 }
 
@@ -240,6 +250,10 @@ describe('BaseToolInvocation message bus capabilities', () => {
 
       expect(called).not.toBeNull();
       expect(called!.outcome).toBe(ToolConfirmationOutcome.ProceedAlways);
+      expect(called!.options).toMatchObject({
+        toolName: 'test-tool',
+        persist: false,
+      });
     });
   });
 
@@ -253,27 +267,15 @@ describe('BaseToolInvocation message bus capabilities', () => {
       );
 
       const controller = new AbortController();
-      // Schedule a confirmation response to be delivered
+      // Schedule a confirmation response to be delivered to the subscriber
       setTimeout(() => {
-        bus.subscribe('tool-confirmation-response', (_response) => {
-          // already subscribed, now deliver the response by publishing
+        const correlationId = (
+          bus.getPublishedMessages()[0] as { correlationId?: string }
+        ).correlationId;
+        bus.deliver('tool-confirmation-response', {
+          correlationId,
+          confirmed: true,
         });
-        // Simulate the bus delivering a response by calling the registered handler
-        const handlers = (
-          bus as unknown as {
-            subscribers: Map<string, Set<(response: unknown) => void>>;
-          }
-        ).subscribers.get('tool-confirmation-response');
-        if (handlers) {
-          for (const handler of handlers) {
-            handler({
-              correlationId: (
-                bus.getPublishedMessages()[0] as { correlationId?: string }
-              ).correlationId,
-              confirmed: true,
-            });
-          }
-        }
       }, 10);
 
       const decision = await invocation.callGetMessageBusDecision(
@@ -286,6 +288,76 @@ describe('BaseToolInvocation message bus capabilities', () => {
         'tool-confirmation-request',
       );
       expect(decision).toBe('ALLOW');
+    });
+
+    it('returns DENY when the response is not confirmed', async () => {
+      const bus = new RealPublishSubscribeBus();
+      const invocation = new TestToolInvocation(
+        { path: '/tmp/test.txt' },
+        bus,
+        'test-tool',
+      );
+
+      const controller = new AbortController();
+      setTimeout(() => {
+        const correlationId = (
+          bus.getPublishedMessages()[0] as { correlationId?: string }
+        ).correlationId;
+        bus.deliver('tool-confirmation-response', {
+          correlationId,
+          confirmed: false,
+        });
+      }, 10);
+
+      const decision = await invocation.callGetMessageBusDecision(
+        controller.signal,
+      );
+
+      expect(decision).toBe('DENY');
+    });
+
+    it('returns ASK_USER when the response requires user confirmation', async () => {
+      const bus = new RealPublishSubscribeBus();
+      const invocation = new TestToolInvocation(
+        { path: '/tmp/test.txt' },
+        bus,
+        'test-tool',
+      );
+
+      const controller = new AbortController();
+      setTimeout(() => {
+        const correlationId = (
+          bus.getPublishedMessages()[0] as { correlationId?: string }
+        ).correlationId;
+        bus.deliver('tool-confirmation-response', {
+          correlationId,
+          requiresUserConfirmation: true,
+        });
+      }, 10);
+
+      const decision = await invocation.callGetMessageBusDecision(
+        controller.signal,
+      );
+
+      expect(decision).toBe('ASK_USER');
+    });
+
+    it('returns DENY when the abort signal fires before a response', async () => {
+      const bus = new RealPublishSubscribeBus();
+      const invocation = new TestToolInvocation(
+        { path: '/tmp/test.txt' },
+        bus,
+        'test-tool',
+      );
+
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 10);
+
+      const decision = await invocation.callGetMessageBusDecision(
+        controller.signal,
+      );
+
+      expect(decision).toBe('DENY');
     });
 
     it('falls back to requestConfirmation when publish/subscribe is absent', async () => {

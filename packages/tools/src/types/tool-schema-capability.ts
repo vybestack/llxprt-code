@@ -24,8 +24,10 @@ export interface ToolSchemaHolder {
 /**
  * Type guard: does the given tool object expose a schema descriptor?
  *
- * Validates that `schema` is either absent or a non-null object, so callers
- * can safely treat it as a `ToolSchemaDescriptor` after the guard passes.
+ * Validates only that the top-level `schema` property is either absent or a
+ * non-null object. Inner fields (`description`, `parametersJsonSchema`) are not
+ * type-checked here; callers that read them should narrow them individually
+ * (see {@link resolveToolDescription} and the `parametersJsonSchema` accessors).
  */
 export function hasToolSchema(tool: object): tool is ToolSchemaHolder {
   if (!('schema' in tool)) {

@@ -82,10 +82,61 @@ describe('createProviderAdapterFromManager', () => {
     });
   });
 
+  describe('getActiveProvider', () => {
+    it('delegates to the manager and returns the active provider', () => {
+      const provider = {
+        name: 'openai',
+        makeRequest: () => Promise.resolve(),
+      } as unknown as RuntimeProvider;
+      const manager = createManagerDouble({ openai: provider }, 'openai');
+      const adapter = createProviderAdapterFromManager(manager);
+
+      expect(adapter.getActiveProvider()).toBe(provider);
+    });
+
+    it('throws when the manager has no active provider', () => {
+      const manager = createManagerDouble({}, undefined);
+      const adapter = createProviderAdapterFromManager(manager);
+
+      expect(() => adapter.getActiveProvider()).toThrow(
+        'AgentRuntimeContext provider adapter requires an active provider.',
+      );
+    });
+  });
+
+  describe('setActiveProvider', () => {
+    it('delegates to the manager', () => {
+      const provider = {
+        name: 'openai',
+        makeRequest: () => Promise.resolve(),
+      } as unknown as RuntimeProvider;
+      const manager = createManagerDouble({ openai: provider }, undefined);
+      const adapter = createProviderAdapterFromManager(manager);
+
+      adapter.setActiveProvider('openai');
+      expect(manager.getActiveProviderName()).toBe('openai');
+      expect(adapter.getActiveProvider()).toBe(provider);
+    });
+  });
+
   describe('when no manager is provided', () => {
     it('getProviderByName throws a descriptive error', () => {
       const adapter = createProviderAdapterFromManager(undefined);
       expect(() => adapter.getProviderByName!('openai')).toThrow(
+        'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
+      );
+    });
+
+    it('getActiveProvider throws a descriptive error', () => {
+      const adapter = createProviderAdapterFromManager(undefined);
+      expect(() => adapter.getActiveProvider()).toThrow(
+        'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
+      );
+    });
+
+    it('setActiveProvider throws a descriptive error', () => {
+      const adapter = createProviderAdapterFromManager(undefined);
+      expect(() => adapter.setActiveProvider('openai')).toThrow(
         'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
       );
     });
@@ -121,6 +172,11 @@ describe('createToolRegistryViewFromRegistry', () => {
     expect(metadata!.description).toBe('A tool with a schema descriptor.');
     expect(metadata!.parameterSchema).toBeDefined();
     expect(metadata!.parameterSchema!.type).toBe('object');
+    // Verify the schema is sourced from the tool's actual parameter schema,
+    // not a generic stub — check the MockTool's declared param property.
+    expect(metadata!.parameterSchema!.properties?.['param']).toMatchObject({
+      type: 'string',
+    });
   });
 
   it('returns undefined for a tool that does not exist', () => {

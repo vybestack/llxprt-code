@@ -41,6 +41,7 @@ import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import {
+  createDefaultToolHost,
   getTargetDirCompat,
   getWorkspaceRootsCompat,
   getLegacyIdeService,
@@ -51,34 +52,6 @@ import {
  * Type representing a parsed patch operation
  */
 export type PatchOperation = Diff.StructuredPatch;
-
-function createDefaultToolHost(): IToolHost {
-  return {
-    getTargetDir: () => process.cwd(),
-    getWorkspaceRoots: () => [path.parse(process.cwd()).root],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getFileService: () => ({
-      shouldGitIgnoreFile: () => false,
-      shouldLlxprtIgnoreFile: () => false,
-      filterFiles: (paths: string[]) => paths,
-    }),
-    getFileFilteringOptions: () => ({
-      respectGitIgnore: true,
-      respectLlxprtIgnore: true,
-    }),
-    getFileExclusions: () => [],
-    getReadManyFilesExclusions: () => [],
-    getFileFilteringRespectLlxprtIgnore: () => true,
-    getLlxprtIgnoreFilePath: () => null,
-    recordFileRead: () => {},
-    getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
-    getDebugMode: () => false,
-  };
-}
 
 function toIdeConnectionStatus(
   status: unknown,

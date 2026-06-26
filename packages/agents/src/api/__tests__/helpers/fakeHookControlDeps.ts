@@ -67,7 +67,10 @@ export interface HookControlDepsHandle {
   /** Publish a bus HOOK_EXECUTION_REQUEST for the given correlation id. */
   publishBusRequest(eventName: string, correlationId: string): void;
   /** Publish a bus HOOK_EXECUTION_RESPONSE for the given correlation id. */
-  publishBusResponse(correlationId: string): void;
+  publishBusResponse(
+    correlationId: string,
+    options?: { success?: boolean; error?: { code?: string; message: string } },
+  ): void;
   /** The session id the fake reports (constant). */
   readonly sessionId: string;
   /** The cwd the fake reports (constant). */
@@ -146,10 +149,20 @@ export function createHookControlDeps(
       };
       messageBus.publish(message);
     },
-    publishBusResponse(correlationId: string): void {
+    publishBusResponse(
+      correlationId: string,
+      options?: {
+        success?: boolean;
+        error?: { code?: string; message: string };
+      },
+    ): void {
       const message: BusHookExecutionResponse = {
         type: MessageBusType.HOOK_EXECUTION_RESPONSE,
-        payload: { correlationId, success: true },
+        payload: {
+          correlationId,
+          success: options?.success ?? true,
+          error: options?.error,
+        },
       };
       messageBus.publish(message);
     },

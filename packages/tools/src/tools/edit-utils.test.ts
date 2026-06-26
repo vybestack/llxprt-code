@@ -111,6 +111,14 @@ describe('getWorkspaceRootsCompat', () => {
     });
     expect(getWorkspaceRootsCompat(host)).toEqual(['/root1', '/root2']);
   });
+
+  it('returns empty array when workspace context has no directories', () => {
+    const host = plainHost();
+    Object.assign(host, {
+      getWorkspaceContext: () => ({ getDirectories: () => [] }),
+    });
+    expect(getWorkspaceRootsCompat(host)).toEqual([]);
+  });
 });
 
 describe('getLegacyIdeService', () => {
@@ -143,10 +151,11 @@ describe('getLegacyIdeService', () => {
   });
 
   it('applyDiff delegates to ideClient.openDiff', async () => {
-    let openDiffCalled = false;
+    const captured: { filePath?: string; content?: string } = {};
     const ideClient = {
-      openDiff: async (_filePath: string, _content?: string) => {
-        openDiffCalled = true;
+      openDiff: async (filePath: string, content?: string) => {
+        captured.filePath = filePath;
+        captured.content = content;
         return { status: 'accepted' as const, content: 'applied' };
       },
     };
@@ -156,7 +165,8 @@ describe('getLegacyIdeService', () => {
       filePath: '/test.ts',
       diff: 'patch',
     });
-    expect(openDiffCalled).toBe(true);
+    expect(captured.filePath).toBe('/test.ts');
+    expect(captured.content).toBe('patch');
     expect(result.status).toBe('accepted');
   });
 });
@@ -205,14 +215,20 @@ describe('getEmojiFilter', () => {
       getEphemeralSettings: () => ({ emojifilter: 'allowed' }),
     });
     const filter = getEmojiFilter(host);
-    expect(filter).toBeDefined();
+    // 'allowed' mode passes emoji text through unchanged
+    const result = filter.filterText('hello 🎉');
+    expect(result.emojiDetected).toBe(false);
+    expect(result.blocked).toBe(false);
   });
 
-  it('defaults when no emojifilter setting is present', () => {
+  it('defaults to error mode when no emojifilter setting is present', () => {
     const host = plainHost({
       getEphemeralSettings: () => ({}),
     });
     const filter = getEmojiFilter(host);
-    expect(filter).toBeDefined();
+    // Default maps to 'error', which blocks emoji-containing text
+    const result = filter.filterText('hello 🎉');
+    expect(result.emojiDetected).toBe(true);
+    expect(result.blocked).toBe(true);
   });
 });
