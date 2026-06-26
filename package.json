@@ -71,7 +71,7 @@
     "lint:ci": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --ext .ts,.tsx --max-warnings 0 && cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint integration-tests --max-warnings 0",
     "lint:eslint-guard": "node scripts/check-eslint-guard.js",
     "lint:all": "./scripts/lint-all.sh",
-    "format": "prettier --experimental-cli --write .",
+    "format": "prettier --experimental-cli --ignore-path .prettierignore --write .",
     "format:check": "prettier --check .",
     "format:all": "./scripts/format-all.sh",
     "typecheck": "npm run typecheck --workspaces --if-present",
