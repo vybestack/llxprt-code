@@ -101,10 +101,14 @@ describe('buildVercelTools', () => {
 
     const result = buildVercelTools(tools);
     expect(result).toBeDefined();
-    const tool = result!.weather as {
-      description?: string;
-      inputSchema?: unknown;
-    };
-    expect(tool).toBeDefined();
+    expect(result!.weather).toMatchObject({
+      description: 'Get weather',
+      inputSchema: {
+        jsonSchema: {
+          type: 'object',
+          properties: { city: { type: 'string' } },
+        },
+      },
+    });
   });
 });
