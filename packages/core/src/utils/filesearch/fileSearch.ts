@@ -151,7 +151,10 @@ class RecursiveFileSearch implements FileSearch {
       ignore: this.ignore,
       cache: this.options.cache,
       cacheTtl: this.options.cacheTtl,
-      maxDepth: this.options.maxDepth,
+      maxDepth:
+        this.options.maxDepth === undefined
+          ? undefined
+          : Math.max(0, this.options.maxDepth - 1),
       maxFiles: this.options.maxFiles ?? 20000,
     });
 
@@ -291,7 +294,14 @@ class DirectoryFileSearch implements FileSearch {
       throw error;
     }
 
-    const filteredResults = await filter(results, pattern, options.signal);
+    const directResults = results.filter((candidate) =>
+      isDirectSearchResult(candidate, dir),
+    );
+    const filteredResults = await filter(
+      directResults,
+      pattern,
+      options.signal,
+    );
 
     const fileFilter = this.ignore.getFileFilter();
     const finalResults: string[] = [];
@@ -312,6 +322,18 @@ export class FileSearchFactory {
     }
     return new DirectoryFileSearch(options);
   }
+}
+
+function isDirectSearchResult(candidate: string, dir: string): boolean {
+  if (candidate === '.') {
+    return true;
+  }
+  const normalizedDir = dir.replace(/\\/g, '/');
+  const relativeCandidate =
+    normalizedDir === '.'
+      ? candidate
+      : path.posix.relative(normalizedDir, candidate);
+  return !relativeCandidate.replace(/\/$/, '').includes('/');
 }
 
 function addCandidateIfIncluded(

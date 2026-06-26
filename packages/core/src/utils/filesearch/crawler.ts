@@ -104,7 +104,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
       });
 
     if (options.maxDepth !== undefined) {
-      api.withMaxDepth(options.maxDepth);
+      api.withMaxDepth(options.maxDepth + 1);
     }
 
     results = await api.crawl(options.crawlDirectory).withPromise();
