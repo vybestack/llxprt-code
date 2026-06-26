@@ -15,6 +15,7 @@ import type {
 import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import path from 'node:path';
 import process from 'node:process';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
@@ -265,7 +266,7 @@ function appendDumpContextInfo(
     diagnostics.push(`\n## Context Dumping`);
     diagnostics.push(`- Mode: ${dumpcontextMode}`);
     diagnostics.push(
-      `- Dump Directory: ${Storage.getGlobalLlxprtDir()}/dumps/`,
+      `- Dump Directory: ${path.join(Storage.getGlobalLlxprtDir(), 'dumps')}`,
     );
   }
 }

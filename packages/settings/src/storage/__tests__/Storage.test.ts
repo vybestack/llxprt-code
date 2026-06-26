@@ -44,7 +44,7 @@ describe('Storage — static path methods', () => {
   it('getGlobalLlxprtDir respects the LLXPRT_CONFIG_HOME override', () => {
     const override = '/tmp/llxprt-override-test';
     process.env['LLXPRT_CONFIG_HOME'] = override;
-    expect(Storage.getGlobalLlxprtDir()).toBe(override);
+    expect(Storage.getGlobalLlxprtDir()).toBe(path.resolve(override));
   });
 
   it('getLegacyLlxprtDir returns ~/.llxprt', () => {

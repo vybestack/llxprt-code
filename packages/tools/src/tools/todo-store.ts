@@ -15,8 +15,13 @@ export const DEFAULT_AGENT_ID = 'primary';
 // importing the storage package (tools is a workspace that must not declare
 // extra @vybestack/ dependencies to avoid lock-file churn in CI).
 function getGlobalConfigDir(): string {
-  const override = process.env['LLXPRT_CONFIG_HOME'];
-  if (override) return override;
+  const raw = process.env['LLXPRT_CONFIG_HOME'];
+  if (raw !== undefined) {
+    const trimmed = raw.trim();
+    if (trimmed !== '' && path.isAbsolute(trimmed)) {
+      return path.resolve(trimmed);
+    }
+  }
   const home = os.homedir();
   if (!home) {
     return path.join(os.tmpdir(), 'llxprt-code', 'configuration');

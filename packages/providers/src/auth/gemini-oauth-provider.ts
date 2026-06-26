@@ -403,9 +403,17 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private async getTokenFromGoogleOAuth(): Promise<OAuthToken | null> {
     return this.errorHandler.handleGracefully(
       async () => {
-        // Try to read from the existing OAuth credentials file
         const credPath = Storage.getOAuthCredsPath();
-        const credsJson = await fs.readFile(credPath, 'utf8');
+        let credsJson: string;
+        try {
+          credsJson = await fs.readFile(credPath, 'utf8');
+        } catch {
+          const legacyPath = path.join(
+            Storage.getLegacyLlxprtDir(),
+            'oauth_creds.json',
+          );
+          credsJson = await fs.readFile(legacyPath, 'utf8');
+        }
         const creds = JSON.parse(credsJson) as Credentials;
 
         if (creds.refresh_token || creds.access_token) {
@@ -421,7 +429,9 @@ export class GeminiOAuthProvider implements OAuthProvider {
   }
 
   /**
-   * Migrates tokens from legacy locations to new format
+   * Reads tokens from the current or legacy OAuth credentials file.
+   * Falls back to the legacy ~/.llxprt/ path if the platform-standard
+   * path does not contain the file (covers pre-migration and override scenarios).
    */
   private async migrateFromLegacyTokens(): Promise<OAuthToken | null> {
     return this.errorHandler.handleGracefully(

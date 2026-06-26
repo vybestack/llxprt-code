@@ -15,7 +15,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { join, isAbsolute, resolve } from 'node:path';
 import { homedir, platform, tmpdir } from 'node:os';
 import {
   OAuthTokenSchema,
@@ -61,12 +61,15 @@ function getPlatformDataDir(): string {
   return join(xdgData, 'llxprt-code');
 }
 
-/** Resolved on each call so LLXPRT_CONFIG_HOME changes take effect. */
+/** Resolves the lock directory based on LLXPRT_CONFIG_HOME or the platform data dir.
+ * Called once during construction; runtime env changes will not affect an
+ * existing instance. Pass an explicit lockDir to override. */
 function getLockDir(): string {
-  const configHome = process.env['LLXPRT_CONFIG_HOME'] ?? '';
+  const rawConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+  const trimmed = rawConfigHome?.trim();
   const baseDir =
-    configHome !== ''
-      ? configHome
+    trimmed !== undefined && trimmed !== '' && isAbsolute(trimmed)
+      ? resolve(trimmed)
       : join(getPlatformDataDir(), 'configuration');
   return join(baseDir, 'oauth', 'locks');
 }

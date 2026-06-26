@@ -409,9 +409,9 @@ export function loadEnvironment(settings: Settings): void {
       const pathSegments = resolvedEnvPath.split(path.sep);
       const isInLlxprtDir = pathSegments.includes(LLXPRT_DIR);
       const globalDirResolved = path.resolve(Storage.getGlobalLlxprtDir());
-      const isInGlobalDir =
-        resolvedEnvPath === globalDirResolved ||
-        resolvedEnvPath.startsWith(globalDirResolved + path.sep);
+      const isInGlobalDir = resolvedEnvPath.startsWith(
+        globalDirResolved + path.sep,
+      );
       const isProjectEnvFile = !isInLlxprtDir && !isInGlobalDir;
 
       applyParsedEnv(parsedEnv, excludedVars, isProjectEnvFile);

@@ -61,6 +61,7 @@ describe('Path / storage constants', () => {
 // ---------------------------------------------------------------------------
 
 const OVERRIDE_DIR = path.join(os.tmpdir(), 'llxprt-test-config-home');
+const ORIGINAL_CONFIG_HOME = process.env['LLXPRT_CONFIG_HOME'];
 
 describe('Storage – global path resolution', () => {
   beforeEach(() => {
@@ -68,7 +69,11 @@ describe('Storage – global path resolution', () => {
   });
 
   afterEach(() => {
-    delete process.env['LLXPRT_CONFIG_HOME'];
+    if (ORIGINAL_CONFIG_HOME === undefined) {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    } else {
+      process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
+    }
   });
 
   it('getGlobalLlxprtDir respects LLXPRT_CONFIG_HOME override', () => {
@@ -127,7 +132,11 @@ describe('Storage – default platform path (no override)', () => {
   });
 
   afterEach(() => {
-    delete process.env['LLXPRT_CONFIG_HOME'];
+    if (ORIGINAL_CONFIG_HOME === undefined) {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    } else {
+      process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
+    }
   });
 
   it('getGlobalLlxprtDir returns a "configuration" suffix without override', () => {
@@ -152,7 +161,11 @@ describe('Storage – legacy path', () => {
   });
 
   afterEach(() => {
-    delete process.env['LLXPRT_CONFIG_HOME'];
+    if (ORIGINAL_CONFIG_HOME === undefined) {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    } else {
+      process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
+    }
   });
 
   it('getLegacyLlxprtDir returns ~/.llxprt regardless of override', () => {

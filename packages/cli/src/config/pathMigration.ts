@@ -339,7 +339,8 @@ function mergeDirectories(staging: string, dest: string): number {
       fs.copyFileSync(stagingPath, destPath);
       count++;
     } else if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
-      createSymlinkClone(stagingPath, destPath);
+      const linkTarget = fs.readlinkSync(stagingPath);
+      fs.symlinkSync(linkTarget, destPath);
       count++;
     }
   }
