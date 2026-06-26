@@ -35,6 +35,12 @@ interface RuntimeGuardResult {
   metadata: Record<string, unknown>;
 }
 
+interface ResolvedRuntimeShape {
+  model?: unknown;
+  baseURL?: unknown;
+  authToken?: unknown;
+}
+
 interface NormalizationDependencies {
   providerName: string;
   defaultSettingsService: SettingsService;
@@ -68,23 +74,21 @@ function findResolvedRuntimeGaps(
   }
 
   const missing: string[] = [];
-  const resolvedRecord = resolved as unknown as Record<string, unknown>;
+  const r = resolved as ResolvedRuntimeShape;
   if (
-    typeof resolvedRecord['model'] !== 'string' ||
-    resolved.model.trim() === ''
+    typeof r.model !== 'string' ||
+    (typeof r.model === 'string' && r.model.trim() === '')
   ) {
     missing.push('resolved.model');
   }
-  const baseURL = resolvedRecord['baseURL'];
   if (
-    baseURL !== undefined &&
-    baseURL !== null &&
-    typeof baseURL !== 'string'
+    r.baseURL !== undefined &&
+    r.baseURL !== null &&
+    typeof r.baseURL !== 'string'
   ) {
     missing.push('resolved.baseURL');
   }
-  const authToken = resolvedRecord['authToken'];
-  if (authToken === undefined || authToken === null) {
+  if (r.authToken === undefined || r.authToken === null) {
     missing.push('resolved.authToken');
   }
   return missing;

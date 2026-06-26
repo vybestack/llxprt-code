@@ -335,6 +335,125 @@ describe('buildMessagesWithReasoning', () => {
     const toolMsg = messages[0] as Record<string, unknown>;
     expect(toolMsg.name).toBeUndefined();
   });
+
+  it('converts user image media block to image_url content array part', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'What is this?' },
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            data: 'imgdata',
+            encoding: 'base64',
+          },
+        ],
+      },
+    ];
+    const options = createMockOptions({
+      'reasoning.includeInContext': false,
+      'reasoning.stripFromContext': 'none',
+    });
+
+    const messages = buildMessagesWithReasoning(contents, options);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe('user');
+    const userMsg = messages[0] as OpenAI.Chat.ChatCompletionUserMessageParam;
+    expect(Array.isArray(userMsg.content)).toBe(true);
+    const parts = userMsg.content as Array<{ type: string }>;
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toStrictEqual({ type: 'text', text: 'What is this?' });
+    expect(parts[1]).toStrictEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,imgdata' },
+    });
+  });
+
+  it('converts user pdf media block to file content array part', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'pdfbytes',
+            encoding: 'base64',
+            filename: 'doc.pdf',
+          },
+        ],
+      },
+    ];
+    const options = createMockOptions({
+      'reasoning.includeInContext': false,
+      'reasoning.stripFromContext': 'none',
+    });
+
+    const messages = buildMessagesWithReasoning(contents, options);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe('user');
+    const userMsg = messages[0] as OpenAI.Chat.ChatCompletionUserMessageParam;
+    expect(Array.isArray(userMsg.content)).toBe(true);
+    const parts = userMsg.content as Array<{ type: string }>;
+    expect(parts[0]).toStrictEqual({
+      type: 'file',
+      file: {
+        filename: 'doc.pdf',
+        file_data: 'data:application/pdf;base64,pdfbytes',
+      },
+    });
+  });
+
+  it('flushes pending tool images as image_url content array parts', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call_1',
+            name: 'screenshot',
+            parameters: {},
+          } as ToolCallBlock,
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_1',
+            toolName: 'screenshot',
+            result: 'captured',
+          } as ToolResponseBlock,
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            data: 'shot',
+            encoding: 'base64',
+          },
+        ],
+      },
+    ];
+    const options = createMockOptions({
+      'reasoning.includeInContext': false,
+      'reasoning.stripFromContext': 'none',
+    });
+
+    const messages = buildMessagesWithReasoning(contents, options);
+    const userMsgs = messages.filter((m) => m.role === 'user');
+    expect(userMsgs.length).toBeGreaterThanOrEqual(1);
+    const imageUserMsg = userMsgs[userMsgs.length - 1];
+    expect(Array.isArray(imageUserMsg.content)).toBe(true);
+    const parts = imageUserMsg.content as Array<{
+      type: string;
+      image_url?: { url: string };
+    }>;
+    const imageParts = parts.filter((p) => p.type === 'image_url');
+    expect(imageParts.length).toBeGreaterThanOrEqual(1);
+    expect(imageParts[0].image_url!.url).toBe('data:image/png;base64,shot');
+  });
 });
 
 describe('validateToolMessageSequence', () => {

@@ -295,4 +295,91 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
 
     expect(result.detectedFormat).toBe('kimi'); // auto overrides → auto-detect
   });
+
+  it('sets thinking enabled on request body when reasoning.enabled is true', async () => {
+    const settings = new SettingsService();
+    const options = createMockOptions({
+      settings,
+      invocation: {
+        requestId: 'test-request',
+        timestamp: Date.now(),
+        modelBehavior: { 'reasoning.enabled': true },
+      } as unknown as NormalizedGenerateChatOptions['invocation'],
+      resolved: {
+        model: 'gpt-4o',
+        authToken: { token: 'test-token', type: 'api-key' },
+      },
+    });
+
+    const result = await prepareRequest(
+      options,
+      'gpt-4o',
+      undefined,
+      logger,
+      'openai',
+    );
+
+    const thinking = (
+      result.requestBody as unknown as { thinking?: { type: string } }
+    ).thinking;
+    expect(thinking).toStrictEqual({ type: 'enabled' });
+  });
+
+  it('sets thinking disabled on request body when reasoning.enabled is false', async () => {
+    const settings = new SettingsService();
+    const options = createMockOptions({
+      settings,
+      invocation: {
+        requestId: 'test-request',
+        timestamp: Date.now(),
+        modelBehavior: { 'reasoning.enabled': false },
+      } as unknown as NormalizedGenerateChatOptions['invocation'],
+      resolved: {
+        model: 'gpt-4o',
+        authToken: { token: 'test-token', type: 'api-key' },
+      },
+    });
+
+    const result = await prepareRequest(
+      options,
+      'gpt-4o',
+      undefined,
+      logger,
+      'openai',
+    );
+
+    const thinking = (
+      result.requestBody as unknown as { thinking?: { type: string } }
+    ).thinking;
+    expect(thinking).toStrictEqual({ type: 'disabled' });
+  });
+
+  it('does not set thinking on request body when reasoning.enabled is undefined', async () => {
+    const settings = new SettingsService();
+    const options = createMockOptions({
+      settings,
+      invocation: {
+        requestId: 'test-request',
+        timestamp: Date.now(),
+        modelBehavior: {},
+      } as unknown as NormalizedGenerateChatOptions['invocation'],
+      resolved: {
+        model: 'gpt-4o',
+        authToken: { token: 'test-token', type: 'api-key' },
+      },
+    });
+
+    const result = await prepareRequest(
+      options,
+      'gpt-4o',
+      undefined,
+      logger,
+      'openai',
+    );
+
+    const thinking = (
+      result.requestBody as unknown as { thinking?: { type: string } }
+    ).thinking;
+    expect(thinking).toBeUndefined();
+  });
 });

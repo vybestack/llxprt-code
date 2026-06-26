@@ -90,12 +90,14 @@ export function buildVercelTools(
   }
 
   const jsonSchemaFn =
-    getAiJsonSchema() ??
-    ((schema: JSONSchema7) => schema as unknown as JSONSchema7);
+    getAiJsonSchema() ?? ((schema: JSONSchema7): unknown => schema);
   const toolFn =
     getAiTool() ??
     ((config: { description?: string; inputSchema?: unknown }) =>
-      config as unknown as Tool<unknown, never>);
+      ({
+        description: config.description,
+        inputSchema: config.inputSchema ?? {},
+      }) as Tool<unknown, never>);
 
   const toolsRecord: VercelTools = {};
 
@@ -223,22 +225,15 @@ export async function createConfiguredModel(
     customFetch,
   );
   const modelId = options.resolved.model || defaultModel;
-  const providerWithChat = openaiProvider as unknown as {
-    chat?: (modelId: string) => unknown;
-    (modelId: string): unknown;
-  };
-  const baseModel = (
-    providerWithChat.chat
-      ? providerWithChat.chat(modelId)
-      : providerWithChat(modelId)
-  ) as LanguageModel;
+  const baseModel: LanguageModel =
+    typeof openaiProvider.chat === 'function'
+      ? openaiProvider.chat(modelId)
+      : openaiProvider(modelId);
 
   const useMiddlewareForNonStreaming = rsEnabled && !streamingEnabled;
   const model = useMiddlewareForNonStreaming
     ? wrapLanguageModel({
-        model: baseModel as unknown as Parameters<
-          typeof wrapLanguageModel
-        >[0]['model'],
+        model: baseModel,
         middleware: extractReasoningMiddleware({
           tagName: 'think',
           separator: '\n',
