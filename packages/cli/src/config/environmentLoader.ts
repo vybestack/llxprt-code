@@ -45,12 +45,12 @@ function findEnvFile(startDir: string): string | null {
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir || !parentDir) {
       // check .env under the platform config dir as fallback
-      const globalGeminiEnvPath = path.join(
+      const globalLlxprtEnvPath = path.join(
         Storage.getGlobalLlxprtDir(),
         '.env',
       );
-      if (fs.existsSync(globalGeminiEnvPath)) {
-        return globalGeminiEnvPath;
+      if (fs.existsSync(globalLlxprtEnvPath)) {
+        return globalLlxprtEnvPath;
       }
       const homeEnvPath = path.join(os.homedir(), '.env');
       if (fs.existsSync(homeEnvPath)) {

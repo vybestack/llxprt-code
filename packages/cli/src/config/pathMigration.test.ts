@@ -383,5 +383,11 @@ describe('performMigration — error handling', () => {
     );
     // newDir should still be the file (migration failed)
     expect(fs.readFileSync(newDir, 'utf-8')).toBe('blocker');
+    // No orphaned staging directories should remain
+    const parentDir = path.dirname(newDir);
+    const leftovers = fs
+      .readdirSync(parentDir)
+      .filter((f) => f.startsWith('.llxprt-migration-staging-'));
+    expect(leftovers).toHaveLength(0);
   });
 });

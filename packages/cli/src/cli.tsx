@@ -447,7 +447,17 @@ export async function main() {
 
   // Migrate legacy ~/.llxprt/ to platform-standard path (if needed),
   // then ensure the platform directory exists.
-  runStartupMigration();
+  const migrationResult = runStartupMigration();
+  if (
+    !migrationResult.migrated &&
+    migrationResult.reason.startsWith('migration error')
+  ) {
+    process.stderr.write(
+      `Warning: configuration migration failed (${migrationResult.reason}). ` +
+        `Your existing data in ~/.llxprt/ was preserved but the new location may be empty.
+`,
+    );
+  }
   const llxprtDir = Storage.getGlobalLlxprtDir();
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });

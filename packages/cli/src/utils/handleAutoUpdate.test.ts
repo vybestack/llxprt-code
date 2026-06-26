@@ -118,7 +118,7 @@ describe('handleAutoUpdate', () => {
 
     // Default mock behavior
     mockHomedir.mockReturnValue('/home/test');
-    process.env['LLXPRT_CONFIG_HOME'] = '/home/test/.llxprt';
+    process.env['LLXPRT_CONFIG_HOME'] = '/tmp/llxprt-test-config-home';
     mockExistsSync.mockReturnValue(false);
     mockReaddirSync.mockReturnValue([]);
     mockOpenSync.mockReturnValue(42); // Mock file descriptor
@@ -126,9 +126,6 @@ describe('handleAutoUpdate', () => {
 
   afterEach(() => {
     delete process.env['LLXPRT_CONFIG_HOME'];
-  });
-
-  afterEach(() => {
     vi.clearAllMocks();
   });
 
@@ -345,8 +342,7 @@ describe('handleAutoUpdate', () => {
       });
 
       const lockFilePath = path.join(
-        '/home/test',
-        '.llxprt',
+        '/tmp/llxprt-test-config-home',
         'locks',
         'cli-update.lock',
       );
@@ -382,8 +378,7 @@ describe('handleAutoUpdate', () => {
         });
 
         const lockFilePath = path.join(
-          '/home/test',
-          '.llxprt',
+          '/tmp/llxprt-test-config-home',
           'locks',
           'cli-update.lock',
         );
@@ -399,7 +394,7 @@ describe('handleAutoUpdate', () => {
 
         // Verify lock was created atomically
         expect(mockMkdirSync).toHaveBeenCalledWith(
-          path.join('/home/test', '.llxprt', 'locks'),
+          path.join('/tmp/llxprt-test-config-home', 'locks'),
           { recursive: true },
         );
         expect(mockOpenSync).toHaveBeenCalledWith(
@@ -412,8 +407,7 @@ describe('handleAutoUpdate', () => {
 
       // Verify lock was released after completion
       const lockFilePath = path.join(
-        '/home/test',
-        '.llxprt',
+        '/tmp/llxprt-test-config-home',
         'locks',
         'cli-update.lock',
       );
@@ -422,8 +416,7 @@ describe('handleAutoUpdate', () => {
 
     it('should release lock even if update fails', async () => {
       const lockFilePath = path.join(
-        '/home/test',
-        '.llxprt',
+        '/tmp/llxprt-test-config-home',
         'locks',
         'cli-update.lock',
       );
@@ -461,8 +454,7 @@ describe('handleAutoUpdate', () => {
       });
 
       const lockFilePath = path.join(
-        '/home/test',
-        '.llxprt',
+        '/tmp/llxprt-test-config-home',
         'locks',
         'cli-update.lock',
       );

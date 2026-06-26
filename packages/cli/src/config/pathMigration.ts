@@ -86,15 +86,17 @@ export function performMigration(
       };
     }
 
-    // Ensure the parent of newDir exists, then swap staging into place.
-    fs.mkdirSync(path.dirname(newDir), { recursive: true });
-
     if (fs.existsSync(newDir)) {
-      mergeDirectories(stagingDir, newDir);
+      const mergedCount = mergeDirectories(stagingDir, newDir);
       fs.rmSync(stagingDir, { recursive: true, force: true });
-    } else {
-      fs.renameSync(stagingDir, newDir);
+      return {
+        migrated: true,
+        reason: 'migration complete (merged)',
+        filesCopied: mergedCount,
+      };
     }
+
+    fs.renameSync(stagingDir, newDir);
 
     return {
       migrated: true,
@@ -160,8 +162,7 @@ export function logMigrationStatus(
   if (result.migrated) {
     process.stderr.write(
       `Configuration migrated successfully (${result.filesCopied} files copied). ` +
-        `The old directory at ${legacyDir} can be removed manually once verified.
-`,
+        `The old directory at ${legacyDir} can be removed manually once verified.\n`,
     );
   }
 }
@@ -203,7 +204,15 @@ function copyDirFiltered(
   dest: string,
   visited: Set<string> = new Set(),
 ): number {
-  const realSrc = fs.realpathSync(src);
+  let realSrc: string;
+  try {
+    realSrc = fs.realpathSync(src);
+  } catch (error) {
+    logger.debug(
+      `Skipping inaccessible entry (broken symlink?): ${src}: ${String(error)}`,
+    );
+    return 0;
+  }
   if (visited.has(realSrc)) {
     logger.debug(`Skipping already-visited directory (symlink cycle): ${src}`);
     return 0;
@@ -256,7 +265,8 @@ function createSymlinkClone(srcPath: string, destPath: string): void {
  * destination files. Used when the destination already exists (e.g. partially
  * populated from a prior interrupted run or concurrent process).
  */
-function mergeDirectories(staging: string, dest: string): void {
+function mergeDirectories(staging: string, dest: string): number {
+  let count = 0;
   const entries = fs.readdirSync(staging, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -265,11 +275,14 @@ function mergeDirectories(staging: string, dest: string): void {
 
     if (entry.isDirectory()) {
       fs.mkdirSync(destPath, { recursive: true });
-      mergeDirectories(stagingPath, destPath);
+      count += mergeDirectories(stagingPath, destPath);
     } else if (entry.isFile() && !pathEntryExists(destPath)) {
       fs.copyFileSync(stagingPath, destPath);
+      count++;
     } else if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
       createSymlinkClone(stagingPath, destPath);
+      count++;
     }
   }
+  return count;
 }

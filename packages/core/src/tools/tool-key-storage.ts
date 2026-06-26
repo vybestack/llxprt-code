@@ -39,8 +39,10 @@ const KEYFILES_JSON_NAME = 'keyfiles.json';
 const DEFAULT_TOOLS_DIR = (): string => {
   try {
     return path.join(Storage.getGlobalLlxprtDir(), 'tools');
-  } catch {
-    // Fall through to fallbacks if getGlobalLlxprtDir() throws
+  } catch (error) {
+    debugLogger.warn(
+      `Storage.getGlobalLlxprtDir() threw, falling back: ${String(error)}`,
+    );
   }
 
   try {

@@ -126,25 +126,22 @@ describe('Storage – default platform path (no override)', () => {
       true,
     );
   });
+
+  it('getGlobalLlxprtDir falls through to platform path when override is empty', () => {
+    process.env['LLXPRT_CONFIG_HOME'] = '';
+    const result = Storage.getGlobalLlxprtDir();
+    expect(result.endsWith(path.join('llxprt-code', 'configuration'))).toBe(
+      true,
+    );
+  });
 });
 
 describe('Storage – legacy path', () => {
-  beforeEach(() => {
+  it('getLegacyLlxprtDir returns ~/.llxprt regardless of override', () => {
     process.env['LLXPRT_CONFIG_HOME'] = '/tmp/some-override';
-  });
-
-  afterEach(() => {
+    const expected = path.join(os.homedir(), '.llxprt');
+    expect(Storage.getLegacyLlxprtDir()).toBe(expected);
     delete process.env['LLXPRT_CONFIG_HOME'];
-  });
-
-  it('getLegacyLlxprtDir returns ~/.llxprt', () => {
-    const expected = path.join(os.homedir(), '.llxprt');
-    expect(Storage.getLegacyLlxprtDir()).toBe(expected);
-  });
-
-  it('getLegacyLlxprtDir is unaffected by LLXPRT_CONFIG_HOME', () => {
-    const expected = path.join(os.homedir(), '.llxprt');
-    expect(Storage.getLegacyLlxprtDir()).toBe(expected);
   });
 });
 

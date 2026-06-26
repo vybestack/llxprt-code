@@ -46,7 +46,7 @@ describe('FileTokenStorage', () => {
     },
     updatedAt: Date.now() - 10000,
   };
-  const CONFIG_HOME = '/home/test/.llxprt';
+  const CONFIG_HOME = '/tmp/llxprt-test-config-home';
 
   beforeEach(() => {
     vi.clearAllMocks();
