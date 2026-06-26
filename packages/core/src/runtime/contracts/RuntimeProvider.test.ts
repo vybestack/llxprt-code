@@ -190,6 +190,7 @@ describe('RuntimeProviderManager contract', () => {
         return 'openai';
       },
       setActiveProvider(_name: string): void {},
+      setRuntimeContext(): void {},
       getAvailableModels(_providerName?: string): Promise<RuntimeModel[]> {
         return Promise.resolve([]);
       },
@@ -228,6 +229,7 @@ describe('RuntimeProviderManager contract', () => {
         return undefined;
       },
       setActiveProvider(_name: string): void {},
+      setRuntimeContext(): void {},
       getAvailableModels(providerName?: string): Promise<RuntimeModel[]> {
         if (!providerName || providerName === 'openai') {
           return Promise.resolve(models);
@@ -261,6 +263,7 @@ describe('RuntimeProviderManager contract', () => {
         return undefined;
       },
       setActiveProvider(_name: string): void {},
+      setRuntimeContext(): void {},
       getAvailableModels(): Promise<RuntimeModel[]> {
         return Promise.resolve([]);
       },

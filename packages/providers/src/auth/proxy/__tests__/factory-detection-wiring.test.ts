@@ -87,9 +87,12 @@ describe('Factory Detection Wiring (P33)', () => {
       const storage = createProviderKeyStorage();
 
       expect(storage).toBeDefined();
+      // Assert the FULL public ProviderKeyStorageLike structural contract so
+      // the direct path verifies the same surface as the proxy path below.
       expect(typeof storage.getKey).toBe('function');
       expect(typeof storage.saveKey).toBe('function');
       expect(typeof storage.deleteKey).toBe('function');
+      expect(typeof storage.hasKey).toBe('function');
       expect(typeof storage.listKeys).toBe('function');
     });
 
@@ -98,9 +101,14 @@ describe('Factory Detection Wiring (P33)', () => {
       const storage = createProviderKeyStorage();
 
       expect(storage).toBeDefined();
+      // Assert the FULL public ProviderKeyStorageLike structural contract
+      // (not a concrete class name) — proving the proxy path yields a
+      // drop-in implementation.
       expect(typeof storage.getKey).toBe('function');
+      expect(typeof storage.saveKey).toBe('function');
+      expect(typeof storage.deleteKey).toBe('function');
+      expect(typeof storage.hasKey).toBe('function');
       expect(typeof storage.listKeys).toBe('function');
-      // ProxyProviderKeyStorage may have read-only behavior
     });
 
     it('returns singleton instances (caches per mode)', () => {

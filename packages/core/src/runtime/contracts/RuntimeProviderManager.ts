@@ -18,6 +18,7 @@
 import type { RuntimeProvider } from './RuntimeProvider.js';
 import type { RuntimeModel } from './RuntimeModel.js';
 import type { Config } from '../../config/config.js';
+import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
 
 export interface RuntimeProviderMetrics {
   [key: string]: unknown;
@@ -62,6 +63,7 @@ export interface RuntimeProviderManager {
   getServerToolsProvider(): RuntimeProvider | null | undefined;
   setServerToolsProvider(provider: RuntimeProvider | null): void;
   setConfig(config: Config): void;
+  setRuntimeContext(runtimeContext: ProviderRuntimeContext): void;
   hasActiveProvider(): boolean;
   accumulateSessionTokens(providerName: string, usage: unknown): void;
 }

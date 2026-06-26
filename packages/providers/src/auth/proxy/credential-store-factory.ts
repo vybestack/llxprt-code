@@ -30,7 +30,10 @@ import {
 } from '@vybestack/llxprt-code-auth';
 import { createKeyringTokenStore } from '@vybestack/llxprt-code-core';
 // ProviderKeyStorage now lives in the storage package
-import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+import type {
+  ProviderKeyStorage,
+  ProviderKeyStorageLike,
+} from '@vybestack/llxprt-code-storage';
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 
 let proxyTokenStore: ProxyTokenStore | undefined;
@@ -73,14 +76,14 @@ export function createTokenStore(): TokenStore {
  *
  * @plan PLAN-20250214-CREDPROXY.P36
  */
-export function createProviderKeyStorage(): ProviderKeyStorage {
+export function createProviderKeyStorage(): ProviderKeyStorageLike {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (socketPath) {
     if (!proxyKeyStorage) {
       const client = new ProxySocketClient(socketPath);
       proxyKeyStorage = new ProxyProviderKeyStorage(client);
     }
-    return proxyKeyStorage as unknown as ProviderKeyStorage;
+    return proxyKeyStorage;
   }
   directKeyStorage ??= getProviderKeyStorage();
   return directKeyStorage;

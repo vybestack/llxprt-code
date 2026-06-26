@@ -1,19 +1,5 @@
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
-type PersistedProfileView = Omit<
-  Partial<Profile>,
-  'ephemeralSettings' | 'modelParams'
-> & {
-  ephemeralSettings?: Record<string, unknown> | null;
-  modelParams?: Record<string, unknown> | null;
-  provider?: string | null;
-  model?: string | null;
-};
-
-function asPersistedProfileView(profile: Profile): PersistedProfileView {
-  return profile as unknown as PersistedProfileView;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -21,25 +7,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function getProfileEphemeralSettings(
   profile: Profile,
 ): Record<string, unknown> {
-  const settings = asPersistedProfileView(profile).ephemeralSettings;
+  const settings: unknown = profile.ephemeralSettings;
   return isRecord(settings) ? settings : {};
 }
 
 export function getProfileModelParams(
   profile: Profile,
 ): Record<string, unknown> {
-  const params = asPersistedProfileView(profile).modelParams;
+  const params: unknown = profile.modelParams;
   return isRecord(params) ? params : {};
 }
 
-export function getProfileProvider(profile: Profile): string | undefined {
-  const provider = asPersistedProfileView(profile).provider;
-  return typeof provider === 'string' ? provider : undefined;
+export function getProfileProvider(profile: Profile): string {
+  return profile.provider;
 }
 
-export function getProfileModel(profile: Profile): string | undefined {
-  const model = asPersistedProfileView(profile).model;
-  return typeof model === 'string' ? model : undefined;
+export function getProfileModel(profile: Profile): string {
+  return profile.model;
 }
 
 export function getStringValue(
