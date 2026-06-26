@@ -60,8 +60,7 @@
     "@ast-grep/lang-ruby": "^0.0.6",
     "@ast-grep/lang-rust": "^0.0.6",
     "@lvce-editor/ripgrep": "^1.6.0",
-    "mime-types": "^2.1.35",
-    "@vybestack/llxprt-code-settings": "file:../settings"
+    "mime-types": "^2.1.35"
   },
   "devDependencies": {
     "@types/node": "^24.2.1",
