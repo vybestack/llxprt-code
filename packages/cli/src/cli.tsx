@@ -448,10 +448,7 @@ export async function main() {
   // Migrate legacy ~/.llxprt/ to platform-standard path (if needed),
   // then ensure the platform directory exists.
   const migrationResult = runStartupMigration();
-  if (
-    !migrationResult.migrated &&
-    migrationResult.reason.startsWith('migration error')
-  ) {
+  if (!migrationResult.migrated && migrationResult.error === true) {
     process.stderr.write(
       `Warning: configuration migration failed (${migrationResult.reason}). ` +
         `Your existing data in ~/.llxprt/ was preserved but the new location may be empty.

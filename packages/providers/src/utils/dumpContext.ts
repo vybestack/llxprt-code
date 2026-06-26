@@ -173,7 +173,7 @@ export async function dumpResponseContext(
 }
 
 /**
- * Dumps context to separate related request and response files in ~/.llxprt/dumps/.
+ * Dumps context to separate related request and response files in the global llxprt configuration directory (dumps/ subdirectory).
  * Returns the shared base id used by the generated filenames.
  */
 export async function dumpContext(

@@ -18,19 +18,26 @@ function getGlobalConfigDir(): string {
   const override = process.env['LLXPRT_CONFIG_HOME'];
   if (override) return override;
   const home = os.homedir();
+  if (!home) {
+    return path.join(os.tmpdir(), 'llxprt-code', 'configuration');
+  }
   const p = process.platform;
   let dataDir: string;
   if (p === 'darwin') {
     dataDir = path.join(home, 'Library', 'Application Support', 'llxprt-code');
   } else if (p === 'win32') {
+    const rawLocalAppData = process.env['LOCALAPPDATA'] ?? '';
     dataDir = path.join(
-      process.env['LOCALAPPDATA'] ?? path.join(home, 'AppData', 'Local'),
+      rawLocalAppData !== ''
+        ? rawLocalAppData
+        : path.join(home, 'AppData', 'Local'),
       'llxprt-code',
       'Data',
     );
   } else {
+    const rawXdg = process.env['XDG_DATA_HOME'] ?? '';
     dataDir = path.join(
-      process.env['XDG_DATA_HOME'] ?? path.join(home, '.local', 'share'),
+      rawXdg !== '' ? rawXdg : path.join(home, '.local', 'share'),
       'llxprt-code',
     );
   }

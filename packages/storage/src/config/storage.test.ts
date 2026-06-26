@@ -50,7 +50,7 @@ describe('Path / storage constants', () => {
 // beforeEach and cleaned up in afterEach.
 // ---------------------------------------------------------------------------
 
-const OVERRIDE_DIR = '/tmp/llxprt-test-config-home';
+const OVERRIDE_DIR = path.join(os.tmpdir(), 'llxprt-test-config-home');
 
 describe('Storage – global path resolution', () => {
   beforeEach(() => {

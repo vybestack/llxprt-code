@@ -21,6 +21,7 @@ export interface MigrationResult {
   readonly migrated: boolean;
   readonly reason: string;
   readonly filesCopied: number;
+  readonly error?: boolean;
 }
 
 /**
@@ -36,7 +37,7 @@ export function shouldMigrate(legacyDir: string, newDir: string): boolean {
     return false;
   }
 
-  if (!directoryHasContent(legacyDir)) {
+  if (!hasMigratableContent(legacyDir)) {
     return false;
   }
 
@@ -147,6 +148,7 @@ export function runStartupMigration(): MigrationResult {
       migrated: false,
       reason: `migration error: ${String(error)}`,
       filesCopied: 0,
+      error: true,
     };
   }
 }
@@ -156,12 +158,13 @@ export function runStartupMigration(): MigrationResult {
  */
 export function logMigrationStatus(
   legacyDir: string,
-  _newDir: string,
+  newDir: string,
   result: MigrationResult,
 ): void {
   if (result.migrated) {
     process.stderr.write(
-      `Configuration migrated successfully (${result.filesCopied} files copied). ` +
+      `Configuration migrated successfully (${result.filesCopied} files copied) ` +
+        `to ${newDir}. ` +
         `The old directory at ${legacyDir} can be removed manually once verified.\n`,
     );
   }
@@ -174,10 +177,33 @@ function directoryHasContent(dir: string): boolean {
   try {
     entries = fs.readdirSync(dir);
   } catch (error) {
+    const nodeErr = error as NodeJS.ErrnoException;
+    if (nodeErr.code === 'ENOENT') {
+      return false;
+    }
     logger.debug(`Cannot read directory ${dir}: ${String(error)}`);
-    return false;
+    return true;
   }
   return entries.length > 0;
+}
+
+/**
+ * Returns true when the directory contains at least one entry that would
+ * actually be copied (i.e. is not in {@link EXCLUDED_ENTRIES}).
+ */
+function hasMigratableContent(dir: string): boolean {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch (error) {
+    const nodeErr = error as NodeJS.ErrnoException;
+    if (nodeErr.code === 'ENOENT') {
+      return false;
+    }
+    logger.debug(`Cannot read directory ${dir}: ${String(error)}`);
+    return true;
+  }
+  return entries.some((name) => !EXCLUDED_ENTRIES.has(name));
 }
 
 /**
@@ -274,6 +300,12 @@ function mergeDirectories(staging: string, dest: string): number {
     const destPath = path.join(dest, entry.name);
 
     if (entry.isDirectory()) {
+      if (pathEntryExists(destPath) && !fs.lstatSync(destPath).isDirectory()) {
+        logger.debug(
+          `Skipping ${entry.name}: type mismatch (dir vs file) at ${destPath}`,
+        );
+        continue;
+      }
       fs.mkdirSync(destPath, { recursive: true });
       count += mergeDirectories(stagingPath, destPath);
     } else if (entry.isFile() && !pathEntryExists(destPath)) {

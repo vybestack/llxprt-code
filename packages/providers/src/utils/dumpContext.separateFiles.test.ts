@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, afterAll } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -19,14 +19,26 @@ import {
 // getGlobalLlxprtDir resolves inside the sandbox, not the real user dir.
 const TEST_CONFIG_HOME = path.join(
   os.tmpdir(),
-  `llxprt-dumpctx-test-${process.pid}`,
+  `llxprt-dumpctx-sep-test-${process.pid}`,
 );
+const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
 process.env['LLXPRT_CONFIG_HOME'] = TEST_CONFIG_HOME;
 
 const DUMP_DIR = path.join(Storage.getGlobalLlxprtDir(), 'dumps');
 
 describe('dumpContext separate request/response files', () => {
   const createdFiles: string[] = [];
+
+  afterAll(async () => {
+    if (originalConfigHome !== undefined) {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+    } else {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    }
+    await fs
+      .rm(TEST_CONFIG_HOME, { recursive: true, force: true })
+      .catch(() => {});
+  });
 
   afterEach(async () => {
     for (const file of createdFiles) {

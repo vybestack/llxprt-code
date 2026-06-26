@@ -16,7 +16,7 @@
 
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { homedir, platform } from 'node:os';
+import { homedir, platform, tmpdir } from 'node:os';
 import {
   OAuthTokenSchema,
   type OAuthToken,
@@ -46,23 +46,28 @@ const LOCK_WRITE_GRACE_MS = 750;
 // Inline platform data path matching envPaths('llxprt-code', { suffix: '' }).data
 // without importing the package (auth is a leaf package with no extra deps).
 function getPlatformDataDir(): string {
-  const home = homedir();
+  const home = homedir() || tmpdir();
   if (platform() === 'darwin') {
     return join(home, 'Library', 'Application Support', 'llxprt-code');
   }
   if (platform() === 'win32') {
+    const rawLocalAppData = process.env['LOCALAPPDATA'] ?? '';
     const localAppData =
-      process.env['LOCALAPPDATA'] ?? join(home, 'AppData', 'Local');
+      rawLocalAppData !== '' ? rawLocalAppData : join(home, 'AppData', 'Local');
     return join(localAppData, 'llxprt-code', 'Data');
   }
-  const xdgData = process.env['XDG_DATA_HOME'] ?? join(home, '.local', 'share');
+  const rawXdg = process.env['XDG_DATA_HOME'] ?? '';
+  const xdgData = rawXdg !== '' ? rawXdg : join(home, '.local', 'share');
   return join(xdgData, 'llxprt-code');
 }
 
 /** Resolved on each call so LLXPRT_CONFIG_HOME changes take effect. */
 function getLockDir(): string {
-  const configHome = process.env['LLXPRT_CONFIG_HOME'];
-  const baseDir = configHome ?? join(getPlatformDataDir(), 'configuration');
+  const configHome = process.env['LLXPRT_CONFIG_HOME'] ?? '';
+  const baseDir =
+    configHome !== ''
+      ? configHome
+      : join(getPlatformDataDir(), 'configuration');
   return join(baseDir, 'oauth', 'locks');
 }
 
