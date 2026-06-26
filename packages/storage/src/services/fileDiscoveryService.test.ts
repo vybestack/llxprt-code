@@ -242,6 +242,39 @@ describe('FileDiscoveryService', () => {
       expect(nonFastPath).toStrictEqual([]);
       expect(fastPath).toStrictEqual(nonFastPath);
     });
+
+    it('should keep visible symlink targets consistently between fast path and non-fast path', async () => {
+      await createTestFile('visible-target/real.txt', 'data');
+      const absoluteSymlinkPath = path.join(projectRoot, 'link-to-visible.txt');
+      await fs.symlink(
+        path.join(projectRoot, 'visible-target', 'real.txt'),
+        absoluteSymlinkPath,
+      );
+      await fs.symlink(
+        path.join(projectRoot, 'visible-target'),
+        path.join(projectRoot, 'linked-visible-target'),
+        'dir',
+      );
+      const relativeSymlinkPath = path.join(
+        'linked-visible-target',
+        'real.txt',
+      );
+      const files = [absoluteSymlinkPath, relativeSymlinkPath];
+
+      const service = new FileDiscoveryService(projectRoot);
+      const fastPath = service.filterFiles(files, {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      });
+      const nonFastPath = service.filterFiles(files, {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: false,
+      });
+
+      expect(fastPath).toStrictEqual(files);
+      expect(nonFastPath).toStrictEqual(files);
+      expect(fastPath).toStrictEqual(nonFastPath);
+    });
   });
 
   describe('filterFilesWithReport', () => {
