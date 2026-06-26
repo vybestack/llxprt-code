@@ -131,7 +131,7 @@ describe('createToolRegistryViewFromRegistry', () => {
 
   it('returns an empty view when no registry is provided', () => {
     const view = createToolRegistryViewFromRegistry(undefined);
-    expect(view.listToolNames()).toEqual([]);
+    expect(view.listToolNames()).toStrictEqual([]);
     expect(view.getToolMetadata('anything')).toBeUndefined();
   });
 });

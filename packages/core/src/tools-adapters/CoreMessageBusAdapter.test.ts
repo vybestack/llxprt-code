@@ -42,9 +42,9 @@ describe('CoreMessageBusAdapter', () => {
       });
 
       expect(received).toHaveLength(1);
-      expect(received[0]!.type).toBe(MessageBusType.TOOL_CONFIRMATION_RESPONSE);
+      expect(received[0].type).toBe(MessageBusType.TOOL_CONFIRMATION_RESPONSE);
       // The payload should carry the original message object
-      expect(received[0]!.payload).toMatchObject({
+      expect(received[0].payload).toMatchObject({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         confirmed: true,
         correlationId: 'corr-1',

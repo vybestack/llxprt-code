@@ -62,7 +62,7 @@ class RealPublishSubscribeBus
 {
   private subscribers: Map<string, Set<(response: unknown) => void>> =
     new Map();
-  private published: Record<string, unknown>[] = [];
+  private published: Array<Record<string, unknown>> = [];
 
   async requestConfirmation(): Promise<{
     confirmed: boolean;
@@ -98,14 +98,14 @@ class RealPublishSubscribeBus
     this.subscribers.get(event)?.delete(handler);
   }
 
-  getPublishedMessages(): Record<string, unknown>[] {
+  getPublishedMessages(): Array<Record<string, unknown>> {
     return this.published;
   }
 }
 
 /** A minimal bus that only exposes publish capability (no subscribe). */
 class RealPublishOnlyBus implements IToolMessageBus, PublishCapable {
-  private published: Record<string, unknown>[] = [];
+  private published: Array<Record<string, unknown>> = [];
 
   async requestConfirmation(): Promise<{
     confirmed: boolean;
@@ -117,7 +117,7 @@ class RealPublishOnlyBus implements IToolMessageBus, PublishCapable {
     this.published.push(message);
   }
 
-  getPublishedMessages(): Record<string, unknown>[] {
+  getPublishedMessages(): Array<Record<string, unknown>> {
     return this.published;
   }
 }
@@ -176,8 +176,8 @@ describe('BaseToolInvocation message bus capabilities', () => {
 
       const messages = bus.getPublishedMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]!['type']).toBe('update-policy');
-      expect(messages[0]!['toolName']).toBe('test-tool');
+      expect(messages[0]['type']).toBe('update-policy');
+      expect(messages[0]['toolName']).toBe('test-tool');
     });
 
     it('publishes with persist when outcome is ProceedAlwaysAndSave', async () => {
@@ -194,7 +194,7 @@ describe('BaseToolInvocation message bus capabilities', () => {
 
       const messages = bus.getPublishedMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]!['persist']).toBe(true);
+      expect(messages[0]['persist']).toBe(true);
     });
 
     it('does nothing when bus lacks publish capability', async () => {
@@ -205,10 +205,11 @@ describe('BaseToolInvocation message bus capabilities', () => {
         'test-tool',
       );
 
-      // Should not throw, just no-op
-      await invocation.callPublishPolicyUpdate(
-        ToolConfirmationOutcome.ProceedAlways,
-      );
+      await expect(
+        invocation.callPublishPolicyUpdate(
+          ToolConfirmationOutcome.ProceedAlways,
+        ),
+      ).resolves.toBeUndefined();
     });
 
     it('uses typed publishPolicyUpdate when available', async () => {
@@ -254,7 +255,7 @@ describe('BaseToolInvocation message bus capabilities', () => {
       const controller = new AbortController();
       // Schedule a confirmation response to be delivered
       setTimeout(() => {
-        bus.subscribe('tool-confirmation-response', (response) => {
+        bus.subscribe('tool-confirmation-response', (_response) => {
           // already subscribed, now deliver the response by publishing
         });
         // Simulate the bus delivering a response by calling the registered handler
@@ -268,7 +269,7 @@ describe('BaseToolInvocation message bus capabilities', () => {
             handler({
               correlationId: (
                 bus.getPublishedMessages()[0] as { correlationId?: string }
-              )?.correlationId,
+              ).correlationId,
               confirmed: true,
             });
           }
@@ -281,7 +282,7 @@ describe('BaseToolInvocation message bus capabilities', () => {
 
       // Should have published a confirmation request
       expect(bus.getPublishedMessages()).toHaveLength(1);
-      expect(bus.getPublishedMessages()[0]!['type']).toBe(
+      expect(bus.getPublishedMessages()[0]['type']).toBe(
         'tool-confirmation-request',
       );
       expect(decision).toBe('ALLOW');
