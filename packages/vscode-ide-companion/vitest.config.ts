@@ -5,26 +5,22 @@
  */
 
 /// <reference types="vitest" />
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
-const ajvCjsEntry = fileURLToPath(
-  new URL(
-    '../../node_modules/ajv-formats/node_modules/ajv/dist/ajv.js',
-    import.meta.url,
-  ),
-);
-const ajv2020Entry = fileURLToPath(
-  new URL(
-    '../../node_modules/ajv-formats/node_modules/ajv/dist/2020.js',
-    import.meta.url,
-  ),
-);
-const fdirEntry = fileURLToPath(
-  new URL(
-    '../../node_modules/vite/node_modules/fdir/dist/index.mjs',
-    import.meta.url,
-  ),
+const require = createRequire(import.meta.url);
+
+// Resolve ajv/fdir dynamically rather than hardcoding nested node_modules
+// paths. npm may hoist or nest these differently depending on the rest of the
+// dependency tree (e.g. after security-driven version bumps), so a fixed
+// relative path is brittle. createRequire walks the normal Node resolution
+// chain and finds them wherever they end up installed.
+const ajvCjsEntry = require.resolve('ajv/dist/ajv.js');
+const ajv2020Entry = require.resolve('ajv/dist/2020.js');
+const fdirEntry = resolve(
+  dirname(require.resolve('fdir/package.json')),
+  'dist/index.mjs',
 );
 
 const workspaceDependencyAliasPlugin = {

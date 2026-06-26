@@ -142,6 +142,7 @@ export function applyProfileEphemeralSettings(
     'tool-format',
     'api-version',
     'custom-headers',
+    'socket-timeout',
     'shell-replacement',
     'authOnly',
   ];

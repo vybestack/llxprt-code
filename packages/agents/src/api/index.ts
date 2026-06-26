@@ -23,6 +23,7 @@ export type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
  * @plan:PLAN-20260622-COREAPIGAP.P17
  * @requirement:REQ-008
  * @pseudocode barrel-exports.md lines 1-9
+ * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004
  */
 export { PolicyDecision, ApprovalMode } from '@vybestack/llxprt-code-core';
 export type {
@@ -38,6 +39,7 @@ export type {
   McpPromptInfo,
   McpResourceInfo,
   McpBlockedServer,
+  McpOAuthStatus, // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004
   ToolKeyInfo,
   ToolKeyStatus,
 } from './agent.js';

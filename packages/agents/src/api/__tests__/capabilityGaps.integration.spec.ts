@@ -34,6 +34,13 @@ const FIXTURE = 'plain-text.jsonl';
 const ALL_APPROVAL_MODES = Object.values(ApprovalMode);
 const ALL_POLICY_DECISIONS = Object.values(PolicyDecision);
 
+function isSafeMaskedKey(masked: string | undefined): boolean {
+  if (masked === undefined) {
+    return true;
+  }
+  return masked.includes('*') === true || masked.length < 20;
+}
+
 describe('P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-20260622-COREAPIGAP.P20', () => {
   let built: BuiltAgent | undefined;
 
@@ -168,10 +175,7 @@ describe('P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-
     // Masked-only contract: a masked key carries a `*` or is short — never a
     // full-length raw secret. When maskedKey is absent the contract holds
     // vacuously; when present it must satisfy the mask shape.
-    const masked = status.maskedKey;
-    const maskedSafe =
-      masked === undefined || masked.includes('*') || masked.length < 20;
-    expect(maskedSafe).toBe(true);
+    expect(isSafeMaskedKey(status.maskedKey)).toBe(true);
   });
 
   // ─── #1595 Keystone: every capability entry is a function on the public root ─

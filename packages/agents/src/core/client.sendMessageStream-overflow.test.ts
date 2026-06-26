@@ -239,7 +239,7 @@ describe('Gemini Client (client.ts)', () => {
       // A string of length 400 is roughly 100 tokens.
       const longText = 'a'.repeat(400);
       const request: Part[] = [{ text: longText }];
-      // estimateTextOnlyLength counts only text content (400 chars), not JSON structure
+      // Structured fallback counts the text content (400 chars), not JSON structure.
       const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
 
@@ -262,6 +262,368 @@ describe('Gemini Client (client.ts)', () => {
       });
       // Ensure turn.run is not called
       expect(mockTurnRunFn).not.toHaveBeenCalled();
+    });
+
+    it('should NOT emit ContextWindowWillOverflow when remaining capacity is already negative (issue 2139)', async () => {
+      // Arrange — simulate a provider/profile switch where the prior session's
+      // lastPromptTokenCount exceeds the switched model's limit. Remaining is
+      // therefore negative, and the preflight guard must NOT short-circuit;
+      // the normal send/compression/enforcement path should attempt to resolve
+      // the overflow with the switched model's tokenizer.
+      const MOCKED_TOKEN_LIMIT = 200000;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+
+      // e.g. 249,442 stored tokens against a 200,000-token model.
+      const lastPromptTokenCount = 249442;
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        lastPromptTokenCount,
+      );
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        convertPartListUnionToIContent: vi
+          .fn()
+          .mockReturnValue({ speaker: 'human', blocks: [] }),
+        estimatePendingTokens: vi.fn().mockResolvedValue(0),
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      // A small "continue" request — remaining is -49,442.
+      const request: Part[] = [{ text: 'continue' }];
+
+      const mockStream = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'ok' };
+      })();
+      mockTurnRunFn.mockReturnValue(mockStream);
+
+      // Act
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-negative-remaining',
+      );
+      const events = await fromAsync(stream);
+
+      // Assert — no bogus overflow; the turn proceeds.
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: GeminiEventType.ContextWindowWillOverflow,
+        }),
+      );
+      expect(mockTurnRunFn).toHaveBeenCalled();
+    });
+
+    it('should NOT emit ContextWindowWillOverflow for a functionResponse-only continuation when remaining is negative (issue 2139)', async () => {
+      // Arrange — after a tool call completes, the continuation request is a
+      // bare functionResponse part. The negative-remaining short-circuit must
+      // defer to the send path rather than tripping a bogus guard.
+      const MOCKED_TOKEN_LIMIT = 200000;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+
+      const lastPromptTokenCount = 249442;
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        lastPromptTokenCount,
+      );
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        convertPartListUnionToIContent: vi.fn().mockReturnValue({
+          speaker: 'tool',
+          blocks: [],
+        }),
+        estimatePendingTokens: vi.fn().mockResolvedValue(0),
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      // Pure functionResponse continuation — 0 tokens by text estimate.
+      const request: Part[] = [
+        {
+          functionResponse: {
+            name: 'someTool',
+            response: { result: 'done' },
+          },
+        },
+      ];
+
+      const mockStream = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'ok' };
+      })();
+      mockTurnRunFn.mockReturnValue(mockStream);
+
+      // Act
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-tool-response-continuation',
+      );
+      const events = await fromAsync(stream);
+
+      // Assert — the 0-token guard must not block the continuation.
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: GeminiEventType.ContextWindowWillOverflow,
+        }),
+      );
+      expect(mockTurnRunFn).toHaveBeenCalled();
+    });
+
+    it('should use the model-aware tokenizer (estimatePendingTokens + convertPartListUnionToIContent) when remaining capacity is positive', async () => {
+      // Arrange — proves the positive-remaining path routes through the
+      // tokenizer-backed sizing path rather than the text-only fallback.
+      const MOCKED_TOKEN_LIMIT = 10000;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      const lastPromptTokenCount = 1000;
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        lastPromptTokenCount,
+      );
+
+      const convertSpy = vi.fn().mockReturnValue({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hi' }],
+      });
+      const estimateSpy = vi.fn().mockResolvedValue(50);
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        convertPartListUnionToIContent: convertSpy,
+        estimatePendingTokens: estimateSpy,
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const mockStream = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'ok' };
+      })();
+      mockTurnRunFn.mockReturnValue(mockStream);
+
+      const request: Part[] = [{ text: 'continue' }];
+
+      // Act
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-tokenizer-positive-remaining',
+      );
+      await fromAsync(stream);
+
+      // Assert — tokenizer path was used; text-only fallback was not needed.
+      expect(convertSpy).toHaveBeenCalledWith(request);
+      expect(estimateSpy).toHaveBeenCalledTimes(1);
+      expect(estimateSpy).toHaveBeenCalledWith([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      ]);
+      // No overflow since 50 < (9000 * 0.95).
+      expect(mockTurnRunFn).toHaveBeenCalled();
+    });
+
+    it('should NOT invoke the tokenizer when remaining capacity is already negative (issue 2139)', async () => {
+      // Arrange — proves the negative-remaining short-circuit avoids the
+      // tokenizer-backed sizing path entirely (it returns before sizing).
+      const MOCKED_TOKEN_LIMIT = 200000;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      const lastPromptTokenCount = 249442;
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        lastPromptTokenCount,
+      );
+
+      const convertSpy = vi.fn();
+      const estimateSpy = vi.fn();
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        convertPartListUnionToIContent: convertSpy,
+        estimatePendingTokens: estimateSpy,
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const mockStream = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'ok' };
+      })();
+      mockTurnRunFn.mockReturnValue(mockStream);
+
+      // Act
+      const stream = client.sendMessageStream(
+        [{ text: 'continue' }],
+        new AbortController().signal,
+        'prompt-id-tokenizer-skipped-negative',
+      );
+      const events = await fromAsync(stream);
+
+      // Assert — preflight deferred to the send path; tokenizer never called.
+      expect(convertSpy).not.toHaveBeenCalled();
+      expect(estimateSpy).not.toHaveBeenCalled();
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: GeminiEventType.ContextWindowWillOverflow,
+        }),
+      );
+      expect(mockTurnRunFn).toHaveBeenCalled();
+    });
+
+    it('should count functionResponse payload tokens in the structured fallback (no tokenizer available)', async () => {
+      // Arrange — a minimal chat double WITHOUT tokenizer methods forces the
+      // structured fallback. A functionResponse-only request must be estimated
+      // as > 0 tokens (its JSON payload), unlike the old text-only estimate.
+      const MOCKED_TOKEN_LIMIT = 1000;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      const lastPromptTokenCount = 0;
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        lastPromptTokenCount,
+      );
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const mockStream = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'ok' };
+      })();
+      mockTurnRunFn.mockReturnValue(mockStream);
+
+      // Build a functionResponse payload large enough that its JSON/4 exceeds
+      // the 95% threshold of the full limit (1000 * 0.95 = 950 tokens).
+      const largeResult = 'x'.repeat(4000);
+      const request: Part[] = [
+        {
+          functionResponse: {
+            name: 'someTool',
+            response: { result: largeResult },
+          },
+        },
+      ];
+
+      // Act
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-structured-fallback-fn-response',
+      );
+      const events = await fromAsync(stream);
+
+      // Assert — the payload is counted (would be 0 under the old text-only
+      // estimate), so the guard correctly fires.
+      const overflow = events.find(
+        (e) => e.type === GeminiEventType.ContextWindowWillOverflow,
+      );
+      expect(overflow).toBeDefined();
+      // JSON of the functionResponse is well over 4000 chars → > 950 tokens.
+      expect(
+        (overflow as { value: { estimatedRequestTokenCount: number } }).value
+          .estimatedRequestTokenCount,
+      ).toBeGreaterThan(950);
+    });
+
+    it('should use structured fallback when request conversion throws before tokenizer sizing', async () => {
+      // Arrange — convertPartListUnionToIContent is synchronous. If it throws,
+      // the fallback still needs to run instead of rejecting the stream.
+      const MOCKED_TOKEN_LIMIT = 1000;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      const lastPromptTokenCount = 0;
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        lastPromptTokenCount,
+      );
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        convertPartListUnionToIContent: vi.fn(() => {
+          throw new Error('conversion unavailable');
+        }),
+        estimatePendingTokens: vi.fn().mockResolvedValue(1),
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const request: Part[] = [
+        {
+          functionResponse: {
+            name: 'someTool',
+            response: { result: 'x'.repeat(4000) },
+          },
+        },
+      ];
+
+      // Act
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-conversion-fallback',
+      );
+      const events = await fromAsync(stream);
+
+      // Assert — fallback counted the functionResponse payload and emitted the
+      // same preflight overflow event rather than throwing.
+      const overflow = events.find(
+        (e) => e.type === GeminiEventType.ContextWindowWillOverflow,
+      );
+      expect(overflow).toBeDefined();
+      expect(mockTurnRunFn).not.toHaveBeenCalled();
+    });
+
+    it('should ignore inlineData/fileData in the structured fallback to avoid false positives', async () => {
+      // Arrange — large binary payloads must not inflate the fallback estimate.
+      const MOCKED_TOKEN_LIMIT = 1000;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      const lastPromptTokenCount = 0;
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        lastPromptTokenCount,
+      );
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+      };
+      client['chat'] = mockChat as ChatSession;
+
+      const mockStream = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'ok' };
+      })();
+      mockTurnRunFn.mockReturnValue(mockStream);
+
+      const request: Part[] = [
+        { text: 'short' }, // 5 chars → 1 token
+        {
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: 'A'.repeat(11 * 1024 * 1024), // ignored
+          },
+        },
+      ];
+
+      // Act
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-structured-fallback-ignore-binary',
+      );
+      const events = await fromAsync(stream);
+
+      // Assert — no overflow despite the huge (ignored) inlineData payload.
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: GeminiEventType.ContextWindowWillOverflow,
+        }),
+      );
+      expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
     it("should use the sticky model's token limit for the overflow check", async () => {
@@ -302,7 +664,7 @@ describe('Gemini Client (client.ts)', () => {
       // We need a request > 95 tokens.
       const longText = 'a'.repeat(400);
       const request: Part[] = [{ text: longText }];
-      // estimateTextOnlyLength counts only text content (400 chars), not JSON structure
+      // Structured fallback counts the text content (400 chars), not JSON structure.
       const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = STICKY_MODEL_LIMIT - lastPromptTokenCount;
 

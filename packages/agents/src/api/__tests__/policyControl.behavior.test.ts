@@ -152,17 +152,18 @@ describe('agent.policy read-only control @plan:PLAN-20260622-COREAPIGAP.P05 @req
       // toolNames are unique to this test).
       const omitted = rules.find((r) => r.toolName === 'omit-source-probe');
       const present = rules.find((r) => r.toolName === 'present-source-probe');
+      if (omitted === undefined || present === undefined) {
+        throw new Error('Expected seeded policy rules to be present');
+      }
       // The no-source rule's view OMITS the source key entirely.
-      expect(omitted).toBeDefined();
-      expect('source' in omitted!).toBe(false);
-      expect(Object.keys(omitted!)).not.toContain('source');
+      expect('source' in omitted).toBe(false);
+      expect(Object.keys(omitted)).not.toContain('source');
       // Belt-and-suspenders: argsPattern key also absent (no argsPattern seeded).
-      expect('argsPattern' in omitted!).toBe(false);
-      expect(Object.keys(omitted!)).not.toContain('argsPattern');
+      expect('argsPattern' in omitted).toBe(false);
+      expect(Object.keys(omitted)).not.toContain('argsPattern');
       // The present-source rule's view CARRIES source with the seeded value.
-      expect(present).toBeDefined();
-      expect(present!.source).toBe('present-probe');
-      expect('source' in present!).toBe(true);
+      expect(present.source).toBe('present-probe');
+      expect('source' in present).toBe(true);
     } finally {
       await cleanup();
     }

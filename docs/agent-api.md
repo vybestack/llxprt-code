@@ -321,7 +321,13 @@ agent.mcp.authenticate(server: string): Promise<McpServerAuthStatus>   // real O
 agent.mcp.details(opts?: McpDetailsOptions): Promise<McpDetailStatus>
 ```
 
-- `McpServerAuthStatus` = `{ server: string; authenticated: boolean; requiresAuth: boolean; authUrl?: string }`.
+<!-- @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 @requirement:REQ-005 -->
+
+- `McpServerAuthStatus` = `{ server: string; authenticated: boolean; requiresAuth: boolean; oauthStatus: McpOAuthStatus; sessionAuthenticated: boolean; authUrl?: string }`.
+- `McpOAuthStatus` = `'authenticated' | 'expired' | 'none' | 'not-required'` — the real persisted OAuth state surfaced from the engine helper.
+- `sessionAuthenticated: boolean` — the in-session marker, distinct from `authenticated`. It is set by either `agent.auth.mcpLogin(server)` or a successful `agent.mcp.authenticate(server)` (both mark the server authenticated for the current session); it is NOT persisted and does not by itself imply a valid stored OAuth token.
+- `McpServerDetail` carries the same `oauthStatus` / `sessionAuthenticated` / `requiresAuth` fields on each entry of `McpDetailStatus.servers`.
+- **CORRECTION (#2165):** `authenticated` now means "a valid persisted OAuth token exists" (i.e. `oauthStatus === 'authenticated'`) — it is NO LONGER derived from the in-session marker; `requiresAuth` is now the real per-server value (no longer hardcoded `true`).
 - `McpDetailsOptions` = `{ includeTools?: boolean; includePrompts?: boolean; includeResources?: boolean }`.
 - `McpDetailStatus` = `{ servers: readonly McpServerDetail[]; blockedServers: readonly McpBlockedServer[] }`.
 
@@ -358,6 +364,34 @@ const detail = await agent.mcp.details({
 });
 for (const server of detail.servers) {
   console.log(server.name, server.authenticated, server.tools?.length);
+}
+```
+
+<!-- @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 @requirement:REQ-005 -->
+
+Reading the corrected OAuth quad-state (`oauthStatus` / `sessionAuthenticated` /
+`requiresAuth`) off the public projection — public root import only, no deep
+core import, no config-introspection call:
+
+```ts
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+
+const status = await agent.mcp.auth('my-server');
+// status.oauthStatus: 'authenticated' | 'expired' | 'none' | 'not-required'
+// status.authenticated === (status.oauthStatus === 'authenticated')
+// status.sessionAuthenticated: in-session marker (independent of a persisted token)
+console.log(
+  status.oauthStatus,
+  status.authenticated,
+  status.sessionAuthenticated,
+  status.requiresAuth,
+);
+
+const detail = await agent.mcp.details({ includeTools: true });
+for (const server of detail.servers) {
+  console.log(server.name, server.oauthStatus, server.sessionAuthenticated);
 }
 ```
 

@@ -340,19 +340,24 @@ describe('Auth @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
     }
   });
 
-  it('T18c mcpLogin via the public auth surface authenticates the server @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', async () => {
+  it('T18c mcpLogin via the public auth surface session-authenticates the server (in-session marker only; no real OAuth token) @plan:PLAN-20260617-COREAPI.P12 @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-008', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       provider: 'openai',
     });
     try {
-      // mcpLogin is the per-server auth flow; at RED throws NYI; at GREEN
-      // the server becomes authenticated.
+      // mcpLogin is the per-server auth flow; it populates the in-session
+      // marker but does NOT persist a real OAuth token.
       await agent.auth.mcpLogin('remote-mcp-server');
 
-      // the MCP server auth status reflects the login
+      // The MCP server auth status reflects the in-session marker under the
+      // corrected semantics: sessionAuthenticated is true (marker present),
+      // authenticated is false (no real persisted token). This is the
+      // canonical proof that `authenticated` derives from the real persisted
+      // OAuth status, NOT from the in-session marker.
       const authStatus = await agent.mcp.auth('remote-mcp-server');
       expect(authStatus.server).toBe('remote-mcp-server');
-      expect(authStatus.authenticated).toBe(true);
+      expect(authStatus.sessionAuthenticated).toBe(true);
+      expect(authStatus.authenticated).toBe(false);
     } finally {
       await cleanup();
     }

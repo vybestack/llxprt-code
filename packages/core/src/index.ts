@@ -500,6 +500,7 @@ export {
   BaseTokenStore,
   FileTokenStore,
   OAuthUtils,
+  getMcpServerOAuthStatus,
 } from '@vybestack/llxprt-code-mcp';
 
 export type {
@@ -511,6 +512,7 @@ export type {
   MCPOAuthCredentials as MCPOAuthCredentialsInterface,
   OAuthAuthorizationServerMetadata,
   OAuthProtectedResourceMetadata,
+  McpOAuthStatus,
 } from '@vybestack/llxprt-code-mcp';
 
 // Export telemetry functions

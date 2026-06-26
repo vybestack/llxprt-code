@@ -399,7 +399,8 @@ async function handleTaskMetadata(
   agentExecutor: CoderAgentExecutor,
   taskStoreForExecutor: TaskStore,
 ): Promise<void> {
-  const taskId = req.params.taskId;
+  const taskIdParam = req.params.taskId;
+  const taskId = Array.isArray(taskIdParam) ? taskIdParam[0] : taskIdParam;
   let wrapper = agentExecutor.getTask(taskId);
   if (!wrapper) {
     const sdkTask = await taskStoreForExecutor.load(taskId);

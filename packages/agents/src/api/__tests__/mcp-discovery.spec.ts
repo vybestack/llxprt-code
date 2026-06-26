@@ -447,22 +447,29 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     expect(status.servers[0].status).toBe('connected');
   });
 
-  it('auth() reports authenticated from the mcpLogin set and always requiresAuth @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013', async () => {
+  it('auth() projects the in-session marker as sessionAuthenticated; authenticated derives from the real persisted status @plan:PLAN-20260617-COREAPI.P22 @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-013', async () => {
     const { deps } = createFakeMcpDeps({
       authenticatedServers: ['loggedin'],
     });
     const control = new McpControl(deps);
 
+    // 'loggedin' has an in-session marker but no real persisted token, so
+    // sessionAuthenticated is true while authenticated is false (corrected
+    // semantics — authenticated no longer comes from the marker Set).
     const authed = await control.auth('loggedin');
     expect(authed).toStrictEqual({
       server: 'loggedin',
-      authenticated: true,
-      requiresAuth: true,
+      authenticated: false,
+      requiresAuth: false,
+      oauthStatus: 'not-required',
+      sessionAuthenticated: true,
     });
 
     const notAuthed = await control.auth('stranger');
     expect(notAuthed.authenticated).toBe(false);
-    expect(notAuthed.requiresAuth).toBe(true);
+    expect(notAuthed.requiresAuth).toBe(false);
+    expect(notAuthed.oauthStatus).toBe('not-required');
+    expect(notAuthed.sessionAuthenticated).toBe(false);
     expect(notAuthed.server).toBe('stranger');
   });
 
@@ -501,8 +508,17 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
       servers: [],
     });
     await expect(control.refresh('x')).resolves.toBeUndefined();
+    // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 — a deps-less control has no
+    // getRequiresAuth closure → requiresAuth is undefined-safe false (no longer
+    // hardcoded true).
     const auth = await control.auth('anything');
     expect(auth.authenticated).toBe(false);
-    expect(auth.requiresAuth).toBe(true);
+    expect(auth.requiresAuth).toBe(false);
+    // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06a — a deps-less control has no
+    // getOAuthStatus closure → oauthStatus is undefined-safe 'not-required';
+    // and no deps at all → sessionAuthenticated is undefined-safe false (this
+    // kills the `?? true` survivor on the `?? false` default at buildAuthStatus).
+    expect(auth.oauthStatus).toBe('not-required');
+    expect(auth.sessionAuthenticated).toBe(false);
   });
 });

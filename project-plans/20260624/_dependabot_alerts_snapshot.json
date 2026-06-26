@@ -1,0 +1,3225 @@
+[
+  {
+    "number": 192,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-g8m3-5g58-fq7m",
+      "severity": "low",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": "< 6.27.0",
+          "first_patched_version": {
+            "identifier": "6.27.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.28.0",
+          "first_patched_version": {
+            "identifier": "7.28.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.5.0",
+          "first_patched_version": {
+            "identifier": "8.5.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 191,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-vxpw-j846-p89q",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": "< 6.27.0",
+          "first_patched_version": {
+            "identifier": "6.27.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.28.0",
+          "first_patched_version": {
+            "identifier": "7.28.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.5.0",
+          "first_patched_version": {
+            "identifier": "8.5.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 190,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-p88m-4jfj-68fv",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": "< 6.27.0",
+          "first_patched_version": {
+            "identifier": "6.27.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.28.0",
+          "first_patched_version": {
+            "identifier": "7.28.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.5.0",
+          "first_patched_version": {
+            "identifier": "8.5.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 189,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-35p6-xmwp-9g52",
+      "severity": "low",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": "< 6.27.0",
+          "first_patched_version": {
+            "identifier": "6.27.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.28.0",
+          "first_patched_version": {
+            "identifier": "7.28.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.5.0",
+          "first_patched_version": {
+            "identifier": "8.5.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 188,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-pr7r-676h-xcf6",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.28.0",
+          "first_patched_version": {
+            "identifier": "7.28.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.5.0",
+          "first_patched_version": {
+            "identifier": "8.5.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 187,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@opentelemetry/core"
+      },
+      "manifest_path": "packages/telemetry/package.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-8988-4f7v-96qf",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@opentelemetry/core"
+          },
+          "vulnerable_version_range": "< 2.8.0",
+          "first_patched_version": {
+            "identifier": "2.8.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 186,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-rv63-4mwf-qqc2",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.25",
+          "first_patched_version": {
+            "identifier": "4.12.25"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 185,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-wgpf-jwqj-8h8p",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.25",
+          "first_patched_version": {
+            "identifier": "4.12.25"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 184,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-88fw-hqm2-52qc",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.25",
+          "first_patched_version": {
+            "identifier": "4.12.25"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 183,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-wwfh-h76j-fc44",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.25",
+          "first_patched_version": {
+            "identifier": "4.12.25"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 182,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-j6c9-x7qj-28xf",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.25",
+          "first_patched_version": {
+            "identifier": "4.12.25"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 181,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "markdown-it"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-6v5v-wf23-fmfq",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "markdown-it"
+          },
+          "vulnerable_version_range": "<= 14.1.1",
+          "first_patched_version": {
+            "identifier": "14.2.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 180,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@opentelemetry/core"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-8988-4f7v-96qf",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@opentelemetry/core"
+          },
+          "vulnerable_version_range": "< 2.8.0",
+          "first_patched_version": {
+            "identifier": "2.8.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 179,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-wcpc-wj8m-hjx6",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.6.0",
+          "first_patched_version": {
+            "identifier": "7.6.1"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.4.0",
+          "first_patched_version": {
+            "identifier": "8.4.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 178,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-f38q-mgvj-vph7",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.6.2",
+          "first_patched_version": {
+            "identifier": "7.6.3"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs-cli"
+          },
+          "vulnerable_version_range": ">= 2.0.0, <= 2.5.0",
+          "first_patched_version": {
+            "identifier": "2.5.1"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs-cli"
+          },
+          "vulnerable_version_range": "<= 1.3.2",
+          "first_patched_version": {
+            "identifier": "1.3.3"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.5.0",
+          "first_patched_version": {
+            "identifier": "8.6.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 177,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "form-data"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-hmw2-7cc7-3qxx",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "form-data"
+          },
+          "vulnerable_version_range": "< 2.5.6",
+          "first_patched_version": {
+            "identifier": "2.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "form-data"
+          },
+          "vulnerable_version_range": ">= 3.0.0, < 3.0.5",
+          "first_patched_version": {
+            "identifier": "3.0.5"
+          }
+        },
+        {
+          "package": {
+            "name": "form-data"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.0.6",
+          "first_patched_version": {
+            "identifier": "4.0.6"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 176,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "form-data"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-hmw2-7cc7-3qxx",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "form-data"
+          },
+          "vulnerable_version_range": "< 2.5.6",
+          "first_patched_version": {
+            "identifier": "2.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "form-data"
+          },
+          "vulnerable_version_range": ">= 3.0.0, < 3.0.5",
+          "first_patched_version": {
+            "identifier": "3.0.5"
+          }
+        },
+        {
+          "package": {
+            "name": "form-data"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.0.6",
+          "first_patched_version": {
+            "identifier": "4.0.6"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 175,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "tar"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-vmf3-w455-68vh",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "tar"
+          },
+          "vulnerable_version_range": "<= 7.5.15",
+          "first_patched_version": {
+            "identifier": "7.5.16"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 174,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "vite"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-v6wh-96g9-6wx3",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "launch-editor"
+          },
+          "vulnerable_version_range": "<= 2.14.0",
+          "first_patched_version": {
+            "identifier": "2.14.1"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.15",
+          "first_patched_version": {
+            "identifier": "8.0.16"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 7.0.0, <= 7.3.4",
+          "first_patched_version": {
+            "identifier": "7.3.5"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": "<= 6.4.2",
+          "first_patched_version": {
+            "identifier": "6.4.3"
+          }
+        },
+        {
+          "package": {
+            "name": "vite-plus"
+          },
+          "vulnerable_version_range": "<= 0.1.23",
+          "first_patched_version": {
+            "identifier": "0.1.24"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 173,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "vite"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-fx2h-pf6j-xcff",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.15",
+          "first_patched_version": {
+            "identifier": "8.0.16"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 7.0.0, <= 7.3.4",
+          "first_patched_version": {
+            "identifier": "7.3.5"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": "<= 6.4.2",
+          "first_patched_version": {
+            "identifier": "6.4.3"
+          }
+        },
+        {
+          "package": {
+            "name": "vite-plus"
+          },
+          "vulnerable_version_range": "<= 0.1.23",
+          "first_patched_version": {
+            "identifier": "0.1.24"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 172,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "js-yaml"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-h67p-54hq-rp68",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "js-yaml"
+          },
+          "vulnerable_version_range": "<= 4.1.1",
+          "first_patched_version": {
+            "identifier": "4.2.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 171,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "ws"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-96hv-2xvq-fx4p",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "ws"
+          },
+          "vulnerable_version_range": ">= 1.1.0, < 5.2.5",
+          "first_patched_version": {
+            "identifier": "5.2.5"
+          }
+        },
+        {
+          "package": {
+            "name": "ws"
+          },
+          "vulnerable_version_range": ">= 6.0.0, < 6.2.4",
+          "first_patched_version": {
+            "identifier": "6.2.4"
+          }
+        },
+        {
+          "package": {
+            "name": "ws"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.5.11",
+          "first_patched_version": {
+            "identifier": "7.5.11"
+          }
+        },
+        {
+          "package": {
+            "name": "ws"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.21.0",
+          "first_patched_version": {
+            "identifier": "8.21.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 166,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@grpc/grpc-js"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-5375-pq7m-f5r2",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": "< 1.9.16",
+          "first_patched_version": {
+            "identifier": "1.9.16"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.10.0, < 1.10.12",
+          "first_patched_version": {
+            "identifier": "1.10.12"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.11.0, < 1.11.4",
+          "first_patched_version": {
+            "identifier": "1.11.4"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.12.0, < 1.12.7",
+          "first_patched_version": {
+            "identifier": "1.12.7"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.13.0, < 1.13.5",
+          "first_patched_version": {
+            "identifier": "1.13.5"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.14.0, < 1.14.4",
+          "first_patched_version": {
+            "identifier": "1.14.4"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 165,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@grpc/grpc-js"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-99f4-grh7-6pcq",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": "< 1.9.16",
+          "first_patched_version": {
+            "identifier": "1.9.16"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.10.0, < 1.10.12",
+          "first_patched_version": {
+            "identifier": "1.10.12"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.11.0, < 1.11.4",
+          "first_patched_version": {
+            "identifier": "1.11.4"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.12.0, < 1.12.7",
+          "first_patched_version": {
+            "identifier": "1.12.7"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.13.0, < 1.13.5",
+          "first_patched_version": {
+            "identifier": "1.13.5"
+          }
+        },
+        {
+          "package": {
+            "name": "@grpc/grpc-js"
+          },
+          "vulnerable_version_range": ">= 1.14.0, < 1.14.4",
+          "first_patched_version": {
+            "identifier": "1.14.4"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 164,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@opentelemetry/sdk-node"
+      },
+      "manifest_path": "packages/telemetry/package.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-q7rr-3cgh-j5r3",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@opentelemetry/exporter-prometheus"
+          },
+          "vulnerable_version_range": "< 0.217.0",
+          "first_patched_version": {
+            "identifier": "0.217.0"
+          }
+        },
+        {
+          "package": {
+            "name": "@opentelemetry/sdk-node"
+          },
+          "vulnerable_version_range": "< 0.217.0",
+          "first_patched_version": {
+            "identifier": "0.217.0"
+          }
+        },
+        {
+          "package": {
+            "name": "@opentelemetry/auto-instrumentations-node"
+          },
+          "vulnerable_version_range": "< 0.75.0",
+          "first_patched_version": {
+            "identifier": "0.75.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 163,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "shell-quote"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-w7jw-789q-3m8p",
+      "severity": "critical",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "shell-quote"
+          },
+          "vulnerable_version_range": ">= 1.1.0, <= 1.8.3",
+          "first_patched_version": {
+            "identifier": "1.8.4"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 162,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "vitest"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-5xrq-8626-4rwp",
+      "severity": "critical",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "vitest"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.1.0",
+          "first_patched_version": {
+            "identifier": "4.1.0"
+          }
+        },
+        {
+          "package": {
+            "name": "vitest"
+          },
+          "vulnerable_version_range": "< 3.2.6",
+          "first_patched_version": {
+            "identifier": "3.2.6"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 160,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@ai-sdk/provider-utils"
+      },
+      "manifest_path": "packages/providers/package.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-866g-f22w-33x8",
+      "severity": "low",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@ai-sdk/provider-utils"
+          },
+          "vulnerable_version_range": "<= 3.0.97",
+          "first_patched_version": null
+        }
+      ]
+    }
+  },
+  {
+    "number": 159,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-2gcr-mfcq-wcc3",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.21",
+          "first_patched_version": {
+            "identifier": "4.12.21"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 158,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-3hrh-pfw6-9m5x",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.21",
+          "first_patched_version": {
+            "identifier": "4.12.21"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 157,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-xrhx-7g5j-rcj5",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.21",
+          "first_patched_version": {
+            "identifier": "4.12.21"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 156,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-f577-qrjj-4474",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.21",
+          "first_patched_version": {
+            "identifier": "4.12.21"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 155,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "postcss"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-qx2v-qp2m-jg93",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "postcss"
+          },
+          "vulnerable_version_range": "< 8.5.10",
+          "first_patched_version": {
+            "identifier": "8.5.10"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 147,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@ai-sdk/provider-utils"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-866g-f22w-33x8",
+      "severity": "low",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@ai-sdk/provider-utils"
+          },
+          "vulnerable_version_range": "<= 3.0.97",
+          "first_patched_version": null
+        }
+      ]
+    }
+  },
+  {
+    "number": 146,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "ws"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-58qx-3vcg-4xpx",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "ws"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.20.1",
+          "first_patched_version": {
+            "identifier": "8.20.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 145,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-jggg-4jg4-v7c6",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.7",
+          "first_patched_version": {
+            "identifier": "7.5.8"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.2.0",
+          "first_patched_version": {
+            "identifier": "8.2.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 144,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "tmp"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-ph9p-34f9-6g65",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "tmp"
+          },
+          "vulnerable_version_range": "< 0.2.6",
+          "first_patched_version": {
+            "identifier": "0.2.6"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 143,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "qs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-q8mj-m7cp-5q26",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.11.1, <= 6.15.1",
+          "first_patched_version": {
+            "identifier": "6.15.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 142,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "uuid"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-w5hq-g745-h8pq",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "uuid"
+          },
+          "vulnerable_version_range": ">= 12.0.0, < 12.0.1",
+          "first_patched_version": {
+            "identifier": "12.0.1"
+          }
+        },
+        {
+          "package": {
+            "name": "uuid"
+          },
+          "vulnerable_version_range": ">= 13.0.0, < 13.0.1",
+          "first_patched_version": {
+            "identifier": "13.0.1"
+          }
+        },
+        {
+          "package": {
+            "name": "uuid"
+          },
+          "vulnerable_version_range": "< 11.1.1",
+          "first_patched_version": {
+            "identifier": "11.1.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 141,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "brace-expansion"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-jxxr-4gwj-5jf2",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "brace-expansion"
+          },
+          "vulnerable_version_range": ">= 5.0.0, < 5.0.6",
+          "first_patched_version": {
+            "identifier": "5.0.6"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 140,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-685m-2w69-288q",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 139,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-66ff-xgx4-vchm",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 138,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-2pr8-phx7-x9h3",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 137,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-fx83-v9x8-x52w",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 136,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-jvwf-75h9-cwgg",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 135,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-75px-5xx7-5xc7",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 134,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-q6x5-8v7m-xcrf",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.2"
+          }
+        },
+        {
+          "package": {
+            "name": "@protobufjs/utf8"
+          },
+          "vulnerable_version_range": "<= 1.1.0",
+          "first_patched_version": {
+            "identifier": "1.1.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 133,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@protobufjs/utf8"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-q6x5-8v7m-xcrf",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "<= 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.2"
+          }
+        },
+        {
+          "package": {
+            "name": "@protobufjs/utf8"
+          },
+          "vulnerable_version_range": "<= 1.1.0",
+          "first_patched_version": {
+            "identifier": "1.1.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 131,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@opentelemetry/sdk-node"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-q7rr-3cgh-j5r3",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@opentelemetry/exporter-prometheus"
+          },
+          "vulnerable_version_range": "< 0.217.0",
+          "first_patched_version": {
+            "identifier": "0.217.0"
+          }
+        },
+        {
+          "package": {
+            "name": "@opentelemetry/sdk-node"
+          },
+          "vulnerable_version_range": "< 0.217.0",
+          "first_patched_version": {
+            "identifier": "0.217.0"
+          }
+        },
+        {
+          "package": {
+            "name": "@opentelemetry/auto-instrumentations-node"
+          },
+          "vulnerable_version_range": "< 0.75.0",
+          "first_patched_version": {
+            "identifier": "0.75.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 130,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@opentelemetry/exporter-prometheus"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-q7rr-3cgh-j5r3",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@opentelemetry/exporter-prometheus"
+          },
+          "vulnerable_version_range": "< 0.217.0",
+          "first_patched_version": {
+            "identifier": "0.217.0"
+          }
+        },
+        {
+          "package": {
+            "name": "@opentelemetry/sdk-node"
+          },
+          "vulnerable_version_range": "< 0.217.0",
+          "first_patched_version": {
+            "identifier": "0.217.0"
+          }
+        },
+        {
+          "package": {
+            "name": "@opentelemetry/auto-instrumentations-node"
+          },
+          "vulnerable_version_range": "< 0.75.0",
+          "first_patched_version": {
+            "identifier": "0.75.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 129,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-qp7p-654g-cw7p",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.18",
+          "first_patched_version": {
+            "identifier": "4.12.18"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 128,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-hm8q-7f3q-5f36",
+      "severity": "low",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.18",
+          "first_patched_version": {
+            "identifier": "4.12.18"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 127,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-p77w-8qqv-26rm",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.18",
+          "first_patched_version": {
+            "identifier": "4.12.18"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 126,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "fast-uri"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-v39h-62p7-jpjc",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "fast-uri"
+          },
+          "vulnerable_version_range": "<= 3.1.1",
+          "first_patched_version": {
+            "identifier": "3.1.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 125,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "fast-uri"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-q3j6-qgpj-74h6",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "fast-uri"
+          },
+          "vulnerable_version_range": "<= 3.1.0",
+          "first_patched_version": {
+            "identifier": "3.1.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 124,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "fast-xml-builder"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-5wm8-gmm8-39j9",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "fast-xml-builder"
+          },
+          "vulnerable_version_range": "<= 1.1.6",
+          "first_patched_version": {
+            "identifier": "1.1.7"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 123,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-9vqf-7f2p-gf9v",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.16",
+          "first_patched_version": {
+            "identifier": "4.12.16"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 122,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-69xw-7hcm-h432",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.16",
+          "first_patched_version": {
+            "identifier": "4.12.16"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 121,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "ip-address"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-v2v4-37r5-5v8g",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "ip-address"
+          },
+          "vulnerable_version_range": "<= 10.1.0",
+          "first_patched_version": {
+            "identifier": "10.1.1"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 120,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "simple-git"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-hffm-xvc3-vprc",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "simple-git"
+          },
+          "vulnerable_version_range": "< 3.36.0",
+          "first_patched_version": {
+            "identifier": "3.36.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 116,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "fast-xml-parser"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-gh4j-gqv2-49f6",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "fast-xml-parser"
+          },
+          "vulnerable_version_range": "< 5.7.0",
+          "first_patched_version": {
+            "identifier": "5.7.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 115,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "protobufjs"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-xq3m-2v4x-88gg",
+      "severity": "critical",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.0.1",
+          "first_patched_version": {
+            "identifier": "8.0.1"
+          }
+        },
+        {
+          "package": {
+            "name": "protobufjs"
+          },
+          "vulnerable_version_range": "< 7.5.5",
+          "first_patched_version": {
+            "identifier": "7.5.5"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 114,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-458j-xx4x-4375",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.14",
+          "first_patched_version": {
+            "identifier": "4.12.14"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 113,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "simple-git"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-jcxm-m3jx-f287",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "simple-git"
+          },
+          "vulnerable_version_range": "< 3.32.0",
+          "first_patched_version": {
+            "identifier": "3.32.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 112,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "lodash"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-f23m-r3pf-42rh",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "lodash"
+          },
+          "vulnerable_version_range": "<= 4.17.23",
+          "first_patched_version": {
+            "identifier": "4.18.0"
+          }
+        },
+        {
+          "package": {
+            "name": "lodash-es"
+          },
+          "vulnerable_version_range": "<= 4.17.23",
+          "first_patched_version": {
+            "identifier": "4.18.0"
+          }
+        },
+        {
+          "package": {
+            "name": "lodash-amd"
+          },
+          "vulnerable_version_range": "<= 4.17.23",
+          "first_patched_version": {
+            "identifier": "4.18.0"
+          }
+        },
+        {
+          "package": {
+            "name": "lodash.unset"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.18.0",
+          "first_patched_version": {
+            "identifier": "4.18.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 111,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "lodash"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-r5fr-rjxr-66jc",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "lodash"
+          },
+          "vulnerable_version_range": ">= 4.0.0, <= 4.17.23",
+          "first_patched_version": {
+            "identifier": "4.18.0"
+          }
+        },
+        {
+          "package": {
+            "name": "lodash-es"
+          },
+          "vulnerable_version_range": ">= 4.0.0, <= 4.17.23",
+          "first_patched_version": {
+            "identifier": "4.18.0"
+          }
+        },
+        {
+          "package": {
+            "name": "lodash-amd"
+          },
+          "vulnerable_version_range": ">= 4.0.0, <= 4.17.23",
+          "first_patched_version": {
+            "identifier": "4.18.0"
+          }
+        },
+        {
+          "package": {
+            "name": "lodash.template"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.18.0",
+          "first_patched_version": {
+            "identifier": "4.18.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 110,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "fast-xml-parser"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-jp2q-39xq-3w4g",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "fast-xml-parser"
+          },
+          "vulnerable_version_range": ">= 4.0.0-beta.3, < 4.5.5",
+          "first_patched_version": {
+            "identifier": "4.5.5"
+          }
+        },
+        {
+          "package": {
+            "name": "fast-xml-parser"
+          },
+          "vulnerable_version_range": ">= 5.0.0, < 5.5.7",
+          "first_patched_version": {
+            "identifier": "5.5.7"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 109,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-r5rp-j6wh-rvv4",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.12",
+          "first_patched_version": {
+            "identifier": "4.12.12"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 108,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-26pp-8wgv-hjvm",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.12",
+          "first_patched_version": {
+            "identifier": "4.12.12"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 107,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-xpcf-pg52-r92g",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.12",
+          "first_patched_version": {
+            "identifier": "4.12.12"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 106,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-wmmm-f939-6g9c",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.12",
+          "first_patched_version": {
+            "identifier": "4.12.12"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 105,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-xf4j-xp2r-rqqx",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": ">= 4.0.0, <= 4.12.11",
+          "first_patched_version": {
+            "identifier": "4.12.12"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 104,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "@hono/node-server"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-92pp-h63x-v22m",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "@hono/node-server"
+          },
+          "vulnerable_version_range": "< 1.19.13",
+          "first_patched_version": {
+            "identifier": "1.19.13"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 103,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "vite"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-4w7w-66w2-5vf9",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.4",
+          "first_patched_version": {
+            "identifier": "8.0.5"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 7.0.0, <= 7.3.1",
+          "first_patched_version": {
+            "identifier": "7.3.2"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": "<= 6.4.1",
+          "first_patched_version": {
+            "identifier": "6.4.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 102,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "vite"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-p9ff-h696-f583",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.4",
+          "first_patched_version": {
+            "identifier": "8.0.5"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 7.0.0, <= 7.3.1",
+          "first_patched_version": {
+            "identifier": "7.3.2"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 6.0.0, <= 6.4.1",
+          "first_patched_version": {
+            "identifier": "6.4.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 101,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "vite"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-v2wj-q39q-566r",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 8.0.0, <= 8.0.4",
+          "first_patched_version": {
+            "identifier": "8.0.5"
+          }
+        },
+        {
+          "package": {
+            "name": "vite"
+          },
+          "vulnerable_version_range": ">= 7.1.0, <= 7.3.1",
+          "first_patched_version": {
+            "identifier": "7.3.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 100,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "path-to-regexp"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-37ch-88jc-xwx2",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "path-to-regexp"
+          },
+          "vulnerable_version_range": "< 0.1.13",
+          "first_patched_version": {
+            "identifier": "0.1.13"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 99,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "path-to-regexp"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-27v5-c462-wpq7",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "path-to-regexp"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.4.0",
+          "first_patched_version": {
+            "identifier": "8.4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 98,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "path-to-regexp"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-j3q9-mxjg-w52f",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "path-to-regexp"
+          },
+          "vulnerable_version_range": ">= 8.0.0, < 8.4.0",
+          "first_patched_version": {
+            "identifier": "8.4.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 95,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "picomatch"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-3v7f-55p6-f55p",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.0.4",
+          "first_patched_version": {
+            "identifier": "4.0.4"
+          }
+        },
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": ">= 3.0.0, < 3.0.2",
+          "first_patched_version": {
+            "identifier": "3.0.2"
+          }
+        },
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": "< 2.3.2",
+          "first_patched_version": {
+            "identifier": "2.3.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 94,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "picomatch"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-c2c7-rcm5-vvqj",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.0.4",
+          "first_patched_version": {
+            "identifier": "4.0.4"
+          }
+        },
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": ">= 3.0.0, < 3.0.2",
+          "first_patched_version": {
+            "identifier": "3.0.2"
+          }
+        },
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": "< 2.3.2",
+          "first_patched_version": {
+            "identifier": "2.3.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 93,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "brace-expansion"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-f886-m6hf-6m8v",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "brace-expansion"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 5.0.5",
+          "first_patched_version": {
+            "identifier": "5.0.5"
+          }
+        },
+        {
+          "package": {
+            "name": "brace-expansion"
+          },
+          "vulnerable_version_range": ">= 3.0.0, < 3.0.2",
+          "first_patched_version": {
+            "identifier": "3.0.2"
+          }
+        },
+        {
+          "package": {
+            "name": "brace-expansion"
+          },
+          "vulnerable_version_range": ">= 2.0.0, < 2.0.3",
+          "first_patched_version": {
+            "identifier": "2.0.3"
+          }
+        },
+        {
+          "package": {
+            "name": "brace-expansion"
+          },
+          "vulnerable_version_range": "< 1.1.13",
+          "first_patched_version": {
+            "identifier": "1.1.13"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 87,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "picomatch"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-3v7f-55p6-f55p",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.0.4",
+          "first_patched_version": {
+            "identifier": "4.0.4"
+          }
+        },
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": ">= 3.0.0, < 3.0.2",
+          "first_patched_version": {
+            "identifier": "3.0.2"
+          }
+        },
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": "< 2.3.2",
+          "first_patched_version": {
+            "identifier": "2.3.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 85,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "picomatch"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-c2c7-rcm5-vvqj",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": ">= 4.0.0, < 4.0.4",
+          "first_patched_version": {
+            "identifier": "4.0.4"
+          }
+        },
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": ">= 3.0.0, < 3.0.2",
+          "first_patched_version": {
+            "identifier": "3.0.2"
+          }
+        },
+        {
+          "package": {
+            "name": "picomatch"
+          },
+          "vulnerable_version_range": "< 2.3.2",
+          "first_patched_version": {
+            "identifier": "2.3.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 84,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "fast-xml-parser"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-8gc5-j5rx-235r",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "fast-xml-parser"
+          },
+          "vulnerable_version_range": ">= 5.0.0, < 5.5.6",
+          "first_patched_version": {
+            "identifier": "5.5.6"
+          }
+        },
+        {
+          "package": {
+            "name": "fast-xml-parser"
+          },
+          "vulnerable_version_range": ">= 4.0.0-beta.3, < 4.5.5",
+          "first_patched_version": {
+            "identifier": "4.5.5"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 81,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "flatted"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "development"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-rf6f-7fwh-wjgh",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "flatted"
+          },
+          "vulnerable_version_range": "<= 3.4.1",
+          "first_patched_version": {
+            "identifier": "3.4.2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 76,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-v9p9-hfj2-hcw8",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": "< 6.24.0",
+          "first_patched_version": {
+            "identifier": "6.24.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.24.0",
+          "first_patched_version": {
+            "identifier": "7.24.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 75,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-vrm6-8vpv-qv8q",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": "< 6.24.0",
+          "first_patched_version": {
+            "identifier": "6.24.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.24.0",
+          "first_patched_version": {
+            "identifier": "7.24.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 74,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-4992-7rv2-5pvq",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": "< 6.24.0",
+          "first_patched_version": {
+            "identifier": "6.24.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.24.0",
+          "first_patched_version": {
+            "identifier": "7.24.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 73,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-phc3-fgpg-7m6h",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.17.0, < 7.24.0",
+          "first_patched_version": {
+            "identifier": "7.24.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 72,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-2mjp-6q6p-2qxm",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": "< 6.24.0",
+          "first_patched_version": {
+            "identifier": "6.24.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.24.0",
+          "first_patched_version": {
+            "identifier": "7.24.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 71,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "undici"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-f269-vfmq-vjvj",
+      "severity": "high",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 6.0.0, < 6.24.0",
+          "first_patched_version": {
+            "identifier": "6.24.0"
+          }
+        },
+        {
+          "package": {
+            "name": "undici"
+          },
+          "vulnerable_version_range": ">= 7.0.0, < 7.24.0",
+          "first_patched_version": {
+            "identifier": "7.24.0"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 70,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "hono"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-v8w9-8mx6-g223",
+      "severity": "medium",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "hono"
+          },
+          "vulnerable_version_range": "< 4.12.7",
+          "first_patched_version": {
+            "identifier": "4.12.7"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "number": 69,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "name": "simple-git"
+      },
+      "manifest_path": "package-lock.json",
+      "scope": "runtime"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-r275-fr43-pm7q",
+      "severity": "critical",
+      "vulnerabilities": [
+        {
+          "package": {
+            "name": "simple-git"
+          },
+          "vulnerable_version_range": ">= 3.15.0, < 3.32.3",
+          "first_patched_version": {
+            "identifier": "3.32.3"
+          }
+        }
+      ]
+    }
+  }
+]

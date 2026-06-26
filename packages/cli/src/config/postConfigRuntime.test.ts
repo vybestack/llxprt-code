@@ -178,11 +178,13 @@ describe('applyProfileEphemeralSettings', () => {
       profileSettingsWithTools: {
         'auth-key': 'secret',
         'context-limit': 100,
+        'socket-timeout': 30_000,
       } as Settings & Record<string, unknown>,
       profileLoadResult: { profileToLoad: 'work' },
     });
 
     expect(config.getEphemeralSetting('auth-key')).toBe('secret');
+    expect(config.getEphemeralSetting('socket-timeout')).toBe(30_000);
     expect(config.getEphemeralSetting('context-limit')).toBe(100);
   });
 

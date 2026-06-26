@@ -22,6 +22,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:ci": "vitest run",
+    "test:mutation": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },
   "files": [
@@ -34,13 +35,16 @@
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "google-auth-library": "^9.11.0",
-    "shell-quote": "^1.8.3"
+    "shell-quote": "^1.8.4"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^24.2.1",
     "@vybestack/llxprt-code-core": "file:../core",
+    "fast-check": "^4.2.0",
     "typescript": "^5.3.3",
-    "vitest": "^3.1.1"
+    "vitest": "^3.2.6"
   },
   "engines": {
     "node": ">=20"
