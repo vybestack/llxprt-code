@@ -297,57 +297,66 @@ describe('FileTokenStorage', () => {
       expect(stored['test-server'].token.accessToken).toBe('new-token');
     });
 
-    it('should remove the file and throw when post-write chmod fails', async () => {
-      // The file is written, but tightening its permissions fails. Production
-      // must remove the just-written file (so credentials are never left on
-      // disk with loose permissions) and surface an error distinct from a
-      // write failure.
-      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
-      mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
-      mockFs.chmod.mockRejectedValue(new Error('EACCES'));
-      mockFs.unlink.mockResolvedValue(undefined);
+    // Production tightens permissions with chmod only on POSIX platforms
+    // (it is skipped when process.platform === 'win32'), so the chmod-failure
+    // branch cannot be exercised on Windows.
+    it.skipIf(process.platform === 'win32')(
+      'should remove the file and throw when post-write chmod fails',
+      async () => {
+        // The file is written, but tightening its permissions fails. Production
+        // must remove the just-written file (so credentials are never left on
+        // disk with loose permissions) and surface an error distinct from a
+        // write failure.
+        mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+        mockFs.mkdir.mockResolvedValue(undefined);
+        mockFs.writeFile.mockResolvedValue(undefined);
+        mockFs.chmod.mockRejectedValue(new Error('EACCES'));
+        mockFs.unlink.mockResolvedValue(undefined);
 
-      const credentials: MCPOAuthCredentials = {
-        serverName: 'new-server',
-        token: {
-          accessToken: 'new-token',
-          tokenType: 'Bearer',
-        },
-        updatedAt: Date.now(),
-      };
+        const credentials: MCPOAuthCredentials = {
+          serverName: 'new-server',
+          token: {
+            accessToken: 'new-token',
+            tokenType: 'Bearer',
+          },
+          updatedAt: Date.now(),
+        };
 
-      await expect(storage.setCredentials(credentials)).rejects.toThrow(
-        /permissions could not be restricted/,
-      );
-      expect(mockFs.unlink).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
-      );
-    });
+        await expect(storage.setCredentials(credentials)).rejects.toThrow(
+          /permissions could not be restricted/,
+        );
+        expect(mockFs.unlink).toHaveBeenCalledWith(
+          path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
+        );
+      },
+    );
 
-    it('should report when cleanup unlink also fails after chmod failure', async () => {
-      // Worst case: chmod fails AND the cleanup unlink fails. The thrown error
-      // must NOT falsely claim the file was removed; it must warn that
-      // credentials may remain on disk with overly permissive permissions.
-      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
-      mockFs.mkdir.mockResolvedValue(undefined);
-      mockFs.writeFile.mockResolvedValue(undefined);
-      mockFs.chmod.mockRejectedValue(new Error('EACCES'));
-      mockFs.unlink.mockRejectedValue(new Error('EPERM'));
+    it.skipIf(process.platform === 'win32')(
+      'should report when cleanup unlink also fails after chmod failure',
+      async () => {
+        // Worst case: chmod fails AND the cleanup unlink fails. The thrown error
+        // must NOT falsely claim the file was removed; it must warn that
+        // credentials may remain on disk with overly permissive permissions.
+        mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+        mockFs.mkdir.mockResolvedValue(undefined);
+        mockFs.writeFile.mockResolvedValue(undefined);
+        mockFs.chmod.mockRejectedValue(new Error('EACCES'));
+        mockFs.unlink.mockRejectedValue(new Error('EPERM'));
 
-      const credentials: MCPOAuthCredentials = {
-        serverName: 'new-server',
-        token: {
-          accessToken: 'new-token',
-          tokenType: 'Bearer',
-        },
-        updatedAt: Date.now(),
-      };
+        const credentials: MCPOAuthCredentials = {
+          serverName: 'new-server',
+          token: {
+            accessToken: 'new-token',
+            tokenType: 'Bearer',
+          },
+          updatedAt: Date.now(),
+        };
 
-      await expect(storage.setCredentials(credentials)).rejects.toThrow(
-        /could not be removed/,
-      );
-    });
+        await expect(storage.setCredentials(credentials)).rejects.toThrow(
+          /could not be removed/,
+        );
+      },
+    );
   });
 
   describe('deleteCredentials', () => {
