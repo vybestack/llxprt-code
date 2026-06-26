@@ -178,10 +178,12 @@ describe('Storage – config-category methods resolve under config dir', () => {
     );
   });
 
-  it('getUserSkillsDir returns <configDir>/skills (NOT under tmp)', () => {
+  it('getUserSkillsDir returns <configDir>/skills (NOT under log/tmp dir)', () => {
     const result = Storage.getUserSkillsDir();
     expect(result).toBe(path.join(OVERRIDE_DIR, 'skills'));
-    expect(result).not.toContain(`${path.sep}tmp${path.sep}`);
+    // Skills must live under the config dir, not the log dir (which holds tmp).
+    expect(result.startsWith(OVERRIDE_DIR)).toBe(true);
+    expect(result.startsWith(LOG_OVERRIDE_DIR)).toBe(false);
   });
 
   it('getUserPoliciesDir returns <configDir>/policies', () => {
@@ -288,7 +290,7 @@ describe('Storage – default platform paths (no overrides)', () => {
     const expectedBasename = platformSegment(
       'Application Support',
       'Data',
-      'data',
+      'share',
     );
     expect(result).toContain(expectedBasename);
   });
