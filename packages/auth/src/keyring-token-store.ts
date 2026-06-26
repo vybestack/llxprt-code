@@ -16,8 +16,7 @@
 
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import envPaths from 'env-paths';
+import { homedir, platform } from 'node:os';
 import {
   OAuthTokenSchema,
   type OAuthToken,
@@ -44,20 +43,28 @@ const DEFAULT_STALE_THRESHOLD_MS = 30_000;
 const LOCK_POLL_INTERVAL_MS = 100;
 const LOCK_WRITE_GRACE_MS = 750;
 
-// Platform-standard config path for OAuth lock files.
-const platformPaths = envPaths('llxprt-code', { suffix: '' });
+// Inline platform data path matching envPaths('llxprt-code', { suffix: '' }).data
+// without importing the package (auth is a leaf package with no extra deps).
+function getPlatformDataDir(): string {
+  const home = homedir();
+  if (platform() === 'darwin') {
+    return join(home, 'Library', 'Application Support', 'llxprt-code');
+  }
+  if (platform() === 'win32') {
+    const localAppData =
+      process.env['LOCALAPPDATA'] ?? join(home, 'AppData', 'Local');
+    return join(localAppData, 'llxprt-code', 'Data');
+  }
+  const xdgData = process.env['XDG_DATA_HOME'] ?? join(home, '.local', 'share');
+  return join(xdgData, 'llxprt-code');
+}
 
 /** Lazily resolved to avoid computing the path at import time. */
 let _lockDir: string | undefined;
 function getLockDir(): string {
   if (_lockDir) return _lockDir;
   const configHome = process.env['LLXPRT_CONFIG_HOME'];
-  const dataDir = platformPaths.data;
-  const baseDir =
-    configHome ??
-    (dataDir
-      ? join(dataDir, 'configuration')
-      : join(tmpdir(), 'llxprt-code', 'configuration'));
+  const baseDir = configHome ?? join(getPlatformDataDir(), 'configuration');
   return (_lockDir = join(baseDir, 'oauth', 'locks'));
 }
 

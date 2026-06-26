@@ -6,8 +6,8 @@
   },
   "type": "module",
   "workspaces": [
-    "packages/storage",
     "packages/tools",
+    "packages/storage",
     "packages/auth",
     "packages/settings",
     "packages/telemetry",
