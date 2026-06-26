@@ -13,24 +13,32 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-import type { Orchestrator } from '../service/orchestrator.js';
+import type {
+  LspDocumentSymbol,
+  LspLocation,
+  LspWorkspaceSymbol,
+} from '../service/lsp-dto.js';
+import type { Diagnostic } from '../service/diagnostics.js';
 
-type Position = { line: number; character: number };
-type Range = { start: Position; end: Position };
-type Location = { uri: string; range: Range };
-type DocumentSymbol = {
-  name: string;
-  kind: number;
-  range: Range;
-  selectionRange: Range;
-};
-type WorkspaceSymbol = { name: string; kind: number; location: Location };
-type Diagnostic = {
-  source: string;
-  code: string;
-  message: string;
-  severity: number;
-  range: Range;
+export type McpOrchestrator = {
+  gotoDefinition: (
+    filePath: string,
+    line: number,
+    character: number,
+  ) => Promise<LspLocation[]>;
+  findReferences: (
+    filePath: string,
+    line: number,
+    character: number,
+  ) => Promise<LspLocation[]>;
+  hover: (
+    filePath: string,
+    line: number,
+    character: number,
+  ) => Promise<string | null>;
+  documentSymbols: (filePath: string) => Promise<LspDocumentSymbol[]>;
+  workspaceSymbols: (query: string) => Promise<LspWorkspaceSymbol[]>;
+  getAllDiagnostics: () => Promise<Record<string, Diagnostic[]>>;
 };
 
 type TextResult = {
@@ -57,15 +65,6 @@ const toTextResult = (text: string, isError = false): TextResult => ({
   ...(isError ? { isError: true } : {}),
 });
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const getNumber = (value: unknown, fallback = 0): number =>
-  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const getString = (value: unknown, fallback = ''): string =>
-  typeof value === 'string' ? value : fallback;
-
 const toDisplayPath = (value: string, workspaceRoot: string): string => {
   const filePath = value.startsWith('file://')
     ? decodeURIComponent(value.slice('file://'.length))
@@ -80,192 +79,25 @@ const toDisplayPath = (value: string, workspaceRoot: string): string => {
       : rel;
 };
 
-const formatLineCol = (position: Position): string =>
-  `${position.line + 1}:${position.character + 1}`;
+const formatLineCol = (line: number, character: number): string =>
+  `${line + 1}:${character + 1}`;
 
-const parsePosition = (value: unknown): Position => {
-  if (!isRecord(value)) {
-    return { line: 0, character: 0 };
-  }
-  return {
-    line: getNumber(value.line, 0),
-    character: getNumber(value.character, 0),
-  };
-};
-
-const parseRange = (value: unknown): Range => {
-  if (!isRecord(value)) {
-    return {
-      start: { line: 0, character: 0 },
-      end: { line: 0, character: 0 },
-    };
-  }
-  return {
-    start: parsePosition(value.start),
-    end: parsePosition(value.end),
-  };
-};
-
-const parseLocation = (value: unknown): Location => {
-  if (!isRecord(value)) {
-    return {
-      uri: '',
-      range: {
-        start: { line: 0, character: 0 },
-        end: { line: 0, character: 0 },
-      },
-    };
-  }
-
-  if (typeof value.file === 'string') {
-    const line = getNumber(value.line, 0);
-    const character = getNumber(value.char, getNumber(value.character, 0));
-    return {
-      uri: value.file,
-      range: {
-        start: { line, character },
-        end: { line, character },
-      },
-    };
-  }
-
-  return {
-    uri: getString(value.uri, ''),
-    range: parseRange(value.range),
-  };
-};
-
-const parseDocumentSymbol = (value: unknown): DocumentSymbol => {
-  if (!isRecord(value)) {
-    return {
-      name: '',
-      kind: 0,
-      range: {
-        start: { line: 0, character: 0 },
-        end: { line: 0, character: 0 },
-      },
-      selectionRange: {
-        start: { line: 0, character: 0 },
-        end: { line: 0, character: 0 },
-      },
-    };
-  }
-
-  const name = getString(value.name, '');
-  const kind = getNumber(value.kind, 0);
-
-  if ('selectionRange' in value || 'range' in value) {
-    return {
-      name,
-      kind,
-      range: parseRange(value.range),
-      selectionRange: parseRange(value.selectionRange ?? value.range),
-    };
-  }
-
-  const line = getNumber(value.line, 0);
-  const character = getNumber(value.char, getNumber(value.character, 0));
-  const pos = { line, character };
-  return {
-    name,
-    kind,
-    range: { start: pos, end: pos },
-    selectionRange: { start: pos, end: pos },
-  };
-};
-
-const parseWorkspaceSymbol = (value: unknown): WorkspaceSymbol => {
-  if (!isRecord(value)) {
-    return {
-      name: '',
-      kind: 0,
-      location: {
-        uri: '',
-        range: {
-          start: { line: 0, character: 0 },
-          end: { line: 0, character: 0 },
-        },
-      },
-    };
-  }
-
-  const name = getString(value.name, '');
-  const kind = getNumber(value.kind, 0);
-
-  if (isRecord(value.location)) {
-    return {
-      name,
-      kind,
-      location: parseLocation(value.location),
-    };
-  }
-
-  const line = getNumber(value.line, 0);
-  const character = getNumber(value.char, getNumber(value.character, 0));
-  return {
-    name,
-    kind,
-    location: {
-      uri: getString(value.file, ''),
-      range: {
-        start: { line, character },
-        end: { line, character },
-      },
-    },
-  };
-};
-
-const parseDiagnostic = (value: unknown): Diagnostic => {
-  if (!isRecord(value)) {
-    return {
-      source: '',
-      code: '',
-      message: '',
-      severity: 0,
-      range: {
-        start: { line: 0, character: 0 },
-        end: { line: 0, character: 0 },
-      },
-    };
-  }
-
-  let range = parseRange(value.range);
-  if (!('range' in value)) {
-    const line = getNumber(value.line, 0);
-    const character = getNumber(
-      value.column,
-      getNumber(value.char, getNumber(value.character, 0)),
-    );
-    range = {
-      start: { line, character },
-      end: { line, character },
-    };
-  }
-
-  return {
-    source: getString(value.source, ''),
-    code: getString(value.code, ''),
-    message: getString(value.message, ''),
-    severity: getNumber(value.severity, 0),
-    range,
-  };
-};
-
-const formatLocation = (location: Location, workspaceRoot: string): string => {
+const formatLocation = (
+  location: LspLocation,
+  workspaceRoot: string,
+): string => {
   const path = toDisplayPath(location.uri, workspaceRoot);
-  return `${path}:${formatLineCol(location.range.start)}`;
+  return `${path}:${formatLineCol(location.range.start.line, location.range.start.character)}`;
 };
 
 const formatSymbol = (
-  symbol:
-    | Pick<DocumentSymbol, 'name' | 'selectionRange'>
-    | Pick<WorkspaceSymbol, 'name' | 'location'>,
+  symbol: LspDocumentSymbol | LspWorkspaceSymbol,
   workspaceRoot: string,
 ): string => {
   if ('location' in symbol) {
     return `${symbol.name} - ${formatLocation(symbol.location, workspaceRoot)}`;
   }
-  return `${symbol.name} - ${formatLineCol(symbol.selectionRange.start)}`;
+  return `${symbol.name} - ${formatLineCol(symbol.selectionRange.start.line, symbol.selectionRange.start.character)}`;
 };
 
 const formatDiagnostic = (
@@ -274,7 +106,7 @@ const formatDiagnostic = (
   workspaceRoot: string,
 ): string => {
   const display = toDisplayPath(filePath, workspaceRoot);
-  return `${display}:${formatLineCol(diagnostic.range.start)} ${diagnostic.message}`;
+  return `${display}:${diagnostic.line}:${diagnostic.column} ${diagnostic.message}`;
 };
 
 export const validateFilePath = (
@@ -292,7 +124,7 @@ export const validateFilePath = (
 };
 
 export async function createMcpChannel(
-  orchestrator: Orchestrator,
+  orchestrator: McpOrchestrator,
   workspaceRoot: string,
   inputStream: Readable,
   outputStream: Writable,
@@ -305,14 +137,11 @@ export async function createMcpChannel(
   server.tool('lsp_goto_definition', filePositionSchema, async (args) => {
     try {
       const filePath = validateFilePath(args.filePath, workspaceRoot);
-      const locationsRaw = (await orchestrator.gotoDefinition(
+      const locations = await orchestrator.gotoDefinition(
         filePath,
         args.line,
         args.character,
-      )) as unknown;
-      const locations = Array.isArray(locationsRaw)
-        ? locationsRaw.map(parseLocation)
-        : [];
+      );
       const text = locations
         .map((loc) => formatLocation(loc, workspaceRoot))
         .join('\n');
@@ -328,14 +157,11 @@ export async function createMcpChannel(
   server.tool('lsp_find_references', filePositionSchema, async (args) => {
     try {
       const filePath = validateFilePath(args.filePath, workspaceRoot);
-      const locationsRaw = (await orchestrator.findReferences(
+      const locations = await orchestrator.findReferences(
         filePath,
         args.line,
         args.character,
-      )) as unknown;
-      const locations = Array.isArray(locationsRaw)
-        ? locationsRaw.map(parseLocation)
-        : [];
+      );
       const text = locations
         .map((loc) => formatLocation(loc, workspaceRoot))
         .join('\n');
@@ -368,12 +194,7 @@ export async function createMcpChannel(
   server.tool('lsp_document_symbols', fileSchema, async (args) => {
     try {
       const filePath = validateFilePath(args.filePath, workspaceRoot);
-      const symbolsRaw = (await orchestrator.documentSymbols(
-        filePath,
-      )) as unknown;
-      const symbols = Array.isArray(symbolsRaw)
-        ? symbolsRaw.map(parseDocumentSymbol)
-        : [];
+      const symbols = await orchestrator.documentSymbols(filePath);
       const text = symbols
         .map((symbol) => formatSymbol(symbol, workspaceRoot))
         .join('\n');
@@ -388,12 +209,7 @@ export async function createMcpChannel(
 
   server.tool('lsp_workspace_symbols', querySchema, async (args) => {
     try {
-      const symbolsRaw = (await orchestrator.workspaceSymbols(
-        args.query,
-      )) as unknown;
-      const symbols = Array.isArray(symbolsRaw)
-        ? symbolsRaw.map(parseWorkspaceSymbol)
-        : [];
+      const symbols = await orchestrator.workspaceSymbols(args.query);
       const text = symbols
         .map((symbol) => formatSymbol(symbol, workspaceRoot))
         .join('\n');
@@ -408,15 +224,11 @@ export async function createMcpChannel(
 
   server.tool('lsp_diagnostics', async () => {
     try {
-      const allRaw = (await orchestrator.getAllDiagnostics()) as unknown;
-      const all = isRecord(allRaw) ? allRaw : {};
+      const all = await orchestrator.getAllDiagnostics();
       const files = Object.keys(all).sort((a, b) => a.localeCompare(b));
       const lines: string[] = [];
       for (const filePath of files) {
-        const diagnosticsRaw = all[filePath];
-        const diagnostics = Array.isArray(diagnosticsRaw)
-          ? diagnosticsRaw.map(parseDiagnostic)
-          : [];
+        const diagnostics = all[filePath];
         for (const diagnostic of diagnostics) {
           lines.push(formatDiagnostic(filePath, diagnostic, workspaceRoot));
         }

@@ -16,7 +16,7 @@ type Diagnostic = {
 
 type PublishDiagnosticsParams = {
   uri: string;
-  diagnostics: Diagnostic[];
+  diagnostics: unknown[];
 };
 
 type JsonRpcRequest = {
@@ -254,7 +254,12 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
     documents.set(uri, text);
     await sendPublishDiagnostics({
       uri,
-      diagnostics: createDiagnosticsForText(text),
+      diagnostics: [
+        ...createDiagnosticsForText(text),
+        { message: 123, range: { start: { line: 99, character: 99 } } },
+        { message: 'invalid missing range' },
+        null,
+      ],
     });
     return;
   }

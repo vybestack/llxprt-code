@@ -311,9 +311,10 @@ describe('main channel wiring', () => {
     const createMcpChannel = vi
       .fn()
       .mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
+    const createOrchestrator = vi.fn(() => orchestrator);
 
     vi.doMock('../src/service/orchestrator.js', () => ({
-      createOrchestrator: vi.fn(() => orchestrator),
+      createOrchestrator,
     }));
     vi.doMock('../src/channels/rpc-channel.js', () => ({ setupRpcChannel }));
     vi.doMock('../src/channels/mcp-channel.js', () => ({ createMcpChannel }));
@@ -330,10 +331,52 @@ describe('main channel wiring', () => {
     const mod = await import('../src/main.js');
     await mod.main();
 
+    expect(createOrchestrator.mock.calls[0]?.[0]).toMatchObject({
+      servers: expect.arrayContaining([expect.objectContaining({ id: 'ts' })]),
+    });
     expect(setupRpcChannel).toHaveBeenCalledTimes(1);
     expect(setupRpcChannel.mock.calls[0]?.[1]).toBe(orchestrator);
     expect(createMcpChannel).toHaveBeenCalledTimes(1);
     expect(createMcpChannel.mock.calls[0]?.[0]).toBe(orchestrator);
+  });
+
+  it('passes explicit bootstrap servers to the orchestrator without adding builtins', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: {
+        navigationTools: false,
+        servers: [{ id: 'tsserver', command: 'typescript-language-server' }],
+      },
+    });
+
+    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    const createOrchestrator = vi.fn(() => orchestrator);
+
+    vi.doMock('../src/service/orchestrator.js', () => ({
+      createOrchestrator,
+    }));
+    vi.doMock('vscode-jsonrpc/node.js', () => ({
+      StreamMessageReader: vi.fn(),
+      StreamMessageWriter: vi.fn(),
+      createMessageConnection: vi.fn(() => ({
+        listen: vi.fn(),
+        dispose: vi.fn(),
+        sendNotification: vi.fn(),
+      })),
+    }));
+
+    const mod = await import('../src/main.js');
+    await mod.main();
+
+    expect(createOrchestrator.mock.calls[0]?.[0]).toMatchObject({
+      servers: [
+        {
+          id: 'tsserver',
+          command: 'typescript-language-server',
+          extensions: [],
+        },
+      ],
+    });
   });
 
   it('navigationTools false skips mcp', async () => {
@@ -419,5 +462,83 @@ describe('main channel wiring', () => {
     await mod.main();
 
     expect(sendNotification).toHaveBeenCalledWith('lsp/ready');
+  });
+});
+
+describe('toServerRegistryEntries conversion', () => {
+  const loadMain = async () => import('../src/main.js');
+
+  it('converts a validated user server config into a ServerRegistryEntry with displayName', async () => {
+    const mod = await loadMain();
+    const entries = mod.toServerRegistryEntries([
+      {
+        id: 'custom-ts',
+        command: 'typescript-language-server',
+        extensions: ['.ts'],
+      },
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.id).toBe('custom-ts');
+    expect(entries[0]?.displayName).toBe('custom-ts');
+    expect(entries[0]?.command).toBe('typescript-language-server');
+    expect(entries[0]?.extensions).toEqual(['.ts']);
+  });
+
+  it('produces entries that mergeUserConfig accepts without casts', async () => {
+    const { mergeUserConfig, getBuiltinServers } = await import(
+      '../src/service/server-registry.js'
+    );
+    const mod = await loadMain();
+    const builtins = getBuiltinServers();
+    const entries = mod.toServerRegistryEntries(
+      [
+        {
+          id: 'ts',
+          command: 'override-ts',
+          args: ['--stdio'],
+          extensions: ['.ts'],
+        },
+      ],
+      builtins,
+    );
+
+    const merged = mergeUserConfig(builtins, entries);
+    const tsEntry = merged.find((e) => e.id === 'ts');
+    expect(tsEntry?.command).toBe('override-ts');
+    expect(tsEntry?.args).toEqual(['--stdio']);
+  });
+
+  it('carries args through conversion as a readonly array', async () => {
+    const mod = await loadMain();
+    const entries = mod.toServerRegistryEntries([
+      {
+        id: 'with-args',
+        command: 'langserver',
+        args: ['--stdio', '--verbose'],
+        extensions: ['.js'],
+      },
+    ]);
+
+    expect(entries[0]?.args).toEqual(['--stdio', '--verbose']);
+  });
+
+  it('inherits builtin displayName and extensions for partial builtin overrides', async () => {
+    const { getBuiltinServers } = await import(
+      '../src/service/server-registry.js'
+    );
+    const mod = await loadMain();
+    const entries = mod.toServerRegistryEntries(
+      [{ id: 'ts', command: 'custom-typescript-language-server' }],
+      getBuiltinServers(),
+    );
+
+    expect(entries[0]?.displayName).toBe('TypeScript Language Server');
+    expect(entries[0]?.extensions).toEqual(['.ts', '.tsx', '.js', '.jsx']);
+  });
+
+  it('returns an empty array for undefined input', async () => {
+    const mod = await loadMain();
+    expect(mod.toServerRegistryEntries(undefined)).toEqual([]);
   });
 });

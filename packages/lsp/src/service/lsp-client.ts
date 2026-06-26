@@ -6,6 +6,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { Diagnostic } from './diagnostics.js';
 import { getLanguageId } from './language-map.js';
+import {
+  isPublishDiagnosticsParams,
+  parsePublishDiagnostics,
+} from './lsp-diagnostic-parser.js';
 import type { LspServerConfig } from '../types.js';
 
 export class LspRequestTimeoutError extends Error {
@@ -840,19 +844,18 @@ export class LspClient {
       'method' in message &&
       message.method === 'textDocument/publishDiagnostics'
     ) {
-      const params = message.params as
-        | { uri?: string; diagnostics?: Diagnostic[] }
-        | undefined;
-      if (!params?.uri) {
+      if (!isPublishDiagnosticsParams(message.params)) {
         return;
       }
 
-      const path = fromFileUri(params.uri);
+      const path = fromFileUri(message.params.uri);
       this.diagnosticsByFile.set(
         path,
-        Array.isArray(params.diagnostics)
-          ? params.diagnostics
-          : EMPTY_DIAGNOSTICS,
+        parsePublishDiagnostics(
+          message.params.diagnostics,
+          path,
+          this.workspaceRoot,
+        ),
       );
       this.eventBus.emit(`diagnostics:${path}`);
     }

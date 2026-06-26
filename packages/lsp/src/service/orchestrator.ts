@@ -11,11 +11,12 @@
 import { readFile } from 'node:fs/promises';
 import { extname, normalize, resolve } from 'node:path';
 
-import {
-  normalizeLspDiagnostic,
-  type Diagnostic,
-  type RawLspDiagnostic,
-} from './diagnostics.js';
+import type { Diagnostic } from './diagnostics.js';
+import type {
+  LspDocumentSymbol,
+  LspLocation,
+  LspWorkspaceSymbol,
+} from './lsp-dto.js';
 import { LspClient, type DocumentSymbol, type Location } from './lsp-client.js';
 import type { LspServerConfig } from '../types.js';
 
@@ -26,16 +27,11 @@ export interface ServerStatus {
   state: 'ok' | 'broken' | 'starting' | 'idle';
 }
 
-export interface WorkspaceSymbol {
-  name: string;
-  file: string;
-  line: number;
-  char: number;
-}
-
 type ClientKey = string;
 
 const DEFAULT_WAIT_MS = 1200;
+const EMPTY_LOCATIONS: Location[] = [];
+const EMPTY_DOCUMENT_SYMBOLS: DocumentSymbol[] = [];
 
 interface OrchestratorServerConfig extends LspServerConfig {
   extensions?: string[];
@@ -48,6 +44,27 @@ interface OrchestratorConfig {
   navigationTimeoutMs?: number;
   requestTimeoutMs?: number;
 }
+
+const toLspLocation = (location: Location): LspLocation => {
+  const position = { line: location.line, character: location.char };
+  return {
+    uri: location.file,
+    range: { start: position, end: position },
+  };
+};
+
+const toLspDocumentSymbol = (symbol: DocumentSymbol): LspDocumentSymbol => {
+  const numericKind = Number.parseInt(symbol.kind, 10);
+  const kind = Number.isFinite(numericKind) ? numericKind : 0;
+  const position = { line: symbol.line, character: symbol.char };
+  const range = { start: position, end: position };
+  return {
+    name: symbol.name,
+    kind,
+    range,
+    selectionRange: range,
+  };
+};
 
 export class Orchestrator {
   private static readonly MAX_DIAGNOSTIC_EVENTS = 1000;
@@ -135,13 +152,7 @@ export class Orchestrator {
               this.startupPromises.delete(key);
               return [];
             }
-            return output.map((raw) =>
-              normalizeLspDiagnostic(
-                raw as unknown as RawLspDiagnostic,
-                normalizedFile,
-                this.workspaceRootAbs,
-              ),
-            );
+            return output;
           } catch {
             this.brokenServers.add(key);
             this.clients.delete(key);
@@ -242,7 +253,7 @@ export class Orchestrator {
     file: string,
     line: number,
     char: number,
-  ): Promise<Location[]> {
+  ): Promise<LspLocation[]> {
     const client = await this.getClientForNavigation(file);
     if (!client) {
       return [];
@@ -253,13 +264,13 @@ export class Orchestrator {
         client.gotoDefinition(normalizedFile, line, char, {
           abortSignal: signal,
         }),
-      [] as Location[],
+      EMPTY_LOCATIONS,
     );
     if (result.length > 0) {
-      return result;
+      return result.map(toLspLocation);
     }
     if (this.isInsideWorkspace(normalizedFile)) {
-      return [{ file: normalizedFile, line, char }];
+      return [toLspLocation({ file: normalizedFile, line, char })];
     }
     return [];
   }
@@ -268,19 +279,20 @@ export class Orchestrator {
     file: string,
     line: number,
     char: number,
-  ): Promise<Location[]> {
+  ): Promise<LspLocation[]> {
     const client = await this.getClientForNavigation(file);
     if (!client) {
       return [];
     }
     const normalizedFile = this.normalizeAbsolutePath(file);
-    return await this.withTimeout(
+    const result = await this.withTimeout(
       (signal) =>
         client.findReferences(normalizedFile, line, char, {
           abortSignal: signal,
         }),
-      [] as Location[],
+      EMPTY_LOCATIONS,
     );
+    return result.map(toLspLocation);
   }
 
   public async hover(
@@ -300,20 +312,21 @@ export class Orchestrator {
     );
   }
 
-  public async documentSymbols(file: string): Promise<DocumentSymbol[]> {
+  public async documentSymbols(file: string): Promise<LspDocumentSymbol[]> {
     const client = await this.getClientForNavigation(file);
     if (!client) {
       return [];
     }
     const normalizedFile = this.normalizeAbsolutePath(file);
-    return await this.withTimeout(
+    const result = await this.withTimeout(
       (signal) =>
         client.documentSymbols(normalizedFile, { abortSignal: signal }),
-      [] as DocumentSymbol[],
+      EMPTY_DOCUMENT_SYMBOLS,
     );
+    return result.map(toLspDocumentSymbol);
   }
 
-  public async workspaceSymbols(query: string): Promise<WorkspaceSymbol[]> {
+  public async workspaceSymbols(query: string): Promise<LspWorkspaceSymbol[]> {
     void query;
     return [];
   }
