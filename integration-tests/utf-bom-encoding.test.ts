@@ -47,6 +47,44 @@ const utf32BE = (s: string) => {
   return Buffer.concat([bom, payload]);
 };
 
+function writeReadTextFixture(filename: string, expectedText: string): string {
+  const safeName = filename.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fixturePath = join(
+    process.env['INTEGRATION_TEST_FILE_DIR']!,
+    `utf-bom-encoding-${safeName}.responses.jsonl`,
+  );
+  const turns = [
+    {
+      chunks: [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: `call_read_${safeName}`,
+              name: 'read_file',
+              parameters: { file_path: `{{CWD}}/${filename}` },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      chunks: [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: expectedText }],
+        },
+      ],
+    },
+  ];
+  writeFileSync(
+    fixturePath,
+    `${turns.map((turn) => JSON.stringify(turn)).join('\n')}\n`,
+  );
+  return fixturePath;
+}
+
 describe('BOM end-to-end integration', () => {
   let rig: TestRig;
 
@@ -61,13 +99,20 @@ describe('BOM end-to-end integration', () => {
     content: Buffer,
     expectedText: string | null,
   ) {
+    const fakeResponsesPath =
+      expectedText === null
+        ? undefined
+        : writeReadTextFixture(filename, expectedText);
     await rig.setup('bom-integration', {
+      fakeResponsesPath,
       settings: { tools: { core: ['read_file'] } },
     });
     writeFileSync(join(rig.testDir!, filename), content);
     const prompt = `read the file ${filename} and output its exact contents`;
     const output = await rig.run({ args: prompt });
-    await rig.waitForToolCall('read_file');
+    await rig.expectToolCallSuccess(['read_file'], undefined, (args) =>
+      args.includes(filename),
+    );
     const lower = output.toLowerCase();
     if (expectedText === null) {
       expect(

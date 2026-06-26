@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as os from 'os';
 import * as path from 'node:path';
 
@@ -22,6 +22,16 @@ import {
   PROVIDER_ACCOUNTS_FILENAME,
   OAUTH_FILE,
 } from './storage.js';
+
+const expectedDefaultSystemSettingsPath = (): string => {
+  if (os.platform() === 'darwin') {
+    return '/Library/Application Support/LlxprtCode/settings.json';
+  }
+  if (os.platform() === 'win32') {
+    return 'C:\\ProgramData\\llxprt-code\\settings.json';
+  }
+  return '/etc/llxprt-code/settings.json';
+};
 
 // ---------------------------------------------------------------------------
 // P02b RED gate – path / storage constant assertions
@@ -185,5 +195,141 @@ describe('Storage – additional helpers', () => {
   it('getMachineSecretPath returns ~/.llxprt/machine_secret', () => {
     const expected = path.join(os.homedir(), '.llxprt', 'machine_secret');
     expect(Storage.getMachineSecretPath()).toBe(expected);
+  });
+});
+
+describe('Storage – getSystemSettingsPath env override hardening', () => {
+  const ENV_KEY = 'LLXPRT_SYSTEM_SETTINGS_PATH';
+  let saved: string | undefined;
+
+  beforeEach(() => {
+    saved = process.env[ENV_KEY];
+    delete process.env[ENV_KEY];
+  });
+
+  afterEach(() => {
+    if (saved === undefined) {
+      delete process.env[ENV_KEY];
+    } else {
+      process.env[ENV_KEY] = saved;
+    }
+  });
+
+  it('returns platform default when env override is unset', () => {
+    expect(Storage.getSystemSettingsPath()).toBe(
+      expectedDefaultSystemSettingsPath(),
+    );
+  });
+
+  it('normalizes an absolute override via path.resolve', () => {
+    const raw = `${os.tmpdir()}/llxprt-system/../settings.json`;
+    process.env[ENV_KEY] = raw;
+    expect(Storage.getSystemSettingsPath()).toBe(path.resolve(raw));
+  });
+
+  it('collapses traversal segments in an absolute override', () => {
+    const base = os.tmpdir();
+    const raw = `${base}/a/../b/settings.json`;
+    process.env[ENV_KEY] = raw;
+    expect(Storage.getSystemSettingsPath()).toBe(
+      path.resolve(`${base}/b/settings.json`),
+    );
+  });
+
+  it('ignores a relative override in favor of platform default', () => {
+    process.env[ENV_KEY] = '../settings.json';
+    expect(Storage.getSystemSettingsPath()).toBe(
+      expectedDefaultSystemSettingsPath(),
+    );
+  });
+
+  it('ignores a nested-relative override in favor of platform default', () => {
+    process.env[ENV_KEY] = 'relative/settings.json';
+    expect(Storage.getSystemSettingsPath()).toBe(
+      expectedDefaultSystemSettingsPath(),
+    );
+  });
+
+  it('ignores a whitespace-only override in favor of platform default', () => {
+    process.env[ENV_KEY] = '   ';
+    expect(Storage.getSystemSettingsPath()).toBe(
+      expectedDefaultSystemSettingsPath(),
+    );
+  });
+
+  it('ignores an empty-string override in favor of platform default', () => {
+    process.env[ENV_KEY] = '';
+    expect(Storage.getSystemSettingsPath()).toBe(
+      expectedDefaultSystemSettingsPath(),
+    );
+  });
+
+  it('rejects raw env input: resolved path differs from raw when traversal present', () => {
+    const raw = `${os.tmpdir()}/x/../settings.json`;
+    process.env[ENV_KEY] = raw;
+    const result = Storage.getSystemSettingsPath();
+    expect(result).not.toBe(raw);
+    expect(result).toBe(path.resolve(raw));
+  });
+
+  it('trims leading whitespace on an absolute override and resolves it', () => {
+    const cleaned = `${os.tmpdir()}/settings.json`;
+    process.env[ENV_KEY] = `   ${cleaned}`;
+    expect(Storage.getSystemSettingsPath()).toBe(path.resolve(cleaned));
+  });
+
+  it('trims trailing whitespace on an absolute override and resolves it', () => {
+    const cleaned = `${os.tmpdir()}/settings.json`;
+    process.env[ENV_KEY] = `${cleaned}   `;
+    expect(Storage.getSystemSettingsPath()).toBe(path.resolve(cleaned));
+  });
+
+  it('trims surrounding whitespace on an absolute override and resolves it', () => {
+    const cleaned = `${os.tmpdir()}/settings.json`;
+    process.env[ENV_KEY] = ` \t ${cleaned} \n`;
+    expect(Storage.getSystemSettingsPath()).toBe(path.resolve(cleaned));
+  });
+
+  it('does not preserve trailing whitespace in the resolved path', () => {
+    const cleaned = `${os.tmpdir()}/settings.json`;
+    const raw = `${cleaned}   `;
+    process.env[ENV_KEY] = raw;
+    const result = Storage.getSystemSettingsPath();
+    expect(result).toBe(path.resolve(cleaned));
+    expect(result).not.toBe(path.resolve(raw));
+  });
+});
+
+describe('Storage – getSystemPoliciesDir derives from sanitized path', () => {
+  const ENV_KEY = 'LLXPRT_SYSTEM_SETTINGS_PATH';
+  let saved: string | undefined;
+
+  beforeEach(() => {
+    saved = process.env[ENV_KEY];
+    delete process.env[ENV_KEY];
+  });
+
+  afterEach(() => {
+    if (saved === undefined) {
+      delete process.env[ENV_KEY];
+    } else {
+      process.env[ENV_KEY] = saved;
+    }
+  });
+
+  it('derives policies dir from resolved settings path, not raw env input', () => {
+    const raw = `${os.tmpdir()}/llxprt-system/sub/../sub2/../../settings.json`;
+    process.env[ENV_KEY] = raw;
+    const resolved = path.resolve(raw);
+    expect(Storage.getSystemPoliciesDir()).toBe(
+      path.join(path.dirname(resolved), 'policies'),
+    );
+  });
+
+  it('derives policies dir from platform default when override is relative', () => {
+    process.env[ENV_KEY] = 'relative/settings.json';
+    expect(Storage.getSystemPoliciesDir()).toBe(
+      path.join(path.dirname(expectedDefaultSystemSettingsPath()), 'policies'),
+    );
   });
 });
