@@ -89,3 +89,59 @@ const _mcpRefreshShape: _AgentShape['mcp']['refresh'] = async (
 void _mcpRefreshShape;
 const _hooksClearShape: _AgentShape['hooks']['clear'] = () => {};
 void _hooksClearShape;
+
+// --- MCP OAuth quad-state anchors (PLAN-20260622-MCPOAUTHTRUTH.P07 / REQ-004) ---
+// These fence the additive OAuth projection landed in P06. Removing a projected
+// field, or dropping a union member, breaks `npm run typecheck`.
+// @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 @requirement:REQ-004
+import type {
+  McpOAuthStatus,
+  McpServerAuthStatus,
+  McpServerDetail,
+} from '@vybestack/llxprt-code-agents';
+
+// McpOAuthStatus must remain a 4-member union (additive quad-state).
+// This array anchor catches member REMOVAL: a dropped member is no longer
+// assignable to the narrowed union, breaking `npm run typecheck`.
+const _mcpOAuthStatusAnchor: McpOAuthStatus[] = [
+  'authenticated',
+  'expired',
+  'none',
+  'not-required',
+];
+void _mcpOAuthStatusAnchor;
+
+// Exhaustiveness helper: only `never` satisfies the `extends never` constraint.
+type _AssertNever<T extends never> = T;
+
+// Complementary anchor that catches union GROWTH (the array anchor above only
+// catches removal): while McpOAuthStatus is EXACTLY the 4-member quad-state,
+// `Exclude<...>` resolves to `never` and satisfies `_AssertNever`. Adding a 5th
+// member makes `Exclude<...>` resolve to that member, which fails
+// `extends never` => `npm run typecheck` error. `export type` keeps it
+// noUnusedLocals-safe (root tsconfig) without a runtime binding.
+export type _McpOAuthStatusExhaustive = _AssertNever<
+  Exclude<McpOAuthStatus, 'authenticated' | 'expired' | 'none' | 'not-required'>
+>;
+
+// New fields must exist on both projected shapes (removal => compile error).
+const _mcpAuthShapeAnchor: Pick<
+  McpServerAuthStatus,
+  'oauthStatus' | 'sessionAuthenticated' | 'authenticated' | 'requiresAuth'
+> = {
+  oauthStatus: 'authenticated',
+  sessionAuthenticated: false,
+  authenticated: true,
+  requiresAuth: true,
+};
+void _mcpAuthShapeAnchor;
+
+const _mcpDetailShapeAnchor: Pick<
+  McpServerDetail,
+  'oauthStatus' | 'sessionAuthenticated' | 'requiresAuth'
+> = {
+  oauthStatus: 'not-required',
+  sessionAuthenticated: false,
+  requiresAuth: false,
+};
+void _mcpDetailShapeAnchor;
