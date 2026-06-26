@@ -522,6 +522,26 @@ describe('ToolKeyStorage', () => {
       expect(result).toBe('sk-legacy-value');
     });
 
+    it('reads a legacy empty-key .key file whose ciphertext is empty (iv:authTag:)', async () => {
+      // AES-256-GCM is a stream cipher, so encrypting an empty plaintext yields
+      // an empty ciphertext: a genuine legacy file for an empty key is
+      // `iv:authTag:` with an empty third part. It must still be recognized as
+      // legacy and round-trip to '' rather than being rejected as unrecognized.
+      const filePath = path.join(tempDir, 'exa.key');
+      const legacyContent = buildLegacyHexColonCiphertext('');
+      expect(legacyContent.endsWith(':')).toBe(true);
+      await fs.writeFile(filePath, legacyContent, { mode: 0o600 });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      const result = await reader.getKey('exa');
+      expect(result).toBe('');
+    });
+
     /**
      * @plan PLAN-20260206-TOOLKEY.P04
      * @requirement REQ-001.2

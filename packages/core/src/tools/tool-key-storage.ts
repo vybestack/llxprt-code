@@ -314,17 +314,23 @@ export class ToolKeyStorage {
    * Recognizes the legacy `iv:authTag:ciphertext` (hex) shape WITHOUT
    * attempting decryption. The legacy `encrypt` path used a 16-byte IV and a
    * 16-byte AES-256-GCM auth tag, so a genuine legacy file always has a
-   * 32-hex-char IV and a 32-hex-char auth tag followed by non-empty ciphertext.
-   * Enforcing those exact lengths prevents short/garbage `a:b:c` content from
-   * being misclassified as legacy (which would route it to a decrypt attempt
-   * and a less specific error) instead of failing closed as unrecognized.
+   * 32-hex-char IV and a 32-hex-char auth tag followed by the hex ciphertext.
+   * The ciphertext part may be empty: AES-256-GCM is a stream cipher (its
+   * ciphertext length equals the plaintext length), so a legacy file that
+   * stored an empty key serializes as `iv:authTag:` with an empty third part
+   * and must still be recognized so it round-trips instead of being rejected
+   * as unrecognized. Enforcing the exact IV/auth-tag lengths still prevents
+   * short/garbage `a:b:c` content from being misclassified as legacy (which
+   * would route it to a decrypt attempt and a less specific error) instead of
+   * failing closed as unrecognized.
    */
   private isLegacyHexColonFormat(data: string): boolean {
-    // Exactly: 32-hex IV, 32-hex auth tag, then non-empty hex ciphertext.
-    // The anchored pattern enforces the part count (two colons), the exact
-    // IV/auth-tag lengths, and hex-only content in a single check, so short or
-    // garbage `a:b:c` content is not misclassified as legacy.
-    return /^[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:[0-9a-fA-F]+$/.test(data);
+    // Exactly: 32-hex IV, 32-hex auth tag, then hex ciphertext that may be
+    // empty (a legacy empty-key file is `iv:authTag:`). The anchored pattern
+    // enforces the part count (two colons), the exact IV/auth-tag lengths, and
+    // hex-only content in a single check, so short or garbage `a:b:c` content
+    // is not misclassified as legacy.
+    return /^[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:[0-9a-fA-F]*$/.test(data);
   }
 
   private async deleteFile(toolName: string): Promise<void> {
