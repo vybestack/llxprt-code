@@ -99,13 +99,34 @@ function nullSecretLoader(): () => Promise<Buffer | null> {
 }
 
 /**
- * Builds legacy `iv:authTag:ciphertext` (hex) file content using the same
- * derivation the old ToolKeyStorage used, so we can test backward-compatible
- * reads of pre-existing .key files.
+ * FROZEN LEGACY KDF SPEC — DO NOT CHANGE.
+ *
+ * These constants describe the `iv:authTag:ciphertext` (hex) format written by
+ * pre-envelope versions of ToolKeyStorage. The current implementation no longer
+ * *writes* this format (it writes versioned envelopes), so this helper exists
+ * only to synthesize pre-existing on-disk files and prove backward-compatible
+ * reads still work.
+ *
+ * The duplication of `deriveEncryptionKey`'s logic
+ * (tool-key-storage.ts) is intentional and unavoidable:
+ *   - A static cross-machine ciphertext fixture is impossible because the legacy
+ *     salt is derived from `os.hostname()`/`os.userInfo().username`, so the key
+ *     differs per machine and must be derived at test time.
+ *   - The public API can no longer produce this format, so it cannot be
+ *     generated through a v:1-only storage instance (that path emits a v:1
+ *     *envelope*, which is covered by separate tests).
+ *
+ * Both this helper and the production `deriveEncryptionKey` are pinned to this
+ * frozen spec. If the production KDF ever diverges from these exact constants,
+ * it would silently break reads of real legacy files in the wild — neither side
+ * may change.
  */
+const LEGACY_KDF_PASSWORD = 'llxprt-cli-tool-keys';
+const legacyKdfSalt = (): string =>
+  `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
+
 function buildLegacyHexColonCiphertext(plaintext: string): string {
-  const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
-  const key = crypto.scryptSync('llxprt-cli-tool-keys', salt, 32);
+  const key = crypto.scryptSync(LEGACY_KDF_PASSWORD, legacyKdfSalt(), 32);
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   let encrypted = cipher.update(plaintext, 'utf8', 'hex');
@@ -487,7 +508,6 @@ describe('ToolKeyStorage', () => {
     it('reads legacy hex-colon .key files (backward compatibility)', async () => {
       // Write a legacy-format file directly.
       const filePath = path.join(tempDir, 'exa.key');
-      await fs.mkdir(tempDir, { recursive: true, mode: 0o700 });
       const legacyContent = buildLegacyHexColonCiphertext('sk-legacy-value');
       expect(isHexColonFormat(legacyContent)).toBe(true);
       await fs.writeFile(filePath, legacyContent, { mode: 0o600 });
@@ -510,7 +530,6 @@ describe('ToolKeyStorage', () => {
       // Write raw garbage that is neither a valid envelope nor legacy
       // hex-colon format directly to the .key file.
       const filePath = path.join(tempDir, 'exa.key');
-      await fs.mkdir(tempDir, { recursive: true, mode: 0o700 });
       await fs.writeFile(filePath, 'this-is-not-a-valid-key-file', {
         mode: 0o600,
       });
@@ -538,7 +557,6 @@ describe('ToolKeyStorage', () => {
       // throws. This proves recognized-legacy decryption failures fail
       // closed rather than returning null.
       const filePath = path.join(tempDir, 'exa.key');
-      await fs.mkdir(tempDir, { recursive: true, mode: 0o700 });
       const bogusLegacy = `${'00'.repeat(16)}:${'11'.repeat(16)}:${'2222'}`;
       await fs.writeFile(filePath, bogusLegacy, { mode: 0o600 });
 
@@ -548,8 +566,60 @@ describe('ToolKeyStorage', () => {
         machineSecretLoader: secretLoaderA(),
       });
 
+      // Assert only that it fails closed (rejects with an Error). The legacy
+      // decrypt path lets Node's raw GCM authentication error propagate; its
+      // exact wording is not a stable API contract, so matching the message
+      // string would make this test brittle across Node versions.
+      await expect(reader.getKey('exa')).rejects.toThrow(Error);
+    });
+
+    /**
+     * @plan PLAN-20260206-TOOLKEY.P04
+     * @requirement REQ-001.2
+     */
+    it('does not misclassify short hex-colon content as legacy and fails closed as unrecognized', async () => {
+      // `a:b:c`-style content has three hex parts but the IV/authTag are far
+      // too short to be a genuine legacy file (which always has a 32-hex-char
+      // IV and 32-hex-char auth tag). It must be treated as unrecognized and
+      // fail closed with the "unrecognized format" error — NOT routed into the
+      // legacy decrypt path (which would surface a raw crypto error instead).
+      const filePath = path.join(tempDir, 'exa.key');
+      await fs.writeFile(filePath, 'aa:bb:cc', { mode: 0o600 });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
       await expect(reader.getKey('exa')).rejects.toThrow(
-        /Unsupported state or unable to authenticate data/,
+        /corrupted or in an unrecognized format/,
+      );
+    });
+
+    /**
+     * @plan PLAN-20260206-TOOLKEY.P04
+     * @requirement REQ-001.2
+     */
+    it('does not misclassify a wrong-length-IV hex-colon file as legacy', async () => {
+      // Correct 32-hex authTag and non-empty ciphertext, but a 30-hex-char IV
+      // (15 bytes) — not a real legacy file. Must fail closed as unrecognized
+      // rather than being routed to the legacy decrypt path.
+      const filePath = path.join(tempDir, 'exa.key');
+      const shortIv = '00'.repeat(15); // 30 hex chars
+      const authTag = '11'.repeat(16); // 32 hex chars
+      await fs.writeFile(filePath, `${shortIv}:${authTag}:2222`, {
+        mode: 0o600,
+      });
+
+      const reader = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keyringLoader: async () => null,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      await expect(reader.getKey('exa')).rejects.toThrow(
+        /corrupted or in an unrecognized format/,
       );
     });
 

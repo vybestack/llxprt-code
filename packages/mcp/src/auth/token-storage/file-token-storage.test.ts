@@ -18,8 +18,35 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { decryptEnvelopeString } from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 import { FileTokenStorage } from './file-token-storage.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
+
+// The service name FileTokenStorage passes to the envelope codec is the
+// constructor argument; this suite always constructs it with 'test-storage'.
+const ENVELOPE_SERVICE_NAME = 'test-storage';
+
+/**
+ * Decrypts an on-disk v:2 envelope written by FileTokenStorage (under the
+ * injected FIXED_SECRET) back into the stored credential map, so write-path
+ * tests can assert the *actual* persisted content (merge/delete correctness),
+ * not merely that `writeFile` was called.
+ */
+async function decryptWrittenEnvelope(
+  written: string,
+): Promise<Record<string, MCPOAuthCredentials>> {
+  // Fail loudly if the written content is not a v:2 envelope.
+  const parsed = JSON.parse(written) as { v: number };
+  expect(parsed.v).toBe(2);
+  const plaintext = await decryptEnvelopeString(
+    written,
+    ENVELOPE_SERVICE_NAME,
+    {
+      machineSecretLoader: fixedSecretLoader(),
+    },
+  );
+  return JSON.parse(plaintext) as Record<string, MCPOAuthCredentials>;
+}
 
 vi.mock('node:fs', () => ({
   promises: {
@@ -215,6 +242,18 @@ describe('FileTokenStorage', () => {
       await storage.setCredentials(newCredentials);
 
       expect(mockFs.writeFile).toHaveBeenCalled();
+
+      // Decrypt the written v:2 envelope and verify the merge: the pre-existing
+      // entry is preserved AND the new entry is added (a broken merge that
+      // overwrites instead of merging would be caught here).
+      const writeCall = mockFs.writeFile.mock.calls[0];
+      const stored = await decryptWrittenEnvelope(writeCall[1] as string);
+      expect(Object.keys(stored).sort()).toStrictEqual([
+        'existing-server',
+        'test-server',
+      ]);
+      expect(stored['existing-server']).toStrictEqual(existingCredentials);
+      expect(stored['test-server'].token.accessToken).toBe('new-token');
     });
   });
 
@@ -279,6 +318,14 @@ describe('FileTokenStorage', () => {
 
       expect(mockFs.writeFile).toHaveBeenCalled();
       expect(mockFs.unlink).not.toHaveBeenCalled();
+
+      // Decrypt the written v:2 envelope and verify the deletion: the removed
+      // server is gone AND the remaining server is preserved (a broken delete
+      // that writes back the deleted entry or drops the survivor is caught).
+      const writeCall = mockFs.writeFile.mock.calls[0];
+      const stored = await decryptWrittenEnvelope(writeCall[1] as string);
+      expect(Object.keys(stored)).toStrictEqual(['server2']);
+      expect(stored['server2']).toStrictEqual(credentials2);
     });
   });
 

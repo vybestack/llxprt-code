@@ -235,7 +235,21 @@ export class ToolKeyStorage {
     // writeFile's `mode` only applies when the file is created; overwriting a
     // pre-existing file with looser permissions leaves them unchanged. Tighten
     // explicitly so a key file is never left world/group-readable.
-    await this.chmodIfPosix(filePath);
+    try {
+      await this.chmodIfPosix(filePath);
+    } catch (chmodError) {
+      // The key was written but its permissions could not be tightened. Remove
+      // the just-written file so a secret is never left on disk with overly
+      // permissive modes, and surface an error distinct from a write failure.
+      await fs.unlink(filePath).catch(() => {
+        // Best-effort cleanup; the file may remain with loose permissions.
+      });
+      const detail =
+        chmodError instanceof Error ? chmodError.message : String(chmodError);
+      throw new Error(
+        `Key file for ${toolName} was written but permissions could not be tightened to 0o600; the file was removed to avoid leaving an over-permissive secret on disk: ${detail}`,
+      );
+    }
   }
 
   /**
@@ -298,16 +312,19 @@ export class ToolKeyStorage {
 
   /**
    * Recognizes the legacy `iv:authTag:ciphertext` (hex) shape WITHOUT
-   * attempting decryption. Requires exactly three colon-separated parts that
-   * are all non-empty hex strings.
+   * attempting decryption. The legacy `encrypt` path used a 16-byte IV and a
+   * 16-byte AES-256-GCM auth tag, so a genuine legacy file always has a
+   * 32-hex-char IV and a 32-hex-char auth tag followed by non-empty ciphertext.
+   * Enforcing those exact lengths prevents short/garbage `a:b:c` content from
+   * being misclassified as legacy (which would route it to a decrypt attempt
+   * and a less specific error) instead of failing closed as unrecognized.
    */
   private isLegacyHexColonFormat(data: string): boolean {
-    const parts = data.split(':');
-    if (parts.length !== 3) {
-      return false;
-    }
-    const hex = /^[0-9a-fA-F]+$/;
-    return parts.every((p) => p.length > 0 && hex.test(p));
+    // Exactly: 32-hex IV, 32-hex auth tag, then non-empty hex ciphertext.
+    // The anchored pattern enforces the part count (two colons), the exact
+    // IV/auth-tag lengths, and hex-only content in a single check, so short or
+    // garbage `a:b:c` content is not misclassified as legacy.
+    return /^[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:[0-9a-fA-F]+$/.test(data);
   }
 
   private async deleteFile(toolName: string): Promise<void> {

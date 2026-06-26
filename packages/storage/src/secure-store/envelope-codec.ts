@@ -153,6 +153,29 @@ function resolveLoader(
 }
 
 /**
+ * Parses `content` as a versioned envelope.
+ *
+ * Returns the validated {@link Envelope} when `content` is well-formed JSON
+ * that satisfies {@link isValidEnvelope}, or `null` for any non-JSON or
+ * structurally invalid input. Centralizes the parse-and-validate step shared
+ * by {@link decryptEnvelopeString} (which throws on `null`) and
+ * {@link readEnvelopeVersion} (which returns `null`), so the two paths can
+ * never drift in how they recognize a valid envelope.
+ */
+function parseEnvelope(content: string): Envelope | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (!isValidEnvelope(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+/**
  * Encrypts `plaintext` into a JSON envelope string under the given
  * `serviceName`.
  *
@@ -228,26 +251,15 @@ export async function decryptEnvelopeString(
   serviceName: string,
   options?: EnvelopeCodecOptions,
 ): Promise<string> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(envelopeJson);
-  } catch {
+  const envelope = parseEnvelope(envelopeJson);
+  if (envelope === null) {
     throw new EnvelopeCodecError(
-      'Envelope is not valid JSON',
+      'Envelope is not valid JSON or is malformed/uses unsupported parameters',
       'CORRUPT',
       'Re-save the value or re-authenticate.',
     );
   }
 
-  if (!isValidEnvelope(parsed)) {
-    throw new EnvelopeCodecError(
-      'Envelope is malformed or uses unsupported parameters',
-      'CORRUPT',
-      'Re-save the value or re-authenticate.',
-    );
-  }
-
-  const envelope = parsed;
   const ciphertext = Buffer.from(envelope.data, 'base64');
   if (ciphertext.length < HEADER_LEN) {
     throw new EnvelopeCodecError(
@@ -268,7 +280,20 @@ export async function decryptEnvelopeString(
     // correct outcome is to fail closed, not to mint a fresh secret that
     // cannot decrypt this envelope.
     const loader = resolveLoader(options, false);
-    const machineSecret = await loader();
+    let machineSecret: Buffer | null;
+    try {
+      machineSecret = await loader();
+    } catch {
+      // A loader that rejects (e.g. keyring or file I/O failure) must fail
+      // closed as CORRUPT rather than propagating a raw, non-EnvelopeCodecError
+      // exception that callers' `instanceof EnvelopeCodecError` guards would
+      // not normalize to fail-closed behavior.
+      throw new EnvelopeCodecError(
+        'Failed to load the machine secret required to decrypt a v:2 envelope',
+        'CORRUPT',
+        'Re-save the value or re-authenticate. The machine secret could not be loaded.',
+      );
+    }
     if (machineSecret === null) {
       throw new EnvelopeCodecError(
         'v:2 envelope requires a machine secret that is unavailable',
@@ -281,9 +306,10 @@ export async function decryptEnvelopeString(
     kdfInput = deriveV1KdfInput(serviceName);
   }
 
-  const decKey = await scryptAsync(kdfInput, salt, 32, SCRYPT_PARAMS);
-
   try {
+    // scryptAsync is inside the try so any KDF failure (e.g. resource limits)
+    // also fails closed as CORRUPT, honoring the documented contract.
+    const decKey = await scryptAsync(kdfInput, salt, 32, SCRYPT_PARAMS);
     const decipher = crypto.createDecipheriv('aes-256-gcm', decKey, iv);
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([
@@ -309,14 +335,5 @@ export async function decryptEnvelopeString(
  * legacy (non-envelope) formats to a legacy reader.
  */
 export function readEnvelopeVersion(content: string): number | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    return null;
-  }
-  if (!isValidEnvelope(parsed)) {
-    return null;
-  }
-  return parsed.v;
+  return parseEnvelope(content)?.v ?? null;
 }

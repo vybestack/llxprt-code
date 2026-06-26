@@ -252,14 +252,15 @@ describe('envelope-codec — decryptEnvelopeString', () => {
     const parsed = JSON.parse(envelopeJson) as { data: string };
     parsed.data = Buffer.alloc(10).toString('base64');
 
+    // Assert only the documented contract (code: 'CORRUPT'). The specific
+    // message ("...too short to contain a valid header") is an internal detail
+    // and not part of the public API, so matching it would make this test
+    // brittle to harmless rewording.
     await expect(
       decryptEnvelopeString(JSON.stringify(parsed), 'svc', {
         machineSecretLoader: secretLoader(FIXED_SECRET_A),
       }),
-    ).rejects.toMatchObject({
-      code: 'CORRUPT',
-      message: expect.stringMatching(/too short/),
-    });
+    ).rejects.toMatchObject({ code: 'CORRUPT' });
   });
 
   it('empty-string plaintext round-trips through the envelope', async () => {
@@ -273,6 +274,33 @@ describe('envelope-codec — decryptEnvelopeString', () => {
       machineSecretLoader: secretLoader(FIXED_SECRET_A),
     });
     expect(plaintext).toBe('');
+  });
+
+  it('fails closed (CORRUPT) when the machine-secret loader rejects on a v:2 read', async () => {
+    // Seal a v:2 envelope with a working secret, then attempt to decrypt it
+    // with a loader that rejects (e.g. keyring/file I/O failure). The codec
+    // must normalize this to a fail-closed EnvelopeCodecError(CORRUPT) rather
+    // than leaking a raw, non-EnvelopeCodecError exception — callers branch on
+    // `instanceof EnvelopeCodecError`, so a raw throw would bypass their
+    // fail-closed handling.
+    const envelopeJson = await encryptEnvelopeString('secret', 'svc', {
+      machineSecretLoader: secretLoader(FIXED_SECRET_A),
+    });
+
+    const rejectingLoader = async (): Promise<Buffer | null> => {
+      throw new Error('keyring unavailable');
+    };
+
+    await expect(
+      decryptEnvelopeString(envelopeJson, 'svc', {
+        machineSecretLoader: rejectingLoader,
+      }),
+    ).rejects.toMatchObject({ code: 'CORRUPT' });
+    await expect(
+      decryptEnvelopeString(envelopeJson, 'svc', {
+        machineSecretLoader: rejectingLoader,
+      }),
+    ).rejects.toBeInstanceOf(EnvelopeCodecError);
   });
 });
 
@@ -322,6 +350,13 @@ describe('envelope-codec — readEnvelopeVersion', () => {
 
   it('returns null for non-JSON content', () => {
     expect(readEnvelopeVersion('not-json')).toBeNull();
+  });
+
+  it('returns null for empty-string content (truncated/zero-length file)', () => {
+    // JSON.parse('') throws, so an empty or truncated file must be reported as
+    // "no recognizable envelope version" rather than throwing. Callers pass raw
+    // file contents that can legitimately be empty.
+    expect(readEnvelopeVersion('')).toBeNull();
   });
 
   it('returns null for JSON that is not a valid envelope', () => {

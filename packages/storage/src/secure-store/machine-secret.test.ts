@@ -640,6 +640,29 @@ describe('Machine Secret Provider — Permission repair', () => {
       expect(Buffer.compare(secret!, existing)).toBe(0);
     });
 
+    it('returns null (fails closed) for an invalid/corrupt file secret without generating', async () => {
+      // A file whose contents do not decode to a 32-byte secret is unusable.
+      // Under generateIfMissing: false the provider must fail closed (return
+      // null) WITHOUT minting or persisting a replacement secret — a corrupt
+      // file must never be silently healed into a fresh, non-matching root of
+      // trust that would render existing v:2 envelopes undecryptable.
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(tempFilePath, 'not-a-valid-32-byte-secret', {
+        mode: 0o600,
+      });
+
+      const secret = await getMachineSecret({
+        filePath: tempFilePath,
+        keyringLoader: async () => null,
+        generateIfMissing: false,
+      });
+
+      expect(secret).toBeNull();
+      // The corrupt file is left untouched (not overwritten with a new secret).
+      const onDisk = await fs.readFile(tempFilePath, 'utf8');
+      expect(onDisk).toBe('not-a-valid-32-byte-secret');
+    });
+
     it('a read-only miss does not poison a later generating call for the same source', async () => {
       const keyring = createMockKeyring();
       const sharedOptions = {

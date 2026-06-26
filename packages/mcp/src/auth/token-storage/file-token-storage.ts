@@ -42,7 +42,12 @@ export interface FileTokenStorageOptions {
 
 export class FileTokenStorage extends BaseTokenStorage {
   private readonly tokenFilePath: string;
-  private readonly encryptionKey: Buffer;
+  /**
+   * Cached legacy KDF key. Lazily derived only when a legacy
+   * `iv:authTag:ciphertext` token file is actually read, so the common paths
+   * (writing, or reading versioned envelopes) never pay for the scrypt cost.
+   */
+  private legacyEncryptionKey: Buffer | null = null;
   private readonly codecOptions: EnvelopeCodecOptions;
 
   constructor(serviceName: string, options?: FileTokenStorageOptions) {
@@ -51,16 +56,27 @@ export class FileTokenStorage extends BaseTokenStorage {
     this.tokenFilePath =
       options?.tokenFilePath ??
       path.join(configDir, 'mcp-oauth-tokens-v2.json');
-    this.encryptionKey = this.deriveEncryptionKey();
     this.codecOptions = {
       machineSecretLoader: options?.machineSecretLoader,
       machineSecretPath: options?.machineSecretPath,
     };
   }
 
-  private deriveEncryptionKey(): Buffer {
-    const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
-    return crypto.scryptSync('llxprt-cli-oauth', salt, 32);
+  /**
+   * Lazily derives and caches the legacy KDF key used only to read pre-existing
+   * `iv:authTag:ciphertext` token files. New writes use the versioned envelope
+   * codec, so this is never computed unless a legacy file is encountered.
+   */
+  private getLegacyEncryptionKey(): Buffer {
+    if (this.legacyEncryptionKey === null) {
+      const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
+      this.legacyEncryptionKey = crypto.scryptSync(
+        'llxprt-cli-oauth',
+        salt,
+        32,
+      );
+    }
+    return this.legacyEncryptionKey;
   }
 
   /**
@@ -80,7 +96,7 @@ export class FileTokenStorage extends BaseTokenStorage {
 
     const decipher = crypto.createDecipheriv(
       'aes-256-gcm',
-      this.encryptionKey,
+      this.getLegacyEncryptionKey(),
       iv,
     );
     decipher.setAuthTag(authTag);
@@ -158,7 +174,15 @@ export class FileTokenStorage extends BaseTokenStorage {
     await this.ensureDirectoryExists();
 
     // Detect an existing envelope version for anti-downgrade protection.
-    // Non-envelope (legacy) files and missing files yield null.
+    // Non-envelope (legacy) files and missing files yield null. This is a
+    // defense-in-depth read: the codec's own anti-downgrade guard
+    // (existingEnvelopeVersion) is the authoritative refusal point, but reading
+    // the current version here lets us pass it through so a v:2 file is never
+    // silently overwritten with a weaker v:1 envelope when the machine secret
+    // is unavailable. The read/write pair is inherently TOCTOU (a concurrent
+    // writer could change the file in between), so the guard is best-effort
+    // hardening rather than a lock; the single-writer assumption holds for the
+    // CLI's normal usage.
     let existingVersion: number | null = null;
     try {
       const existing = await fs.readFile(this.tokenFilePath, 'utf-8');
@@ -182,7 +206,22 @@ export class FileTokenStorage extends BaseTokenStorage {
     // file leaves its (possibly looser) permissions intact. Tighten explicitly
     // on POSIX so the token file is never left group/world-readable.
     if (process.platform !== 'win32') {
-      await fs.chmod(this.tokenFilePath, 0o600);
+      try {
+        await fs.chmod(this.tokenFilePath, 0o600);
+      } catch (chmodError) {
+        // The token file was written but its permissions could not be
+        // restricted. Remove it so OAuth credentials are never left on disk
+        // with overly permissive modes, and surface an error distinct from a
+        // write failure.
+        await fs.unlink(this.tokenFilePath).catch(() => {
+          // Best-effort cleanup; the file may remain with loose permissions.
+        });
+        const detail =
+          chmodError instanceof Error ? chmodError.message : String(chmodError);
+        throw new Error(
+          `Token file was written but permissions could not be restricted to 0o600; the file was removed to avoid leaving over-permissive credentials on disk: ${detail}`,
+        );
+      }
     }
   }
 

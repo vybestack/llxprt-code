@@ -215,7 +215,7 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(result!.token.accessToken).toBe('access-legacy-server');
   });
 
-  it('anti-downgrade: refuses to overwrite existing v:2 with v:1 and leaves file unchanged', async () => {
+  it('fail-closed-on-read prevents overwrite of existing v:2 file with unavailable secret', async () => {
     const writer = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,
       machineSecretLoader: secretLoaderA(),
@@ -227,9 +227,11 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(beforeEnvelope.v).toBe(2);
 
     // Attempt to mutate with no machine secret — must reject and leave the
-    // existing v:2 file intact. setCredentials reads-then-writes, so the
-    // read fails closed on the v:2 envelope before any downgraded write can
-    // occur; the net effect is the same anti-downgrade protection.
+    // existing v:2 file intact. setCredentials reads-then-writes, so the read
+    // fails closed on the v:2 envelope before any downgraded write can occur.
+    // The explicit write-path anti-downgrade guard in saveTokens (passing
+    // existingEnvelopeVersion to encryptEnvelopeString) is a defense-in-depth
+    // measure and is unit-tested directly in envelope-codec.test.ts.
     const degradedWriter = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,
       machineSecretLoader: nullSecretLoader(),
@@ -319,9 +321,11 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     await storage.setCredentials(c1);
     await storage.setCredentials(c2);
 
-    expect(await storage.listServers()).toStrictEqual(
-      expect.arrayContaining(['s1', 's2']),
-    );
+    // Assert exactly these two servers (in any order) — arrayContaining would
+    // pass even if stale entries leaked in, masking a cleanup bug.
+    const servers = await storage.listServers();
+    expect(servers).toHaveLength(2);
+    expect([...servers].sort()).toStrictEqual(['s1', 's2']);
     const r1 = await storage.getCredentials('s1');
     expect(r1).not.toBeNull();
     expect(r1!.serverName).toBe('s1');
