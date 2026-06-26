@@ -10,7 +10,10 @@ import {
   resolveStreamIdleTimeoutMs,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
-import { applyStreamIdleTimeoutSettings } from './postConfigRuntime.js';
+import {
+  applyProfileEphemeralSettings,
+  applyStreamIdleTimeoutSettings,
+} from './postConfigRuntime.js';
 
 interface CapturingConfig {
   readonly getEphemeralSetting: (key: string) => unknown;
@@ -81,5 +84,136 @@ describe('applyStreamIdleTimeoutSettings', () => {
 
     expect(resolveStreamIdleTimeoutMs(zeroConfig)).toBe(0);
     expect(resolveStreamIdleTimeoutMs(negativeConfig)).toBe(0);
+  });
+});
+
+describe('applyProfileEphemeralSettings', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV];
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('applies stream idle timeout from profile ephemerals when profile settings are active', () => {
+    const config = createCapturingConfig();
+
+    applyProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: null },
+      argv: { provider: undefined },
+      settings: {},
+      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileLoadResult: { profileToLoad: 'work' },
+    });
+
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
+  });
+
+  it('applies profile ephemerals when profileJson is provided without profileToLoad', () => {
+    const config = createCapturingConfig();
+
+    applyProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: '{"provider":"openai"}' },
+      argv: { provider: undefined },
+      settings: {},
+      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileLoadResult: { profileToLoad: undefined },
+    });
+
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
+  });
+  it('skips stream idle timeout profile ephemerals when provider is explicit', () => {
+    const config = createCapturingConfig();
+
+    applyProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: null },
+      argv: { provider: 'openai' },
+      settings: {},
+      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileLoadResult: { profileToLoad: 'work' },
+    });
+
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
+    expect(
+      config.getEphemeralSetting('stream-idle-timeout-ms'),
+    ).toBeUndefined();
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(0);
+  });
+
+  it('skips profile ephemerals when no profile is active', () => {
+    const config = createCapturingConfig();
+
+    applyProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: null },
+      argv: { provider: undefined },
+      settings: { streamIdleTimeoutMs: 90_000 },
+      profileSettingsWithTools: {
+        streamIdleTimeoutMs: 120_000,
+        'auth-key': 'secret',
+      } as Settings & Record<string, unknown>,
+      profileLoadResult: { profileToLoad: undefined },
+    });
+
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBe(90_000);
+    expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(90_000);
+  });
+
+  it('applies non-timeout ephemeral keys from profile settings', () => {
+    const config = createCapturingConfig();
+
+    applyProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: null },
+      argv: { provider: undefined },
+      settings: {},
+      profileSettingsWithTools: {
+        'auth-key': 'secret',
+        'context-limit': 100,
+      } as Settings & Record<string, unknown>,
+      profileLoadResult: { profileToLoad: 'work' },
+    });
+
+    expect(config.getEphemeralSetting('auth-key')).toBe('secret');
+    expect(config.getEphemeralSetting('context-limit')).toBe(100);
+  });
+
+  it('applies global stream idle timeout when provider is explicit', () => {
+    const config = createCapturingConfig();
+
+    applyProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: null },
+      argv: { provider: 'openai' },
+      settings: { streamIdleTimeoutMs: 90_000 },
+      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileLoadResult: { profileToLoad: 'work' },
+    });
+
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBe(90_000);
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(90_000);
+  });
+
+  it('profile stream idle timeout overrides global when profile is active', () => {
+    const config = createCapturingConfig();
+
+    applyProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: null },
+      argv: { provider: undefined },
+      settings: { streamIdleTimeoutMs: 90_000 },
+      profileSettingsWithTools: { streamIdleTimeoutMs: 120_000 },
+      profileLoadResult: { profileToLoad: 'work' },
+    });
+
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
   });
 });

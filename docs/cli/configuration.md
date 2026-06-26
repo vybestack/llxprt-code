@@ -80,6 +80,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`emojifilter`** (string):
   - **Description:** Filter emojis from AI-generated content and file operations. Options: allowed (no filtering), auto (silent filtering), warn (filter with warnings to AI), error (block operations with emojis).
   - **Default:** `"auto"`
+  - **Requires restart:** No
 
 #### `fileFiltering`
 
@@ -118,6 +119,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`enableAutoUpdate`** (boolean):
   - **Description:** Enable automatic updates.
   - **Default:** `true`
+  - **Requires restart:** No
 
 #### `shouldUseNodePtyShell`
 
@@ -145,6 +147,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`streamIdleTimeoutMs`** (number):
   - **Description:** Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog; zero or negative disables it. Any finite number is valid.
   - **Default:** `0`
+  - **Requires restart:** No
 
 #### `useExternalAuth`
 
@@ -226,6 +229,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`sessionRetention`** (object):
   - **Description:** Settings for automatic session cleanup.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 #### `output`
 
@@ -233,6 +237,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** The format of the CLI output. Can be `text` or `json`.
   - **Default:** `"text"`
   - **Values:** `"text"`, `"json"`
+  - **Requires restart:** No
 
 #### `ui`
 
@@ -284,10 +289,12 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`ui.theme`** (string):
   - **Description:** The color theme for the UI.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`ui.customThemes`** (object):
   - **Description:** Custom theme definitions.
   - **Default:** `{}`
+  - **Requires restart:** No
 
 - **`ui.hideWindowTitle`** (boolean):
   - **Description:** Hide the window title bar
@@ -297,10 +304,12 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`ui.showStatusInTitle`** (boolean):
   - **Description:** Show LLxprt model thoughts in the terminal window title during the working phase
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.dynamicWindowTitle`** (boolean):
   - **Description:** Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )
   - **Default:** `true`
+  - **Requires restart:** No
 
 - **`ui.showHomeDirectoryWarning`** (boolean):
   - **Description:** Show a warning when running LLxprt CLI in the home directory.
@@ -310,30 +319,37 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`ui.hideTips`** (boolean):
   - **Description:** Hide helpful tips in the UI
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.hideBanner`** (boolean):
   - **Description:** Hide the application banner
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.hideContextSummary`** (boolean):
   - **Description:** Hide the context summary (LLXPRT.md, MCP servers) above the input.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.footer.hideCWD`** (boolean):
   - **Description:** Hide the current working directory path in the footer.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.footer.hideSandboxStatus`** (boolean):
   - **Description:** Hide the sandbox status indicator in the footer.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.footer.hideModelInfo`** (boolean):
   - **Description:** Hide the model name and context usage in the footer.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.hideFooter`** (boolean):
   - **Description:** Hide the footer from the UI
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.useAlternateBuffer`** (boolean):
   - **Description:** Use an alternate screen buffer for the UI, preserving shell history.
@@ -353,35 +369,43 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`ui.showMemoryUsage`** (boolean):
   - **Description:** Display memory usage information in the UI
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.showLineNumbers`** (boolean):
   - **Description:** Show line numbers in the chat.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.showCitations`** (boolean):
   - **Description:** Show citations for generated text in the chat.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.customWittyPhrases`** (array):
   - **Description:** Custom witty phrases to display during loading.
   - **Default:** `[]`
+  - **Requires restart:** No
 
 - **`ui.wittyPhraseStyle`** (enum):
   - **Description:** Choose which collection of witty phrases to display during loading.
   - **Default:** `"default"`
   - **Values:** `"default"`, `"llxprt"`, `"gemini-cli"`, `"whimsical"`, `"custom"`
+  - **Requires restart:** No
 
 - **`ui.vimMode`** (boolean):
   - **Description:** Enable Vim keybindings in the input field.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.ideMode`** (boolean):
   - **Description:** Enable IDE integration mode.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`ui.preferredEditor`** (string):
   - **Description:** The preferred code editor for opening files.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`ui.autoConfigureMaxOldSpaceSize`** (boolean):
   - **Description:** Automatically configure Node.js max old space size based on system memory.
@@ -396,42 +420,52 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`ui.historyMaxItems`** (number):
   - **Description:** Maximum number of history items to keep.
   - **Default:** `100`
+  - **Requires restart:** No
 
 - **`ui.historyMaxBytes`** (number):
   - **Description:** Maximum size of history in bytes.
   - **Default:** `1048576`
+  - **Requires restart:** No
 
 - **`ui.memoryImportFormat`** (string):
   - **Description:** Format for importing memory files (tree or flat).
   - **Default:** `"tree"`
+  - **Requires restart:** No
 
 - **`ui.memoryDiscoveryMaxDirs`** (number):
   - **Description:** Maximum number of directories to scan for memory files.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`ui.memoryDiscoveryMaxDepth`** (number):
   - **Description:** Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`ui.contextFileName`** (string | string[]):
   - **Description:** The name of the context file or files to load into memory. Accepts either a single string or an array of strings.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`ui.usageStatisticsEnabled`** (boolean):
   - **Description:** Enable anonymous usage statistics collection.
   - **Default:** `true`
+  - **Requires restart:** No
 
 - **`ui.maxSessionTurns`** (number):
   - **Description:** Maximum number of turns in a session (-1 for unlimited).
   - **Default:** `-1`
+  - **Requires restart:** No
 
 - **`ui.showTodoPanel`** (boolean):
   - **Description:** Show the todo panel in the UI.
   - **Default:** `true`
+  - **Requires restart:** No
 
 - **`ui.useFullWidth`** (boolean):
   - **Description:** Use the entire width of the terminal for output.
   - **Default:** `true`
+  - **Requires restart:** No
 
 - **`ui.enableLoadingPhrases`** (boolean):
   - **Description:** Enable loading phrases during operations.
@@ -453,30 +487,35 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`ide.hasSeenNudge`** (boolean):
   - **Description:** Whether the user has seen the IDE integration nudge.
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `showStatusInTitle`
 
 - **`showStatusInTitle`** (boolean):
   - **Description:** Show LLxprt status and thoughts in the terminal window title
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `hideCWD`
 
 - **`hideCWD`** (boolean):
   - **Description:** Hide the current working directory path in the footer.
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `hideSandboxStatus`
 
 - **`hideSandboxStatus`** (boolean):
   - **Description:** Hide the sandbox status indicator in the footer.
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `hideModelInfo`
 
 - **`hideModelInfo`** (boolean):
   - **Description:** Hide the model name and context usage in the footer.
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `allowMCPServers`
 
@@ -497,12 +536,14 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`bugCommand`** (object):
   - **Description:** Configuration for the bug report command.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 #### `summarizeToolOutput`
 
 - **`summarizeToolOutput`** (object):
   - **Description:** Enables or disables summarization of tool output. Configure per-tool token budgets (for example {"run_shell_command": {"tokenBudget": 2000}}). Currently only the run_shell_command tool supports summarization.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 #### `dnsResolutionOrder`
 
@@ -521,6 +562,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`tools.autoAccept`** (boolean):
   - **Description:** Automatically accept and execute tool calls that are considered safe (e.g., read-only operations).
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`tools.core`** (array):
   - **Description:** Paths to core tool definitions.
@@ -550,6 +592,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`tools.useRipgrep`** (boolean):
   - **Description:** Use ripgrep for file content search instead of the fallback implementation. When unset, ripgrep is auto-enabled if detected.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`tools.enableToolOutputTruncation`** (boolean):
   - **Description:** Enable truncation of large tool outputs.
@@ -569,6 +612,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`tools.policyPath`** (string):
   - **Description:** Absolute path to a TOML policy file that augments the built-in policy rules.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`tools.enableHooks`** (boolean):
   - **Description:** Enables the hooks system experiment. When disabled, the hooks system is completely deactivated regardless of other settings.
@@ -597,10 +641,12 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`subagents.asyncEnabled`** (boolean):
   - **Description:** Globally allow background subagent runs. If off, async=true launches are blocked even if a profile enables them.
   - **Default:** `true`
+  - **Requires restart:** No
 
 - **`subagents.maxAsync`** (number):
   - **Description:** Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.
   - **Default:** `5`
+  - **Requires restart:** No
 
 - **`subagents.definitions`** (object):
   - **Description:** Inline subagent definitions keyed by name. Each value must contain profile and systemPrompt.
@@ -617,6 +663,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`security.enablePermanentToolApproval`** (boolean):
   - **Description:** Enable the "Allow for all future sessions" option in tool confirmation dialogs.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`security.blockGitExtensions`** (boolean):
   - **Description:** Blocks installing and loading extensions from Git.
@@ -641,14 +688,17 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`security.environmentVariableRedaction.allowed`** (array):
   - **Description:** Environment variables to allow in addition to the default allowlist.
   - **Default:** `[]`
+  - **Requires restart:** No
 
 - **`security.environmentVariableRedaction.blocked`** (array):
   - **Description:** Environment variables to block in addition to the default blocklist.
   - **Default:** `[]`
+  - **Requires restart:** No
 
 - **`security.environmentVariableRedaction.enabled`** (boolean):
   - **Description:** Enable environment variable redaction (disabled by default).
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `excludedProjectEnvVars`
 
@@ -660,35 +710,42 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
     ["DEBUG", "DEBUG_MODE"]
     ```
 
+  - **Requires restart:** No
+
 #### `enableAutoUpdateNotification`
 
 - **`enableAutoUpdateNotification`** (boolean):
   - **Description:** Enable update notification prompts.
   - **Default:** `true`
+  - **Requires restart:** No
 
 #### `includeDirectories`
 
 - **`includeDirectories`** (array):
   - **Description:** Additional directories to include in the workspace context. Missing directories will be skipped with a warning.
   - **Default:** `[]`
+  - **Requires restart:** No
 
 #### `loadMemoryFromIncludeDirectories`
 
 - **`loadMemoryFromIncludeDirectories`** (boolean):
   - **Description:** Whether to load memory files from include directories.
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `model`
 
 - **`model`** (string | object):
   - **Description:** The model to use for conversations. V2 settings may use { name, compressionThreshold }; compressionThreshold maps to chatCompression.contextPercentageThreshold.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 #### `hasSeenIdeIntegrationNudge`
 
 - **`hasSeenIdeIntegrationNudge`** (boolean):
   - **Description:** Whether the user has seen the IDE integration nudge.
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `folderTrustFeature`
 
@@ -709,14 +766,17 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`chatCompression.contextPercentageThreshold`** (number):
   - **Description:** Fraction of context-limit that triggers history compression (0.0–1.0).
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`chatCompression.strategy`** (string):
   - **Description:** Legacy compression strategy selector.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 - **`chatCompression.profile`** (string):
   - **Description:** Legacy compression profile selector.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 #### `experimental`
 
@@ -792,18 +852,21 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`enableTextToolCallParsing`** (boolean):
   - **Description:** Enable parsing of tool calls from text responses.
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `textToolCallModels`
 
 - **`textToolCallModels`** (array):
   - **Description:** Models that support text-based tool call parsing.
   - **Default:** `[]`
+  - **Requires restart:** No
 
 #### `openaiResponsesEnabled`
 
 - **`openaiResponsesEnabled`** (boolean):
   - **Description:** Enable OpenAI Responses API compatibility.
   - **Default:** `false`
+  - **Requires restart:** No
 
 #### `shellReplacement`
 
@@ -811,6 +874,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** Control command substitution in shell commands: "allowlist" (validate inner commands against coreTools), "all" (allow all), "none" (block all).
   - **Default:** `"allowlist"`
   - **Values:** `"allowlist"`, `"all"`, `"none"`
+  - **Requires restart:** No
 
 #### `oauthEnabledProviders`
 
@@ -824,6 +888,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`useRipgrep`** (boolean):
   - **Description:** Use ripgrep for file content search instead of the fallback implementation. When unset, ripgrep is auto-enabled if detected.
   - **Default:** `undefined`
+  - **Requires restart:** No
 
 #### `enablePromptCompletion`
 
@@ -837,18 +902,21 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`showProfileChangeInChat`** (boolean):
   - **Description:** Show a message in chat when the active profile changes.
   - **Default:** `true`
+  - **Requires restart:** No
 
 #### `enableFuzzyFiltering`
 
 - **`enableFuzzyFiltering`** (boolean):
   - **Description:** Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., "prd" to match "production"). When disabled, only exact prefix matches are shown.
   - **Default:** `true`
+  - **Requires restart:** No
 
 #### `customWittyPhrases`
 
 - **`customWittyPhrases`** (array):
   - **Description:** Custom witty phrases to display during loading. When provided, the CLI cycles through these instead of the defaults.
   - **Default:** `[]`
+  - **Requires restart:** No
 
 #### `wittyPhraseStyle`
 
@@ -856,6 +924,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** Choose which collection of witty phrases to display during loading.
   - **Default:** `"default"`
   - **Values:** `"default"`, `"llxprt"`, `"gemini-cli"`, `"whimsical"`, `"custom"`
+  - **Requires restart:** No
 
 #### `skills`
 
@@ -869,38 +938,46 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`hooksConfig.enabled`** (boolean):
   - **Description:** Canonical toggle for the hooks system. When disabled, no hooks will be executed.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`hooksConfig.notifications`** (boolean):
   - **Description:** Show visual indicators when hooks are executing.
   - **Default:** `true`
+  - **Requires restart:** No
 
 - **`hooksConfig.disabled`** (array):
   - **Description:** List of hook names (commands) that should be disabled. Hooks in this list will not execute even if configured.
   - **Default:** `[]`
+  - **Requires restart:** No
 
 #### `hooks`
 
 - **`hooks`** (object):
   - **Description:** Event-specific hook configurations.
   - **Default:** `{}`
+  - **Requires restart:** No
 
 #### `admin`
 
 - **`admin.secureModeEnabled`** (boolean):
   - **Description:** If true, disallows YOLO mode from being used.
   - **Default:** `false`
+  - **Requires restart:** No
 
 - **`admin.extensions.enabled`** (boolean):
   - **Description:** If false, disallows extensions from being installed or used.
   - **Default:** `true`
+  - **Requires restart:** No
 
 - **`admin.mcp.enabled`** (boolean):
   - **Description:** If false, disallows MCP servers from being used.
   - **Default:** `true`
+  - **Requires restart:** No
 
 - **`admin.skills.enabled`** (boolean):
   - **Description:** If false, disallows agent skills from being used.
   - **Default:** `true`
+  - **Requires restart:** No
   <!-- SETTINGS-AUTOGEN:END -->
 
 - **Hook execution precedence:** Hook execution requires both `tools.enableHooks` and `hooksConfig.enabled` to be `true`.
