@@ -124,48 +124,71 @@ describe('Storage – additional helpers', () => {
     expect(storage.getExtensionsConfigPath()).toBe(expected);
   });
 
-  it('getProjectTempDir returns hashed temp dir', () => {
-    const hash = (
-      storage as unknown as { getFilePathHash: (p: string) => string }
-    ).getFilePathHash(projectRoot);
-    const expected = path.join(os.homedir(), '.llxprt', 'tmp', hash);
-    expect(storage.getProjectTempDir()).toBe(expected);
-  });
-
-  it('getHistoryDir returns hashed history dir', () => {
-    const hash = (
-      storage as unknown as { getFilePathHash: (p: string) => string }
-    ).getFilePathHash(projectRoot);
-    const expected = path.join(os.homedir(), '.llxprt', 'history', hash);
-    expect(storage.getHistoryDir()).toBe(expected);
-  });
-
-  it('getHistoryFilePath returns shell_history in project temp dir', () => {
-    const hash = (
-      storage as unknown as { getFilePathHash: (p: string) => string }
-    ).getFilePathHash(projectRoot);
-    const expected = path.join(
-      os.homedir(),
-      '.llxprt',
-      'tmp',
-      hash,
-      'shell_history',
+  it('getProjectTempDir is located directly under the global temp dir', () => {
+    expect(path.dirname(storage.getProjectTempDir())).toBe(
+      Storage.getGlobalTempDir(),
     );
-    expect(storage.getHistoryFilePath()).toBe(expected);
   });
 
-  it('getProjectTempCheckpointsDir returns checkpoints in project temp dir', () => {
-    const hash = (
-      storage as unknown as { getFilePathHash: (p: string) => string }
-    ).getFilePathHash(projectRoot);
-    const expected = path.join(
-      os.homedir(),
-      '.llxprt',
-      'tmp',
-      hash,
-      'checkpoints',
+  it('getProjectTempDir is deterministic for a given project root', () => {
+    const a = new Storage(projectRoot).getProjectTempDir();
+    const b = new Storage(projectRoot).getProjectTempDir();
+    expect(a).toBe(b);
+  });
+
+  it('getProjectTempDir is unique per project root', () => {
+    const dirA = new Storage('/tmp/projectA').getProjectTempDir();
+    const dirB = new Storage('/tmp/projectB').getProjectTempDir();
+    expect(dirA).not.toBe(dirB);
+  });
+
+  it('getProjectTempDir directory-name segment is the sha256 of the project root (golden master / on-disk compatibility contract)', () => {
+    // Golden master: sha256 hex of the raw, unnormalized string '/tmp/project'
+    // (the exact projectRoot passed to the constructor; no path normalization).
+    // Hard-coded (not recomputed) so this test fails if the temp-dir naming
+    // scheme ever silently changes, which would orphan users' existing
+    // on-disk project temp directories.
+    const expectedSegment =
+      'f630ad93b344dd6bd04d44ecde70b128e7e77f9ecc28ee90b62b018734a7e8c4';
+    expect(path.basename(storage.getProjectTempDir())).toBe(expectedSegment);
+  });
+
+  it('getHistoryDir is located directly under the global history dir', () => {
+    expect(path.dirname(storage.getHistoryDir())).toBe(
+      path.join(Storage.getGlobalLlxprtDir(), 'history'),
     );
-    expect(storage.getProjectTempCheckpointsDir()).toBe(expected);
+  });
+
+  it('getHistoryDir shares the same per-project segment as the temp dir', () => {
+    expect(path.basename(storage.getHistoryDir())).toBe(
+      path.basename(storage.getProjectTempDir()),
+    );
+  });
+
+  it('getHistoryDir is deterministic for a given project root', () => {
+    const a = new Storage(projectRoot).getHistoryDir();
+    const b = new Storage(projectRoot).getHistoryDir();
+    expect(a).toBe(b);
+  });
+
+  it('getHistoryDir is unique per project root', () => {
+    const dirA = new Storage('/tmp/projectA').getHistoryDir();
+    const dirB = new Storage('/tmp/projectB').getHistoryDir();
+    expect(dirA).not.toBe(dirB);
+  });
+
+  it('getHistoryFilePath returns shell_history under the global temp dir', () => {
+    const result = storage.getHistoryFilePath();
+    expect(result).toBe(
+      path.join(storage.getProjectTempDir(), 'shell_history'),
+    );
+    expect(result.startsWith(Storage.getGlobalTempDir())).toBe(true);
+  });
+
+  it('getProjectTempCheckpointsDir returns checkpoints under the global temp dir', () => {
+    const result = storage.getProjectTempCheckpointsDir();
+    expect(result).toBe(path.join(storage.getProjectTempDir(), 'checkpoints'));
+    expect(result.startsWith(Storage.getGlobalTempDir())).toBe(true);
   });
 
   it('getInstallationIdPath returns ~/.llxprt/installation_id', () => {
