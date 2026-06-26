@@ -28,6 +28,7 @@ vi.mock('../utils/userMemory.js', () => ({
 function createMockOptions(
   overrides: Partial<NormalizedGenerateChatOptions> = {},
   modelBehavior: Record<string, unknown> = {},
+  modelParams: Record<string, unknown> = {},
 ): NormalizedGenerateChatOptions {
   const settings = new SettingsService();
   return {
@@ -40,6 +41,7 @@ function createMockOptions(
       requestId: 'test-request',
       timestamp: Date.now(),
       modelBehavior,
+      modelParams,
     },
     resolved: {
       model: 'gpt-4o',
@@ -367,6 +369,32 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
       'openai',
     );
 
+    expect(result.requestBody).not.toHaveProperty('thinking');
+  });
+
+  it('does not overwrite reasoning_effort with thinking when reasoning_effort is already present', async () => {
+    const settings = new SettingsService();
+    const options = createMockOptions(
+      {
+        settings,
+        resolved: {
+          model: 'gpt-4o',
+          authToken: { token: 'test-token', type: 'api-key' },
+        },
+      },
+      { 'reasoning.enabled': true },
+      { reasoning_effort: 'high' },
+    );
+
+    const result = await prepareRequest(
+      options,
+      'gpt-4o',
+      undefined,
+      logger,
+      'openai',
+    );
+
+    expect(result.requestBody).toHaveProperty('reasoning_effort', 'high');
     expect(result.requestBody).not.toHaveProperty('thinking');
   });
 });

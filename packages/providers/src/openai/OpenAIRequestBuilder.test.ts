@@ -136,7 +136,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options);
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      undefined,
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe('user');
     expect(
@@ -187,7 +192,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options);
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      undefined,
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe('assistant');
     const assistant =
@@ -215,7 +225,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options);
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      undefined,
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe('tool');
     expect(
@@ -248,7 +263,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options);
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      undefined,
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     const msg = messages[0] as unknown as Record<string, unknown>;
     expect(msg.reasoning_content).toBeDefined();
@@ -279,7 +299,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options, 'openai');
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      'openai',
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     const msg = messages[0] as unknown as Record<string, unknown>;
     expect(msg.reasoning_content).toBeUndefined();
@@ -304,7 +329,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options, 'mistral');
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      'mistral',
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     const toolMsg = messages[0] as Record<string, unknown>;
     expect(toolMsg.role).toBe('tool');
@@ -330,7 +360,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options, 'openai');
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      'openai',
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     const toolMsg = messages[0] as Record<string, unknown>;
     expect(toolMsg.name).toBeUndefined();
@@ -356,7 +391,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options);
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      undefined,
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe('user');
     const userMsg = messages[0] as OpenAI.Chat.ChatCompletionUserMessageParam;
@@ -390,7 +430,12 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options);
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      undefined,
+      undefined,
+    );
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe('user');
     const userMsg = messages[0] as OpenAI.Chat.ChatCompletionUserMessageParam;
@@ -441,10 +486,22 @@ describe('buildMessagesWithReasoning', () => {
       'reasoning.stripFromContext': 'none',
     });
 
-    const messages = buildMessagesWithReasoning(contents, options);
-    const userMsgs = messages.filter((m) => m.role === 'user');
-    expect(userMsgs.length).toBeGreaterThanOrEqual(1);
-    const imageUserMsg = userMsgs[userMsgs.length - 1];
+    const messages = buildMessagesWithReasoning(
+      contents,
+      options,
+      undefined,
+      undefined,
+    );
+    expect(messages).toHaveLength(3);
+    expect(messages[0].role).toBe('assistant');
+    expect(messages[1].role).toBe('tool');
+    expect(messages[2].role).toBe('user');
+
+    const toolMsg = messages[1] as OpenAI.Chat.ChatCompletionToolMessageParam;
+    expect(String(toolMsg.content)).toContain('captured');
+
+    const imageUserMsg =
+      messages[2] as OpenAI.Chat.ChatCompletionUserMessageParam;
     expect(Array.isArray(imageUserMsg.content)).toBe(true);
     const parts = imageUserMsg.content as Array<{
       type: string;

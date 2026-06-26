@@ -82,6 +82,7 @@ describe('buildVercelTools', () => {
     const result = buildVercelTools(tools);
     expect(result).toBeDefined();
     expect(Object.keys(result!)).toStrictEqual(['dup_tool']);
+    expect(result!.dup_tool).toMatchObject({ description: 'first' });
   });
 
   it('produces a tool object with description and inputSchema', () => {
@@ -107,6 +108,31 @@ describe('buildVercelTools', () => {
         jsonSchema: {
           type: 'object',
           properties: { city: { type: 'string' } },
+        },
+      },
+    });
+  });
+
+  it('defaults to an empty-object schema when parameters are absent', () => {
+    const tools: OpenAIVercelTool[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'no_params',
+          description: 'No parameters',
+        },
+      },
+    ];
+
+    const result = buildVercelTools(tools);
+    expect(result).toBeDefined();
+    expect(result!.no_params).toMatchObject({
+      description: 'No parameters',
+      inputSchema: {
+        jsonSchema: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
         },
       },
     });
