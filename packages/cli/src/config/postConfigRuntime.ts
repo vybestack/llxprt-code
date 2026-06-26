@@ -7,6 +7,8 @@
 import {
   ApprovalMode,
   DebugLogger,
+  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+  STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
 } from '@vybestack/llxprt-code-core';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
@@ -41,6 +43,7 @@ export interface PostConfigInput {
   readonly runtimeState: BootstrapRuntimeState;
   readonly bootstrapArgs: BootstrapProfileArgs;
   readonly argv: CliArgs;
+  readonly settings: Settings;
   readonly profileSettingsWithTools: Settings;
   readonly profileLoadResult: ProfileLoadResult;
   readonly providerModelResult: ProviderModelResult;
@@ -75,6 +78,83 @@ type ApplyToolPoliciesInput = Pick<
 >;
 
 // ─── Sub-functions ────────────────────────────────────────────────────────────
+
+export function applyStreamIdleTimeoutSettings(
+  config: Pick<Config, 'setEphemeralSetting'>,
+  settings: Settings,
+): void {
+  const camelCaseValue = settings.streamIdleTimeoutMs;
+  if (camelCaseValue !== undefined) {
+    config.setEphemeralSetting(
+      STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+      camelCaseValue,
+    );
+  }
+  const settingsRecord = settings as Record<string, unknown>;
+  const hyphenatedValue = settingsRecord[STREAM_IDLE_TIMEOUT_SETTING_KEY];
+  if (hyphenatedValue !== undefined) {
+    config.setEphemeralSetting(
+      STREAM_IDLE_TIMEOUT_SETTING_KEY,
+      hyphenatedValue,
+    );
+  }
+}
+
+interface ProfileEphemeralSettingsInput {
+  readonly config: Pick<Config, 'setEphemeralSetting'>;
+  readonly bootstrapArgs: Pick<BootstrapProfileArgs, 'profileJson'>;
+  readonly argv: Pick<CliArgs, 'provider'>;
+  readonly settings: Settings;
+  readonly profileSettingsWithTools: Settings;
+  readonly profileLoadResult: Pick<ProfileLoadResult, 'profileToLoad'>;
+}
+
+export function applyGlobalAndProfileEphemeralSettings(
+  input: ProfileEphemeralSettingsInput,
+): void {
+  const {
+    config,
+    bootstrapArgs,
+    argv,
+    settings,
+    profileSettingsWithTools,
+    profileLoadResult,
+  } = input;
+
+  // Global settings must apply even when --provider suppresses profile values.
+  applyStreamIdleTimeoutSettings(config, settings);
+
+  const profileToLoad = profileLoadResult.profileToLoad;
+  const shouldApplyProfileSettings =
+    (profileToLoad !== undefined && profileToLoad !== '') ||
+    bootstrapArgs.profileJson !== null;
+  if (!shouldApplyProfileSettings || argv.provider !== undefined) {
+    return;
+  }
+
+  applyStreamIdleTimeoutSettings(config, profileSettingsWithTools);
+
+  const ephemeralKeys = [
+    'auth-key',
+    'auth-keyfile',
+    'context-limit',
+    'compression-threshold',
+    'base-url',
+    'tool-format',
+    'api-version',
+    'custom-headers',
+    'socket-timeout',
+    'shell-replacement',
+    'authOnly',
+  ];
+
+  for (const key of ephemeralKeys) {
+    const value = (profileSettingsWithTools as Record<string, unknown>)[key];
+    if (value !== undefined) {
+      config.setEphemeralSetting(key, value);
+    }
+  }
+}
 
 function getSettingsService(
   input: Pick<PostConfigInput, 'runtimeState' | 'runtimeOverrides'>,
@@ -360,14 +440,7 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
  * Step 16: Apply emojifilter, profile ephemeral settings, CLI /set args, disabled hooks.
  */
 function applyEphemeralSettings(input: PostConfigInput): void {
-  const {
-    config,
-    bootstrapArgs,
-    argv,
-    profileSettingsWithTools,
-    profileLoadResult,
-    runtimeOverrides,
-  } = input;
+  const { config, argv, profileSettingsWithTools, runtimeOverrides } = input;
 
   const settingsService = getSettingsService(input);
   if (!runtimeOverrides.settingsService) {
@@ -382,35 +455,10 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     settingsService.set('emojifilter', profileSettingsWithTools.emojifilter);
   }
 
-  // Apply ephemeral settings from profile (--profile-load or --profile)
-  // Skip ALL profile ephemeral settings if --provider was explicitly specified
-  const profileToLoad = profileLoadResult.profileToLoad;
-  // Profile ephemeral settings apply if profileToLoad is a non-empty string OR profileJson is provided
-  const shouldApplyProfileSettings =
-    (profileToLoad !== undefined && profileToLoad !== '') ||
-    bootstrapArgs.profileJson !== null;
-  if (shouldApplyProfileSettings && argv.provider === undefined) {
-    const ephemeralKeys = [
-      'auth-key',
-      'auth-keyfile',
-      'context-limit',
-      'compression-threshold',
-      'base-url',
-      'tool-format',
-      'api-version',
-      'custom-headers',
-      'socket-timeout',
-      'shell-replacement',
-      'authOnly',
-    ];
-
-    for (const key of ephemeralKeys) {
-      const value = (profileSettingsWithTools as Record<string, unknown>)[key];
-      if (value !== undefined) {
-        config.setEphemeralSetting(key, value);
-      }
-    }
-  }
+  // Apply stream idle timeout from settings.json and profile ephemerals.
+  // Global stream idle timeout settings are always applied; profile-specific
+  // ephemeral settings are skipped if --provider was explicitly specified.
+  applyGlobalAndProfileEphemeralSettings(input);
 
   // In non-interactive mode, tool governance is enforced from approval mode,
   // so /set must not override governance-managed keys after step 15.

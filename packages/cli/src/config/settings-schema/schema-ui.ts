@@ -64,7 +64,7 @@ export const UI_SETTINGS_SCHEMA = {
         requiresRestart: false,
         default: true,
         description:
-          'Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )',
+          'Update the terminal window title with current status prefixes (Ready: ◇, Action Required: no leading glyph, Working: no leading glyph)',
         showInDialog: true,
       },
       showHomeDirectoryWarning: {

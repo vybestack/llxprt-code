@@ -363,7 +363,7 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
       if (value === undefined || value === null) {
         return { success: true, value: undefined };
       }
-      if (typeof value === 'number' && value <= 1) {
+      if (typeof value === 'number' && value >= 0 && value <= 1) {
         return { success: true, value };
       }
       return {

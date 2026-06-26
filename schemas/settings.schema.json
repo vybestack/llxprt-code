@@ -147,6 +147,13 @@
       "default": 600000,
       "type": "number"
     },
+    "streamIdleTimeoutMs": {
+      "title": "Stream Idle Timeout (ms)",
+      "description": "Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog; zero or negative disables it. Any finite number is valid.",
+      "markdownDescription": "Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog; zero or negative disables it. Any finite number is valid.\n\n- Category: `Streaming`\n- Requires restart: `no`\n- Default: `0`",
+      "default": 0,
+      "type": "number"
+    },
     "useExternalAuth": {
       "title": "Use External Auth",
       "description": "Whether to use an external authentication flow.",
@@ -381,8 +388,8 @@
         },
         "dynamicWindowTitle": {
           "title": "Dynamic Window Title",
-          "description": "Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )",
-          "markdownDescription": "Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
+          "description": "Update the terminal window title with current status prefixes (Ready: ◇, Action Required: no leading glyph, Working: no leading glyph)",
+          "markdownDescription": "Update the terminal window title with current status prefixes (Ready: ◇, Action Required: no leading glyph, Working: no leading glyph)\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
           "default": true,
           "type": "boolean"
         },

@@ -270,6 +270,7 @@ export async function loadCliConfig(
     runtimeState,
     bootstrapArgs,
     argv,
+    settings,
     profileSettingsWithTools: pieces.profileSettingsWithTools,
     profileLoadResult: profileResult,
     providerModelResult: pieces.providerModel,
