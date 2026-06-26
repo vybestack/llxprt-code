@@ -62,6 +62,7 @@ const storageExportToSource: Record<string, string> = {
   'services/fileDiscoveryService': 'services/fileDiscoveryService',
   'storage/secure-store': 'secure-store/secure-store',
   'storage/provider-key-storage': 'secure-store/provider-key-storage',
+  'storage/envelope-codec': 'secure-store/envelope-codec',
   'storage/sessionTypes': 'session/sessionTypes',
   'storage/ConversationFileWriter': 'conversation/ConversationFileWriter',
 };
