@@ -27,6 +27,7 @@ vi.mock('../utils/userMemory.js', () => ({
 
 function createMockOptions(
   overrides: Partial<NormalizedGenerateChatOptions> = {},
+  modelBehavior: Record<string, unknown> = {},
 ): NormalizedGenerateChatOptions {
   const settings = new SettingsService();
   return {
@@ -38,6 +39,7 @@ function createMockOptions(
     invocation: {
       requestId: 'test-request',
       timestamp: Date.now(),
+      modelBehavior,
     },
     resolved: {
       model: 'gpt-4o',
@@ -298,18 +300,16 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
 
   it('sets thinking enabled on request body when reasoning.enabled is true', async () => {
     const settings = new SettingsService();
-    const options = createMockOptions({
-      settings,
-      invocation: {
-        requestId: 'test-request',
-        timestamp: Date.now(),
-        modelBehavior: { 'reasoning.enabled': true },
-      } as unknown as NormalizedGenerateChatOptions['invocation'],
-      resolved: {
-        model: 'gpt-4o',
-        authToken: { token: 'test-token', type: 'api-key' },
+    const options = createMockOptions(
+      {
+        settings,
+        resolved: {
+          model: 'gpt-4o',
+          authToken: { token: 'test-token', type: 'api-key' },
+        },
       },
-    });
+      { 'reasoning.enabled': true },
+    );
 
     const result = await prepareRequest(
       options,
@@ -319,26 +319,21 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
       'openai',
     );
 
-    const thinking = (
-      result.requestBody as unknown as { thinking?: { type: string } }
-    ).thinking;
-    expect(thinking).toStrictEqual({ type: 'enabled' });
+    expect(result.requestBody).toHaveProperty('thinking', { type: 'enabled' });
   });
 
   it('sets thinking disabled on request body when reasoning.enabled is false', async () => {
     const settings = new SettingsService();
-    const options = createMockOptions({
-      settings,
-      invocation: {
-        requestId: 'test-request',
-        timestamp: Date.now(),
-        modelBehavior: { 'reasoning.enabled': false },
-      } as unknown as NormalizedGenerateChatOptions['invocation'],
-      resolved: {
-        model: 'gpt-4o',
-        authToken: { token: 'test-token', type: 'api-key' },
+    const options = createMockOptions(
+      {
+        settings,
+        resolved: {
+          model: 'gpt-4o',
+          authToken: { token: 'test-token', type: 'api-key' },
+        },
       },
-    });
+      { 'reasoning.enabled': false },
+    );
 
     const result = await prepareRequest(
       options,
@@ -348,26 +343,21 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
       'openai',
     );
 
-    const thinking = (
-      result.requestBody as unknown as { thinking?: { type: string } }
-    ).thinking;
-    expect(thinking).toStrictEqual({ type: 'disabled' });
+    expect(result.requestBody).toHaveProperty('thinking', { type: 'disabled' });
   });
 
   it('does not set thinking on request body when reasoning.enabled is undefined', async () => {
     const settings = new SettingsService();
-    const options = createMockOptions({
-      settings,
-      invocation: {
-        requestId: 'test-request',
-        timestamp: Date.now(),
-        modelBehavior: {},
-      } as unknown as NormalizedGenerateChatOptions['invocation'],
-      resolved: {
-        model: 'gpt-4o',
-        authToken: { token: 'test-token', type: 'api-key' },
+    const options = createMockOptions(
+      {
+        settings,
+        resolved: {
+          model: 'gpt-4o',
+          authToken: { token: 'test-token', type: 'api-key' },
+        },
       },
-    });
+      {},
+    );
 
     const result = await prepareRequest(
       options,
@@ -377,9 +367,6 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
       'openai',
     );
 
-    const thinking = (
-      result.requestBody as unknown as { thinking?: { type: string } }
-    ).thinking;
-    expect(thinking).toBeUndefined();
+    expect(result.requestBody).not.toHaveProperty('thinking');
   });
 });

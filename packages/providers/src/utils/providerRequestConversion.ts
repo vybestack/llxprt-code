@@ -38,14 +38,10 @@ function createSettings(overrides?: unknown): SettingsService {
   } as SettingsService;
 }
 
-function createOptions(
-  history: IContent[],
-  settings?: unknown,
-): ReasoningMessageOptions {
+function createOptions(settings?: unknown): ReasoningMessageOptions {
   return {
-    contents: history,
     settings: createSettings(settings),
-  } as ReasoningMessageOptions;
+  };
 }
 
 export function buildOpenAIDumpMessages(
@@ -55,7 +51,7 @@ export function buildOpenAIDumpMessages(
 ): unknown[] {
   return buildMessagesWithReasoning(
     history,
-    createOptions(history, settings),
+    createOptions(settings),
     'openai',
     config,
   );
