@@ -147,11 +147,17 @@ describe('Storage – default platform path (no override)', () => {
 });
 
 describe('Storage – legacy path', () => {
-  it('getLegacyLlxprtDir returns ~/.llxprt regardless of override', () => {
+  beforeEach(() => {
     process.env['LLXPRT_CONFIG_HOME'] = '/tmp/some-override';
+  });
+
+  afterEach(() => {
+    delete process.env['LLXPRT_CONFIG_HOME'];
+  });
+
+  it('getLegacyLlxprtDir returns ~/.llxprt regardless of override', () => {
     const expected = path.join(os.homedir(), '.llxprt');
     expect(Storage.getLegacyLlxprtDir()).toBe(expected);
-    delete process.env['LLXPRT_CONFIG_HOME'];
   });
 });
 
@@ -217,6 +223,11 @@ describe('Storage – instance (workspace-local) helpers', () => {
   });
 
   it('getProjectTempDir directory-name segment is the sha256 of the project root (golden master / on-disk compatibility contract)', () => {
+    // Golden master: sha256 hex of the raw, unnormalized string '/tmp/project'
+    // (the exact projectRoot passed to the constructor; no path normalization).
+    // Hard-coded (not recomputed) so this test fails if the temp-dir naming
+    // scheme ever silently changes, which would orphan users' existing
+    // on-disk project temp directories.
     const expectedSegment =
       'f630ad93b344dd6bd04d44ecde70b128e7e77f9ecc28ee90b62b018734a7e8c4';
     expect(path.basename(storage.getProjectTempDir())).toBe(expectedSegment);

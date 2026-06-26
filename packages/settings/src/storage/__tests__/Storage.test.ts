@@ -36,9 +36,9 @@ describe('Storage — static path methods', () => {
 
   it('getGlobalLlxprtDir returns the platform configuration path', () => {
     const result = Storage.getGlobalLlxprtDir();
-    expect(result.endsWith(path.join('llxprt-code', 'configuration'))).toBe(
-      true,
-    );
+    // On Windows env-paths inserts a `Data` segment, so only assert the
+    // last path component is `configuration`.
+    expect(path.basename(result)).toBe('configuration');
   });
 
   it('getGlobalLlxprtDir respects the LLXPRT_CONFIG_HOME override', () => {
@@ -69,8 +69,8 @@ describe('Storage — static path methods', () => {
 
   it('getGlobalTempDir returns a path under the configuration dir', () => {
     const result = Storage.getGlobalTempDir();
-    expect(result).toContain('configuration');
-    expect(result).toContain('tmp');
+    expect(result.startsWith(Storage.getGlobalLlxprtDir())).toBe(true);
+    expect(path.basename(result)).toBe('tmp');
   });
 
   it('getOAuthCredsPath ends with oauth_creds.json', () => {

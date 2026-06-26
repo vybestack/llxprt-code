@@ -76,7 +76,12 @@ export function performMigration(
   );
 
   try {
-    const filesCopied = copyDirFiltered(legacyDir, stagingDir);
+    const filesCopied = copyDirFiltered(
+      legacyDir,
+      stagingDir,
+      legacyDir,
+      newDir,
+    );
 
     if (filesCopied === 0) {
       fs.rmSync(stagingDir, { recursive: true, force: true });
@@ -228,7 +233,10 @@ function pathEntryExists(p: string): boolean {
 function copyDirFiltered(
   src: string,
   dest: string,
+  legacyRoot: string,
+  destRoot: string,
   visited: Set<string> = new Set(),
+  depth: number = 0,
 ): number {
   let realSrc: string;
   try {
@@ -249,7 +257,7 @@ function copyDirFiltered(
   const entries = fs.readdirSync(src, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (EXCLUDED_ENTRIES.has(entry.name)) {
+    if (depth === 0 && EXCLUDED_ENTRIES.has(entry.name)) {
       continue;
     }
 
@@ -258,12 +266,19 @@ function copyDirFiltered(
 
     if (entry.isDirectory()) {
       fs.mkdirSync(destPath, { recursive: true });
-      count += copyDirFiltered(srcPath, destPath, visited);
+      count += copyDirFiltered(
+        srcPath,
+        destPath,
+        legacyRoot,
+        destRoot,
+        visited,
+        depth + 1,
+      );
     } else if (entry.isFile()) {
       fs.copyFileSync(srcPath, destPath);
       count++;
     } else if (entry.isSymbolicLink()) {
-      createSymlinkClone(srcPath, destPath);
+      createSymlinkClone(srcPath, destPath, legacyRoot, destRoot);
       count++;
     }
   }
@@ -274,11 +289,23 @@ function copyDirFiltered(
 /**
  * Creates a symlink at `destPath` mirroring the one at `srcPath`.
  * Relative targets are rebased so they resolve correctly from the new location.
+ * Absolute targets that point inside the legacy tree are rebased to the
+ * corresponding path under the new root.
  */
-function createSymlinkClone(srcPath: string, destPath: string): void {
+function createSymlinkClone(
+  srcPath: string,
+  destPath: string,
+  legacyRoot: string,
+  newRoot: string,
+): void {
   const target = fs.readlinkSync(srcPath);
   if (path.isAbsolute(target)) {
-    fs.symlinkSync(target, destPath);
+    const rel = path.relative(legacyRoot, target);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+      fs.symlinkSync(path.join(newRoot, rel), destPath);
+    } else {
+      fs.symlinkSync(target, destPath);
+    }
   } else {
     const resolvedTarget = path.resolve(path.dirname(srcPath), target);
     const rebased = path.relative(path.dirname(destPath), resolvedTarget);

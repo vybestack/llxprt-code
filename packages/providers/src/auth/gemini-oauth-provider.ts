@@ -445,7 +445,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
   }
 
   /**
-   * Clears tokens from all legacy locations
+   * Clears tokens from all locations — both the legacy ~/.llxprt/ directory
+   * and the current platform-standard paths.
    */
   private async clearLegacyTokens(): Promise<void> {
     const legacyPaths = [
@@ -453,6 +454,10 @@ export class GeminiOAuthProvider implements OAuthProvider {
       path.join(Storage.getLegacyLlxprtDir(), 'oauth_creds.json'),
       // Legacy Google accounts file (pre-migration ~/.llxprt/)
       path.join(Storage.getLegacyLlxprtDir(), 'google_accounts.json'),
+      // Current OAuth credentials file (post-migration platform path)
+      Storage.getOAuthCredsPath(),
+      // Current Google accounts file (post-migration platform path)
+      Storage.getGoogleAccountsPath(),
     ];
 
     // Use Promise.allSettled to continue even if some paths fail

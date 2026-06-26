@@ -53,9 +53,11 @@ export class Storage {
    * `%LOCALAPPDATA%\llxprt-code\configuration`.
    */
   static getGlobalLlxprtDir(): string {
-    const override = process.env['LLXPRT_CONFIG_HOME'];
-    if (override) {
-      return override;
+    const sanitized = resolveSystemSettingsEnv(
+      process.env['LLXPRT_CONFIG_HOME'],
+    );
+    if (sanitized !== undefined) {
+      return sanitized;
     }
     const dataDir = platformPaths.data;
     if (!dataDir) {

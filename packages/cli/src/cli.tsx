@@ -311,7 +311,7 @@ export async function startInteractiveUI(
 
 /**
  * Patch stdio, register flush-on-exit, install the unhandled-rejection handler,
- * and ensure the user's ~/.llxprt directory exists. Returns the stdio cleanup.
+ * and ensure the platform-standard config directory (or legacy fallback) exists. Returns the stdio cleanup.
  */
 function setupProcessLifecycle(): () => void {
   const cleanupStdio = patchStdio();

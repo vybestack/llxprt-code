@@ -187,6 +187,14 @@ describe('performMigration', () => {
     expect(result.filesCopied).toBe(0);
     expect(fs.existsSync(path.join(newDir, 'secure-store'))).toBe(false);
   });
+
+  it('returns migrated:false when legacy dir does not exist', () => {
+    const nonExistent = path.join(legacyDir, 'does-not-exist');
+    const result = performMigration(nonExistent, newDir);
+
+    expect(result.migrated).toBe(false);
+    expect(result.filesCopied).toBe(0);
+  });
 });
 
 describe('performMigration — edge cases', () => {
@@ -333,7 +341,21 @@ describe('performMigration — symlinks', () => {
     expect(fs.readFileSync(newLink, 'utf-8')).toBe('hello');
   });
 
-  it('prevents infinite recursion from symlink cycles', () => {
+  it('rebases parent-traversing relative symlinks (../target) correctly', () => {
+    const subDir = path.join(legacyDir, 'sub');
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'shared.txt'), 'shared-data');
+    fs.symlinkSync('../shared.txt', path.join(subDir, 'link.txt'));
+
+    const result = performMigration(legacyDir, newDir);
+
+    expect(result.migrated).toBe(true);
+    const newLink = path.join(newDir, 'sub', 'link.txt');
+    expect(fs.lstatSync(newLink).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(newLink, 'utf-8')).toBe('shared-data');
+  });
+
+  it('clones directory symlinks without following them (no infinite recursion)', () => {
     const dirA = path.join(legacyDir, 'dirA');
     const dirB = path.join(legacyDir, 'dirB');
     fs.mkdirSync(dirA, { recursive: true });
@@ -344,7 +366,7 @@ describe('performMigration — symlinks', () => {
     fs.writeFileSync(path.join(dirA, 'file.txt'), 'a');
     fs.writeFileSync(path.join(dirB, 'file.txt'), 'b');
 
-    // Should not hang or overflow the stack
+    // Should not hang or overflow the stack — symlinks are cloned, not followed
     const result = performMigration(legacyDir, newDir);
 
     expect(result.migrated).toBe(true);
