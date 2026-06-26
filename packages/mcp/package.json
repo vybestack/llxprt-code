@@ -34,13 +34,13 @@
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "google-auth-library": "^9.11.0",
-    "shell-quote": "^1.8.3"
+    "shell-quote": "^1.8.4"
   },
   "devDependencies": {
     "@types/node": "^24.2.1",
     "@vybestack/llxprt-code-core": "file:../core",
     "typescript": "^5.3.3",
-    "vitest": "^3.1.1"
+    "vitest": "^3.2.6"
   },
   "engines": {
     "node": ">=20"

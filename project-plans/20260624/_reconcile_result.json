@@ -1,0 +1,848 @@
+[
+  {
+    "num": 172,
+    "pkg": "js-yaml",
+    "sev": "medium",
+    "ghsa": "GHSA-h67p-54hq-rp68",
+    "manifest": "package-lock.json",
+    "verdict": "REMAINING",
+    "detail": "installed=[3.14.2, 4.2.0] STILL VULN=[3.14.2] range=\"<= 4.1.1\" firstPatched=4.2.0"
+  },
+  {
+    "num": 160,
+    "pkg": "@ai-sdk/provider-utils",
+    "sev": "low",
+    "ghsa": "GHSA-866g-f22w-33x8",
+    "manifest": "packages/providers/package.json",
+    "verdict": "REMAINING",
+    "detail": "installed=[2.2.8, 3.0.27] STILL VULN=[2.2.8, 3.0.27] range=\"<= 3.0.97\" firstPatched=null"
+  },
+  {
+    "num": 147,
+    "pkg": "@ai-sdk/provider-utils",
+    "sev": "low",
+    "ghsa": "GHSA-866g-f22w-33x8",
+    "manifest": "package-lock.json",
+    "verdict": "REMAINING",
+    "detail": "installed=[2.2.8, 3.0.27] STILL VULN=[2.2.8, 3.0.27] range=\"<= 3.0.97\" firstPatched=null"
+  },
+  {
+    "num": 163,
+    "pkg": "shell-quote",
+    "sev": "critical",
+    "ghsa": "GHSA-w7jw-789q-3m8p",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[1.8.4] none in vuln range \">= 1.1.0, <= 1.8.3\""
+  },
+  {
+    "num": 162,
+    "pkg": "vitest",
+    "sev": "critical",
+    "ghsa": "GHSA-5xrq-8626-4rwp",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[3.2.6] none in vuln range \">= 4.0.0, < 4.1.0\""
+  },
+  {
+    "num": 115,
+    "pkg": "protobufjs",
+    "sev": "critical",
+    "ghsa": "GHSA-xq3m-2v4x-88gg",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \">= 8.0.0, < 8.0.1\""
+  },
+  {
+    "num": 69,
+    "pkg": "simple-git",
+    "sev": "critical",
+    "ghsa": "GHSA-r275-fr43-pm7q",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[3.36.0] none in vuln range \">= 3.15.0, < 3.32.3\""
+  },
+  {
+    "num": 191,
+    "pkg": "undici",
+    "sev": "high",
+    "ghsa": "GHSA-vxpw-j846-p89q",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \"< 6.27.0\""
+  },
+  {
+    "num": 184,
+    "pkg": "hono",
+    "sev": "high",
+    "ghsa": "GHSA-88fw-hqm2-52qc",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.25\""
+  },
+  {
+    "num": 179,
+    "pkg": "protobufjs",
+    "sev": "high",
+    "ghsa": "GHSA-wcpc-wj8m-hjx6",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.6.0\""
+  },
+  {
+    "num": 177,
+    "pkg": "form-data",
+    "sev": "high",
+    "ghsa": "GHSA-hmw2-7cc7-3qxx",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[2.5.6, 4.0.6] none in vuln range \"< 2.5.6\""
+  },
+  {
+    "num": 176,
+    "pkg": "form-data",
+    "sev": "high",
+    "ghsa": "GHSA-hmw2-7cc7-3qxx",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[2.5.6, 4.0.6] none in vuln range \"< 2.5.6\""
+  },
+  {
+    "num": 173,
+    "pkg": "vite",
+    "sev": "high",
+    "ghsa": "GHSA-fx2h-pf6j-xcff",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.3.6] none in vuln range \">= 8.0.0, <= 8.0.15\""
+  },
+  {
+    "num": 171,
+    "pkg": "ws",
+    "sev": "high",
+    "ghsa": "GHSA-96hv-2xvq-fx4p",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.5.11, 8.21.0] none in vuln range \">= 1.1.0, < 5.2.5\""
+  },
+  {
+    "num": 166,
+    "pkg": "@grpc/grpc-js",
+    "sev": "high",
+    "ghsa": "GHSA-5375-pq7m-f5r2",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[1.14.4] none in vuln range \"< 1.9.16\""
+  },
+  {
+    "num": 165,
+    "pkg": "@grpc/grpc-js",
+    "sev": "high",
+    "ghsa": "GHSA-99f4-grh7-6pcq",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[1.14.4] none in vuln range \"< 1.9.16\""
+  },
+  {
+    "num": 164,
+    "pkg": "@opentelemetry/sdk-node",
+    "sev": "high",
+    "ghsa": "GHSA-q7rr-3cgh-j5r3",
+    "manifest": "packages/telemetry/package.json",
+    "verdict": "FIXED",
+    "detail": "installed=[0.219.0] none in vuln range \"< 0.217.0\""
+  },
+  {
+    "num": 144,
+    "pkg": "tmp",
+    "sev": "high",
+    "ghsa": "GHSA-ph9p-34f9-6g65",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[0.2.7] none in vuln range \"< 0.2.6\""
+  },
+  {
+    "num": 140,
+    "pkg": "protobufjs",
+    "sev": "high",
+    "ghsa": "GHSA-685m-2w69-288q",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.5.5\""
+  },
+  {
+    "num": 139,
+    "pkg": "protobufjs",
+    "sev": "high",
+    "ghsa": "GHSA-66ff-xgx4-vchm",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.5.5\""
+  },
+  {
+    "num": 136,
+    "pkg": "protobufjs",
+    "sev": "high",
+    "ghsa": "GHSA-jvwf-75h9-cwgg",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.5.5\""
+  },
+  {
+    "num": 135,
+    "pkg": "protobufjs",
+    "sev": "high",
+    "ghsa": "GHSA-75px-5xx7-5xc7",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.5.5\""
+  },
+  {
+    "num": 131,
+    "pkg": "@opentelemetry/sdk-node",
+    "sev": "high",
+    "ghsa": "GHSA-q7rr-3cgh-j5r3",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[0.219.0] none in vuln range \"< 0.217.0\""
+  },
+  {
+    "num": 130,
+    "pkg": "@opentelemetry/exporter-prometheus",
+    "sev": "high",
+    "ghsa": "GHSA-q7rr-3cgh-j5r3",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[0.219.0] none in vuln range \"< 0.217.0\""
+  },
+  {
+    "num": 126,
+    "pkg": "fast-uri",
+    "sev": "high",
+    "ghsa": "GHSA-v39h-62p7-jpjc",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[3.1.2] none in vuln range \"<= 3.1.1\""
+  },
+  {
+    "num": 125,
+    "pkg": "fast-uri",
+    "sev": "high",
+    "ghsa": "GHSA-q3j6-qgpj-74h6",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[3.1.2] none in vuln range \"<= 3.1.0\""
+  },
+  {
+    "num": 124,
+    "pkg": "fast-xml-builder",
+    "sev": "high",
+    "ghsa": "GHSA-5wm8-gmm8-39j9",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[1.2.0] none in vuln range \"<= 1.1.6\""
+  },
+  {
+    "num": 120,
+    "pkg": "simple-git",
+    "sev": "high",
+    "ghsa": "GHSA-hffm-xvc3-vprc",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[3.36.0] none in vuln range \"< 3.36.0\""
+  },
+  {
+    "num": 113,
+    "pkg": "simple-git",
+    "sev": "high",
+    "ghsa": "GHSA-jcxm-m3jx-f287",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[3.36.0] none in vuln range \"< 3.32.0\""
+  },
+  {
+    "num": 111,
+    "pkg": "lodash",
+    "sev": "high",
+    "ghsa": "GHSA-r5fr-rjxr-66jc",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.18.1] none in vuln range \">= 4.0.0, <= 4.17.23\""
+  },
+  {
+    "num": 102,
+    "pkg": "vite",
+    "sev": "high",
+    "ghsa": "GHSA-p9ff-h696-f583",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.3.6] none in vuln range \">= 8.0.0, <= 8.0.4\""
+  },
+  {
+    "num": 101,
+    "pkg": "vite",
+    "sev": "high",
+    "ghsa": "GHSA-v2wj-q39q-566r",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.3.6] none in vuln range \">= 8.0.0, <= 8.0.4\""
+  },
+  {
+    "num": 100,
+    "pkg": "path-to-regexp",
+    "sev": "high",
+    "ghsa": "GHSA-37ch-88jc-xwx2",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[6.3.0, 8.4.0] none in vuln range \"< 0.1.13\""
+  },
+  {
+    "num": 98,
+    "pkg": "path-to-regexp",
+    "sev": "high",
+    "ghsa": "GHSA-j3q9-mxjg-w52f",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[6.3.0, 8.4.0] none in vuln range \">= 8.0.0, < 8.4.0\""
+  },
+  {
+    "num": 94,
+    "pkg": "picomatch",
+    "sev": "high",
+    "ghsa": "GHSA-c2c7-rcm5-vvqj",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[2.3.2, 4.0.4] none in vuln range \">= 4.0.0, < 4.0.4\""
+  },
+  {
+    "num": 85,
+    "pkg": "picomatch",
+    "sev": "high",
+    "ghsa": "GHSA-c2c7-rcm5-vvqj",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[2.3.2, 4.0.4] none in vuln range \">= 4.0.0, < 4.0.4\""
+  },
+  {
+    "num": 84,
+    "pkg": "fast-xml-parser",
+    "sev": "high",
+    "ghsa": "GHSA-8gc5-j5rx-235r",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[5.9.3] none in vuln range \">= 5.0.0, < 5.5.6\""
+  },
+  {
+    "num": 81,
+    "pkg": "flatted",
+    "sev": "high",
+    "ghsa": "GHSA-rf6f-7fwh-wjgh",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[3.4.2] none in vuln range \"<= 3.4.1\""
+  },
+  {
+    "num": 76,
+    "pkg": "undici",
+    "sev": "high",
+    "ghsa": "GHSA-v9p9-hfj2-hcw8",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \"< 6.24.0\""
+  },
+  {
+    "num": 75,
+    "pkg": "undici",
+    "sev": "high",
+    "ghsa": "GHSA-vrm6-8vpv-qv8q",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \"< 6.24.0\""
+  },
+  {
+    "num": 71,
+    "pkg": "undici",
+    "sev": "high",
+    "ghsa": "GHSA-f269-vfmq-vjvj",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \">= 6.0.0, < 6.24.0\""
+  },
+  {
+    "num": 190,
+    "pkg": "undici",
+    "sev": "medium",
+    "ghsa": "GHSA-p88m-4jfj-68fv",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \"< 6.27.0\""
+  },
+  {
+    "num": 188,
+    "pkg": "undici",
+    "sev": "medium",
+    "ghsa": "GHSA-pr7r-676h-xcf6",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \">= 7.0.0, < 7.28.0\""
+  },
+  {
+    "num": 187,
+    "pkg": "@opentelemetry/core",
+    "sev": "medium",
+    "ghsa": "GHSA-8988-4f7v-96qf",
+    "manifest": "packages/telemetry/package.json",
+    "verdict": "FIXED",
+    "detail": "installed=[2.8.0] none in vuln range \"< 2.8.0\""
+  },
+  {
+    "num": 186,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-rv63-4mwf-qqc2",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.25\""
+  },
+  {
+    "num": 185,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-wgpf-jwqj-8h8p",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.25\""
+  },
+  {
+    "num": 183,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-wwfh-h76j-fc44",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.25\""
+  },
+  {
+    "num": 182,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-j6c9-x7qj-28xf",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.25\""
+  },
+  {
+    "num": 181,
+    "pkg": "markdown-it",
+    "sev": "medium",
+    "ghsa": "GHSA-6v5v-wf23-fmfq",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[14.2.0] none in vuln range \"<= 14.1.1\""
+  },
+  {
+    "num": 180,
+    "pkg": "@opentelemetry/core",
+    "sev": "medium",
+    "ghsa": "GHSA-8988-4f7v-96qf",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[2.8.0] none in vuln range \"< 2.8.0\""
+  },
+  {
+    "num": 178,
+    "pkg": "protobufjs",
+    "sev": "medium",
+    "ghsa": "GHSA-f38q-mgvj-vph7",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.6.2\""
+  },
+  {
+    "num": 175,
+    "pkg": "tar",
+    "sev": "medium",
+    "ghsa": "GHSA-vmf3-w455-68vh",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.5.16] none in vuln range \"<= 7.5.15\""
+  },
+  {
+    "num": 174,
+    "pkg": "vite",
+    "sev": "medium",
+    "ghsa": "GHSA-v6wh-96g9-6wx3",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.3.6] none in vuln range \">= 8.0.0, <= 8.0.15\""
+  },
+  {
+    "num": 159,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-2gcr-mfcq-wcc3",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.21\""
+  },
+  {
+    "num": 158,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-3hrh-pfw6-9m5x",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.21\""
+  },
+  {
+    "num": 157,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-xrhx-7g5j-rcj5",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.21\""
+  },
+  {
+    "num": 156,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-f577-qrjj-4474",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.21\""
+  },
+  {
+    "num": 155,
+    "pkg": "postcss",
+    "sev": "medium",
+    "ghsa": "GHSA-qx2v-qp2m-jg93",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[8.5.15] none in vuln range \"< 8.5.10\""
+  },
+  {
+    "num": 146,
+    "pkg": "ws",
+    "sev": "medium",
+    "ghsa": "GHSA-58qx-3vcg-4xpx",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.5.11, 8.21.0] none in vuln range \">= 8.0.0, < 8.20.1\""
+  },
+  {
+    "num": 145,
+    "pkg": "protobufjs",
+    "sev": "medium",
+    "ghsa": "GHSA-jggg-4jg4-v7c6",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.5.7\""
+  },
+  {
+    "num": 143,
+    "pkg": "qs",
+    "sev": "medium",
+    "ghsa": "GHSA-q8mj-m7cp-5q26",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[6.15.3] none in vuln range \">= 6.11.1, <= 6.15.1\""
+  },
+  {
+    "num": 142,
+    "pkg": "uuid",
+    "sev": "medium",
+    "ghsa": "GHSA-w5hq-g745-h8pq",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[11.1.1] none in vuln range \">= 12.0.0, < 12.0.1\""
+  },
+  {
+    "num": 141,
+    "pkg": "brace-expansion",
+    "sev": "medium",
+    "ghsa": "GHSA-jxxr-4gwj-5jf2",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[1.1.15, 2.1.1, 5.0.6] none in vuln range \">= 5.0.0, < 5.0.6\""
+  },
+  {
+    "num": 138,
+    "pkg": "protobufjs",
+    "sev": "medium",
+    "ghsa": "GHSA-2pr8-phx7-x9h3",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.5.5\""
+  },
+  {
+    "num": 137,
+    "pkg": "protobufjs",
+    "sev": "medium",
+    "ghsa": "GHSA-fx83-v9x8-x52w",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.5.5\""
+  },
+  {
+    "num": 134,
+    "pkg": "protobufjs",
+    "sev": "medium",
+    "ghsa": "GHSA-q6x5-8v7m-xcrf",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.6.4] none in vuln range \"<= 7.5.5\""
+  },
+  {
+    "num": 133,
+    "pkg": "@protobufjs/utf8",
+    "sev": "medium",
+    "ghsa": "GHSA-q6x5-8v7m-xcrf",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[1.1.1] none in vuln range \"<= 1.1.0\""
+  },
+  {
+    "num": 129,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-qp7p-654g-cw7p",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.18\""
+  },
+  {
+    "num": 127,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-p77w-8qqv-26rm",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.18\""
+  },
+  {
+    "num": 123,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-9vqf-7f2p-gf9v",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.16\""
+  },
+  {
+    "num": 122,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-69xw-7hcm-h432",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.16\""
+  },
+  {
+    "num": 121,
+    "pkg": "ip-address",
+    "sev": "medium",
+    "ghsa": "GHSA-v2v4-37r5-5v8g",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[10.2.0] none in vuln range \"<= 10.1.0\""
+  },
+  {
+    "num": 116,
+    "pkg": "fast-xml-parser",
+    "sev": "medium",
+    "ghsa": "GHSA-gh4j-gqv2-49f6",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[5.9.3] none in vuln range \"< 5.7.0\""
+  },
+  {
+    "num": 114,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-458j-xx4x-4375",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.14\""
+  },
+  {
+    "num": 112,
+    "pkg": "lodash",
+    "sev": "medium",
+    "ghsa": "GHSA-f23m-r3pf-42rh",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.18.1] none in vuln range \"<= 4.17.23\""
+  },
+  {
+    "num": 110,
+    "pkg": "fast-xml-parser",
+    "sev": "medium",
+    "ghsa": "GHSA-jp2q-39xq-3w4g",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[5.9.3] none in vuln range \">= 4.0.0-beta.3, < 4.5.5\""
+  },
+  {
+    "num": 109,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-r5rp-j6wh-rvv4",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.12\""
+  },
+  {
+    "num": 108,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-26pp-8wgv-hjvm",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.12\""
+  },
+  {
+    "num": 107,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-xpcf-pg52-r92g",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.12\""
+  },
+  {
+    "num": 106,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-wmmm-f939-6g9c",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.12\""
+  },
+  {
+    "num": 105,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-xf4j-xp2r-rqqx",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \">= 4.0.0, <= 4.12.11\""
+  },
+  {
+    "num": 104,
+    "pkg": "@hono/node-server",
+    "sev": "medium",
+    "ghsa": "GHSA-92pp-h63x-v22m",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[1.19.14] none in vuln range \"< 1.19.13\""
+  },
+  {
+    "num": 103,
+    "pkg": "vite",
+    "sev": "medium",
+    "ghsa": "GHSA-4w7w-66w2-5vf9",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.3.6] none in vuln range \">= 8.0.0, <= 8.0.4\""
+  },
+  {
+    "num": 99,
+    "pkg": "path-to-regexp",
+    "sev": "medium",
+    "ghsa": "GHSA-27v5-c462-wpq7",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[6.3.0, 8.4.0] none in vuln range \">= 8.0.0, < 8.4.0\""
+  },
+  {
+    "num": 95,
+    "pkg": "picomatch",
+    "sev": "medium",
+    "ghsa": "GHSA-3v7f-55p6-f55p",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[2.3.2, 4.0.4] none in vuln range \">= 4.0.0, < 4.0.4\""
+  },
+  {
+    "num": 93,
+    "pkg": "brace-expansion",
+    "sev": "medium",
+    "ghsa": "GHSA-f886-m6hf-6m8v",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[1.1.15, 2.1.1, 5.0.6] none in vuln range \">= 4.0.0, < 5.0.5\""
+  },
+  {
+    "num": 87,
+    "pkg": "picomatch",
+    "sev": "medium",
+    "ghsa": "GHSA-3v7f-55p6-f55p",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[2.3.2, 4.0.4] none in vuln range \">= 4.0.0, < 4.0.4\""
+  },
+  {
+    "num": 74,
+    "pkg": "undici",
+    "sev": "medium",
+    "ghsa": "GHSA-4992-7rv2-5pvq",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \"< 6.24.0\""
+  },
+  {
+    "num": 73,
+    "pkg": "undici",
+    "sev": "medium",
+    "ghsa": "GHSA-phc3-fgpg-7m6h",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \">= 7.17.0, < 7.24.0\""
+  },
+  {
+    "num": 72,
+    "pkg": "undici",
+    "sev": "medium",
+    "ghsa": "GHSA-2mjp-6q6p-2qxm",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \"< 6.24.0\""
+  },
+  {
+    "num": 70,
+    "pkg": "hono",
+    "sev": "medium",
+    "ghsa": "GHSA-v8w9-8mx6-g223",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.7\""
+  },
+  {
+    "num": 192,
+    "pkg": "undici",
+    "sev": "low",
+    "ghsa": "GHSA-g8m3-5g58-fq7m",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \"< 6.27.0\""
+  },
+  {
+    "num": 189,
+    "pkg": "undici",
+    "sev": "low",
+    "ghsa": "GHSA-35p6-xmwp-9g52",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[7.28.0] none in vuln range \"< 6.27.0\""
+  },
+  {
+    "num": 128,
+    "pkg": "hono",
+    "sev": "low",
+    "ghsa": "GHSA-hm8q-7f3q-5f36",
+    "manifest": "package-lock.json",
+    "verdict": "FIXED",
+    "detail": "installed=[4.12.27] none in vuln range \"< 4.12.18\""
+  }
+]
