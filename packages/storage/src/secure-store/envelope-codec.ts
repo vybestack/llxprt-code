@@ -89,9 +89,16 @@ export class EnvelopeCodecError extends Error {
  */
 export interface EnvelopeCodecOptions {
   /**
-   * Injectable machine-secret loader. Defaults to the production
-   * `getMachineSecret()` resolution (keyring → file → generate). Returning
-   * `null` means "no machine secret available" (v:1 only).
+   * Injectable machine-secret loader. When omitted, the default loader uses
+   * `getMachineSecret()` with mode-appropriate generation:
+   *   - encrypt: keyring → file → generate (a write may mint a new root of
+   *     trust when none exists),
+   *   - decrypt: keyring → file → fail closed (a read never generates a new
+   *     secret, since doing so cannot recover an envelope sealed under a prior
+   *     secret and would orphan it).
+   * Returning `null` means "no machine secret available": v:1 on encrypt,
+   * fail-closed `CORRUPT` on a v:2 decrypt. An injected loader is used verbatim
+   * for both operations.
    */
   machineSecretLoader?: () => Promise<Buffer | null>;
   /**
@@ -119,17 +126,29 @@ export interface EncryptEnvelopeStringOptions extends EnvelopeCodecOptions {
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 function defaultMachineSecretLoader(
-  filePath?: string,
+  filePath: string | undefined,
+  generateIfMissing: boolean,
 ): () => Promise<Buffer | null> {
-  return async () => getMachineSecret({ filePath });
+  return async () => getMachineSecret({ filePath, generateIfMissing });
 }
 
+/**
+ * Resolves the machine-secret loader for an operation.
+ *
+ * `generateIfMissing` distinguishes write paths (encrypt) — which may mint and
+ * persist a new root of trust when none exists — from read paths (decrypt) —
+ * which must fail closed on a missing/rotated secret rather than generating a
+ * new one as a side effect of a read (doing so would orphan existing v:2
+ * envelopes sealed under the prior secret). An injected `machineSecretLoader`
+ * is always honored verbatim and is responsible for its own semantics.
+ */
 function resolveLoader(
-  options?: EnvelopeCodecOptions,
+  options: EnvelopeCodecOptions | undefined,
+  generateIfMissing: boolean,
 ): () => Promise<Buffer | null> {
   return (
     options?.machineSecretLoader ??
-    defaultMachineSecretLoader(options?.machineSecretPath)
+    defaultMachineSecretLoader(options?.machineSecretPath, generateIfMissing)
   );
 }
 
@@ -149,7 +168,7 @@ export async function encryptEnvelopeString(
   serviceName: string,
   options?: EncryptEnvelopeStringOptions,
 ): Promise<string> {
-  const loader = resolveLoader(options);
+  const loader = resolveLoader(options, true);
   const machineSecret = await loader();
   const useV2 = machineSecret !== null;
 
@@ -244,7 +263,11 @@ export async function decryptEnvelopeString(
 
   let kdfInput: string;
   if (envelope.v === 2) {
-    const loader = resolveLoader(options);
+    // Read path: never generate a new secret on a miss. A v:2 envelope was
+    // sealed under an existing root of trust; if that secret is gone, the
+    // correct outcome is to fail closed, not to mint a fresh secret that
+    // cannot decrypt this envelope.
+    const loader = resolveLoader(options, false);
     const machineSecret = await loader();
     if (machineSecret === null) {
       throw new EnvelopeCodecError(

@@ -27,6 +27,7 @@ vi.mock('node:fs', () => ({
     writeFile: vi.fn(),
     unlink: vi.fn(),
     mkdir: vi.fn(),
+    chmod: vi.fn(),
   },
 }));
 
@@ -69,6 +70,7 @@ describe('FileTokenStorage', () => {
     writeFile: ReturnType<typeof vi.fn>;
     unlink: ReturnType<typeof vi.fn>;
     mkdir: ReturnType<typeof vi.fn>;
+    chmod: ReturnType<typeof vi.fn>;
   };
   const existingCredentials: MCPOAuthCredentials = {
     serverName: 'existing-server',
@@ -81,6 +83,9 @@ describe('FileTokenStorage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // chmod is invoked after every write to tighten permissions on overwrite;
+    // default it to resolve so write-path tests do not need to wire it up.
+    mockFs.chmod.mockResolvedValue(undefined);
     storage = new FileTokenStorage('test-storage', {
       machineSecretLoader: fixedSecretLoader(),
     });

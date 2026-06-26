@@ -555,4 +555,119 @@ describe('Machine Secret Provider — Permission repair', () => {
     const onDisk = await fs.readFile(tempFilePath, 'utf8');
     expect(onDisk).toBe('not-a-valid-32-byte-secret');
   });
+
+  describe('Machine Secret Provider — read-only (generateIfMissing: false)', () => {
+    let tempFilePath: string;
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempFilePath = await createTempFilePath();
+      tempDir = path.dirname(tempFilePath);
+      resetMachineSecretCache();
+    });
+
+    afterEach(async () => {
+      resetMachineSecretCache();
+      await fs.rm(tempDir, { recursive: true, force: true });
+    });
+
+    it('returns null without generating or persisting a secret when none exists', async () => {
+      const keyring = createMockKeyring();
+      let setCalls = 0;
+      const wrappedKeyring: KeyringAdapter = {
+        getPassword: keyring.getPassword.bind(keyring),
+        setPassword: async (
+          service: string,
+          account: string,
+          password: string,
+        ) => {
+          setCalls++;
+          return keyring.setPassword(service, account, password);
+        },
+        deletePassword: keyring.deletePassword.bind(keyring),
+      };
+      const options: MachineSecretOptions = {
+        filePath: tempFilePath,
+        keyringLoader: async () => wrappedKeyring,
+        generateIfMissing: false,
+      };
+
+      const secret = await getMachineSecret(options);
+
+      expect(secret).toBeNull();
+      // No secret was written to the keyring...
+      expect(setCalls).toBe(0);
+      expect(keyring.store.size).toBe(0);
+      // ...nor to the file fallback.
+      await expect(fs.readFile(tempFilePath, 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    });
+
+    it('returns an existing keyring secret without generating', async () => {
+      const keyring = createMockKeyring();
+      const existing = crypto.randomBytes(32);
+      await keyring.setPassword(
+        'llxprt-code-machine-secret',
+        'default',
+        existing.toString('base64'),
+      );
+
+      const secret = await getMachineSecret({
+        filePath: tempFilePath,
+        keyringLoader: async () => keyring,
+        generateIfMissing: false,
+      });
+
+      expect(secret).not.toBeNull();
+      expect(Buffer.compare(secret!, existing)).toBe(0);
+    });
+
+    it('returns an existing file secret without generating', async () => {
+      const existing = crypto.randomBytes(32);
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(tempFilePath, existing.toString('base64'), {
+        mode: 0o600,
+      });
+
+      const secret = await getMachineSecret({
+        filePath: tempFilePath,
+        keyringLoader: async () => null,
+        generateIfMissing: false,
+      });
+
+      expect(secret).not.toBeNull();
+      expect(Buffer.compare(secret!, existing)).toBe(0);
+    });
+
+    it('a read-only miss does not poison a later generating call for the same source', async () => {
+      const keyring = createMockKeyring();
+      const sharedOptions = {
+        filePath: tempFilePath,
+        keyringLoader: async () => keyring,
+      };
+
+      // Read-only first: no secret yet, so this must return null and cache
+      // nothing negative.
+      const readMiss = await getMachineSecret({
+        ...sharedOptions,
+        generateIfMissing: false,
+      });
+      expect(readMiss).toBeNull();
+
+      // A subsequent generating call for the same source must still mint and
+      // persist a secret rather than returning a cached null.
+      const generated = await getMachineSecret(sharedOptions);
+      expect(generated).not.toBeNull();
+      expect(generated!.length).toBe(32);
+
+      // And a following read-only call now observes the persisted secret.
+      const readHit = await getMachineSecret({
+        ...sharedOptions,
+        generateIfMissing: false,
+      });
+      expect(readHit).not.toBeNull();
+      expect(Buffer.compare(readHit!, generated!)).toBe(0);
+    });
+  });
 });

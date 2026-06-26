@@ -371,6 +371,33 @@ describe('ToolKeyStorage', () => {
      * @plan PLAN-20260206-TOOLKEY.P04
      * @requirement REQ-001.2
      */
+    it.skipIf(process.platform === 'win32')(
+      'tightens permissions to 0o600 when overwriting a pre-existing loose-mode .key file',
+      async () => {
+        // Simulate a key file left behind with group/world-readable
+        // permissions. writeFile's `mode` only applies when the file is
+        // created, so an overwrite must explicitly chmod to avoid leaving a
+        // secret world-readable.
+        const filePath = path.join(tempDir, 'exa.key');
+        await fs.writeFile(filePath, 'placeholder', { mode: 0o644 });
+        await fs.chmod(filePath, 0o644);
+
+        const storage = new ToolKeyStorage({
+          toolsDir: tempDir,
+          keyringLoader: async () => null,
+          machineSecretLoader: secretLoaderA(),
+        });
+        await storage.saveKey('exa', 'sk-perm-check');
+
+        const stat = await fs.stat(filePath);
+        expect(stat.mode & 0o777).toBe(0o600);
+      },
+    );
+
+    /**
+     * @plan PLAN-20260206-TOOLKEY.P04
+     * @requirement REQ-001.2
+     */
     it('returns null when no encrypted file exists', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,

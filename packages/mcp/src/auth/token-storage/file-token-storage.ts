@@ -131,17 +131,13 @@ export class FileTokenStorage extends BaseTokenStorage {
     } else {
       try {
         plaintext = this.decrypt(data);
-      } catch (error: unknown) {
-        const err = error as Error;
-        if (
-          err.message.includes('Invalid encrypted data format') ||
-          err.message.includes(
-            'Unsupported state or unable to authenticate data',
-          )
-        ) {
-          throw new Error('Token file corrupted');
-        }
-        throw error;
+      } catch {
+        // Any failure decrypting a legacy hex-colon token file (malformed
+        // format, bad IV/authTag, authentication failure, tampering) is
+        // normalized to a single fail-closed error so raw crypto details do
+        // not leak and the caller observes consistent behavior with the
+        // versioned-envelope path above.
+        throw new Error('Token file corrupted');
       }
     }
 
@@ -182,6 +178,12 @@ export class FileTokenStorage extends BaseTokenStorage {
     });
 
     await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
+    // writeFile's `mode` only applies on creation; overwriting a pre-existing
+    // file leaves its (possibly looser) permissions intact. Tighten explicitly
+    // on POSIX so the token file is never left group/world-readable.
+    if (process.platform !== 'win32') {
+      await fs.chmod(this.tokenFilePath, 0o600);
+    }
   }
 
   async getCredentials(

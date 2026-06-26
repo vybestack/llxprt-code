@@ -232,6 +232,23 @@ export class ToolKeyStorage {
       existingEnvelopeVersion: existingVersion,
     });
     await fs.writeFile(filePath, envelopeJson, { mode: 0o600 });
+    // writeFile's `mode` only applies when the file is created; overwriting a
+    // pre-existing file with looser permissions leaves them unchanged. Tighten
+    // explicitly so a key file is never left world/group-readable.
+    await this.chmodIfPosix(filePath);
+  }
+
+  /**
+   * Restricts a file to owner-only (0o600) on POSIX platforms. On Windows this
+   * is a no-op (permissions are enforced via ACLs, not POSIX modes). chmod
+   * failures are surfaced so a key file is never silently left with overly
+   * permissive modes.
+   */
+  private async chmodIfPosix(filePath: string): Promise<void> {
+    if (process.platform === 'win32') {
+      return;
+    }
+    await fs.chmod(filePath, 0o600);
   }
 
   /**

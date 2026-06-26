@@ -256,6 +256,58 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(result).toBeNull();
   });
 
+  it('normalizes a malformed legacy hex-colon file to "Token file corrupted"', async () => {
+    // A legacy-shaped `iv:authTag:ciphertext` string whose components are
+    // well-formed hex but cryptographically invalid (random bytes). The legacy
+    // decrypt path raises a raw crypto error ("Unsupported state or unable to
+    // authenticate data" or similar); the store must normalize ALL such
+    // failures to a single fail-closed message rather than leaking crypto
+    // internals.
+    const iv = crypto.randomBytes(16).toString('hex');
+    const authTag = crypto.randomBytes(16).toString('hex');
+    const ciphertext = crypto.randomBytes(32).toString('hex');
+    const malformedLegacy = `${iv}:${authTag}:${ciphertext}`;
+    await fs.mkdir(path.dirname(tokenFilePath), {
+      recursive: true,
+      mode: 0o700,
+    });
+    await fs.writeFile(tokenFilePath, malformedLegacy, { mode: 0o600 });
+
+    const reader = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: secretLoaderA(),
+    });
+
+    await expect(reader.getCredentials('anything')).rejects.toThrow(
+      'Token file corrupted',
+    );
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'tightens permissions to 0o600 when overwriting a pre-existing loose-mode file',
+    async () => {
+      const storage = new FileTokenStorage(SERVICE_NAME, {
+        tokenFilePath,
+        machineSecretLoader: secretLoaderA(),
+      });
+
+      // First write creates a real v:2 envelope file.
+      await storage.setCredentials(makeCredentials('perm-server'));
+
+      // Simulate the file being left with group/world-readable permissions
+      // (e.g. by an older write path). writeFile's `mode` only applies on
+      // creation, so the subsequent overwrite must explicitly chmod.
+      await fs.chmod(tokenFilePath, 0o644);
+
+      // Second write overwrites the existing file; permissions must be
+      // tightened back to owner-only.
+      await storage.setCredentials(makeCredentials('perm-server-2'));
+
+      const stat = await fs.stat(tokenFilePath);
+      expect(stat.mode & 0o777).toBe(0o600);
+    },
+  );
+
   it('preserves CRUD API behavior (set/get/delete/list/clear) with v:2 envelopes', async () => {
     const storage = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,
