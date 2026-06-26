@@ -107,6 +107,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
+      machineSecretLoader: async () => null,
     });
 
     await store.set('envelope-key', 'envelope-value');
@@ -433,6 +434,7 @@ describe('SecureStore — Resilience', () => {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
+      machineSecretLoader: async () => null,
     });
 
     // Write a value successfully

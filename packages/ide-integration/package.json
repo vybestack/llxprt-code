@@ -30,7 +30,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
-    "undici": "^7.18.2",
+    "undici": "^7.28.0",
     "vscode-jsonrpc": "^8.2.1",
     "zod": "^3.25.76"
   },
@@ -38,7 +38,7 @@
     "@types/node": "^24.2.1",
     "fast-check": "^4.2.0",
     "typescript": "^5.3.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.6"
   },
   "engines": {
     "node": ">=20"

@@ -81,10 +81,12 @@ export function initializeTelemetry(config: TelemetryConfig): void {
     ? new PeriodicExportingMetricReader({
         exporter: new FileMetricExporter(telemetryOutfile),
         exportIntervalMillis: 10000,
+        exportTimeoutMillis: 5000,
       })
     : new PeriodicExportingMetricReader({
         exporter: new ConsoleMetricExporter(),
         exportIntervalMillis: 10000,
+        exportTimeoutMillis: 5000,
       });
 
   // Configure batch processors with shorter delays for faster writes
