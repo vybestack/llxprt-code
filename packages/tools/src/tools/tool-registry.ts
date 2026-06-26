@@ -12,7 +12,7 @@ import {
   BaseTool,
   BaseToolInvocation,
 } from './tools.js';
-import { type ToolContext } from '../types/tool-context.js';
+import { type ToolContext, isContextAwareTool } from '../types/tool-context.js';
 import type { IToolRegistryHost } from '../interfaces/IToolRegistryHost.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 import { spawn } from 'node:child_process';
@@ -768,8 +768,8 @@ export class ToolRegistry {
     }
 
     // Inject context into tool instance
-    if (context && 'context' in tool) {
-      (tool as unknown as { context: ToolContext }).context = context;
+    if (context && isContextAwareTool(tool)) {
+      tool.context = context;
     }
     return tool;
   }

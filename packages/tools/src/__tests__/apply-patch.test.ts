@@ -71,6 +71,7 @@ describe('ApplyPatchTool issue #2133 regressions', () => {
       setApprovalMode: () => {},
       isInteractive: () => false,
       hasFeatureFlag: () => false,
+      getEphemeralSettings: () => ({}),
     };
   }
 

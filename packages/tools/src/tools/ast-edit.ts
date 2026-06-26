@@ -20,6 +20,7 @@ import type { ToolInvocation } from './tools.js';
 import { BaseDeclarativeTool, Kind, type ToolResult } from './tools.js';
 import { isNodeError } from '../utils/errors.js';
 import type { IToolHost, ILspService } from '../interfaces/index.js';
+import { hasWorkspaceContextCap } from '../interfaces/host-capabilities.js';
 import type {
   ModifiableDeclarativeTool,
   ModifyContext,
@@ -73,15 +74,10 @@ function validateFilePathParam(
   }
 
   const pathError = validatePathWithinWorkspace(
-    typeof host.getWorkspaceRoots === 'function'
-      ? host.getWorkspaceRoots()
-      : ((
-          host as unknown as {
-            getWorkspaceContext?: () => { getDirectories?: () => string[] };
-          }
-        )
-          .getWorkspaceContext?.()
-          .getDirectories?.() ?? [host.getTargetDir()]),
+    hasWorkspaceContextCap(host)
+      ? (host.getWorkspaceContext().getDirectories?.() ??
+          host.getWorkspaceRoots())
+      : host.getWorkspaceRoots(),
     params.file_path,
   );
   if (pathError) {

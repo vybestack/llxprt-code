@@ -89,7 +89,11 @@ export * from './core/prompts.js';
 export * from './core/tokenLimits.js';
 export * from './core/turn.js';
 export * from './core/geminiRequest.js';
-export type { SubagentSchedulerFactory } from './core/subagentTypes.js';
+export {
+  type SubagentSchedulerFactory,
+  type InteractiveSubagentSchedulerHost,
+  hasInteractiveSubagentScheduler,
+} from './core/subagentTypes.js';
 export { buildContinuationDirective } from './core/compression/continuationDirective.js';
 
 export * from './code_assist/codeAssist.js';

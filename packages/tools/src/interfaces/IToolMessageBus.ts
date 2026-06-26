@@ -50,6 +50,52 @@ export interface ToolMessageEvent {
 /** Unsubscribe function returned by subscribe. */
 export type Unsubscribe = () => void;
 
+/**
+ * Optional capability: direct publish on the message bus.
+ *
+ * Used by tools that fall back to raw publish when the typed
+ * `publishPolicyUpdate` method is not available.
+ */
+export interface PublishCapable {
+  publish(message: Record<string, unknown>): void | Promise<void>;
+}
+
+/**
+ * Optional capability: direct publish/subscribe on the message bus.
+ *
+ * Some adapters expose a low-level publish/subscribe API alongside the
+ * typed confirmation methods. Tools detect this capability via type guards
+ * rather than casting through `unknown`.
+ */
+export interface PublishSubscribeCapable extends PublishCapable {
+  subscribe(
+    event: string,
+    handler: (response: unknown) => void,
+  ): void | Unsubscribe;
+  unsubscribe?(event: string, handler: (response: unknown) => void): void;
+}
+
+/**
+ * Type guard: does the given message bus expose a raw publish capability?
+ */
+export function hasPublish(
+  bus: IToolMessageBus,
+): bus is IToolMessageBus & PublishCapable {
+  return typeof (bus as Partial<PublishCapable>).publish === 'function';
+}
+
+/**
+ * Type guard: does the given message bus expose a publish/subscribe capability?
+ */
+export function hasPublishSubscribe(
+  bus: IToolMessageBus,
+): bus is IToolMessageBus & PublishSubscribeCapable {
+  return (
+    hasPublish(bus) &&
+    typeof (bus as Partial<PublishSubscribeCapable>).subscribe === 'function'
+  );
+}
+
 export interface IToolMessageBus {
   /**
    * Request user confirmation for a tool call.

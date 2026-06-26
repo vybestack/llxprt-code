@@ -149,7 +149,7 @@ export function createHookControlDeps(
     publishBusResponse(correlationId: string): void {
       const message: BusHookExecutionResponse = {
         type: MessageBusType.HOOK_EXECUTION_RESPONSE,
-        payload: { correlationId },
+        payload: { correlationId, success: true },
       };
       messageBus.publish(message);
     },

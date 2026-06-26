@@ -24,6 +24,12 @@ export type * from './interfaces/index.js';
 
 // --- Types ---
 export type { ToolContext, ContextAwareTool } from './types/tool-context.js';
+export {
+  type ToolSchemaDescriptor,
+  type ToolSchemaHolder,
+  hasToolSchema,
+  resolveToolDescription,
+} from './types/tool-schema-capability.js';
 
 // --- Formatters ---
 export type {

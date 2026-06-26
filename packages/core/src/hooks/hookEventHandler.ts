@@ -43,10 +43,7 @@ import {
 import { coreEvents } from '../utils/events.js';
 import { logHookCall } from '../telemetry/loggers.js';
 import { HookCallEvent } from '../telemetry/types.js';
-import type {
-  MessageBusType,
-  MessageBusMessage,
-} from '../confirmation-bus/types.js';
+import { MessageBusType } from '../confirmation-bus/types.js';
 import type { HookExecutionResponse } from './hookBusContracts.js';
 
 const moduleDebugLogger = DebugLogger.getLogger(
@@ -326,7 +323,7 @@ export class HookEventHandler {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.SessionStart,
-        context as unknown as Record<string, unknown>,
+        context,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireSessionStartEvent', {
@@ -348,7 +345,7 @@ export class HookEventHandler {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.SessionEnd,
-        context as unknown as Record<string, unknown>,
+        context,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireSessionEndEvent', {
@@ -369,7 +366,7 @@ export class HookEventHandler {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.PreCompress,
-        context as unknown as Record<string, unknown>,
+        context,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'firePreCompressEvent', {
@@ -470,9 +467,9 @@ export class HookEventHandler {
    * @plan PLAN-20250218-HOOKSYSTEM.P03
    * @requirement DELTA-HFAIL-005
    */
-  private async executeEventWithFullResult(
+  private async executeEventWithFullResult<T extends Record<string, unknown>>(
     eventName: HookEventName,
-    context: Record<string, unknown>,
+    context: T,
   ): Promise<AggregatedHookResult> {
     const startTime = Date.now();
 
@@ -904,12 +901,10 @@ export class HookEventHandler {
    */
   private publishResponse = (response: HookExecutionResponse): void => {
     // Line 121: CALL this.messageBus.publish('HOOK_EXECUTION_RESPONSE', response)
-    // Note: HOOK_EXECUTION_RESPONSE is a hook-specific message type not yet in
-    // the MessageBusMessage union; cast through unknown for now
     this.messageBus?.publish({
-      type: 'HOOK_EXECUTION_RESPONSE',
+      type: MessageBusType.HOOK_EXECUTION_RESPONSE,
       payload: response,
-    } as unknown as MessageBusMessage);
+    });
   };
 
   /**

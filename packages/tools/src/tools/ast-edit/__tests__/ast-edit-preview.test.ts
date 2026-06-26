@@ -41,6 +41,7 @@ function createFakeToolHost(targetDir: string): IToolHost {
     setApprovalMode: () => {},
     isInteractive: () => false,
     hasFeatureFlag: () => false,
+    getEphemeralSettings: () => ({}),
   };
 }
 
