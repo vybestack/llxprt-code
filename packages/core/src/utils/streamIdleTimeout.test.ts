@@ -394,17 +394,17 @@ describe('resolveStreamIdleTimeoutMs', () => {
       process.env = originalEnv;
     });
 
-    it('camelCase streamIdleTimeoutMs with a positive finite value resolves to that value when env var is absent', () => {
+    it('camelCase streamIdleTimeoutMs with a very large finite value resolves to that value', () => {
       const mockConfig = {
         getEphemeralSetting: (key: string) => {
           if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
-            return 75_000;
+            return Number.MAX_SAFE_INTEGER;
           }
           return undefined;
         },
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
-      expect(result).toBe(75_000);
+      expect(result).toBe(Number.MAX_SAFE_INTEGER);
     });
 
     it('camelCase 0 resolves to 0 (disabled semantics preserved)', () => {
@@ -475,6 +475,22 @@ describe('resolveStreamIdleTimeoutMs', () => {
       expect(result).toBe(300_000); // hyphenated wins
     });
 
+    it('hyphenated 0 (disabled) wins over camelCase positive value', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_SETTING_KEY) {
+            return 0;
+          }
+          if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
+            return 150_000;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(0);
+    });
+
     it('invalid hyphenated value falls through to camelCase', () => {
       const mockConfig = {
         getEphemeralSetting: (key: string) => {
@@ -508,7 +524,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
       expect(result).toBe(500_000); // env wins
     });
 
-    it('camelCase is used when hyphenated is absent', () => {
+    it('env var takes priority over camelCase when hyphenated is absent', () => {
+      process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '500000';
       const mockConfig = {
         getEphemeralSetting: (key: string) => {
           if (key === STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY) {
@@ -518,7 +535,7 @@ describe('resolveStreamIdleTimeoutMs', () => {
         },
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
-      expect(result).toBe(60_000);
+      expect(result).toBe(500_000);
     });
 
     it('falls through to default when camelCase is invalid', () => {

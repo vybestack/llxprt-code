@@ -294,12 +294,38 @@ describe('validateSetting — validation', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects NaN for compression-threshold', () => {
+    const result = validateSetting('compression-threshold', NaN);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects Infinity for compression-threshold', () => {
+    const result = validateSetting('compression-threshold', Infinity);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects -Infinity for compression-threshold', () => {
+    const result = validateSetting('compression-threshold', -Infinity);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects undefined for compression-threshold', () => {
+    const result = validateSetting('compression-threshold', undefined);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects null for compression-threshold', () => {
+    const result = validateSetting('compression-threshold', null);
+    expect(result.success).toBe(false);
+  });
+
   it('validates compression.density.optimizeThreshold with undefined (uses default)', () => {
     const result = validateSetting(
       'compression.density.optimizeThreshold',
       undefined,
     );
     expect(result.success).toBe(true);
+    expect(result.value).toBeUndefined();
   });
 
   it('validates compression.density.optimizeThreshold with null (uses default)', () => {
@@ -308,6 +334,7 @@ describe('validateSetting — validation', () => {
       null,
     );
     expect(result.success).toBe(true);
+    expect(result.value).toBeUndefined();
   });
 
   it('validates compression.density.optimizeThreshold with a decimal in range (0.5)', () => {
@@ -344,6 +371,30 @@ describe('validateSetting — validation', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects NaN for compression.density.optimizeThreshold', () => {
+    const result = validateSetting(
+      'compression.density.optimizeThreshold',
+      NaN,
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects Infinity for compression.density.optimizeThreshold', () => {
+    const result = validateSetting(
+      'compression.density.optimizeThreshold',
+      Infinity,
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects -Infinity for compression.density.optimizeThreshold', () => {
+    const result = validateSetting(
+      'compression.density.optimizeThreshold',
+      -Infinity,
+    );
+    expect(result.success).toBe(false);
+  });
+
   it('preserves permissive stream-idle-timeout-ms validation for finite values', () => {
     expect(validateSetting('stream-idle-timeout-ms', 60_000).success).toBe(
       true,
@@ -353,15 +404,25 @@ describe('validateSetting — validation', () => {
     expect(validateSetting('stream-idle-timeout-ms', Infinity).success).toBe(
       false,
     );
+    expect(validateSetting('stream-idle-timeout-ms', -Infinity).success).toBe(
+      false,
+    );
+    expect(validateSetting('stream-idle-timeout-ms', NaN).success).toBe(false);
+    expect(validateSetting('stream-idle-timeout-ms', null).success).toBe(false);
+    expect(validateSetting('stream-idle-timeout-ms', undefined).success).toBe(
+      false,
+    );
     expect(validateSetting('stream-idle-timeout-ms', '60000').success).toBe(
       false,
     );
   });
 
   it('surfaces stream-idle-timeout-ms in registry schema/help surfaces', () => {
-    expect(getSettingSpec('stream-idle-timeout-ms')?.key).toBe(
-      'stream-idle-timeout-ms',
-    );
+    const spec = getSettingSpec('stream-idle-timeout-ms');
+    expect(spec?.key).toBe('stream-idle-timeout-ms');
+    expect(spec?.type).toBe('number');
+    expect(spec?.description).toBeTruthy();
+    expect(spec?.persistToProfile).toBe(true);
     expect(getAllSettingKeys()).toContain('stream-idle-timeout-ms');
     expect(getSettingHelp()['stream-idle-timeout-ms']).toBeTruthy();
     expect(getProfilePersistableKeys()).toContain('stream-idle-timeout-ms');

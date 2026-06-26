@@ -83,14 +83,14 @@ export function applyStreamIdleTimeoutSettings(
   config: Pick<Config, 'setEphemeralSetting'>,
   settings: Settings,
 ): void {
-  const settingsRecord = settings as Record<string, unknown>;
-  const camelCaseValue = settingsRecord[STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY];
+  const camelCaseValue = settings.streamIdleTimeoutMs;
   if (camelCaseValue !== undefined) {
     config.setEphemeralSetting(
       STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
       camelCaseValue,
     );
   }
+  const settingsRecord = settings as Record<string, unknown>;
   const hyphenatedValue = settingsRecord[STREAM_IDLE_TIMEOUT_SETTING_KEY];
   if (hyphenatedValue !== undefined) {
     config.setEphemeralSetting(
@@ -109,7 +109,7 @@ interface ProfileEphemeralSettingsInput {
   readonly profileLoadResult: Pick<ProfileLoadResult, 'profileToLoad'>;
 }
 
-export function applyProfileEphemeralSettings(
+export function applyGlobalAndProfileEphemeralSettings(
   input: ProfileEphemeralSettingsInput,
 ): void {
   const {
@@ -121,6 +121,7 @@ export function applyProfileEphemeralSettings(
     profileLoadResult,
   } = input;
 
+  // Global settings must apply even when --provider suppresses profile values.
   applyStreamIdleTimeoutSettings(config, settings);
 
   const profileToLoad = profileLoadResult.profileToLoad;
@@ -430,9 +431,10 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     settingsService.set('emojifilter', profileSettingsWithTools.emojifilter);
   }
 
-  // Apply ephemeral settings from profile (--profile-load or --profile)
-  // Skip ALL profile ephemeral settings if --provider was explicitly specified
-  applyProfileEphemeralSettings(input);
+  // Apply stream idle timeout from settings.json and profile ephemerals.
+  // Global stream idle timeout settings are always applied; profile-specific
+  // ephemeral settings are skipped if --provider was explicitly specified.
+  applyGlobalAndProfileEphemeralSettings(input);
 
   // In non-interactive mode, tool governance is enforced from approval mode,
   // so /set must not override governance-managed keys after step 15.

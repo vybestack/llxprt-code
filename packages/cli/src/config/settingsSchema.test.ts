@@ -19,14 +19,47 @@ import { validateSettings } from './settings-validation.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const generatedSettingsSchemaPath = [
-  resolve(process.cwd(), 'schemas/settings.schema.json'),
-  resolve(process.cwd(), '../../schemas/settings.schema.json'),
-].find((path) => existsSync(path));
+function getGeneratedSettingsSchemaPath(): string {
+  const schemaPath = [
+    resolve(process.cwd(), 'schemas/settings.schema.json'),
+    resolve(process.cwd(), '../../schemas/settings.schema.json'),
+  ].find((path) => existsSync(path));
 
-if (generatedSettingsSchemaPath === undefined) {
-  throw new Error('Unable to locate schemas/settings.schema.json');
+  if (schemaPath === undefined) {
+    throw new Error('Unable to locate schemas/settings.schema.json');
+  }
+
+  return schemaPath;
 }
+
+const generatedSettingsSchemaPath = getGeneratedSettingsSchemaPath();
+
+type GeneratedSettingsSchema = {
+  properties: {
+    model: { anyOf?: Array<{ $ref: string }> };
+    streamIdleTimeoutMs?: {
+      type?: string;
+      default?: number;
+      minimum?: number;
+      maximum?: number;
+    };
+  };
+  $defs: {
+    ModelConfig: {
+      properties: {
+        compressionThreshold: { minimum?: number; maximum?: number };
+      };
+    };
+  };
+};
+
+function getGeneratedSchema(): GeneratedSettingsSchema {
+  return JSON.parse(
+    readFileSync(generatedSettingsSchemaPath, 'utf8'),
+  ) as GeneratedSettingsSchema;
+}
+
+const parsedGeneratedSchema = getGeneratedSchema();
 
 describe('SettingsSchema', () => {
   describe('SETTINGS_SCHEMA', () => {
@@ -64,6 +97,7 @@ describe('SettingsSchema', () => {
         'shouldUseNodePtyShell',
         'allowPtyThemeOverride',
         'ptyScrollbackLimit',
+        'streamIdleTimeoutMs',
       ];
 
       expectedSettings.forEach((setting) => {
@@ -357,31 +391,39 @@ describe('SettingsSchema', () => {
       });
 
       it('should not define minimum or maximum constraints (permissive finite-number intent)', () => {
-        const def = SETTINGS_SCHEMA.streamIdleTimeoutMs as SettingDefinition;
-        expect(def.minimum).toBeUndefined();
-        expect(def.maximum).toBeUndefined();
+        expect('minimum' in SETTINGS_SCHEMA.streamIdleTimeoutMs).toBe(false);
+        expect('maximum' in SETTINGS_SCHEMA.streamIdleTimeoutMs).toBe(false);
       });
 
       it('should default to 0 (watchdog disabled by default)', () => {
         expect(SETTINGS_SCHEMA.streamIdleTimeoutMs.default).toBe(0);
       });
 
-      it('should be present in the generated settings.schema.json as type number without minimum/maximum', () => {
-        const generatedSchema = JSON.parse(
-          readFileSync(generatedSettingsSchemaPath, 'utf8'),
-        ) as {
-          properties: {
-            streamIdleTimeoutMs?: {
-              type?: string;
-              minimum?: number;
-              maximum?: number;
-            };
-          };
-        };
+      it('should accept a positive integer value via validation', () => {
+        const result = validateSettings({ streamIdleTimeoutMs: 5000 });
+        expect(result.success).toBe(true);
+      });
 
-        const setting = generatedSchema.properties.streamIdleTimeoutMs;
+      it('should accept zero (watchdog disabled) via validation', () => {
+        const result = validateSettings({ streamIdleTimeoutMs: 0 });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept a negative value via validation (no minimum constraint)', () => {
+        const result = validateSettings({ streamIdleTimeoutMs: -1 });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept a fractional value via validation (no multipleOf constraint)', () => {
+        const result = validateSettings({ streamIdleTimeoutMs: 0.5 });
+        expect(result.success).toBe(true);
+      });
+
+      it('should be present in the generated settings.schema.json as type number without minimum/maximum', () => {
+        const setting = parsedGeneratedSchema.properties.streamIdleTimeoutMs;
         expect(setting).toBeDefined();
         expect(setting?.type).toBe('number');
+        expect(setting?.default).toBe(0);
         expect(setting?.minimum).toBeUndefined();
         expect(setting?.maximum).toBeUndefined();
       });
@@ -462,28 +504,13 @@ describe('SettingsSchema', () => {
     });
 
     it('should keep generated JSON schema model union consistent with schema definitions', () => {
-      const generatedSchema = JSON.parse(
-        readFileSync(generatedSettingsSchemaPath, 'utf8'),
-      ) as {
-        properties: { model: { anyOf?: Array<{ $ref: string }> } };
-      };
-
-      expect(generatedSchema.properties.model.anyOf).toStrictEqual([
+      expect(parsedGeneratedSchema.properties.model.anyOf).toStrictEqual([
         { $ref: '#/$defs/ModelName' },
         { $ref: '#/$defs/ModelConfig' },
       ]);
-      const modelConfig = (
-        generatedSchema as unknown as {
-          $defs: {
-            ModelConfig: {
-              properties: {
-                compressionThreshold: { minimum?: number; maximum?: number };
-              };
-            };
-          };
-        }
-      ).$defs.ModelConfig;
-      expect(modelConfig.properties.compressionThreshold).toMatchObject({
+      expect(
+        parsedGeneratedSchema.$defs.ModelConfig.properties.compressionThreshold,
+      ).toMatchObject({
         minimum: 0,
         maximum: 1,
       });

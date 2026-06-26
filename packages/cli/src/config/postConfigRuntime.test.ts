@@ -11,7 +11,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 import {
-  applyProfileEphemeralSettings,
+  applyGlobalAndProfileEphemeralSettings,
   applyStreamIdleTimeoutSettings,
 } from './postConfigRuntime.js';
 
@@ -82,12 +82,35 @@ describe('applyStreamIdleTimeoutSettings', () => {
     const negativeConfig = createCapturingConfig();
     applyStreamIdleTimeoutSettings(negativeConfig, { streamIdleTimeoutMs: -1 });
 
+    expect(zeroConfig.getEphemeralSetting('streamIdleTimeoutMs')).toBe(0);
+    expect(negativeConfig.getEphemeralSetting('streamIdleTimeoutMs')).toBe(-1);
     expect(resolveStreamIdleTimeoutMs(zeroConfig)).toBe(0);
     expect(resolveStreamIdleTimeoutMs(negativeConfig)).toBe(0);
   });
+
+  it('preserves numeric string settings and falls through on invalid settings', () => {
+    const stringConfig = createCapturingConfig();
+    applyStreamIdleTimeoutSettings(stringConfig, {
+      streamIdleTimeoutMs: '120000',
+    } as unknown as Settings & Record<string, unknown>);
+
+    const invalidConfig = createCapturingConfig();
+    applyStreamIdleTimeoutSettings(invalidConfig, {
+      streamIdleTimeoutMs: 'abc',
+    } as unknown as Settings & Record<string, unknown>);
+
+    const nanConfig = createCapturingConfig();
+    applyStreamIdleTimeoutSettings(nanConfig, {
+      streamIdleTimeoutMs: Number.NaN,
+    });
+
+    expect(resolveStreamIdleTimeoutMs(stringConfig)).toBe(120_000);
+    expect(resolveStreamIdleTimeoutMs(invalidConfig)).toBe(0);
+    expect(resolveStreamIdleTimeoutMs(nanConfig)).toBe(0);
+  });
 });
 
-describe('applyProfileEphemeralSettings', () => {
+describe('applyGlobalAndProfileEphemeralSettings', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -102,7 +125,7 @@ describe('applyProfileEphemeralSettings', () => {
   it('applies stream idle timeout from profile ephemerals when profile settings are active', () => {
     const config = createCapturingConfig();
 
-    applyProfileEphemeralSettings({
+    applyGlobalAndProfileEphemeralSettings({
       config,
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
@@ -117,7 +140,7 @@ describe('applyProfileEphemeralSettings', () => {
   it('applies profile ephemerals when profileJson is provided without profileToLoad', () => {
     const config = createCapturingConfig();
 
-    applyProfileEphemeralSettings({
+    applyGlobalAndProfileEphemeralSettings({
       config,
       bootstrapArgs: { profileJson: '{"provider":"openai"}' },
       argv: { provider: undefined },
@@ -128,10 +151,11 @@ describe('applyProfileEphemeralSettings', () => {
 
     expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
   });
+
   it('skips stream idle timeout profile ephemerals when provider is explicit', () => {
     const config = createCapturingConfig();
 
-    applyProfileEphemeralSettings({
+    applyGlobalAndProfileEphemeralSettings({
       config,
       bootstrapArgs: { profileJson: null },
       argv: { provider: 'openai' },
@@ -150,7 +174,7 @@ describe('applyProfileEphemeralSettings', () => {
   it('skips profile ephemerals when no profile is active', () => {
     const config = createCapturingConfig();
 
-    applyProfileEphemeralSettings({
+    applyGlobalAndProfileEphemeralSettings({
       config,
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
@@ -167,10 +191,30 @@ describe('applyProfileEphemeralSettings', () => {
     expect(resolveStreamIdleTimeoutMs(config)).toBe(90_000);
   });
 
+  it('skips profile ephemerals when profileToLoad is an empty string', () => {
+    const config = createCapturingConfig();
+
+    applyGlobalAndProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: null },
+      argv: { provider: undefined },
+      settings: { streamIdleTimeoutMs: 90_000 },
+      profileSettingsWithTools: {
+        streamIdleTimeoutMs: 120_000,
+        'auth-key': 'secret',
+      } as Settings & Record<string, unknown>,
+      profileLoadResult: { profileToLoad: '' },
+    });
+
+    expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBe(90_000);
+    expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(resolveStreamIdleTimeoutMs(config)).toBe(90_000);
+  });
+
   it('applies non-timeout ephemeral keys from profile settings', () => {
     const config = createCapturingConfig();
 
-    applyProfileEphemeralSettings({
+    applyGlobalAndProfileEphemeralSettings({
       config,
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
@@ -191,7 +235,7 @@ describe('applyProfileEphemeralSettings', () => {
   it('applies global stream idle timeout when provider is explicit', () => {
     const config = createCapturingConfig();
 
-    applyProfileEphemeralSettings({
+    applyGlobalAndProfileEphemeralSettings({
       config,
       bootstrapArgs: { profileJson: null },
       argv: { provider: 'openai' },
@@ -207,7 +251,7 @@ describe('applyProfileEphemeralSettings', () => {
   it('profile stream idle timeout overrides global when profile is active', () => {
     const config = createCapturingConfig();
 
-    applyProfileEphemeralSettings({
+    applyGlobalAndProfileEphemeralSettings({
       config,
       bootstrapArgs: { profileJson: null },
       argv: { provider: undefined },
