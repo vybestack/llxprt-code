@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Content } from '@google/genai';
+import { type PartListUnion, type Part, type Content } from '@google/genai';
 
 export function isThinkingSupported(model: string) {
   return !model.startsWith('gemini-2.0');
@@ -116,25 +116,61 @@ export function extractPromptText(request: PartListUnion): string {
   return '';
 }
 
-export function estimateTextOnlyLength(request: PartListUnion): number {
-  if (typeof request === 'string') {
-    return request.length;
+/**
+ * Structured, payload-aware token estimate for a pending request, used as a
+ * fallback when the model-aware tokenizer (ChatSession.estimatePendingTokens)
+ * is unavailable — e.g. with minimal test doubles.
+ *
+ * This accounts for `functionResponse` and `functionCall` payloads by
+ * serializing their JSON, so a bare functionResponse continuation is no longer
+ * estimated as 0 tokens. Binary payloads (`inlineData`/`fileData`) are
+ * intentionally ignored so that large base64 blobs do not produce
+ * false-positive overflow estimates.
+ */
+export function estimateRequestTokensStructured(
+  request: PartListUnion,
+): number {
+  const parts = normalizeToParts(request);
+  let charLength = 0;
+  for (const part of parts) {
+    charLength += charLengthForPart(part);
   }
+  return Math.floor(charLength / 4);
+}
 
-  if (!Array.isArray(request)) {
-    if (hasTextProperty(request) && request.text) {
-      return request.text.length;
-    }
+/**
+ * Computes the character length contribution of a single part for the
+ * structured fallback. Returns 0 for binary payloads (inlineData/fileData)
+ * so large base64 blobs do not inflate the estimate.
+ */
+function charLengthForPart(part: Part | string): number {
+  if (typeof part === 'string') {
+    return part.length;
+  }
+  if ('inlineData' in part || 'fileData' in part) {
     return 0;
   }
-
-  let textLength = 0;
-  for (const part of request) {
-    if (typeof part === 'string') {
-      textLength += part.length;
-    } else if (hasTextProperty(part) && part.text) {
-      textLength += part.text.length;
-    }
+  if ('text' in part && typeof part.text === 'string') {
+    return part.text.length;
   }
-  return textLength;
+  if ('functionResponse' in part && part.functionResponse != null) {
+    return safeJsonLength(part.functionResponse);
+  }
+  if ('functionCall' in part && part.functionCall != null) {
+    return safeJsonLength(part.functionCall);
+  }
+  return 0;
+}
+
+function normalizeToParts(request: PartListUnion): Array<Part | string> {
+  if (typeof request === 'string') return [request];
+  return Array.isArray(request) ? request : [request];
+}
+
+function safeJsonLength(value: unknown): number {
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return 0;
+  }
 }
