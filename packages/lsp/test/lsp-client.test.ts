@@ -465,6 +465,29 @@ describe('LspClient diagnostics boundary normalization', () => {
     expect(warning?.line).toBe(2);
   });
 
+  it('waitForDiagnostics maps info and hint severities to strings', async () => {
+    const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile(
+      '/workspace/src/norm-info-hint.ts',
+      ['// INFO', '// HINT'].join('\n'),
+    );
+
+    const diagnostics = await client.waitForDiagnostics(
+      '/workspace/src/norm-info-hint.ts',
+      2000,
+    );
+
+    const info = diagnostics.find((d) => d.message.includes('info'));
+    const hint = diagnostics.find((d) => d.message.includes('hint'));
+    expect(info?.severity).toBe('info');
+    expect(info?.code).toBe('FAKE3001');
+    expect(hint?.severity).toBe('hint');
+    expect(hint?.code).toBe('FAKE4001');
+  });
+
   it('waitForDiagnostics drops malformed diagnostics at the client boundary', async () => {
     const client = createLspClient(createConfig(), WORKSPACE_ROOT);
     createdClients.push(client);
@@ -647,6 +670,20 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       );
       expect(Array.isArray(symbols)).toBe(true);
       expect(client.isAlive()).toBe(true);
+    });
+
+    it('documentSymbols preserves numeric symbol kinds from the LSP server', async () => {
+      const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/symbol-kind.ts', 'const x = 1;');
+
+      const symbols = await client.documentSymbols(
+        '/workspace/src/symbol-kind.ts',
+      );
+
+      expect(symbols[0]?.kind).toBe(12);
     });
 
     it('uses DEFAULT_REQUEST_TIMEOUT_MS (30s) when no requestTimeoutMs is configured', () => {

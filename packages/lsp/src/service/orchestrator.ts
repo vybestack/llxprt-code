@@ -54,13 +54,11 @@ const toLspLocation = (location: Location): LspLocation => {
 };
 
 const toLspDocumentSymbol = (symbol: DocumentSymbol): LspDocumentSymbol => {
-  const numericKind = Number.parseInt(symbol.kind, 10);
-  const kind = Number.isFinite(numericKind) ? numericKind : 0;
   const position = { line: symbol.line, character: symbol.char };
   const range = { start: position, end: position };
   return {
     name: symbol.name,
-    kind,
+    kind: symbol.kind,
     range,
     selectionRange: range,
   };

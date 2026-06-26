@@ -160,6 +160,30 @@ function createDiagnosticsForText(text: string): Diagnostic[] {
         },
       });
     }
+
+    if (line.includes('INFO')) {
+      diagnostics.push({
+        message: 'Simulated info',
+        severity: 3,
+        code: 'FAKE3001',
+        range: {
+          start: { line: index, character: 0 },
+          end: { line: index, character: Math.max(1, line.length) },
+        },
+      });
+    }
+
+    if (line.includes('HINT')) {
+      diagnostics.push({
+        message: 'Simulated hint',
+        severity: 4,
+        code: 'FAKE4001',
+        range: {
+          start: { line: index, character: 0 },
+          end: { line: index, character: Math.max(1, line.length) },
+        },
+      });
+    }
   }
 
   return diagnostics;
@@ -317,7 +341,16 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
     send({
       jsonrpc: '2.0',
       id: message.id,
-      result: [],
+      result: [
+        {
+          name: 'fakeSymbol',
+          kind: 12,
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 10 },
+          },
+        },
+      ],
     });
     return;
   }

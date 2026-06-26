@@ -368,15 +368,13 @@ describe('main channel wiring', () => {
     const mod = await import('../src/main.js');
     await mod.main();
 
-    expect(createOrchestrator.mock.calls[0]?.[0]).toMatchObject({
-      servers: [
-        {
-          id: 'tsserver',
-          command: 'typescript-language-server',
-          extensions: [],
-        },
-      ],
-    });
+    expect(createOrchestrator.mock.calls[0]?.[0].servers).toEqual([
+      {
+        id: 'tsserver',
+        command: 'typescript-language-server',
+        extensions: [],
+      },
+    ]);
   });
 
   it('navigationTools false skips mcp', async () => {
