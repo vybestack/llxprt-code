@@ -158,9 +158,10 @@ export function logMigrationStatus(
   result: MigrationResult,
 ): void {
   if (result.migrated) {
-    logger.debug(
+    process.stderr.write(
       `Configuration migrated successfully (${result.filesCopied} files copied). ` +
-        `The old directory at ${legacyDir} can be removed manually once verified.`,
+        `The old directory at ${legacyDir} can be removed manually once verified.
+`,
     );
   }
 }
@@ -228,6 +229,7 @@ function copyDirFiltered(
       count++;
     } else if (entry.isSymbolicLink()) {
       createSymlinkClone(srcPath, destPath);
+      count++;
     }
   }
 

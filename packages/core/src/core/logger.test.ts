@@ -23,6 +23,7 @@ import {
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import type { Content } from '@google/genai';
 import { debugLogger } from '../utils/debugLogger.js';
 
@@ -31,6 +32,14 @@ import crypto from 'node:crypto';
 const TMP_DIR_NAME = 'tmp';
 const LOG_FILE_NAME = 'logs.json';
 const CHECKPOINT_FILE_NAME = 'checkpoint.json';
+
+// Set a test-specific config home before any Storage call so
+// getGlobalLlxprtDir resolves inside the sandbox, not the real user dir.
+const TEST_CONFIG_HOME = path.join(
+  os.tmpdir(),
+  `llxprt-logger-test-${process.pid}`,
+);
+process.env['LLXPRT_CONFIG_HOME'] = TEST_CONFIG_HOME;
 
 const projectDir = process.cwd();
 const hash = crypto.createHash('sha256').update(projectDir).digest('hex');
@@ -97,6 +106,9 @@ describe('Logger', () => {
   afterAll(async () => {
     // Final cleanup
     await cleanupLogAndCheckpointFiles();
+    await fs
+      .rm(TEST_CONFIG_HOME, { recursive: true, force: true })
+      .catch(() => {});
   });
 
   describe('initialize', () => {
