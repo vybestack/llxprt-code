@@ -130,6 +130,8 @@ import {
   setupSessionRecording,
 } from './cliSessionBootstrap.js';
 import type { SessionRecordingSetup } from './cliSessionBootstrap.js';
+import { createForegroundAgent } from './cliAgentBootstrap.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -228,7 +230,10 @@ function handleError(error: Error, errorInfo: ErrorInfo) {
  * @pseudocode recording-integration.md lines 115-132
  */
 export async function startInteractiveUI(
+  // `config` remains a temporary migration bridge alongside the Agent until the
+  // remaining UI Config consumers are migrated (see #1595).
   config: Config,
+  agent: Agent,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
@@ -274,6 +279,7 @@ export async function startInteractiveUI(
         <SettingsContext.Provider value={settings}>
           <AppWrapper
             config={config}
+            agent={agent}
             settings={settings}
             runtimeMessageBus={runtimeMessageBus}
             startupWarnings={startupWarnings}
@@ -394,11 +400,15 @@ async function dispatchInteractiveOrNonInteractive({
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-    // Fire SessionStart hook for interactive mode
-    await triggerSessionStartHook(config, SessionStartSource.Startup);
+    // Create the single interactive Agent at the composition root. `fromConfig`
+    // fires the SessionStart hook internally via the same core hook, so the
+    // interactive branch no longer fires it explicitly (the non-interactive
+    // branch keeps its own explicit call since it builds no Agent).
+    const agent = await createForegroundAgent({ config, sessionMessageBus });
 
     await startInteractiveUI(
       config,
+      agent,
       settings,
       startupWarnings,
       workspaceRoot,

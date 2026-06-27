@@ -24,6 +24,7 @@ import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import { getCliVersion } from './utils/version.js';
+import { createForegroundAgent } from './cliAgentBootstrap.js';
 
 // Custom error to identify mock process.exit calls
 class MockProcessExitError extends Error {
@@ -145,6 +146,14 @@ vi.mock('./utils/cleanup.js', () => ({
 
 vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
+}));
+
+// Mock the Agent composition root so interactive-path tests do not construct a
+// real Agent via fromConfig (which would require a fully wired Config).
+vi.mock('./cliAgentBootstrap.js', () => ({
+  createForegroundAgent: vi.fn(async () => ({
+    dispose: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 vi.mock('./ui/utils/mouse.js', () => ({
@@ -505,6 +514,13 @@ describe('cli.tsx main function', () => {
 
     const { render } = await import('ink');
     expect(vi.mocked(render)).toHaveBeenCalledTimes(1);
+
+    // The interactive path creates exactly one Agent at the composition root,
+    // adopting the existing Config.
+    expect(vi.mocked(createForegroundAgent)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(createForegroundAgent)).toHaveBeenCalledWith(
+      expect.objectContaining({ config: mockConfig }),
+    );
 
     // Avoid the process.exit error from being thrown in later tests.
     processExitSpy.mockRestore();

@@ -14,6 +14,7 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
 import { UIStateProvider } from './contexts/UIStateContext.js';
@@ -40,6 +41,11 @@ const debug = new DebugLogger('llxprt:ui:appcontainer');
 
 export interface AppContainerRuntimeProps {
   config: Config;
+  /**
+   * The single interactive Agent threaded from the composition root.
+   * `config` remains a temporary migration bridge (see #1595).
+   */
+  agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
