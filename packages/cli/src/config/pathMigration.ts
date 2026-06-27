@@ -204,18 +204,6 @@ export function performMigration(
         !entry.isSymbolicLink()
       ) {
         filesCopied += migrateTmpDir(legacyDir, destinations, visited);
-      } else if (entry.isSymbolicLink()) {
-        const destDir = getDestDir(category, destinations);
-        fs.mkdirSync(destDir, { recursive: true });
-        const srcPath = path.join(legacyDir, entry.name);
-        const destPath = path.join(destDir, entry.name);
-        filesCopied += copyEntry(
-          srcPath,
-          destPath,
-          legacyDir,
-          destDir,
-          visited,
-        );
       } else {
         const destDir = getDestDir(category, destinations);
         fs.mkdirSync(destDir, { recursive: true });
