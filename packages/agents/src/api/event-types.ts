@@ -55,6 +55,8 @@ export type AgentToolResult = Readonly<{
   name: string;
   output?: unknown;
   isError?: boolean;
+  display?: unknown;
+  suppressDisplay?: boolean;
 }>;
 
 export type ToolConfirmation = Readonly<{

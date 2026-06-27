@@ -32,7 +32,8 @@ import type { LoadedSettings } from './config/settings.js';
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
-import { processResponseTurns } from './nonInteractiveCliSupport.js';
+import { processAgentStream } from './nonInteractiveCliSupport.js';
+import { fromConfig } from '@vybestack/llxprt-code-agents';
 import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
@@ -233,28 +234,38 @@ async function processQuery(
     startTime: number;
   },
 ): Promise<void> {
-  await processResponseTurns(
-    query,
-    {
-      config: params.config,
-      abortController: options.abortController,
-      prompt_id: params.prompt_id,
-      jsonOutput: options.jsonOutput,
-      streamJsonOutput: options.streamJsonOutput,
-      streamFormatter: options.streamFormatter,
-      emojiFilter: options.emojiFilter,
-      runtimeMessageBus: params.runtimeMessageBus,
-      createProfileNameWriter: () =>
-        createProfileNameWriter(
-          params.config,
-          options.jsonOutput,
-          options.streamFormatter,
-        ),
-      maxSessionTurns: params.config.getMaxSessionTurns(),
-    },
-    options.startTime,
-    () => uiTelemetryService.getMetrics(),
-  );
+  const agent = await fromConfig({
+    config: params.config,
+    messageBus: params.runtimeMessageBus,
+    sessionId: params.config.getSessionId(),
+  });
+  try {
+    const eventStream = agent.stream(query, {
+      signal: options.abortController.signal,
+      promptId: params.prompt_id,
+      maxTurns: params.config.getMaxSessionTurns(),
+    });
+    await processAgentStream(
+      eventStream,
+      {
+        config: params.config,
+        jsonOutput: options.jsonOutput,
+        streamJsonOutput: options.streamJsonOutput,
+        streamFormatter: options.streamFormatter,
+        emojiFilter: options.emojiFilter,
+        createProfileNameWriter: () =>
+          createProfileNameWriter(
+            params.config,
+            options.jsonOutput,
+            options.streamFormatter,
+          ),
+      },
+      options.startTime,
+      () => uiTelemetryService.getMetrics(),
+    );
+  } finally {
+    await agent.dispose();
+  }
 }
 
 export async function runNonInteractive(

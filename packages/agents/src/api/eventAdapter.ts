@@ -79,6 +79,10 @@ function projectToolResult(
         x.status === 'error' ||
         (x.status === 'cancelled' &&
           x.outcome === ToolConfirmationOutcome.Cancel),
+      ...(x.response.resultDisplay !== undefined
+        ? { display: x.response.resultDisplay }
+        : {}),
+      ...(x.response.suppressDisplay === true ? { suppressDisplay: true } : {}),
     };
   }
   return {
@@ -86,6 +90,8 @@ function projectToolResult(
     name: '',
     output: x.responseParts,
     isError: x.error !== undefined,
+    ...(x.resultDisplay !== undefined ? { display: x.resultDisplay } : {}),
+    ...(x.suppressDisplay === true ? { suppressDisplay: true } : {}),
   };
 }
 

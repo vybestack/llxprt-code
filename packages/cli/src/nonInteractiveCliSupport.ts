@@ -1,78 +1,34 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import {
   type Config,
-  type ToolCallRequestInfo,
-  GeminiEventType,
   JsonStreamEventType,
-  type MessageBus,
-  type ServerGeminiStreamEvent,
-  StreamIdleTimeoutError,
-  FatalTurnLimitedError,
-  debugLogger,
-  nextStreamEventWithIdleTimeout,
-  resolveStreamIdleTimeoutMs,
   type StreamJsonFormatter,
   type EmojiFilter,
   type SessionMetrics,
+  FatalTurnLimitedError,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
-import type { Part } from '@google/genai';
-import { executeToolCall } from '@vybestack/llxprt-code-agents';
+import type {
+  AgentEvent,
+  AgentToolResult,
+} from '@vybestack/llxprt-code-agents';
 
-type RuntimeToolCallRequest = Omit<ToolCallRequestInfo, 'args' | 'callId'> & {
-  args: unknown;
-  callId?: string;
-};
-
-type ResponseProcessingContext = {
+type StreamConsumerContext = {
   config: Config;
-  abortController: AbortController;
-  prompt_id: string;
   jsonOutput: boolean;
   streamJsonOutput: boolean;
   streamFormatter: StreamJsonFormatter | null;
   emojiFilter: EmojiFilter | undefined;
-  runtimeMessageBus?: MessageBus;
   createProfileNameWriter: () => () => void;
-  maxSessionTurns: number;
 };
 
-type TurnResult =
-  | { kind: 'continue'; messages: Part[]; jsonResponseText: string }
-  | { kind: 'complete'; jsonResponseText: string; emitFinal: boolean };
-
-function normalizeToolCallArgs(args: unknown): Record<string, unknown> {
-  if (typeof args === 'object' && args !== null && !Array.isArray(args)) {
-    return args as Record<string, unknown>;
-  }
-  return {};
-}
-
-function normalizeRequestArgs(
-  rawArgs: unknown,
-  toolName: string,
-): Record<string, unknown> {
-  if (typeof rawArgs === 'string') {
-    try {
-      const parsed = JSON.parse(rawArgs) as unknown;
-      return typeof parsed === 'object' && parsed !== null
-        ? (parsed as Record<string, unknown>)
-        : {};
-    } catch (error) {
-      debugLogger.error(
-        `Failed to parse tool arguments for ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return {};
-    }
-  }
-  if (Array.isArray(rawArgs)) {
-    debugLogger.error(
-      `Unexpected array arguments for tool ${toolName}; coercing to empty object.`,
-    );
-    return {};
-  }
-  return typeof rawArgs === 'object' && rawArgs !== null
-    ? (rawArgs as Record<string, unknown>)
-    : {};
-}
+const MAX_TURNS_MESSAGE =
+  'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.';
 
 function formatThoughtText(thought: {
   subject?: string;
@@ -97,18 +53,54 @@ function emitStreamError(
   });
 }
 
-function handleThoughtEvent(
-  event: ServerGeminiStreamEvent,
-  context: ResponseProcessingContext,
+function flushThoughtBuffer(
+  thoughtBuffer: string,
+  includeThinking: boolean,
+): string {
+  if (!includeThinking || !thoughtBuffer.trim()) {
+    return '';
+  }
+  process.stdout.write(`<think>${thoughtBuffer.trim()}</think>\n`);
+  return '';
+}
+
+function flushEmojiBuffer(
+  context: StreamConsumerContext,
+  jsonResponseText: string,
+): string {
+  const remainingBuffered = context.emojiFilter?.flushBuffer();
+  if (!remainingBuffered) {
+    return jsonResponseText;
+  }
+  if (context.streamFormatter) {
+    context.streamFormatter.emitEvent({
+      type: JsonStreamEventType.MESSAGE,
+      timestamp: new Date().toISOString(),
+      role: 'assistant',
+      content: remainingBuffered,
+      delta: true,
+    });
+    return jsonResponseText;
+  }
+  if (context.jsonOutput) {
+    return jsonResponseText + remainingBuffered;
+  }
+  process.stdout.write(remainingBuffered);
+  return jsonResponseText;
+}
+
+function handleThinking(
+  thought: { subject?: string; description?: string },
+  context: StreamConsumerContext,
   writeProfileName: () => void,
   thoughtBuffer: string,
   includeThinking: boolean,
 ): string {
-  if (event.type !== GeminiEventType.Thought || !includeThinking) {
+  if (!includeThinking) {
     return thoughtBuffer;
   }
   writeProfileName();
-  let thoughtText = formatThoughtText(event.value);
+  let thoughtText = formatThoughtText(thought);
   if (!thoughtText.trim()) {
     return thoughtBuffer;
   }
@@ -124,17 +116,14 @@ function handleThoughtEvent(
   return thoughtBuffer ? `${thoughtBuffer} ${thoughtText}` : thoughtText;
 }
 
-function handleContentEvent(
-  event: ServerGeminiStreamEvent,
-  context: ResponseProcessingContext,
+function handleText(
+  text: string,
+  context: StreamConsumerContext,
   writeProfileName: () => void,
   jsonResponseText: string,
 ): string {
-  if (event.type !== GeminiEventType.Content) {
-    return jsonResponseText;
-  }
   writeProfileName();
-  let outputValue = event.value;
+  let outputValue = text;
   if (context.emojiFilter) {
     const filterResult = context.emojiFilter.filterStreamChunk(outputValue);
     if (filterResult.blocked) {
@@ -170,215 +159,80 @@ function handleContentEvent(
   return jsonResponseText;
 }
 
-function collectToolCall(
-  event: ServerGeminiStreamEvent,
-  functionCalls: RuntimeToolCallRequest[],
+function emitToolUse(
+  call: { id: string; name: string; args: Readonly<Record<string, unknown>> },
   formatter: StreamJsonFormatter | null,
 ): void {
-  if (event.type !== GeminiEventType.ToolCallRequest) {
-    return;
-  }
-  const toolCallRequest = event.value as RuntimeToolCallRequest;
-  const callId =
-    toolCallRequest.callId ?? `${toolCallRequest.name}-${Date.now()}`;
   formatter?.emitEvent({
     type: JsonStreamEventType.TOOL_USE,
     timestamp: new Date().toISOString(),
-    tool_name: toolCallRequest.name,
-    tool_id: callId,
-    parameters: normalizeToolCallArgs(toolCallRequest.args),
+    tool_name: call.name,
+    tool_id: call.id,
+    parameters: { ...call.args },
   });
-  functionCalls.push({
-    ...toolCallRequest,
-    callId,
-    args: toolCallRequest.args,
-    agentId: toolCallRequest.agentId ?? 'primary',
-  });
-}
-
-function handleControlEvent(
-  event: ServerGeminiStreamEvent,
-  formatter: StreamJsonFormatter | null,
-): void {
-  if (event.type === GeminiEventType.LoopDetected) {
-    emitStreamError(formatter, 'warning', 'Loop detected, stopping execution');
-  } else if (event.type === GeminiEventType.MaxSessionTurns) {
-    emitStreamError(formatter, 'error', 'Maximum session turns exceeded');
-  } else if (event.type === GeminiEventType.Error) {
-    throw event.value.error;
-  } else if (event.type === GeminiEventType.AgentExecutionStopped) {
-    const stopMessage = `Agent execution stopped: ${event.systemMessage?.trim() ?? event.reason}`;
-    process.stderr.write(`${stopMessage}\n`);
-  } else if (event.type === GeminiEventType.AgentExecutionBlocked) {
-    const blockMessage = `Agent execution blocked: ${event.systemMessage?.trim() ?? event.reason}`;
-    process.stderr.write(`[WARNING] ${blockMessage}\n`);
-  }
-}
-
-async function nextStreamEvent(
-  iterator: AsyncIterator<ServerGeminiStreamEvent>,
-  context: ResponseProcessingContext,
-): Promise<IteratorResult<ServerGeminiStreamEvent>> {
-  const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(context.config);
-  if (effectiveTimeoutMs <= 0) {
-    return iterator.next();
-  }
-  return nextStreamEventWithIdleTimeout({
-    iterator,
-    timeoutMs: effectiveTimeoutMs,
-    signal: context.abortController.signal,
-  });
-}
-
-function handleStreamReadError(
-  error: unknown,
-  context: ResponseProcessingContext,
-): void {
-  if (error instanceof StreamIdleTimeoutError) {
-    context.abortController.abort();
-    debugLogger.error('Operation cancelled.');
-    emitStreamError(
-      context.streamFormatter,
-      'error',
-      'Stream idle timeout: no response received within the allowed time.',
-    );
-  }
-}
-
-function flushThoughtBuffer(
-  thoughtBuffer: string,
-  includeThinking: boolean,
-): string {
-  if (!includeThinking || !thoughtBuffer.trim()) {
-    return '';
-  }
-  process.stdout.write(`<think>${thoughtBuffer.trim()}</think>\n`);
-  return '';
-}
-
-function flushEmojiBuffer(
-  context: ResponseProcessingContext,
-  jsonResponseText: string,
-): string {
-  const remainingBuffered = context.emojiFilter?.flushBuffer();
-  if (!remainingBuffered) {
-    return jsonResponseText;
-  }
-  if (context.streamFormatter) {
-    context.streamFormatter.emitEvent({
-      type: JsonStreamEventType.MESSAGE,
-      timestamp: new Date().toISOString(),
-      role: 'assistant',
-      content: remainingBuffered,
-      delta: true,
-    });
-    return jsonResponseText;
-  }
-  if (context.jsonOutput) {
-    return jsonResponseText + remainingBuffered;
-  }
-  process.stdout.write(remainingBuffered);
-  return jsonResponseText;
-}
-
-async function handleToolCalls(
-  requests: RuntimeToolCallRequest[],
-  context: ResponseProcessingContext,
-): Promise<Part[]> {
-  const toolResponseParts: Part[] = [];
-  for (const requestFromModel of requests) {
-    const requestInfo: ToolCallRequestInfo = {
-      callId:
-        requestFromModel.callId ?? `${requestFromModel.name}-${Date.now()}`,
-      name: requestFromModel.name,
-      args: normalizeRequestArgs(requestFromModel.args, requestFromModel.name),
-      isClientInitiated: false,
-      prompt_id: requestFromModel.prompt_id,
-      agentId: requestFromModel.agentId ?? 'primary',
-    };
-    const completed = await executeToolCall(
-      context.config,
-      requestInfo,
-      context.abortController.signal,
-      { messageBus: context.runtimeMessageBus },
-    );
-    emitToolResult(
-      requestInfo.callId,
-      completed.response,
-      context.streamFormatter,
-    );
-    displayToolResult(requestFromModel.name, completed.response, context);
-    toolResponseParts.push(...completed.response.responseParts);
-  }
-  return toolResponseParts;
 }
 
 function emitToolResult(
-  toolId: string,
-  toolResponse: Awaited<ReturnType<typeof executeToolCall>>['response'],
+  result: AgentToolResult,
   formatter: StreamJsonFormatter | null,
 ): void {
   const output =
-    typeof toolResponse.resultDisplay === 'string'
-      ? toolResponse.resultDisplay
+    typeof result.display === 'string' ? result.display : undefined;
+  const error =
+    result.isError === true
+      ? {
+          type: 'TOOL_EXECUTION_ERROR',
+          message:
+            typeof result.display === 'string'
+              ? result.display
+              : `${result.name} failed`,
+        }
       : undefined;
-  const error = toolResponse.error
-    ? {
-        type: toolResponse.errorType ?? 'TOOL_EXECUTION_ERROR',
-        message: toolResponse.error.message,
-      }
-    : undefined;
   formatter?.emitEvent({
     type: JsonStreamEventType.TOOL_RESULT,
     timestamp: new Date().toISOString(),
-    tool_id: toolId,
-    status: toolResponse.error ? 'error' : 'success',
+    tool_id: result.id,
+    status: result.isError === true ? 'error' : 'success',
     output,
     error,
   });
 }
 
 function shouldDisplayToolResult(
-  toolResponse: Awaited<ReturnType<typeof executeToolCall>>['response'],
-  context: ResponseProcessingContext,
+  result: AgentToolResult,
+  context: StreamConsumerContext,
 ): boolean {
-  if (context.jsonOutput !== false || context.streamJsonOutput !== false) {
+  if (context.jsonOutput || context.streamJsonOutput) {
     return false;
   }
-  if (toolResponse.suppressDisplay === true) {
+  if (result.suppressDisplay === true) {
     return false;
   }
-  return (
-    typeof toolResponse.resultDisplay === 'string' &&
-    toolResponse.resultDisplay.length !== 0
-  );
+  return typeof result.display === 'string' && result.display.length > 0;
 }
 
 function displayToolResult(
-  toolName: string,
-  toolResponse: Awaited<ReturnType<typeof executeToolCall>>['response'],
-  context: ResponseProcessingContext,
+  result: AgentToolResult,
+  context: StreamConsumerContext,
 ): void {
-  if (toolResponse.error != null) {
-    if (context.jsonOutput === false && context.streamJsonOutput === false) {
-      const display = toolResponse.resultDisplay;
-      const hasDisplay =
-        typeof display === 'string' ? display.length > 0 : display != null;
-      debugLogger.error(
-        `Error executing tool ${toolName}: ${
-          hasDisplay ? display : toolResponse.error.message
-        }`,
-      );
+  if (result.isError === true) {
+    if (!context.jsonOutput && !context.streamJsonOutput) {
+      const display = result.display;
+      const msg =
+        typeof display === 'string' && display.length > 0
+          ? display
+          : `${result.name} failed`;
+      debugLogger.error(`Error executing tool ${result.name}: ${msg}`);
     }
     return;
   }
-  if (shouldDisplayToolResult(toolResponse, context)) {
-    process.stdout.write(`${toolResponse.resultDisplay}\n`);
+  if (shouldDisplayToolResult(result, context)) {
+    process.stdout.write(`${result.display}\n`);
   }
 }
 
 function emitFinalResult(
-  context: ResponseProcessingContext,
+  context: StreamConsumerContext,
   jsonResponseText: string,
   startTime: number,
   metrics: SessionMetrics,
@@ -410,120 +264,127 @@ function emitFinalResult(
   }
 }
 
-function assertTurnLimit(turnCount: number, maxSessionTurns: number): void {
-  if (maxSessionTurns >= 0 && turnCount > maxSessionTurns) {
-    throw new FatalTurnLimitedError(
-      'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
-    );
+/**
+ * Rebuilds an Error from a public StructuredError so the caller's catch
+ * (parseAndFormatApiError) receives an Error instance, matching the legacy
+ * GeminiEventType.Error throw path. The optional HTTP status is preserved as a
+ * property without a type assertion.
+ */
+function reconstructError(structured: {
+  readonly message: string;
+  readonly status?: number;
+}): Error {
+  const err: Error & { status?: number } = new Error(structured.message);
+  if (structured.status !== undefined) {
+    err.status = structured.status;
+  }
+  return err;
+}
+
+function handleDone(
+  event: Extract<AgentEvent, { type: 'done' }>,
+  context: StreamConsumerContext,
+  jsonResponseText: string,
+  startTime: number,
+  getMetrics: () => SessionMetrics,
+): void {
+  switch (event.reason) {
+    case 'stop':
+    case 'loop-detected':
+    case 'context-overflow':
+      emitFinalResult(context, jsonResponseText, startTime, getMetrics());
+      return;
+    case 'hook-stopped': {
+      const stop = event.stop;
+      const stopMessage = `Agent execution stopped: ${
+        stop?.systemMessage?.trim() ?? stop?.reason ?? ''
+      }`;
+      process.stderr.write(`${stopMessage}\n`);
+      return;
+    }
+    case 'aborted':
+      debugLogger.error('Operation cancelled.');
+      return;
+    case 'max-turns':
+      throw new FatalTurnLimitedError(MAX_TURNS_MESSAGE);
+    case 'error':
+      throw new Error('Agent execution failed');
+    default:
+      return;
   }
 }
 
-export async function processResponseTurns(
-  initialMessages: Part[],
-  context: ResponseProcessingContext,
+/**
+ * Consumes a public {@link AgentEvent} stream produced by `agent.stream()` and
+ * maps each event onto the existing non-interactive output helpers (stdout
+ * write, JSON accumulation, stream-JSON emission), preserving the user-visible
+ * output, exit-code, and stderr behavior of the legacy manual turn loop.
+ */
+export async function processAgentStream(
+  events: AsyncIterable<AgentEvent>,
+  context: StreamConsumerContext,
   startTime: number,
   getMetrics: () => SessionMetrics,
 ): Promise<void> {
-  let currentMessages = initialMessages;
-  let turnCount = 0;
-  let jsonResponseText = '';
-  for (;;) {
-    turnCount++;
-    assertTurnLimit(turnCount, context.maxSessionTurns);
-    const result = await processOneTurn(
-      currentMessages,
-      context,
-      jsonResponseText,
-    );
-    if (result.kind === 'continue') {
-      currentMessages = result.messages;
-      jsonResponseText = result.jsonResponseText;
-    } else {
-      if (result.emitFinal) {
-        emitFinalResult(
-          context,
-          result.jsonResponseText,
-          startTime,
-          getMetrics(),
-        );
-      }
-      return;
-    }
-  }
-}
-
-async function processOneTurn(
-  currentMessages: Part[],
-  context: ResponseProcessingContext,
-  jsonResponseText: string,
-): Promise<TurnResult> {
-  const functionCalls: RuntimeToolCallRequest[] = [];
   const writeProfileName = context.createProfileNameWriter();
-  let thoughtBuffer = '';
   const includeThinking =
     !context.jsonOutput &&
     !context.streamJsonOutput &&
     context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
-  const responseIterator = context.config
-    .getAgentClient()
-    .sendMessageStream(
-      currentMessages,
-      context.abortController.signal,
-      context.prompt_id,
-    )
-    [Symbol.asyncIterator]();
-  for (;;) {
-    let nextEvent: IteratorResult<ServerGeminiStreamEvent>;
-    try {
-      nextEvent = await nextStreamEvent(responseIterator, context);
-    } catch (error) {
-      if (context.abortController.signal.aborted) {
-        debugLogger.error('Operation cancelled.');
-        return { kind: 'complete', jsonResponseText, emitFinal: false };
-      }
-      handleStreamReadError(error, context);
-      throw error;
-    }
-    if (nextEvent.done === true) {
-      break;
-    }
-    if (context.abortController.signal.aborted) {
-      debugLogger.error('Operation cancelled.');
-      return { kind: 'complete', jsonResponseText, emitFinal: false };
-    }
-    thoughtBuffer = handleThoughtEvent(
-      nextEvent.value,
-      context,
-      writeProfileName,
-      thoughtBuffer,
-      includeThinking,
-    );
-    if (nextEvent.value.type === GeminiEventType.Content) {
-      thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
-      jsonResponseText = handleContentEvent(
-        nextEvent.value,
-        context,
-        writeProfileName,
-        jsonResponseText,
-      );
-    } else if (nextEvent.value.type === GeminiEventType.ToolCallRequest) {
-      thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
-      collectToolCall(nextEvent.value, functionCalls, context.streamFormatter);
-    } else {
-      handleControlEvent(nextEvent.value, context.streamFormatter);
-      if (nextEvent.value.type === GeminiEventType.AgentExecutionStopped) {
-        return { kind: 'complete', jsonResponseText, emitFinal: false };
-      }
+  let thoughtBuffer = '';
+  let jsonResponseText = '';
+
+  for await (const event of events) {
+    switch (event.type) {
+      case 'thinking':
+        thoughtBuffer = handleThinking(
+          event.thought,
+          context,
+          writeProfileName,
+          thoughtBuffer,
+          includeThinking,
+        );
+        break;
+      case 'text':
+        thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
+        jsonResponseText = handleText(
+          event.text,
+          context,
+          writeProfileName,
+          jsonResponseText,
+        );
+        break;
+      case 'tool-call':
+        thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
+        emitToolUse(event.call, context.streamFormatter);
+        break;
+      case 'tool-result':
+        thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
+        emitToolResult(event.result, context.streamFormatter);
+        displayToolResult(event.result, context);
+        break;
+      case 'loop-detected':
+        emitStreamError(
+          context.streamFormatter,
+          'warning',
+          'Loop detected, stopping execution',
+        );
+        break;
+      case 'error':
+        throw reconstructError(event.error);
+      case 'done':
+        thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
+        jsonResponseText = flushEmojiBuffer(context, jsonResponseText);
+        handleDone(event, context, jsonResponseText, startTime, getMetrics);
+        return;
+      default:
+        break;
     }
   }
-  flushThoughtBuffer(thoughtBuffer, includeThinking);
+
+  // Defensive: emit a final result if the stream ended without a terminal
+  // done event (the Agent stream always ends with one, but guard regardless).
+  thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
   jsonResponseText = flushEmojiBuffer(context, jsonResponseText);
-  if (functionCalls.length === 0) {
-    return { kind: 'complete', jsonResponseText, emitFinal: true };
-  }
-  return {
-    kind: 'continue',
-    messages: await handleToolCalls(functionCalls, context),
-    jsonResponseText,
-  };
+  emitFinalResult(context, jsonResponseText, startTime, getMetrics());
 }
