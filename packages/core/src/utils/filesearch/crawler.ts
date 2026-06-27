@@ -117,6 +117,8 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
       });
 
     if (options.maxDepth !== undefined) {
+      // fdir counts the root directory as depth 0, so caller-facing maxDepth
+      // values must be shifted to describe descendant levels below the root.
       api.withMaxDepth(options.maxDepth + 1);
     }
 

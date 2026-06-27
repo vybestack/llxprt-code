@@ -18,7 +18,7 @@
  * success condition.
  *
  * Scenarios (mirroring pseudocode cli-integration-adapter.md lines 10-34):
- *   T1  — fromConfig adopts the external Config: getConfig() === config identity,
+ *   T1  — fromConfig adopts the external Config: internalConfig(agent) === config identity,
  *         getRuntimeId() is a non-empty string, and agent.stream('hello') ends
  *         with exactly one terminal done.
  *   T6  — runtime reuse: the adopted Config's active provider/model are reflected
@@ -39,11 +39,16 @@ import {
 } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { drain, countType, buildAgent } from './helpers/agentHarness.js';
+import {
+  drain,
+  countType,
+  buildAgent,
+  internalConfig,
+} from './helpers/agentHarness.js';
 import { captureProbe, agentClientDisposed } from './helpers/disposalProbe.js';
 
 describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirement:REQ-INT-001', () => {
-  it('T1 fromConfig adopts the external Config: getConfig() identity, non-empty runtimeId, single terminal done (REQ-INT-001)', async () => {
+  it('T1 fromConfig adopts the external Config: internalConfig() identity, non-empty runtimeId, single terminal done (REQ-INT-001)', async () => {
     const built = await buildCliStyleConfig('parity-toolcall.jsonl');
     try {
       const config = built.config;
@@ -55,7 +60,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       });
 
       // REQ-INT-001: the adopted Config is the SAME instance.
-      expect(agent.getConfig()).toBe(config);
+      expect(internalConfig(agent)).toBe(config);
 
       // REQ-INT-001: the agent reports a non-empty runtime id.
       const id = agent.getRuntimeId();
@@ -148,7 +153,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     );
   }, 30000);
 
-  it('PROP adoption identity: for any non-empty sessionId, getConfig() === the caller-supplied Config (REQ-INT-001)', async () => {
+  it('PROP adoption identity: for any non-empty sessionId, internalConfig(agent) === the caller-supplied Config (REQ-INT-001)', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.string({ minLength: 1, maxLength: 40 }),
@@ -159,7 +164,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
               config: built.config,
               sessionId,
             });
-            return agent.getConfig() === built.config;
+            return internalConfig(agent) === built.config;
           } finally {
             await built.cleanup();
           }

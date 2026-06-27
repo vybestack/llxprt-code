@@ -7,10 +7,36 @@
  * @pseudocode lines 10-15
  */
 
-export * from './config-types.js';
+export type {
+  ProviderAuth,
+  AgentAuth,
+  AgentHooks,
+  AgentModelParams,
+  AgentFileFiltering,
+  AgentTelemetry,
+  AgentCompression,
+  AgentRecording,
+  AgentIde,
+  AgentShell,
+  AgentHarnessOptions,
+  AgentToolOutputLimits,
+  AgentMcpServerConfig,
+  AgentSkillDefinition,
+  AgentSandboxConfig,
+  AgentLspServerConfig,
+  AgentLspConfig,
+  AgentExtension,
+  ApprovalHandler,
+  OAuthPromptHandler,
+  EditorCallbacks,
+  AgentSchedulerHandle,
+  AgentSchedulerFactoryOptions,
+  AgentSchedulerFactory,
+  AgentConfig,
+  FromConfigOptions,
+} from './config-types.js';
 export * from './event-types.js';
 export * from './agent.js';
-export * from './config-schema.js';
 export * from './event-schema.js';
 export { createAgent } from './createAgent.js';
 export { fromConfig } from './fromConfig.js';
@@ -42,4 +68,14 @@ export type {
   McpOAuthStatus, // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004
   ToolKeyInfo,
   ToolKeyStatus,
+  // @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02-P05
+  AgentMemoryControl,
+  AgentSkillsControl,
+  AgentWorkspaceControl,
+  AgentLspControl,
+  SkillInfo,
+  LspServerStatus,
+  LspStatusSnapshot,
+  MemoryChangedEvent,
+  MemoryRefreshResult,
 } from './agent.js';

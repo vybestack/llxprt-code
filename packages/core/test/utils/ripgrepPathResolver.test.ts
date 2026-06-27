@@ -19,7 +19,19 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it('should find ripgrep from @lvce-editor/ripgrep package first', async () => {
+    vi.spyOn(os, 'platform').mockReturnValue('darwin');
+    vi.spyOn(fs, 'openSync').mockReturnValue(17);
+    vi.spyOn(fs, 'readSync').mockImplementation((_fd, buffer, offset) => {
+      const bytes = Buffer.from([0xcf, 0xfa, 0xed, 0xfe]);
+      bytes.copy(buffer as Buffer, offset);
+      return bytes.length;
+    });
+    vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+
     // Mock package to be available
     vi.doMock('@lvce-editor/ripgrep', () => ({
       rgPath: '/mock/package/path/rg',
@@ -35,6 +47,35 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     expect(resolvedPath).toBe('/mock/package/path/rg');
   });
 
+  it('should skip packaged ripgrep with an ELF header on macOS', async () => {
+    vi.spyOn(os, 'platform').mockReturnValue('darwin');
+    vi.spyOn(fs, 'openSync').mockReturnValue(17);
+    vi.spyOn(fs, 'readSync').mockImplementation((_fd, buffer, offset) => {
+      const bytes = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
+      bytes.copy(buffer as Buffer, offset);
+      return bytes.length;
+    });
+    vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+
+    vi.doMock('@lvce-editor/ripgrep', () => ({
+      rgPath: '/mock/package/path/rg',
+    }));
+
+    const mockExecSync = vi.fn().mockReturnValue('/usr/local/bin/rg\n');
+    vi.doMock('child_process', () => ({
+      execSync: mockExecSync,
+    }));
+
+    const mockExistsSync = vi.fn().mockImplementation((filePath: string) => {
+      return (
+        filePath === '/mock/package/path/rg' || filePath === '/usr/local/bin/rg'
+      );
+    });
+    (fs.existsSync as unknown) = mockExistsSync;
+
+    const resolvedPath = await getRipgrepPath();
+    expect(resolvedPath).toBe('/usr/local/bin/rg');
+  });
   it('should fall back to system ripgrep when package not available', async () => {
     // Mock package to fail
     vi.doMock('@lvce-editor/ripgrep', () => {

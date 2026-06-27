@@ -11,6 +11,10 @@ import {
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
+  LspConfig,
+  LspServerConfig,
+} from '@vybestack/llxprt-code-ide-integration';
+import type {
   AgentSchedulerFactory,
   ApprovalHandler,
   EditorCallbacks,
@@ -85,6 +89,18 @@ export const AgentToolOutputLimitsSchema = z
   })
   .strict();
 
+/**
+ * Production-safety gate for createAgent harness seams.
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01
+ */
+export const AgentHarnessSchema = z
+  .object({
+    forceInteractive: z.boolean().optional(),
+    forceConfirmations: z.boolean().optional(),
+    includeProcessCwd: z.boolean().optional(),
+  })
+  .strict();
+
 export const BlockedMcpServerEntrySchema = z
   .object({
     name: z.string(),
@@ -148,6 +164,79 @@ export const McpServerConfigSchema = z.object({
   targetServiceAccount: z.string().optional(),
 });
 
+const AgentSkillDefinitionSchema = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    location: z.string(),
+    body: z.string(),
+    disabled: z.boolean().optional(),
+    source: z.enum(['builtin', 'extension', 'user', 'project']).optional(),
+  })
+  .strict();
+
+const AgentSandboxSchema = z
+  .object({
+    command: z.enum(['docker', 'podman', 'sandbox-exec']),
+    image: z.string(),
+  })
+  .strict();
+
+const AgentExtensionSchema = z
+  .object({
+    name: z.string(),
+    version: z.string(),
+    isActive: z.boolean(),
+    path: z.string(),
+    mcpServers: z.record(McpServerConfigSchema).optional(),
+    contextFiles: z.array(z.string()),
+    excludeTools: z.array(z.string()).optional(),
+    hooks: z.record(z.array(z.record(z.unknown()))).optional(),
+    skills: z.array(AgentSkillDefinitionSchema).optional(),
+    settings: z.array(z.record(z.unknown())).optional(),
+    resolvedSettings: z.array(z.record(z.unknown())).optional(),
+    subagents: z
+      .array(
+        z
+          .object({
+            name: z.string(),
+            profile: z.string(),
+            systemPrompt: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+
+const LspServerConfigSchema = z
+  .object({
+    id: z.string(),
+    command: z.string(),
+    args: z.array(z.string()).optional(),
+    rootUri: z.string().optional(),
+  })
+  .strict() as z.ZodType<LspServerConfig>;
+
+export const LspConfigSchema = z.union([
+  z.boolean(),
+  z
+    .object({
+      servers: z.array(LspServerConfigSchema),
+      includeSeverities: z
+        .array(z.enum(['error', 'warning', 'info', 'hint']))
+        .optional(),
+      maxDiagnosticsPerFile: z.number().optional(),
+      maxProjectDiagnosticsFiles: z.number().optional(),
+      diagnosticTimeout: z.number().optional(),
+      firstTouchTimeout: z.number().optional(),
+      navigationTimeout: z.number().optional(),
+      navigationTools: z.boolean().optional(),
+      requestTimeout: z.number().optional(),
+    })
+    .strict(),
+]) as z.ZodType<boolean | LspConfig>;
+
 export const AgentConfigSchema = z
   .object({
     provider: z.string(),
@@ -174,19 +263,22 @@ export const AgentConfigSchema = z
     checkpointing: z.boolean().optional(),
     recording: AgentRecordingSchema.optional(),
     policy: z.record(z.unknown()).optional(),
-    extensions: z.array(z.record(z.unknown())).optional(),
+    extensions: z.array(AgentExtensionSchema).optional(),
     ide: AgentIdeSchema.optional(),
     hooks: z.record(z.unknown()).optional(),
     memory: z.string().optional(),
+    skillsSupport: z.boolean().optional(),
+    disabledSkills: z.array(z.string()).optional(),
+    adminSkillsEnabled: z.boolean().optional(),
     streamIdleTimeoutMs: z.number().optional(),
     toolOutputLimits: AgentToolOutputLimitsSchema.optional(),
-    outputFormat: z.string().optional(),
+    outputFormat: z.enum(['text', 'json', 'stream-json']).optional(),
     shell: AgentShellSchema.optional(),
     contextLimit: z.number().optional(),
     compressionThreshold: z.number().optional(),
-    skills: z.array(z.record(z.unknown())).optional(),
+    skills: z.array(AgentSkillDefinitionSchema).optional(),
     useWriteTodos: z.boolean().optional(),
-    sandbox: z.record(z.unknown()).optional(),
+    sandbox: AgentSandboxSchema.optional(),
     folderTrust: z.boolean().optional(),
     embeddingModel: z.string().optional(),
     debugMode: z.boolean().optional(),
@@ -203,6 +295,8 @@ export const AgentConfigSchema = z
     projectHooks: z.record(z.unknown()).optional(),
     disabledHooks: z.array(z.string()).optional(),
     interactive: z.boolean().optional(),
+    lsp: LspConfigSchema.optional(),
+    harness: AgentHarnessSchema.optional(),
     /**
      * UNSTABLE escape hatch. Long-tail settings merged into ConfigParameters.
      * The adapter throws if a key shadows a typed AgentConfig field.
@@ -222,6 +316,7 @@ export type AgentConfigWithCallbacks = ParsedAgentConfig & {
 
 export type {
   AgentConfig,
+  AgentHarnessOptions,
   AgentSchedulerFactory,
   AgentSchedulerHandle,
   ApprovalHandler,

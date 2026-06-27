@@ -53,6 +53,9 @@ import type { PolicyEngine } from '@vybestack/llxprt-code-policy';
  */
 const CONFIRMATION_FORCING_PRIORITY = 4.0;
 
+export const CONFIRMATION_FORCING_SOURCE =
+  'Agent confirmation-forcing seam (P17)';
+
 /**
  * Adds a high-priority ASK rule (matching every tool) to the policy engine so
  * the ConfirmationCoordinator reaches `evaluateAndRoute` →
@@ -72,7 +75,7 @@ export function injectConfirmationForcingPolicy(
     toolName: undefined,
     decision: PolicyDecision.ASK_USER,
     priority: CONFIRMATION_FORCING_PRIORITY,
-    source: 'Agent confirmation-forcing seam (P17)',
+    source: CONFIRMATION_FORCING_SOURCE,
   });
 }
 
