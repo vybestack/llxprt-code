@@ -12,7 +12,11 @@
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
-      "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"]
+      "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
+      "@vybestack/llxprt-code-settings": ["../settings/dist/index.d.ts"],
+      "@vybestack/llxprt-code-settings/*": ["../settings/dist/src/*"],
+      "@vybestack/llxprt-code-storage": ["../storage/dist/index.d.ts"],
+      "@vybestack/llxprt-code-storage/*": ["../storage/dist/src/*"]
     }
   },
   "include": [

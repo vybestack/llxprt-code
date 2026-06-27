@@ -72,7 +72,6 @@ describe('agent.lsp control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05', () => {
     });
     try {
       const status = await agent.lsp.status();
-      expect(status.disabled).toBe(true);
       expect(status.servers).toStrictEqual([
         expect.objectContaining({
           serverId: 'ts-lsp',

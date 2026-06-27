@@ -14,10 +14,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const providersPackagePrefix = '@vybestack/llxprt-code-providers/';
+const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 const coreEntry = resolve(__dirname, '../core/index.ts');
 const coreSrcDir = resolve(__dirname, '../core/src/') + '/';
 const providersEntry = resolve(__dirname, '../providers/index.ts');
 const providersSrcDir = resolve(__dirname, '../providers/src/') + '/';
+const storageEntry = resolve(__dirname, '../storage/index.ts');
+const storageSrcDir = resolve(__dirname, '../storage/src/') + '/';
+
+const storageExportToSource: Record<string, string> = {
+  'config/storage': 'config/storage',
+  'services/fileSystemService': 'services/fileSystemService',
+  'services/fileDiscoveryService': 'services/fileDiscoveryService',
+  'storage/secure-store': 'secure-store/secure-store',
+  'storage/provider-key-storage': 'secure-store/provider-key-storage',
+  'storage/envelope-codec': 'secure-store/envelope-codec',
+  'storage/sessionTypes': 'session/sessionTypes',
+  'storage/ConversationFileWriter': 'conversation/ConversationFileWriter',
+};
 // Resolve these dependencies dynamically rather than hardcoding nested
 // node_modules paths. npm may hoist or nest ajv/fdir differently depending on
 // the rest of the dependency tree (e.g. after security-driven version bumps),
@@ -73,6 +87,25 @@ const workspaceDependencyAliasPlugin = {
       return resolveTsSource(
         providersSrcDir,
         source.slice(providersPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-storage') {
+      return storageEntry;
+    }
+    if (source.startsWith(storagePackagePrefix)) {
+      const subPath = source
+        .slice(storagePackagePrefix.length)
+        .replace(/\.js$/, '');
+      const sourcePath = storageExportToSource[subPath];
+      if (sourcePath !== undefined) {
+        const tsPath = storageSrcDir + sourcePath + '.ts';
+        if (existsSync(tsPath)) {
+          return tsPath;
+        }
+      }
+      return resolveTsSource(
+        storageSrcDir,
+        source.slice(storagePackagePrefix.length),
       );
     }
     if (source === 'ajv/dist/2020.js') {
