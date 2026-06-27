@@ -19,6 +19,9 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it('should find ripgrep from @lvce-editor/ripgrep package first', async () => {
     vi.spyOn(os, 'platform').mockReturnValue('darwin');
     vi.spyOn(fs, 'openSync').mockReturnValue(17);

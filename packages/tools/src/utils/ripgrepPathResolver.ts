@@ -54,7 +54,10 @@ function isCompatibleRipgrepBinary(candidate: string): boolean {
     const fd = fs.openSync(candidate, 'r');
     try {
       const header = Buffer.alloc(4);
-      fs.readSync(fd, header, 0, header.length, 0);
+      const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
+      if (bytesRead < header.length) {
+        return false;
+      }
       return !header.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]));
     } finally {
       fs.closeSync(fd);

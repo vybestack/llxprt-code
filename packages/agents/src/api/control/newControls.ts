@@ -6,6 +6,7 @@
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
+  AgentMemoryControl,
   AgentSkillsControl,
   AgentWorkspaceControl,
   AgentLspControl,
@@ -16,17 +17,20 @@ import { WorkspaceControl } from './workspaceControl.js';
 import { LspControl } from './lspControl.js';
 
 export interface NewControls {
-  readonly memory: MemoryControl;
+  readonly memory: AgentMemoryControl;
   readonly skills: AgentSkillsControl;
   readonly workspace: AgentWorkspaceControl;
   readonly lsp: AgentLspControl;
+  dispose(): void;
 }
 
 export function buildNewControls(config: Config): NewControls {
+  const memory = new MemoryControl({ config });
   return {
-    memory: new MemoryControl({ config }),
+    memory,
     skills: new SkillsControl({ config }),
     workspace: new WorkspaceControl({ config }),
     lsp: new LspControl({ config }),
+    dispose: () => memory.dispose(),
   };
 }
