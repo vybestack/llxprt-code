@@ -838,7 +838,7 @@ export class LoadBalancingProvider implements IProvider {
           startTime,
           chunksYielded,
         );
-        this.currentFailoverIndex = 0;
+        this.currentFailoverIndex = currentIndex;
         return true;
       } catch (error) {
         if (error instanceof LoadBalancerCompressionCallbackError) {

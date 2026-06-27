@@ -3,13 +3,11 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
 /**
  * StreamProcessor - Handles API stream requests and response processing.
  * Extracted from chatSession.ts Phase 05.
  * These are the core streaming methods that make API calls and process responses.
  */
-
 import type { GenerateContentResponse } from '@google/genai';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
@@ -299,39 +297,35 @@ export class StreamProcessor {
       throw error;
     }
   }
-
   private _withCompressionCallbackCleanup(
     stream: AsyncGenerator<GenerateContentResponse>,
     provider: IProvider,
   ): AsyncGenerator<GenerateContentResponse> {
     let cleanupDone = false;
     const cleanup = () => {
-      if (!cleanupDone) {
-        cleanupDone = true;
-        this.compressionHandler.clearProviderCompressionCallback(provider);
+      if (cleanupDone) return;
+      cleanupDone = true;
+      this.compressionHandler.clearProviderCompressionCallback(provider);
+    };
+    const finish = async <T>(operation: () => Promise<T>): Promise<T> => {
+      try {
+        return await operation();
+      } finally {
+        cleanup();
       }
     };
 
     return {
       next: async (value?: unknown) => {
-        const result = await stream.next(value);
+        const result = await stream.next(value).catch((error: unknown) => {
+          cleanup();
+          throw error;
+        });
         if (result.done === true) cleanup();
         return result;
       },
-      return: async (value?: unknown) => {
-        try {
-          return await stream.return(value);
-        } finally {
-          cleanup();
-        }
-      },
-      throw: async (error?: unknown) => {
-        try {
-          return await stream.throw(error);
-        } finally {
-          cleanup();
-        }
-      },
+      return: (value?: unknown) => finish(() => stream.return(value)),
+      throw: (error?: unknown) => finish(() => stream.throw(error)),
       [Symbol.asyncIterator]() {
         return this;
       },

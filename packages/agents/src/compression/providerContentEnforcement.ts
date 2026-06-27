@@ -49,6 +49,11 @@ interface ContextLimits {
   marginAdjustedLimit: number;
 }
 
+interface PendingExtractionResult {
+  pendingContents: IContent[];
+  safeToRecompose: boolean;
+}
+
 export class ProviderContentEnforcer {
   private readonly baselineProviderHistory: IContent[];
 
@@ -62,17 +67,20 @@ export class ProviderContentEnforcer {
     provider?: IProvider,
   ): Promise<IContent[]> {
     await this.deps.historyService.waitForTokenUpdates();
-
     const { completionBudget, limit, marginAdjustedLimit } =
       this.computeContextLimits(provider);
     const initialProjected = await this.estimateProviderProjection(
       contents,
       completionBudget,
     );
-    const pendingContents = this.extractPendingContents(contents);
-    if (initialProjected <= marginAdjustedLimit && pendingContents.length > 0) {
-      const recomposedContents =
-        this.recomposeProviderContents(pendingContents);
+    const extraction = this.extractPendingContents(contents);
+    if (initialProjected <= marginAdjustedLimit) {
+      if (!extraction.safeToRecompose) {
+        return contents;
+      }
+      const recomposedContents = this.recomposeProviderContents(
+        extraction.pendingContents,
+      );
       const recomposedProjected = await this.estimateProviderProjection(
         recomposedContents,
         completionBudget,
@@ -81,11 +89,20 @@ export class ProviderContentEnforcer {
         return recomposedContents;
       }
     }
-
+    if (!extraction.safeToRecompose) {
+      this.throwUnsafeExtractionOverflow(
+        limit,
+        initialProjected,
+        marginAdjustedLimit,
+        completionBudget,
+      );
+    }
     await this.deps.ensureDensityOptimized();
     await this.deps.historyService.waitForTokenUpdates();
 
-    const optimizedContents = this.recomposeProviderContents(pendingContents);
+    const optimizedContents = this.recomposeProviderContents(
+      extraction.pendingContents,
+    );
     const postOptProjected = await this.estimateProviderProjection(
       optimizedContents,
       completionBudget,
@@ -96,7 +113,7 @@ export class ProviderContentEnforcer {
 
     const compressedContents = await this.runCompressionAndRecompose(
       promptId,
-      pendingContents,
+      extraction.pendingContents,
     );
     let recomputed = await this.estimateProviderProjection(
       compressedContents,
@@ -110,7 +127,7 @@ export class ProviderContentEnforcer {
       promptId,
       postOptProjected,
       recomputed,
-      pendingContents,
+      extraction.pendingContents,
     );
     recomputed = await this.estimateProviderProjection(
       fallbackContents,
@@ -133,8 +150,14 @@ export class ProviderContentEnforcer {
     contents: IContent[],
     promptId: string,
   ): Promise<IContent[]> {
-    const pendingContents = this.extractPendingContents(contents);
-    return this.runCompressionAndRecompose(promptId, pendingContents);
+    const extraction = this.extractPendingContents(contents);
+    if (!extraction.safeToRecompose) {
+      return contents;
+    }
+    return this.runCompressionAndRecompose(
+      promptId,
+      extraction.pendingContents,
+    );
   }
 
   private async runCompressionAndRecompose(
@@ -155,26 +178,37 @@ export class ProviderContentEnforcer {
     return this.recomposeProviderContents(pendingContents);
   }
 
-  private extractPendingContents(contents: IContent[]): IContent[] {
+  private extractPendingContents(
+    contents: IContent[],
+  ): PendingExtractionResult {
     const prefixLength = this.findHistoryPrefixLength(
       contents,
       this.baselineProviderHistory,
     );
-    if (prefixLength > 0 || this.baselineProviderHistory.length === 0) {
-      return contents.slice(prefixLength);
+    if (
+      this.baselineProviderHistory.length === 0 ||
+      prefixLength === this.baselineProviderHistory.length
+    ) {
+      return {
+        pendingContents: contents.slice(prefixLength),
+        safeToRecompose: true,
+      };
     }
 
     const recomposedPending =
       this.extractPendingContentsByRecomposition(contents);
     if (recomposedPending !== undefined) {
-      return recomposedPending;
+      return {
+        pendingContents: recomposedPending,
+        safeToRecompose: true,
+      };
     }
 
     this.deps.logger.warn(
       () =>
-        '[CompressionHandler] Could not extract pending contents via prefix match or recomposition; returning full contents to avoid data loss',
+        '[CompressionHandler] Could not extract pending contents via prefix match or recomposition; preserving provider contents unchanged',
     );
-    return contents;
+    return { pendingContents: [], safeToRecompose: false };
   }
 
   private extractPendingContentsByRecomposition(
@@ -208,6 +242,21 @@ export class ProviderContentEnforcer {
       prefix = index + 1;
     }
     return prefix;
+  }
+
+  private throwUnsafeExtractionOverflow(
+    limit: number,
+    projected: number,
+    marginAdjustedLimit: number,
+    completionBudget: number,
+  ): never {
+    throw this.buildContextOverflowError(
+      limit,
+      projected,
+      projected,
+      marginAdjustedLimit,
+      completionBudget,
+    );
   }
 
   private contentsEqual(left: IContent[], right: IContent[]): boolean {

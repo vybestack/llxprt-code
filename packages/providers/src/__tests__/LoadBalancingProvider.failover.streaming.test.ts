@@ -145,8 +145,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
   describe('Sticky Failover Behavior - Issue #902', () => {
     it('should track failover across requests via currentFailoverIndex', async () => {
       // This test verifies sticky behavior by checking getCurrentFailoverIndex()
-      // after a failover. On success, it resets to 0. On 429 immediate failover,
-      // it advances to the next index.
+      // after a failover. On success, it stays on the working backend. On 429
+      // immediate failover, it advances to the next index.
       let callCount = 0;
 
       const mockProvider: IProvider = {
@@ -206,18 +206,17 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
       expect(results1).toHaveLength(1);
       expect(callCount).toBe(2); // backend1 failed, backend2 succeeded
-      // After success, index resets to 0
-      expect(provider.getCurrentFailoverIndex()).toBe(0);
+      expect(provider.getCurrentFailoverIndex()).toBe(1);
     });
 
-    it('should reset currentFailoverIndex to 0 after successful response', async () => {
+    it('should keep currentFailoverIndex on the successful backend', async () => {
       let callCount = 0;
 
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           callCount++;
-          // First call fails, second succeeds, third succeeds (starting from 0)
+          // First call fails, second succeeds on the sticky backend.
           if (callCount === 1) {
             const error = new Error('Rate limited') as Error & {
               status: number;
@@ -267,8 +266,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         // consume
       }
 
-      // After success, index should be reset to 0
-      expect(provider.getCurrentFailoverIndex()).toBe(0);
+      expect(provider.getCurrentFailoverIndex()).toBe(1);
     });
 
     it('should immediately failover on 429 without retrying current member', async () => {

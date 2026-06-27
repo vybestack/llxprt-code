@@ -9,17 +9,28 @@ import type {
   ResolvedSubProfile,
 } from './loadBalancerTypes.js';
 
+function normalizePositiveFiniteLimit(
+  value: number | undefined,
+): number | undefined {
+  return value !== undefined && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
 export function getTargetContextLimit(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   sharedLimit: number | undefined,
 ): number | undefined {
-  if (
-    !('contextWindow' in subProfile) ||
-    subProfile.contextWindow === undefined
-  ) {
-    return sharedLimit;
+  const normalizedSharedLimit = normalizePositiveFiniteLimit(sharedLimit);
+  const normalizedMemberLimit =
+    'contextWindow' in subProfile
+      ? normalizePositiveFiniteLimit(subProfile.contextWindow)
+      : undefined;
+
+  if (normalizedMemberLimit === undefined) {
+    return normalizedSharedLimit;
   }
-  return sharedLimit === undefined
-    ? subProfile.contextWindow
-    : Math.min(sharedLimit, subProfile.contextWindow);
+  return normalizedSharedLimit === undefined
+    ? normalizedMemberLimit
+    : Math.min(normalizedSharedLimit, normalizedMemberLimit);
 }

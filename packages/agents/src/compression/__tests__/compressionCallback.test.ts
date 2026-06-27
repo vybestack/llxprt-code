@@ -235,14 +235,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       ),
     ).toBe(true);
 
-    // Empty input means no pending content; the callback still recomposes the
-    // current HistoryService contents into the provider-ready request payload.
     const emptyResult = await callback([]);
-    expect(Array.isArray(emptyResult)).toBe(true);
-    expect(emptyResult.length).toBeGreaterThan(0);
-    expect(emptyResult.some((content) => content.speaker === 'human')).toBe(
-      true,
-    );
+    expect(emptyResult).toStrictEqual([]);
   });
 
   it('preserves pending request contents when callback recomposes compressed history', async () => {

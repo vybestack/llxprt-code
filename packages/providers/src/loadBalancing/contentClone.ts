@@ -161,14 +161,16 @@ function cloneObjectForCompression<T extends object>(
         value: cloneValueForCompression(descriptor.value, seen),
       });
     } else if (descriptor?.get) {
-      logger.debug(
-        () =>
-          `[content-clone] Skipping accessor property "${String(key)}" to match structuredClone behavior`,
-      );
+      Object.defineProperty(clone, key, {
+        configurable: true,
+        enumerable: descriptor.enumerable,
+        writable: true,
+        value: cloneValueForCompression(descriptor.get.call(value), seen),
+      });
     } else if (descriptor?.set) {
       logger.debug(
         () =>
-          `[content-clone] Skipping setter-only accessor property "${String(key)}" to match structuredClone behavior`,
+          `[content-clone] Skipping setter-only accessor property "${String(key)}" because no value can be materialized`,
       );
     } else if (descriptor !== undefined) {
       logger.debug(

@@ -152,6 +152,8 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
         // consume
       }
 
+      lb.resetFailoverIndex();
+
       // Second request - should fail backend1 again, succeed on backend2
       const gen2 = lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
@@ -206,6 +208,7 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Trigger 2 failures to open circuit
       for (let i = 0; i < 2; i++) {
+        lb.resetFailoverIndex();
         const gen = lb.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
         });
@@ -272,6 +275,7 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Trigger 2 failures to open circuit
       for (let i = 0; i < 2; i++) {
+        lb.resetFailoverIndex();
         const gen = lb.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
         });
@@ -285,6 +289,8 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Wait for recovery timeout
       await new Promise((resolve) => setTimeout(resolve, 150));
+
+      lb.resetFailoverIndex();
 
       // Next request should try backend1 in half-open state
       const gen = lb.generateChatCompletion({
@@ -342,6 +348,7 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Open circuit
       for (let i = 0; i < 2; i++) {
+        lb.resetFailoverIndex();
         const gen = lb.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
         });
@@ -352,6 +359,7 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Wait and recover
       await new Promise((resolve) => setTimeout(resolve, 150));
+      lb.resetFailoverIndex();
 
       const gen = lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test-recovery' }] }],
@@ -401,6 +409,7 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Open circuit
       for (let i = 0; i < 2; i++) {
+        lb.resetFailoverIndex();
         const gen = lb.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
         });
@@ -411,6 +420,7 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
 
       // Wait and try recovery (will fail)
       await new Promise((resolve) => setTimeout(resolve, 150));
+      lb.resetFailoverIndex();
 
       const gen = lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test-recovery' }] }],

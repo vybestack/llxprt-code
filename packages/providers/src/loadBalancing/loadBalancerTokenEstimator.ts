@@ -30,6 +30,8 @@ const CHARS_PER_TOKEN_FALLBACK = 3;
 /** Base64 media is billed as media input, not raw encoded text, so downscale. */
 const BASE64_MEDIA_CHAR_DIVISOR = 4;
 const MEDIA_DATA_CHAR_CAP = 10_000;
+const CIRCULAR_REFERENCE_CHAR_ESTIMATE = 64;
+const MAX_UNSERIALIZABLE_ESTIMATE_DEPTH = 8;
 
 export interface EstimationResult {
   tokens: number;
@@ -134,8 +136,56 @@ function estimateSerializedBlockCharacters(value: unknown): number {
       ? serialized.length
       : NON_TEXT_BLOCK_CHAR_ESTIMATE;
   } catch {
+    return Math.max(
+      estimateUnserializableCharacters(value),
+      NON_TEXT_BLOCK_CHAR_ESTIMATE,
+    );
+  }
+}
+
+function estimateUnserializableCharacters(
+  value: unknown,
+  seen = new WeakSet<object>(),
+  depth = 0,
+): number {
+  if (value === null || value === undefined) {
+    return 4;
+  }
+  if (typeof value === 'string') {
+    return value.length;
+  }
+  if (typeof value === 'bigint') {
+    return value.toString().length;
+  }
+  if (typeof value !== 'object') {
+    return String(value).length;
+  }
+  if (seen.has(value)) {
+    return CIRCULAR_REFERENCE_CHAR_ESTIMATE;
+  }
+  if (depth >= MAX_UNSERIALIZABLE_ESTIMATE_DEPTH) {
     return NON_TEXT_BLOCK_CHAR_ESTIMATE;
   }
+
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.reduce(
+      (total, entry) =>
+        total + estimateUnserializableCharacters(entry, seen, depth + 1),
+      2,
+    );
+  }
+
+  let total = 2;
+  for (const key of Reflect.ownKeys(value)) {
+    total += String(key).length;
+    total += estimateUnserializableCharacters(
+      (value as Record<PropertyKey, unknown>)[key],
+      seen,
+      depth + 1,
+    );
+  }
+  return total;
 }
 
 function stringLength(value: unknown): number {
