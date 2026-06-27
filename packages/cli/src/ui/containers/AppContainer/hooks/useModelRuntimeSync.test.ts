@@ -508,3 +508,110 @@ describe('useModelRuntimeSync', () => {
     });
   });
 });
+
+describe('useModelRuntimeSync profile-qualified footer identity (issue #2193)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    coreEvents.removeAllListeners();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    coreEvents.removeAllListeners();
+    vi.clearAllMocks();
+  });
+
+  it('computes the footer label from the injected identity resolver on initial sync', () => {
+    const setCurrentModel = vi.fn();
+    const setCurrentModelLabel = vi.fn();
+    const setContextLimit = vi.fn();
+    const getActiveModelName = vi.fn().mockReturnValue('gpt-4');
+    const config = createConfig('gpt-4');
+    // Issue #2193 req #1: standard profile identity is `profileName:modelName`.
+    const resolveModelDisplayLabel = vi.fn().mockReturnValue('work:gpt-4');
+
+    renderHook(() =>
+      useModelRuntimeSync({
+        config: config as never,
+        currentModel: 'gpt-4',
+        setCurrentModel,
+        currentModelLabel: '',
+        setCurrentModelLabel,
+        getActiveModelName,
+        resolveModelDisplayLabel,
+        contextLimit: undefined,
+        setContextLimit,
+      } as never),
+    );
+
+    expect(resolveModelDisplayLabel).toHaveBeenCalled();
+    expect(setCurrentModelLabel).toHaveBeenCalledWith('work:gpt-4');
+  });
+
+  it('recomputes the footer label when a ModelChanged trigger fires (load-balancer selection)', () => {
+    const setCurrentModel = vi.fn();
+    const setCurrentModelLabel = vi.fn();
+    const setContextLimit = vi.fn();
+    const getActiveModelName = vi.fn().mockReturnValue('glm');
+    const config = createConfig('glm');
+    // Before the first request the identity is pending; after the LB selects a
+    // sub-profile it resolves to `lb:<lb>:<sub>:<model>`.
+    const resolveModelDisplayLabel = vi
+      .fn()
+      .mockReturnValueOnce('lb:glm:none:none')
+      .mockReturnValue('lb:glm:zai:glm-4-zai');
+
+    renderHook(() =>
+      useModelRuntimeSync({
+        config: config as never,
+        currentModel: 'glm',
+        setCurrentModel,
+        currentModelLabel: undefined,
+        setCurrentModelLabel,
+        getActiveModelName,
+        resolveModelDisplayLabel,
+        contextLimit: undefined,
+        setContextLimit,
+      } as never),
+    );
+
+    // Initial sync seeds the pending identity.
+    expect(setCurrentModelLabel).toHaveBeenLastCalledWith('lb:glm:none:none');
+
+    // The provider emits a bare ModelChanged trigger when it selects a
+    // sub-profile; the footer label must refresh to the live identity.
+    coreEvents.emitModelChanged('glm');
+
+    expect(setCurrentModelLabel).toHaveBeenLastCalledWith(
+      'lb:glm:zai:glm-4-zai',
+    );
+  });
+
+  it('does not update the footer label when the resolved identity is unchanged', () => {
+    const setCurrentModel = vi.fn();
+    const setCurrentModelLabel = vi.fn();
+    const setContextLimit = vi.fn();
+    const getActiveModelName = vi.fn().mockReturnValue('gpt-4');
+    const config = createConfig('gpt-4');
+    const resolveModelDisplayLabel = vi.fn().mockReturnValue('work:gpt-4');
+
+    renderHook(() =>
+      useModelRuntimeSync({
+        config: config as never,
+        currentModel: 'gpt-4',
+        setCurrentModel,
+        currentModelLabel: 'work:gpt-4',
+        setCurrentModelLabel,
+        getActiveModelName,
+        resolveModelDisplayLabel,
+        contextLimit: undefined,
+        setContextLimit,
+      } as never),
+    );
+
+    setCurrentModelLabel.mockClear();
+    coreEvents.emitModelChanged('gpt-4');
+
+    expect(setCurrentModelLabel).not.toHaveBeenCalled();
+  });
+});

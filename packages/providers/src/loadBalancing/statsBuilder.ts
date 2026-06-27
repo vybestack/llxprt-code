@@ -36,16 +36,48 @@ export function buildExtendedStats(
     collectCircuitBreakerStates(circuitBreakerStates);
   const currentTPM = collectCurrentTPM(subProfiles, calculateTPM);
   const backendMetricsRecord = collectBackendMetrics(backendMetrics);
+  const members = collectMembers(subProfiles);
+  const lastSelectedModel = resolveSubProfileModel(subProfiles, lastSelected);
 
   return {
     profileName,
+    members,
     totalRequests,
     lastSelected,
+    lastSelectedModel,
     profileCounts,
     backendMetrics: backendMetricsRecord,
     circuitBreakerStates: circuitBreakerSnapshot,
     currentTPM,
   };
+}
+
+function collectMembers(
+  subProfiles: ResolvedSubProfile[] | LoadBalancerSubProfile[],
+): string[] {
+  return subProfiles.map((subProfile) => subProfile.name);
+}
+
+function subProfileModel(
+  subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+): string | null {
+  if ('model' in subProfile) {
+    return subProfile.model;
+  }
+  return subProfile.modelId ?? null;
+}
+
+function resolveSubProfileModel(
+  subProfiles: ResolvedSubProfile[] | LoadBalancerSubProfile[],
+  lastSelected: string | null,
+): string | null {
+  if (lastSelected === null) {
+    return null;
+  }
+  const match = subProfiles.find(
+    (subProfile) => subProfile.name === lastSelected,
+  );
+  return match ? subProfileModel(match) : null;
 }
 
 function collectProfileCounts(
