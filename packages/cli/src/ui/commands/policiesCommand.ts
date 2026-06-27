@@ -42,14 +42,16 @@ interface PolicyRuleDisplay {
   source?: string;
 }
 
-function toPolicyRuleDisplay(
-  rule: {
-    priority?: number;
-    toolName?: string;
-    decision: PolicyDecision;
-    source?: string;
-  },
-  extractPattern: (r: typeof rule) => string | undefined,
+interface PolicyRuleBase {
+  priority?: number;
+  toolName?: string;
+  decision: PolicyDecision;
+  source?: string;
+}
+
+function toPolicyRuleDisplay<T extends PolicyRuleBase>(
+  rule: T,
+  extractPattern: (r: T) => string | undefined,
 ): PolicyRuleDisplay {
   return {
     priority: rule.priority,
