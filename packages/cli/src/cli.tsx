@@ -563,6 +563,11 @@ async function buildAgentFacade(
   config: Config,
   sessionMessageBus: MessageBus,
 ): Promise<Agent | null> {
+  // Only build the agent facade for interactive sessions; non-interactive
+  // (piped) mode does not use slash commands and avoids adoption overhead.
+  if (typeof config.isInteractive !== 'function' || !config.isInteractive()) {
+    return null;
+  }
   try {
     return await fromConfig({
       config,

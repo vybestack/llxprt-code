@@ -248,15 +248,18 @@ export function makeCommandContext(
   overrides: Partial<CommandContext> = {},
 ): CommandContext {
   return {
+    ...overrides,
     services: {
+      agent: overrides.services?.agent ?? null,
+      settings:
+        overrides.services?.settings ??
+        ({} as CommandContext['services']['settings']),
+      git: overrides.services?.git,
+      logger: overrides.services?.logger ?? makeMockLogger(),
       config: {
         isInteractive: () =>
           overrides.services?.config?.isInteractive() ?? true,
       } as CommandContext['services']['config'],
-      agent: null,
-      settings: {} as CommandContext['services']['settings'],
-      git: undefined,
-      logger: makeMockLogger(),
     },
     ui: {
       addItem: () => 0,
@@ -282,7 +285,6 @@ export function makeCommandContext(
       sessionShellAllowlist: new Set(),
       ...overrides.session,
     },
-    ...overrides,
   } as CommandContext;
 }
 

@@ -25,12 +25,9 @@ import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
 
 /**
  * Config-gated commands that are not loaded when config is null. These are
- * intentionally excluded from the completeness check because their registration
- * depends on feature flags that require a fully initialized Config.
- *
- * Note: /uiprofile is gated by isDevelopment in BuiltinCommandLoader. The test
- * environment sets isDevelopment=true so it is loaded and checked. If this
- * assumption changes, add '/uiprofile' to this list.
+ * intentionally excluded from the registered-command completeness check
+ * because their registration depends on feature flags that require a
+ * fully initialized Config. Their map entries are verified separately.
  */
 const CONFIG_GATED_COMMANDS: readonly string[] = [
   '/skills',
@@ -38,6 +35,19 @@ const CONFIG_GATED_COMMANDS: readonly string[] = [
   '/restore',
   '/ide',
   '/uiprofile',
+];
+
+/**
+ * Known subcommands of config-gated commands. These are not loaded by
+ * BuiltinCommandLoader(null), so they are verified explicitly here to
+ * ensure they have COMMAND_API_MAP entries.
+ */
+const GATED_SUBCOMMANDS: readonly string[] = [
+  '/hooks list',
+  '/hooks enable',
+  '/hooks disable',
+  '/hooks enable-all',
+  '/hooks disable-all',
 ];
 
 /**
@@ -114,6 +124,7 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
     const knownPaths = new Set([
       ...checkablePaths,
       ...CONFIG_GATED_COMMANDS,
+      ...GATED_SUBCOMMANDS,
       ...CONCEPTUAL_COMMANDS,
     ]);
     const orphans = slashEntries.filter((cmd) => !knownPaths.has(cmd));
@@ -136,11 +147,12 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
     }
   });
 
-  it('config-gated commands are tracked and map entries exist for them', () => {
-    // Even though skills/hooks are not loaded with null config, their map
-    // entries must exist so the boundary classification is complete.
+  it('config-gated commands and their subcommands are tracked in COMMAND_API_MAP', () => {
     for (const gated of CONFIG_GATED_COMMANDS) {
       expect(isCommandMapped(gated)).toBe(true);
+    }
+    for (const sub of GATED_SUBCOMMANDS) {
+      expect(isCommandMapped(sub)).toBe(true);
     }
   });
 });

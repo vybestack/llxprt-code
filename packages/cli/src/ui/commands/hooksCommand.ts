@@ -10,12 +10,58 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType, type HistoryItemHooksList } from '../types.js';
-import { type HookRegistryEntry } from '@vybestack/llxprt-code-core';
+import {
+  type HookRegistryEntry,
+  type HookEventName,
+  HookType,
+  ConfigSource,
+} from '@vybestack/llxprt-code-core';
+import type { HookInfo } from '@vybestack/llxprt-code-agents';
+
+/**
+ * Map projected HookInfo[] from the agent surface to the richer
+ * HookRegistryEntry[] shape expected by the HooksList display component.
+ * Command/config details unavailable in the projection are left empty.
+ */
+function mapHookInfoToEntries(hooks: readonly HookInfo[]): HookRegistryEntry[] {
+  return hooks.map((h) => ({
+    config: {
+      type: HookType.Command,
+      command: '',
+      name: h.name,
+    },
+    source: (h.source ?? ConfigSource.User) as ConfigSource,
+    eventName: h.eventName as HookEventName,
+    enabled: h.enabled,
+  }));
+}
 
 /**
  * List all registered hooks
  */
 async function listHooks(context: CommandContext): Promise<void> {
+  const agent = context.services.agent;
+
+  if (agent) {
+    const agentHooks = agent.hooks.listHooks();
+    if (agentHooks.length === 0) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'No hooks registered.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+    const historyItem: HistoryItemHooksList = {
+      type: MessageType.HOOKS_LIST,
+      hooks: mapHookInfoToEntries(agentHooks),
+    };
+    context.ui.addItem(historyItem);
+    return;
+  }
+
   const { config } = context.services;
   if (!config) {
     context.ui.addItem(
@@ -444,6 +490,14 @@ async function completeHookNames(
   context: CommandContext,
   partialArg: string,
 ): Promise<string[]> {
+  const agent = context.services.agent;
+  if (agent) {
+    return agent.hooks
+      .listHooks()
+      .map((h) => h.name)
+      .filter((name) => name.startsWith(partialArg));
+  }
+
   const { config } = context.services;
   if (!config) {
     return [];

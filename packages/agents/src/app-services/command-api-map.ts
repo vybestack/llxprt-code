@@ -264,6 +264,31 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'Hook registry inspection + enable/disable on the active run',
   ),
   runtime(
+    '/hooks list',
+    'agent.hooks.listHooks',
+    'List hooks reflects the active run hook registry',
+  ),
+  runtime(
+    '/hooks enable',
+    'agent.hooks.enable',
+    'Enabling a hook affects the active run',
+  ),
+  runtime(
+    '/hooks disable',
+    'agent.hooks.disable',
+    'Disabling a hook affects the active run',
+  ),
+  runtime(
+    '/hooks enable-all',
+    'agent.hooks.setDisabledHooks',
+    'Bulk enable clears the disabled-hook list on the active run',
+  ),
+  runtime(
+    '/hooks disable-all',
+    'agent.hooks.setDisabledHooks',
+    'Bulk disable sets the disabled-hook list on the active run',
+  ),
+  runtime(
     '/toolkey',
     'agent.tools.keys.save',
     'Built-in tool key storage feeds the active run tools',
