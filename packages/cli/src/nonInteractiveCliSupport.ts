@@ -152,13 +152,15 @@ function handleContentEvent(
     }
   }
   if (context.streamFormatter) {
-    context.streamFormatter.emitEvent({
-      type: JsonStreamEventType.MESSAGE,
-      timestamp: new Date().toISOString(),
-      role: 'assistant',
-      content: outputValue,
-      delta: true,
-    });
+    if (outputValue !== '') {
+      context.streamFormatter.emitEvent({
+        type: JsonStreamEventType.MESSAGE,
+        timestamp: new Date().toISOString(),
+        role: 'assistant',
+        content: outputValue,
+        delta: true,
+      });
+    }
     return jsonResponseText;
   }
   if (context.jsonOutput) {
@@ -260,6 +262,16 @@ function flushEmojiBuffer(
 ): string {
   const remainingBuffered = context.emojiFilter?.flushBuffer();
   if (!remainingBuffered) {
+    return jsonResponseText;
+  }
+  if (context.streamFormatter) {
+    context.streamFormatter.emitEvent({
+      type: JsonStreamEventType.MESSAGE,
+      timestamp: new Date().toISOString(),
+      role: 'assistant',
+      content: remainingBuffered,
+      delta: true,
+    });
     return jsonResponseText;
   }
   if (context.jsonOutput) {

@@ -152,6 +152,94 @@ describe('Turn', () => {
       expect(turn.getDebugResponses().length).toBe(2);
     });
 
+    it('should yield content events for newline-only chunks after visible text', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [
+              { content: { parts: [{ text: 'LLXPRT2208_ALPHA' }] } },
+            ],
+          } as GenerateContentResponse,
+        };
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: '\n\n' }] } }],
+          } as GenerateContentResponse,
+        };
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [
+              { content: { parts: [{ text: 'Alpha paragraph one.' }] } },
+            ],
+          } as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events = [];
+      const reqParts: Part[] = [{ text: 'Hi' }];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.Content,
+          value: 'LLXPRT2208_ALPHA',
+          traceId: undefined,
+        },
+        { type: GeminiEventType.Content, value: '\n\n', traceId: undefined },
+        {
+          type: GeminiEventType.Content,
+          value: 'Alpha paragraph one.',
+          traceId: undefined,
+        },
+      ]);
+    });
+
+    it('should yield content events for leading newline-only chunks', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: '\n\n' }] } }],
+          } as GenerateContentResponse,
+        };
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [
+              { content: { parts: [{ text: 'LLXPRT2208_ALPHA' }] } },
+            ],
+          } as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events = [];
+      const reqParts: Part[] = [{ text: 'Hi' }];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      expect(events).toStrictEqual([
+        { type: GeminiEventType.Content, value: '\n\n', traceId: undefined },
+        {
+          type: GeminiEventType.Content,
+          value: 'LLXPRT2208_ALPHA',
+          traceId: undefined,
+        },
+      ]);
+    });
     it('should yield tool_call_request events for function calls', async () => {
       const mockResponseStream = (async function* () {
         yield {

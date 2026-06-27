@@ -322,22 +322,24 @@ export class Turn {
       }
     }
 
-    const chunkOutcome = analyzeResponseOutcome(allowedParts);
+    const finishReason = resp.candidates?.[0]?.finishReason;
     const text = allowedParts
       .filter((part) => !isThoughtPart(part))
       .map((part) => part.text)
       .filter((partText): partText is string => typeof partText === 'string')
       .join('');
-    if (chunkOutcome.hasVisibleText && text !== '') {
+    if (text !== '') {
       yield { type: GeminiEventType.Content, value: text, traceId };
 
-      // Emit citation event if conditions are met
-      // Based on upstream implementation - emit citation after content
-      const citationEvent = this.emitCitation(
-        'Response may contain information from external sources. Please verify important details independently.',
-      );
-      if (citationEvent) {
-        yield citationEvent;
+      if (text.trim() !== '') {
+        // Emit citation event if conditions are met
+        // Based on upstream implementation - emit citation after content
+        const citationEvent = this.emitCitation(
+          'Response may contain information from external sources. Please verify important details independently.',
+        );
+        if (citationEvent) {
+          yield citationEvent;
+        }
       }
     }
 
@@ -357,9 +359,6 @@ export class Turn {
         yield event;
       }
     }
-
-    // Check if response was truncated or stopped for various reasons
-    const finishReason = resp.candidates?.[0]?.finishReason;
 
     // This is the key change: Only yield 'Finished' if there is a finishReason.
     // Pass only allowed function calls so logging/outcome reflect executable calls.
