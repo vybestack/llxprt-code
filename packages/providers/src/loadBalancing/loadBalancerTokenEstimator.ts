@@ -168,24 +168,28 @@ function estimateUnserializableCharacters(
   }
 
   seen.add(value);
-  if (Array.isArray(value)) {
-    return value.reduce(
-      (total, entry) =>
-        total + estimateUnserializableCharacters(entry, seen, depth + 1),
-      2,
-    );
-  }
+  try {
+    if (Array.isArray(value)) {
+      return value.reduce(
+        (total, entry) =>
+          total + estimateUnserializableCharacters(entry, seen, depth + 1),
+        2,
+      );
+    }
 
-  let total = 2;
-  for (const key of Reflect.ownKeys(value)) {
-    total += String(key).length;
-    total += estimateUnserializableCharacters(
-      (value as Record<PropertyKey, unknown>)[key],
-      seen,
-      depth + 1,
-    );
+    let total = 2;
+    for (const key of Reflect.ownKeys(value)) {
+      total += String(key).length;
+      total += estimateUnserializableCharacters(
+        (value as Record<PropertyKey, unknown>)[key],
+        seen,
+        depth + 1,
+      );
+    }
+    return total;
+  } finally {
+    seen.delete(value);
   }
-  return total;
 }
 
 function stringLength(value: unknown): number {
