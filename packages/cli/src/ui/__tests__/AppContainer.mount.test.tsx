@@ -394,19 +394,7 @@ import {
 import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-
-/**
- * Minimal fake Agent satisfying the threaded `agent` prop. The streaming hooks
- * are mocked wholesale in this suite, so the Agent is not exercised — it only
- * needs to satisfy the type and prove the component mounts when given one.
- */
-function createMockAgent(config: Config): Agent {
-  return {
-    dispose: vi.fn().mockResolvedValue(undefined),
-    getConfig: () => config,
-  } as unknown as Agent;
-}
+import { createMockAgent } from '../../test-utils/mockAgent.js';
 
 // Type for the mock config
 interface MockConfig {

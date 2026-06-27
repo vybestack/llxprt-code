@@ -28,11 +28,10 @@ interface FakeAgent {
   getConfig: () => Config;
 }
 
-function makeConfig(overrides: Partial<Record<string, unknown>> = {}): Config {
+function makeConfig(): Config {
   return {
     getPolicyEngine: () => null,
     getDebugMode: () => false,
-    ...overrides,
   } as unknown as Config;
 }
 
@@ -124,16 +123,11 @@ describe('createForegroundAgent', () => {
     expect(fakeAgent.dispose).not.toHaveBeenCalled();
   });
 
-  it('does not tear down the caller-owned config when disposing the agent', async () => {
-    const dispose = vi.fn();
-    config = makeConfig({ dispose });
-    fakeAgent.getConfig = () => config;
-
-    await createForegroundAgent({ config, sessionMessageBus });
-    await runExitCleanup();
-
-    expect(dispose).not.toHaveBeenCalled();
-  });
+  // Note: the caller-owned Config contract (agent.dispose() must NOT tear down
+  // a fromConfig-supplied Config) is owned and verified by the agents package
+  // against the real fromConfig/dispose flow — see
+  // packages/agents/src/api/__tests__/fromConfig.behavior.test.ts (T7/T7b).
+  // Asserting it here, where fromConfig is mocked, would be mock theater.
 
   it('forwards the exact existing instances to fromConfig (no duplicate runtime construction)', async () => {
     await createForegroundAgent({ config, sessionMessageBus });

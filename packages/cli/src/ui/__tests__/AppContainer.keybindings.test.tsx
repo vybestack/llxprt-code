@@ -19,16 +19,9 @@ import {
 import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import { Command } from '../keyMatchers.js';
 import { defaultKeyBindings } from '../../config/keyBindings.js';
-
-function createMockAgent(config: Config): Agent {
-  return {
-    dispose: vi.fn().mockResolvedValue(undefined),
-    getConfig: () => config,
-  } as unknown as Agent;
-}
+import { createMockAgent } from '../../test-utils/mockAgent.js';
 
 // Mock config type
 interface MockConfig {
