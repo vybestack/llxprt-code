@@ -19,6 +19,7 @@ import {
 import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { createMockAgent } from '../../test-utils/mockAgent.js';
 
 // Mock config type
 interface MockConfig {
@@ -458,7 +459,7 @@ describe('AppContainer.render-budget', () => {
     it('should maintain stable output across re-renders', () => {
       const props = {
         config: mockConfig as unknown as Config,
-        agent: null,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -490,7 +491,7 @@ describe('AppContainer.render-budget', () => {
     it('should not throw on rapid re-renders', () => {
       const props = {
         config: mockConfig as unknown as Config,
-        agent: null,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -516,7 +517,7 @@ describe('AppContainer.render-budget', () => {
     it('should use useMemo for computed values', () => {
       const props = {
         config: mockConfig as unknown as Config,
-        agent: null,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -536,7 +537,7 @@ describe('AppContainer.render-budget', () => {
     it('should use useCallback for event handlers', () => {
       const props = {
         config: mockConfig as unknown as Config,
-        agent: null,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -558,7 +559,7 @@ describe('AppContainer.render-budget', () => {
     it('should mount within reasonable time', async () => {
       const props = {
         config: mockConfig as unknown as Config,
-        agent: null,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -578,7 +579,7 @@ describe('AppContainer.render-budget', () => {
     it('should handle re-renders efficiently', async () => {
       const props = {
         config: mockConfig as unknown as Config,
-        agent: null,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -609,7 +610,7 @@ describe('AppContainer.render-budget', () => {
     it('should complete mount/unmount cycles without errors', () => {
       const props = {
         config: mockConfig as unknown as Config,
-        agent: null,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

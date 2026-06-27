@@ -38,7 +38,11 @@ import {
 
 export interface AppContainerProps {
   config: Config;
-  agent: Agent | null;
+  /**
+   * The single interactive Agent threaded from the composition root.
+   * `config` remains a temporary migration bridge (see #1595).
+   */
+  agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];

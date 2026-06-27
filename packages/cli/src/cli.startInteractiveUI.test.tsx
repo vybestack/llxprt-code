@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { validateDnsResolutionOrder, startInteractiveUI } from './cli.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from './config/settings.js';
 
 // Mock writeToStdout for exit-handler tests
@@ -114,6 +115,10 @@ describe('startInteractiveUI', () => {
     getDebugMode: () => false,
     getTerminalBackground: () => undefined,
   } as Config;
+  const mockAgent = {
+    dispose: vi.fn().mockResolvedValue(undefined),
+    getConfig: () => mockConfig,
+  } as unknown as Agent;
   const mockSettings = {
     merged: {
       ui: {
@@ -134,7 +139,7 @@ describe('startInteractiveUI', () => {
 
     await startInteractiveUI(
       mockConfig,
-      null,
+      mockAgent,
       mockSettings,
       mockStartupWarnings,
       mockWorkspaceRoot,
@@ -162,7 +167,7 @@ describe('startInteractiveUI', () => {
 
     await startInteractiveUI(
       mockConfig,
-      null,
+      mockAgent,
       mockSettings,
       mockStartupWarnings,
       mockWorkspaceRoot,
@@ -221,7 +226,7 @@ describe('startInteractiveUI', () => {
 
       await startInteractiveUI(
         mouseEnabledConfig,
-        null,
+        mockAgent,
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,
@@ -287,7 +292,7 @@ describe('startInteractiveUI', () => {
 
       await startInteractiveUI(
         mouseEnabledConfig,
-        null,
+        mockAgent,
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,

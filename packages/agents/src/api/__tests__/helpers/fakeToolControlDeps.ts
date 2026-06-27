@@ -19,10 +19,17 @@
  */
 
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
+import {
+  MessageBusType,
+  type ToolConfirmationResponse,
+} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
 import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
+import type {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../../config-types.js';
 import type { ToolControlDeps } from '../../control/toolControl.js';
 
@@ -44,7 +51,9 @@ export interface ToolControlDepsHandle {
   /** All TOOL_CONFIRMATION_RESPONSE messages the bus published. */
   responses(): ReadonlyArray<{
     readonly correlationId: string;
-    readonly outcome: string;
+    readonly outcome?: ToolConfirmationOutcome;
+    readonly payload?: ToolConfirmationPayload;
+    readonly requiresUserConfirmation?: boolean;
   }>;
 }
 
@@ -60,12 +69,14 @@ export function createToolControlDeps(
   const messageBus = new MessageBus();
   let allowed: readonly string[] | undefined;
   const editorCallbacksHolder = { editorCallbacks: noopEditorCallbacks };
-  const responses: Array<{ correlationId: string; outcome: string }> = [];
+  const responses: ToolConfirmationResponse[] = [];
 
-  messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_RESPONSE, (msg) => {
-    const m = msg as unknown as { correlationId: string; outcome: string };
-    responses.push({ correlationId: m.correlationId, outcome: m.outcome });
-  });
+  messageBus.subscribe<ToolConfirmationResponse>(
+    MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+    (msg) => {
+      responses.push(msg);
+    },
+  );
 
   const allTools = tools.map((t) => ({
     name: t.name,

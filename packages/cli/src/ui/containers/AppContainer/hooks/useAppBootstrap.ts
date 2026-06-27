@@ -39,14 +39,18 @@ import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 import { registerCleanup } from '../../../../utils/cleanup.js';
-import type { LoadedSettings } from '../../../../config/settings.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItem } from '../../../types.js';
 import type { TodoContinuationHook } from './useTodoContinuationFlow.js';
 
 export interface AppBootstrapProps {
   config: Config;
-  agent: Agent | null;
+  /**
+   * The single interactive Agent threaded from the composition root.
+   * `config` remains a temporary migration bridge (see #1595).
+   */
+  agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -61,7 +65,12 @@ export interface AppBootstrapProps {
 
 export interface AppBootstrapResult {
   config: Config;
-  agent: Agent | null;
+  /**
+   * The single interactive Agent, exposed alongside `config` so future
+   * migration steps can replace remaining `config.getAgentClient()` usage
+   * (see #1595). Streaming hooks are intentionally unchanged at this stage.
+   */
+  agent: Agent;
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
   isFocused: boolean;

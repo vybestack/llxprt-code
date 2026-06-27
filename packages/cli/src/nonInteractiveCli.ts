@@ -24,6 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { type Part } from '@google/genai';
 import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
@@ -32,7 +33,7 @@ import type { LoadedSettings } from './config/settings.js';
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
-import { processResponseTurns } from './nonInteractiveCliSupport.js';
+import { processAgentStream } from './nonInteractiveCliSupport.js';
 import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
@@ -233,28 +234,53 @@ async function processQuery(
     startTime: number;
   },
 ): Promise<void> {
-  await processResponseTurns(
-    query,
-    {
+  let agent: Agent | undefined;
+  try {
+    agent = await fromConfig({
       config: params.config,
-      abortController: options.abortController,
-      prompt_id: params.prompt_id,
-      jsonOutput: options.jsonOutput,
-      streamJsonOutput: options.streamJsonOutput,
-      streamFormatter: options.streamFormatter,
-      emojiFilter: options.emojiFilter,
-      runtimeMessageBus: params.runtimeMessageBus,
-      createProfileNameWriter: () =>
-        createProfileNameWriter(
-          params.config,
-          options.jsonOutput,
-          options.streamFormatter,
-        ),
-      maxSessionTurns: params.config.getMaxSessionTurns(),
-    },
-    options.startTime,
-    () => uiTelemetryService.getMetrics(),
-  );
+      messageBus: params.runtimeMessageBus,
+      sessionId: params.config.getSessionId(),
+    });
+    const eventStream = agent.stream(query, {
+      signal: options.abortController.signal,
+      promptId: params.prompt_id,
+      maxTurns: params.config.getMaxSessionTurns(),
+    });
+    await processAgentStream(
+      eventStream,
+      {
+        config: params.config,
+        jsonOutput: options.jsonOutput,
+        streamJsonOutput: options.streamJsonOutput,
+        streamFormatter: options.streamFormatter,
+        emojiFilter: options.emojiFilter,
+        createProfileNameWriter: () =>
+          createProfileNameWriter(
+            params.config,
+            options.jsonOutput,
+            options.streamFormatter,
+          ),
+      },
+      options.startTime,
+      () => uiTelemetryService.getMetrics(),
+    );
+  } finally {
+    if (agent !== undefined) {
+      // Dispose in its own try/catch so a disposal failure never masks the
+      // original error thrown by the stream/turn loop above.
+      try {
+        await agent.dispose();
+      } catch (disposeError) {
+        debugLogger.error(
+          `Failed to dispose agent: ${
+            disposeError instanceof Error
+              ? disposeError.message
+              : String(disposeError)
+          }`,
+        );
+      }
+    }
+  }
 }
 
 export async function runNonInteractive(

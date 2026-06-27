@@ -130,7 +130,7 @@ import {
   setupSessionRecording,
 } from './cliSessionBootstrap.js';
 import type { SessionRecordingSetup } from './cliSessionBootstrap.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { createForegroundAgent } from './cliAgentBootstrap.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
@@ -230,8 +230,10 @@ function handleError(error: Error, errorInfo: ErrorInfo) {
  * @pseudocode recording-integration.md lines 115-132
  */
 export async function startInteractiveUI(
+  // `config` remains a temporary migration bridge alongside the Agent until the
+  // remaining UI Config consumers are migrated (see #1595).
   config: Config,
-  agent: Agent | null,
+  agent: Agent,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
@@ -364,7 +366,6 @@ interface PipedOrPromptSessionOptions {
 
 interface SessionDispatchOptions {
   config: Config;
-  agent: Agent | null;
   settings: LoadedSettings;
   workspaceRoot: string;
   sessionMessageBus: MessageBus;
@@ -380,7 +381,6 @@ interface SessionDispatchOptions {
  */
 async function dispatchInteractiveOrNonInteractive({
   config,
-  agent,
   settings,
   workspaceRoot,
   sessionMessageBus,
@@ -400,8 +400,11 @@ async function dispatchInteractiveOrNonInteractive({
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-    // Fire SessionStart hook for interactive mode
-    await triggerSessionStartHook(config, SessionStartSource.Startup);
+    // Create the single interactive Agent at the composition root. `fromConfig`
+    // fires the SessionStart hook internally via the same core hook, so the
+    // interactive branch no longer fires it explicitly (the non-interactive
+    // branch keeps its own explicit call since it builds no Agent).
+    const agent = await createForegroundAgent({ config, sessionMessageBus });
 
     await startInteractiveUI(
       config,
@@ -554,36 +557,6 @@ ${finalInput}`;
   return nonInteractiveExitCode;
 }
 
-/**
- * Constructs the rich Agent facade adopting the initialized Config so that
- * slash commands can use agent.* sub-surfaces instead of deep Config access.
- * Returns null when adoption fails (commands gracefully fall back to Config).
- */
-async function buildAgentFacade(
-  config: Config,
-  sessionMessageBus: MessageBus,
-): Promise<Agent | null> {
-  // Only build the agent facade for interactive sessions; non-interactive
-  // (piped) mode does not use slash commands and avoids adoption overhead.
-  if (typeof config.isInteractive !== 'function' || !config.isInteractive()) {
-    return null;
-  }
-  try {
-    return await fromConfig({
-      config,
-      messageBus: sessionMessageBus,
-      sessionId: config.getSessionId(),
-    });
-  } catch (agentErr) {
-    debugLogger.warn(
-      `Agent facade construction skipped: ${
-        agentErr instanceof Error ? agentErr.message : String(agentErr)
-      }`,
-    );
-    return null;
-  }
-}
-
 export async function main() {
   configureEarlyDebugLogging();
 
@@ -676,11 +649,8 @@ export async function main() {
     return;
   }
 
-  const agent = await buildAgentFacade(config, sessionMessageBus);
-
   await dispatchInteractiveOrNonInteractive({
     config,
-    agent,
     settings,
     workspaceRoot,
     sessionMessageBus,

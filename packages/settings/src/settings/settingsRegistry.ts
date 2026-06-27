@@ -31,6 +31,10 @@ const ALIAS_NORMALIZATION_RULES: Record<string, string> = {
   'tool-choice': 'tool_choice',
   toolChoice: 'tool_choice',
   'disabled-tools': 'tools.disabled',
+  // settings.json stores this under the camelCase key; without an alias it is
+  // treated as an unknown pass-through model-param and leaks into API bodies.
+  // @issue #2182
+  streamIdleTimeoutMs: 'stream-idle-timeout-ms',
 };
 
 const HEADER_PRESERVE_SET = new Set([
@@ -146,26 +150,107 @@ function extractCustomHeaders(
   return customHeaders;
 }
 
-/** Flatten provider overrides and reasoning sub-keys into a merged settings object. */
+/**
+ * Flatten nested objects whose key is a known registry prefix (e.g. `text`,
+ * `compression`, `compression.density`) into their registered dotted keys.
+ *
+ * Previously only `reasoning.*` was flattened, so a nested `text` object (or
+ * any other prefix) leaked into modelParams as an unknown pass-through key and
+ * was spread verbatim into provider request bodies — rejected by Anthropic as
+ * "text: Extra inputs are not permitted". @issue #2182
+ *
+ * Semantics:
+ *  - A registry prefix is any ancestor of a registered dotted key
+ *    (`text.verbosity` -> prefix `text`).
+ *  - Nested objects under a prefix are expanded into dotted keys; the original
+ *    container is kept only when it has its own bare spec (e.g. `reasoning`),
+ *    so a prefix-only container never falls through to modelParams.
+ *  - Explicit flat keys always win over values extracted from a nested object.
+ */
+function flattenRegistryPrefixedObjects(
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const { prefixes, bareKeys } = getRegistryStructure();
+  const result: Record<string, unknown> = { ...source };
+
+  for (const [key, value] of Object.entries(source)) {
+    if (!isPlainObject(value) || !prefixes.has(key)) {
+      continue;
+    }
+    emitFlattenedEntries(result, key, value);
+    if (!bareKeys.has(key)) {
+      delete result[key];
+    }
+  }
+
+  return result;
+}
+
+function emitFlattenedEntries(
+  result: Record<string, unknown>,
+  dottedKey: string,
+  value: Record<string, unknown>,
+): void {
+  const { prefixes, bareKeys } = getRegistryStructure();
+  for (const [subKey, subValue] of Object.entries(value)) {
+    const childKey = `${dottedKey}.${subKey}`;
+    if (isPlainObject(subValue) && prefixes.has(childKey)) {
+      emitFlattenedEntries(result, childKey, subValue);
+      if (!bareKeys.has(childKey)) {
+        continue;
+      }
+    }
+    if (!(childKey in result)) {
+      result[childKey] = subValue;
+    }
+  }
+}
+
+let registryStructureCache: {
+  prefixes: Set<string>;
+  bareKeys: Set<string>;
+} | null = null;
+
+function getRegistryStructure(): {
+  prefixes: Set<string>;
+  bareKeys: Set<string>;
+} {
+  if (registryStructureCache !== null) {
+    return registryStructureCache;
+  }
+  const prefixes = new Set<string>();
+  const bareKeys = new Set<string>();
+  for (const spec of SETTINGS_REGISTRY) {
+    bareKeys.add(spec.key);
+    let prefix = spec.key;
+    let dotIndex = prefix.lastIndexOf('.');
+    while (dotIndex > 0) {
+      prefix = prefix.slice(0, dotIndex);
+      prefixes.add(prefix);
+      dotIndex = prefix.lastIndexOf('.');
+    }
+  }
+  registryStructureCache = { prefixes, bareKeys };
+  return registryStructureCache;
+}
+
+/**
+ * Flatten provider overrides and reasoning sub-keys into a merged settings object.
+ *
+ * Base settings are flattened first, then provider overrides are flattened
+ * separately and spread on top so provider-specific values always win —
+ * including when an override arrives as a nested container (e.g. `text` →
+ * `text.verbosity`) against a base-level flat key of the same name.
+ */
 function mergeProviderSettings(
   mixed: Record<string, unknown>,
   providerOverrides: Record<string, unknown>,
 ): Record<string, unknown> {
-  const merged = { ...mixed, ...providerOverrides };
-
-  if (isPlainObject(merged['reasoning'])) {
-    const reasoningObj = merged['reasoning'];
-
-    for (const [subKey, subValue] of Object.entries(reasoningObj)) {
-      const fullKey = `reasoning.${subKey}`;
-
-      if (!(fullKey in merged)) {
-        merged[fullKey] = subValue;
-      }
-    }
-  }
-
-  return merged;
+  const baseFlattened = flattenRegistryPrefixedObjects({ ...mixed });
+  const overridesFlattened = flattenRegistryPrefixedObjects({
+    ...providerOverrides,
+  });
+  return { ...baseFlattened, ...overridesFlattened };
 }
 
 /** Categorize a single setting entry into the appropriate bucket. */
