@@ -60,6 +60,9 @@ function resolveAgentCompressionStatus(
   if (newTokenCount < originalTokenCount) {
     return CompressionStatus.COMPRESSED;
   }
+  if (newTokenCount > originalTokenCount) {
+    return CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT;
+  }
   return CompressionStatus.NOOP;
 }
 

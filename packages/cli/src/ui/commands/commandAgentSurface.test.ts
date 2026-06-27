@@ -21,42 +21,12 @@ import { hooksCommand } from './hooksCommand.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
-import type { LoadedSettings } from '../../config/settings.js';
-import type { SessionStatsState } from '../contexts/SessionContext.js';
+import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
 function buildContextWithAgent(agent: Partial<Agent>): CommandContext {
-  return {
-    services: {
-      config: null,
-      agent: agent as Agent,
-      settings: {} as unknown as LoadedSettings,
-      git: undefined,
-      logger: {} as unknown as { log: () => void },
-    },
-    ui: {
-      addItem: vi.fn(),
-      clear: vi.fn(),
-      setDebugMessage: vi.fn(),
-      pendingItem: null,
-      setPendingItem: vi.fn(),
-      loadHistory: vi.fn(),
-      toggleCorgiMode: vi.fn(),
-      toggleDebugProfiler: vi.fn(),
-      toggleVimEnabled: vi.fn(),
-      setGeminiMdFileCount: vi.fn(),
-      setLlxprtMdFileCount: vi.fn(),
-      updateHistoryTokenCount: vi.fn(),
-      reloadCommands: vi.fn(),
-      extensionsUpdateState: new Map(),
-      dispatchExtensionStateUpdate: vi.fn(),
-      addConfirmUpdateExtensionRequest: vi.fn(),
-      setExtensionsUpdateState: vi.fn(),
-    },
-    session: {
-      sessionShellAllowlist: new Set<string>(),
-      stats: {} as SessionStatsState,
-    },
-  } as unknown as CommandContext;
+  return createMockCommandContext({
+    services: { agent: agent as Agent },
+  });
 }
 
 describe('compressCommand — agent surface', () => {
@@ -93,11 +63,17 @@ describe('compressCommand — agent surface', () => {
     });
     const context = buildContextWithAgent({
       compress: compressMock,
-      getConfig: () => ({ getAgentClient }) as unknown as never,
     });
+    // Provide a real config mock so the fallback path is reachable but NOT used
+    (
+      context.services as { config: { getAgentClient: typeof getAgentClient } }
+    ).config = {
+      getAgentClient,
+    } as unknown as CommandContext['services']['config'];
 
     await compressCommand.action!(context, '');
 
+    expect(compressMock).toHaveBeenCalledTimes(1);
     expect(getAgentClient).not.toHaveBeenCalled();
   });
 });
@@ -173,8 +149,9 @@ describe('tasksCommand — agent surface', () => {
       tasks: { list: listMock } as unknown as AgentTasksControl,
     });
 
-    const listSub = taskCommand.subCommands!.find((c) => c.name === 'list')!;
-    await listSub.action!(context, '');
+    const listSub = taskCommand.subCommands?.find((c) => c.name === 'list');
+    expect(listSub).toBeDefined();
+    await listSub!.action!(context, '');
 
     expect(listMock).toHaveBeenCalledTimes(1);
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
@@ -199,8 +176,9 @@ describe('tasksCommand — agent surface', () => {
       } as unknown as AgentTasksControl,
     });
 
-    const endSub = taskCommand.subCommands!.find((c) => c.name === 'end')!;
-    await endSub.action!(context, 'coder-abc123');
+    const endSub = taskCommand.subCommands?.find((c) => c.name === 'end');
+    expect(endSub).toBeDefined();
+    await endSub!.action!(context, 'coder-abc123');
 
     expect(getMock).toHaveBeenCalledWith('coder-abc123');
     expect(cancelMock).toHaveBeenCalledWith('coder-abc123');
@@ -295,10 +273,11 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, enable } as unknown as AgentHookControl,
     });
 
-    const enableSub = hooksCommand.subCommands!.find(
+    const enableSub = hooksCommand.subCommands?.find(
       (c) => c.name === 'enable',
-    )!;
-    await enableSub.action!(context, 'preToolCall');
+    );
+    expect(enableSub).toBeDefined();
+    await enableSub!.action!(context, 'preToolCall');
 
     expect(enable).toHaveBeenCalledWith('preToolCall');
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
@@ -317,10 +296,11 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, disable } as unknown as AgentHookControl,
     });
 
-    const disableSub = hooksCommand.subCommands!.find(
+    const disableSub = hooksCommand.subCommands?.find(
       (c) => c.name === 'disable',
-    )!;
-    await disableSub.action!(context, 'postToolCall');
+    );
+    expect(disableSub).toBeDefined();
+    await disableSub!.action!(context, 'postToolCall');
 
     expect(disable).toHaveBeenCalledWith('postToolCall');
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
@@ -338,10 +318,11 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, setDisabledHooks } as unknown as AgentHookControl,
     });
 
-    const disableAllSub = hooksCommand.subCommands!.find(
+    const disableAllSub = hooksCommand.subCommands?.find(
       (c) => c.name === 'disable-all',
-    )!;
-    await disableAllSub.action!(context, '');
+    );
+    expect(disableAllSub).toBeDefined();
+    await disableAllSub!.action!(context, '');
 
     expect(setDisabledHooks).toHaveBeenCalledWith(['hook1', 'hook2']);
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
@@ -359,10 +340,11 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, setDisabledHooks } as unknown as AgentHookControl,
     });
 
-    const enableAllSub = hooksCommand.subCommands!.find(
+    const enableAllSub = hooksCommand.subCommands?.find(
       (c) => c.name === 'enable-all',
-    )!;
-    await enableAllSub.action!(context, '');
+    );
+    expect(enableAllSub).toBeDefined();
+    await enableAllSub!.action!(context, '');
 
     expect(setDisabledHooks).toHaveBeenCalledWith([]);
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;

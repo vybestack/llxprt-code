@@ -36,13 +36,20 @@ async function logoutViaAgent(
         : `Cleaned up authentication state for ${provider} (was not authenticated)`,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to logout from ${provider}: ${errorMessage}`,
-    };
+    return logoutErrorHandler(provider, error);
   }
+}
+
+function logoutErrorHandler(
+  provider: string,
+  error: unknown,
+): MessageActionReturn {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  return {
+    type: 'message',
+    messageType: 'error',
+    content: `Failed to logout from ${provider}: ${errorMessage}`,
+  };
 }
 
 async function logoutViaRuntimeApi(
@@ -75,12 +82,7 @@ async function logoutViaRuntimeApi(
         : `Cleaned up authentication state for ${provider} (was not authenticated)`,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to logout from ${provider}: ${errorMessage}`,
-    };
+    return logoutErrorHandler(provider, error);
   }
 }
 

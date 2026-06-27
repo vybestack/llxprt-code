@@ -10,8 +10,9 @@
  *
  * Command-map completeness test (#2203 / REQ-021). Every registered CLI slash
  * command (top-level and sub-command) must appear in COMMAND_API_MAP or be
- * present in the explicit CLI_LOCAL_EXEMPTION set. This prevents future drift
- * between the command registry and the classification map.
+ * excluded via the CONFIG_GATED_COMMANDS set (commands not loaded with null
+ * config). This prevents future drift between the command registry and the
+ * classification map.
  *
  * The COMMAND_API_MAP classifies each command as runtime / subpath / cli-local
  * and is the canonical source of truth for the runtime-vs-app-service boundary.
@@ -26,8 +27,32 @@ import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
  * Config-gated commands that are not loaded when config is null. These are
  * intentionally excluded from the completeness check because their registration
  * depends on feature flags that require a fully initialized Config.
+ *
+ * Note: /uiprofile is gated by isDevelopment in BuiltinCommandLoader. The test
+ * environment sets isDevelopment=true so it is loaded and checked. If this
+ * assumption changes, add '/uiprofile' to this list.
  */
-const CONFIG_GATED_COMMANDS: readonly string[] = ['/skills', '/hooks'];
+const CONFIG_GATED_COMMANDS: readonly string[] = [
+  '/skills',
+  '/hooks',
+  '/restore',
+  '/ide',
+  '/uiprofile',
+];
+
+/**
+ * Conceptual entries in COMMAND_API_MAP that do not correspond to literal slash
+ * commands but are required by the boundary test (app-service functions invoked
+ * via dialogs or internal actions, not via /command). These are intentionally
+ * excluded from the reverse orphan check.
+ */
+const CONCEPTUAL_COMMANDS: readonly string[] = [
+  '/mcp add',
+  '/mcp remove',
+  '/memory edit',
+  '/approval-mode',
+  '/chat tag',
+];
 
 /**
  * Returns true when the given command path is covered by at least one entry in
@@ -80,6 +105,19 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
   it('every registered command has a COMMAND_API_MAP entry', () => {
     const unmapped = checkablePaths.filter((p) => !isCommandMapped(p));
     expect(unmapped).toStrictEqual([]);
+  });
+
+  it('no orphaned slash-command entries exist in COMMAND_API_MAP', () => {
+    const slashEntries = COMMAND_API_MAP.map((e) => e.command).filter((cmd) =>
+      cmd.startsWith('/'),
+    );
+    const knownPaths = new Set([
+      ...checkablePaths,
+      ...CONFIG_GATED_COMMANDS,
+      ...CONCEPTUAL_COMMANDS,
+    ]);
+    const orphans = slashEntries.filter((cmd) => !knownPaths.has(cmd));
+    expect(orphans).toStrictEqual([]);
   });
 
   it('no two COMMAND_API_MAP entries share the same command string', () => {

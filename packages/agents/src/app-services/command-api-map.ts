@@ -99,9 +99,9 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'Switching the live model affects the active turn',
   ),
   runtime(
-    '/profile apply',
+    '/profile load',
     'agent.profiles.apply',
-    'Applying a profile rebinds the active runtime',
+    'Loading a profile rebinds the active runtime',
   ),
   subpath(
     '/profile save',
@@ -124,9 +124,9 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'Compression operates on the live conversation history',
   ),
   runtime(
-    '/mcp status',
-    'agent.mcp.status',
-    'MCP status reflects the live runtime connection set',
+    '/mcp list',
+    'agent.mcp.listServers',
+    'MCP listing reflects the live runtime connection set',
   ),
   runtime(
     '/mcp auth',
@@ -173,10 +173,10 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'agent.addDirectoryContext',
     'Directory context feeds the next live turn',
   ),
-  runtime(
+  cliLocal(
     '/memory show',
-    'agent.updateSystemInstruction',
-    'Showing memory reflects the live system instruction',
+    'memory show (UI)',
+    'Memory display is CLI-local; updates route via runtime',
   ),
   subpath(
     '/memory edit',
@@ -300,11 +300,6 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'Context dump reads the live conversation state for debugging',
   ),
   runtime(
-    '/mcp list',
-    'agent.mcp.listServers',
-    'Listing MCP servers reflects the live runtime connection set',
-  ),
-  runtime(
     '/mcp refresh',
     'agent.mcp.refresh',
     'Refreshing MCP discovery affects the live runtime tool set',
@@ -313,11 +308,6 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     '/chat list',
     'agent.session.listCheckpoints',
     'Listing checkpoints reflects the live session state',
-  ),
-  runtime(
-    '/profile load',
-    'agent.profiles.apply',
-    'Loading a profile rebinds the active runtime',
   ),
   runtime(
     '/profile show',
@@ -334,10 +324,10 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'agent.updateSystemInstruction',
     'Adding memory content affects the live system instruction',
   ),
-  runtime(
+  cliLocal(
     '/memory list',
-    'agent.updateSystemInstruction',
-    'Listing memory reflects the live system instruction sources',
+    'memory list (UI)',
+    'Memory listing is CLI-local; updates route via runtime',
   ),
   subpath(
     '/diagnostics',
@@ -478,15 +468,15 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'agent.session.createCheckpoint',
     'Tagging a checkpoint is tied to the live agent snapshot',
   ),
-  runtime(
+  cliLocal(
     '/chat delete',
-    'agent.session.listCheckpoints',
-    'Deleting a checkpoint mutates live session state',
+    'chat delete (UI)',
+    'Checkpoint deletion is CLI-local; no Agent deleteCheckpoint surface yet',
   ),
-  runtime(
+  cliLocal(
     '/chat rename',
-    'agent.session.createCheckpoint',
-    'Renaming a checkpoint mutates live session state',
+    'chat rename (UI)',
+    'Checkpoint rename is CLI-local; no Agent renameCheckpoint surface yet',
   ),
   runtime(
     '/chat restore',
@@ -509,10 +499,10 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'agent.addDirectoryContext',
     'Adding directory context feeds the next live turn',
   ),
-  runtime(
+  cliLocal(
     '/directory show',
-    'agent.addDirectoryContext',
-    'Showing directory context reflects the active context set',
+    'directory show (UI)',
+    'Directory display is CLI-local; add routes via runtime',
   ),
   subpath(
     '/extensions list',
@@ -524,10 +514,10 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'manageExtensions',
     'Updating extensions mutates durable app-service state',
   ),
-  runtime(
+  cliLocal(
     '/extensions restart',
-    'agent.mcp.refresh',
-    'Restarting an extension reloads the live runtime tool set',
+    'extension restart (UI)',
+    'Extension restart handled by extension manager; no Agent surface yet',
   ),
   subpath(
     '/extensions install',

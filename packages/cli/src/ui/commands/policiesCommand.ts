@@ -135,6 +135,11 @@ function formatPolicyOutput(
   };
 }
 
+/**
+ * Handle /policies command — displays active policy rules.
+ * Prefers the agent.policy facade; falls back to config.getPolicyEngine()
+ * when the agent is null (tracked migration debt).
+ */
 function handlePoliciesCommand(
   context: CommandContext,
   _args: string,

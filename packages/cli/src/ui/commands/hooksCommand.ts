@@ -53,8 +53,9 @@ async function listHooks(context: CommandContext): Promise<void> {
 }
 
 /**
- * Resolve a hook by name from the Agent surface. Returns the HookInfo if found,
- * or null if not registered (in which case an error message is emitted).
+ * Check whether a hook with the given name is registered on the Agent surface.
+ * Emits an error message via context.ui if not found.
+ * Returns true if the hook exists, false otherwise.
  */
 function resolveAgentHook(
   agent: NonNullable<CommandContext['services']['agent']>,
