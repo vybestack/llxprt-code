@@ -321,6 +321,101 @@ describe('LoadBalancingProvider', () => {
       });
     });
 
+    describe('issue #2182: cross-provider ephemerals must not leak into modelParams', () => {
+      it('does not surface a nested text object or streamIdleTimeoutMs on the delegate invocation', async () => {
+        const resolvedSubProfiles: ResolvedSubProfile[] = [
+          {
+            name: 'opusthinking',
+            providerName: 'anthropic',
+            model: 'claude-opus-4-8',
+            ephemeralSettings: {
+              'reasoning.enabled': true,
+              'reasoning.effort': 'xhigh',
+            },
+            modelParams: {},
+          },
+          {
+            name: 'gpt55high',
+            providerName: 'codex',
+            model: 'gpt-5.5',
+            ephemeralSettings: {
+              'reasoning.enabled': true,
+              'reasoning.effort': 'high',
+              'text.verbosity': 'medium',
+            },
+            modelParams: {},
+          },
+        ];
+
+        const provider = new LoadBalancingProvider(
+          {
+            profileName: 'opusfirst',
+            strategy: 'failover',
+            subProfiles: resolvedSubProfiles,
+            // LB-level nested object + the global camelCase setting from
+            // settings.json that previously leaked verbatim into the body.
+            lbProfileEphemeralSettings: {
+              reasoning: { enabled: true, effort: 'high' },
+              text: { verbosity: 'medium' },
+              'prompt-caching': '24h',
+              streamIdleTimeoutMs: 60000,
+            },
+          },
+          providerManager,
+        );
+
+        let capturedOptions: GenerateChatOptions | undefined;
+        const mockProvider = {
+          name: 'anthropic',
+          async *generateChatCompletion(
+            options: GenerateChatOptions,
+          ): AsyncIterableIterator<IContent> {
+            capturedOptions = options;
+            yield { role: 'model', parts: [{ text: 'response' }] };
+          },
+          getModels: async () => [],
+          getDefaultModel: () => 'claude-opus-4-8',
+          getServerTools: () => [],
+          invokeServerTool: async () => ({}),
+        };
+
+        const originalGetProvider =
+          providerManager.getProviderByName.bind(providerManager);
+        providerManager.getProviderByName = () => mockProvider as IProvider;
+
+        try {
+          const iterator = provider.generateChatCompletion({
+            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            settings: settingsService,
+            config,
+            runtime: { settingsService, config },
+          });
+          for await (const _chunk of iterator) {
+            // Consume
+          }
+
+          expect(capturedOptions?.invocation?.modelParams).toBeDefined();
+          const modelParams = capturedOptions!.invocation!
+            .modelParams as Record<string, unknown>;
+          expect(modelParams['text']).toBeUndefined();
+          expect(modelParams['text.verbosity']).toBeUndefined();
+          expect(modelParams['streamIdleTimeoutMs']).toBeUndefined();
+          expect(modelParams['stream_idle_timeout_ms']).toBeUndefined();
+          expect(modelParams['reasoning']).toBeUndefined();
+          // text.verbosity survives as model-behavior, not a raw model-param.
+          expect(
+            capturedOptions?.invocation?.getModelBehavior('text.verbosity'),
+          ).toBe('medium');
+          expect(
+            capturedOptions?.invocation?.getCliSetting(
+              'stream-idle-timeout-ms',
+            ),
+          ).toBe(60000);
+        } finally {
+          providerManager.getProviderByName = originalGetProvider;
+        }
+      });
+    });
     describe('ephemeralSettings merge (dumb merge)', () => {
       it('should merge LB profile ephemeralSettings over sub-profile ephemeralSettings', async () => {
         const resolvedSubProfiles: ResolvedSubProfile[] = [
