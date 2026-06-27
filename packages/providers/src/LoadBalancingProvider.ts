@@ -111,6 +111,8 @@ export interface LoadBalancerStats {
  * @plan PLAN-20251212issue489 - Phase 1
  */
 export interface ExtendedLoadBalancerStats extends LoadBalancerStats {
+  members: string[];
+  lastSelectedModel: string | null;
   backendMetrics: Record<string, BackendMetrics>;
   circuitBreakerStates: Record<string, CircuitBreakerState>;
   currentTPM: Record<string, number>;

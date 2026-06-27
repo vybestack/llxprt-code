@@ -21,7 +21,10 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
 
 interface LoadBalancerStatsResult {
+  profileName: string;
+  members: string[];
   lastSelected: string | null;
+  lastSelectedModel: string | null;
   totalRequests: number;
   profileCounts: Record<string, number>;
 }
@@ -142,6 +145,20 @@ function appendFailoverInfo(
   }
 }
 
+function appendProfileDistribution(
+  diagnostics: string[],
+  lbStats: LoadBalancerStatsResult,
+): void {
+  diagnostics.push('- Profile Distribution:');
+  for (const [profile, count] of Object.entries(lbStats.profileCounts)) {
+    const percentage =
+      lbStats.totalRequests > 0
+        ? ((count / lbStats.totalRequests) * 100).toFixed(1)
+        : '0';
+    diagnostics.push(`  - ${profile}: ${count} requests (${percentage}%)`);
+  }
+}
+
 function appendLoadBalancerStats(
   diagnostics: string[],
   logger: DebugLogger,
@@ -159,16 +176,16 @@ function appendLoadBalancerStats(
     }
     const lbStats = lbProvider.getStats();
     diagnostics.push('\n## Load Balancer Stats');
+    diagnostics.push(`- Load Balancer Profile: ${lbStats.profileName}`);
+    diagnostics.push(
+      `- Member Sub-Profiles: ${
+        lbStats.members.length > 0 ? lbStats.members.join(', ') : 'none'
+      }`,
+    );
     diagnostics.push(`- Active Sub-Profile: ${lbStats.lastSelected ?? 'none'}`);
+    diagnostics.push(`- Active Model: ${lbStats.lastSelectedModel ?? 'none'}`);
     diagnostics.push(`- Total Requests: ${lbStats.totalRequests}`);
-    diagnostics.push('- Profile Distribution:');
-    for (const [profile, count] of Object.entries(lbStats.profileCounts)) {
-      const percentage =
-        lbStats.totalRequests > 0
-          ? ((count / lbStats.totalRequests) * 100).toFixed(1)
-          : '0';
-      diagnostics.push(`  - ${profile}: ${count} requests (${percentage}%)`);
-    }
+    appendProfileDistribution(diagnostics, lbStats);
   } catch (error) {
     logger.debug(
       () =>

@@ -23,6 +23,7 @@ import { DebugProfiler } from './DebugProfiler.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateMiddle } from '../utils/responsive.js';
 import { ThemedGradient } from './ThemedGradient.js';
+import { resolveModelIdentity } from '../utils/modelIdentity.js';
 
 const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
 const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
@@ -315,55 +316,11 @@ interface ModelNameDisplayProps {
 const ModelNameDisplay = React.memo(
   ({ model, showModelName, runtime }: ModelNameDisplayProps) => {
     if (!showModelName) return null;
-    const providerStatus = runtime.getActiveProviderStatus();
-    const lbDisplay = tryGetLBDisplayName(runtime, providerStatus);
-    if (lbDisplay !== null) return lbDisplay;
-    return <Text color={SemanticColors.text.primary}>{model}</Text>;
+    const identity = resolveModelIdentity(runtime, model);
+    return <Text color={SemanticColors.text.primary}>{identity}</Text>;
   },
 );
 ModelNameDisplay.displayName = 'ModelNameDisplay';
-
-function tryGetLBDisplayName(
-  runtime: ReturnType<typeof useRuntimeApi>,
-  providerStatus: { providerName: string | null },
-): React.ReactNode | null {
-  if (providerStatus.providerName !== 'load-balancer') return null;
-  try {
-    const providerManager = runtime.getCliProviderManager();
-    const lbProvider = providerManager.getProviderByName('load-balancer');
-    if (
-      lbProvider &&
-      'getStats' in lbProvider &&
-      typeof (lbProvider as { getStats?: () => unknown }).getStats ===
-        'function'
-    ) {
-      const lbStats = (
-        lbProvider as {
-          getStats: () => {
-            lastSelected: string | null;
-            profileName: string;
-          };
-        }
-      ).getStats();
-      if (lbStats.lastSelected) {
-        return (
-          <>
-            <Text color={SemanticColors.text.primary}>
-              {lbStats.lastSelected}
-            </Text>
-            <Text color={SemanticColors.text.secondary}>
-              {' '}
-              via {lbStats.profileName}
-            </Text>
-          </>
-        );
-      }
-    }
-  } catch {
-    // Silently ignore errors fetching LB stats in the footer
-  }
-  return null;
-}
 
 // Paid/free mode sub-component
 interface PaidModeDisplayProps {

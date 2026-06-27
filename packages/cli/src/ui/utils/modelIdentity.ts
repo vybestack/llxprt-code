@@ -1,0 +1,173 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Placeholder shown for a load-balancer sub-profile or model that has not yet
+ * been selected for the current session.
+ */
+export const LB_PENDING_PLACEHOLDER = 'none';
+
+const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
+const UNKNOWN_IDENTITY = 'unknown';
+
+export interface LoadBalancerIdentity {
+  profileName: string;
+  activeSubProfile: string | null;
+  activeModel: string | null;
+}
+
+export interface ModelIdentityInput {
+  profileName: string | null;
+  providerName: string | null;
+  modelName: string | null;
+  fallback?: string;
+  loadBalancer?: LoadBalancerIdentity;
+}
+
+interface LoadBalancerStatsShape {
+  profileName?: string;
+  lastSelected?: string | null;
+  lastSelectedModel?: string | null;
+}
+
+export interface ModelIdentityRuntime {
+  getActiveProviderStatus: () => {
+    providerName: string | null;
+    modelName: string | null;
+  };
+  getActiveProfileName: () => string | null;
+  getCliProviderManager: () => {
+    getProviderByName: (name: string) => unknown;
+  } | null;
+}
+
+function cleaned(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+function formatLoadBalancerIdentity(lb: LoadBalancerIdentity): string {
+  const lbName = cleaned(lb.profileName) ?? LOAD_BALANCER_PROVIDER_NAME;
+  const sub = cleaned(lb.activeSubProfile) ?? LB_PENDING_PLACEHOLDER;
+  const model = cleaned(lb.activeModel) ?? LB_PENDING_PLACEHOLDER;
+  return `lb:${lbName}:${sub}:${model}`;
+}
+
+function joinPrimaryAndModel(
+  primary: string,
+  modelName: string | null,
+): string {
+  const model = cleaned(modelName);
+  return model ? `${primary}:${model}` : primary;
+}
+
+/**
+ * Build the user-facing model identity string from the supplied context.
+ *
+ * - Load-balancer sessions: `lb:<lbProfile>:<subProfile>:<model>`.
+ * - Standard profile sessions: `<profile>:<model>` (or `<profile>`).
+ * - Direct provider sessions: `<provider>:<model>` (or `<provider>` / `<model>`).
+ * - Otherwise the supplied fallback, or `unknown`.
+ */
+export function formatModelIdentity(input: ModelIdentityInput): string {
+  if (input.loadBalancer) {
+    return formatLoadBalancerIdentity(input.loadBalancer);
+  }
+
+  const profileName = cleaned(input.profileName);
+  if (profileName) {
+    return joinPrimaryAndModel(profileName, input.modelName);
+  }
+
+  const providerName = cleaned(input.providerName);
+  if (providerName) {
+    return joinPrimaryAndModel(providerName, input.modelName);
+  }
+
+  const modelName = cleaned(input.modelName);
+  if (modelName) {
+    return modelName;
+  }
+
+  return cleaned(input.fallback) ?? UNKNOWN_IDENTITY;
+}
+
+function hasGetStats(value: unknown): value is { getStats: () => unknown } {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'getStats' in value &&
+    typeof (value as { getStats?: unknown }).getStats === 'function'
+  );
+}
+
+function asLoadBalancerStats(value: unknown): LoadBalancerStatsShape | null {
+  if (value === null || typeof value !== 'object') {
+    return null;
+  }
+  return value as LoadBalancerStatsShape;
+}
+
+function readLoadBalancerStats(
+  runtime: ModelIdentityRuntime,
+): LoadBalancerStatsShape | null {
+  try {
+    const providerManager = runtime.getCliProviderManager();
+    if (providerManager === null) {
+      return null;
+    }
+    const provider = providerManager.getProviderByName(
+      LOAD_BALANCER_PROVIDER_NAME,
+    );
+    if (!hasGetStats(provider)) {
+      return null;
+    }
+    return asLoadBalancerStats(provider.getStats());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the current model identity from runtime accessors, applying
+ * load-balancer awareness when the active provider is a load balancer.
+ */
+export function resolveModelIdentity(
+  runtime: ModelIdentityRuntime,
+  fallback?: string,
+): string {
+  const status = runtime.getActiveProviderStatus();
+  const profileName = runtime.getActiveProfileName();
+
+  if (status.providerName === LOAD_BALANCER_PROVIDER_NAME) {
+    const stats = readLoadBalancerStats(runtime);
+    const loadBalancer: LoadBalancerIdentity = {
+      profileName:
+        cleaned(stats?.profileName) ??
+        cleaned(profileName) ??
+        LOAD_BALANCER_PROVIDER_NAME,
+      activeSubProfile: stats?.lastSelected ?? null,
+      activeModel: stats?.lastSelectedModel ?? null,
+    };
+    return formatModelIdentity({
+      profileName,
+      providerName: status.providerName,
+      modelName: status.modelName,
+      fallback,
+      loadBalancer,
+    });
+  }
+
+  return formatModelIdentity({
+    profileName,
+    providerName: status.providerName,
+    modelName: status.modelName,
+    fallback,
+  });
+}
