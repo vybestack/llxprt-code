@@ -18,6 +18,7 @@ import {
   type ToolCall,
   type EditorType,
   type SubagentSchedulerFactory,
+  hasInteractiveSubagentScheduler,
   DEFAULT_AGENT_ID,
   DebugLogger,
   type AnsiOutput,
@@ -548,28 +549,16 @@ function useExternalSchedulerSetup(
   createExternalScheduler: SubagentSchedulerFactory,
   setExternalSchedulerRegistered: (registered: boolean) => void,
 ): void {
-  type ConfigWithSchedulerFactory = Config & {
-    setInteractiveSubagentSchedulerFactory?: (
-      factory: SubagentSchedulerFactory | undefined,
-    ) => void;
-  };
-
   useEffect(() => {
-    const configWithFactory = config as ConfigWithSchedulerFactory;
-    if (
-      typeof configWithFactory.setInteractiveSubagentSchedulerFactory !==
-      'function'
-    ) {
+    if (!hasInteractiveSubagentScheduler(config)) {
       setExternalSchedulerRegistered(true);
       return () => setExternalSchedulerRegistered(false);
     }
-    configWithFactory.setInteractiveSubagentSchedulerFactory(
-      createExternalScheduler,
-    );
+    config.setInteractiveSubagentSchedulerFactory(createExternalScheduler);
     setExternalSchedulerRegistered(true);
     return () => {
       setExternalSchedulerRegistered(false);
-      configWithFactory.setInteractiveSubagentSchedulerFactory(undefined);
+      config.setInteractiveSubagentSchedulerFactory(undefined);
     };
   }, [config, createExternalScheduler, setExternalSchedulerRegistered]);
 }

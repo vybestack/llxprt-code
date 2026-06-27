@@ -9,7 +9,6 @@ import {
   ToolConfirmationOutcome,
   type IToolMessageBus,
   type PolicyUpdateOptions,
-  type ToolMessageEvent,
   type ToolMessageHandler,
   type Unsubscribe,
 } from '@vybestack/llxprt-code-tools';
@@ -114,7 +113,7 @@ export class CoreMessageBusAdapter implements IToolMessageBus {
 
   subscribe(handler: ToolMessageHandler): Unsubscribe {
     const wrappedHandler = (message: MessageBusMessage) => {
-      void handler(message as unknown as ToolMessageEvent);
+      void handler({ type: message.type, payload: message });
     };
 
     const unsubscribers = Object.values(MessageBusType).map((type) =>

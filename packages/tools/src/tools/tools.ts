@@ -10,7 +10,11 @@ import {
   type PartListUnion,
 } from '@google/genai';
 import { randomUUID } from 'node:crypto';
-import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
+import {
+  type IToolMessageBus,
+  hasPublish,
+  hasPublishSubscribe,
+} from '../interfaces/IToolMessageBus.js';
 import type { DiffUpdateResult } from '../interfaces/IIdeService.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
@@ -87,13 +91,6 @@ export interface PolicyUpdateOptions {
 interface ConfirmationResponse {
   confirmed?: boolean;
   outcome?: ToolConfirmationOutcome;
-}
-
-/** Structural shape of a message bus with publish/subscribe methods. */
-interface PublishSubscribeBus {
-  publish: (message: Record<string, unknown>) => void;
-  subscribe: (event: string, handler: (response: unknown) => void) => void;
-  unsubscribe?: (event: string, handler: (response: unknown) => void) => void;
 }
 
 /**
@@ -185,13 +182,12 @@ export abstract class BaseToolInvocation<
         await this.messageBus.publishPolicyUpdate(outcome, policyUpdate);
         return;
       }
-      const bus = this.messageBus as unknown as {
-        publish?: (message: Record<string, unknown>) => void | Promise<void>;
-      };
-      await bus.publish?.({
-        type: 'update-policy',
-        ...policyUpdate,
-      });
+      if (hasPublish(this.messageBus)) {
+        await this.messageBus.publish({
+          type: 'update-policy',
+          ...policyUpdate,
+        });
+      }
     }
   }
 
@@ -219,11 +215,8 @@ export abstract class BaseToolInvocation<
       return Promise.resolve('DENY');
     }
 
-    const bus = this.messageBus as unknown as PublishSubscribeBus;
-    if (
-      typeof bus.publish !== 'function' ||
-      typeof bus.subscribe !== 'function'
-    ) {
+    const bus = this.messageBus;
+    if (!hasPublishSubscribe(bus)) {
       return this.getInterfaceMessageBusDecision(abortSignal);
     }
 
@@ -291,7 +284,7 @@ export abstract class BaseToolInvocation<
       );
 
       try {
-        bus.publish({
+        void bus.publish({
           type: 'tool-confirmation-request',
           toolCall,
           correlationId,

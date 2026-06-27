@@ -5,10 +5,12 @@
  */
 
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
-import type { RuntimeProviderManager as IRuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
-import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { Config } from '../config/config.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import {
+  hasToolSchema,
+  resolveToolDescription,
+  type ToolRegistry,
+} from '@vybestack/llxprt-code-tools';
 import {
   logApiRequest,
   logApiResponse,
@@ -29,7 +31,7 @@ import type {
  * Creates a mutable provider adapter backed by a RuntimeProviderManager instance.
  */
 export function createProviderAdapterFromManager(
-  manager?: RuntimeProviderManager | IRuntimeProviderManager,
+  manager?: RuntimeProviderManager,
 ): AgentRuntimeProviderAdapter {
   if (!manager) {
     return {
@@ -64,16 +66,7 @@ export function createProviderAdapterFromManager(
     setActiveProvider: (name: string) => {
       void manager.setActiveProvider(name);
     },
-    getProviderByName:
-      typeof (manager as unknown as { getProviderByName?: unknown })
-        .getProviderByName === 'function'
-        ? (name: string) =>
-            (
-              manager as unknown as {
-                getProviderByName: (providerName: string) => unknown;
-              }
-            ).getProviderByName(name) as IProvider | undefined
-        : undefined,
+    getProviderByName: (name: string) => manager.getProviderByName(name),
   };
 }
 
@@ -137,34 +130,15 @@ export function createToolRegistryViewFromRegistry(
       if (!tool) {
         return undefined;
       }
-      const schema = (tool as unknown as { schema?: Record<string, unknown> })
-        .schema;
-      const description = resolveToolDescription(tool, schema);
-      const parameterSchema = (
-        schema as { parametersJsonSchema?: Record<string, unknown> }
-      ).parametersJsonSchema;
+      const schema = hasToolSchema(tool) ? tool.schema : undefined;
+      const description = resolveToolDescription(schema, tool.description);
+      const parameterSchema = schema?.parametersJsonSchema;
 
       return {
-        name: (tool as { name?: string }).name ?? name,
+        name: tool.name,
         description,
         parameterSchema,
       };
     },
   };
-}
-
-/**
- * Helper function to resolve tool description from schema or tool object.
- */
-function resolveToolDescription(
-  tool: unknown,
-  schema: Record<string, unknown> | undefined,
-): string {
-  if (typeof schema?.description === 'string') {
-    return schema.description;
-  }
-  if (typeof (tool as { description?: string }).description === 'string') {
-    return (tool as { description: string }).description;
-  }
-  return '';
 }

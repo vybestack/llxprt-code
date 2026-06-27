@@ -12,6 +12,11 @@ import type {
   IToolHost,
   IToolMessageBus,
 } from '../interfaces/index.js';
+import {
+  hasWorkspaceContextCap,
+  hasIdeCap,
+  hasLspCap,
+} from '../interfaces/host-capabilities.js';
 import type { ModifyContext } from './modifiable-tool.js';
 import { isNodeError } from '../utils/errors.js';
 import { EmojiFilter } from '../utils/EmojiFilter.js';
@@ -137,17 +142,8 @@ export function applyLineGuardedReplacement(
  * Gets emoji filter instance based on configuration
  */
 export function getEmojiFilter(host: IToolHost): EmojiFilter {
-  // Get emojifilter from ephemeral settings or default to 'auto'.
-  // IToolHost types getEphemeralSettings() as required, but some partial
-  // host implementations (e.g. test fakes, legacy adapters) may omit it at
-  // runtime, so validate at this boundary before dereferencing.
-  const maybeHost = host as unknown as {
-    getEphemeralSettings?: () => Record<string, unknown>;
-  };
-  const settings =
-    typeof maybeHost.getEphemeralSettings === 'function'
-      ? maybeHost.getEphemeralSettings()
-      : {};
+  // IToolHost types getEphemeralSettings() as required. Call it directly.
+  const settings = host.getEphemeralSettings();
   const mode = settings.emojifilter as 'allowed' | 'auto' | 'warn' | 'error';
 
   // Map auto to warn for file operations (we want warnings when filtering files)
@@ -489,17 +485,13 @@ export function getTargetDirCompat(host: IToolHost): string {
 
 /** Resolves workspace roots from a host with optional legacy accessors. */
 export function getWorkspaceRootsCompat(host: IToolHost): string[] {
-  const maybeHost = host as unknown as {
-    getWorkspaceRoots?: () => string[];
-    getWorkspaceContext?: () => { getDirectories?: () => string[] };
-    getTargetDir?: () => string;
-  };
-  return (
-    maybeHost.getWorkspaceContext?.().getDirectories?.() ??
-    maybeHost.getWorkspaceRoots?.() ?? [
-      maybeHost.getTargetDir?.() ?? process.cwd(),
-    ]
-  );
+  if (hasWorkspaceContextCap(host)) {
+    const dirs = host.getWorkspaceContext().getDirectories?.();
+    if (dirs) {
+      return dirs;
+    }
+  }
+  return host.getWorkspaceRoots();
 }
 
 type LegacyIdeClient = {
@@ -515,21 +507,14 @@ type LegacyIdeClient = {
  * present.
  */
 export function getLegacyIdeService(host: IToolHost): IIdeService | undefined {
-  const maybeHost = host as unknown as {
-    getIdeMode?: () => boolean;
-    getIdeClient?: () => unknown;
-  };
-  if (
-    typeof maybeHost.getIdeMode !== 'function' ||
-    typeof maybeHost.getIdeClient !== 'function'
-  ) {
+  if (!hasIdeCap(host)) {
     return undefined;
   }
   const getLegacyIdeClient = (): LegacyIdeClient | undefined => {
-    if (maybeHost.getIdeMode?.() !== true) {
+    if (host.getIdeMode() !== true) {
       return undefined;
     }
-    const ideClient = maybeHost.getIdeClient?.();
+    const ideClient = host.getIdeClient();
     if (
       typeof ideClient !== 'object' ||
       ideClient === null ||
@@ -563,11 +548,10 @@ export function getLegacyIdeService(host: IToolHost): IIdeService | undefined {
  * present.
  */
 export function getLegacyLspService(host: IToolHost): ILspService | undefined {
-  const maybeHost = host as unknown as {
-    getLspServiceClient?: () => unknown;
-    getLspConfig?: () => unknown;
-  };
-  const lspClient = maybeHost.getLspServiceClient?.();
+  if (!hasLspCap(host)) {
+    return undefined;
+  }
+  const lspClient = host.getLspServiceClient();
   if (typeof lspClient !== 'object' || lspClient === null) {
     return undefined;
   }
@@ -592,8 +576,7 @@ export function getLegacyLspService(host: IToolHost): ILspService | undefined {
       const diagnostics = await checkFile.call(lspClient, filePath);
       return Array.isArray(diagnostics) ? diagnostics : [];
     },
-    getLspConfig: () =>
-      maybeHost.getLspConfig?.() as ReturnType<ILspService['getLspConfig']>,
+    getLspConfig: () => host.getLspConfig?.(),
   };
 }
 

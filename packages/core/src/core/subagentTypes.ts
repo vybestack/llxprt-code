@@ -61,6 +61,26 @@ export type SubagentSchedulerFactory = (args: {
 }) => SubagentSchedulerHandle | Promise<SubagentSchedulerHandle>;
 
 /**
+ * Capability interface for hosts that accept an interactive subagent scheduler
+ * factory. `Config` implements this; CLI test doubles may not.
+ */
+export interface InteractiveSubagentSchedulerHost {
+  setInteractiveSubagentSchedulerFactory(
+    factory: SubagentSchedulerFactory | undefined,
+  ): void;
+}
+
+/** Type guard: does the host accept an interactive subagent scheduler factory? */
+export function hasInteractiveSubagentScheduler(
+  host: unknown,
+): host is InteractiveSubagentSchedulerHost {
+  return (
+    typeof (host as Partial<InteractiveSubagentSchedulerHost>)
+      .setInteractiveSubagentSchedulerFactory === 'function'
+  );
+}
+
+/**
  * Describes the possible termination modes for a subagent.
  * This enum provides a clear indication of why a subagent's execution might have ended.
  */

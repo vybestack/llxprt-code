@@ -33,3 +33,8 @@ export interface ToolContext {
 export interface ContextAwareTool {
   context?: ToolContext;
 }
+
+/** Type guard: does the given tool accept an execution context? */
+export function isContextAwareTool(tool: object): tool is ContextAwareTool {
+  return 'context' in tool;
+}

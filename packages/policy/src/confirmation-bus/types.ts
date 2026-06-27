@@ -184,9 +184,24 @@ export interface HookExecutionRequest {
   payload: { eventName: string; correlationId: string };
 }
 
+/**
+ * Full payload of a hook execution response published on the bus.
+ *
+ * Carries the correlation id plus the outcome of hook execution so that
+ * mediated consumers (core-internal) receive the complete result without
+ * reshaping through `unknown`. Consumers that only need correlation can
+ * ignore the extra fields.
+ */
+export interface HookExecutionResponsePayload {
+  correlationId: string;
+  success: boolean;
+  output?: unknown;
+  error?: { code?: string; message: string; details?: unknown };
+}
+
 export interface HookExecutionResponse {
   type: MessageBusType.HOOK_EXECUTION_RESPONSE;
-  payload: { correlationId: string };
+  payload: HookExecutionResponsePayload;
 }
 
 export type MessageBusMessage<TToolCall = unknown> =

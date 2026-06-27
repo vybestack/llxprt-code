@@ -31,7 +31,7 @@ function publishRequest(
 function publishResponse(bus: MessageBus, correlationId: string) {
   bus.publish({
     type: MessageBusType.HOOK_EXECUTION_RESPONSE,
-    payload: { correlationId },
+    payload: { correlationId, success: true },
   });
 }
 
