@@ -19,6 +19,7 @@ import type {
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderManager } from './ProviderManager.js';
+import { coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
@@ -528,9 +529,31 @@ export class LoadBalancingProvider implements IProvider {
    * Phase 5: Stats Integration
    */
   private incrementStats(subProfileName: string): void {
+    const selectionChanged = this.lastSelected !== subProfileName;
     this.stats.set(subProfileName, (this.stats.get(subProfileName) ?? 0) + 1);
     this.lastSelected = subProfileName;
     this.totalRequests++;
+    if (selectionChanged) {
+      this.emitSelectionChanged();
+    }
+  }
+
+  /**
+   * Notify the rest of the app that the active sub-profile changed so the
+   * status footer can recompute the load-balancer identity
+   * (`lb:<lb>:<sub>:<model>`). The footer derives the full identity from the
+   * provider stats, so this only needs to be a lightweight trigger carrying
+   * the load-balancer profile name as the model value.
+   */
+  private emitSelectionChanged(): void {
+    try {
+      coreEvents.emitModelChanged(this.config.profileName);
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Failed to emit model-change trigger for load-balancer selection: ${error}`,
+      );
+    }
   }
 
   /**

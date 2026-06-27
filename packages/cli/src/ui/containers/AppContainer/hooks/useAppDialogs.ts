@@ -30,6 +30,8 @@ import { useIdeRestartHotkey } from './useIdeRestartHotkey.js';
 import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
 import { useModelRuntimeSync } from './useModelRuntimeSync.js';
 import { useAppEventHandlers } from './useAppEventHandlers.js';
+import { resolveModelIdentity } from '../../../utils/modelIdentity.js';
+import type { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import type {
   Config,
   IdeContext,
@@ -50,11 +52,7 @@ export interface AppDialogsParams {
   handleNewMessage: (message: ConsoleMessageItem) => void;
   recordingIntegration?: RecordingIntegration;
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
-  runtime: {
-    getActiveModelName: () => string;
-    getActiveProviderName: () => string;
-    getCliOAuthManager: () => unknown;
-  };
+  runtime: ReturnType<typeof useRuntimeApi>;
   consoleMessages: ConsoleMessageItem[];
   setLlxprtMdFileCount: (count: number) => void;
 }
@@ -200,7 +198,7 @@ function useDialogsAuthProviders(
   st: ReturnType<typeof useDialogsState>,
   currentModel: string,
   setCurrentModel: (model: string) => void,
-  currentModelLabel: string,
+  currentModelLabel: string | undefined,
   setCurrentModelLabel: (label: string) => void,
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
@@ -240,6 +238,7 @@ function useDialogsAuthProviders(
     setCurrentModelLabel,
     getActiveModelName: runtime.getActiveModelName,
     getActiveProviderName: runtime.getActiveProviderName,
+    resolveModelDisplayLabel: () => resolveModelIdentity(runtime),
     contextLimit,
     setContextLimit,
   });
@@ -271,7 +270,7 @@ function useDialogsAuth(
   st: ReturnType<typeof useDialogsState>,
   currentModel: string,
   setCurrentModel: (model: string) => void,
-  currentModelLabel: string,
+  currentModelLabel: string | undefined,
   setCurrentModelLabel: (label: string) => void,
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,

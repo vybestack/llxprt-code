@@ -23,7 +23,6 @@ import { DebugProfiler } from './DebugProfiler.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateMiddle } from '../utils/responsive.js';
 import { ThemedGradient } from './ThemedGradient.js';
-import { resolveModelIdentity } from '../utils/modelIdentity.js';
 
 const DEFAULT_HEAP_LIMIT = 4.8 * 1024 * 1024 * 1024;
 const rawHeapLimit = v8.getHeapStatistics().heap_size_limit;
@@ -306,18 +305,23 @@ const BranchDisplay = React.memo(
 );
 BranchDisplay.displayName = 'BranchDisplay';
 
-// Model name sub-component with load-balancer logic
+// Model name sub-component.
+//
+// The profile-qualified identity (e.g. `profileName:modelName` or
+// `lb:<lb>:<sub>:<model>` for load balancers) is computed reactively by
+// useModelRuntimeSync and arrives here via the `model` prop. Rendering the
+// prop directly — rather than reading runtime stats imperatively — keeps the
+// footer in sync when a load-balancer selects a new sub-profile mid-session,
+// which previously left a stale identity because Footer is memoised on `model`.
 interface ModelNameDisplayProps {
   model: string;
   showModelName: boolean;
-  runtime: ReturnType<typeof useRuntimeApi>;
 }
 
 const ModelNameDisplay = React.memo(
-  ({ model, showModelName, runtime }: ModelNameDisplayProps) => {
+  ({ model, showModelName }: ModelNameDisplayProps) => {
     if (!showModelName) return null;
-    const identity = resolveModelIdentity(runtime, model);
-    return <Text color={SemanticColors.text.primary}>{identity}</Text>;
+    return <Text color={SemanticColors.text.primary}>{model}</Text>;
   },
 );
 ModelNameDisplay.displayName = 'ModelNameDisplay';
@@ -615,11 +619,7 @@ const FooterSecondLine = React.memo((props: FooterSecondLineProps) => {
       )}
       {!hideModelInfo && (
         <Box flexDirection="row" alignItems="center">
-          <ModelNameDisplay
-            model={model}
-            showModelName={showModelName}
-            runtime={runtime}
-          />
+          <ModelNameDisplay model={model} showModelName={showModelName} />
           <PaidModeDisplay
             isPaidMode={isPaidMode}
             showModelName={showModelName}
