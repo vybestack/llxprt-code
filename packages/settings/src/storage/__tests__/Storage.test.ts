@@ -51,10 +51,12 @@ describe('Storage — static path methods', () => {
     const result = Storage.getGlobalConfigDir();
     // The app-name segment is always the basename; the parent identifies the
     // category (Preferences on macOS, Config on Windows, .config on Linux).
-    expect(path.basename(result)).toBe('llxprt-code');
+    const expectedBasename =
+      process.platform === 'win32' ? 'Config' : 'llxprt-code';
+    expect(path.basename(result)).toBe(expectedBasename);
     const PLATFORM_PARENTS: Record<string, string> = {
       darwin: 'Preferences',
-      win32: 'Config',
+      win32: 'llxprt-code',
     };
     const expectedParent = PLATFORM_PARENTS[process.platform] ?? '.config';
     expect(result).toContain(expectedParent);
@@ -76,6 +78,16 @@ describe('Storage — static path methods', () => {
     const override = '/tmp/llxprt-fallback-test';
     process.env['LLXPRT_CONFIG_HOME'] = override;
     expect(Storage.getGlobalDataDir()).toBe(path.resolve(override));
+  });
+
+  it('getGlobalDataDir prefers LLXPRT_DATA_HOME over LLXPRT_CONFIG_HOME', () => {
+    process.env['LLXPRT_DATA_HOME'] = '/tmp/llxprt-data-primary';
+    process.env['LLXPRT_CONFIG_HOME'] = '/tmp/llxprt-config-fallback';
+    expect(Storage.getGlobalDataDir()).toBe(
+      path.resolve('/tmp/llxprt-data-primary'),
+    );
+    delete process.env['LLXPRT_DATA_HOME'];
+    delete process.env['LLXPRT_CONFIG_HOME'];
   });
 
   it('getGlobalCacheDir falls back to LLXPRT_CONFIG_HOME (backward compat)', () => {

@@ -428,7 +428,7 @@ describe('performMigration — edge cases', () => {
     const result = performMigration(legacyDir, destinations);
 
     expect(result.migrated).toBe(true);
-    expect(result.filesCopied).toBeGreaterThanOrEqual(1);
+    expect(result.filesCopied).toBe(1);
     expect(
       fs.existsSync(path.join(destinations.configDir, 'settings.json')),
     ).toBe(true);
@@ -592,6 +592,16 @@ describe.skipIf(process.platform === 'win32')(
           'utf-8',
         ),
       ).toBe('b');
+      expect(
+        fs
+          .lstatSync(path.join(destinations.dataDir, 'dirA', 'linkB'))
+          .isSymbolicLink(),
+      ).toBe(true);
+      expect(
+        fs
+          .lstatSync(path.join(destinations.dataDir, 'dirB', 'linkA'))
+          .isSymbolicLink(),
+      ).toBe(true);
     });
   },
 );

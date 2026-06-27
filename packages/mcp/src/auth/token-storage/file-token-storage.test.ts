@@ -17,6 +17,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { decryptEnvelopeString } from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 import { FileTokenStorage } from './file-token-storage.js';
@@ -63,10 +64,12 @@ vi.mock('node:os', () => ({
     homedir: vi.fn(() => '/home/test'),
     hostname: vi.fn(() => 'test-host'),
     userInfo: vi.fn(() => ({ username: 'test-user' })),
+    tmpdir: vi.fn(() => '/tmp'),
   },
   homedir: vi.fn(() => '/home/test'),
   hostname: vi.fn(() => 'test-host'),
   userInfo: vi.fn(() => ({ username: 'test-user' })),
+  tmpdir: vi.fn(() => '/tmp'),
 }));
 
 const FIXED_SECRET = crypto.randomBytes(32);
@@ -116,7 +119,9 @@ describe('FileTokenStorage', () => {
     },
     updatedAt: Date.now() - 10000,
   };
-  const CONFIG_HOME = '/tmp/llxprt-test-config-home';
+  const CONFIG_HOME = path.resolve(
+    path.join(os.tmpdir(), 'llxprt-test-config-home'),
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();

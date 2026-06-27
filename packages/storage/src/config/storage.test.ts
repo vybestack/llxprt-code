@@ -280,7 +280,12 @@ describe('Storage – default platform paths (no overrides)', () => {
     const result = Storage.getGlobalConfigDir();
     // The app-name segment is always the basename; the parent identifies the
     // category (Preferences on macOS, Config on Windows, .config on Linux).
-    expect(path.basename(result)).toBe('llxprt-code');
+    const expectedBasename = platformSegment(
+      'llxprt-code',
+      'Config',
+      'llxprt-code',
+    );
+    expect(path.basename(result)).toBe(expectedBasename);
     const expectedParent = platformSegment('Preferences', 'Config', '.config');
     expect(result).toContain(expectedParent);
   });
@@ -310,7 +315,12 @@ describe('Storage – default platform paths (no overrides)', () => {
   it('getGlobalConfigDir falls through to platform path when override is empty', () => {
     process.env['LLXPRT_CONFIG_HOME'] = '';
     const result = Storage.getGlobalConfigDir();
-    expect(path.basename(result)).toBe('llxprt-code');
+    const expectedBasename = platformSegment(
+      'llxprt-code',
+      'Config',
+      'llxprt-code',
+    );
+    expect(path.basename(result)).toBe(expectedBasename);
   });
 });
 

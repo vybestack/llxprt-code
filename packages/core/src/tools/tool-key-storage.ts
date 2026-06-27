@@ -42,43 +42,11 @@ import { debugLogger } from '../utils/debugLogger.js';
 
 const KEYCHAIN_SERVICE = 'llxprt-code-tool-keys';
 const KEYFILES_JSON_NAME = 'keyfiles.json';
-const DEFAULT_TOOLS_DIR = (): string => {
-  try {
-    return path.join(Storage.getGlobalDataDir(), 'tools');
-  } catch (error) {
-    debugLogger.warn(
-      `Storage.getGlobalDataDir() threw, falling back: ${String(error)}`,
-    );
-  }
-
-  try {
-    const tmpDir = os.tmpdir();
-    if (typeof tmpDir === 'string' && tmpDir.length > 0) {
-      return path.join(tmpDir, 'llxprt-tools');
-    }
-  } catch {
-    // ignore missing tmpdir
-  }
-
-  // Harden against mocked/undefined process.cwd() in test environments
-  const cwd = process.cwd();
-  if (typeof cwd === 'string' && cwd.length > 0) {
-    return path.join(cwd, '.llxprt-tools');
-  }
-
-  // Final fallback: use absolute path to tmpdir
-  try {
-    const tmpDir = os.tmpdir();
-    if (typeof tmpDir === 'string' && tmpDir.length > 0) {
-      return path.join(tmpDir, 'llxprt-tools-fallback');
-    }
-  } catch {
-    // ignore
-  }
-
-  // Last resort: hardcoded POSIX path (should never reach here in real environments)
-  return '/tmp/llxprt-tools-fallback';
-};
+// Tool-key storage holds auth state — never silently fall back to a temp
+// or cwd directory, which would orphan existing keys. If the global data
+// directory cannot be resolved, fail loudly.
+const DEFAULT_TOOLS_DIR = (): string =>
+  path.join(Storage.getGlobalDataDir(), 'tools');
 
 // ─── Module-level Lazy Singleton ─────────────────────────────────────────────
 

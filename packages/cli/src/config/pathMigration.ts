@@ -197,16 +197,40 @@ export function performMigration(
       continue;
     }
 
-    if (entry.name === 'tmp' && entry.isDirectory()) {
-      filesCopied += migrateTmpDir(legacyDir, destinations, visited);
-    } else {
-      const destDir = getDestDir(category, destinations);
-      fs.mkdirSync(destDir, { recursive: true });
-
-      const srcPath = path.join(legacyDir, entry.name);
-      const destPath = path.join(destDir, entry.name);
-
-      filesCopied += copyEntry(srcPath, destPath, legacyDir, destDir, visited);
+    try {
+      if (
+        entry.name === 'tmp' &&
+        entry.isDirectory() &&
+        !entry.isSymbolicLink()
+      ) {
+        filesCopied += migrateTmpDir(legacyDir, destinations, visited);
+      } else if (entry.isSymbolicLink()) {
+        const destDir = getDestDir(category, destinations);
+        fs.mkdirSync(destDir, { recursive: true });
+        const srcPath = path.join(legacyDir, entry.name);
+        const destPath = path.join(destDir, entry.name);
+        filesCopied += copyEntry(
+          srcPath,
+          destPath,
+          legacyDir,
+          destDir,
+          visited,
+        );
+      } else {
+        const destDir = getDestDir(category, destinations);
+        fs.mkdirSync(destDir, { recursive: true });
+        const srcPath = path.join(legacyDir, entry.name);
+        const destPath = path.join(destDir, entry.name);
+        filesCopied += copyEntry(
+          srcPath,
+          destPath,
+          legacyDir,
+          destDir,
+          visited,
+        );
+      }
+    } catch (error) {
+      logger.debug(`Failed to migrate entry '${entry.name}': ${String(error)}`);
     }
   }
 
@@ -432,7 +456,11 @@ function copyEntry(
     }
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     fs.copyFileSync(srcPath, destPath);
-    fs.chmodSync(destPath, stat.mode);
+    try {
+      fs.chmodSync(destPath, stat.mode);
+    } catch {
+      // chmod is best-effort; file copy succeeded
+    }
     return 1;
   }
 
@@ -496,7 +524,11 @@ function copyDirFiltered(
     } else if (entry.isFile() && !pathEntryExists(destPath)) {
       fs.copyFileSync(srcPath, destPath);
       const srcStat = fs.statSync(srcPath);
-      fs.chmodSync(destPath, srcStat.mode);
+      try {
+        fs.chmodSync(destPath, srcStat.mode);
+      } catch {
+        // chmod is best-effort; file copy succeeded
+      }
       count++;
     } else if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
       createSymlinkClone(srcPath, destPath, legacyRoot, destRoot);
@@ -536,8 +568,14 @@ function createSymlinkClone(
       }
     } else {
       const resolvedTarget = path.resolve(path.dirname(srcPath), target);
-      const rebased = path.relative(path.dirname(destPath), resolvedTarget);
-      fs.symlinkSync(rebased, destPath);
+      const relFromLegacy = path.relative(legacyRoot, resolvedTarget);
+      if (relFromLegacy.startsWith('..') || path.isAbsolute(relFromLegacy)) {
+        // Target escapes legacy tree — preserve original target as-is
+        fs.symlinkSync(target, destPath);
+      } else {
+        const rebased = path.relative(path.dirname(destPath), resolvedTarget);
+        fs.symlinkSync(rebased, destPath);
+      }
     }
   } catch (error) {
     logger.debug(`Cannot create symlink at ${destPath}: ${String(error)}`);
