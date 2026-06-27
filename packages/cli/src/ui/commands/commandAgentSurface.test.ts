@@ -61,15 +61,13 @@ describe('compressCommand — agent surface', () => {
     const compressMock = vi.fn().mockResolvedValue({
       status: 'skipped' as const,
     });
-    const context = buildContextWithAgent({
-      compress: compressMock,
-    });
     // Provide a real config mock so the fallback path is reachable but NOT used
-    (
-      context.services as { config: { getAgentClient: typeof getAgentClient } }
-    ).config = {
-      getAgentClient,
-    } as unknown as CommandContext['services']['config'];
+    const context = createMockCommandContext({
+      services: {
+        agent: { compress: compressMock } as unknown as Agent,
+        config: { getAgentClient } as unknown as CommandContext['services']['config'],
+      },
+    });
 
     await compressCommand.action!(context, '');
 
