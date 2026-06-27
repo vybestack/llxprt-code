@@ -65,7 +65,9 @@ describe('compressCommand — agent surface', () => {
     const context = createMockCommandContext({
       services: {
         agent: { compress: compressMock } as unknown as Agent,
-        config: { getAgentClient } as unknown as CommandContext['services']['config'],
+        config: {
+          getAgentClient,
+        } as unknown as CommandContext['services']['config'],
       },
     });
 
