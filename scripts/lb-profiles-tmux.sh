@@ -18,7 +18,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+cd "${ROOT}"
 
 ALL_PROFILES=(opusfirst gptfirst glm)
 MODE="${1:-launch}"
@@ -26,16 +26,16 @@ PROFILE_ARG="${2:-}"
 
 # Validate the optional profile argument against the allow-list so typos or
 # anything containing shell metacharacters cannot reach the tmux/ node command.
-if [[ -n "$PROFILE_ARG" ]]; then
+if [[ -n "${PROFILE_ARG}" ]]; then
   valid=0
   for candidate in "${ALL_PROFILES[@]}"; do
-    if [[ "$PROFILE_ARG" == "$candidate" ]]; then
+    if [[ "${PROFILE_ARG}" == "${candidate}" ]]; then
       valid=1
       break
     fi
   done
-  if [[ $valid -eq 0 ]]; then
-    echo "Unknown profile '$PROFILE_ARG'. Valid: ${ALL_PROFILES[*]}" >&2
+  if [[ ${valid} -eq 0 ]]; then
+    echo "Unknown profile '${PROFILE_ARG}'. Valid: ${ALL_PROFILES[*]}" >&2
     exit 2
   fi
 fi
@@ -45,59 +45,59 @@ if ! command -v node >/dev/null 2>&1; then
   exit 127
 fi
 
-if [[ "$MODE" == "smoke" ]]; then
+if [[ "${MODE}" == "smoke" ]]; then
   PROFILES=("${ALL_PROFILES[@]}")
-  if [[ -n "$PROFILE_ARG" ]]; then PROFILES=("$PROFILE_ARG"); fi
+  if [[ -n "${PROFILE_ARG}" ]]; then PROFILES=("${PROFILE_ARG}"); fi
 
   # Aggregate results across all profiles instead of aborting on the first
   # failure, so a transient issue with one provider does not hide the rest.
   smoke_failed=0
 
   for p in "${PROFILES[@]}"; do
-    echo "=== smoke: $p ==="
+    echo "=== smoke: ${p} ==="
     # Non-interactive: a positional prompt makes start.js run once and exit.
     set +e
-    output="$(node scripts/start.js --profile-load "$p" \
+    output="$(node scripts/start.js --profile-load "${p}" \
       "Reply with only the word: ok" 2>&1)"
     rc=$?
     set -e
-    if echo "$output" | grep -Eq "Extra inputs are not permitted|failover exhausted|Unsupported parameter"; then
-      echo "FAIL: $p still emits a cross-provider 400 leak:"
-      echo "$output" | grep -E "Extra inputs are not permitted|failover exhausted|Unsupported parameter" | head -5
+    if echo "${output}" | grep -Eq "Extra inputs are not permitted|failover exhausted|Unsupported parameter"; then
+      echo "FAIL: ${p} still emits a cross-provider 400 leak:"
+      echo "${output}" | grep -E "Extra inputs are not permitted|failover exhausted|Unsupported parameter" | head -5
       smoke_failed=1
       continue
     fi
-    if [[ $rc -ne 0 ]]; then
-      if echo "$output" | grep -q "command not found"; then
-        echo "ERROR: $p could not run — node or a dependency is missing (rc=$rc)."
+    if [[ ${rc} -ne 0 ]]; then
+      if echo "${output}" | grep -q "command not found"; then
+        echo "ERROR: ${p} could not run — node or a dependency is missing (rc=${rc})."
       else
-        echo "WARN: $p exited non-zero (rc=$rc); confirm whether the provider credentials/network are healthy."
+        echo "WARN: ${p} exited non-zero (rc=${rc}); confirm whether the provider credentials/network are healthy."
       fi
     else
-      echo "PASS: $p produced no cross-provider 400 leak."
+      echo "PASS: ${p} produced no cross-provider 400 leak."
     fi
   done
-  exit "$smoke_failed"
+  exit "${smoke_failed}"
 fi
 
-if [[ "$MODE" != "launch" ]]; then
-  echo "Unknown mode '$MODE'. Use 'launch' or 'smoke'." >&2
+if [[ "${MODE}" != "launch" ]]; then
+  echo "Unknown mode '${MODE}'. Use 'launch' or 'smoke'." >&2
   exit 2
 fi
 
 PROFILES=("${ALL_PROFILES[@]}")
-if [[ -n "$PROFILE_ARG" ]]; then PROFILES=("$PROFILE_ARG"); fi
+if [[ -n "${PROFILE_ARG}" ]]; then PROFILES=("${PROFILE_ARG}"); fi
 
 for p in "${PROFILES[@]}"; do
   session="llxprt-${p}"
-  if tmux has-session -t "$session" 2>/dev/null; then
-    echo "tmux session '$session' already exists; attaching."
+  if tmux has-session -t "${session}" 2>/dev/null; then
+    echo "tmux session '${session}' already exists; attaching."
   else
-    # Quote ${p} in the tmux command string — it is now validated against the
-    # allow-list, but quoting keeps the command safe and unambiguous.
-    tmux new-session -d -s "$session" -c "$ROOT" \
+    # ${p} is validated against the allow-list above; quoting keeps the
+    # command unambiguous and safe.
+    tmux new-session -d -s "${session}" -c "${ROOT}" \
       "node scripts/start.js --profile-load '${p}'; echo '(exited)'; bash"
-    echo "Created tmux session '$session' for profile '$p'."
+    echo "Created tmux session '${session}' for profile '${p}'."
   fi
 done
 
