@@ -15,6 +15,7 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import type {
   CompressionContext,
   CompressionProviderResult,
+  CompressionResult,
   DensityConfig,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -25,6 +26,7 @@ import {
   getCompressionStrategy,
   parseCompressionStrategyName,
 } from './compressionStrategyFactory.js';
+import { buildContextOverflowError } from './contextOverflowError.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -456,12 +458,8 @@ export class CompressionHandler {
     }
 
     const preCompressionProjected = postOptProjected;
-
-    await this.performCompression(promptId, {
-      bypassCooldown: true,
-      trigger: 'auto',
-    });
-    await this.historyService.waitForTokenUpdates();
+    const compressionFailure =
+      await this.tryAutoCompressionForHardLimit(promptId);
 
     let recomputed = this.computeProjectedTokens(
       pendingTokens,
@@ -475,111 +473,244 @@ export class CompressionHandler {
       return;
     }
 
-    // If compression barely reduced tokens, force truncation fallback
-    recomputed = await this.forceTruncationIfIneffective(
+    const reductionResult = await this.reduceHardLimitOverflow(
       promptId,
       preCompressionProjected,
       recomputed,
       marginAdjustedLimit,
       pendingTokens,
       completionBudget,
+      compressionFailure,
     );
+    recomputed = reductionResult.projected;
     if (recomputed <= marginAdjustedLimit) {
       return;
     }
 
-    throw this.buildContextOverflowError(
+    throw buildContextOverflowError({
       limit,
       initialProjected,
-      recomputed,
+      finalProjected: recomputed,
       marginAdjustedLimit,
       completionBudget,
-    );
+      truncationFailure: reductionResult.truncationFailure,
+      compressionFailure: reductionResult.compressionFailure,
+    });
   }
 
-  /**
-   * Force truncation fallback when primary compression was ineffective.
-   * Returns the recomputed projected token count after fallback attempt.
-   */
-  private async forceTruncationIfIneffective(
+  private async tryAutoCompressionForHardLimit(
+    promptId: string,
+  ): Promise<Error | undefined> {
+    try {
+      const result = await this.performCompression(promptId, {
+        bypassCooldown: true,
+        trigger: 'auto',
+      });
+      await this.historyService.waitForTokenUpdates();
+      if (result === PerformCompressionResult.FAILED) {
+        const failedError = new Error(
+          'Auto compression failed during hard-limit enforcement',
+        );
+        this.logger.warn(
+          () =>
+            '[CompressionHandler] Auto compression failed during hard-limit enforcement, trying fallback reduction',
+          failedError,
+        );
+        return failedError;
+      }
+      return undefined;
+    } catch (error) {
+      const compressionError = this.normalizeError(error);
+      this.recordCompressionFailure();
+      this.logger.warn(
+        () =>
+          '[CompressionHandler] Auto compression failed during hard-limit enforcement, trying fallback reduction',
+        compressionError,
+      );
+      await this.historyService.waitForTokenUpdates();
+      return compressionError;
+    }
+  }
+
+  private async reduceHardLimitOverflow(
     promptId: string,
     preCompressionProjected: number,
     postCompressionProjected: number,
     marginAdjustedLimit: number,
     pendingTokens: number,
     completionBudget: number,
-  ): Promise<number> {
+    compressionFailure: Error | undefined,
+  ): Promise<{
+    projected: number;
+    truncationFailure?: Error;
+    compressionFailure?: Error;
+  }> {
+    const compressionRetryResult = await this.retryFullCompressionIfIneffective(
+      promptId,
+      preCompressionProjected,
+      postCompressionProjected,
+      marginAdjustedLimit,
+      pendingTokens,
+      completionBudget,
+      compressionFailure,
+    );
+    if (compressionRetryResult.projected <= marginAdjustedLimit) {
+      return compressionRetryResult;
+    }
+
+    return this.forceTruncationIfStillOverLimit(
+      promptId,
+      compressionRetryResult.projected,
+      marginAdjustedLimit,
+      pendingTokens,
+      completionBudget,
+      compressionRetryResult.compressionFailure,
+    );
+  }
+
+  private async retryFullCompressionIfIneffective(
+    promptId: string,
+    preCompressionProjected: number,
+    postCompressionProjected: number,
+    marginAdjustedLimit: number,
+    pendingTokens: number,
+    completionBudget: number,
+    compressionFailure: Error | undefined,
+  ): Promise<{ projected: number; compressionFailure?: Error }> {
     const reduction = preCompressionProjected - postCompressionProjected;
     const reductionRatio =
       preCompressionProjected > 0 ? reduction / preCompressionProjected : 0;
     if (
+      compressionFailure !== undefined ||
       reductionRatio >=
         CompressionHandler.INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD ||
       postCompressionProjected <= marginAdjustedLimit
     ) {
-      return postCompressionProjected;
+      return { projected: postCompressionProjected, compressionFailure };
     }
 
     this.logger.warn(
       () =>
-        '[CompressionHandler] Primary compression was ineffective, forcing truncation fallback',
+        '[CompressionHandler] Auto compression remained ineffective, retrying full compression before truncation',
       {
         preCompressionProjected,
         postCompressionProjected,
         reductionRatio,
+        tokensStillNeeded: postCompressionProjected - marginAdjustedLimit,
+      },
+    );
+
+    try {
+      const result = await this.performCompression(promptId, {
+        bypassCooldown: true,
+        trigger: 'auto',
+      });
+      await this.historyService.waitForTokenUpdates();
+      if (result === PerformCompressionResult.FAILED) {
+        const retryError = new Error(
+          'Additional hard-limit compression attempt failed',
+        );
+        this.logger.warn(
+          () =>
+            '[CompressionHandler] Additional hard-limit compression attempt failed',
+          retryError,
+        );
+        return {
+          projected: this.computeProjectedTokens(
+            pendingTokens,
+            completionBudget,
+          ),
+          compressionFailure: retryError,
+        };
+      }
+      return {
+        projected: this.computeProjectedTokens(pendingTokens, completionBudget),
+      };
+    } catch (error) {
+      const retryError = this.normalizeError(error);
+      this.recordCompressionFailure();
+      this.logger.warn(
+        () =>
+          '[CompressionHandler] Additional hard-limit compression attempt failed',
+        retryError,
+      );
+      return {
+        projected: this.computeProjectedTokens(pendingTokens, completionBudget),
+        compressionFailure: retryError,
+      };
+    }
+  }
+
+  private async forceTruncationIfStillOverLimit(
+    promptId: string,
+    postCompressionProjected: number,
+    marginAdjustedLimit: number,
+    pendingTokens: number,
+    completionBudget: number,
+    compressionFailure: Error | undefined,
+  ): Promise<{
+    projected: number;
+    truncationFailure?: Error;
+    compressionFailure?: Error;
+  }> {
+    if (postCompressionProjected <= marginAdjustedLimit) {
+      return { projected: postCompressionProjected, compressionFailure };
+    }
+
+    this.logger.warn(
+      () =>
+        '[CompressionHandler] Context remains over limit, forcing truncation fallback',
+      {
+        postCompressionProjected,
+        marginAdjustedLimit,
+        tokensStillNeeded: postCompressionProjected - marginAdjustedLimit,
       },
     );
     this._suppressDensityDirty = true;
+    let truncationFailure: Error | undefined;
     try {
       const context = await this.buildCompressionContext(promptId);
-      await this.performFallbackCompression(
-        context,
-        new Error('Primary compression was ineffective'),
-        (newHistory) => {
-          this.historyService.clear();
-          for (const content of newHistory) {
-            this.historyService.add(content, this.runtimeContext.state.model);
-          }
-          this.lastPromptTokenCount = null;
-        },
+      const result = await this.compressWithFallbackStrategy(context);
+      this.applyFallbackCompressionResult(result, (newHistory) => {
+        this.historyService.clear();
+        for (const content of newHistory) {
+          this.historyService.add(content, this.runtimeContext.state.model);
+        }
+        this.lastPromptTokenCount = null;
+      });
+      this.logger.debug(
+        'Compression completed with hard-limit fallback (TopDownTruncation)',
       );
       await this.historyService.waitForTokenUpdates();
     } catch (error) {
+      truncationFailure = this.normalizeError(error);
+      this.recordCompressionFailure();
       this.logger.warn(
         () =>
           '[CompressionHandler] Truncation fallback failed during hard-limit enforcement',
-        error,
+        truncationFailure,
       );
     } finally {
       this._suppressDensityDirty = false;
     }
 
-    return this.computeProjectedTokens(pendingTokens, completionBudget);
+    return {
+      projected: this.computeProjectedTokens(pendingTokens, completionBudget),
+      truncationFailure,
+      compressionFailure,
+    };
   }
 
-  /**
-   * Build a diagnostic error for context window overflow after all reduction attempts.
-   */
-  private buildContextOverflowError(
-    limit: number,
-    initialProjected: number,
-    finalProjected: number,
-    marginAdjustedLimit: number,
-    completionBudget: number,
-  ): Error {
-    const totalReduction = Math.max(0, initialProjected - finalProjected);
-    const tokensStillNeeded = finalProjected - marginAdjustedLimit;
-    const parts: string[] = [
-      `Request still exceeds the safety-adjusted context limit (${marginAdjustedLimit} tokens).`,
-      `density optimization and compression reduced ${totalReduction} tokens (from ${initialProjected} to ${finalProjected} projected).`,
-      `completionBudget=${completionBudget}, tokensStillNeeded=${tokensStillNeeded}.`,
-    ];
-    if (completionBudget > 0.8 * limit) {
-      parts.push(
-        `The completion budget (${completionBudget}) consumes more than 80% of the context window (${limit}). Consider lowering maxOutputTokens.`,
-      );
+  private normalizeError(error: unknown): Error {
+    if (error instanceof Error) {
+      return error;
     }
-    return new Error(parts.join(' '));
+    return new Error(String(error));
+  }
+
+  private recordCompressionFailure(): void {
+    this.compressionFailureCount++;
+    this.lastCompressionFailureTime = Date.now();
   }
 
   /**
@@ -759,6 +890,23 @@ export class CompressionHandler {
     return this.performFallbackCompression(context, primaryError, applyResult);
   }
 
+  private applyFallbackCompressionResult(
+    result: CompressionResult,
+    applyResult: (newHistory: IContent[]) => void,
+  ): void {
+    applyResult(result.newHistory);
+    this.compressionFailureCount = 0;
+    this.lastCompressionFailureTime = null;
+    this.lastSuccessfulCompressionTime = Date.now();
+  }
+
+  private async compressWithFallbackStrategy(
+    context: CompressionContext,
+  ): Promise<CompressionResult> {
+    const fallback = getCompressionStrategy('top-down-truncation');
+    return fallback.compress(context);
+  }
+
   /**
    * Attempt fallback compression using TopDownTruncationStrategy.
    *
@@ -772,13 +920,8 @@ export class CompressionHandler {
   ): Promise<boolean> {
     try {
       // Use the strategy factory so tests can intercept
-      const fallback = getCompressionStrategy('top-down-truncation');
-      const result = await fallback.compress(context);
-      applyResult(result.newHistory);
-      // Fallback succeeded — reset failure counters
-      this.compressionFailureCount = 0;
-      this.lastCompressionFailureTime = null;
-      this.lastSuccessfulCompressionTime = Date.now();
+      const result = await this.compressWithFallbackStrategy(context);
+      this.applyFallbackCompressionResult(result, applyResult);
       this.logger.debug(
         'Compression completed with fallback (TopDownTruncation)',
       );
