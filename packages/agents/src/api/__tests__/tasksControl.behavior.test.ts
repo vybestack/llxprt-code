@@ -12,7 +12,7 @@
  * (AgentTasksControl). Drives through the PUBLIC ROOT via the buildAgent
  * harness (helpers/agentHarness.ts:79). The REAL AsyncTaskManager is seeded
  * through the public config path with ZERO mocking:
- *   agent.getConfig().getAsyncTaskManager() (config.ts:601)
+ *   internalConfig(agent).getAsyncTaskManager() (config.ts:601)
  *   → the SAME lazily-created AsyncTaskManager the control resolves
  *   → mgr.registerTask(RegisterTaskInput) (asyncTaskManager.ts:148) marks
  *     the task 'running'.
@@ -35,13 +35,13 @@
 
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { buildAgent } from './helpers/agentHarness.js';
+import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 
 describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-COREAPIGAP.P07 @requirement:REQ-003', () => {
-  it('T7 seed N running tasks on the real manager, cancelAllRunning returns N and leaves listRunning empty @requirement:REQ-003 @scenario:cancel-all-count @given:a real manager seeded with 2 running tasks via agent.getConfig().getAsyncTaskManager().registerTask @when:agent.tasks.cancelAllRunning() is called @then:the returned count === 2 AND a subsequent agent.tasks.listRunning() has length 0 (terminal idempotent state)', async () => {
+  it('T7 seed N running tasks on the real manager, cancelAllRunning returns N and leaves listRunning empty @requirement:REQ-003 @scenario:cancel-all-count @given:a real manager seeded with 2 running tasks via internalConfig(agent).getAsyncTaskManager().registerTask @when:agent.tasks.cancelAllRunning() is called @then:the returned count === 2 AND a subsequent agent.tasks.listRunning() has length 0 (terminal idempotent state)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const mgr = agent.getConfig().getAsyncTaskManager()!;
+      const mgr = internalConfig(agent).getAsyncTaskManager()!;
       expect(mgr).toBeDefined();
       const ids = ['t7-a', 't7-b'];
       for (const id of ids) {
@@ -66,7 +66,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
   it('T8 projection strips abortController from the public view of a running task @requirement:REQ-003 @scenario:no-abortController @given:a real manager seeded with 1 running task that carries an AbortController on the core manager @when:agent.tasks.list() is called @then:the projected view does NOT include an abortController key (Object.keys(view) omits it AND "abortController" in view === false)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const mgr = agent.getConfig().getAsyncTaskManager()!;
+      const mgr = internalConfig(agent).getAsyncTaskManager()!;
       const ac = new AbortController();
       mgr.registerTask({
         id: 't8-x',
@@ -105,7 +105,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
   it('T10 list/listRunning/get/cancel fidelity over a mix of running, completed, and cancelled tasks @requirement:REQ-003 @scenario:fidelity @given:a real manager seeded with 2 running tasks where 1 is then completed @when:list/listRunning/get(knownId)/get(missing)/cancel(knownId)/cancel(missing) are called @then:list() length === 2 (both tasks remain in history); listRunning() length === 1; get(knownId) returns the projected view with matching id; get(missing) === undefined; cancel(knownId) === true; cancel(missing) === false', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const mgr = agent.getConfig().getAsyncTaskManager()!;
+      const mgr = internalConfig(agent).getAsyncTaskManager()!;
       mgr.registerTask({
         id: 't10-run',
         subagentName: 's',
@@ -149,7 +149,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
   it('T11 completed/failed projection: terminal tasks carry completedAt, failed tasks carry error, running tasks omit BOTH @requirement:REQ-003 @scenario:optional-field-projection @given:a real manager seeded with 3 running tasks (t11-run stays running, t11-done is completed, t11-fail is failed) @when:agent.tasks.get() is called for each terminal task @then:the completed view has completedAt:number>0 AND has NO error key; the failed view has error===the seed AND completedAt:number>0; the running view OMITS both completedAt and error keys', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const mgr = agent.getConfig().getAsyncTaskManager()!;
+      const mgr = internalConfig(agent).getAsyncTaskManager()!;
       for (const id of ['t11-run', 't11-done', 't11-fail']) {
         mgr.registerTask({
           id,
@@ -207,7 +207,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
         async (kind, suffix) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {
-            const mgr = agent.getConfig().getAsyncTaskManager()!;
+            const mgr = internalConfig(agent).getAsyncTaskManager()!;
             const termId = `prop-term-${suffix}`;
             const controlId = `prop-ctrl-${suffix}`;
             for (const id of [termId, controlId]) {
@@ -260,7 +260,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
         async (tasks) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {
-            const mgr = agent.getConfig().getAsyncTaskManager()!;
+            const mgr = internalConfig(agent).getAsyncTaskManager()!;
             for (const t of tasks) {
               mgr.registerTask({
                 id: t.id,
@@ -300,7 +300,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
         async (n, ids) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {
-            const mgr = agent.getConfig().getAsyncTaskManager()!;
+            const mgr = internalConfig(agent).getAsyncTaskManager()!;
             // Use exactly n ids from the generated pool (trim/pad not needed —
             // uniqueArray with minLength:0, maxLength:5 yields distinct ids).
             const chosen = ids.slice(0, n);

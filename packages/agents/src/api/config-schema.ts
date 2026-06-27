@@ -11,6 +11,10 @@ import {
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
+  LspConfig,
+  LspServerConfig,
+} from '@vybestack/llxprt-code-ide-integration';
+import type {
   AgentSchedulerFactory,
   ApprovalHandler,
   EditorCallbacks,
@@ -85,6 +89,18 @@ export const AgentToolOutputLimitsSchema = z
   })
   .strict();
 
+/**
+ * Production-safety gate for createAgent harness seams.
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01
+ */
+export const AgentHarnessSchema = z
+  .object({
+    forceInteractive: z.boolean().optional(),
+    forceConfirmations: z.boolean().optional(),
+    includeProcessCwd: z.boolean().optional(),
+  })
+  .strict();
+
 export const BlockedMcpServerEntrySchema = z
   .object({
     name: z.string(),
@@ -147,6 +163,23 @@ export const McpServerConfigSchema = z.object({
   targetAudience: z.string().optional(),
   targetServiceAccount: z.string().optional(),
 });
+const LspServerConfigSchema = z
+  .object({
+    id: z.string(),
+    command: z.string(),
+    args: z.array(z.string()).optional(),
+    rootUri: z.string().optional(),
+  })
+  .passthrough() as z.ZodType<LspServerConfig>;
+
+export const LspConfigSchema = z.union([
+  z.boolean(),
+  z
+    .object({
+      servers: z.array(LspServerConfigSchema),
+    })
+    .passthrough(),
+]) as z.ZodType<boolean | LspConfig>;
 
 export const AgentConfigSchema = z
   .object({
@@ -178,6 +211,9 @@ export const AgentConfigSchema = z
     ide: AgentIdeSchema.optional(),
     hooks: z.record(z.unknown()).optional(),
     memory: z.string().optional(),
+    skillsSupport: z.boolean().optional(),
+    disabledSkills: z.array(z.string()).optional(),
+    adminSkillsEnabled: z.boolean().optional(),
     streamIdleTimeoutMs: z.number().optional(),
     toolOutputLimits: AgentToolOutputLimitsSchema.optional(),
     outputFormat: z.string().optional(),
@@ -203,6 +239,8 @@ export const AgentConfigSchema = z
     projectHooks: z.record(z.unknown()).optional(),
     disabledHooks: z.array(z.string()).optional(),
     interactive: z.boolean().optional(),
+    lsp: LspConfigSchema.optional(),
+    harness: AgentHarnessSchema.optional(),
     /**
      * UNSTABLE escape hatch. Long-tail settings merged into ConfigParameters.
      * The adapter throws if a key shadows a typed AgentConfig field.
@@ -222,6 +260,7 @@ export type AgentConfigWithCallbacks = ParsedAgentConfig & {
 
 export type {
   AgentConfig,
+  AgentHarnessOptions,
   AgentSchedulerFactory,
   AgentSchedulerHandle,
   ApprovalHandler,

@@ -38,7 +38,12 @@ import {
   agentClientDisposed,
   type DisposalProbe,
 } from './helpers/disposalProbe.js';
-import { drain, countType, buildAgent } from './helpers/agentHarness.js';
+import {
+  drain,
+  countType,
+  buildAgent,
+  internalConfig,
+} from './helpers/agentHarness.js';
 
 // ─── Structural identity probes (cast-free, mirrors agentHarness idiom) ──────
 //
@@ -90,24 +95,24 @@ function captureRuntimeId(agent: Agent): unknown {
 }
 
 describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:REQ-001 @requirement:REQ-INT-001', () => {
-  it('T1 fromConfig returns an Agent whose getConfig() === the SAME caller-supplied Config (identity) @requirement:REQ-001 @scenario:adoption @given:a real CLI-style Config @when:fromConfig({ config }) @then:getConfig() is the SAME Config instance', async () => {
+  it('T1 fromConfig returns an Agent whose internalConfig(agent) === the SAME caller-supplied Config (identity) @requirement:REQ-001 @scenario:adoption @given:a real CLI-style Config @when:fromConfig({ config }) @then:internalConfig(agent) is the SAME Config instance', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
       const agent: Agent = await fromConfig({ config });
-      expect(agent.getConfig()).toBe(config);
+      expect(internalConfig(agent)).toBe(config);
     } finally {
       await built.cleanup();
     }
   });
 
-  it('T1b agent.getConfig().getSettingsService() === the caller Config getSettingsService() (identity) @requirement:REQ-001 @scenario:adoption @given:a real CLI-style Config @when:fromConfig({ config }) @then:getConfig().getSettingsService() is the SAME SettingsService instance', async () => {
+  it('T1b internalConfig(agent).getSettingsService() === the caller Config getSettingsService() (identity) @requirement:REQ-001 @scenario:adoption @given:a real CLI-style Config @when:fromConfig({ config }) @then:internalConfig(agent).getSettingsService() is the SAME SettingsService instance', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
       const expected = config.getSettingsService();
       const agent: Agent = await fromConfig({ config });
-      expect(agent.getConfig().getSettingsService()).toBe(expected);
+      expect(internalConfig(agent).getSettingsService()).toBe(expected);
     } finally {
       await built.cleanup();
     }
@@ -314,7 +319,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
 
   // ─── Property-based tests (>=30% of total) ──────────────────────────────
 
-  it('PROP1 for any valid sessionId string, fromConfig identity holds: getConfig() === the caller Config @requirement:REQ-001 @scenario:property-identity @given:any non-empty sessionId string @when:fromConfig({ config, sessionId }) @then:getConfig() is the SAME Config instance for every generated sessionId', async () => {
+  it('PROP1 for any valid sessionId string, fromConfig identity holds: internalConfig(agent) === the caller Config @requirement:REQ-001 @scenario:property-identity @given:any non-empty sessionId string @when:fromConfig({ config, sessionId }) @then:internalConfig(agent) is the SAME Config instance for every generated sessionId', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.string({ minLength: 1, maxLength: 40 }),
@@ -325,7 +330,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
               config: built.config,
               sessionId,
             });
-            return agent.getConfig() === built.config;
+            return internalConfig(agent) === built.config;
           } finally {
             await built.cleanup();
           }
@@ -354,7 +359,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     );
   });
 
-  it('PROP3 for any subset of optional handlers provided, getConfig() identity holds @requirement:REQ-001 @scenario:property-handler-subset @given:any subset of { onApproval, onOAuthPrompt, editorCallbacks } @when:fromConfig({ config, ...subset }) @then:getConfig() === the caller Config for every generated subset', async () => {
+  it('PROP3 for any subset of optional handlers provided, internalConfig(agent) identity holds @requirement:REQ-001 @scenario:property-handler-subset @given:any subset of { onApproval, onOAuthPrompt, editorCallbacks } @when:fromConfig({ config, ...subset }) @then:internalConfig(agent) === the caller Config for every generated subset', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({
@@ -380,7 +385,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
             const agent: Agent = await fromConfig(
               opts as unknown as Parameters<typeof fromConfig>[0],
             );
-            return agent.getConfig() === built.config;
+            return internalConfig(agent) === built.config;
           } finally {
             await built.cleanup();
           }
@@ -464,7 +469,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     );
   }, 30000);
 
-  it('PROP7 for any non-empty sessionId, fromConfig with a caller bus AND sessionId preserves both the config identity AND the caller-bus identity @requirement:REQ-001 @scenario:property-combined-identity @given:any non-empty sessionId and a caller-supplied messageBus @when:fromConfig({ config, messageBus, sessionId }) @then:both getConfig() === config AND captureAgentMessageBus(agent) === callerBus hold for every generated sessionId', async () => {
+  it('PROP7 for any non-empty sessionId, fromConfig with a caller bus AND sessionId preserves both the config identity AND the caller-bus identity @requirement:REQ-001 @scenario:property-combined-identity @given:any non-empty sessionId and a caller-supplied messageBus @when:fromConfig({ config, messageBus, sessionId }) @then:both internalConfig(agent) === config AND captureAgentMessageBus(agent) === callerBus hold for every generated sessionId', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.string({ minLength: 1, maxLength: 40 }),
@@ -478,7 +483,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
               sessionId,
             });
             return (
-              agent.getConfig() === built.config &&
+              internalConfig(agent) === built.config &&
               captureAgentMessageBus(agent) === callerBus
             );
           } finally {

@@ -294,12 +294,18 @@ class DirectoryFileSearch implements FileSearch {
     const filteredResults = await filter(results, pattern, options.signal);
 
     const fileFilter = this.ignore.getFileFilter();
+    const maxFileDepth = directChildFileDepth(dir);
     const finalResults: string[] = [];
     for (const candidate of filteredResults) {
       if (finalResults.length >= (options.maxResults ?? Infinity)) {
         break;
       }
-      addCandidateIfIncluded(finalResults, candidate, fileFilter);
+      addCandidateWithDepthLimit(
+        finalResults,
+        candidate,
+        fileFilter,
+        maxFileDepth,
+      );
     }
     return finalResults;
   }
@@ -319,10 +325,36 @@ function addCandidateIfIncluded(
   candidate: string,
   fileFilter: (path: string) => boolean,
 ): void {
-  if (candidate === '.') {
+  addCandidateWithDepthLimit(results, candidate, fileFilter, undefined);
+}
+
+function addCandidateWithDepthLimit(
+  results: string[],
+  candidate: string,
+  fileFilter: (path: string) => boolean,
+  maxDepth: number | undefined,
+): void {
+  if (candidate === '.' || exceedsDepth(candidate, maxDepth)) {
     return;
   }
   if (!fileFilter(candidate)) {
     results.push(candidate);
   }
+}
+
+function directChildFileDepth(dir: string): number {
+  if (dir === '.') {
+    return 0;
+  }
+  return dir.replace(/\/$/, '').split('/').length;
+}
+
+function exceedsDepth(
+  candidate: string,
+  maxDepth: number | undefined,
+): boolean {
+  if (maxDepth === undefined || candidate.endsWith('/')) {
+    return false;
+  }
+  return candidate.split('/').length - 1 > maxDepth;
 }

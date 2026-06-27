@@ -7,35 +7,15 @@
 
 import { z } from 'zod';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type {
-  ApprovalMode,
-  Config,
-  ConfigParameters,
-  MCPServerConfig,
-  SandboxConfig,
-  SkillDefinition,
-} from '@vybestack/llxprt-code-core/config/config.js';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { PolicyEngineConfig } from '@vybestack/llxprt-code-core/policy/types.js';
 import type {
   HookDefinition,
   HookEventName,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-
-export type {
-  ApprovalMode,
-  ConfigParameters,
-  MCPServerConfig,
-  SandboxConfig,
-  SkillDefinition,
-} from '@vybestack/llxprt-code-core/config/config.js';
-export type { PolicyEngineConfig } from '@vybestack/llxprt-code-core/policy/types.js';
-export type {
-  HookDefinition,
-  HookEventName,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
-export type { GeminiCLIExtension } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { OutputFormat } from '@vybestack/llxprt-code-core/utils/output-format.js';
 
 export interface ProviderAuth {
   readonly apiKey?: string;
@@ -65,11 +45,7 @@ export interface AgentFileFiltering {
 
 export interface AgentTelemetry {
   readonly enabled?: boolean;
-  readonly target?: ConfigParameters['telemetry'] extends
-    | { target?: infer T }
-    | undefined
-    ? T
-    : never;
+  readonly target?: 'local' | 'gcp';
   readonly otlpEndpoint?: string;
   readonly logPrompts?: boolean;
   readonly outfile?: string;
@@ -95,17 +71,104 @@ export interface AgentIde {
 
 export type AgentShell = 'allowlist' | 'all' | 'none';
 
+/**
+ * Production-safety gate for createAgent harness seams.
+ *
+ * createAgent historically forces three behaviors that are unsafe for
+ * production callers: forced interactive mode (overwrites caller intent),
+ * confirmation-forcing policy injection, and unconditional process.cwd()
+ * workspace mutation. Each field defaults to `true` (preserving backward
+ * compatibility) so existing callers are unaffected unless they explicitly
+ * disable a seam.
+ *
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01
+ */
+export interface AgentHarnessOptions {
+  readonly forceInteractive?: boolean;
+  readonly forceConfirmations?: boolean;
+  readonly includeProcessCwd?: boolean;
+}
+
 export interface AgentToolOutputLimits {
   readonly truncateThreshold?: number;
   readonly truncateLines?: number;
   readonly enableTruncation?: boolean;
 }
 
-export interface AgentExtensions {
-  readonly enabled?: readonly string[];
-  readonly active?: ReadonlyArray<{
+export interface AgentMcpServerConfig {
+  readonly command?: string;
+  readonly args?: readonly string[];
+  readonly env?: Readonly<Record<string, string>>;
+  readonly cwd?: string;
+  readonly url?: string;
+  readonly httpUrl?: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly tcp?: string;
+  readonly type?: 'sse' | 'http';
+  readonly timeout?: number;
+  readonly trust?: boolean;
+  readonly description?: string;
+  readonly includeTools?: readonly string[];
+  readonly excludeTools?: readonly string[];
+  readonly extensionName?: string;
+  readonly extension?: Readonly<Record<string, unknown>>;
+  readonly oauth?: Readonly<Record<string, unknown>>;
+  readonly authProviderType?: string;
+  readonly targetAudience?: string;
+  readonly targetServiceAccount?: string;
+}
+
+export interface AgentSkillDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly location: string;
+  readonly body: string;
+  readonly disabled?: boolean;
+  readonly source?: 'builtin' | 'extension' | 'user' | 'project';
+}
+
+export interface AgentSandboxConfig {
+  readonly command: 'docker' | 'podman' | 'sandbox-exec';
+  readonly image: string;
+}
+
+export interface AgentLspServerConfig {
+  readonly id: string;
+  readonly command: string;
+  readonly args?: readonly string[];
+  readonly rootUri?: string;
+}
+
+export interface AgentLspConfig {
+  readonly servers: readonly AgentLspServerConfig[];
+  readonly includeSeverities?: ReadonlyArray<
+    'error' | 'warning' | 'info' | 'hint'
+  >;
+  readonly maxDiagnosticsPerFile?: number;
+  readonly maxProjectDiagnosticsFiles?: number;
+  readonly diagnosticTimeout?: number;
+  readonly firstTouchTimeout?: number;
+  readonly navigationTimeout?: number;
+  readonly navigationTools?: boolean;
+  readonly requestTimeout?: number;
+}
+
+export interface AgentExtension {
+  readonly name: string;
+  readonly version: string;
+  readonly isActive: boolean;
+  readonly path: string;
+  readonly mcpServers?: Readonly<Record<string, AgentMcpServerConfig>>;
+  readonly contextFiles: readonly string[];
+  readonly excludeTools?: readonly string[];
+  readonly hooks?: AgentHooks;
+  readonly skills?: readonly AgentSkillDefinition[];
+  readonly settings?: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  readonly resolvedSettings?: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  readonly subagents?: ReadonlyArray<{
     readonly name: string;
-    readonly version: string;
+    readonly profile: string;
+    readonly systemPrompt: string;
   }>;
 }
 
@@ -148,7 +211,7 @@ export interface AgentConfig {
   readonly auth?: AgentAuth;
   readonly tools?: readonly string[];
   readonly excludeTools?: readonly string[];
-  readonly mcpServers?: Readonly<Record<string, MCPServerConfig>>;
+  readonly mcpServers?: Readonly<Record<string, AgentMcpServerConfig>>;
   readonly approvalMode?: ApprovalMode;
   readonly systemPrompt?: string;
   readonly workingDir?: string;
@@ -162,19 +225,22 @@ export interface AgentConfig {
   readonly checkpointing?: boolean;
   readonly recording?: AgentRecording;
   readonly policy?: PolicyEngineConfig;
-  readonly extensions?: readonly GeminiCLIExtension[];
+  readonly extensions?: readonly AgentExtension[];
   readonly ide?: AgentIde;
   readonly hooks?: AgentHooks;
   readonly memory?: string;
+  readonly skillsSupport?: boolean;
+  readonly disabledSkills?: readonly string[];
+  readonly adminSkillsEnabled?: boolean;
   readonly streamIdleTimeoutMs?: number;
   readonly toolOutputLimits?: AgentToolOutputLimits;
-  readonly outputFormat?: ConfigParameters['outputFormat'];
+  readonly outputFormat?: OutputFormat;
   readonly shell?: AgentShell;
   readonly contextLimit?: number;
   readonly compressionThreshold?: number;
-  readonly skills?: readonly SkillDefinition[];
+  readonly skills?: readonly AgentSkillDefinition[];
   readonly useWriteTodos?: boolean;
-  readonly sandbox?: SandboxConfig;
+  readonly sandbox?: AgentSandboxConfig;
   readonly folderTrust?: boolean;
   readonly embeddingModel?: string;
   readonly debugMode?: boolean;
@@ -194,6 +260,16 @@ export interface AgentConfig {
   readonly projectHooks?: AgentHooks;
   readonly disabledHooks?: readonly string[];
   readonly interactive?: boolean;
+  readonly lsp?: boolean | AgentLspConfig;
+  /**
+   * Production-safety gate for createAgent harness seams. When omitted,
+   * createAgent preserves its current (backward-compatible) defaults. Callers
+   * who need production-safe behavior (e.g. non-interactive CLI migration)
+   * set individual fields to `false` to disable the corresponding unsafe seam.
+   *
+   * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01
+   */
+  readonly harness?: AgentHarnessOptions;
   readonly onApproval?: ApprovalHandler;
   readonly onOAuthPrompt?: OAuthPromptHandler;
   readonly editorCallbacks?: EditorCallbacks;

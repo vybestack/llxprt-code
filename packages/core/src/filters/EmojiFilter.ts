@@ -174,6 +174,17 @@ function isEmojiSequenceAt(chars: readonly string[], index: number): boolean {
  * Tests whether the given text contains at least one emoji code point.
  */
 function textContainsEmoji(text: string): boolean {
+  let hasNonAscii = false;
+  for (let index = 0; index < text.length; index++) {
+    if (text.charCodeAt(index) > 0x7f) {
+      hasNonAscii = true;
+      break;
+    }
+  }
+  if (!hasNonAscii) {
+    return false;
+  }
+
   const chars = Array.from(text);
   for (let index = 0; index < chars.length; index++) {
     if (isEmojiSequenceAt(chars, index)) {

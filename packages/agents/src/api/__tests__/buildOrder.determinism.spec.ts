@@ -1,0 +1,47 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P07
+ *
+ * Build-order determinism regression guard.
+ *
+ * The agents API tests must exercise the current source tree rather than stale
+ * package dist artifacts. These tests assert the package-level alias config maps
+ * the public root to source and that the public root import exposes newly added
+ * runtime surfaces that stale dist artifacts would omit.
+ */
+
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { describe, it, expect } from 'vitest';
+
+describe('agents API build-order determinism @plan:PLAN-20260626-RUNTIMEBOUNDARY.P07', () => {
+  it('vitest aliases the public root to package source rather than dist @requirement:build-order @given:the package vitest config @when:its workspace alias plugin mapping is inspected @then:the public root maps to index.ts', async () => {
+    const configPath = resolve(
+      fileURLToPath(new URL('../../..', import.meta.url)),
+      'vitest.config.ts',
+    );
+    const config = await readFile(configPath, 'utf8');
+    expect(config).toContain('workspaceAliasPlugin');
+    expect(config).toContain("new URL('./index.ts', import.meta.url)");
+  });
+
+  it('the new surface types are present at runtime via createAgent output @requirement:build-order @given:an agent built via the public root @when:its new readonly controls are accessed @then:memory, skills, workspace, and lsp are defined objects (proves the source build includes the new controls)', async () => {
+    // Import the harness helper (allowed: relative within __tests__).
+    const { buildAgent } = await import('./helpers/agentHarness.js');
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      expect(agent.memory).toBeDefined();
+      expect(agent.skills).toBeDefined();
+      expect(agent.workspace).toBeDefined();
+      expect(agent.lsp).toBeDefined();
+    } finally {
+      await cleanup();
+    }
+  });
+});

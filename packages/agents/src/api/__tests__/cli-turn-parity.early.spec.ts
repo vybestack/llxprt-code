@@ -76,7 +76,7 @@ import {
   type Config,
   type MessageBus,
 } from './helpers/buildCliStyleConfig.js';
-import { drain } from './helpers/agentHarness.js';
+import { drain, internalConfig } from './helpers/agentHarness.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -165,7 +165,7 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
       });
 
       // REQ-INT-001: the adopted Config is the SAME instance.
-      expect(agent.getConfig()).toBe(config);
+      expect(internalConfig(agent)).toBe(config);
 
       // REQ-INT-001: the stream yields exactly one terminal done.
       const events = await drain(agent.stream('hello'));
