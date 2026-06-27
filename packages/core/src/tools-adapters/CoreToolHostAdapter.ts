@@ -116,10 +116,7 @@ export class CoreToolHostAdapter implements IToolHost {
   }
 
   getLlxprtIgnorePatterns(): string[] {
-    const maybeConfig = this.config as unknown as {
-      getFileService?: () => { getLlxprtIgnorePatterns?: () => string[] };
-    };
-    return maybeConfig.getFileService?.().getLlxprtIgnorePatterns?.() ?? [];
+    return this.config.getFileService().getLlxprtIgnorePatterns();
   }
 
   getEphemeralSettings(): Record<string, unknown> {

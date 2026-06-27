@@ -11,8 +11,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type { Todo } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
 
@@ -365,7 +365,7 @@ export interface TodoSessionFile {
  * @returns Array of saved session files sorted by modification time (newest first)
  */
 export function getTodoSessionFiles(): TodoSessionFile[] {
-  const todoDir = path.join(os.homedir(), '.llxprt', 'todos');
+  const todoDir = path.join(Storage.getGlobalDataDir(), 'todos');
 
   if (!fs.existsSync(todoDir)) {
     return [];

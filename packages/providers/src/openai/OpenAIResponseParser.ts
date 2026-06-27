@@ -30,6 +30,11 @@ const CODE_FENCE_END_SOURCE = '```$';
 const CODE_FENCE_START = new RegExp(CODE_FENCE_START_SOURCE, 'm');
 const CODE_FENCE_END = new RegExp(CODE_FENCE_END_SOURCE, 'm');
 
+type DeltaWithReasoning =
+  OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta & {
+    reasoning_content?: unknown;
+  };
+
 /**
  * Returns true for parts that carry no textual content and should be skipped.
  */
@@ -403,8 +408,7 @@ export function parseStreamingReasoningDelta(
   }
 
   // Access reasoning_content via type assertion since OpenAI SDK doesn't declare it
-  const reasoningContent = (delta as unknown as Record<string, unknown>)
-    .reasoning_content;
+  const reasoningContent = (delta as DeltaWithReasoning).reasoning_content;
 
   // Handle absent, null, or non-string
   if (

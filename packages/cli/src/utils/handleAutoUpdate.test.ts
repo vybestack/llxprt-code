@@ -81,6 +81,8 @@ describe('handleAutoUpdate', () => {
   let mockUpdateInfo: UpdateObject;
   let mockSettings: LoadedSettings;
   let mockChildProcess: ChildProcess;
+  let originalConfigHome: string | undefined;
+  let originalDataHome: string | undefined;
 
   beforeEach(() => {
     mockSpawn = vi.fn();
@@ -118,12 +120,26 @@ describe('handleAutoUpdate', () => {
 
     // Default mock behavior
     mockHomedir.mockReturnValue('/home/test');
+    originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+    process.env['LLXPRT_CONFIG_HOME'] = '/tmp/llxprt-test-config-home';
+    originalDataHome = process.env['LLXPRT_DATA_HOME'];
+    delete process.env['LLXPRT_DATA_HOME'];
     mockExistsSync.mockReturnValue(false);
     mockReaddirSync.mockReturnValue([]);
     mockOpenSync.mockReturnValue(42); // Mock file descriptor
   });
 
   afterEach(() => {
+    if (originalConfigHome !== undefined) {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+    } else {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    }
+    if (originalDataHome !== undefined) {
+      process.env['LLXPRT_DATA_HOME'] = originalDataHome;
+    } else {
+      delete process.env['LLXPRT_DATA_HOME'];
+    }
     vi.clearAllMocks();
   });
 
@@ -340,8 +356,7 @@ describe('handleAutoUpdate', () => {
       });
 
       const lockFilePath = path.join(
-        '/home/test',
-        '.llxprt',
+        '/tmp/llxprt-test-config-home',
         'locks',
         'cli-update.lock',
       );
@@ -377,8 +392,7 @@ describe('handleAutoUpdate', () => {
         });
 
         const lockFilePath = path.join(
-          '/home/test',
-          '.llxprt',
+          '/tmp/llxprt-test-config-home',
           'locks',
           'cli-update.lock',
         );
@@ -394,7 +408,7 @@ describe('handleAutoUpdate', () => {
 
         // Verify lock was created atomically
         expect(mockMkdirSync).toHaveBeenCalledWith(
-          path.join('/home/test', '.llxprt', 'locks'),
+          path.join('/tmp/llxprt-test-config-home', 'locks'),
           { recursive: true },
         );
         expect(mockOpenSync).toHaveBeenCalledWith(
@@ -407,8 +421,7 @@ describe('handleAutoUpdate', () => {
 
       // Verify lock was released after completion
       const lockFilePath = path.join(
-        '/home/test',
-        '.llxprt',
+        '/tmp/llxprt-test-config-home',
         'locks',
         'cli-update.lock',
       );
@@ -417,8 +430,7 @@ describe('handleAutoUpdate', () => {
 
     it('should release lock even if update fails', async () => {
       const lockFilePath = path.join(
-        '/home/test',
-        '.llxprt',
+        '/tmp/llxprt-test-config-home',
         'locks',
         'cli-update.lock',
       );
@@ -456,8 +468,7 @@ describe('handleAutoUpdate', () => {
       });
 
       const lockFilePath = path.join(
-        '/home/test',
-        '.llxprt',
+        '/tmp/llxprt-test-config-home',
         'locks',
         'cli-update.lock',
       );

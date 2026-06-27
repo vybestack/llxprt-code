@@ -378,7 +378,7 @@ function resolveRequestedModel(
   if (isLoadBalancerProfile(actualProfile)) {
     return 'load-balancer';
   }
-  const requestedModel = getProfileModel(sanitizedProfile)?.trim() ?? '';
+  const requestedModel = getProfileModel(sanitizedProfile).trim();
   const fallbackModel =
     providerRecord?.getDefaultModel?.() ??
     config.getModel() ??
@@ -386,7 +386,7 @@ function resolveRequestedModel(
     '';
   if (requestedModel === '' && fallbackModel === '') {
     throw new Error(
-      `Provider '${getProfileProvider(sanitizedProfile) ?? 'unknown'}' profile does not specify a model and no default is available.`,
+      `Provider '${getProfileProvider(sanitizedProfile) || 'unknown'}' profile does not specify a model and no default is available.`,
     );
   }
   return requestedModel || fallbackModel;

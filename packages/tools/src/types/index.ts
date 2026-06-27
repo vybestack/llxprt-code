@@ -13,7 +13,17 @@
  * Barrel export for package-local types.
  */
 
-export type { ToolContext, ContextAwareTool } from './tool-context.js';
+export {
+  type ToolContext,
+  type ContextAwareTool,
+  isContextAwareTool,
+} from './tool-context.js';
+export {
+  type ToolSchemaDescriptor,
+  type ToolSchemaHolder,
+  hasToolSchema,
+  resolveToolDescription,
+} from './tool-schema-capability.js';
 export {
   ToolConfirmationOutcome,
   type ToolConfirmationPayload,

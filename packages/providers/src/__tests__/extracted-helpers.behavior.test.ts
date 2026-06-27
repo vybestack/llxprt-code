@@ -15,6 +15,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import {
   extractFailoverSettings,
   isImmediateFailoverError,
@@ -427,6 +428,59 @@ describe('extracted provider helper behavior', () => {
         'base-url': 'https://settings.example.test',
       },
     });
+  });
+
+  it('does not apply global ephemeral settings when config owns a different SettingsService', () => {
+    const invocationSettingsService = new SettingsService();
+    invocationSettingsService.setProviderSetting(
+      'provider-a',
+      'model',
+      'settings-model',
+    );
+    invocationSettingsService.setProviderSetting(
+      'provider-a',
+      'base-url',
+      'https://settings.example.test',
+    );
+    invocationSettingsService.setProviderSetting(
+      'provider-a',
+      'auth-key',
+      'provider-scoped-token',
+    );
+    const configOwnedSettingsService = new SettingsService();
+    const config = createRuntimeConfigStub(configOwnedSettingsService, {
+      getModel: () => 'config-model',
+      getEphemeralSetting: (key: string) => {
+        if (key === 'auth-key') {
+          return 'global-token';
+        }
+        if (key === 'base-url') {
+          return 'https://config.example.test';
+        }
+        return undefined;
+      },
+      getUserMemory: () => 'remember this',
+    });
+    const rawOptions: GenerateChatOptions = {
+      contents: [],
+      runtime: {
+        settingsService: invocationSettingsService,
+        config,
+        runtimeId: 'runtime-a',
+        metadata: {},
+      },
+    };
+
+    const normalized = normalizeRuntimeInputs(rawOptions, {
+      getActiveProviderName: () => 'provider-a',
+      getProvider: () => providerStub(),
+    });
+
+    expect(normalized.resolved.model).toBe('settings-model');
+    expect(normalized.resolved.baseURL).toBe('https://settings.example.test');
+    // Global ephemeral auth-key must NOT win; the provider-scoped token is used
+    // because the config-bound SettingsService differs from the invocation one.
+    expect(normalized.resolved.authToken).toBe('provider-scoped-token');
   });
 
   it('fails closed instead of looping on cyclic wrapped-provider chains', () => {

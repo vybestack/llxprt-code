@@ -6,9 +6,13 @@
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { Config } from '../config/config.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import {
+  hasToolSchema,
+  resolveToolDescription,
+  type ToolRegistry,
+  normalizeToolName,
+} from '@vybestack/llxprt-code-tools';
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
-import type { RuntimeProviderManager as IRuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapterFromConfig,
@@ -28,7 +32,6 @@ import {
   type ContentGenerator,
   type ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import { normalizeToolName } from '@vybestack/llxprt-code-tools';
 
 export interface AgentRuntimeProfileSnapshot {
   config: Config;
@@ -37,7 +40,7 @@ export interface AgentRuntimeProfileSnapshot {
   providerRuntime: ProviderRuntimeContext;
   contentGeneratorConfig?: ContentGeneratorConfig;
   toolRegistry?: ToolRegistry;
-  providerManager?: RuntimeProviderManager | IRuntimeProviderManager;
+  providerManager?: RuntimeProviderManager;
 }
 
 export interface AgentRuntimeLoaderOverrides {
@@ -178,37 +181,17 @@ function createFilteredToolRegistryView(
       if (!tool) {
         return undefined;
       }
-      const schema = (tool as unknown as { schema?: Record<string, unknown> })
-        .schema;
-      const description = resolveToolDescriptionFromSchema(tool, schema);
-      const runtimeSchema = schema as
-        | { parametersJsonSchema?: Record<string, unknown> }
-        | undefined;
-      const parameterSchema = runtimeSchema?.parametersJsonSchema;
+      const schema = hasToolSchema(tool) ? tool.schema : undefined;
+      const description = resolveToolDescription(schema, tool.description);
+      const parameterSchema = schema?.parametersJsonSchema;
 
       return {
-        name: (tool as { name?: string }).name ?? name,
+        name: tool.name,
         description,
         parameterSchema,
       };
     },
   };
-}
-
-/**
- * Helper function to resolve tool description from schema or tool object.
- */
-function resolveToolDescriptionFromSchema(
-  tool: unknown,
-  schema: Record<string, unknown> | undefined,
-): string {
-  if (typeof schema?.description === 'string') {
-    return schema.description;
-  }
-  if (typeof (tool as { description?: string }).description === 'string') {
-    return (tool as { description: string }).description;
-  }
-  return '';
 }
 
 export async function loadAgentRuntime(

@@ -14,7 +14,7 @@ vi.mock('@vybestack/llxprt-code-settings', async () => {
   return {
     ...actual,
     Storage: {
-      getGlobalLlxprtDir: vi.fn(() => '/tmp/llxprt-test-persistent-state'),
+      getGlobalDataDir: vi.fn(() => '/tmp/llxprt-test-persistent-state'),
     },
   };
 });

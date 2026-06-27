@@ -9,8 +9,8 @@ import * as path from 'path';
 import { isNodeError } from '../utils/errors.js';
 import { exec } from 'node:child_process';
 import { simpleGit, type SimpleGit, CheckRepoActions } from 'simple-git';
-import { ensureLlxprtDirExists } from '../utils/paths.js';
-import type { Storage } from '@vybestack/llxprt-code-settings';
+import { ensureDir } from '../utils/paths.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
 export class GitService {
@@ -23,7 +23,7 @@ export class GitService {
   }
 
   private getHistoryDir(): string {
-    ensureLlxprtDirExists();
+    ensureDir(Storage.getGlobalDataDir());
     return this.storage.getHistoryDir();
   }
 

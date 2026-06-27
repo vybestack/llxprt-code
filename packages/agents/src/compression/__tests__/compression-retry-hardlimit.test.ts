@@ -26,7 +26,20 @@ import {
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { makeHttpError } from './compression-retry-helpers.js';
+
+vi.mock('@vybestack/llxprt-code-settings', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+  return {
+    ...original,
+    Storage: {
+      ...original.Storage,
+      getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
+    },
+  };
+});
 
 // Mock the delay utility so retryWithBackoff doesn't actually wait in tests
 vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
@@ -285,9 +298,9 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
 
   /**
    * @requirement REQ-1791.2
-   * When primary compression barely reduces tokens, fallback truncation is triggered.
+   * When compression remains insufficient, fallback truncation is triggered.
    */
-  it('forces fallback truncation when compression barely reduces tokens', async () => {
+  it('forces fallback truncation when compression remains over limit', async () => {
     // totalTokens=150000, pendingTokens=50000, completionBudget=65536
     // projected = 150000 + 50000 + 65536 = 265536 > 199000
     const chat = makeChatForEnforceContextWindow({ totalTokens: 150_000 });
@@ -354,10 +367,285 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
   });
 
   /**
+   * @requirement REQ-2067.3
+   * Ineffective auto compression gets one more full compression pass before truncation.
+   */
+  it('retries full compression before truncating when auto compression is ineffective', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 155_000,
+      contextLimit: 200_000,
+      maxOutputTokens: 40_000,
+    });
+
+    let primaryCallCount = 0;
+    let truncationCalled = false;
+
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
+        if (name === 'top-down-truncation') {
+          return {
+            name: 'top-down-truncation' as const,
+            requiresLLM: false,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockImplementation(async () => {
+              truncationCalled = true;
+              return {
+                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                metadata: {
+                  originalMessageCount: 10,
+                  compressedMessageCount: 1,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              };
+            }),
+          };
+        }
+
+        return {
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryCallCount++;
+            return {
+              newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+              metadata: {
+                originalMessageCount: 10,
+                compressedMessageCount: 1,
+                strategyUsed: 'middle-out' as const,
+                llmCallMade: true,
+              },
+            };
+          }),
+        };
+      },
+    );
+
+    vi.spyOn(chat['historyService'], 'getTotalTokens').mockImplementation(
+      () => {
+        if (primaryCallCount >= 2) {
+          return 140_000;
+        }
+        return 155_000;
+      },
+    );
+
+    await expect(
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
+    ).resolves.toBeUndefined();
+
+    expect(primaryCallCount).toBe(2);
+    expect(truncationCalled).toBe(false);
+  });
+
+  /**
+   * @requirement REQ-2067.3
+   * Failed retry compression is surfaced before hard-limit truncation diagnostics.
+   */
+  it('surfaces failed retry compression diagnostics before truncation failure details', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 155_000,
+      contextLimit: 200_000,
+      maxOutputTokens: 40_000,
+    });
+
+    let primaryCallCount = 0;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
+        if (name === 'top-down-truncation') {
+          return {
+            name: 'top-down-truncation' as const,
+            requiresLLM: false,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockRejectedValue(new Error('truncation broke')),
+          };
+        }
+
+        return {
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryCallCount++;
+            if (primaryCallCount === 1) {
+              return {
+                newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+                metadata: {
+                  originalMessageCount: 10,
+                  compressedMessageCount: 1,
+                  strategyUsed: 'middle-out' as const,
+                  llmCallMade: true,
+                },
+              };
+            }
+            throw makeHttpError(500);
+          }),
+        };
+      },
+    );
+    vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(155_000);
+
+    await expect(
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
+    ).rejects.toThrow(
+      'Automatic compression failed before fallback: Error: Additional hard-limit compression attempt failed.',
+    );
+
+    expect(primaryCallCount).toBeGreaterThan(1);
+  });
+  /**
+   * @requirement REQ-2067.4
+   * Permanent auto-compression failures still allow hard-limit truncation fallback.
+   */
+  it('tries truncation when auto compression returns an empty summary', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 155_000,
+      contextLimit: 200_000,
+      maxOutputTokens: 40_000,
+    });
+
+    let fallbackApplied = false;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
+        if (name === 'top-down-truncation') {
+          return {
+            name: 'top-down-truncation' as const,
+            requiresLLM: false,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockImplementation(async () => {
+              fallbackApplied = true;
+              return {
+                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                metadata: {
+                  originalMessageCount: 10,
+                  compressedMessageCount: 1,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              };
+            }),
+          };
+        }
+
+        return {
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi
+            .fn()
+            .mockRejectedValue(new EmptySummaryError('middle-out')),
+        };
+      },
+    );
+
+    vi.spyOn(chat['historyService'], 'getTotalTokens').mockImplementation(() =>
+      fallbackApplied ? 140_000 : 155_000,
+    );
+
+    await expect(
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
+    ).resolves.toBeUndefined();
+
+    expect(fallbackApplied).toBe(true);
+  });
+
+  /**
+   * @requirement REQ-2067.4
+   * Non-throwing auto-compression failures are diagnosed and do not trigger a redundant full retry.
+   */
+  it('surfaces non-throwing auto compression failures without retrying full compression', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 155_000,
+      contextLimit: 200_000,
+      maxOutputTokens: 40_000,
+    });
+
+    let primaryCallCount = 0;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
+        if (name === 'top-down-truncation') {
+          return {
+            name: 'top-down-truncation' as const,
+            requiresLLM: false,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockRejectedValue(new Error('truncation broke')),
+          };
+        }
+
+        return {
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryCallCount++;
+            throw makeHttpError(500);
+          }),
+        };
+      },
+    );
+    vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(155_000);
+
+    await expect(
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
+    ).rejects.toThrow(
+      'Automatic compression failed before fallback: Error: Auto compression failed during hard-limit enforcement.',
+    );
+
+    expect(primaryCallCount).toBe(3);
+  });
+  /**
+   * @requirement REQ-2067.5
+   * Hard-limit overflow errors include truncation fallback failure details.
+   */
+  it('surfaces truncation failure details in hard-limit overflow errors', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 155_000,
+      contextLimit: 200_000,
+      maxOutputTokens: 40_000,
+    });
+
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
+        if (name === 'top-down-truncation') {
+          return {
+            name: 'top-down-truncation' as const,
+            requiresLLM: false,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockRejectedValue(new Error('truncation broke')),
+          };
+        }
+
+        return {
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockResolvedValue({
+            newHistory: [{ role: 'user', parts: [{ text: 'compressed' }] }],
+            metadata: {
+              originalMessageCount: 10,
+              compressedMessageCount: 1,
+              strategyUsed: 'middle-out' as const,
+              llmCallMade: true,
+            },
+          }),
+        };
+      },
+    );
+    vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(155_000);
+
+    await expect(
+      chat['enforceContextWindow'](10_000, 'test-prompt'),
+    ).rejects.toThrow(
+      'Truncation fallback failed during hard-limit enforcement: Error: truncation broke',
+    );
+  });
+
+  /**
    * @requirement REQ-1791.6
    * Hard-limit fallback rewrite clears stale API prompt baseline.
    */
-  it('clears lastPromptTokenCount when forceTruncationIfIneffective rewrites history', async () => {
+  it('clears lastPromptTokenCount when hard-limit truncation rewrites history', async () => {
     const chat = makeChatForEnforceContextWindow({
       totalTokens: 150_000,
       contextLimit: 200_000,
@@ -398,7 +686,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           requiresLLM: true,
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
           compress: vi.fn().mockResolvedValue({
-            // Ineffective primary compression triggers forceTruncationIfIneffective.
+            // Insufficient compression triggers hard-limit truncation.
             newHistory: [
               { role: 'user', parts: [{ text: 'hello' }] },
               { role: 'model', parts: [{ text: 'hi' }] },

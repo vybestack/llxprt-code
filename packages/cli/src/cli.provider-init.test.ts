@@ -76,6 +76,17 @@ vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(),
 }));
 
+// Agent creation has its own dedicated behavioral coverage in
+// cliAgentBootstrap.test.ts (and the single-call wiring is asserted in
+// cli.test.tsx). These provider-init tests exercise the --continue /
+// restoreHistory flow, so the agent composition root is mocked at its module
+// boundary to keep the narrow mock Config focused on session restore.
+vi.mock('./cliAgentBootstrap.js', () => ({
+  createForegroundAgent: vi.fn(async () => ({
+    dispose: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();

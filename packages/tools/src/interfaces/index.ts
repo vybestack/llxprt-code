@@ -32,7 +32,10 @@ export type {
   ToolMessageHandler,
   ToolMessageEvent,
   Unsubscribe,
+  PublishCapable,
+  PublishSubscribeCapable,
 } from './IToolMessageBus.js';
+export { hasPublish, hasPublishSubscribe } from './IToolMessageBus.js';
 export type {
   IShellExecutionService,
   ShellOptions,
@@ -113,3 +116,13 @@ export type {
   IWebSearchService,
   WebSearchServerToolsProvider,
 } from './IWebSearchService.js';
+export type {
+  HostWorkspaceContextCap,
+  HostIdeCap,
+  HostLspCap,
+} from './host-capabilities.js';
+export {
+  hasWorkspaceContextCap,
+  hasIdeCap,
+  hasLspCap,
+} from './host-capabilities.js';

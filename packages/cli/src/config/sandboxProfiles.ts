@@ -44,7 +44,7 @@ export interface SandboxProfile {
 export const SANDBOX_PROFILES_DIR_NAME = 'sandboxes';
 
 export function getSandboxProfilesDir(): string {
-  return path.join(Storage.getGlobalLlxprtDir(), SANDBOX_PROFILES_DIR_NAME);
+  return path.join(Storage.getGlobalConfigDir(), SANDBOX_PROFILES_DIR_NAME);
 }
 
 export function getDefaultSandboxProfiles(

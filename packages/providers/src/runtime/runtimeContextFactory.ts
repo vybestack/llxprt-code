@@ -11,8 +11,8 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { Storage } from '@vybestack/llxprt-code-settings';
 /**
  * @plan:PLAN-20250214-CREDPROXY.P33
  */
@@ -21,11 +21,9 @@ import {
   Config,
   type KeyringTokenStore,
   MessageBus,
-  type ProviderRuntimeContext,
   flushRuntimeAuthScope,
   type RuntimeAuthScopeFlushResult,
   SubagentManager,
-  type ConfigParameters,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -89,16 +87,21 @@ function attachAgentRuntimeFactories(config: Config): void {
     //     surfaces as a clear error rather than silent incorrect behavior.
     return;
   }
-  const mutableConfig = config as unknown as Pick<
-    ConfigParameters,
-    'agentClientFactory' | 'toolSchedulerFactory' | 'taskToolRegistration'
-  >;
-  mutableConfig.agentClientFactory ??=
-    agentRuntimeFactoryBindings.agentClientFactory;
-  mutableConfig.toolSchedulerFactory ??=
-    agentRuntimeFactoryBindings.toolSchedulerFactory;
-  mutableConfig.taskToolRegistration ??=
-    agentRuntimeFactoryBindings.taskToolRegistration();
+  if (config.getToolSchedulerFactory() === undefined) {
+    config.setToolSchedulerFactory(
+      agentRuntimeFactoryBindings.toolSchedulerFactory,
+    );
+  }
+  if (config.getAgentClientFactory() === undefined) {
+    config.setAgentClientFactory(
+      agentRuntimeFactoryBindings.agentClientFactory,
+    );
+  }
+  if (config.getTaskToolRegistration() === undefined) {
+    config.setTaskToolRegistration(
+      agentRuntimeFactoryBindings.taskToolRegistration(),
+    );
+  }
 }
 
 let sharedTokenStore: KeyringTokenStore | null = null;
@@ -287,7 +290,7 @@ function resolveRuntimeConfig(
   // (registerAgentRuntimeFactories) to avoid a providers→agents cycle.
   attachAgentRuntimeFactories(config);
 
-  const llxprtDir = path.join(os.homedir(), '.llxprt');
+  const llxprtDir = Storage.getGlobalConfigDir();
   const resolvedProfileManager =
     config.getProfileManager() ??
     new ProfileManager(path.join(llxprtDir, 'profiles'));
@@ -369,9 +372,7 @@ function buildActivateClosure(
         runtimeId: state.currentRuntimeId,
         metadata: state.currentMetadata,
       });
-      (
-        providerManager as unknown as { runtime?: ProviderRuntimeContext }
-      ).runtime = scopedRuntime;
+      providerManager.setRuntimeContext(scopedRuntime);
 
       await Promise.resolve(bindings.resetInfrastructure());
       await Promise.resolve(

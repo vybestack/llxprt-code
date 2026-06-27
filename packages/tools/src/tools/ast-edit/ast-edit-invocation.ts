@@ -27,6 +27,7 @@ import type {
   IToolHost,
   ILspService,
 } from '../../interfaces/index.js';
+import { hasLspCap } from '../../interfaces/host-capabilities.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../../utils/diffOptions.js';
 import { collectLspDiagnosticsBlock } from '../../utils/lsp-diagnostics-helper.js';
 import type { AnsiOutput } from '../../utils/terminalSerializer.js';
@@ -107,11 +108,7 @@ export class ASTEditToolInvocation
       newContent: editData.newContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
-          (
-            this.host as unknown as {
-              setApprovalMode: (mode: 'autoEdit') => void;
-            }
-          ).setApprovalMode('autoEdit');
+          this.host.setApprovalMode('auto');
         }
       },
       metadata: {
@@ -434,19 +431,22 @@ export class ASTEditToolInvocation
     if (this.lspService) {
       return this.lspService;
     }
-    const legacyHost = this.host as unknown as {
-      getLspServiceClient?: () =>
-        | {
-            isAlive?: () => boolean;
-            getDiagnostics?: (filePath: string) => unknown[];
-          }
-        | undefined;
-      getLspConfig?: () => unknown;
-    };
-    const client = legacyHost.getLspServiceClient?.();
-    if (!client || client.isAlive?.() === false) {
+    if (!hasLspCap(this.host)) {
       return undefined;
     }
+    const lspHost = this.host;
+    const rawClient = lspHost.getLspServiceClient();
+    if (
+      typeof rawClient !== 'object' ||
+      rawClient === null ||
+      (rawClient as { isAlive?: () => boolean }).isAlive?.() !== true
+    ) {
+      return undefined;
+    }
+    const client = rawClient as {
+      isAlive?: () => boolean;
+      getDiagnostics?: (filePath: string) => unknown[];
+    };
     return {
       getDiagnostics: (filePath: string) => {
         const diagnostics = client.getDiagnostics?.(filePath) ?? [];
@@ -493,7 +493,7 @@ export class ASTEditToolInvocation
         }
         return this.getEffectiveLspService()!.getDiagnostics(filePath);
       },
-      getLspConfig: () => legacyHost.getLspConfig?.() as never,
+      getLspConfig: () => lspHost.getLspConfig?.(),
     };
   }
 

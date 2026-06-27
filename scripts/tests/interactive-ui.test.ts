@@ -160,4 +160,23 @@ describe('Interactive UI (tmux harness)', () => {
     },
     300_000,
   );
+
+  runTmuxE2E(
+    'preserves assistant markdown hard line breaks',
+    () => {
+      const result = runHarness(
+        'tmux-script.issue2208-newlines.fake.json',
+        'issue2208-newlines',
+        [],
+        {
+          LLXPRT_FAKE_RESPONSES: path.join(
+            projectRoot,
+            'scripts/fixtures/issue2208-newlines.responses.jsonl',
+          ),
+        },
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
 });

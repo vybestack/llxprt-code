@@ -403,7 +403,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         });
       });
 
-      it('should not emit content for whitespace-only text', async () => {
+      it('should emit whitespace-only text without counting it as visible output', async () => {
         const mockResponseStream = (async function* () {
           yield {
             type: StreamEventType.CHUNK,
@@ -427,9 +427,11 @@ describe('Turn - debug responses and finished event outcome', () => {
           events.push(event);
         }
 
-        expect(
-          events.some((event) => event.type === GeminiEventType.Content),
-        ).toBe(false);
+        expect(events).toContainEqual({
+          type: GeminiEventType.Content,
+          value: '   ',
+          traceId: undefined,
+        });
         const finishedEvent = findFinishedEvent(events);
         expect(finishedEvent).toBeDefined();
         expect(finishedEvent?.value.outcome).toStrictEqual({

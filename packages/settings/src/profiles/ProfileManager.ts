@@ -23,8 +23,8 @@ import {
 } from '../settings/validation.js';
 
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
+import { Storage } from '@vybestack/llxprt-code-storage';
 
 interface ProfileSettingsServiceLike {
   exportForProfile?: () => Promise<{
@@ -74,19 +74,19 @@ function stringArray(value: unknown): string[] {
 
 /**
  * Manages saving and loading of configuration profiles.
- * Profiles are stored in ~/.llxprt/profiles/<profileName>.json
+ * Profiles are stored in <global llxprt dir>/profiles/<profileName>.json
  */
 export class ProfileManager {
   private profilesDir: string;
 
   /**
-   * @param profilesDir Optional custom directory for testing. If not provided, uses ~/.llxprt/profiles.
+   * @param profilesDir Optional custom directory for testing. If not provided, uses Storage.getGlobalConfigDir()/profiles.
    */
   constructor(profilesDir?: string) {
     this.profilesDir =
       profilesDir !== undefined && profilesDir !== ''
         ? profilesDir
-        : path.join(os.homedir(), '.llxprt', 'profiles');
+        : path.join(Storage.getGlobalConfigDir(), 'profiles');
   }
 
   /**

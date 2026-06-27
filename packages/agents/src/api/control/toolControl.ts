@@ -21,6 +21,7 @@
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../config-types.js';
 import type {
   AgentToolControl,
@@ -145,17 +146,29 @@ export class ToolControl implements AgentToolControl {
    * {@link ToolControlError} for an unknown confirmationId.
    *
    * For `ModifyWithEditor`, the confirmationId is retired (the coordinator
-   * issues a new correlationId).
+   * issues a new correlationId). Optional payloads carry editor/suggest-edit
+   * overrides, and requiresUserConfirmation flags decisions that should be
+   * re-surfaced to the user by the bus consumer.
    *
    * @plan:PLAN-20260617-COREAPI.P17
    * @requirement:REQ-006
    * @pseudocode tool-confirmation-merge.md steps 80-91
    */
-  respondToConfirmation(confirmationId: string, decision: ToolDecision): void {
+  respondToConfirmation(
+    confirmationId: string,
+    decision: ToolDecision,
+    payload?: ToolConfirmationPayload,
+    requiresUserConfirmation?: boolean,
+  ): void {
     if (!this.seen.has(confirmationId)) {
       throw new ToolControlError('unknown confirmationId: ' + confirmationId);
     }
-    this.deps.messageBus.respondToConfirmation(confirmationId, decision);
+    this.deps.messageBus.respondToConfirmation(
+      confirmationId,
+      decision,
+      payload,
+      requiresUserConfirmation,
+    );
     if (decision === ToolConfirmationOutcome.ModifyWithEditor) {
       // editor-modify retires the correlationId; the coordinator issues a new one.
       this.seen.delete(confirmationId);

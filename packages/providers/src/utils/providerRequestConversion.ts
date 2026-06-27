@@ -10,8 +10,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
 import { convertHistoryToGeminiFormat } from '../gemini/GeminiMessageConverter.js';
-import { buildMessagesWithReasoning } from '../openai/OpenAIRequestBuilder.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import {
+  buildMessagesWithReasoning,
+  type ReasoningMessageOptions,
+} from '../openai/OpenAIRequestBuilder.js';
 
 interface MinimalSettings {
   get?: (key: string) => unknown;
@@ -36,27 +38,10 @@ function createSettings(overrides?: unknown): SettingsService {
   } as SettingsService;
 }
 
-function createOptions(
-  history: IContent[],
-  settings?: unknown,
-): NormalizedGenerateChatOptions {
+function createOptions(settings?: unknown): ReasoningMessageOptions {
   return {
-    contents: history,
     settings: createSettings(settings),
-    invocation: {
-      ephemerals: {},
-      getModelBehavior: () => undefined,
-      getCliSetting: () => undefined,
-      getEphemeral: () => undefined,
-      getModelParam: () => undefined,
-      getProviderOverrides: () => undefined,
-    },
-    metadata: {},
-    resolved: {
-      model: '',
-      authToken: { token: '', source: 'none' },
-    },
-  } as unknown as NormalizedGenerateChatOptions;
+  };
 }
 
 export function buildOpenAIDumpMessages(
@@ -66,7 +51,7 @@ export function buildOpenAIDumpMessages(
 ): unknown[] {
   return buildMessagesWithReasoning(
     history,
-    createOptions(history, settings),
+    createOptions(settings),
     'openai',
     config,
   );

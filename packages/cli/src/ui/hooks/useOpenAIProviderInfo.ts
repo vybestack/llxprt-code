@@ -40,7 +40,7 @@ export function useOpenAIProviderInfo(
   const runtime = useRuntimeApi();
   const getProviderInfo = useCallback(() => {
     const services = runtime.getCliRuntimeServices();
-    return getOpenAIProviderInfo(services.providerManager as never);
+    return getOpenAIProviderInfo(services.providerManager);
   }, [runtime]);
   const [providerInfo, setProviderInfo] = useState<OpenAIProviderInfo>(() =>
     getProviderInfo(),

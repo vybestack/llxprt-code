@@ -7,7 +7,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
-import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
+import type {
+  IOAuthSettingsProvider,
+  OAuthUICallback,
+} from '@vybestack/llxprt-code-auth';
 import { createFakeOAuthSettings } from './test-oauth-settings.js';
 import {
   SettingsService,
@@ -853,5 +856,122 @@ describe('Higher priority auth detection', () => {
     const result = await manager.getHigherPriorityAuth('anthropic');
 
     expect(result).toBeNull();
+  });
+});
+
+/**
+ * Behavioral coverage for OAuthManager.attachAddItemToProviders — the typed
+ * public alternative to reaching into the private provider registry. Verifies
+ * the addItem callback is propagated to every registered provider that
+ * implements setAddItem, observed through the provider's OWN state (no mock
+ * call assertion on the unit under test).
+ */
+describe('OAuthManager.attachAddItemToProviders', () => {
+  /**
+   * Minimal-but-honest OAuthProvider that records the addItem callback in its
+   * own state so propagation is observable behaviorally. Implements only the
+   * required OAuthProvider surface plus the optional setAddItem under test.
+   */
+  class AddItemRecordingProvider implements OAuthProvider {
+    readonly name: string;
+    receivedAddItem: OAuthUICallback | undefined;
+
+    constructor(name: string) {
+      this.name = name;
+    }
+
+    async initiateAuth(): Promise<OAuthToken> {
+      return {
+        access_token: `access_${this.name}`,
+        refresh_token: `refresh_${this.name}`,
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer',
+        scope: 'read',
+      };
+    }
+
+    async getToken(): Promise<OAuthToken | null> {
+      return null;
+    }
+
+    async refreshToken(): Promise<OAuthToken | null> {
+      return null;
+    }
+
+    setAddItem(callback: OAuthUICallback): void {
+      this.receivedAddItem = callback;
+    }
+  }
+
+  it('propagates the addItem callback to a registered provider that implements setAddItem', () => {
+    const tokenStore = new MockTokenStore();
+    const manager = new OAuthManager(tokenStore);
+    const provider = new AddItemRecordingProvider('qwen');
+    manager.registerProvider(provider);
+
+    const addItem: OAuthUICallback = () => 42;
+
+    expect(provider.receivedAddItem).toBeUndefined();
+    manager.attachAddItemToProviders(addItem);
+    // Observe propagation through the provider's own state, not a mock-call
+    // assertion on the manager.
+    expect(provider.receivedAddItem).toBe(addItem);
+  });
+
+  it('propagates the addItem callback to every supported provider', () => {
+    const tokenStore = new MockTokenStore();
+    const manager = new OAuthManager(tokenStore);
+    const providerA = new AddItemRecordingProvider('qwen');
+    const providerB = new AddItemRecordingProvider('gemini');
+    manager.registerProvider(providerA);
+    manager.registerProvider(providerB);
+
+    const addItem: OAuthUICallback = () => 7;
+
+    manager.attachAddItemToProviders(addItem);
+    expect(providerA.receivedAddItem).toBe(addItem);
+    expect(providerB.receivedAddItem).toBe(addItem);
+  });
+
+  it('safely skips registered providers that do not implement setAddItem', () => {
+    // A provider WITHOUT the optional setAddItem method exercises the
+    // `?.setAddItem?.()` guard in attachAddItemToProviders. If that optional
+    // chaining were ever removed, this propagation would throw — so the
+    // behavioral contract is that mixed registries are handled without error.
+    class NoSetAddItemProvider implements OAuthProvider {
+      readonly name = 'codex';
+
+      async initiateAuth(): Promise<OAuthToken> {
+        return {
+          access_token: 'access_codex',
+          refresh_token: 'refresh_codex',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+          scope: 'read',
+        };
+      }
+
+      async getToken(): Promise<OAuthToken | null> {
+        return null;
+      }
+
+      async refreshToken(): Promise<OAuthToken | null> {
+        return null;
+      }
+    }
+
+    const tokenStore = new MockTokenStore();
+    const manager = new OAuthManager(tokenStore);
+    const recordingProvider = new AddItemRecordingProvider('qwen');
+    const plainProvider = new NoSetAddItemProvider();
+    manager.registerProvider(recordingProvider);
+    manager.registerProvider(plainProvider);
+
+    const addItem: OAuthUICallback = () => 13;
+
+    // Does not throw despite the registry containing a provider without
+    // setAddItem, and still propagates to the provider that supports it.
+    expect(() => manager.attachAddItemToProviders(addItem)).not.toThrow();
+    expect(recordingProvider.receivedAddItem).toBe(addItem);
   });
 });

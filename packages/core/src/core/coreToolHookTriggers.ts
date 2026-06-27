@@ -23,28 +23,20 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '../debug/index.js';
 import type { HookSystem } from '../hooks/hookSystem.js';
+import type { HookConfigBoundary } from './hookConfigBoundary.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hook-triggers:tool');
-
-/**
- * Boundary view of Config: test doubles may omit hook accessors.
- */
-type HookConfigBoundary = {
-  getEnableHooks?(): boolean;
-  getHookSystem?(): HookSystem | undefined;
-};
 
 /**
  * Returns the active HookSystem (or null) when hooks are enabled.
  * Handles config test doubles that may not implement hook accessors.
  */
-function getEnabledHookSystem(config: Config): HookSystem | null {
-  const boundary = config as unknown as HookConfigBoundary;
-  const enabled = boundary.getEnableHooks?.();
+function getEnabledHookSystem(config: HookConfigBoundary): HookSystem | null {
+  const enabled = config.getEnableHooks?.();
   if (enabled !== true) {
     return null;
   }
-  const hookSystem = boundary.getHookSystem?.();
+  const hookSystem = config.getHookSystem?.();
   if (hookSystem === undefined) {
     return null;
   }

@@ -6,6 +6,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { Diagnostic } from './diagnostics.js';
 import { getLanguageId } from './language-map.js';
+import {
+  isPublishDiagnosticsParams,
+  parsePublishDiagnostics,
+} from './lsp-diagnostic-parser.js';
 import type { LspServerConfig } from '../types.js';
 
 export class LspRequestTimeoutError extends Error {
@@ -38,7 +42,7 @@ export interface Location {
 
 export interface DocumentSymbol {
   name: string;
-  kind: string;
+  kind: number;
   line: number;
   char: number;
 }
@@ -72,6 +76,9 @@ const DEBOUNCE_MS = 120;
 const DEADLINE_SAFETY_MARGIN_MS = 5;
 const TOUCH_CRASH_OBSERVATION_WINDOW_MS = 25;
 const HEADER_SEPARATOR = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a]);
+
+const toSymbolKind = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
 function toFileUri(filePath: string): string {
   if (filePath.startsWith('file://')) {
@@ -501,7 +508,7 @@ export class LspClient {
       if (!item || typeof item !== 'object') return EMPTY_SYMBOLS;
       const symbol = item as Record<string, unknown>;
       const name = typeof symbol.name === 'string' ? symbol.name : '';
-      const kind = String(symbol.kind ?? 'unknown');
+      const kind = toSymbolKind(symbol.kind);
       const range = symbol.range as
         | { start?: { line?: number; character?: number } }
         | undefined;
@@ -840,19 +847,18 @@ export class LspClient {
       'method' in message &&
       message.method === 'textDocument/publishDiagnostics'
     ) {
-      const params = message.params as
-        | { uri?: string; diagnostics?: Diagnostic[] }
-        | undefined;
-      if (!params?.uri) {
+      if (!isPublishDiagnosticsParams(message.params)) {
         return;
       }
 
-      const path = fromFileUri(params.uri);
+      const path = fromFileUri(message.params.uri);
       this.diagnosticsByFile.set(
         path,
-        Array.isArray(params.diagnostics)
-          ? params.diagnostics
-          : EMPTY_DIAGNOSTICS,
+        parsePublishDiagnostics(
+          message.params.diagnostics,
+          path,
+          this.workspaceRoot,
+        ),
       );
       this.eventBus.emit(`diagnostics:${path}`);
     }

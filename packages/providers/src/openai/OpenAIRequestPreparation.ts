@@ -135,6 +135,10 @@ type OpenAIInvocationRuntime = {
   modelBehavior?: Record<string, unknown>;
 };
 
+type RequestBodyWithThinking = OpenAI.Chat.ChatCompletionCreateParams & {
+  thinking?: { type: 'enabled' | 'disabled' };
+};
+
 function resolveReasoningConfig(
   requestBody: OpenAI.Chat.ChatCompletionCreateParams,
   options: NormalizedGenerateChatOptions,
@@ -146,14 +150,11 @@ function resolveReasoningConfig(
   const reasoningEnabled = invocation.modelBehavior?.['reasoning.enabled'] as
     | boolean
     | undefined;
+  const body = requestBody as RequestBodyWithThinking;
   if (reasoningEnabled === true) {
-    (requestBody as unknown as Record<string, unknown>)['thinking'] = {
-      type: 'enabled',
-    };
+    body.thinking = { type: 'enabled' };
   } else if (reasoningEnabled === false) {
-    (requestBody as unknown as Record<string, unknown>)['thinking'] = {
-      type: 'disabled',
-    };
+    body.thinking = { type: 'disabled' };
   }
 }
 

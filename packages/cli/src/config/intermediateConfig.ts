@@ -50,9 +50,14 @@ function resolveScreenReaderSetting(
 }
 
 function resolveOutputFormat(argv: CliArgs): OutputFormat {
-  return argv.outputFormat === OutputFormat.JSON
-    ? OutputFormat.JSON
-    : OutputFormat.TEXT;
+  switch (argv.outputFormat) {
+    case OutputFormat.JSON:
+      return OutputFormat.JSON;
+    case OutputFormat.STREAM_JSON:
+      return OutputFormat.STREAM_JSON;
+    default:
+      return OutputFormat.TEXT;
+  }
 }
 
 export async function resolveIntermediateConfig(

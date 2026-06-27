@@ -35,6 +35,7 @@ describe('RuntimeContentGeneratorFactory contract', () => {
         return 'openai';
       },
       setActiveProvider(): void {},
+      setRuntimeContext(): void {},
       getAvailableModels(): Promise<unknown[]> {
         return Promise.resolve([]);
       },
@@ -81,6 +82,7 @@ describe('RuntimeContentGeneratorFactory contract', () => {
         return undefined;
       },
       setActiveProvider(): void {},
+      setRuntimeContext(): void {},
       getAvailableModels(): Promise<unknown[]> {
         return Promise.resolve([]);
       },
@@ -122,6 +124,7 @@ describe('RuntimeContentGeneratorFactory contract', () => {
         return 'test';
       },
       setActiveProvider(): void {},
+      setRuntimeContext(): void {},
       getAvailableModels(): Promise<unknown[]> {
         return Promise.resolve([]);
       },

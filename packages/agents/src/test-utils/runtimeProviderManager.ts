@@ -25,8 +25,11 @@ export class TestRuntimeProviderManager implements RuntimeProviderManager {
   private readonly providers = new Map<string, RuntimeProvider>();
   private activeProviderName: string | undefined;
   private serverToolsProvider: RuntimeProvider | null | undefined;
+  private runtimeContext: ProviderRuntimeContext | undefined;
 
-  constructor(private readonly runtimeContext?: ProviderRuntimeContext) {}
+  constructor(runtimeContext?: ProviderRuntimeContext) {
+    this.runtimeContext = runtimeContext;
+  }
 
   getActiveProvider(): RuntimeProvider | undefined {
     return this.activeProviderName
@@ -94,6 +97,10 @@ export class TestRuntimeProviderManager implements RuntimeProviderManager {
   }
 
   setConfig(_config: Config): void {}
+
+  setRuntimeContext(runtimeContext: ProviderRuntimeContext): void {
+    this.runtimeContext = runtimeContext;
+  }
 
   hasActiveProvider(): boolean {
     return this.getActiveProvider() != null;

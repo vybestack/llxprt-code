@@ -12,6 +12,7 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
+import type { MessageCreateParamsBase } from '@anthropic-ai/sdk/resources/messages/index.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
   shouldDumpSDKContext,
@@ -96,6 +97,30 @@ export function buildAnthropicCustomHeaders(params: {
 }
 
 /**
+ * The request body built by buildAnthropicRequestBody, which includes the
+ * required SDK base fields (model, messages, max_tokens) plus optional
+ * dynamic overrides from modelParams. The index signature preserves the
+ * ability to carry dynamic fields at runtime while being assignable to
+ * the SDK's create() overload that accepts MessageCreateParamsBase.
+ */
+type AnthropicRequestBody = MessageCreateParamsBase & {
+  [key: string]: unknown;
+};
+
+/**
+ * Narrows the dynamically-built request body to the SDK-accepted type.
+ * The body is constructed by buildAnthropicRequestBody at runtime with
+ * valid base fields. Since AnthropicRequestBody includes the index
+ * signature, the single `as` narrowing from Record<string, unknown>
+ * is structurally justified (the source carries all base fields).
+ */
+function asMessageCreateParams(
+  body: Record<string, unknown>,
+): AnthropicRequestBody {
+  return body as AnthropicRequestBody;
+}
+
+/**
  * Create API call closure with response headers
  */
 export function createAnthropicApiCall(
@@ -106,20 +131,12 @@ export function createAnthropicApiCall(
   data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   response: Response | undefined;
 }> {
+  const params = asMessageCreateParams(requestBody);
   return async () => {
     const apiCall = () =>
       Object.keys(customHeaders).length > 0
-        ? client.messages.create(
-            requestBody as unknown as Parameters<
-              typeof client.messages.create
-            >[0],
-            { headers: customHeaders },
-          )
-        : client.messages.create(
-            requestBody as unknown as Parameters<
-              typeof client.messages.create
-            >[0],
-          );
+        ? client.messages.create(params, { headers: customHeaders })
+        : client.messages.create(params);
 
     const promise = apiCall();
     // The promise has a withResponse() method we can call

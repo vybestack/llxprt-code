@@ -4,20 +4,48 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, afterAll } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   dumpRequestContext,
   dumpResponseContext,
   generateDumpBaseId,
 } from './dumpContext.js';
 
-const DUMP_DIR = path.join(os.homedir(), '.llxprt', 'dumps');
+// Set a test-specific config home before any Storage call so
+// getGlobalCacheDir resolves inside the sandbox, not the real user dir.
+const TEST_CONFIG_HOME = path.join(
+  os.tmpdir(),
+  `llxprt-dumpctx-sep-test-${process.pid}`,
+);
+const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+const originalCacheHome = process.env['LLXPRT_CACHE_HOME'];
+delete process.env['LLXPRT_CACHE_HOME'];
+process.env['LLXPRT_CONFIG_HOME'] = TEST_CONFIG_HOME;
+
+const DUMP_DIR = path.join(Storage.getGlobalCacheDir(), 'dumps');
 
 describe('dumpContext separate request/response files', () => {
   const createdFiles: string[] = [];
+
+  afterAll(async () => {
+    if (originalConfigHome !== undefined) {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+    } else {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    }
+    if (originalCacheHome !== undefined) {
+      process.env['LLXPRT_CACHE_HOME'] = originalCacheHome;
+    } else {
+      delete process.env['LLXPRT_CACHE_HOME'];
+    }
+    await fs
+      .rm(TEST_CONFIG_HOME, { recursive: true, force: true })
+      .catch(() => {});
+  });
 
   afterEach(async () => {
     for (const file of createdFiles) {
