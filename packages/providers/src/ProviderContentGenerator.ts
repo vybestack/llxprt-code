@@ -20,14 +20,24 @@ import {
   type Content,
   type Part,
 } from '@google/genai';
-import type { IProviderManager as ProviderManager } from './IProviderManager.js';
+
+/**
+ * Minimal structural contract for the provider-manager capability that
+ * {@link ProviderContentGenerator} consumes. Both the concrete
+ * `ProviderManager` (via `IProviderManager`) and the core-owned
+ * `RuntimeProviderManager` satisfy this surface, so the composition root can
+ * pass either without a cast bridge.
+ */
+export interface ProviderContentGeneratorManager {
+  getActiveProvider(): { name: string } | undefined;
+}
 
 /**
  * ContentGenerator implementation that delegates to external providers
  */
 export class ProviderContentGenerator implements ContentGenerator {
   constructor(
-    private providerManager: ProviderManager,
+    private providerManager: ProviderContentGeneratorManager,
     private _config: ContentGeneratorConfig,
   ) {
     // Config parameter is reserved for future use

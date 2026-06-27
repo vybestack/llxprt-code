@@ -47,6 +47,19 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+function isWithinMaxDepth(
+  relativePath: string,
+  maxDepth: number | undefined,
+): boolean {
+  if (maxDepth === undefined || relativePath === '.') {
+    return true;
+  }
+
+  const pathWithoutTrailingSlash = relativePath.replace(/\/$/, '');
+  const depth = pathWithoutTrailingSlash.split('/').length - 1;
+  return depth <= maxDepth;
+}
+
 export async function crawl(options: CrawlOptions): Promise<string[]> {
   throwIfAborted(options.signal);
 
@@ -121,9 +134,9 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
 
   const relativeToCrawlDir = path.posix.relative(posixCwd, posixCrawlDirectory);
 
-  const relativeToCwdResults = results.map((p) =>
-    path.posix.join(relativeToCrawlDir, p),
-  );
+  const relativeToCwdResults = results
+    .filter((p) => isWithinMaxDepth(p, options.maxDepth))
+    .map((p) => path.posix.join(relativeToCrawlDir, p));
 
   if (options.cache && !state.truncated) {
     const cacheKey = cache.getCacheKey(

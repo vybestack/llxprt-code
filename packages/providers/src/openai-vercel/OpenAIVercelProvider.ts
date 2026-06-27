@@ -172,11 +172,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         ? getToolIdStrategy(toolFormat).createMapper(contents)
         : undefined;
 
-    return convertToVercelMessages(
-      contents,
-      toolIdMapper,
-      options,
-    ) as unknown as ModelMessage[];
+    return convertToVercelMessages(contents, toolIdMapper, options);
   }
 
   private getClientConfig(

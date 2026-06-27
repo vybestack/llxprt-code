@@ -21,9 +21,28 @@
 
 // --- Interface contracts ---
 export type * from './interfaces/index.js';
+// Runtime capability guards are values, not types, so export type * omits them.
+// Re-export explicitly so consumers can import them from the package root.
+export {
+  hasPublish,
+  hasPublishSubscribe,
+  hasWorkspaceContextCap,
+  hasIdeCap,
+  hasLspCap,
+} from './interfaces/index.js';
 
 // --- Types ---
-export type { ToolContext, ContextAwareTool } from './types/tool-context.js';
+export {
+  type ToolContext,
+  type ContextAwareTool,
+  isContextAwareTool,
+} from './types/tool-context.js';
+export {
+  type ToolSchemaDescriptor,
+  type ToolSchemaHolder,
+  hasToolSchema,
+  resolveToolDescription,
+} from './types/tool-schema-capability.js';
 
 // --- Formatters ---
 export type {

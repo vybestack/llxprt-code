@@ -5,10 +5,12 @@
  */
 
 import process from 'node:process';
+import path from 'node:path';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ActivateSkillTool } from '@vybestack/llxprt-code-tools';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
@@ -445,7 +447,7 @@ export class Config extends ConfigBase {
     }
 
     // Default path
-    return this.expandPath('~/.llxprt/conversations/');
+    return path.join(Storage.getGlobalDataDir(), 'conversations');
   }
 
   getRedactionConfig(): RedactionConfig {

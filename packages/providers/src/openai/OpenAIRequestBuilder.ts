@@ -18,7 +18,6 @@ import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -112,12 +111,18 @@ export function buildToolResponseContent(
     }),
   );
 }
-type OpenAIPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } }
-  | { type: 'file'; file: { filename: string; file_data: string } };
+type AssistantMessageWithReasoning =
+  OpenAI.Chat.ChatCompletionAssistantMessageParam & {
+    reasoning_content?: string;
+  };
 
-function convertBlockToPart(block: ContentBlock): OpenAIPart | null {
+type ToolMessageWithName = OpenAI.Chat.ChatCompletionToolMessageParam & {
+  name?: string;
+};
+
+function convertBlockToPart(
+  block: ContentBlock,
+): OpenAI.Chat.ChatCompletionContentPart | null {
   if (block.type === 'text' && block.text) {
     return { type: 'text', text: block.text };
   }
@@ -162,11 +167,7 @@ function processUserMessage(
   const hasMedia = content.blocks.some((b) => b.type === 'media');
 
   if (hasMedia) {
-    const parts: Array<
-      | { type: 'text'; text: string }
-      | { type: 'image_url'; image_url: { url: string } }
-      | { type: 'file'; file: { filename: string; file_data: string } }
-    > = [];
+    const parts: OpenAI.Chat.ChatCompletionContentPart[] = [];
 
     for (const block of content.blocks) {
       const part = convertBlockToPart(block);
@@ -178,7 +179,7 @@ function processUserMessage(
     if (parts.length > 0) {
       return {
         role: 'user',
-        content: parts as unknown as string,
+        content: parts,
       };
     }
   } else {
@@ -232,13 +233,11 @@ function processAssistantMessage(
       if (isStrictOpenAI) {
         return baseMessage;
       }
-      const messageWithReasoning = baseMessage as unknown as Record<
-        string,
-        unknown
-      >;
-      messageWithReasoning.reasoning_content =
-        thinkingToReasoningField(thinkingBlocks);
-      return messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam;
+      const messageWithReasoning: AssistantMessageWithReasoning = {
+        ...baseMessage,
+        reasoning_content: thinkingToReasoningField(thinkingBlocks),
+      };
+      return messageWithReasoning;
     }
     return baseMessage;
   } else if (textBlocks.length > 0 || thinkingBlocks.length > 0) {
@@ -248,13 +247,11 @@ function processAssistantMessage(
     };
 
     if (includeInContext && thinkingBlocks.length > 0) {
-      const messageWithReasoning = baseMessage as unknown as Record<
-        string,
-        unknown
-      >;
-      messageWithReasoning.reasoning_content =
-        thinkingToReasoningField(thinkingBlocks);
-      return messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam;
+      const messageWithReasoning: AssistantMessageWithReasoning = {
+        ...baseMessage,
+        reasoning_content: thinkingToReasoningField(thinkingBlocks),
+      };
+      return messageWithReasoning;
     }
     return baseMessage;
   }
@@ -304,7 +301,7 @@ function processToolResponses(
       toolContent = toolContent + '\n' + mediaFallback;
     }
 
-    const toolMessage: Record<string, unknown> = {
+    const toolMessage: ToolMessageWithName = {
       role: 'tool',
       content: toolContent,
       tool_call_id: resolveToolResponseId(tr),
@@ -314,9 +311,7 @@ function processToolResponses(
       toolMessage.name = tr.toolName;
     }
 
-    messages.push(
-      toolMessage as unknown as OpenAI.Chat.ChatCompletionToolMessageParam,
-    );
+    messages.push(toolMessage);
   }
 
   return messages;
@@ -328,10 +323,7 @@ function flushPendingToolImages(
 ): void {
   if (pendingToolImages.length === 0) return;
 
-  const imageParts: Array<
-    | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string } }
-  > = [
+  const imageParts: OpenAI.Chat.ChatCompletionContentPart[] = [
     { type: 'text', text: '[Images from tool response]' },
     ...pendingToolImages.map((mb) => ({
       type: 'image_url' as const,
@@ -340,7 +332,7 @@ function flushPendingToolImages(
   ];
   messages.push({
     role: 'user',
-    content: imageParts as unknown as string,
+    content: imageParts,
   });
   pendingToolImages.length = 0;
 }
@@ -392,6 +384,10 @@ function processContentMessages(
   flushPendingToolImages(pendingToolImages, messages);
 }
 
+export interface ReasoningMessageOptions {
+  settings: { get(key: string): unknown };
+}
+
 /**
  * Build messages with optional reasoning_content based on settings.
  *
@@ -400,7 +396,7 @@ function processContentMessages(
  */
 export function buildMessagesWithReasoning(
   contents: IContent[],
-  options: NormalizedGenerateChatOptions,
+  options: ReasoningMessageOptions,
   toolFormat: ToolFormat | undefined,
   config: Config | undefined,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {

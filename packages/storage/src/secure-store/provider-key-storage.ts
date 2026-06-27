@@ -15,7 +15,7 @@
  */
 
 import * as path from 'node:path';
-import * as os from 'node:os';
+import { Storage } from '../config/storage.js';
 import { SecureStore } from './secure-store.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -27,14 +27,8 @@ export const KEY_NAME_REGEX = /^[a-zA-Z0-9._-]{1,64}$/;
 const SERVICE_NAME = 'llxprt-code-provider-keys';
 
 /** @pseudocode line 14 */
-const DEFAULT_FALLBACK_DIR = (): string => {
-  const homeDir = os.homedir();
-  if (typeof homeDir === 'string' && homeDir.length > 0) {
-    return path.join(homeDir, '.llxprt', 'provider-keys');
-  }
-  const tmpDir = os.tmpdir();
-  return path.join(tmpDir, 'llxprt-provider-keys');
-};
+const DEFAULT_FALLBACK_DIR = (): string =>
+  path.join(Storage.getGlobalDataDir(), 'provider-keys');
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
@@ -57,11 +51,30 @@ export function validateKeyName(name: string): void {
 // ─── ProviderKeyStorage Class ────────────────────────────────────────────────
 
 /**
+ * Structural contract for named provider API key storage.
+ *
+ * Both the direct {@link ProviderKeyStorage} and proxy-backed implementations
+ * (e.g. `ProxyProviderKeyStorage` in the auth package) satisfy this interface,
+ * allowing consumers to depend on the shared surface without coupling to a
+ * specific concrete class.
+ *
+ * @plan PLAN-20260211-SECURESTORE.P12
+ * @requirement R9.1
+ */
+export interface ProviderKeyStorageLike {
+  saveKey(name: string, apiKey: string): Promise<void>;
+  getKey(name: string): Promise<string | null>;
+  deleteKey(name: string): Promise<boolean>;
+  listKeys(): Promise<string[]>;
+  hasKey(name: string): Promise<boolean>;
+}
+
+/**
  * @plan PLAN-20260211-SECURESTORE.P12
  * @pseudocode lines 11-65
  * @requirement R9.1
  */
-export class ProviderKeyStorage {
+export class ProviderKeyStorage implements ProviderKeyStorageLike {
   private readonly secureStore: SecureStore;
 
   /** @pseudocode lines 16-24 */

@@ -173,8 +173,8 @@ async function resolveLoadBalancerSubProfile(
     authKeyfile,
     deps,
   );
-  const providerName = getProfileProvider(subProfile) ?? '';
-  const model = getProfileModel(subProfile) ?? '';
+  const providerName = getProfileProvider(subProfile);
+  const model = getProfileModel(subProfile);
   const contextWindow = await resolveSubProfileContextWindow(
     providerName,
     model,

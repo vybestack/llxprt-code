@@ -13,6 +13,7 @@ import type {
   OAuthToken,
   OAuthTokenRequestMetadata,
   TokenStore,
+  OAuthUICallback,
 } from '@vybestack/llxprt-code-auth';
 
 export type {
@@ -20,6 +21,7 @@ export type {
   AuthStatus,
   TokenStore,
   OAuthTokenRequestMetadata,
+  OAuthUICallback,
 } from '@vybestack/llxprt-code-auth';
 
 export { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
@@ -81,6 +83,14 @@ export interface OAuthProvider {
    * @returns true if the provider can confirm authentication status, false otherwise
    */
   isAuthenticated?(): Promise<boolean>;
+
+  /**
+   * Optional UI callback for emitting OAuth events (e.g. history item creation).
+   * Concrete providers (gemini, qwen, anthropic, codex) implement this so the
+   * composition root can attach the CLI's history callback without reaching
+   * into the manager's private provider registry.
+   */
+  setAddItem?(callback: OAuthUICallback): void;
 }
 
 /**

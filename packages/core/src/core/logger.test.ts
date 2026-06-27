@@ -23,22 +23,31 @@ import {
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import type { Content } from '@google/genai';
 import { debugLogger } from '../utils/debugLogger.js';
 
 import crypto from 'node:crypto';
-import os from 'node:os';
 
-const LLXPRT_DIR_NAME = '.llxprt';
 const TMP_DIR_NAME = 'tmp';
 const LOG_FILE_NAME = 'logs.json';
 const CHECKPOINT_FILE_NAME = 'checkpoint.json';
 
+// Set a test-specific config home before any Storage call so
+// getGlobalLogDir resolves inside the sandbox, not the real user dir.
+const ORIGINAL_CONFIG_HOME = process.env['LLXPRT_CONFIG_HOME'];
+const ORIGINAL_LOG_HOME = process.env['LLXPRT_LOG_HOME'];
+const TEST_CONFIG_HOME = path.join(
+  os.tmpdir(),
+  `llxprt-logger-test-${process.pid}`,
+);
+process.env['LLXPRT_CONFIG_HOME'] = TEST_CONFIG_HOME;
+process.env['LLXPRT_LOG_HOME'] = TEST_CONFIG_HOME;
+
 const projectDir = process.cwd();
 const hash = crypto.createHash('sha256').update(projectDir).digest('hex');
 const TEST_LLXPRT_DIR = path.join(
-  os.homedir(),
-  LLXPRT_DIR_NAME,
+  Storage.getGlobalLogDir(),
   TMP_DIR_NAME,
   hash,
 );
@@ -100,6 +109,19 @@ describe('Logger', () => {
   afterAll(async () => {
     // Final cleanup
     await cleanupLogAndCheckpointFiles();
+    await fs
+      .rm(TEST_CONFIG_HOME, { recursive: true, force: true })
+      .catch(() => {});
+    if (ORIGINAL_CONFIG_HOME !== undefined) {
+      process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
+    } else {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    }
+    if (ORIGINAL_LOG_HOME !== undefined) {
+      process.env['LLXPRT_LOG_HOME'] = ORIGINAL_LOG_HOME;
+    } else {
+      delete process.env['LLXPRT_LOG_HOME'];
+    }
   });
 
   describe('initialize', () => {

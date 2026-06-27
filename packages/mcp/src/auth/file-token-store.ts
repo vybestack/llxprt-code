@@ -47,6 +47,14 @@ const safeOsUsername = (): string => {
 /**
  * File-based implementation of the BaseTokenStore.
  * Stores MCP OAuth tokens in a JSON file in the user's configuration directory.
+ *
+ * @deprecated This legacy token store is not on the current production path
+ * and is retained for public API compatibility and backward-compatible reads.
+ * New code should use {@link HybridTokenStorage} (preferred) or
+ * `FileTokenStorage` from `./token-storage/file-token-storage.js`, both of
+ * which derive their encryption keys from a machine-secret-backed versioned
+ * envelope rather than host/user metadata. Do not add new production
+ * instantiations of this class.
  */
 export class FileTokenStore extends BaseTokenStore {
   private readonly tokenFilePath: string;

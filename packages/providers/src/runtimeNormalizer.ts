@@ -287,16 +287,8 @@ function computeShouldApplyGlobalEphemerals(
   config: Config,
   targetProvider: string,
 ): boolean {
-  const configSettingsService =
-    typeof (config as unknown as { getSettingsService?: () => unknown })
-      .getSettingsService === 'function'
-      ? (
-          config as unknown as { getSettingsService: () => unknown }
-        ).getSettingsService()
-      : undefined;
+  const configSettingsService = config.getSettingsService();
   const configMatchesSettingsService =
-    configSettingsService === undefined ||
-    configSettingsService === null ||
     configSettingsService === settingsService;
   const activeProviderRaw = settingsService.get('activeProvider');
   const activeProviderName =

@@ -588,12 +588,7 @@ class EditToolInvocation extends BaseToolInvocation<
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           // No need to publish a policy update as the default policy for
           // AUTO_EDIT already reflects always approving edit.
-          const legacyAutoEdit =
-            (this.host as unknown as { constructor?: { name?: string } })
-              .constructor?.name !== 'CoreToolHostAdapter';
-          (
-            this.host as unknown as { setApprovalMode: (mode: string) => void }
-          ).setApprovalMode(legacyAutoEdit ? 'autoEdit' : 'auto');
+          this.host.setApprovalMode('auto');
         } else {
           await this.publishPolicyUpdate(outcome);
         }

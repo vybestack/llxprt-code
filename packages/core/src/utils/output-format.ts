@@ -142,7 +142,7 @@ export class StreamJsonFormatter {
    * @returns JSON string with trailing newline
    */
   formatEvent(event: JsonStreamEvent): string {
-    return JSON.stringify(event) + '\\n';
+    return JSON.stringify(event) + '\n';
   }
 
   /**

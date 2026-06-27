@@ -189,29 +189,7 @@ const TYPE_ESCAPE_PATTERNS = [
   { pattern: /\bas\s+unknown\s+as\b/, label: 'as unknown as' },
 ];
 
-const CLI_TYPE_ESCAPE_ALLOWLIST = [
-  {
-    file: 'packages/cli/src/runtime/agentRuntimeAdapter.ts',
-    label: 'as unknown as',
-    content: 'providerManager as unknown as {',
-    issue: '2171',
-    max: 2,
-  },
-  {
-    file: 'packages/cli/src/ui/commands/mcpDisplay.ts',
-    label: 'as unknown as',
-    content: 'MCPOAuthTokenStorage as unknown as TokenStorageStatic,',
-    issue: '2173',
-    max: 1,
-  },
-  {
-    file: 'packages/cli/src/ui/hooks/useReactToolScheduler.ts',
-    label: 'as unknown as',
-    content: 'return factory as unknown as ExternalSchedulerFactory;',
-    issue: '2172',
-    max: 1,
-  },
-];
+const CLI_TYPE_ESCAPE_ALLOWLIST = [];
 
 export function hasInlineEslintDirective(line) {
   for (let i = 0; i < line.length; i++) {

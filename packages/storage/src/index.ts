@@ -38,6 +38,22 @@ export {
   resetProviderKeyStorage,
   validateKeyName,
 } from './secure-store/provider-key-storage.js';
+export type { ProviderKeyStorageLike } from './secure-store/provider-key-storage.js';
+
+// Shared envelope codec for sibling encrypted file stores
+export {
+  encryptEnvelopeString,
+  decryptEnvelopeString,
+  readEnvelopeVersion,
+  EnvelopeCodecError,
+} from './secure-store/envelope-codec.js';
+export type {
+  Envelope,
+  EnvelopeCodecOptions,
+  EnvelopeCodecErrorCode,
+  EncryptEnvelopeStringOptions,
+} from './secure-store/envelope-codec.js';
+export { isValidEnvelope } from './secure-store/envelope.js';
 
 // Session types and constants
 export { SESSION_FILE_PREFIX } from './session/sessionTypes.js';

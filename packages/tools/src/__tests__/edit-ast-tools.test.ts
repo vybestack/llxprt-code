@@ -72,6 +72,7 @@ describe('Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-202606
       setApprovalMode: () => {},
       isInteractive: () => false,
       hasFeatureFlag: () => false,
+      getEphemeralSettings: () => ({}),
     };
   }
   async function executeDeclarativeToolForBehavioralAssertion(

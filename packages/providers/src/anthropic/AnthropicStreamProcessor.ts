@@ -157,11 +157,8 @@ export async function* processAnthropicStream(
           retryResult.data as AsyncIterable<Anthropic.MessageStreamEvent>;
       }
 
-      const stream =
-        currentResponse as unknown as AsyncIterable<Anthropic.MessageStreamEvent>;
-
       logger.debug(() => 'Processing streaming response');
-      yield* processStreamEvents(stream, options, state);
+      yield* processStreamEvents(currentResponse, options, state);
       return;
     } catch (error) {
       const canRetryStream = isNetworkTransientError(error);
@@ -199,59 +196,42 @@ export async function* processAnthropicStream(
 }
 
 function* handleMessageStart(
-  chunk: Anthropic.MessageStreamEvent,
+  chunk: Anthropic.MessageStreamEvent & { type: 'message_start' },
   cacheLogger: { debug: (fn: () => string) => void },
 ): Generator<IContent> {
-  const usage = (
-    chunk as unknown as {
-      message?: {
-        usage?: {
-          input_tokens?: number;
-          output_tokens?: number;
-          cache_read_input_tokens?: number;
-          cache_creation_input_tokens?: number;
-        };
-      };
-    }
-  ).message?.usage;
+  const usage = chunk.message.usage;
+  const cacheRead = usage.cache_read_input_tokens ?? 0;
+  const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
-  if (usage) {
-    const cacheRead = usage.cache_read_input_tokens ?? 0;
-    const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+  cacheLogger.debug(
+    () =>
+      `[AnthropicProvider streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
+  );
 
-    cacheLogger.debug(
-      () =>
-        `[AnthropicProvider streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
-    );
-
-    if (cacheRead > 0 || cacheCreation > 0) {
-      cacheLogger.debug(() => {
-        const hitRate =
-          cacheRead + (usage.input_tokens ?? 0) > 0
-            ? (cacheRead / (cacheRead + (usage.input_tokens ?? 0))) * 100
-            : 0;
-        return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
-      });
-    }
-
-    yield {
-      speaker: 'ai',
-      blocks: [],
-      metadata: {
-        usage: {
-          promptTokens: (usage.input_tokens ?? 0) + cacheRead + cacheCreation,
-          completionTokens: usage.output_tokens ?? 0,
-          totalTokens:
-            (usage.input_tokens ?? 0) +
-            (usage.output_tokens ?? 0) +
-            cacheRead +
-            cacheCreation,
-          cache_read_input_tokens: cacheRead,
-          cache_creation_input_tokens: cacheCreation,
-        },
-      },
-    } as IContent;
+  if (cacheRead > 0 || cacheCreation > 0) {
+    cacheLogger.debug(() => {
+      const hitRate =
+        cacheRead + usage.input_tokens > 0
+          ? (cacheRead / (cacheRead + usage.input_tokens)) * 100
+          : 0;
+      return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
+    });
   }
+
+  yield {
+    speaker: 'ai',
+    blocks: [],
+    metadata: {
+      usage: {
+        promptTokens: usage.input_tokens + cacheRead + cacheCreation,
+        completionTokens: usage.output_tokens,
+        totalTokens:
+          usage.input_tokens + usage.output_tokens + cacheRead + cacheCreation,
+        cache_read_input_tokens: cacheRead,
+        cache_creation_input_tokens: cacheCreation,
+      },
+    },
+  } as IContent;
 }
 
 function handleContentBlockStart(
@@ -420,6 +400,24 @@ function completeToolCall(
   } as IContent;
 }
 
+interface StopEventContentBlock {
+  type?: string;
+  thinking?: string;
+  signature?: string;
+}
+
+function readStopEventContentBlock(
+  chunk: unknown,
+): StopEventContentBlock | undefined {
+  if (typeof chunk === 'object' && chunk !== null && 'content_block' in chunk) {
+    const cb = (chunk as { content_block?: unknown }).content_block;
+    if (typeof cb === 'object' && cb !== null) {
+      return cb as StopEventContentBlock;
+    }
+  }
+  return undefined;
+}
+
 function completeThinkingBlock(
   currentThinkingBlock: { thinking: string; signature?: string },
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_stop' },
@@ -430,15 +428,7 @@ function completeThinkingBlock(
       `Completed thinking block: ${currentThinkingBlock.thinking.length} chars`,
   );
 
-  const contentBlock = (
-    chunk as unknown as {
-      content_block?: {
-        type: string;
-        thinking?: string;
-        signature?: string;
-      };
-    }
-  ).content_block;
+  const contentBlock = readStopEventContentBlock(chunk);
   if (contentBlock?.signature) {
     currentThinkingBlock.signature = contentBlock.signature;
   }
@@ -496,6 +486,20 @@ function handleContentBlockStop(
   return { currentToolCall, currentThinkingBlock };
 }
 
+/**
+ * Reads stop_reason from a message_delta event defensively.
+ * The SDK type declares delta as required, but some test/runtime
+ * streams may omit it. Treating the field as possibly-absent runtime
+ * data avoids a crash while preserving the original optional-chaining
+ * semantics.
+ */
+function readMessageDeltaStopReason(
+  chunk: Anthropic.MessageStreamEvent & { type: 'message_delta' },
+): string | null | undefined {
+  const delta = (chunk as { delta?: { stop_reason?: string | null } }).delta;
+  return delta?.stop_reason;
+}
+
 function* handleMessageDelta(
   chunk: Anthropic.MessageStreamEvent & { type: 'message_delta' },
   logger: { debug: (fn: () => string) => void },
@@ -510,8 +514,7 @@ function* handleMessageDelta(
       }
     | undefined;
 
-  const stopReason = (chunk as unknown as { delta?: { stop_reason?: string } })
-    .delta?.stop_reason;
+  const stopReason = readMessageDeltaStopReason(chunk);
 
   if (!usage) {
     logger.debug(

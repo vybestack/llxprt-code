@@ -33,6 +33,10 @@ vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
         .fn()
         .mockReturnValue('/mock/home/.llxprt/settings.json'),
       getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+      getGlobalConfigDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+      getGlobalDataDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+      getGlobalCacheDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+      getGlobalLogDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
     },
     MCPServerStatus: {
       CONNECTED: 'CONNECTED',

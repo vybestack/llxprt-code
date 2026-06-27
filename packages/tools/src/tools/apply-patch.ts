@@ -40,57 +40,18 @@ import { collectLspDiagnosticsBlock } from '../utils/lsp-diagnostics-helper.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
+import {
+  createDefaultToolHost,
+  getTargetDirCompat,
+  getWorkspaceRootsCompat,
+  getLegacyIdeService,
+  getLegacyLspService,
+} from './edit-utils.js';
 
 /**
  * Type representing a parsed patch operation
  */
 export type PatchOperation = Diff.StructuredPatch;
-
-function createDefaultToolHost(): IToolHost {
-  return {
-    getTargetDir: () => process.cwd(),
-    getWorkspaceRoots: () => [path.parse(process.cwd()).root],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getFileService: () => ({
-      shouldGitIgnoreFile: () => false,
-      shouldLlxprtIgnoreFile: () => false,
-      filterFiles: (paths: string[]) => paths,
-    }),
-    getFileFilteringOptions: () => ({
-      respectGitIgnore: true,
-      respectLlxprtIgnore: true,
-    }),
-    getFileExclusions: () => [],
-    getReadManyFilesExclusions: () => [],
-    getFileFilteringRespectLlxprtIgnore: () => true,
-    getLlxprtIgnoreFilePath: () => null,
-    recordFileRead: () => {},
-    getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
-    getDebugMode: () => false,
-  };
-}
-
-function getTargetDirCompat(host: IToolHost): string {
-  return host.getTargetDir();
-}
-
-function getWorkspaceRootsCompat(host: IToolHost): string[] {
-  const maybeHost = host as unknown as {
-    getWorkspaceRoots?: () => string[];
-    getWorkspaceContext?: () => { getDirectories?: () => string[] };
-    getTargetDir?: () => string;
-  };
-  return (
-    maybeHost.getWorkspaceContext?.().getDirectories?.() ??
-    maybeHost.getWorkspaceRoots?.() ?? [
-      maybeHost.getTargetDir?.() ?? process.cwd(),
-    ]
-  );
-}
 
 function toIdeConnectionStatus(
   status: unknown,
@@ -136,99 +97,6 @@ function hasIdeServiceShape(value: unknown): value is IIdeService {
 
 function hasLspServiceShape(value: unknown): value is ILspService {
   return isNonNullObject(value) && LSP_SERVICE_KEYS.every((k) => k in value);
-}
-
-function getLegacyIdeService(host: IToolHost): IIdeService | undefined {
-  const maybeHost = host as unknown as {
-    getIdeMode?: () => boolean;
-    getIdeClient?: () => unknown;
-  };
-  if (
-    typeof maybeHost.getIdeMode !== 'function' ||
-    typeof maybeHost.getIdeClient !== 'function'
-  ) {
-    return undefined;
-  }
-  const getLegacyIdeClient = ():
-    | {
-        openDiff?: (
-          filePath: string,
-          content?: string,
-        ) => Promise<{ status: 'accepted' | 'rejected'; content?: string }>;
-        getConnectionStatus?: () => unknown;
-      }
-    | undefined => {
-    if (maybeHost.getIdeMode?.() !== true) {
-      return undefined;
-    }
-    const ideClient = maybeHost.getIdeClient?.();
-    if (
-      typeof ideClient !== 'object' ||
-      ideClient === null ||
-      !('openDiff' in ideClient)
-    ) {
-      return undefined;
-    }
-    return ideClient as {
-      openDiff?: (
-        filePath: string,
-        content?: string,
-      ) => Promise<{ status: 'accepted' | 'rejected'; content?: string }>;
-      getConnectionStatus?: () => unknown;
-    };
-  };
-  return {
-    applyDiff: async ({ filePath, diff }) => {
-      const legacyIdeClient = getLegacyIdeClient();
-      if (legacyIdeClient?.openDiff === undefined) {
-        return { status: 'rejected', content: undefined };
-      }
-      const result = await legacyIdeClient.openDiff(filePath, diff);
-      return result.status === 'accepted'
-        ? { status: 'accepted', content: result.content }
-        : { status: 'rejected', content: undefined };
-    },
-    getConnectionStatus: () =>
-      toIdeConnectionStatus(getLegacyIdeClient()?.getConnectionStatus?.()),
-    openDiff: async ({ filePath, newContent }) => {
-      await getLegacyIdeClient()?.openDiff?.(filePath, newContent);
-    },
-  };
-}
-
-function getLegacyLspService(host: IToolHost): ILspService | undefined {
-  const maybeHost = host as unknown as {
-    getLspServiceClient?: () => unknown;
-    getLspConfig?: () => unknown;
-  };
-  const lspClient = maybeHost.getLspServiceClient?.();
-  if (typeof lspClient !== 'object' || lspClient === null) {
-    return undefined;
-  }
-  return {
-    getDiagnostics: () => [],
-    waitForDiagnostics: async (filePath, _timeout) => {
-      const isAlive = (lspClient as { isAlive?: () => boolean }).isAlive?.();
-      if (isAlive !== true) {
-        return [];
-      }
-      const checkFile = (
-        lspClient as {
-          checkFile?: (
-            filePath: string,
-            signal?: AbortSignal,
-          ) => Promise<unknown>;
-        }
-      ).checkFile;
-      if (typeof checkFile !== 'function') {
-        return [];
-      }
-      const diagnostics = await checkFile.call(lspClient, filePath);
-      return Array.isArray(diagnostics) ? diagnostics : [];
-    },
-    getLspConfig: () =>
-      maybeHost.getLspConfig?.() as ReturnType<ILspService['getLspConfig']>,
-  };
 }
 
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {

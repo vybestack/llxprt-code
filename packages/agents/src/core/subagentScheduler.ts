@@ -12,15 +12,21 @@ import type {
   ToolCallsUpdateHandler,
 } from './coreToolScheduler.js';
 
-export type SubagentSchedulerFactory = (args: {
-  schedulerConfig: Config;
-  onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
-  outputUpdateHandler: OutputUpdateHandler;
-  onToolCallsUpdate?: ToolCallsUpdateHandler;
-}) => {
+/**
+ * Handle returned by a subagent scheduler factory.
+ * Allows scheduling tool calls and optionally disposing of the scheduler.
+ */
+export interface SubagentSchedulerHandle {
   schedule(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
   ): Promise<void> | void;
   dispose?: () => void;
-};
+}
+
+export type SubagentSchedulerFactory = (args: {
+  schedulerConfig: Config;
+  onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
+  outputUpdateHandler: OutputUpdateHandler;
+  onToolCallsUpdate?: ToolCallsUpdateHandler;
+}) => SubagentSchedulerHandle | Promise<SubagentSchedulerHandle>;

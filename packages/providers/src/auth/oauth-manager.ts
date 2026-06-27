@@ -12,6 +12,7 @@ import {
   type OAuthManagerRuntimeMessageBusDeps,
   type BucketFailoverOAuthManagerLike,
   type OAuthTokenRequestMetadata,
+  type OAuthUICallback,
 } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { ProviderRegistry } from './provider-registry.js';
@@ -59,7 +60,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   private readonly tokenAccessCoordinator: TokenAccessCoordinator;
   private readonly authFlowOrchestrator: AuthFlowOrchestrator;
   private readonly authStatusService: AuthStatusService;
-  private _runtimeMessageBus?: MessageBus;
+  private _runtimeMessageBus: MessageBus | undefined;
   private readonly config?: Config;
 
   /**
@@ -74,15 +75,10 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
 
   set runtimeMessageBus(bus: MessageBus | undefined) {
     this._runtimeMessageBus = bus;
-    // Propagate to the orchestrator if it has been constructed.
-    // During construction this.authFlowOrchestrator may not exist yet,
-    // so the conditional guard is required.
-    const authFlowOrchestrator = (
-      this as unknown as { authFlowOrchestrator?: AuthFlowOrchestrator }
-    ).authFlowOrchestrator;
-    if (authFlowOrchestrator !== undefined) {
-      authFlowOrchestrator.setRuntimeMessageBus(bus);
-    }
+    // Propagate to the orchestrator, which actually consumes the bus. The
+    // orchestrator is constructed during this manager's construction before any
+    // external setter call, so it is always present here.
+    this.authFlowOrchestrator.setRuntimeMessageBus(bus);
   }
 
   /**
@@ -99,7 +95,6 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     this.providerRegistry = new ProviderRegistry(settings);
     this.tokenStore = tokenStore;
     this.settings = settings;
-    this.runtimeMessageBus = runtimeDeps?.messageBus;
     this.config = runtimeDeps?.config;
     this.bucketManager = new OAuthBucketManager(tokenStore);
     this.proactiveRenewalManager = new ProactiveRenewalManager(
@@ -114,6 +109,10 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       runtimeDeps?.config,
       runtimeDeps?.messageBus,
     );
+    // Assign AFTER authFlowOrchestrator exists so the setter can propagate the
+    // bus to the orchestrator. Idempotent with the constructor argument above,
+    // and keeps propagation correct if that argument is ever dropped.
+    this.runtimeMessageBus = runtimeDeps?.messageBus;
     this.tokenAccessCoordinator = new TokenAccessCoordinator(
       tokenStore,
       this.providerRegistry,
@@ -160,6 +159,17 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    */
   getProvider(name: string): OAuthProvider | undefined {
     return this.providerRegistry.getProvider(name);
+  }
+
+  /**
+   * Attach a UI addItem callback to every registered OAuth provider that
+   * supports setAddItem. This is the typed public alternative to reaching
+   * into the private providers map.
+   */
+  attachAddItemToProviders(addItem: OAuthUICallback): void {
+    for (const providerName of this.getSupportedProviders()) {
+      this.providerRegistry.getProvider(providerName)?.setAddItem?.(addItem);
+    }
   }
 
   /**

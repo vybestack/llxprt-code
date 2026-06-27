@@ -82,9 +82,20 @@ function inferMediaEncoding(imageData: string): {
   return { encoding: 'base64', mimeType: 'image/*' };
 }
 
+type CoreMessageWithReasoning = CoreMessage & { reasoning_content?: string };
+
+type MessageWithToolInvocations = CoreMessage & {
+  toolInvocations?: Array<{
+    state: string;
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+  }>;
+};
+
 function pushWithReasoning(
   messages: CoreMessage[],
-  baseMessage: Record<string, unknown>,
+  baseMessage: CoreMessage,
   options: { includeReasoningInContext?: boolean } | undefined,
   thinkingBlocks: ThinkingBlock[],
 ): void {
@@ -94,17 +105,15 @@ function pushWithReasoning(
   ) {
     const reasoningText = thinkingToReasoningField(thinkingBlocks);
     if (reasoningText) {
-      const messageWithReasoning = baseMessage as unknown as Record<
-        string,
-        unknown
-      >;
-      messageWithReasoning.reasoning_content =
-        cleanKimiTokensFromThinking(reasoningText);
-      messages.push(messageWithReasoning as unknown as CoreMessage);
+      const messageWithReasoning: CoreMessageWithReasoning = {
+        ...baseMessage,
+        reasoning_content: cleanKimiTokensFromThinking(reasoningText),
+      };
+      messages.push(messageWithReasoning);
       return;
     }
   }
-  messages.push(baseMessage as unknown as CoreMessage);
+  messages.push(baseMessage);
 }
 
 function hasReasoningForContext(
@@ -403,14 +412,7 @@ function convertFromVercelAssistant(message: CoreMessage): IContent | null {
     }
   }
 
-  const extendedMessage = message as unknown as {
-    toolInvocations?: Array<{
-      state: string;
-      toolCallId: string;
-      toolName: string;
-      args: unknown;
-    }>;
-  };
+  const extendedMessage = message as MessageWithToolInvocations;
   if (
     extendedMessage.toolInvocations &&
     extendedMessage.toolInvocations.length > 0

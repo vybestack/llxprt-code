@@ -34,22 +34,51 @@ import type {
 } from './toolSchedulerContract.js';
 
 /**
+ * Handle returned by a subagent scheduler factory.
+ * Allows scheduling tool calls and optionally disposing of the scheduler.
+ */
+export interface SubagentSchedulerHandle {
+  schedule(
+    request: ToolCallRequestInfo | ToolCallRequestInfo[],
+    signal: AbortSignal,
+  ): Promise<void> | void;
+  dispose?: () => void;
+}
+
+/**
  * @plan PLAN-20260610-ISSUE1592.P03
  * Relocated from core/subagentScheduler.ts (which moves to agents).
  * Core config stayers import this type from here.
+ *
+ * The factory may return synchronously or asynchronously — the runtime call site
+ * wraps the result in Promise.resolve() to normalize both shapes.
  */
 export type SubagentSchedulerFactory = (args: {
   schedulerConfig: Config;
   onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
   outputUpdateHandler: OutputUpdateHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
-}) => {
-  schedule(
-    request: ToolCallRequestInfo | ToolCallRequestInfo[],
-    signal: AbortSignal,
-  ): Promise<void> | void;
-  dispose?: () => void;
-};
+}) => SubagentSchedulerHandle | Promise<SubagentSchedulerHandle>;
+
+/**
+ * Capability interface for hosts that accept an interactive subagent scheduler
+ * factory. `Config` implements this; CLI test doubles may not.
+ */
+export interface InteractiveSubagentSchedulerHost {
+  setInteractiveSubagentSchedulerFactory(
+    factory: SubagentSchedulerFactory | undefined,
+  ): void;
+}
+
+/** Type guard: does the host accept an interactive subagent scheduler factory? */
+export function hasInteractiveSubagentScheduler(
+  host: unknown,
+): host is InteractiveSubagentSchedulerHost {
+  return (
+    typeof (host as Partial<InteractiveSubagentSchedulerHost>)
+      .setInteractiveSubagentSchedulerFactory === 'function'
+  );
+}
 
 /**
  * Describes the possible termination modes for a subagent.

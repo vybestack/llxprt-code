@@ -16,6 +16,8 @@ import {
   GeminiEventType,
   StreamIdleTimeoutError,
   DebugLogger,
+  JsonStreamEventType,
+  OutputFormat,
 } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
@@ -58,6 +60,27 @@ vi.mock('./services/CommandService.js', () => ({
     create: mockCommandServiceCreate,
   },
 }));
+
+type ParsedStreamEvent = {
+  type: string;
+  role?: string;
+  content?: string;
+};
+
+function parseJsonStdoutEvents(
+  calls: Array<[unknown, ...unknown[]]>,
+): ParsedStreamEvent[] {
+  return calls
+    .map(([value]) => String(value).trimEnd())
+    .filter((value) => value.startsWith('{'))
+    .map((value) => {
+      try {
+        return JSON.parse(value) as ParsedStreamEvent;
+      } catch {
+        throw new Error(`Failed to parse stdout line as JSON: ${value}`);
+      }
+    });
+}
 
 describe('runNonInteractive', () => {
   let mockConfig: Config;
@@ -111,6 +134,7 @@ describe('runNonInteractive', () => {
       getDebugMode: vi.fn().mockReturnValue(false),
       getProviderManager: vi.fn().mockReturnValue(undefined),
       getOutputFormat: vi.fn().mockReturnValue('text'),
+      getModel: vi.fn().mockReturnValue('test-model'),
       getFolderTrust: vi.fn().mockReturnValue(false),
       isTrustedFolder: vi.fn().mockReturnValue(false),
       getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
@@ -237,6 +261,80 @@ describe('runNonInteractive', () => {
     // Content may be buffered/processed, check total output
     expect(meaningfulWrites.join('')).toBe('Hello World\n');
     expect(mockShutdownTelemetry).toHaveBeenCalled();
+  });
+
+  it('should emit stream-json message records for newline-only chunks', async () => {
+    mockConfig.getOutputFormat = vi
+      .fn()
+      .mockReturnValue(OutputFormat.STREAM_JSON);
+    mockConfig.getEphemeralSetting = vi.fn((key: string) =>
+      key === 'emojifilter' ? 'allowed' : undefined,
+    );
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'LLXPRT2208_ALPHA' },
+      { type: GeminiEventType.Content, value: '\n\n' },
+      { type: GeminiEventType.Content, value: 'Alpha paragraph one.' },
+    ];
+    mockAgentClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-stream-json',
+    });
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const messages = jsonEvents.filter(
+      (event) => event.type === JsonStreamEventType.MESSAGE,
+    );
+
+    expect(
+      messages.map((event) => ({ role: event.role, content: event.content })),
+    ).toStrictEqual([
+      { role: 'user', content: 'Test input' },
+      { role: 'assistant', content: 'LLXPRT2208_ALPHA' },
+      { role: 'assistant', content: '\n\n' },
+      { role: 'assistant', content: 'Alpha paragraph one.' },
+    ]);
+  });
+
+  it('should emit emoji-filter buffered stream-json content as JSON records', async () => {
+    mockConfig.getOutputFormat = vi
+      .fn()
+      .mockReturnValue(OutputFormat.STREAM_JSON);
+    mockConfig.getEphemeralSetting = vi.fn((key: string) =>
+      key === 'emojifilter' ? 'auto' : undefined,
+    );
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'LLXPRT2208_ALPHA' },
+      { type: GeminiEventType.Content, value: '\n\n' },
+      { type: GeminiEventType.Content, value: 'Alpha paragraph one.' },
+    ];
+    mockAgentClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-stream-json-buffered',
+    });
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const assistantOutput = jsonEvents
+      .filter(
+        (event) =>
+          event.type === JsonStreamEventType.MESSAGE &&
+          event.role === 'assistant',
+      )
+      .map((event) => event.content)
+      .join('');
+
+    expect(assistantOutput).toBe('LLXPRT2208_ALPHA\n\nAlpha paragraph one.');
   });
 
   it('should coalesce thought output before content', async () => {

@@ -54,10 +54,12 @@ describe('providerCommand /provider save', () => {
   let tempDir: string;
   let originalHome: string | undefined;
   let originalUserProfile: string | undefined;
+  let originalConfigHome: string | undefined;
 
   beforeAll(() => {
     originalHome = process.env.HOME;
     originalUserProfile = process.env.USERPROFILE;
+    originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
   });
 
   beforeEach(() => {
@@ -65,6 +67,7 @@ describe('providerCommand /provider save', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-provider-save-'));
     process.env.HOME = tempDir;
     process.env.USERPROFILE = tempDir;
+    process.env['LLXPRT_CONFIG_HOME'] = path.join(tempDir, '.llxprt');
   });
 
   afterEach(() => {
@@ -81,6 +84,11 @@ describe('providerCommand /provider save', () => {
       delete process.env.USERPROFILE;
     } else {
       process.env.USERPROFILE = originalUserProfile;
+    }
+    if (originalConfigHome === undefined) {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    } else {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
     }
   });
 

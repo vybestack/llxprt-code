@@ -46,6 +46,7 @@ research/
 .docker
 .env
 .llxprt/
+.llxprt/**
 eslint.config.js
 gha-creds-*.json
 junit.xml

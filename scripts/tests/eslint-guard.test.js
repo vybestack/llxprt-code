@@ -210,28 +210,35 @@ describe('check-eslint-guard', () => {
     expect(checkCliSourcePolicy()).toEqual([]);
   });
 
-  it('keeps checked-in CLI production type escape policy clean except tracked shared seams', () => {
+  it('keeps checked-in CLI production type escape policy clean (#2174)', () => {
     expect(scanCliProductionTypeEscapes()).toEqual([]);
   });
 
-  it('rejects production CLI TypeScript escape hatches in cleaned scopes', () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-cli-types-'));
-    const sourceDir = join(tmpDir, 'packages', 'cli', 'src', 'ui');
-    mkdirSync(sourceDir, { recursive: true });
-    writeFileSync(
-      join(sourceDir, 'example.ts'),
-      [
-        'export function unsafe(value: unknown): string {',
-        '  return value as unknown as string;',
-        '}',
-      ].join('\n'),
-    );
+  it.each([
+    ['as unknown as', 'return value as unknown as string;'],
+    ['as any', 'return value as any;'],
+    ['@ts-ignore', '// @ts-ignore\nreturn value;'],
+    ['@ts-expect-error', '// @ts-expect-error\nreturn value;'],
+    ['@ts-nocheck', '// @ts-nocheck\nexport const value = 1;'],
+  ])(
+    'rejects production CLI TypeScript escape hatch: %s (#2174)',
+    (_label, source) => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-cli-types-'));
+      const sourceDir = join(tmpDir, 'packages', 'cli', 'src', 'ui');
+      mkdirSync(sourceDir, { recursive: true });
+      writeFileSync(
+        join(sourceDir, 'example.ts'),
+        ['export function unsafe(value: unknown): string {', source, '}'].join(
+          '\n',
+        ),
+      );
 
-    const violations = scanCliProductionTypeEscapes(tmpDir);
+      const violations = scanCliProductionTypeEscapes(tmpDir);
 
-    expect(violations).toHaveLength(1);
-    expect(violations[0].message).toContain('#2174');
-  });
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('#2174');
+    },
+  );
 
   it('ignores CLI test files when checking production type escape policy', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-cli-test-types-'));

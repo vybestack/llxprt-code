@@ -29,46 +29,24 @@ import {
   SecureStoreError,
   type KeyringAdapter,
 } from '../storage/secure-store.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import {
+  decryptEnvelopeString,
+  encryptEnvelopeString,
+  readEnvelopeVersion,
+  type EnvelopeCodecOptions,
+} from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const KEYCHAIN_SERVICE = 'llxprt-code-tool-keys';
 const KEYFILES_JSON_NAME = 'keyfiles.json';
-const DEFAULT_TOOLS_DIR = (): string => {
-  const homeDir = os.homedir();
-  if (typeof homeDir === 'string' && homeDir.length > 0) {
-    return path.join(homeDir, '.llxprt', 'tools');
-  }
-
-  try {
-    const tmpDir = os.tmpdir();
-    if (typeof tmpDir === 'string' && tmpDir.length > 0) {
-      return path.join(tmpDir, 'llxprt-tools');
-    }
-  } catch {
-    // ignore missing tmpdir
-  }
-
-  // Harden against mocked/undefined process.cwd() in test environments
-  const cwd = process.cwd();
-  if (typeof cwd === 'string' && cwd.length > 0) {
-    return path.join(cwd, '.llxprt-tools');
-  }
-
-  // Final fallback: use absolute path to tmpdir
-  try {
-    const tmpDir = os.tmpdir();
-    if (typeof tmpDir === 'string' && tmpDir.length > 0) {
-      return path.join(tmpDir, 'llxprt-tools-fallback');
-    }
-  } catch {
-    // ignore
-  }
-
-  // Last resort: hardcoded POSIX path (should never reach here in real environments)
-  return '/tmp/llxprt-tools-fallback';
-};
+// Tool-key storage holds auth state — never silently fall back to a temp
+// or cwd directory, which would orphan existing keys. If the global data
+// directory cannot be resolved, fail loudly.
+const DEFAULT_TOOLS_DIR = (): string =>
+  path.join(Storage.getGlobalDataDir(), 'tools');
 
 // ─── Module-level Lazy Singleton ─────────────────────────────────────────────
 
@@ -90,6 +68,18 @@ export type { KeyringAdapter };
 export interface ToolKeyStorageOptions {
   toolsDir?: string;
   keyringLoader?: () => Promise<KeyringAdapter | null>;
+  /**
+   * Injectable machine-secret loader backing the v:2 envelope codec used for
+   * the encrypted .key file fallback. Defaults to the production
+   * machine-secret resolution (keyring → file → generate). Returning `null`
+   * means "no machine secret available" (v:1 only).
+   */
+  machineSecretLoader?: () => Promise<Buffer | null>;
+  /**
+   * Optional path for the default machine-secret loader. Ignored when
+   * `machineSecretLoader` is provided.
+   */
+  machineSecretPath?: string;
 }
 
 // ─── ToolKeyStorage Class ────────────────────────────────────────────────────
@@ -111,6 +101,7 @@ export class ToolKeyStorage {
   private readonly keyfilesJsonPath: string;
   private readonly secureStore: SecureStore;
   private readonly encryptionKey: Buffer;
+  private readonly codecOptions: EnvelopeCodecOptions;
 
   constructor(options?: ToolKeyStorageOptions) {
     this.toolsDir = options?.toolsDir ?? DEFAULT_TOOLS_DIR();
@@ -120,6 +111,14 @@ export class ToolKeyStorage {
       keyringLoader: options?.keyringLoader,
     });
     this.encryptionKey = this.deriveEncryptionKey();
+    // When no explicit machineSecretLoader is injected, leave it undefined so
+    // the codec falls back to its own production resolver
+    // (getMachineSecret). When a path is supplied, pass it through so the
+    // default resolver uses that file location.
+    this.codecOptions = {
+      machineSecretLoader: options?.machineSecretLoader,
+      machineSecretPath: options?.machineSecretPath,
+    };
   }
 
   private assertValidToolName(toolName: string): void {
@@ -130,22 +129,18 @@ export class ToolKeyStorage {
     }
   }
 
-  // ─── Encryption (backward-compatible .key file format) ──────────────────
+  // ─── Encryption (legacy .key file format — read-only compatibility) ────
 
   private deriveEncryptionKey(): Buffer {
     const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
     return crypto.scryptSync('llxprt-cli-tool-keys', salt, 32);
   }
 
-  private encrypt(text: string): string {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    const authTag = cipher.getAuthTag();
-    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
-  }
-
+  /**
+   * Legacy AES-256-GCM decrypt for the `iv:authTag:ciphertext` (hex) format.
+   * Used only to read pre-existing .key files that predate the versioned
+   * envelope codec.
+   */
   private decrypt(data: string): string {
     const parts = data.split(':');
     if (parts.length !== 3) {
@@ -179,24 +174,150 @@ export class ToolKeyStorage {
     return path.join(this.toolsDir, `${toolName}.key`);
   }
 
+  /**
+   * Writes the key to a versioned envelope (v:2 when a machine secret is
+   * available, v:1 otherwise). Enforces anti-downgrade: an existing v:2 file
+   * is never silently overwritten with a weaker v:1 envelope when the machine
+   * secret is unavailable.
+   */
   private async saveToFile(toolName: string, key: string): Promise<void> {
     await this.ensureToolsDir();
     const filePath = this.getEncryptedFilePath(toolName);
-    const encrypted = this.encrypt(key);
-    await fs.writeFile(filePath, encrypted, { mode: 0o600 });
+
+    // Detect an existing envelope version for anti-downgrade protection.
+    // Non-envelope (legacy) files and missing files yield null. Non-ENOENT
+    // read errors are rethrown so we fail closed rather than silently
+    // clobbering an unreadable file.
+    let existingVersion: number | null = null;
+    try {
+      const existing = await fs.readFile(filePath, 'utf-8');
+      existingVersion = readEnvelopeVersion(existing);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
+    const envelopeJson = await encryptEnvelopeString(key, KEYCHAIN_SERVICE, {
+      ...this.codecOptions,
+      existingEnvelopeVersion: existingVersion,
+    });
+    await fs.writeFile(filePath, envelopeJson, { mode: 0o600 });
+    // writeFile's `mode` only applies when the file is created; overwriting a
+    // pre-existing file with looser permissions leaves them unchanged. Tighten
+    // explicitly so a key file is never left world/group-readable.
+    try {
+      await this.chmodIfPosix(filePath);
+    } catch (chmodError) {
+      // The key was written but its permissions could not be tightened. Remove
+      // the just-written file so a secret is never left on disk with overly
+      // permissive modes, and surface an error distinct from a write failure.
+      let unlinkFailed = false;
+      try {
+        await fs.unlink(filePath);
+      } catch (unlinkError) {
+        // The over-permissive file could not be removed either. Log the path
+        // and error so an operator can investigate and manually remove the
+        // file, and report it so the thrown message does not falsely claim the
+        // file was removed.
+        unlinkFailed = true;
+        debugLogger.warn(
+          `Key file for ${toolName} at ${filePath} could not be removed after chmod failure; the file may remain with overly permissive permissions:`,
+          unlinkError instanceof Error
+            ? unlinkError.message
+            : String(unlinkError),
+        );
+      }
+      const detail =
+        chmodError instanceof Error ? chmodError.message : String(chmodError);
+      throw new Error(
+        unlinkFailed
+          ? `Key file for ${toolName} was written but permissions could not be tightened to 0o600, and the over-permissive file could not be removed; a secret may remain on disk with overly permissive permissions. chmod error: ${detail}`
+          : `Key file for ${toolName} was written but permissions could not be tightened to 0o600; the file was removed to avoid leaving an over-permissive secret on disk: ${detail}`,
+      );
+    }
   }
 
+  /**
+   * Restricts a file to owner-only (0o600) on POSIX platforms. On Windows this
+   * is a no-op (permissions are enforced via ACLs, not POSIX modes). chmod
+   * failures are surfaced so a key file is never silently left with overly
+   * permissive modes.
+   */
+  private async chmodIfPosix(filePath: string): Promise<void> {
+    if (process.platform === 'win32') {
+      return;
+    }
+    await fs.chmod(filePath, 0o600);
+  }
+
+  /**
+   * Reads and decrypts the .key file.
+   *
+   * - Versioned envelope (v:1 or v:2): decrypt via the codec. v:2 read errors
+   *   (missing/different machine secret, tampering) propagate — fail closed.
+   * - Legacy `iv:authTag:ciphertext` (hex): decrypt with the legacy key for
+   *   backward compatibility. A recognized legacy file that fails to decrypt
+   *   (authentication failure/tampering) throws — fail closed.
+   * - Unrecognized content (neither a valid envelope nor legacy hex-colon):
+   *   throws — fail closed (a corrupted/forged .key is never silently treated
+   *   as "no key").
+   * - Missing file (ENOENT): returns null.
+   */
   private async getFromFile(toolName: string): Promise<string | null> {
     const filePath = this.getEncryptedFilePath(toolName);
+    let data: string;
     try {
-      const data = await fs.readFile(filePath, 'utf-8');
-      return this.decrypt(data);
+      data = await fs.readFile(filePath, 'utf-8');
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') return null;
-      debugLogger.warn('Encrypted key file corrupt for', toolName);
-      return null;
+      throw error;
     }
+
+    // Route versioned envelopes through the codec. readEnvelopeVersion returns
+    // a version number for valid envelopes and null otherwise (including for
+    // legacy hex-colon content).
+    if (readEnvelopeVersion(data) !== null) {
+      // Versioned envelope: v:2 missing/different secret errors must
+      // propagate (fail closed), not turn into null.
+      return decryptEnvelopeString(data, KEYCHAIN_SERVICE, this.codecOptions);
+    }
+
+    // Legacy hex-colon format: positively recognize it before attempting
+    // decryption. Recognized legacy content that fails to authenticate must
+    // fail closed (throw), not return null; unrecognized content (neither
+    // envelope nor legacy hex-colon) also fails closed.
+    if (this.isLegacyHexColonFormat(data)) {
+      return this.decrypt(data);
+    }
+    throw new Error(
+      `Encrypted key file for ${toolName} is corrupted or in an unrecognized format`,
+    );
+  }
+
+  /**
+   * Recognizes the legacy `iv:authTag:ciphertext` (hex) shape WITHOUT
+   * attempting decryption. The legacy `encrypt` path used a 16-byte IV and a
+   * 16-byte AES-256-GCM auth tag, so a genuine legacy file always has a
+   * 32-hex-char IV and a 32-hex-char auth tag followed by the hex ciphertext.
+   * The ciphertext part may be empty: AES-256-GCM is a stream cipher (its
+   * ciphertext length equals the plaintext length), so a legacy file that
+   * stored an empty key serializes as `iv:authTag:` with an empty third part
+   * and must still be recognized so it round-trips instead of being rejected
+   * as unrecognized. Enforcing the exact IV/auth-tag lengths still prevents
+   * short/garbage `a:b:c` content from being misclassified as legacy (which
+   * would route it to a decrypt attempt and a less specific error) instead of
+   * failing closed as unrecognized.
+   */
+  private isLegacyHexColonFormat(data: string): boolean {
+    // Exactly: 32-hex IV, 32-hex auth tag, then hex ciphertext that may be
+    // empty (a legacy empty-key file is `iv:authTag:`). The anchored pattern
+    // enforces the part count (two colons), the exact IV/auth-tag lengths, and
+    // hex-only content in a single check, so short or garbage `a:b:c` content
+    // is not misclassified as legacy.
+    return /^[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:[0-9a-fA-F]*$/.test(data);
   }
 
   private async deleteFile(toolName: string): Promise<void> {
@@ -236,6 +357,11 @@ export class ToolKeyStorage {
     await fs.writeFile(this.keyfilesJsonPath, JSON.stringify(map, null, 2), {
       mode: 0o600,
     });
+    // writeFile's `mode` only applies on creation; overwriting a pre-existing
+    // keyfiles.json (which maps tool names to plaintext keyfile paths) leaves
+    // its prior permissions intact. Tighten explicitly on POSIX so the map is
+    // never left group/world-readable, mirroring saveToFile.
+    await this.chmodIfPosix(this.keyfilesJsonPath);
   }
 
   async setKeyfilePath(toolName: string, filePath: string): Promise<void> {

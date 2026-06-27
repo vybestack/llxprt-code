@@ -245,9 +245,9 @@ function renderSections(sections: Map<string, DocEntry[]>) {
         lines.push('  - **Values:** ' + values);
       }
 
-      if (entry.requiresRestart) {
-        lines.push('  - **Requires restart:** Yes');
-      }
+      lines.push(
+        `  - **Requires restart:** ${entry.requiresRestart ? 'Yes' : 'No'}`,
+      );
 
       lines.push('');
     }

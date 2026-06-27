@@ -13,7 +13,7 @@ import { MessageType } from '../ui/types.js';
 import { spawnWrapper } from './spawnWrapper.js';
 import type { spawn, ChildProcess } from 'child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 import { constants } from 'node:fs';
 
@@ -71,8 +71,7 @@ function removeLockFile(lockFilePath: string): void {
 }
 
 function tryAcquireLock(): string | null {
-  const homeDir = os.homedir();
-  const locksDir = path.join(homeDir, '.llxprt', 'locks');
+  const locksDir = path.join(Storage.getGlobalDataDir(), 'locks');
   const lockFilePath = path.join(locksDir, LOCK_FILE_NAME);
 
   try {
