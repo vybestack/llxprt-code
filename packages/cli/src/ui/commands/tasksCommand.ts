@@ -78,10 +78,7 @@ function reportTaskNotFound(context: CommandContext, taskId: string): void {
   );
 }
 
-function reportAmbiguous(
-  context: CommandContext,
-  candidates: string[],
-): void {
+function reportAmbiguous(context: CommandContext, candidates: string[]): void {
   const candidateList = candidates.map((c) => `  ${c}`).join('\n');
   context.ui.addItem(
     {
