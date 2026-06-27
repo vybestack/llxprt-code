@@ -18,14 +18,18 @@ async function logoutViaAgent(
   provider: string,
 ): Promise<MessageActionReturn> {
   try {
-    const authStatus = agent.auth.status(provider);
-    if (authStatus === 'unknown') {
+    // Validate provider against the agent's known provider list since
+    // auth.status() only returns 'authenticated'/'unauthenticated' (never
+    // 'unknown'), so it cannot reject unsupported providers.
+    const knownProviders = agent.listProviders().map((p) => p.name);
+    if (!knownProviders.includes(provider)) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Unknown provider: ${provider}.`,
+        content: `Unknown provider: ${provider}. Supported: ${knownProviders.join(', ')}`,
       };
     }
+    const authStatus = agent.auth.status(provider);
     const wasAuthenticated = authStatus === 'authenticated';
     await agent.auth.logout(provider);
     return {

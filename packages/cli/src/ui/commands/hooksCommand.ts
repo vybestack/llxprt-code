@@ -21,7 +21,10 @@ import type { HookInfo } from '@vybestack/llxprt-code-agents';
 /**
  * Map projected HookInfo[] from the agent surface to the richer
  * HookRegistryEntry[] shape expected by the HooksList display component.
- * Command/config details unavailable in the projection are left empty.
+ * The HookInfo projection intentionally omits command/type details (the
+ * Agent API surface does not expose them); config.command is left empty so
+ * HooksList shows the hook name without a stale command line. This is
+ * tracked migration debt — see #1595 for extending the projection.
  */
 function mapHookInfoToEntries(hooks: readonly HookInfo[]): HookRegistryEntry[] {
   return hooks.map((h) => ({
@@ -109,8 +112,8 @@ function resolveAgentHook(
   context: CommandContext,
 ): boolean {
   const allHooks = agent.hooks.listHooks();
-  const matchingHook = allHooks.find((h) => h.name === hookName);
-  if (!matchingHook) {
+  const found = allHooks.some((h) => h.name === hookName);
+  if (!found) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,

@@ -250,16 +250,15 @@ export function makeCommandContext(
   return {
     ...overrides,
     services: {
-      agent: overrides.services?.agent ?? null,
-      settings:
-        overrides.services?.settings ??
-        ({} as CommandContext['services']['settings']),
-      git: overrides.services?.git,
-      logger: overrides.services?.logger ?? makeMockLogger(),
+      agent: null,
+      settings: {} as CommandContext['services']['settings'],
+      git: undefined,
+      logger: makeMockLogger(),
       config: {
         isInteractive: () =>
           overrides.services?.config?.isInteractive() ?? true,
       } as CommandContext['services']['config'],
+      ...overrides.services,
     },
     ui: {
       addItem: () => 0,

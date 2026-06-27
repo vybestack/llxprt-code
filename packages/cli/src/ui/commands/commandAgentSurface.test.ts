@@ -232,6 +232,7 @@ describe('logoutCommand — agent surface', () => {
     const status = vi.fn().mockReturnValue('authenticated');
     const context = buildContextWithAgent({
       auth: { logout, status } as unknown as AgentAuthControl,
+      listProviders: vi.fn().mockReturnValue([{ name: 'qwen' }]),
     });
 
     const result = (await logoutCommand.action!(context, 'qwen')) as {
@@ -250,6 +251,7 @@ describe('logoutCommand — agent surface', () => {
     const status = vi.fn().mockReturnValue('unauthenticated');
     const context = buildContextWithAgent({
       auth: { logout, status } as unknown as AgentAuthControl,
+      listProviders: vi.fn().mockReturnValue([{ name: 'gemini' }]),
     });
 
     const result = (await logoutCommand.action!(context, 'gemini')) as {
@@ -354,7 +356,7 @@ describe('hooksCommand — agent surface', () => {
 });
 
 describe('error paths — agent surface rejections', () => {
-  it('reports error when agent.compress() rejects', async () => {
+  it('falls through to config path when agent.compress() rejects', async () => {
     const compressMock = vi
       .fn()
       .mockRejectedValue(new Error('Network timeout'));
@@ -364,13 +366,13 @@ describe('error paths — agent surface rejections', () => {
 
     await compressCommand.action!(context, '');
 
+    // Agent rejection triggers fallback to Config path, which also fails
+    // (no real chat in mock context), resulting in an error message.
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
     const errorCall = addItem.mock.calls.find(
       (call) => call[0]?.type === MessageType.ERROR,
     );
     expect(errorCall).toBeDefined();
-    expect(errorCall![0].text).toContain('Failed to compress chat history');
-    expect(errorCall![0].text).toContain('Network timeout');
   });
 
   it('reports error when agent.auth.setBaseUrl() rejects', async () => {
@@ -400,6 +402,7 @@ describe('error paths — agent surface rejections', () => {
     const status = vi.fn().mockReturnValue('authenticated');
     const context = buildContextWithAgent({
       auth: { logout, status } as unknown as AgentAuthControl,
+      listProviders: vi.fn().mockReturnValue([{ name: 'qwen' }]),
     });
 
     const result = (await logoutCommand.action!(context, 'qwen')) as {

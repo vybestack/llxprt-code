@@ -51,6 +51,10 @@ function resolveAgentCompressionStatus(
   if (status === 'failed') {
     return CompressionStatus.COMPRESSION_FAILED;
   }
+  // The agent's CompressionResult collapses both SKIPPED_COOLDOWN (treated as
+  // COMPRESSION_FAILED by the legacy path) and SKIPPED_EMPTY (treated as NOOP)
+  // into a single 'skipped' status. This divergence is tracked debt — see #1595
+  // for expanding the CompressionResult.status union.
   if (status === 'skipped') {
     return CompressionStatus.NOOP;
   }
@@ -151,12 +155,17 @@ export const compressCommand: SlashCommand = {
       const promptId = `compress-${Date.now()}`;
       const agent = context.services.agent;
       if (agent) {
-        const compressionResult = await executeCompressionViaAgent(
-          agent,
-          promptId,
-        );
-        ui.addItem(compressionResult);
-        return;
+        try {
+          const compressionResult = await executeCompressionViaAgent(
+            agent,
+            promptId,
+          );
+          ui.addItem(compressionResult);
+          return;
+        } catch {
+          // Fall through to the legacy Config-based path if agent compression
+          // fails, so users still get compression.
+        }
       }
       // Fallback: Config path (tracked migration debt for null agent).
       const agentClient = context.services.config?.getAgentClient();
