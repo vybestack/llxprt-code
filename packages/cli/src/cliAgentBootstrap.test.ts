@@ -18,6 +18,7 @@ vi.mock('@vybestack/llxprt-code-agents', () => ({
 
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import {
+  registerCleanup,
   runExitCleanup,
   __resetCleanupStateForTesting,
 } from './utils/cleanup.js';
@@ -82,24 +83,45 @@ describe('createForegroundAgent', () => {
     expect(agent).toBe(fakeAgent as unknown as Agent);
   });
 
-  it('registers a cleanup that disposes the agent on normal exit', async () => {
+  it('disposes the agent on normal exit alongside the interactive UI cleanup', async () => {
     await createForegroundAgent({ config, sessionMessageBus });
+
+    // Mirror the real startup flow: after the agent is created, the interactive
+    // UI registers its own teardown. Both cleanups must run on a normal exit.
+    const uiCleanup = vi.fn();
+    registerCleanup(uiCleanup);
 
     expect(fakeAgent.dispose).not.toHaveBeenCalled();
 
     await runExitCleanup();
 
     expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
+    expect(uiCleanup).toHaveBeenCalledTimes(1);
   });
 
-  it('disposes the agent when startup is interrupted before the UI renders', async () => {
+  it('disposes the agent when startup is interrupted before the UI registers cleanup', async () => {
     await createForegroundAgent({ config, sessionMessageBus });
 
-    // Simulate an interrupted/fatal startup path that runs cleanup directly,
-    // before any interactive UI cleanup is registered.
+    // Fatal/interrupted startup: the exit cleanup fires before the interactive
+    // UI ever mounts, so the agent's cleanup is the only one registered.
     await runExitCleanup();
 
     expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not register cleanup when fromConfig rejects', async () => {
+    const failure = new Error('fromConfig failed');
+    fromConfigMock.mockReset();
+    fromConfigMock.mockRejectedValue(failure);
+
+    await expect(
+      createForegroundAgent({ config, sessionMessageBus }),
+    ).rejects.toThrow(failure);
+
+    // No agent was produced, so no disposal cleanup should have been queued.
+    await runExitCleanup();
+
+    expect(fakeAgent.dispose).not.toHaveBeenCalled();
   });
 
   it('does not tear down the caller-owned config when disposing the agent', async () => {
