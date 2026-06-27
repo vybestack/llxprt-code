@@ -11,6 +11,7 @@ import type {
   RecordingIntegration,
   Todo,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
@@ -59,6 +60,7 @@ export type SlashCommandProcessorCoreResult = {
 
 export interface UseSlashCommandProcessorCoreArgs {
   config: Config | null;
+  agent: Agent | null;
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   clearItems: UseHistoryManagerReturn['clearItems'];
@@ -140,6 +142,7 @@ export function useSlashCommandProcessorCore(
   const pending = usePendingHistory(args.addItem);
   const commandContext = useCommandContext({
     config: args.config,
+    agent: args.agent,
     settings: args.settings,
     ...managers,
     addItem: args.addItem,

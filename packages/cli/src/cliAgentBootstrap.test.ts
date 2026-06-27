@@ -8,12 +8,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Config, MessageBus } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
-const { fromConfigMock } = vi.hoisted(() => ({
-  fromConfigMock: vi.fn(),
-}));
+const { fromConfigMock, switchActiveProviderMock, setActiveModelMock } =
+  vi.hoisted(() => ({
+    fromConfigMock: vi.fn(),
+    switchActiveProviderMock: vi.fn().mockResolvedValue(undefined),
+    setActiveModelMock: vi.fn().mockResolvedValue(undefined),
+  }));
 
 vi.mock('@vybestack/llxprt-code-agents', () => ({
   fromConfig: fromConfigMock,
+}));
+
+vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({
+  switchActiveProvider: switchActiveProviderMock,
+  setActiveModel: setActiveModelMock,
 }));
 
 import { createForegroundAgent } from './cliAgentBootstrap.js';
@@ -26,12 +34,18 @@ import {
 interface FakeAgent {
   dispose: ReturnType<typeof vi.fn>;
   getConfig: () => Config;
+  getProvider: () => string | undefined;
+  getModel: () => string;
 }
 
-function makeConfig(): Config {
+function makeConfig(
+  overrides: { provider?: string | undefined; model?: string } = {},
+): Config {
   return {
     getPolicyEngine: () => null,
     getDebugMode: () => false,
+    getProvider: () => overrides.provider,
+    getModel: () => overrides.model ?? 'gemini-2.5-pro',
   } as unknown as Config;
 }
 
@@ -50,11 +64,17 @@ describe('createForegroundAgent', () => {
   beforeEach(() => {
     __resetCleanupStateForTesting();
     fromConfigMock.mockReset();
+    switchActiveProviderMock.mockReset();
+    switchActiveProviderMock.mockResolvedValue(undefined);
+    setActiveModelMock.mockReset();
+    setActiveModelMock.mockResolvedValue(undefined);
     config = makeConfig();
     sessionMessageBus = makeMessageBus();
     fakeAgent = {
       dispose: vi.fn().mockResolvedValue(undefined),
       getConfig: () => config,
+      getProvider: () => 'gemini',
+      getModel: () => 'gemini-2.5-pro',
     };
     fromConfigMock.mockResolvedValue(fakeAgent as unknown as Agent);
   });
@@ -140,5 +160,32 @@ describe('createForegroundAgent', () => {
     expect(options.config).toBe(config);
     expect(options.messageBus).toBe(sessionMessageBus);
     expect(Object.keys(options)).toStrictEqual(['config', 'messageBus']);
+  });
+
+  it('re-activates the configured provider after fromConfig resets it', async () => {
+    config = makeConfig({ provider: 'glm', model: 'glm-4' });
+    await createForegroundAgent({ config, sessionMessageBus });
+
+    // fromConfig → activate() resets the active provider; the fix
+    // re-activates the profile-loaded provider so the status bar is correct.
+    expect(switchActiveProviderMock).toHaveBeenCalledWith('glm');
+    expect(setActiveModelMock).toHaveBeenCalledWith('glm-4');
+  });
+
+  it('does not call setActiveModel when model is placeholder-model', async () => {
+    config = makeConfig({ provider: 'glm', model: 'placeholder-model' });
+    await createForegroundAgent({ config, sessionMessageBus });
+
+    expect(switchActiveProviderMock).toHaveBeenCalledWith('glm');
+    expect(setActiveModelMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to agent provider when config has none', async () => {
+    config = makeConfig({ provider: undefined, model: 'gemini-2.5-pro' });
+    fakeAgent.getProvider = () => 'ollama';
+    await createForegroundAgent({ config, sessionMessageBus });
+
+    expect(switchActiveProviderMock).toHaveBeenCalledWith('ollama');
+    expect(setActiveModelMock).toHaveBeenCalledWith('gemini-2.5-pro');
   });
 });

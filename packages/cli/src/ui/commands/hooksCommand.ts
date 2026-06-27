@@ -10,12 +10,61 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType, type HistoryItemHooksList } from '../types.js';
-import { type HookRegistryEntry } from '@vybestack/llxprt-code-core';
+import {
+  type HookRegistryEntry,
+  type HookEventName,
+  HookType,
+  ConfigSource,
+} from '@vybestack/llxprt-code-core';
+import type { HookInfo } from '@vybestack/llxprt-code-agents';
+
+/**
+ * Map projected HookInfo[] from the agent surface to the richer
+ * HookRegistryEntry[] shape expected by the HooksList display component.
+ * The HookInfo projection intentionally omits command/type details (the
+ * Agent API surface does not expose them); config.command is left empty so
+ * HooksList shows the hook name without a stale command line. This is
+ * tracked migration debt — see #1595 for extending the projection.
+ */
+function mapHookInfoToEntries(hooks: readonly HookInfo[]): HookRegistryEntry[] {
+  return hooks.map((h) => ({
+    config: {
+      type: HookType.Command,
+      command: '',
+      name: h.name,
+    },
+    source: (h.source ?? ConfigSource.User) as ConfigSource,
+    eventName: h.eventName as HookEventName,
+    enabled: h.enabled,
+  }));
+}
 
 /**
  * List all registered hooks
  */
 async function listHooks(context: CommandContext): Promise<void> {
+  const agent = context.services.agent;
+
+  if (agent) {
+    const agentHooks = agent.hooks.listHooks();
+    if (agentHooks.length === 0) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'No hooks registered.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+    const historyItem: HistoryItemHooksList = {
+      type: MessageType.HOOKS_LIST,
+      hooks: mapHookInfoToEntries(agentHooks),
+    };
+    context.ui.addItem(historyItem);
+    return;
+  }
+
   const { config } = context.services;
   if (!config) {
     context.ui.addItem(
@@ -53,6 +102,31 @@ async function listHooks(context: CommandContext): Promise<void> {
 }
 
 /**
+ * Check whether a hook with the given name is registered on the Agent surface.
+ * Emits an error message via context.ui if not found.
+ * Returns true if the hook exists, false otherwise.
+ */
+function resolveAgentHook(
+  agent: NonNullable<CommandContext['services']['agent']>,
+  hookName: string,
+  context: CommandContext,
+): boolean {
+  const allHooks = agent.hooks.listHooks();
+  const found = allHooks.some((h) => h.name === hookName);
+  if (!found) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: `Hook '${hookName}' not found.`,
+      },
+      Date.now(),
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
  * Enable a hook by name
  */
 async function enableHook(
@@ -60,6 +134,23 @@ async function enableHook(
   hookName: string,
 ): Promise<void> {
   const { config } = context.services;
+  const agent = context.services.agent;
+
+  if (agent) {
+    if (!resolveAgentHook(agent, hookName, context)) {
+      return;
+    }
+    agent.hooks.enable(hookName);
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Enabled hook '${hookName}'.`,
+      },
+      Date.now(),
+    );
+    return;
+  }
+
   if (!config) {
     context.ui.addItem(
       {
@@ -130,6 +221,23 @@ async function disableHook(
   hookName: string,
 ): Promise<void> {
   const { config } = context.services;
+  const agent = context.services.agent;
+
+  if (agent) {
+    if (!resolveAgentHook(agent, hookName, context)) {
+      return;
+    }
+    agent.hooks.disable(hookName);
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Disabled hook '${hookName}'.`,
+      },
+      Date.now(),
+    );
+    return;
+  }
+
   if (!config) {
     context.ui.addItem(
       {
@@ -197,6 +305,31 @@ async function disableHook(
  */
 async function enableAllHooks(context: CommandContext): Promise<void> {
   const { config } = context.services;
+  const agent = context.services.agent;
+
+  if (agent) {
+    const allHooks = agent.hooks.listHooks();
+    if (allHooks.length === 0) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'No hooks registered.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+    agent.hooks.setDisabledHooks([]);
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Enabled all ${allHooks.length} hook(s).`,
+      },
+      Date.now(),
+    );
+    return;
+  }
+
   if (!config) {
     context.ui.addItem(
       {
@@ -265,6 +398,32 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
  */
 async function disableAllHooks(context: CommandContext): Promise<void> {
   const { config } = context.services;
+  const agent = context.services.agent;
+
+  if (agent) {
+    const allHooks = agent.hooks.listHooks();
+    if (allHooks.length === 0) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'No hooks registered.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+    const allHookNames = allHooks.map((h) => h.name);
+    agent.hooks.setDisabledHooks(allHookNames);
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Disabled all ${allHooks.length} hook(s).`,
+      },
+      Date.now(),
+    );
+    return;
+  }
+
   if (!config) {
     context.ui.addItem(
       {
@@ -334,6 +493,14 @@ async function completeHookNames(
   context: CommandContext,
   partialArg: string,
 ): Promise<string[]> {
+  const agent = context.services.agent;
+  if (agent) {
+    return agent.hooks
+      .listHooks()
+      .map((h) => h.name)
+      .filter((name) => name.startsWith(partialArg));
+  }
+
   const { config } = context.services;
   if (!config) {
     return [];

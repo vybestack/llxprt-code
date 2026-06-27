@@ -7,10 +7,37 @@
 import type { Config, MessageBus } from '@vybestack/llxprt-code-core';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { registerCleanup } from './utils/cleanup.js';
+import {
+  switchActiveProvider,
+  setActiveModel,
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 
 export interface ForegroundAgentOptions {
   config: Config;
   sessionMessageBus: MessageBus;
+}
+
+/**
+ * `fromConfig` → `activate()` calls `resetInfrastructure()` which clears the
+ * active provider on the shared ProviderManager. This re-activates the provider
+ * and model that were configured (via --profile-load or --provider) so the
+ * status bar and the first request use the correct provider.
+ */
+async function restoreActiveProvider(
+  config: Config,
+  agent: Agent,
+): Promise<void> {
+  const provider = config.getProvider() ?? agent.getProvider();
+  if (!provider) return;
+  try {
+    await switchActiveProvider(provider);
+    const model = config.getModel();
+    if (model && model !== 'placeholder-model') {
+      await setActiveModel(model);
+    }
+  } catch {
+    // Best-effort: auth will be triggered lazily on the first API call.
+  }
 }
 
 /**
@@ -32,10 +59,10 @@ export async function createForegroundAgent({
 }: ForegroundAgentOptions): Promise<Agent> {
   const agent = await fromConfig({ config, messageBus: sessionMessageBus });
 
-  // Dispose the Agent on every exit path (normal interactive exit and
-  // interrupted/fatal startup). Because the Config is caller-owned, this
-  // dispose() aborts active runs and fires SessionEnd without tearing down the
-  // caller-owned Config.
+  // fromConfig → activate() resets the active provider on the shared
+  // ProviderManager; restore it so profile-loaded providers survive.
+  await restoreActiveProvider(config, agent);
+
   registerCleanup(async () => {
     await agent.dispose();
   });

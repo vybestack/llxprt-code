@@ -36,6 +36,7 @@ describe('tasksCommand', () => {
         config: {
           getAsyncTaskManager: () => asyncTaskManager,
         } as unknown as Config,
+        agent: null,
         settings: {} as unknown as LoadedSettings,
         git: undefined,
         logger: {} as unknown as Logger,

@@ -11,6 +11,84 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
+async function logoutViaAgent(
+  agent: Agent,
+  provider: string,
+): Promise<MessageActionReturn> {
+  try {
+    // Validate provider against the agent's known provider list since
+    // auth.status() only returns 'authenticated'/'unauthenticated' (never
+    // 'unknown'), so it cannot reject unsupported providers.
+    const knownProviders = agent.listProviders().map((p) => p.name);
+    if (!knownProviders.includes(provider)) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Unknown provider: ${provider}. Supported: ${knownProviders.join(', ')}`,
+      };
+    }
+    const authStatus = agent.auth.status(provider);
+    const wasAuthenticated = authStatus === 'authenticated';
+    await agent.auth.logout(provider);
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: wasAuthenticated
+        ? `Successfully logged out of ${provider}`
+        : `Cleaned up authentication state for ${provider} (was not authenticated)`,
+    };
+  } catch (error) {
+    return logoutErrorHandler(provider, error);
+  }
+}
+
+function logoutErrorHandler(
+  provider: string,
+  error: unknown,
+): MessageActionReturn {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  return {
+    type: 'message',
+    messageType: 'error',
+    content: `Failed to logout from ${provider}: ${errorMessage}`,
+  };
+}
+
+async function logoutViaRuntimeApi(
+  provider: string,
+): Promise<MessageActionReturn> {
+  try {
+    const oauthManager = getRuntimeApi().getCliOAuthManager();
+    if (!oauthManager) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'OAuth manager not available. Please try again.',
+      };
+    }
+    const supportedProviders = oauthManager.getSupportedProviders();
+    if (!supportedProviders.includes(provider)) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Unknown provider: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
+      };
+    }
+    const isAuthenticated = await oauthManager.isAuthenticated(provider);
+    await oauthManager.logout(provider);
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: isAuthenticated
+        ? `Successfully logged out of ${provider}`
+        : `Cleaned up authentication state for ${provider} (was not authenticated)`,
+    };
+  } catch (error) {
+    return logoutErrorHandler(provider, error);
+  }
+}
 
 export const logoutCommand: SlashCommand = {
   name: 'logout',
@@ -22,8 +100,6 @@ export const logoutCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     const provider = args.trim();
-
-    // If no provider specified, show error
     if (!provider) {
       return {
         type: 'message',
@@ -32,54 +108,10 @@ export const logoutCommand: SlashCommand = {
           'Please specify a provider to logout from: /logout <provider>\nSupported providers: gemini, qwen, anthropic',
       };
     }
-
-    try {
-      const oauthManager = getRuntimeApi().getCliOAuthManager();
-      if (!oauthManager) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: 'OAuth manager not available. Please try again.',
-        };
-      }
-
-      // Check if provider is supported
-      const supportedProviders = oauthManager.getSupportedProviders();
-      if (!supportedProviders.includes(provider)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Unknown provider: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
-        };
-      }
-
-      // Check if user is authenticated
-      const isAuthenticated = await oauthManager.isAuthenticated(provider);
-
-      // Perform logout regardless of authentication status to clean up any stale tokens
-      await oauthManager.logout(provider);
-
-      if (isAuthenticated) {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Successfully logged out of ${provider}`,
-        };
-      }
-      // User wasn't authenticated but we cleaned up any stale tokens
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Cleaned up authentication state for ${provider} (was not authenticated)`,
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to logout from ${provider}: ${errorMessage}`,
-      };
+    const agent = context.services.agent;
+    if (agent) {
+      return logoutViaAgent(agent, provider);
     }
+    return logoutViaRuntimeApi(provider);
   },
 };

@@ -280,6 +280,7 @@ describe('useSlashCommandProcessor', () => {
 
     useSlashCommandProcessor(
       mockConfig,
+      null,
       mockSettings,
       addItem,
       clearItems,
