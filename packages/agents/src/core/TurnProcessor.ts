@@ -188,22 +188,15 @@ export class TurnProcessor {
       }
     }
 
-    return this._createStreamGenerator(
-      params,
-      prompt_id,
-      pendingTokens,
-      userContent,
-      () => {
-        abortSignal?.removeEventListener('abort', onAbort);
-        streamDoneResolver!();
-      },
-    );
+    return this._createStreamGenerator(params, prompt_id, userContent, () => {
+      abortSignal?.removeEventListener('abort', onAbort);
+      streamDoneResolver!();
+    });
   }
 
   private async *_createStreamGenerator(
     params: SendMessageParameters,
     prompt_id: string,
-    pendingTokens: number,
     userContent: Content | Content[],
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
@@ -215,7 +208,6 @@ export class TurnProcessor {
         const outcome = yield* this._runStreamAttempt(
           params,
           prompt_id,
-          pendingTokens,
           userContent,
           attempt,
         );
@@ -246,7 +238,6 @@ export class TurnProcessor {
   private async *_runStreamAttempt(
     params: SendMessageParameters,
     prompt_id: string,
-    pendingTokens: number,
     userContent: Content | Content[],
     attempt: number,
   ): AsyncGenerator<StreamEvent, { error: unknown; action: 'retry' | 'stop' }> {
@@ -259,7 +250,6 @@ export class TurnProcessor {
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
         currentParams,
         prompt_id,
-        pendingTokens,
         userContent,
       );
       for await (const chunk of stream) {
@@ -351,7 +341,6 @@ export class TurnProcessor {
   ): Promise<{
     userContent: Content | Content[];
     userIContents: IContent[];
-    pendingTokens: number;
   }> {
     const userContent = normalizeToolInteractionInput(params.message);
     const userIContents = this._convertToIContents(userContent);
@@ -364,14 +353,7 @@ export class TurnProcessor {
       'auto',
     );
 
-    const provider = this.providerResolver('sendMessage');
-    await this.compressionHandler.enforceContextWindow(
-      pendingTokens,
-      prompt_id,
-      provider,
-    );
-
-    return { userContent, userIContents, pendingTokens };
+    return { userContent, userIContents };
   }
 
   /**
@@ -384,19 +366,26 @@ export class TurnProcessor {
     prompt_id: string,
   ): Promise<GenerateContentResponse> {
     this._validateProvider(provider);
-    const iContents = this.historyService.getCuratedForProvider(userIContents);
-    logApiRequest(
-      this.runtimeContext,
-      this.runtimeContext.state,
-      ContentConverters.toGeminiContents(iContents),
-      this.runtimeContext.state.model,
-      prompt_id,
-    );
-
-    const providerBaseUrl = this.resolveProviderBaseUrl(provider);
-    const startTime = Date.now();
+    let providerStartTime = 0;
+    let providerRequestStarted = false;
 
     try {
+      const iContents = await this.compressionHandler.enforceProviderContents(
+        this.historyService.getCuratedForProvider(userIContents),
+        prompt_id,
+        provider,
+      );
+      logApiRequest(
+        this.runtimeContext,
+        this.runtimeContext.state,
+        ContentConverters.toGeminiContents(iContents),
+        this.runtimeContext.state.model,
+        prompt_id,
+      );
+
+      const providerBaseUrl = this.resolveProviderBaseUrl(provider);
+      providerRequestStarted = true;
+      providerStartTime = Date.now();
       const response = await retryWithBackoff(
         () =>
           this._executeProviderCall(
@@ -422,7 +411,7 @@ export class TurnProcessor {
         },
       );
 
-      const durationMs = Date.now() - startTime;
+      const durationMs = Date.now() - providerStartTime;
       logApiResponse(
         this.runtimeContext,
         this.runtimeContext.state,
@@ -434,7 +423,9 @@ export class TurnProcessor {
       );
       return response;
     } catch (error) {
-      const durationMs = Date.now() - startTime;
+      const durationMs = providerRequestStarted
+        ? Date.now() - providerStartTime
+        : 0;
       logApiError(
         this.runtimeContext,
         this.runtimeContext.state,
@@ -446,6 +437,8 @@ export class TurnProcessor {
       this._enrichSchemaDepthError(error);
       this.sendPromise = Promise.resolve();
       throw error;
+    } finally {
+      this.compressionHandler.clearProviderCompressionCallback(provider);
     }
   }
 

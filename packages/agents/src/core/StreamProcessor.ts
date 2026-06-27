@@ -121,13 +121,12 @@ export class StreamProcessor {
 
   /**
    * Makes an API call with retry and returns a stream processor.
-   * This is the outer method that resolves the provider, enforces context window,
-   * makes the API call with retry, and returns processStreamResponse.
+   * This outer method resolves the provider, makes the API call with retry,
+   * and returns processStreamResponse.
    */
   async makeApiCallAndProcessStream(
     params: SendMessageParameters,
     promptId: string,
-    pendingTokens: number,
     userContent: Content | Content[],
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const provider = this.providerResolver('stream');
@@ -142,13 +141,6 @@ export class StreamProcessor {
         configModel: this.runtimeContext.state.model,
         baseUrl: providerBaseUrl,
       },
-    );
-
-    // Enforce context window limits before proceeding
-    await this.compressionHandler.enforceContextWindow(
-      pendingTokens,
-      promptId,
-      provider,
     );
 
     // Check if provider supports IContent interface
@@ -271,30 +263,79 @@ export class StreamProcessor {
     const { requestPayload, baseRuntimeContext, runtimeContext } =
       this._prepareRequestPayload(requestContents, tools, params);
 
-    const finalContents = await this._fireBeforeModelHook(
-      configForHooks,
-      requestPayload.contents,
-      tools as ProviderToolset | undefined,
-      toolSelection.allowedFunctionNames,
-    );
-    requestPayload.contents = finalContents;
+    try {
+      const finalContents = await this._fireBeforeModelHook(
+        configForHooks,
+        requestPayload.contents,
+        tools as ProviderToolset | undefined,
+        toolSelection.allowedFunctionNames,
+      );
+      requestPayload.contents =
+        await this.compressionHandler.enforceProviderContents(
+          finalContents,
+          promptId,
+          provider,
+        );
 
-    logOutgoingRequest(
-      this.runtimeContext,
-      requestPayload,
-      this.runtimeContext.state.model,
-      promptId,
-    );
+      logOutgoingRequest(
+        this.runtimeContext,
+        requestPayload,
+        this.runtimeContext.state.model,
+        promptId,
+      );
 
-    return this._sendProviderRequest(
-      provider,
-      requestPayload,
-      runtimeContext,
-      baseRuntimeContext,
-      params,
-      promptId,
-      toolSelection.allowedFunctionNames,
-    );
+      const stream = await this._sendProviderRequest(
+        provider,
+        requestPayload,
+        runtimeContext,
+        baseRuntimeContext,
+        params,
+        promptId,
+        toolSelection.allowedFunctionNames,
+      );
+      return this._withCompressionCallbackCleanup(stream, provider);
+    } catch (error) {
+      this.compressionHandler.clearProviderCompressionCallback(provider);
+      throw error;
+    }
+  }
+
+  private _withCompressionCallbackCleanup(
+    stream: AsyncGenerator<GenerateContentResponse>,
+    provider: IProvider,
+  ): AsyncGenerator<GenerateContentResponse> {
+    let cleanupDone = false;
+    const cleanup = () => {
+      if (!cleanupDone) {
+        cleanupDone = true;
+        this.compressionHandler.clearProviderCompressionCallback(provider);
+      }
+    };
+
+    return {
+      next: async (value?: unknown) => {
+        const result = await stream.next(value);
+        if (result.done === true) cleanup();
+        return result;
+      },
+      return: async (value?: unknown) => {
+        try {
+          return await stream.return(value);
+        } finally {
+          cleanup();
+        }
+      },
+      throw: async (error?: unknown) => {
+        try {
+          return await stream.throw(error);
+        } finally {
+          cleanup();
+        }
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    } as unknown as AsyncGenerator<GenerateContentResponse>;
   }
 
   /**

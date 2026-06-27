@@ -48,6 +48,7 @@ import {
   estimatePendingTokens,
   getCompletionBudget,
 } from './compressionBudgeting.js';
+import { ProviderContentEnforcer } from './providerContentEnforcement.js';
 
 /**
  * CompressionHandler orchestrates all compression logic for ChatSession.
@@ -78,6 +79,7 @@ export class CompressionHandler {
   private lastSuccessfulCompressionTime: number | null = null;
   densityDirty: boolean = true;
   _suppressDensityDirty: boolean = false;
+  private _suppressDensityDirtyDepth: number = 0;
   private activeTodosProvider?: () => Promise<string | undefined>;
   lastPromptTokenCount: number | null = null;
 
@@ -408,6 +410,129 @@ export class CompressionHandler {
     return { completionBudget, limit, marginAdjustedLimit };
   }
 
+  private attachCompressionCallback(
+    provider: IProvider | undefined,
+    promptId: string,
+    enforcer: ProviderContentEnforcer,
+  ): void {
+    if (!provider) {
+      return;
+    }
+    if (typeof provider.setCompressionCallback !== 'function') {
+      return;
+    }
+
+    const callback = async (contents: IContent[]): Promise<IContent[]> => {
+      try {
+        return await enforcer.compressAndRecompose(contents, promptId);
+      } catch (error) {
+        this.logger.warn(
+          () => '[CompressionHandler] Compression callback failed',
+          error,
+        );
+        throw error;
+      }
+    };
+
+    provider.setCompressionCallback(callback);
+  }
+
+  private detachCompressionCallback(provider?: IProvider): void {
+    if (provider && typeof provider.setCompressionCallback === 'function') {
+      provider.setCompressionCallback(null);
+    }
+  }
+
+  /**
+   * Public cleanup hook for callers that use enforceProviderContents and then
+   * invoke the provider while the compression callback remains attached.
+   */
+  clearProviderCompressionCallback(provider?: IProvider): void {
+    try {
+      this.detachCompressionCallback(provider);
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          '[CompressionHandler] Failed to detach compression callback during cleanup',
+        error,
+      );
+    }
+  }
+
+  private createProviderContentEnforcer(): ProviderContentEnforcer {
+    return new ProviderContentEnforcer({
+      historyService: this.historyService,
+      runtimeContext: this.runtimeContext,
+      generationConfig: this.generationConfig,
+      providerRuntimeNullable: this.providerRuntimeNullable,
+      logger: this.logger,
+      ensureDensityOptimized: () => this.ensureDensityOptimized(),
+      performCompression: (promptId, options) =>
+        this.performCompression(promptId, options),
+      performFallbackCompression: async (promptId, applyResult) => {
+        this._suppressDensityDirtyDepth++;
+        this._suppressDensityDirty = true;
+        try {
+          const context = await this.buildCompressionContext(promptId);
+          const applyAndResetPromptCount = (newHistory: IContent[]) => {
+            this.lastPromptTokenCount = null;
+            applyResult(newHistory);
+          };
+          return await this.performFallbackCompression(
+            context,
+            new Error('Provider content fallback truncation triggered'),
+            applyAndResetPromptCount,
+          );
+        } catch (error) {
+          this.logger.warn(
+            () =>
+              '[CompressionHandler] Provider truncation fallback failed during hard-limit enforcement',
+            error,
+          );
+          throw error;
+        } finally {
+          this._suppressDensityDirtyDepth = Math.max(
+            0,
+            this._suppressDensityDirtyDepth - 1,
+          );
+          this._suppressDensityDirty = this._suppressDensityDirtyDepth > 0;
+        }
+      },
+    });
+  }
+
+  /**
+   * Enforce provider content limits and return the provider-ready contents.
+   *
+   * On success, any attached compression callback intentionally remains on the
+   * provider for the immediately following provider call. Callers must invoke
+   * clearProviderCompressionCallback(provider) in a finally block after that
+   * provider call completes. On error, this method makes a best-effort attempt
+   * to detach the callback before rethrowing the original enforcement error.
+   */
+  async enforceProviderContents(
+    contents: IContent[],
+    promptId: string,
+    provider?: IProvider,
+  ): Promise<IContent[]> {
+    const enforcer = this.createProviderContentEnforcer();
+    try {
+      this.attachCompressionCallback(provider, promptId, enforcer);
+      return await enforcer.enforce(contents, promptId, provider);
+    } catch (error) {
+      try {
+        this.detachCompressionCallback(provider);
+      } catch (detachError) {
+        this.logger.warn(
+          () =>
+            '[CompressionHandler] Failed to detach compression callback during error recovery',
+          detachError,
+        );
+      }
+      throw error;
+    }
+  }
+
   async enforceContextWindow(
     pendingTokens: number,
     promptId: string,
@@ -475,7 +600,7 @@ export class CompressionHandler {
       return;
     }
 
-    // If compression barely reduced tokens, force truncation fallback
+    // If compression barely reduced tokens, force truncation fallback.
     recomputed = await this.forceTruncationIfIneffective(
       promptId,
       preCompressionProjected,
