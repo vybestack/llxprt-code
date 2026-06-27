@@ -19,8 +19,16 @@ import {
 import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { Command } from '../keyMatchers.js';
 import { defaultKeyBindings } from '../../config/keyBindings.js';
+
+function createMockAgent(config: Config): Agent {
+  return {
+    dispose: vi.fn().mockResolvedValue(undefined),
+    getConfig: () => config,
+  } as unknown as Agent;
+}
 
 // Mock config type
 interface MockConfig {
@@ -508,6 +516,7 @@ describe('AppContainer.keybindings', () => {
     it('should mount component with keybinding handlers active', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -525,6 +534,7 @@ describe('AppContainer.keybindings', () => {
     it('should have copy mode toggle available when using alternate buffer', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -547,6 +557,7 @@ describe('AppContainer.keybindings', () => {
 
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

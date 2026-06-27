@@ -394,6 +394,19 @@ import {
 import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
+/**
+ * Minimal fake Agent satisfying the threaded `agent` prop. The streaming hooks
+ * are mocked wholesale in this suite, so the Agent is not exercised — it only
+ * needs to satisfy the type and prove the component mounts when given one.
+ */
+function createMockAgent(config: Config): Agent {
+  return {
+    dispose: vi.fn().mockResolvedValue(undefined),
+    getConfig: () => config,
+  } as unknown as Agent;
+}
 
 // Type for the mock config
 interface MockConfig {
@@ -481,6 +494,7 @@ describe('AppContainer.mount', () => {
       // Arrange: All dependencies mocked
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -497,6 +511,7 @@ describe('AppContainer.mount', () => {
       // Arrange
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -518,6 +533,7 @@ describe('AppContainer.mount', () => {
       // Arrange
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -542,6 +558,7 @@ describe('AppContainer.mount', () => {
       ];
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         resumedHistory,
@@ -562,6 +579,7 @@ describe('AppContainer.mount', () => {
       const startupWarnings = ['Warning 1', 'Warning 2'];
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         startupWarnings,
@@ -581,6 +599,7 @@ describe('AppContainer.mount', () => {
       // Arrange
       const props = {
         config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

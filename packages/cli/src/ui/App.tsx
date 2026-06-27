@@ -13,6 +13,7 @@ import type {
   LockHandle,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
 import { MouseProvider } from './contexts/MouseContext.js';
@@ -31,6 +32,12 @@ import { AppContainer } from './AppContainer.js';
 
 interface AppProps {
   config: Config;
+  /**
+   * The single interactive Agent created at the CLI composition root.
+   * `config` is retained alongside it as a temporary migration bridge until the
+   * remaining UI Config consumers are migrated to the Agent (see #1595).
+   */
+  agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
