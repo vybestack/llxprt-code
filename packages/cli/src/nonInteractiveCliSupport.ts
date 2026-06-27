@@ -181,7 +181,7 @@ function emitToolResult(
   const error =
     result.isError === true
       ? {
-          type: 'TOOL_EXECUTION_ERROR',
+          type: result.errorType ?? 'TOOL_EXECUTION_ERROR',
           message:
             typeof result.display === 'string'
               ? result.display
@@ -370,6 +370,22 @@ export async function processAgentStream(
           'Loop detected, stopping execution',
         );
         break;
+      case 'hook-blocked': {
+        const info = event.info;
+        const blockMessage = `Agent execution blocked: ${
+          info.systemMessage?.trim() ?? info.reason
+        }`;
+        process.stderr.write(`[WARNING] ${blockMessage}
+`);
+        break;
+      }
+      case 'idle-timeout':
+        emitStreamError(
+          context.streamFormatter,
+          'error',
+          'Stream idle timeout: no response received within the allowed time.',
+        );
+        throw reconstructError(event.error);
       case 'error':
         throw reconstructError(event.error);
       case 'done':

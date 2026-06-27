@@ -93,14 +93,18 @@ describe('processAgentStream', () => {
     emojiFilter?: EmojiFilter | undefined;
     config?: Config;
   }) {
+    const streamFormatter =
+      overrides?.streamFormatter === undefined
+        ? null
+        : overrides.streamFormatter;
     return {
       config: overrides?.config ?? createMockConfig(),
       jsonOutput: overrides?.jsonOutput ?? false,
-      streamJsonOutput: overrides?.streamJsonOutput ?? false,
-      streamFormatter:
-        overrides?.streamFormatter === undefined
-          ? null
-          : overrides.streamFormatter,
+      // In production, streamJsonOutput and streamFormatter are always set
+      // together; derive streamJsonOutput from the formatter unless a test
+      // explicitly overrides it, so the test context matches production.
+      streamJsonOutput: overrides?.streamJsonOutput ?? streamFormatter !== null,
+      streamFormatter,
       emojiFilter: overrides?.emojiFilter,
       createProfileNameWriter: () => () => {},
     };
@@ -473,5 +477,85 @@ describe('processAgentStream', () => {
       (event) => event.type === JsonStreamEventType.RESULT,
     );
     expect(result).toBeDefined();
+  });
+
+  it('writes a warning to stderr and continues on a hook-blocked event', async () => {
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'partial' },
+      {
+        type: 'hook-blocked',
+        info: { reason: 'policy', systemMessage: '  blocked by hook  ' },
+      },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    expect(processStderrSpy).toHaveBeenCalledWith(
+      '[WARNING] Agent execution blocked: blocked by hook\n',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('partial');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('emits a stream-json error and throws on an idle-timeout event', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'idle-timeout',
+        error: { message: 'no response received within the allowed time.' },
+      },
+    ];
+
+    await expect(
+      processAgentStream(
+        streamFromEvents(events),
+        createContext({ streamFormatter }),
+        Date.now(),
+        () => uiTelemetryService.getMetrics(),
+      ),
+    ).rejects.toThrow('no response received within the allowed time.');
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const streamError = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.ERROR,
+    );
+    expect(streamError?.message).toContain('Stream idle timeout');
+  });
+
+  it('preserves the tool errorType in the stream-json TOOL_RESULT record', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'tool-result',
+        result: {
+          id: 'tool-perm-1',
+          name: 'editTool',
+          isError: true,
+          display: 'Permission denied',
+          errorType: 'PERMISSION_DENIED',
+        },
+      },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const toolResult = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.TOOL_RESULT,
+    );
+    expect(toolResult?.status).toBe('error');
+    expect(toolResult?.error?.type).toBe('PERMISSION_DENIED');
   });
 });

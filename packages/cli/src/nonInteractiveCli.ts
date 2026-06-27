@@ -24,6 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { type Part } from '@google/genai';
 import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import { fromConfig } from '@vybestack/llxprt-code-agents';
 
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
@@ -33,7 +34,6 @@ import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
 import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,

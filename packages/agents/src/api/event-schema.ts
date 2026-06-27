@@ -69,6 +69,7 @@ export const AgentToolResultSchema = z.object({
   isError: z.boolean().optional(),
   display: z.unknown().optional(),
   suppressDisplay: z.boolean().optional(),
+  errorType: z.string().optional(),
 });
 
 export const ToolConfirmationSchema = z.object({

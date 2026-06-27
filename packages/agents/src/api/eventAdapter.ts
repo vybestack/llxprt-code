@@ -83,6 +83,9 @@ function projectToolResult(
         ? { display: x.response.resultDisplay }
         : {}),
       ...(x.response.suppressDisplay === true ? { suppressDisplay: true } : {}),
+      ...(x.response.errorType !== undefined
+        ? { errorType: x.response.errorType }
+        : {}),
     };
   }
   return {

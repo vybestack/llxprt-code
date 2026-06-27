@@ -11,7 +11,11 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
-import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentEvent,
+  AgentInput,
+} from '@vybestack/llxprt-code-agents';
 import { runNonInteractive } from './nonInteractiveCli.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -21,7 +25,10 @@ import type { LoadedSettings } from './config/settings.js';
 // Captures the resolved query handed to the fake Agent's stream(), and the
 // AgentEvents it should emit. Reset per-test in beforeEach.
 const agentState = vi.hoisted(() => ({
-  streamInput: null as unknown,
+  // runNonInteractive passes the resolved query to agent.stream(); typed as
+  // AgentInput | null (matching the stream() parameter type) so assertions get
+  // compile-time checking instead of the looser `unknown`.
+  streamInput: null as AgentInput | null,
   events: [] as AgentEvent[],
 }));
 
@@ -59,9 +66,13 @@ vi.mock('./services/CommandService.js', () => ({
  * currently staged in agentState.events. Drives runNonInteractive end-to-end
  * without a real Agent/Config round-trip.
  */
+// Only `stream` and `dispose` are exercised by runNonInteractive; the cast
+// back to the full Agent interface is needed because fromConfig() is typed to
+// return a complete Agent. If production code calls a new Agent method, extend
+// this fake accordingly.
 function buildFakeAgent(): Agent {
   return {
-    stream: (input: unknown) => {
+    stream: (input: AgentInput) => {
       agentState.streamInput = input;
       return (async function* generateFakeStream(): AsyncIterable<AgentEvent> {
         for (const event of agentState.events) {
@@ -320,8 +331,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   it('should render tool-call and tool-result events through the Agent stream', async () => {
     // After migration, tool execution is owned by the Agent. This verifies the
     // tool-call/tool-result AgentEvents render their display end-to-end through
-    // runNonInteractive (allowlist governance itself is covered by the
-    // run_shell_command integration test).
+    // runNonInteractive.
+    // Allowlist governance (--allowed-tools overriding ShellTool/EditTool/
+    // WriteFile exclusion) is config-level and covered by the fast unit suite
+    // config/__tests__/toolGovernanceParity.test.ts (getExcludeTools parity) and
+    // the integration-tests/run_shell_command.test.ts scenarios.
     agentState.events = [
       {
         type: 'tool-call',
