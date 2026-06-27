@@ -16,13 +16,6 @@ import {
 } from '../LoadBalancingProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
-interface ActiveModelStats {
-  profileName: string;
-  lastSelected: string | null;
-  lastSelectedModel: string | null;
-  members: string[];
-}
-
 function makeMockProvider(name: string): IProvider {
   return {
     name,
@@ -66,9 +59,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       };
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
-      const stats = (
-        provider as unknown as { getStats: () => ActiveModelStats }
-      ).getStats();
+      const stats = provider.getStats();
 
       expect(stats.members).toStrictEqual(['fast', 'smart', 'cheap']);
     });
@@ -86,9 +77,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       };
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
-      const stats = (
-        provider as unknown as { getStats: () => ActiveModelStats }
-      ).getStats();
+      const stats = provider.getStats();
 
       expect(stats.lastSelected).toBeNull();
       expect(stats.lastSelectedModel).toBeNull();
@@ -121,9 +110,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
             contents: [{ role: 'user', parts: [{ text: 'one' }] }],
           }),
         );
-        let stats = (
-          provider as unknown as { getStats: () => ActiveModelStats }
-        ).getStats();
+        let stats = provider.getStats();
         expect(stats.lastSelected).toBe('fast');
         expect(stats.lastSelectedModel).toBe('gemini-flash');
 
@@ -133,9 +120,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
             contents: [{ role: 'user', parts: [{ text: 'two' }] }],
           }),
         );
-        stats = (
-          provider as unknown as { getStats: () => ActiveModelStats }
-        ).getStats();
+        stats = provider.getStats();
         expect(stats.lastSelected).toBe('smart');
         expect(stats.lastSelectedModel).toBe('gpt-4');
       } finally {
@@ -170,9 +155,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
             contents: [{ role: 'user', parts: [{ text: 'one' }] }],
           }),
         );
-        const stats = (
-          provider as unknown as { getStats: () => ActiveModelStats }
-        ).getStats();
+        const stats = provider.getStats();
         expect(stats.lastSelected).toBe('resolved-sub');
         expect(stats.lastSelectedModel).toBe('gemini-2.5-pro');
       } finally {
@@ -202,16 +185,12 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
             contents: [{ role: 'user', parts: [{ text: 'one' }] }],
           }),
         );
-        let stats = (
-          provider as unknown as { getStats: () => ActiveModelStats }
-        ).getStats();
+        let stats = provider.getStats();
         expect(stats.lastSelectedModel).toBe('gemini-flash');
 
-        (provider as unknown as { resetStats: () => void }).resetStats();
+        provider.resetStats();
 
-        stats = (
-          provider as unknown as { getStats: () => ActiveModelStats }
-        ).getStats();
+        stats = provider.getStats();
         expect(stats.lastSelected).toBeNull();
         expect(stats.lastSelectedModel).toBeNull();
       } finally {

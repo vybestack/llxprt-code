@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-providers';
 import { diagnosticsCommand } from './diagnosticsCommand.js';
 import type { MessageActionReturn } from './types.js';
 import {
@@ -21,18 +22,26 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: runtimeMocks.getRuntimeApiMock,
 }));
 
-interface LbStats {
-  profileName: string;
-  lastSelected: string | null;
-  lastSelectedModel: string | null;
-  members: string[];
-  totalRequests: number;
-  profileCounts: Record<string, number>;
+function makeLbStats(
+  overrides: Partial<ExtendedLoadBalancerStats>,
+): ExtendedLoadBalancerStats {
+  return {
+    profileName: 'my-lb',
+    lastSelected: null,
+    lastSelectedModel: null,
+    members: [],
+    totalRequests: 0,
+    profileCounts: {},
+    backendMetrics: {},
+    circuitBreakerStates: {},
+    currentTPM: {},
+    ...overrides,
+  };
 }
 
 function setupLoadBalancerRuntime(options: {
   runtimeProfileName: string | null;
-  lbStats: LbStats;
+  lbStats: ExtendedLoadBalancerStats;
 }) {
   const lbProvider = {
     getStats: vi.fn(() => options.lbStats),
@@ -75,14 +84,14 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
   it('reports the runtime profile, load-balancer profile, members, active sub-profile, and active model', async () => {
     setupLoadBalancerRuntime({
       runtimeProfileName: 'my-lb',
-      lbStats: {
+      lbStats: makeLbStats({
         profileName: 'my-lb',
         lastSelected: 'fast-sub',
         lastSelectedModel: 'gpt-4o-mini',
         members: ['fast-sub', 'smart-sub'],
         totalRequests: 3,
         profileCounts: { 'fast-sub': 2, 'smart-sub': 1 },
-      },
+      }),
     });
 
     const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -102,14 +111,14 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
   it('shows pending placeholders before any sub-profile has been selected', async () => {
     setupLoadBalancerRuntime({
       runtimeProfileName: 'my-lb',
-      lbStats: {
+      lbStats: makeLbStats({
         profileName: 'my-lb',
         lastSelected: null,
         lastSelectedModel: null,
         members: ['fast-sub', 'smart-sub'],
         totalRequests: 0,
         profileCounts: {},
-      },
+      }),
     });
 
     const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -123,14 +132,14 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
   it('does not duplicate the same value under ambiguous labels', async () => {
     setupLoadBalancerRuntime({
       runtimeProfileName: 'my-lb',
-      lbStats: {
+      lbStats: makeLbStats({
         profileName: 'my-lb',
         lastSelected: 'fast-sub',
         lastSelectedModel: 'gpt-4o-mini',
         members: ['fast-sub', 'smart-sub'],
         totalRequests: 1,
         profileCounts: { 'fast-sub': 1 },
-      },
+      }),
     });
 
     const result = await diagnosticsCommand.action?.(mockContext, '');

@@ -144,6 +144,21 @@ describe('formatModelIdentity', () => {
       ).toBe(`lb:my-lb:fast-sub:${LB_PENDING_PLACEHOLDER}`);
     });
 
+    it('treats empty or whitespace-only sub-profile and model as pending', () => {
+      expect(
+        formatModelIdentity({
+          profileName: 'my-lb',
+          providerName: 'load-balancer',
+          modelName: 'my-lb',
+          loadBalancer: {
+            profileName: 'my-lb',
+            activeSubProfile: '',
+            activeModel: '  ',
+          },
+        }),
+      ).toBe(`lb:my-lb:${LB_PENDING_PLACEHOLDER}:${LB_PENDING_PLACEHOLDER}`);
+    });
+
     it('falls back to "load-balancer" when the load-balancer profile name is missing', () => {
       expect(
         formatModelIdentity({
@@ -188,6 +203,9 @@ function makeRuntime(options: {
   profileName: string | null;
   lbStats?: FakeLbStats | null;
   providerManagerNull?: boolean;
+  providerMissing?: boolean;
+  getStatsReturnsNull?: boolean;
+  lbStatsThrows?: boolean;
 }): ModelIdentityRuntime {
   const {
     providerName,
@@ -195,6 +213,9 @@ function makeRuntime(options: {
     profileName,
     lbStats = null,
     providerManagerNull = false,
+    providerMissing = false,
+    getStatsReturnsNull = false,
+    lbStatsThrows = false,
   } = options;
 
   return {
@@ -206,11 +227,16 @@ function makeRuntime(options: {
       }
       return {
         getProviderByName: (name: string) => {
-          if (name !== 'load-balancer' || lbStats === null) {
+          if (name !== 'load-balancer' || providerMissing) {
             return null;
           }
           return {
-            getStats: () => lbStats,
+            getStats: () => {
+              if (lbStatsThrows) {
+                throw new Error('stats unavailable');
+              }
+              return getStatsReturnsNull ? null : lbStats;
+            },
           };
         },
       };
@@ -267,12 +293,36 @@ describe('resolveModelIdentity', () => {
     );
   });
 
-  it('still renders the load-balancer context when stats cannot be retrieved', () => {
+  it('renders the load-balancer context when getStats returns null', () => {
     const runtime = makeRuntime({
       providerName: 'load-balancer',
       modelName: 'my-lb',
       profileName: 'my-lb',
-      lbStats: null,
+      getStatsReturnsNull: true,
+    });
+    expect(resolveModelIdentity(runtime)).toBe(
+      `lb:my-lb:${LB_PENDING_PLACEHOLDER}:${LB_PENDING_PLACEHOLDER}`,
+    );
+  });
+
+  it('renders the load-balancer context when the provider is not found', () => {
+    const runtime = makeRuntime({
+      providerName: 'load-balancer',
+      modelName: 'my-lb',
+      profileName: 'my-lb',
+      providerMissing: true,
+    });
+    expect(resolveModelIdentity(runtime)).toBe(
+      `lb:my-lb:${LB_PENDING_PLACEHOLDER}:${LB_PENDING_PLACEHOLDER}`,
+    );
+  });
+
+  it('renders the load-balancer context when getStats throws', () => {
+    const runtime = makeRuntime({
+      providerName: 'load-balancer',
+      modelName: 'my-lb',
+      profileName: 'my-lb',
+      lbStatsThrows: true,
     });
     expect(resolveModelIdentity(runtime)).toBe(
       `lb:my-lb:${LB_PENDING_PLACEHOLDER}:${LB_PENDING_PLACEHOLDER}`,

@@ -18,16 +18,8 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 import path from 'node:path';
 import process from 'node:process';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-providers';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
-
-interface LoadBalancerStatsResult {
-  profileName: string;
-  members: string[];
-  lastSelected: string | null;
-  lastSelectedModel: string | null;
-  totalRequests: number;
-  profileCounts: Record<string, number>;
-}
 
 interface BucketFailoverDiagnosticsHandler {
   getBuckets: () => string[];
@@ -78,7 +70,7 @@ function isBucketFailoverHandler(handler: unknown): boolean {
 
 function isLoadBalancingProvider(
   provider: unknown,
-): provider is { getStats: () => LoadBalancerStatsResult } {
+): provider is { getStats: () => ExtendedLoadBalancerStats } {
   return (
     provider !== null &&
     typeof provider === 'object' &&
@@ -147,7 +139,7 @@ function appendFailoverInfo(
 
 function appendProfileDistribution(
   diagnostics: string[],
-  lbStats: LoadBalancerStatsResult,
+  lbStats: ExtendedLoadBalancerStats,
 ): void {
   diagnostics.push('- Profile Distribution:');
   for (const [profile, count] of Object.entries(lbStats.profileCounts)) {
