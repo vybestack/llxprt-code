@@ -24,7 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { type Part } from '@google/genai';
 import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
@@ -234,12 +234,13 @@ async function processQuery(
     startTime: number;
   },
 ): Promise<void> {
-  const agent = await fromConfig({
-    config: params.config,
-    messageBus: params.runtimeMessageBus,
-    sessionId: params.config.getSessionId(),
-  });
+  let agent: Agent | undefined;
   try {
+    agent = await fromConfig({
+      config: params.config,
+      messageBus: params.runtimeMessageBus,
+      sessionId: params.config.getSessionId(),
+    });
     const eventStream = agent.stream(query, {
       signal: options.abortController.signal,
       promptId: params.prompt_id,
@@ -264,7 +265,21 @@ async function processQuery(
       () => uiTelemetryService.getMetrics(),
     );
   } finally {
-    await agent.dispose();
+    if (agent !== undefined) {
+      // Dispose in its own try/catch so a disposal failure never masks the
+      // original error thrown by the stream/turn loop above.
+      try {
+        await agent.dispose();
+      } catch (disposeError) {
+        debugLogger.error(
+          `Failed to dispose agent: ${
+            disposeError instanceof Error
+              ? disposeError.message
+              : String(disposeError)
+          }`,
+        );
+      }
+    }
   }
 }
 

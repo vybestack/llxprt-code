@@ -187,7 +187,8 @@ export function deriveDisplayCallbacks(
 }
 
 /**
- * Maps an AgentInput (string | structured) to a PartListUnion for run().
+ * Maps an AgentInput (string | readonly Part[] | structured {text, role?})
+ * to a PartListUnion for run().
  */
 function isPartArray(input: AgentInput): input is readonly Part[] {
   return Array.isArray(input);

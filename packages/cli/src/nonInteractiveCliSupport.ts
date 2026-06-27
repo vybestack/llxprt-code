@@ -16,7 +16,9 @@ import {
 import type {
   AgentEvent,
   AgentToolResult,
+  StructuredError,
 } from '@vybestack/llxprt-code-agents';
+import { MAX_TURNS_MESSAGE } from './utils/errors.js';
 
 type StreamConsumerContext = {
   config: Config;
@@ -26,9 +28,6 @@ type StreamConsumerContext = {
   emojiFilter: EmojiFilter | undefined;
   createProfileNameWriter: () => () => void;
 };
-
-const MAX_TURNS_MESSAGE =
-  'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.';
 
 function formatThoughtText(thought: {
   subject?: string;
@@ -270,10 +269,7 @@ function emitFinalResult(
  * GeminiEventType.Error throw path. The optional HTTP status is preserved as a
  * property without a type assertion.
  */
-function reconstructError(structured: {
-  readonly message: string;
-  readonly status?: number;
-}): Error {
+function reconstructError(structured: StructuredError): Error {
   const err: Error & { status?: number } = new Error(structured.message);
   if (structured.status !== undefined) {
     err.status = structured.status;
@@ -308,7 +304,12 @@ function handleDone(
     case 'max-turns':
       throw new FatalTurnLimitedError(MAX_TURNS_MESSAGE);
     case 'error':
-      throw new Error('Agent execution failed');
+      // processAgentStream normally throws the preceding 'error' AgentEvent
+      // (carrying the StructuredError) before this terminal done arrives.
+      // Reaching here means done{reason:'error'} had no error event.
+      throw new Error(
+        'Agent execution failed with no structured error details provided.',
+      );
     default:
       return;
   }
@@ -375,8 +376,7 @@ export async function processAgentStream(
         const blockMessage = `Agent execution blocked: ${
           info.systemMessage?.trim() ?? info.reason
         }`;
-        process.stderr.write(`[WARNING] ${blockMessage}
-`);
+        process.stderr.write(`[WARNING] ${blockMessage}\n`);
         break;
       }
       case 'idle-timeout':
