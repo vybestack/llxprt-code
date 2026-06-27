@@ -589,10 +589,18 @@ export class AgentImpl implements Agent {
   ): AsyncIterable<AgentEvent> {
     // @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013
     // MCP discovery gate: by default await readiness before the model turn. On
-    // discovery FAILURE the stream yields exactly ONE done{reason:'error'} and
-    // stops — no model turn runs.
+    // discovery FAILURE the stream yields a structured `error` event (carrying
+    // the failure message so consumers can surface useful diagnostics) followed
+    // by exactly ONE done{reason:'error'} and stops — no model turn runs.
     const gateError = await this.awaitMcpDiscoveryGate(opts);
     if (gateError !== undefined) {
+      // StructuredError has no `code` field, so the typed AgentError code
+      // (e.g. 'mcp_discovery_failed') is prefixed onto the message to keep it
+      // programmatically distinguishable without widening the public type.
+      yield {
+        type: 'error',
+        error: { message: `[${gateError.code}] ${gateError.message}` },
+      };
       yield { type: 'done', reason: 'error' };
       return;
     }

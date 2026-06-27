@@ -4,40 +4,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  Config,
-  ToolRegistry,
-  ServerGeminiStreamEvent,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   shutdownTelemetry,
   isTelemetrySdkInitialized,
-  GeminiEventType,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
+import type {
+  Agent,
+  AgentEvent,
+  AgentInput,
+  TurnOptions,
+} from '@vybestack/llxprt-code-agents';
 import { runNonInteractive } from './nonInteractiveCli.js';
-
-import { executeToolCall } from '@vybestack/llxprt-code-agents';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { Mock, MockInstance } from 'vitest';
 import type { LoadedSettings } from './config/settings.js';
-import {
-  createCompletedToolCallResponse,
-  createStreamFromEvents,
-} from './nonInteractiveCli.test-helpers.js';
 
-// Mock core modules
-vi.mock('./ui/hooks/atCommandProcessor.js');
+// Captures the resolved query handed to the fake Agent's stream(), and the
+// AgentEvents it should emit. Reset per-test in beforeEach.
+const agentState = vi.hoisted(() => ({
+  // runNonInteractive passes the resolved query to agent.stream(); typed as
+  // AgentInput | null (matching the stream() parameter type) so assertions get
+  // compile-time checking instead of the looser `unknown`.
+  streamInput: null as AgentInput | null,
+  // The TurnOptions (signal/promptId/maxTurns) handed to agent.stream(), so
+  // tests can assert runNonInteractive still forwards prompt_id and maxTurns.
+  streamOpts: null as TurnOptions | null,
+  events: [] as AgentEvent[],
+}));
+
 vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
   return {
     ...original,
-    executeToolCall: vi.fn(),
+    fromConfig: vi.fn(),
   };
 });
+
+// Mock core modules
+vi.mock('./ui/hooks/atCommandProcessor.js');
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
@@ -45,9 +54,6 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     ...original,
     shutdownTelemetry: vi.fn(),
     isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
-    delay: original.delay,
-    nextStreamEventWithIdleTimeout: original.nextStreamEventWithIdleTimeout,
-    StreamIdleTimeoutError: original.StreamIdleTimeoutError,
   };
 });
 
@@ -59,19 +65,38 @@ vi.mock('./services/CommandService.js', () => ({
   },
 }));
 
+/**
+ * Builds a fake Agent whose stream() records its input and yields the events
+ * currently staged in agentState.events. Drives runNonInteractive end-to-end
+ * without a real Agent/Config round-trip.
+ */
+// Only `stream` and `dispose` are exercised by runNonInteractive; the cast
+// back to the full Agent interface is needed because fromConfig() is typed to
+// return a complete Agent. If production code calls a new Agent method, extend
+// this fake accordingly.
+function buildFakeAgent(): Agent {
+  return {
+    stream: (input: AgentInput, opts?: TurnOptions) => {
+      agentState.streamInput = input;
+      agentState.streamOpts = opts ?? null;
+      return (async function* generateFakeStream(): AsyncIterable<AgentEvent> {
+        for (const event of agentState.events) {
+          yield event;
+        }
+      })();
+    },
+    dispose: vi.fn().mockResolvedValue(undefined),
+  } as unknown as Agent;
+}
+
 describe('runNonInteractive - slash commands and thinking output', () => {
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
-  let mockToolRegistry: ToolRegistry;
-  let mockCoreExecuteToolCall: Mock;
   let mockShutdownTelemetry: Mock;
   let mockIsTelemetrySdkInitialized: Mock;
   let processStdoutSpy: MockInstance;
-  let mockAgentClient: {
-    sendMessageStream: Mock;
-  };
+
   beforeEach(async () => {
-    mockCoreExecuteToolCall = vi.mocked(executeToolCall);
     mockShutdownTelemetry = vi.mocked(shutdownTelemetry);
     mockShutdownTelemetry.mockResolvedValue(undefined);
     mockIsTelemetrySdkInitialized = vi.mocked(isTelemetrySdkInitialized);
@@ -88,22 +113,19 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       .mockImplementation(() => true);
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-    mockToolRegistry = {
-      getTool: vi.fn(),
-      getFunctionDeclarations: vi.fn().mockReturnValue([]),
-    } as unknown as ToolRegistry;
+    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    vi.mocked(fromConfig).mockResolvedValue(buildFakeAgent());
 
-    mockAgentClient = {
-      sendMessageStream: vi.fn(),
-    };
+    // Default: the Agent emits a clean stop completion. Individual tests
+    // override agentState.events to stage thinking/tool/text sequences.
+    agentState.streamInput = null;
+    agentState.streamOpts = null;
+    agentState.events = [{ type: 'done', reason: 'stop' }];
 
     mockConfig = {
       initialize: vi.fn().mockResolvedValue(undefined),
-      getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
-      getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
       getMaxSessionTurns: vi.fn().mockReturnValue(10),
       getIdeMode: vi.fn().mockReturnValue(false),
-
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
       getDebugMode: vi.fn().mockReturnValue(false),
       getProviderManager: vi.fn().mockReturnValue(undefined),
@@ -154,35 +176,28 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   it('should preprocess @include commands before sending to the model', async () => {
-    // 1. Mock the imported atCommandProcessor
     const { handleAtCommand } = await import(
       './ui/hooks/atCommandProcessor.js'
     );
     const mockHandleAtCommand = vi.mocked(handleAtCommand);
 
-    // 2. Define the raw input and the expected processed output
     const rawInput = 'Summarize @file.txt';
     const processedParts: Part[] = [
       { text: 'Summarize @file.txt' },
       { text: '\n--- Content from referenced files ---\n' },
       { text: 'This is the content of the file.' },
-      { text: '\n--- End of content ---' },
+      { text: '\n--- End of content ---\n' },
     ];
 
-    // 3. Setup the mock to return the processed parts
     mockHandleAtCommand.mockResolvedValue({
       processedQuery: processedParts,
     });
 
-    // Mock a simple stream response from the Gemini client
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'Summary complete.' },
+    agentState.events = [
+      { type: 'text', text: 'Summary complete.' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
-    // 4. Run the non-interactive mode with the raw input
     await runNonInteractive({
       config: mockConfig,
       settings: mockSettings,
@@ -190,14 +205,13 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-7',
     });
 
-    // 5. Assert that sendMessageStream was called with the PROCESSED parts, not the raw input
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
-      processedParts,
-      expect.any(AbortSignal),
-      'prompt-id-7',
+    // The PROCESSED parts (not the raw input) must reach the Agent stream.
+    expect(agentState.streamInput).toStrictEqual(processedParts);
+    // runNonInteractive must forward prompt_id and maxTurns to agent.stream().
+    expect(agentState.streamOpts?.promptId).toBe('prompt-id-7');
+    expect(agentState.streamOpts?.maxTurns).toBe(
+      mockConfig.getMaxSessionTurns(),
     );
-
-    // 6. Assert the final output is correct
     expect(processStdoutSpy).toHaveBeenCalledWith('Summary complete.');
   });
 
@@ -212,12 +226,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     };
     mockGetCommands.mockReturnValue([mockCommand]);
 
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'Response from command' },
+    agentState.events = [
+      { type: 'text', text: 'Response from command' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
     await runNonInteractive({
       config: mockConfig,
@@ -226,13 +238,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-slash',
     });
 
-    // Ensure the prompt sent to the model is from the command, not the raw input
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
-      [{ text: 'Prompt from command' }],
-      expect.any(AbortSignal),
-      'prompt-id-slash',
-    );
-
+    // The prompt sent to the Agent is from the command, not the raw input.
+    expect(agentState.streamInput).toStrictEqual([
+      { text: 'Prompt from command' },
+    ]);
     expect(processStdoutSpy).toHaveBeenCalledWith('Response from command');
   });
 
@@ -263,12 +272,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     // No commands are mocked, so any slash command is "unknown"
     mockGetCommands.mockReturnValue([]);
 
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'Response to unknown' },
+    agentState.events = [
+      { type: 'text', text: 'Response to unknown' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
     await runNonInteractive({
       config: mockConfig,
@@ -277,13 +284,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-unknown',
     });
 
-    // Ensure the raw input is sent to the model
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
-      [{ text: '/unknowncommand' }],
-      expect.any(AbortSignal),
-      'prompt-id-unknown',
-    );
-
+    // The raw input is sent to the Agent.
+    expect(agentState.streamInput).toStrictEqual([{ text: '/unknowncommand' }]);
     expect(processStdoutSpy).toHaveBeenCalledWith('Response to unknown');
   });
 
@@ -321,12 +323,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     };
     mockGetCommands.mockReturnValue([mockCommand]);
 
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'Acknowledged' },
+    agentState.events = [
+      { type: 'text', text: 'Acknowledged' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
     await runNonInteractive({
       config: mockConfig,
@@ -336,55 +336,40 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     expect(mockAction).toHaveBeenCalledWith(expect.any(Object), 'arg1 arg2');
-
     expect(processStdoutSpy).toHaveBeenCalledWith('Acknowledged');
   });
 
-  it('should allow a normally-excluded tool when --allowed-tools is set', async () => {
-    // By default, ShellTool is excluded in non-interactive mode.
-    // This test ensures that --allowed-tools overrides this exclusion.
-    vi.mocked(mockConfig.getToolRegistry).mockReturnValue({
-      getTool: vi.fn().mockReturnValue({
-        name: 'ShellTool',
-        description: 'A shell tool',
-        run: vi.fn(),
-      }),
-      getFunctionDeclarations: vi.fn().mockReturnValue([{ name: 'ShellTool' }]),
-    } as unknown as ToolRegistry);
-
-    const toolCallEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.ToolCallRequest,
-      value: {
-        callId: 'tool-shell-1',
-        name: 'ShellTool',
-        args: { command: 'ls' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-id-allowed',
-      },
-    };
-    const toolResponse: Part[] = [{ text: 'file.txt' }];
-    mockCoreExecuteToolCall.mockResolvedValue(
-      createCompletedToolCallResponse({
-        callId: 'tool-shell-1',
-        responseParts: toolResponse,
-      }),
-    );
-
-    const firstCallEvents: ServerGeminiStreamEvent[] = [toolCallEvent];
-    const secondCallEvents: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'file.txt' },
+  it('should render tool-result display output through the Agent stream', async () => {
+    // After migration, tool execution is owned by the Agent. This verifies the
+    // tool-result AgentEvent renders its display end-to-end through
+    // runNonInteractive. (The tool-call event only writes to the stream-json
+    // formatter, which is null here; its rendering is covered by the
+    // stream-json unit tests in nonInteractiveCli.test.ts.)
+    // Allowlist governance (--allowed-tools overriding ShellTool/EditTool/
+    // WriteFile exclusion) is config-level and covered by the fast unit suite
+    // config/__tests__/toolGovernanceParity.test.ts (getExcludeTools parity) and
+    // the integration-tests/run_shell_command.test.ts scenarios.
+    agentState.events = [
       {
-        type: GeminiEventType.Finished,
-        value: {
-          reason: undefined,
-          usageMetadata: { totalTokenCount: 10 },
+        type: 'tool-call',
+        call: {
+          id: 'tool-shell-1',
+          name: 'ShellTool',
+          args: { command: 'ls' },
         },
-      } as unknown as ServerGeminiStreamEvent,
+      },
+      {
+        type: 'tool-result',
+        result: {
+          id: 'tool-shell-1',
+          name: 'ShellTool',
+          display: 'file.txt',
+          output: 'file.txt',
+        },
+      },
+      { type: 'text', text: 'file.txt' },
+      { type: 'done', reason: 'stop' },
     ];
-
-    mockAgentClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
-      .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
 
     await runNonInteractive({
       config: mockConfig,
@@ -393,50 +378,22 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-allowed',
     });
 
-    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
-      mockConfig,
-      expect.objectContaining({ name: 'ShellTool' }),
-      expect.any(AbortSignal),
-      expect.objectContaining({ messageBus: undefined }),
-    );
-    expect(processStdoutSpy).toHaveBeenCalledWith('file.txt');
+    expect(processStdoutSpy).toHaveBeenCalledWith('file.txt\n');
   });
 
   it('should accumulate multiple Thought events and flush once on content boundary', async () => {
-    const thoughtEvent1: ServerGeminiStreamEvent = {
-      type: GeminiEventType.Thought,
-      value: {
-        subject: 'First',
-        description: 'thought',
+    agentState.events = [
+      {
+        type: 'thinking',
+        thought: { subject: 'First', description: 'thought' },
       },
-    };
-    const thoughtEvent2: ServerGeminiStreamEvent = {
-      type: GeminiEventType.Thought,
-      value: {
-        subject: 'Second',
-        description: 'thought',
+      {
+        type: 'thinking',
+        thought: { subject: 'Second', description: 'thought' },
       },
-    };
-    const contentEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.Content,
-      value: 'Response text',
-    };
-    const finishedEvent = {
-      type: GeminiEventType.Finished,
-      value: {
-        reason: undefined,
-        usageMetadata: { totalTokenCount: 10 },
-      },
-    } as unknown as ServerGeminiStreamEvent;
-
-    mockAgentClient.sendMessageStream.mockReturnValueOnce(
-      createStreamFromEvents([
-        thoughtEvent1,
-        thoughtEvent2,
-        contentEvent,
-        finishedEvent,
-      ]),
-    );
+      { type: 'text', text: 'Response text' },
+      { type: 'done', reason: 'stop' },
+    ];
 
     await runNonInteractive({
       config: mockConfig,
@@ -458,40 +415,12 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   it('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
-    const thoughtEvent1: ServerGeminiStreamEvent = {
-      type: GeminiEventType.Thought,
-      value: {
-        subject: 'Analyzing',
-        description: '',
-      },
-    };
-    const thoughtEvent2: ServerGeminiStreamEvent = {
-      type: GeminiEventType.Thought,
-      value: {
-        subject: 'request',
-        description: '',
-      },
-    };
-    const contentEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.Content,
-      value: 'Response',
-    };
-    const finishedEvent = {
-      type: GeminiEventType.Finished,
-      value: {
-        reason: undefined,
-        usageMetadata: { totalTokenCount: 10 },
-      },
-    } as unknown as ServerGeminiStreamEvent;
-
-    mockAgentClient.sendMessageStream.mockReturnValueOnce(
-      createStreamFromEvents([
-        thoughtEvent1,
-        thoughtEvent2,
-        contentEvent,
-        finishedEvent,
-      ]),
-    );
+    agentState.events = [
+      { type: 'thinking', thought: { subject: 'Analyzing', description: '' } },
+      { type: 'thinking', thought: { subject: 'request', description: '' } },
+      { type: 'text', text: 'Response' },
+      { type: 'done', reason: 'stop' },
+    ];
 
     await runNonInteractive({
       config: mockConfig,
@@ -508,7 +437,6 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     expect(thinkingOutputs).toHaveLength(1);
     const thinkingText = thinkingOutputs[0][0];
     // "Analyzing" should appear exactly once — not repeated for each subsequent thought
-
     const thoughtCount = (thinkingText.match(/Analyzing/g) ?? []).length;
     expect(thoughtCount).toBe(1);
   });
@@ -523,19 +451,17 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       mockGetEphemeralSetting,
     );
 
-    const events: ServerGeminiStreamEvent[] = [
+    agentState.events = [
       {
-        type: GeminiEventType.Thought,
-        value: {
+        type: 'thinking',
+        thought: {
           subject: 'Planning \u{1F914} the approach',
           description: 'Let me think \u{1F4AD} carefully',
         },
       },
-      { type: GeminiEventType.Content, value: 'Here is my answer' },
+      { type: 'text', text: 'Here is my answer' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
     await runNonInteractive({
       config: mockConfig,
@@ -567,19 +493,17 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       mockGetEphemeralSetting,
     );
 
-    const events: ServerGeminiStreamEvent[] = [
+    agentState.events = [
       {
-        type: GeminiEventType.Thought,
-        value: {
+        type: 'thinking',
+        thought: {
           subject: 'Planning \u{1F914}',
           description: 'Think carefully \u{1F4AD}',
         },
       },
-      { type: GeminiEventType.Content, value: 'Here is my answer' },
+      { type: 'text', text: 'Here is my answer' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
     await runNonInteractive({
       config: mockConfig,
@@ -604,19 +528,17 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       mockGetEphemeralSetting,
     );
 
-    const events: ServerGeminiStreamEvent[] = [
+    agentState.events = [
       {
-        type: GeminiEventType.Thought,
-        value: {
+        type: 'thinking',
+        thought: {
           subject: 'Planning \u{1F914}',
           description: 'Think carefully \u{1F4AD}',
         },
       },
-      { type: GeminiEventType.Content, value: 'Here is my answer' },
+      { type: 'text', text: 'Here is my answer' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
     await runNonInteractive({
       config: mockConfig,

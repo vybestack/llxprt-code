@@ -4,7 +4,7 @@
  * @plan:PLAN-20260621-COREAPIREMED.P06
  */
 
-import type { Content } from '@google/genai';
+import type { Content, Part } from '@google/genai';
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
@@ -40,6 +40,7 @@ export type AgentHistoryItem = IContent;
 
 export type AgentInput =
   | string
+  | readonly Part[]
   | Readonly<{ readonly text: string; readonly role?: 'user' | 'system' }>;
 
 export type McpDiscoveryMode = 'await' | 'skip';
