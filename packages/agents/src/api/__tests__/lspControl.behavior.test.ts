@@ -65,7 +65,7 @@ describe('agent.lsp control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05', () => {
         servers: [
           {
             id: 'ts-lsp',
-            command: 'definitely-not-a-real-lsp-command',
+            command: '/definitely/not/a/real/lsp',
           },
         ],
       },
