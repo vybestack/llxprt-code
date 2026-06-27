@@ -87,6 +87,18 @@ export class LspControl implements AgentLspControl {
   constructor(private readonly deps: LspControlDeps) {}
 
   async status(): Promise<LspStatusSnapshot> {
+    try {
+      return await this.readStatus();
+    } catch (err) {
+      return {
+        disabled: true,
+        servers: [],
+        unavailableReason: formatError(err),
+      };
+    }
+  }
+
+  private async readStatus(): Promise<LspStatusSnapshot> {
     const config = this.deps.config;
     const lspConfig = config.getLspConfig();
     const client = config.getLspServiceClient();

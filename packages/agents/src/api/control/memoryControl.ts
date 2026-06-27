@@ -32,8 +32,14 @@ export interface MemoryControlDeps {
 
 export class MemoryControl implements AgentMemoryControl {
   private readonly emitter = new EventEmitter();
+  private disposed = false;
 
   constructor(private readonly deps: MemoryControlDeps) {}
+
+  dispose(): void {
+    this.disposed = true;
+    this.emitter.removeAllListeners('memory-changed');
+  }
 
   getMemory(): string {
     return this.deps.config.getUserMemory();
@@ -45,7 +51,7 @@ export class MemoryControl implements AgentMemoryControl {
     } catch (err) {
       throw createControlError('Failed to update memory', err);
     }
-    this.emitLocalMemoryChanged();
+    this.emitMemoryChangedBestEffort();
   }
 
   getFileCount(): number {
@@ -70,41 +76,61 @@ export class MemoryControl implements AgentMemoryControl {
     } catch (err) {
       throw createControlError('Failed to update core memory', err);
     }
-    this.emitLocalMemoryChanged();
+    this.emitMemoryChangedBestEffort();
   }
 
   async refresh(): Promise<MemoryRefreshResult> {
+    let result: Awaited<ReturnType<Config['refreshMemory']>>;
     try {
-      const result = await this.deps.config.refreshMemory();
-      this.emitLocalMemoryChanged({
-        fileCount: result.fileCount,
-        coreMemoryFileCount: this.deps.config.getCoreMemoryFileCount(),
-      });
-      return {
-        memoryContent: result.memoryContent,
-        fileCount: result.fileCount,
-        filePaths: [...result.filePaths],
-      };
+      result = await this.deps.config.refreshMemory();
     } catch (err) {
       throw createControlError('Failed to refresh memory', err);
     }
+    this.emitMemoryChangedBestEffort(
+      this.buildMemoryChangedEvent(result.fileCount),
+    );
+    return {
+      memoryContent: result.memoryContent,
+      fileCount: result.fileCount,
+      filePaths: [...result.filePaths],
+    };
   }
 
   onMemoryChanged(cb: (event: MemoryChangedEvent) => void): Unsubscribe {
+    if (this.disposed) {
+      return () => undefined;
+    }
     this.emitter.on('memory-changed', cb);
     return () => {
       this.emitter.off('memory-changed', cb);
     };
   }
 
-  private emitLocalMemoryChanged(event?: MemoryChangedEvent): void {
-    this.emitter.emit('memory-changed', event ?? this.currentMemoryEvent());
+  private emitMemoryChangedBestEffort(event?: MemoryChangedEvent): void {
+    if (this.disposed) {
+      return;
+    }
+    try {
+      this.emitter.emit('memory-changed', event ?? this.currentMemoryEvent());
+    } catch {
+      // Memory operation already succeeded; listener failures must not mask it.
+    }
   }
 
   private currentMemoryEvent(): MemoryChangedEvent {
-    return {
-      fileCount: this.deps.config.getLlxprtMdFileCount(),
-      coreMemoryFileCount: this.deps.config.getCoreMemoryFileCount(),
-    };
+    return this.buildMemoryChangedEvent(
+      this.deps.config.getLlxprtMdFileCount(),
+    );
+  }
+
+  private buildMemoryChangedEvent(fileCount: number): MemoryChangedEvent {
+    try {
+      return {
+        fileCount,
+        coreMemoryFileCount: this.deps.config.getCoreMemoryFileCount(),
+      };
+    } catch {
+      return { fileCount };
+    }
   }
 }

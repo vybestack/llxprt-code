@@ -51,11 +51,14 @@ function isCompatibleRipgrepBinary(candidate: string): boolean {
     return true;
   }
   try {
-    const header = fs.readFileSync(candidate).subarray(0, 4);
-    if (header.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))) {
-      return false;
+    const fd = fs.openSync(candidate, 'r');
+    try {
+      const header = Buffer.alloc(4);
+      fs.readSync(fd, header, 0, header.length, 0);
+      return !header.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]));
+    } finally {
+      fs.closeSync(fd);
     }
-    return true;
   } catch {
     return false;
   }

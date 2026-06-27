@@ -65,6 +65,22 @@ describe('createAgent harness hardening @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01'
     }
   });
 
+  it('does NOT force confirmations when forceInteractive is false and interactive is omitted @scenario:no-confirmations-with-implicit-noninteractive @given:harness:{forceInteractive:false} and no interactive field @when:createAgent builds the agent @then:confirmation forcing is disabled because the runtime was not positively forced interactive', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      harness: { forceInteractive: false },
+    });
+    try {
+      const rules = agent.policy.getRules();
+      const forcingRules = rules.filter(
+        (r) => r.source === CONFIRMATION_FORCING_SOURCE,
+      );
+      expect(forcingRules).toHaveLength(0);
+      expect(internalConfig(agent).isInteractive()).toBe(false);
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('does NOT inject the confirmation-forcing policy rule when harness.forceConfirmations is false @scenario:no-force-confirmations @given:an agent config with harness:{forceConfirmations:false} @when:createAgent builds the agent @then:no policy rule has source containing "confirmation-forcing"', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       harness: { forceConfirmations: false },

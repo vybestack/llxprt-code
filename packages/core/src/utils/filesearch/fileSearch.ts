@@ -368,7 +368,7 @@ function directChildFileDepth(dir: string): number {
   if (dir === '.') {
     return 0;
   }
-  return dir.replace(/\/$/, '').split('/').length;
+  return dir.replace(/\\/g, '/').replace(/\/$/, '').split('/').length;
 }
 
 function exceedsDepth(

@@ -6,7 +6,6 @@
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
-  AgentMemoryControl,
   AgentSkillsControl,
   AgentWorkspaceControl,
   AgentLspControl,
@@ -17,7 +16,7 @@ import { WorkspaceControl } from './workspaceControl.js';
 import { LspControl } from './lspControl.js';
 
 export interface NewControls {
-  readonly memory: AgentMemoryControl;
+  readonly memory: MemoryControl;
   readonly skills: AgentSkillsControl;
   readonly workspace: AgentWorkspaceControl;
   readonly lsp: AgentLspControl;

@@ -408,7 +408,7 @@ function applyHarnessGates(
     params.interactive = true;
   }
   return (
-    (parsed.harness?.forceConfirmations ?? true) && params.interactive !== false
+    (parsed.harness?.forceConfirmations ?? true) && params.interactive === true
   );
 }
 

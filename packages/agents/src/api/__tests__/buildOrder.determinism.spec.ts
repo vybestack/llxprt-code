@@ -35,26 +35,30 @@ describe('agents API build-order determinism @plan:PLAN-20260626-RUNTIMEBOUNDARY
 
   it('the new surface types are present at runtime via createAgent output @requirement:build-order @given:an agent built via the public root @when:its new readonly controls are accessed @then:memory, skills, workspace, and lsp are defined objects (proves the source build includes the new controls)', async () => {
     const prev = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = resolve(
-      fixturesDir,
-      'plain-text.jsonl',
-    );
-    const agent = await createAgent({
-      provider: 'fake',
-      model: 'fake-model',
-      workingDir: fixturesDir,
-    });
+    let agent: Awaited<ReturnType<typeof createAgent>> | undefined;
     try {
+      process.env.LLXPRT_FAKE_RESPONSES = resolve(
+        fixturesDir,
+        'plain-text.jsonl',
+      );
+      agent = await createAgent({
+        provider: 'fake',
+        model: 'fake-model',
+        workingDir: fixturesDir,
+      });
       expect(agent.memory).toBeDefined();
       expect(agent.skills).toBeDefined();
       expect(agent.workspace).toBeDefined();
       expect(agent.lsp).toBeDefined();
     } finally {
-      await agent.dispose();
-      if (prev === undefined) {
-        delete process.env.LLXPRT_FAKE_RESPONSES;
-      } else {
-        process.env.LLXPRT_FAKE_RESPONSES = prev;
+      try {
+        await agent?.dispose();
+      } finally {
+        if (prev === undefined) {
+          delete process.env.LLXPRT_FAKE_RESPONSES;
+        } else {
+          process.env.LLXPRT_FAKE_RESPONSES = prev;
+        }
       }
     }
   });

@@ -51,7 +51,6 @@ import type {
   TurnOptions,
   Unsubscribe,
   Agent,
-  AgentMemoryControl,
   AgentSkillsControl,
   AgentWorkspaceControl,
   AgentLspControl,
@@ -77,6 +76,7 @@ import { SessionControl } from './control/sessionControl.js';
 import type { SessionControlDeps } from './control/sessionControl.js';
 import { ProfilesControl } from './control/profilesControl.js';
 import { buildNewControls } from './control/newControls.js';
+import type { MemoryControl } from './control/memoryControl.js';
 import type { LoopHolder } from './loop/rebuildLoop.js';
 import type { RebuildLoopDeps } from './loop/rebuildLoop.js';
 import type {
@@ -193,7 +193,7 @@ export class AgentImpl implements Agent {
   readonly policy: PolicyControl;
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
   readonly tasks: TasksControl;
-  readonly memory: AgentMemoryControl;
+  readonly memory: MemoryControl;
   readonly skills: AgentSkillsControl;
   readonly workspace: AgentWorkspaceControl;
   readonly lsp: AgentLspControl;
@@ -1327,6 +1327,9 @@ export class AgentImpl implements Agent {
     // the bus emitter's listener tally to its post-dispose baseline (zero).
     this.safeSync(errors, () => {
       this.hooks.detach();
+    });
+    this.safeSync(errors, () => {
+      this.memory.dispose();
     });
     const subs = holder.subscriptions;
     if (subs !== undefined) {
