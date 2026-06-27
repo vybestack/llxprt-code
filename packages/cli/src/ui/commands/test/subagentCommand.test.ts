@@ -155,6 +155,7 @@ const createTestContext = ({
     },
     services: {
       config: null,
+      agent: null,
       settings,
       git: undefined,
       logger,

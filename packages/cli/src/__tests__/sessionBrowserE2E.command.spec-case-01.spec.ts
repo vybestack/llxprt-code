@@ -56,6 +56,7 @@ describe('Continue command integration #1', () => {
         config: {
           isInteractive: () => false,
         } as CommandContext['services']['config'],
+        agent: null,
         settings: {} as CommandContext['services']['settings'],
         git: undefined,
         logger: makeMockLogger(),

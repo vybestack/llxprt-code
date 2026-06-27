@@ -47,6 +47,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
     mockContext = {
       services: {
         config: null,
+        agent: null,
         settings: {} as never,
         git: undefined,
         logger: {} as never,

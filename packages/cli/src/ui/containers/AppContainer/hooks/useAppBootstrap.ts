@@ -40,11 +40,13 @@ import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { HistoryItem } from '../../../types.js';
 import type { TodoContinuationHook } from './useTodoContinuationFlow.js';
 
 export interface AppBootstrapProps {
   config: Config;
+  agent: Agent | null;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -59,6 +61,7 @@ export interface AppBootstrapProps {
 
 export interface AppBootstrapResult {
   config: Config;
+  agent: Agent | null;
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
   isFocused: boolean;
@@ -267,6 +270,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo, h.runtime);
   return {
     config: props.config,
+    agent: props.agent,
     settings: props.settings,
     runtimeMessageBus: props.runtimeMessageBus,
     startupWarnings: props.startupWarnings ?? [],

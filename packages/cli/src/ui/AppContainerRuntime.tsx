@@ -14,6 +14,7 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
 import { UIStateProvider } from './contexts/UIStateContext.js';
@@ -40,6 +41,7 @@ const debug = new DebugLogger('llxprt:ui:appcontainer');
 
 export interface AppContainerRuntimeProps {
   config: Config;
+  agent: Agent | null;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -71,6 +73,7 @@ function buildInputParams(
 ): AppInputParams {
   return {
     config: bootstrap.config,
+    agent: bootstrap.agent,
     settings: bootstrap.settings,
     runtime: bootstrap.runtime,
     history: bootstrap.history,

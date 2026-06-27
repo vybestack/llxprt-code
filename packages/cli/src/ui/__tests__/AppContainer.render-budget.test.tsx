@@ -458,6 +458,7 @@ describe('AppContainer.render-budget', () => {
     it('should maintain stable output across re-renders', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -489,6 +490,7 @@ describe('AppContainer.render-budget', () => {
     it('should not throw on rapid re-renders', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -514,6 +516,7 @@ describe('AppContainer.render-budget', () => {
     it('should use useMemo for computed values', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -533,6 +536,7 @@ describe('AppContainer.render-budget', () => {
     it('should use useCallback for event handlers', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -554,6 +558,7 @@ describe('AppContainer.render-budget', () => {
     it('should mount within reasonable time', async () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -573,6 +578,7 @@ describe('AppContainer.render-budget', () => {
     it('should handle re-renders efficiently', async () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -603,6 +609,7 @@ describe('AppContainer.render-budget', () => {
     it('should complete mount/unmount cycles without errors', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

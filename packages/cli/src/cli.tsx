@@ -130,6 +130,8 @@ import {
   setupSessionRecording,
 } from './cliSessionBootstrap.js';
 import type { SessionRecordingSetup } from './cliSessionBootstrap.js';
+import { fromConfig } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -229,6 +231,7 @@ function handleError(error: Error, errorInfo: ErrorInfo) {
  */
 export async function startInteractiveUI(
   config: Config,
+  agent: Agent | null,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
@@ -274,6 +277,7 @@ export async function startInteractiveUI(
         <SettingsContext.Provider value={settings}>
           <AppWrapper
             config={config}
+            agent={agent}
             settings={settings}
             runtimeMessageBus={runtimeMessageBus}
             startupWarnings={startupWarnings}
@@ -360,6 +364,7 @@ interface PipedOrPromptSessionOptions {
 
 interface SessionDispatchOptions {
   config: Config;
+  agent: Agent | null;
   settings: LoadedSettings;
   workspaceRoot: string;
   sessionMessageBus: MessageBus;
@@ -375,6 +380,7 @@ interface SessionDispatchOptions {
  */
 async function dispatchInteractiveOrNonInteractive({
   config,
+  agent,
   settings,
   workspaceRoot,
   sessionMessageBus,
@@ -399,6 +405,7 @@ async function dispatchInteractiveOrNonInteractive({
 
     await startInteractiveUI(
       config,
+      agent,
       settings,
       startupWarnings,
       workspaceRoot,
@@ -547,6 +554,31 @@ ${finalInput}`;
   return nonInteractiveExitCode;
 }
 
+/**
+ * Constructs the rich Agent facade adopting the initialized Config so that
+ * slash commands can use agent.* sub-surfaces instead of deep Config access.
+ * Returns null when adoption fails (commands gracefully fall back to Config).
+ */
+async function buildAgentFacade(
+  config: Config,
+  sessionMessageBus: MessageBus,
+): Promise<Agent | null> {
+  try {
+    return await fromConfig({
+      config,
+      messageBus: sessionMessageBus,
+      sessionId: config.getSessionId(),
+    });
+  } catch (agentErr) {
+    debugLogger.warn(
+      `Agent facade construction skipped: ${
+        agentErr instanceof Error ? agentErr.message : String(agentErr)
+      }`,
+    );
+    return null;
+  }
+}
+
 export async function main() {
   configureEarlyDebugLogging();
 
@@ -639,8 +671,11 @@ export async function main() {
     return;
   }
 
+  const agent = await buildAgentFacade(config, sessionMessageBus);
+
   await dispatchInteractiveOrNonInteractive({
     config,
+    agent,
     settings,
     workspaceRoot,
     sessionMessageBus,

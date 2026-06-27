@@ -134,6 +134,7 @@ describe('startInteractiveUI', () => {
 
     await startInteractiveUI(
       mockConfig,
+      null,
       mockSettings,
       mockStartupWarnings,
       mockWorkspaceRoot,
@@ -161,6 +162,7 @@ describe('startInteractiveUI', () => {
 
     await startInteractiveUI(
       mockConfig,
+      null,
       mockSettings,
       mockStartupWarnings,
       mockWorkspaceRoot,
@@ -219,6 +221,7 @@ describe('startInteractiveUI', () => {
 
       await startInteractiveUI(
         mouseEnabledConfig,
+        null,
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,
@@ -284,6 +287,7 @@ describe('startInteractiveUI', () => {
 
       await startInteractiveUI(
         mouseEnabledConfig,
+        null,
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,

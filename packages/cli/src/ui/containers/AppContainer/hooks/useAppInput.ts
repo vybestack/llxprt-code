@@ -37,6 +37,7 @@ import type { AppDialogsResult } from './useAppDialogs.js';
 export interface AppInputParams {
   // From bootstrap
   config: AppBootstrapResult['config'];
+  agent: AppBootstrapResult['agent'];
   settings: AppBootstrapResult['settings'];
   runtime: AppBootstrapResult['runtime'];
   history: AppBootstrapResult['history'];
@@ -175,6 +176,7 @@ function useSlashCommandSetup(
 ) {
   const {
     config,
+    agent,
     settings,
     addItem,
     clearItems,
@@ -195,6 +197,7 @@ function useSlashCommandSetup(
   );
   return useSlashCommandProcessor(
     config,
+    agent,
     settings,
     addItem,
     clearItems,

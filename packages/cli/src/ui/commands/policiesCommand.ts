@@ -12,9 +12,6 @@ import {
 } from './types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 
-/**
- * Formats a PolicyDecision enum value for display
- */
 function formatDecision(decision: PolicyDecision): string {
   switch (decision) {
     case PolicyDecision.ALLOW:
@@ -28,9 +25,6 @@ function formatDecision(decision: PolicyDecision): string {
   }
 }
 
-/**
- * Categorizes a priority into a tier band
- */
 function getTierBand(priority: number): string {
   if (priority >= 2.0) {
     return 'Tier 2 (User-defined)';
@@ -40,26 +34,37 @@ function getTierBand(priority: number): string {
   return 'Tier 0 (System)';
 }
 
-/**
- * Handle /policies command - displays active policy rules
- */
-function handlePoliciesCommand(
-  context: CommandContext,
-  _args: string,
+interface PolicyRuleDisplay {
+  priority?: number;
+  toolName?: string;
+  decision: PolicyDecision;
+  argsPatternSource?: string;
+  source?: string;
+}
+
+function toPolicyRuleDisplay(
+  rule: {
+    priority?: number;
+    toolName?: string;
+    decision: PolicyDecision;
+    source?: string;
+  },
+  extractPattern: (r: typeof rule) => string | undefined,
+): PolicyRuleDisplay {
+  return {
+    priority: rule.priority,
+    toolName: rule.toolName,
+    decision: rule.decision,
+    argsPatternSource: extractPattern(rule),
+    source: rule.source,
+  };
+}
+
+function formatPolicyOutput(
+  rules: readonly PolicyRuleDisplay[],
+  defaultDecision: PolicyDecision,
+  nonInteractive: boolean,
 ): MessageActionReturn {
-  const config = context.services.config;
-
-  if (!config) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'Configuration not available',
-    };
-  }
-
-  const policyEngine = config.getPolicyEngine();
-  const rules = policyEngine.getRules();
-
   if (rules.length === 0) {
     return {
       type: 'message',
@@ -68,27 +73,23 @@ function handlePoliciesCommand(
     };
   }
 
-  // Sort by priority (highest first)
   const sortedRules = [...rules].sort(
     (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
   );
 
   const lines: string[] = ['Active Policy Rules:', ''];
 
-  // Group rules by tier
   const tierBands = new Map<string, typeof sortedRules>();
 
   for (const rule of sortedRules) {
     const priority = rule.priority ?? 0;
     const tier = getTierBand(priority);
-
     if (!tierBands.has(tier)) {
       tierBands.set(tier, []);
     }
     tierBands.get(tier)!.push(rule);
   }
 
-  // Display rules grouped by tier
   const tierOrder = [
     'Tier 2 (User-defined)',
     'Tier 1 (Defaults)',
@@ -107,8 +108,8 @@ function handlePoliciesCommand(
       const toolName = rule.toolName ?? '*';
       const decision = formatDecision(rule.decision);
       const priority = rule.priority ?? 0;
-      const argsPattern = rule.argsPattern
-        ? ` (pattern: ${rule.argsPattern.source})`
+      const argsPattern = rule.argsPatternSource
+        ? ` (pattern: ${rule.argsPatternSource})`
         : '';
       const source = rule.source ? ` [Source: ${rule.source}]` : '';
 
@@ -120,12 +121,9 @@ function handlePoliciesCommand(
     lines.push('');
   }
 
-  // Display default decision and mode
+  lines.push(`Default Decision: ${formatDecision(defaultDecision)}`);
   lines.push(
-    `Default Decision: ${formatDecision(policyEngine.getDefaultDecision())}`,
-  );
-  lines.push(
-    `Non-Interactive Mode: ${policyEngine.isNonInteractive() ? 'true (ASK_USER → DENY)' : 'false'}`,
+    `Non-Interactive Mode: ${nonInteractive ? 'true (ASK_USER → DENY)' : 'false'}`,
   );
 
   return {
@@ -135,9 +133,44 @@ function handlePoliciesCommand(
   };
 }
 
-/**
- * Policies command definition
- */
+function handlePoliciesCommand(
+  context: CommandContext,
+  _args: string,
+): MessageActionReturn {
+  const agent = context.services.agent;
+
+  if (agent) {
+    const rules: PolicyRuleDisplay[] = agent.policy
+      .getRules()
+      .map((r) => toPolicyRuleDisplay(r, (rule) => rule.argsPattern));
+    return formatPolicyOutput(
+      rules,
+      agent.policy.getDefaultDecision(),
+      agent.policy.isNonInteractive(),
+    );
+  }
+
+  // Fallback: Config path (tracked migration debt for null agent)
+  const config = context.services.config;
+  if (!config) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Configuration not available',
+    };
+  }
+
+  const policyEngine = config.getPolicyEngine();
+  const rules: PolicyRuleDisplay[] = policyEngine
+    .getRules()
+    .map((r) => toPolicyRuleDisplay(r, (rule) => rule.argsPattern?.source));
+  return formatPolicyOutput(
+    rules,
+    policyEngine.getDefaultDecision(),
+    policyEngine.isNonInteractive(),
+  );
+}
+
 export const policiesCommand: SlashCommand = {
   name: 'policies',
   description: 'display active policy rules and their priorities',

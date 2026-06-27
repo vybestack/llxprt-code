@@ -28,6 +28,7 @@ import type {
   LockHandle,
   IContent,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
 import {
@@ -37,6 +38,7 @@ import {
 
 export interface AppContainerProps {
   config: Config;
+  agent: Agent | null;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];

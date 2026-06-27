@@ -123,7 +123,7 @@ describe('startInteractiveUI ink render options', () => {
 
       const settings = createLoadedSettings();
 
-      await startInteractiveUI(config, settings, [], tempDir);
+      await startInteractiveUI(config, null, settings, [], tempDir);
 
       expect(renderSpy).toHaveBeenCalledTimes(1);
       const [_reactElement, options] = renderSpy.mock.calls[0];
@@ -157,7 +157,7 @@ describe('startInteractiveUI ink render options', () => {
         accessibility: { screenReader: true },
       });
 
-      await startInteractiveUI(config, createLoadedSettings(), [], tempDir);
+      await startInteractiveUI(config, null, createLoadedSettings(), [], tempDir);
 
       expect(renderSpy).toHaveBeenCalledTimes(1);
       const [_reactElement, options] = renderSpy.mock.calls[0];

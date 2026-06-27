@@ -14,6 +14,7 @@ import type {
   MessageBus,
 } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../config/settings.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { KeypressProvider } from './contexts/KeypressContext.js';
 import { MouseProvider } from './contexts/MouseContext.js';
 import { SessionStatsProvider } from './contexts/SessionContext.js';
@@ -31,6 +32,7 @@ import { AppContainer } from './AppContainer.js';
 
 interface AppProps {
   config: Config;
+  agent: Agent | null;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];

@@ -12,6 +12,7 @@ import type {
   RecordingIntegration,
   Todo,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   addMCPStatusChangeListener,
   removeMCPStatusChangeListener,
@@ -48,6 +49,7 @@ interface TodoContextValue {
 
 interface CommandContextInputs {
   config: Config | null;
+  agent: Agent | null;
   settings: LoadedSettings;
   gitService: GitService | undefined;
   logger: Logger;
@@ -184,6 +186,7 @@ export function useCommandContext(
     (): CommandContext => ({
       services: {
         config: inputs.config,
+        agent: inputs.agent,
         settings: inputs.settings,
         git: inputs.gitService,
         logger: inputs.logger,

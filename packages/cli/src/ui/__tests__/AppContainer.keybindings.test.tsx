@@ -508,6 +508,7 @@ describe('AppContainer.keybindings', () => {
     it('should mount component with keybinding handlers active', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -525,6 +526,7 @@ describe('AppContainer.keybindings', () => {
     it('should have copy mode toggle available when using alternate buffer', () => {
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -547,6 +549,7 @@ describe('AppContainer.keybindings', () => {
 
       const props = {
         config: mockConfig as unknown as Config,
+        agent: null,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

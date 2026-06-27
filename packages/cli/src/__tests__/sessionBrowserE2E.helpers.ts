@@ -253,6 +253,7 @@ export function makeCommandContext(
         isInteractive: () =>
           overrides.services?.config?.isInteractive() ?? true,
       } as CommandContext['services']['config'],
+      agent: null,
       settings: {} as CommandContext['services']['settings'],
       git: undefined,
       logger: makeMockLogger(),
