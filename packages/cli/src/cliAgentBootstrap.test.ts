@@ -34,6 +34,8 @@ import {
 interface FakeAgent {
   dispose: ReturnType<typeof vi.fn>;
   getConfig: () => Config;
+  getProvider: () => string | undefined;
+  getModel: () => string;
 }
 
 function makeConfig(
