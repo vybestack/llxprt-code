@@ -17,7 +17,10 @@ import type {
   HookInput,
   HookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from '@vybestack/llxprt-code-tools';
 import type { PolicyDecision } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
 import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
@@ -128,6 +131,7 @@ export interface ProviderStatus {
 }
 
 export type ToolDecision = ToolConfirmationOutcome;
+export type ToolDecisionPayload = ToolConfirmationPayload;
 
 export type McpDiscoveryState =
   | 'idle'
@@ -316,7 +320,12 @@ export interface AgentToolControl {
   list(): readonly ToolInfo[];
   setEnabled(names: readonly string[]): Promise<void>;
   onConfirmationRequest(cb: (req: ToolConfirmation) => void): Unsubscribe;
-  respondToConfirmation(confirmationId: string, decision: ToolDecision): void;
+  respondToConfirmation(
+    confirmationId: string,
+    decision: ToolDecision,
+    payload?: ToolDecisionPayload,
+    requiresUserConfirmation?: boolean,
+  ): void;
   onToolUpdate(cb: (u: ToolUpdate) => void): Unsubscribe;
   setEditorCallbacks(cbs: EditorCallbacks): void;
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
