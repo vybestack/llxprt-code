@@ -15,6 +15,7 @@ import type {
   Agent,
   AgentEvent,
   AgentInput,
+  TurnOptions,
 } from '@vybestack/llxprt-code-agents';
 import { runNonInteractive } from './nonInteractiveCli.js';
 
@@ -29,6 +30,9 @@ const agentState = vi.hoisted(() => ({
   // AgentInput | null (matching the stream() parameter type) so assertions get
   // compile-time checking instead of the looser `unknown`.
   streamInput: null as AgentInput | null,
+  // The TurnOptions (signal/promptId/maxTurns) handed to agent.stream(), so
+  // tests can assert runNonInteractive still forwards prompt_id and maxTurns.
+  streamOpts: null as TurnOptions | null,
   events: [] as AgentEvent[],
 }));
 
@@ -72,8 +76,9 @@ vi.mock('./services/CommandService.js', () => ({
 // this fake accordingly.
 function buildFakeAgent(): Agent {
   return {
-    stream: (input: AgentInput) => {
+    stream: (input: AgentInput, opts?: TurnOptions) => {
       agentState.streamInput = input;
+      agentState.streamOpts = opts ?? null;
       return (async function* generateFakeStream(): AsyncIterable<AgentEvent> {
         for (const event of agentState.events) {
           yield event;
@@ -114,6 +119,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     // Default: the Agent emits a clean stop completion. Individual tests
     // override agentState.events to stage thinking/tool/text sequences.
     agentState.streamInput = null;
+    agentState.streamOpts = null;
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
     mockConfig = {
@@ -201,6 +207,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     // The PROCESSED parts (not the raw input) must reach the Agent stream.
     expect(agentState.streamInput).toStrictEqual(processedParts);
+    // runNonInteractive must forward prompt_id and maxTurns to agent.stream().
+    expect(agentState.streamOpts?.promptId).toBe('prompt-id-7');
+    expect(agentState.streamOpts?.maxTurns).toBe(
+      mockConfig.getMaxSessionTurns(),
+    );
     expect(processStdoutSpy).toHaveBeenCalledWith('Summary complete.');
   });
 
@@ -328,10 +339,12 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     expect(processStdoutSpy).toHaveBeenCalledWith('Acknowledged');
   });
 
-  it('should render tool-call and tool-result events through the Agent stream', async () => {
+  it('should render tool-result display output through the Agent stream', async () => {
     // After migration, tool execution is owned by the Agent. This verifies the
-    // tool-call/tool-result AgentEvents render their display end-to-end through
-    // runNonInteractive.
+    // tool-result AgentEvent renders its display end-to-end through
+    // runNonInteractive. (The tool-call event only writes to the stream-json
+    // formatter, which is null here; its rendering is covered by the
+    // stream-json unit tests in nonInteractiveCli.test.ts.)
     // Allowlist governance (--allowed-tools overriding ShellTool/EditTool/
     // WriteFile exclusion) is config-level and covered by the fast unit suite
     // config/__tests__/toolGovernanceParity.test.ts (getExcludeTools parity) and

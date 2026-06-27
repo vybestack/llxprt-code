@@ -27,6 +27,7 @@ type ParsedStreamEvent = {
   status?: string;
   severity?: string;
   message?: string;
+  error?: { type?: string; message?: string };
 };
 
 async function* streamFromEvents(

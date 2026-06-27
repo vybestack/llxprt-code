@@ -594,7 +594,13 @@ export class AgentImpl implements Agent {
     // by exactly ONE done{reason:'error'} and stops — no model turn runs.
     const gateError = await this.awaitMcpDiscoveryGate(opts);
     if (gateError !== undefined) {
-      yield { type: 'error', error: { message: gateError.message } };
+      // StructuredError has no `code` field, so the typed AgentError code
+      // (e.g. 'mcp_discovery_failed') is prefixed onto the message to keep it
+      // programmatically distinguishable without widening the public type.
+      yield {
+        type: 'error',
+        error: { message: `[${gateError.code}] ${gateError.message}` },
+      };
       yield { type: 'done', reason: 'error' };
       return;
     }
