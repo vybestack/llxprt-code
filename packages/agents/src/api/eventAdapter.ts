@@ -95,6 +95,7 @@ function projectToolResult(
     isError: x.error !== undefined,
     ...(x.resultDisplay !== undefined ? { display: x.resultDisplay } : {}),
     ...(x.suppressDisplay === true ? { suppressDisplay: true } : {}),
+    ...(x.errorType !== undefined ? { errorType: x.errorType } : {}),
   };
 }
 

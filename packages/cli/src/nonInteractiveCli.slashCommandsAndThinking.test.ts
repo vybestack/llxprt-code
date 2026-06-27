@@ -200,7 +200,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     // The PROCESSED parts (not the raw input) must reach the Agent stream.
-    expect(agentState.streamInput).toBe(processedParts);
+    expect(agentState.streamInput).toStrictEqual(processedParts);
     expect(processStdoutSpy).toHaveBeenCalledWith('Summary complete.');
   });
 
