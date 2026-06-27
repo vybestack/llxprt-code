@@ -73,9 +73,11 @@ import {
   shutdownTelemetry,
   isTelemetrySdkInitialized,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
+import { runStartupMigration } from './config/pathMigration.js';
 import {
   cleanupCheckpoints,
   registerCleanup,
@@ -104,7 +106,6 @@ import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
 import { firstNonEmptyString } from './utils/coalesce.js';
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
 import {
   activateConfiguredProvider,
@@ -310,7 +311,7 @@ export async function startInteractiveUI(
 
 /**
  * Patch stdio, register flush-on-exit, install the unhandled-rejection handler,
- * and ensure the user's ~/.llxprt directory exists. Returns the stdio cleanup.
+ * and ensure the platform-standard config directory (or legacy fallback) exists. Returns the stdio cleanup.
  */
 function setupProcessLifecycle(): () => void {
   const cleanupStdio = patchStdio();
@@ -322,7 +323,18 @@ function setupProcessLifecycle(): () => void {
 
   setupUnhandledRejectionHandler();
 
-  const llxprtDir = join(homedir(), '.llxprt');
+  // Migrate legacy ~/.llxprt/ to platform-standard path (if needed),
+  // then ensure the platform directory exists.
+  const migrationResult = runStartupMigration();
+  if (!migrationResult.migrated && migrationResult.error === true) {
+    const legacyDir = Storage.getLegacyLlxprtDir();
+    process.stderr.write(
+      `Warning: configuration migration failed (${migrationResult.reason}). ` +
+        `Falling back to legacy directory ${legacyDir} for this session.\n`,
+    );
+    process.env['LLXPRT_CONFIG_HOME'] = legacyDir;
+  }
+  const llxprtDir = Storage.getGlobalConfigDir();
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }

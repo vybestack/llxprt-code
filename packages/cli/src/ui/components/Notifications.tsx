@@ -18,10 +18,9 @@ import { debugLogger } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 import * as fs from 'node:fs/promises';
-import { homedir } from 'node:os';
 import path from 'node:path';
 
-const settingsPath = path.join(homedir(), '.llxprt-code', 'settings.json');
+const settingsPath = Storage.getGlobalSettingsPath();
 
 const screenReaderNudgeFilePath = path.join(
   Storage.getGlobalTempDir(),

@@ -11,8 +11,8 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { Storage } from '@vybestack/llxprt-code-settings';
 /**
  * @plan:PLAN-20250214-CREDPROXY.P33
  */
@@ -290,7 +290,7 @@ function resolveRuntimeConfig(
   // (registerAgentRuntimeFactories) to avoid a providers→agents cycle.
   attachAgentRuntimeFactories(config);
 
-  const llxprtDir = path.join(os.homedir(), '.llxprt');
+  const llxprtDir = Storage.getGlobalConfigDir();
   const resolvedProfileManager =
     config.getProfileManager() ??
     new ProfileManager(path.join(llxprtDir, 'profiles'));

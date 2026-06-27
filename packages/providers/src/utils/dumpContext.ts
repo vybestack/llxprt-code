@@ -6,7 +6,7 @@
 
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 const logger = new DebugLogger('llxprt:core:dumpContext');
@@ -122,7 +122,7 @@ export async function dumpRequestContext(
   provider: string,
   baseId?: string,
 ): Promise<DumpRequestResult> {
-  const dumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
+  const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   await fs.mkdir(dumpDir, { recursive: true });
 
   const id = baseId ?? generateDumpBaseId(provider);
@@ -152,7 +152,7 @@ export async function dumpResponseContext(
   response: DumpResponse,
   provider: string,
 ): Promise<DumpResponseResult> {
-  const dumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
+  const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   await fs.mkdir(dumpDir, { recursive: true });
 
   const id = baseId ?? generateDumpBaseId(provider);
@@ -173,7 +173,7 @@ export async function dumpResponseContext(
 }
 
 /**
- * Dumps context to separate related request and response files in ~/.llxprt/dumps/.
+ * Dumps context to separate related request and response files in the global llxprt configuration directory (dumps/ subdirectory).
  * Returns the shared base id used by the generated filenames.
  */
 export async function dumpContext(

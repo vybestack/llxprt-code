@@ -15,8 +15,8 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { join, isAbsolute, resolve } from 'node:path';
+import { homedir, platform, tmpdir } from 'node:os';
 import {
   OAuthTokenSchema,
   type OAuthToken,
@@ -43,10 +43,35 @@ const DEFAULT_STALE_THRESHOLD_MS = 30_000;
 const LOCK_POLL_INTERVAL_MS = 100;
 const LOCK_WRITE_GRACE_MS = 750;
 
-/** Lazily resolved to avoid crashing when homedir() is undefined at import time. */
-let _lockDir: string | undefined;
+// Inline platform config path matching envPaths('llxprt-code', { suffix: '' }).config
+// without importing the package (auth is a leaf package with no extra deps).
+function getPlatformConfigDir(): string {
+  const home = homedir() || tmpdir();
+  if (platform() === 'darwin') {
+    return join(home, 'Library', 'Preferences', 'llxprt-code');
+  }
+  if (platform() === 'win32') {
+    const rawAppData = process.env['APPDATA'] ?? '';
+    const appData =
+      rawAppData !== '' ? rawAppData : join(home, 'AppData', 'Roaming');
+    return join(appData, 'llxprt-code', 'Config');
+  }
+  const rawXdgConfig = process.env['XDG_CONFIG_HOME'] ?? '';
+  const xdgConfig = rawXdgConfig !== '' ? rawXdgConfig : join(home, '.config');
+  return join(xdgConfig, 'llxprt-code');
+}
+
+/** Resolves the lock directory based on LLXPRT_CONFIG_HOME or the platform config dir.
+ * Called once during construction; runtime env changes will not affect an
+ * existing instance. Pass an explicit lockDir to override. */
 function getLockDir(): string {
-  return (_lockDir ??= join(homedir(), '.llxprt', 'oauth', 'locks'));
+  const rawConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+  const trimmed = rawConfigHome?.trim();
+  const baseDir =
+    trimmed !== undefined && trimmed !== '' && isAbsolute(trimmed)
+      ? resolve(trimmed)
+      : getPlatformConfigDir();
+  return join(baseDir, 'oauth', 'locks');
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

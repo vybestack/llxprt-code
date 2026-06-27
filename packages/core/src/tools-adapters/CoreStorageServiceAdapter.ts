@@ -10,7 +10,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 
 export class CoreStorageServiceAdapter implements IStorageService {
   getLLXPRTDir(): string {
-    return Storage.getGlobalLlxprtDir();
+    return Storage.getGlobalDataDir();
   }
 
   async readFile(filePath: string): Promise<string> {

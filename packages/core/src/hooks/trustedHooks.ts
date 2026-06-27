@@ -25,7 +25,7 @@ export class TrustedHooksManager {
 
   constructor() {
     this.filePath = path.join(
-      Storage.getGlobalLlxprtDir(),
+      Storage.getGlobalConfigDir(),
       TRUSTED_HOOKS_FILENAME,
     );
   }

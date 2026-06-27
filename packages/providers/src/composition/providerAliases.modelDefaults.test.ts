@@ -38,12 +38,12 @@ async function loadWithTempConfig(
   const configPath = path.join(fakeProvidersDir, filename);
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-  vi.spyOn(Storage, 'getGlobalLlxprtDir').mockReturnValue(fakeLlxprtDir);
+  vi.spyOn(Storage, 'getGlobalDataDir').mockReturnValue(fakeLlxprtDir);
 
   try {
     return loadProviderAliasEntries();
   } finally {
-    vi.mocked(Storage.getGlobalLlxprtDir).mockRestore();
+    vi.mocked(Storage.getGlobalDataDir).mockRestore();
   }
 }
 
@@ -589,7 +589,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
       JSON.stringify(userConfig, null, 2),
     );
 
-    vi.spyOn(Storage, 'getGlobalLlxprtDir').mockReturnValue(fakeLlxprtDir);
+    vi.spyOn(Storage, 'getGlobalDataDir').mockReturnValue(fakeLlxprtDir);
 
     try {
       const entries = loadProviderAliasEntries();
@@ -612,7 +612,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
         ],
       ).toBe(true);
     } finally {
-      vi.mocked(Storage.getGlobalLlxprtDir).mockRestore();
+      vi.mocked(Storage.getGlobalDataDir).mockRestore();
     }
   });
 });

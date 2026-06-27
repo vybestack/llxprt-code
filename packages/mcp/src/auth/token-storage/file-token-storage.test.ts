@@ -17,6 +17,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { decryptEnvelopeString } from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 import { FileTokenStorage } from './file-token-storage.js';
@@ -63,10 +64,12 @@ vi.mock('node:os', () => ({
     homedir: vi.fn(() => '/home/test'),
     hostname: vi.fn(() => 'test-host'),
     userInfo: vi.fn(() => ({ username: 'test-user' })),
+    tmpdir: vi.fn(() => '/tmp'),
   },
   homedir: vi.fn(() => '/home/test'),
   hostname: vi.fn(() => 'test-host'),
   userInfo: vi.fn(() => ({ username: 'test-user' })),
+  tmpdir: vi.fn(() => '/tmp'),
 }));
 
 const FIXED_SECRET = crypto.randomBytes(32);
@@ -116,9 +119,13 @@ describe('FileTokenStorage', () => {
     },
     updatedAt: Date.now() - 10000,
   };
+  const CONFIG_HOME = path.resolve(
+    path.join(os.tmpdir(), 'llxprt-test-config-home'),
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env['LLXPRT_CONFIG_HOME'] = CONFIG_HOME;
     // chmod is invoked after every write to tighten permissions on overwrite;
     // default it to resolve so write-path tests do not need to wire it up.
     mockFs.chmod.mockResolvedValue(undefined);
@@ -129,6 +136,7 @@ describe('FileTokenStorage', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    delete process.env['LLXPRT_CONFIG_HOME'];
   });
 
   describe('getCredentials', () => {
@@ -210,10 +218,10 @@ describe('FileTokenStorage', () => {
 
       await storage.setCredentials(credentials);
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt'),
-        { recursive: true, mode: 0o700 },
-      );
+      expect(mockFs.mkdir).toHaveBeenCalledWith(CONFIG_HOME, {
+        recursive: true,
+        mode: 0o700,
+      });
       expect(mockFs.writeFile).toHaveBeenCalled();
 
       const writeCall = mockFs.writeFile.mock.calls[0];
@@ -251,10 +259,10 @@ describe('FileTokenStorage', () => {
 
       await storage.setCredentials(credentials);
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt'),
-        { recursive: true, mode: 0o700 },
-      );
+      expect(mockFs.mkdir).toHaveBeenCalledWith(CONFIG_HOME, {
+        recursive: true,
+        mode: 0o700,
+      });
       expect(mockFs.writeFile).toHaveBeenCalled();
 
       const writeCall = mockFs.writeFile.mock.calls[0];
@@ -326,7 +334,7 @@ describe('FileTokenStorage', () => {
           /permissions could not be restricted/,
         );
         expect(mockFs.unlink).toHaveBeenCalledWith(
-          path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
+          path.join(CONFIG_HOME, 'mcp-oauth-tokens-v2.json'),
         );
       },
     );
@@ -387,7 +395,7 @@ describe('FileTokenStorage', () => {
       await storage.deleteCredentials('test-server');
 
       expect(mockFs.unlink).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
+        path.join(CONFIG_HOME, 'mcp-oauth-tokens-v2.json'),
       );
     });
 
@@ -468,7 +476,7 @@ describe('FileTokenStorage', () => {
       await storage.clearAll();
 
       expect(mockFs.unlink).toHaveBeenCalledWith(
-        path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
+        path.join(CONFIG_HOME, 'mcp-oauth-tokens-v2.json'),
       );
     });
 

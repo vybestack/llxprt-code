@@ -15,7 +15,7 @@
  */
 
 import * as path from 'node:path';
-import * as os from 'node:os';
+import { Storage } from '../config/storage.js';
 import { SecureStore } from './secure-store.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -27,14 +27,8 @@ export const KEY_NAME_REGEX = /^[a-zA-Z0-9._-]{1,64}$/;
 const SERVICE_NAME = 'llxprt-code-provider-keys';
 
 /** @pseudocode line 14 */
-const DEFAULT_FALLBACK_DIR = (): string => {
-  const homeDir = os.homedir();
-  if (typeof homeDir === 'string' && homeDir.length > 0) {
-    return path.join(homeDir, '.llxprt', 'provider-keys');
-  }
-  const tmpDir = os.tmpdir();
-  return path.join(tmpDir, 'llxprt-provider-keys');
-};
+const DEFAULT_FALLBACK_DIR = (): string =>
+  path.join(Storage.getGlobalDataDir(), 'provider-keys');
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 

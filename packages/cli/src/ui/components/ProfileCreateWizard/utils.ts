@@ -7,6 +7,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { PROVIDER_OPTIONS } from './constants.js';
 import { WizardStep } from './types.js';
 import type { WizardState, ConnectionTestResult } from './types.js';
@@ -137,7 +138,7 @@ export async function saveProfile(
   alreadyExists?: boolean;
 }> {
   try {
-    const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
+    const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
 
     // Ensure directory exists with restrictive permissions (owner-only)
     await fs.mkdir(profilesDir, { recursive: true, mode: 0o700 });

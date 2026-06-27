@@ -8,7 +8,7 @@ import type React from 'react';
 import { useState, useCallback, useEffect } from 'react';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
@@ -29,7 +29,7 @@ const useExistingProfiles = () => {
   useEffect(() => {
     const loadExistingProfiles = async () => {
       try {
-        const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
+        const profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
         const files = await fs.readdir(profilesDir);
         const profileNames = files
           .filter((f) => f.endsWith('.json'))

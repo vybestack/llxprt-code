@@ -8,6 +8,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
 import {
@@ -24,7 +25,7 @@ import {
 export interface FileTokenStorageOptions {
   /**
    * Overrides the on-disk token file path. Defaults to
-   * `~/.llxprt/mcp-oauth-tokens-v2.json`. Exposed for deterministic tests.
+   * `<global-data-dir>/mcp-oauth-tokens-v2.json`. Exposed for deterministic tests.
    */
   tokenFilePath?: string;
   /**
@@ -52,7 +53,7 @@ export class FileTokenStorage extends BaseTokenStorage {
 
   constructor(serviceName: string, options?: FileTokenStorageOptions) {
     super(serviceName);
-    const configDir = path.join(os.homedir(), '.llxprt');
+    const configDir = Storage.getGlobalDataDir();
     this.tokenFilePath =
       options?.tokenFilePath ??
       path.join(configDir, 'mcp-oauth-tokens-v2.json');

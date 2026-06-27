@@ -8,16 +8,23 @@ import path from 'node:path';
 import os from 'os';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 export const LLXPRT_DIR = '.llxprt';
 export const GOOGLE_ACCOUNTS_FILENAME = 'google_accounts.json';
 
-export function ensureLlxprtDirExists() {
-  const homeDir = os.homedir();
-  const llxprtDir = path.join(homeDir, LLXPRT_DIR);
-  if (!fs.existsSync(llxprtDir)) {
-    fs.mkdirSync(llxprtDir, { recursive: true });
+/**
+ * Ensures an arbitrary directory exists, creating it (and intermediate
+ * directories) if needed.
+ */
+export function ensureDir(dir: string): void {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
+}
+
+export function ensureGlobalConfigDirExists() {
+  ensureDir(Storage.getGlobalConfigDir());
 }
 
 /**

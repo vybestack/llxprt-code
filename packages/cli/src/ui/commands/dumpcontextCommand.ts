@@ -24,7 +24,7 @@ import {
   dumpRequestContext,
 } from '@vybestack/llxprt-code-providers';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import * as os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 
 type HistoryService = { getAll: () => unknown };
@@ -184,7 +184,7 @@ export const dumpcontextCommand: SlashCommand = {
         };
       }
 
-      const dumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
+      const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
 
       // Handle status command
       if (mode === 'status') {
