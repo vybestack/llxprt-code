@@ -21,11 +21,9 @@ import {
   Config,
   type KeyringTokenStore,
   MessageBus,
-  type ProviderRuntimeContext,
   flushRuntimeAuthScope,
   type RuntimeAuthScopeFlushResult,
   SubagentManager,
-  type ConfigParameters,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -89,16 +87,21 @@ function attachAgentRuntimeFactories(config: Config): void {
     //     surfaces as a clear error rather than silent incorrect behavior.
     return;
   }
-  const mutableConfig = config as unknown as Pick<
-    ConfigParameters,
-    'agentClientFactory' | 'toolSchedulerFactory' | 'taskToolRegistration'
-  >;
-  mutableConfig.agentClientFactory ??=
-    agentRuntimeFactoryBindings.agentClientFactory;
-  mutableConfig.toolSchedulerFactory ??=
-    agentRuntimeFactoryBindings.toolSchedulerFactory;
-  mutableConfig.taskToolRegistration ??=
-    agentRuntimeFactoryBindings.taskToolRegistration();
+  if (config.getToolSchedulerFactory() === undefined) {
+    config.setToolSchedulerFactory(
+      agentRuntimeFactoryBindings.toolSchedulerFactory,
+    );
+  }
+  if (config.getAgentClientFactory() === undefined) {
+    config.setAgentClientFactory(
+      agentRuntimeFactoryBindings.agentClientFactory,
+    );
+  }
+  if (config.getTaskToolRegistration() === undefined) {
+    config.setTaskToolRegistration(
+      agentRuntimeFactoryBindings.taskToolRegistration(),
+    );
+  }
 }
 
 let sharedTokenStore: KeyringTokenStore | null = null;
@@ -369,9 +372,7 @@ function buildActivateClosure(
         runtimeId: state.currentRuntimeId,
         metadata: state.currentMetadata,
       });
-      (
-        providerManager as unknown as { runtime?: ProviderRuntimeContext }
-      ).runtime = scopedRuntime;
+      providerManager.setRuntimeContext(scopedRuntime);
 
       await Promise.resolve(bindings.resetInfrastructure());
       await Promise.resolve(

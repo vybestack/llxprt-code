@@ -9,7 +9,6 @@
  * @requirement REQ-INT-001.1
  */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { ProviderManager } from '../ProviderManager.js';
 import { getActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ConversationCache } from './ConversationCache.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
@@ -19,13 +18,12 @@ const logger = new DebugLogger('llxprt:openai:provider');
 
 // Helper types leveraging public APIs
 
-type OpenAIProviderLike = {
+export type OpenAIProviderLike = {
   name: string;
   getCurrentModel?: () => string;
   getConversationCache?: () => ConversationCache;
   shouldUseResponses?: (model: string) => boolean;
-  // Fallback index signature for accessing other dynamic props safely
-  [key: string]: unknown;
+  conversationCache?: ConversationCache;
 };
 
 export interface OpenAIProviderInfo {
@@ -41,12 +39,18 @@ export interface OpenAIProviderInfo {
 }
 
 /**
- * Retrieves OpenAI provider information from the current ProviderManager instance
- * @param providerManager The ProviderManager instance
+ * Retrieves OpenAI provider information from a provider manager.
+ *
+ * Accepts the minimal structural surface (`OpenAIProviderInfoSource`) the
+ * function actually consumes, so callers holding the core
+ * `RuntimeProviderManager` contract (rather than the concrete providers
+ * `ProviderManager`) can pass it directly without a type-escape cast.
+ *
+ * @param providerManager A structural provider-info source, or null/undefined
  * @returns OpenAI provider info if available, null values otherwise
  */
 export function getOpenAIProviderInfo(
-  providerManager?: ProviderManager | null,
+  providerManager?: OpenAIProviderInfoSource | null,
 ): OpenAIProviderInfo {
   const result: OpenAIProviderInfo = {
     provider: null,
@@ -84,14 +88,14 @@ export function getOpenAIProviderInfo(
   return result;
 }
 
-type ProviderInfoManager = {
+export type OpenAIProviderInfoSource = {
   hasActiveProvider: () => boolean;
   getActiveProviderName: () => string | undefined;
-  getActiveProvider: () => { name: string } | undefined;
+  getActiveProvider: () => OpenAIProviderLike | undefined;
 };
 
 type ProviderInfoConfig = {
-  getProviderManager?: () => ProviderInfoManager | undefined;
+  getProviderManager?: () => OpenAIProviderInfoSource | undefined;
   getProvider?: () => string | undefined;
   getModel?: () => string | undefined;
 };
@@ -102,9 +106,9 @@ type ProviderInfoSettings = {
 };
 
 function resolveManager(
-  providerManager: ProviderManager | null | undefined,
+  providerManager: OpenAIProviderInfoSource | null | undefined,
   config: ProviderInfoConfig | undefined,
-): ProviderInfoManager | null | undefined {
+): OpenAIProviderInfoSource | null | undefined {
   const runtimeManager =
     typeof config?.getProviderManager === 'function'
       ? config.getProviderManager()
@@ -113,7 +117,7 @@ function resolveManager(
 }
 
 function resolveActiveProviderName(
-  manager: ProviderInfoManager | null | undefined,
+  manager: OpenAIProviderInfoSource | null | undefined,
   config: ProviderInfoConfig | undefined,
 ): string | undefined {
   return (
@@ -127,7 +131,7 @@ function resolveActiveProviderName(
 }
 
 function resolveOpenAIProvider(
-  manager: ProviderInfoManager | null | undefined,
+  manager: OpenAIProviderInfoSource | null | undefined,
 ): OpenAIProviderLike | null {
   if (manager?.hasActiveProvider() !== true) {
     return null;
@@ -136,7 +140,7 @@ function resolveOpenAIProvider(
   if (activeProvider === undefined || activeProvider.name !== 'openai') {
     return null;
   }
-  return activeProvider as unknown as OpenAIProviderLike;
+  return activeProvider;
 }
 
 function resolveConversationCache(
@@ -149,10 +153,7 @@ function resolveConversationCache(
     return openaiProvider.getConversationCache();
   }
   if ('conversationCache' in openaiProvider) {
-    return (
-      (openaiProvider as { conversationCache?: ConversationCache })
-        .conversationCache ?? null
-    );
+    return openaiProvider.conversationCache ?? null;
   }
   return null;
 }

@@ -23,7 +23,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { ProviderManager } from '../ProviderManager.js';
-import type { IProviderManager } from '../IProviderManager.js';
 import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
 import { OpenAITokenizer } from '../tokenizers/OpenAITokenizer.js';
@@ -154,14 +153,11 @@ function createRuntimeContentGeneratorFactory(
 ): RuntimeContentGeneratorFactory<ContentGenerator> {
   return {
     createContentGenerator(manager: RuntimeProviderManager) {
-      return new ProviderContentGenerator(
-        manager as unknown as IProviderManager,
-        {
-          model: config.getModel(),
-          providerManager: manager,
-          proxy: config.getProxy(),
-        },
-      );
+      return new ProviderContentGenerator(manager, {
+        model: config.getModel(),
+        providerManager: manager,
+        proxy: config.getProxy(),
+      });
     },
   };
 }
@@ -245,21 +241,7 @@ function attachAddItemToOAuthProviders(
   if (!addItem) {
     return;
   }
-
-  const providersMap = (
-    oauthManager as unknown as { providers?: Map<string, unknown> }
-  ).providers;
-
-  if (!(providersMap instanceof Map)) {
-    return;
-  }
-
-  for (const provider of providersMap.values()) {
-    const candidate = provider as {
-      setAddItem?: (callback: typeof addItem) => void;
-    };
-    candidate.setAddItem?.(addItem);
-  }
+  oauthManager.attachAddItemToProviders(addItem);
 }
 
 function coerceAuthOnly(value: unknown): boolean | undefined {
@@ -509,10 +491,7 @@ export function createProviderManager(
 ): { manager: ProviderManager; oauthManager: OAuthManager } {
   const fs = getFileSystem();
   const userSettings = resolveUserSettings(fs);
-  const ManagerCtor = ProviderManager as unknown as {
-    new (context?: unknown): ProviderManager;
-  };
-  const manager = new ManagerCtor(context);
+  const manager = new ProviderManager(context);
 
   // @plan:PLAN-20250214-CREDPROXY.P33
   const tokenStore = createTokenStore();

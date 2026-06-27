@@ -199,6 +199,18 @@ export class ProviderManager implements IProviderManager {
   }
 
   /**
+   * Replaces the active provider runtime context. Used by the isolated-runtime
+   * activation flow to install a scoped settings-backed runtime onto the
+   * manager without reaching into private state.
+   *
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP4-004
+   */
+  setRuntimeContext(runtime: ProviderRuntimeContext): void {
+    this.runtime = runtime;
+  }
+
+  /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @plan PLAN-20260128issue808
    * @requirement REQ-SP2-001

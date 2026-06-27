@@ -242,6 +242,42 @@ export abstract class ConfigBaseCore {
   }
   /**
    * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-002
+   */
+  setToolSchedulerFactory(factory: ToolSchedulerFactory | undefined): void {
+    this.toolSchedulerFactory = factory;
+  }
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   * Public typed setter so the runtime composition root can inject the
+   * agent client factory without mutating a protected field via a cast.
+   */
+  setAgentClientFactory(factory: AgentClientFactory | undefined): void {
+    this.agentClientFactory = factory;
+  }
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   * Public typed getter so the runtime composition root can detect whether
+   * an agent client factory has already been provided before injecting one.
+   */
+  getAgentClientFactory(): AgentClientFactory | undefined {
+    return this.agentClientFactory;
+  }
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
+   * @requirement REQ-INV-003
+   * Public typed setter so the runtime composition root can inject the
+   * task tool registration without mutating a protected field via a cast.
+   */
+  setTaskToolRegistration(
+    registration: TaskToolRegistration | undefined,
+  ): void {
+    this.taskToolRegistration = registration;
+  }
+  /**
+   * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
    */
   protected agentClientFactory: AgentClientFactory | undefined;

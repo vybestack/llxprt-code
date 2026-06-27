@@ -57,11 +57,30 @@ export function validateKeyName(name: string): void {
 // ─── ProviderKeyStorage Class ────────────────────────────────────────────────
 
 /**
+ * Structural contract for named provider API key storage.
+ *
+ * Both the direct {@link ProviderKeyStorage} and proxy-backed implementations
+ * (e.g. `ProxyProviderKeyStorage` in the auth package) satisfy this interface,
+ * allowing consumers to depend on the shared surface without coupling to a
+ * specific concrete class.
+ *
+ * @plan PLAN-20260211-SECURESTORE.P12
+ * @requirement R9.1
+ */
+export interface ProviderKeyStorageLike {
+  saveKey(name: string, apiKey: string): Promise<void>;
+  getKey(name: string): Promise<string | null>;
+  deleteKey(name: string): Promise<boolean>;
+  listKeys(): Promise<string[]>;
+  hasKey(name: string): Promise<boolean>;
+}
+
+/**
  * @plan PLAN-20260211-SECURESTORE.P12
  * @pseudocode lines 11-65
  * @requirement R9.1
  */
-export class ProviderKeyStorage {
+export class ProviderKeyStorage implements ProviderKeyStorageLike {
   private readonly secureStore: SecureStore;
 
   /** @pseudocode lines 16-24 */

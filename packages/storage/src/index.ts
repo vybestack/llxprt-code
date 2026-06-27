@@ -38,6 +38,7 @@ export {
   resetProviderKeyStorage,
   validateKeyName,
 } from './secure-store/provider-key-storage.js';
+export type { ProviderKeyStorageLike } from './secure-store/provider-key-storage.js';
 
 // Shared envelope codec for sibling encrypted file stores
 export {
