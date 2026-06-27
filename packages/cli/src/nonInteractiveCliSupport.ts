@@ -315,11 +315,116 @@ function handleDone(
   }
 }
 
+function finalizeStream(
+  thoughtBuffer: string,
+  jsonResponseText: string,
+  pendingDone: Extract<AgentEvent, { type: 'done' }> | null,
+  context: StreamConsumerContext,
+  includeThinking: boolean,
+  startTime: number,
+  getMetrics: () => SessionMetrics,
+): void {
+  flushThoughtBuffer(thoughtBuffer, includeThinking);
+  const finalText = flushEmojiBuffer(context, jsonResponseText);
+  if (pendingDone !== null) {
+    handleDone(pendingDone, context, finalText, startTime, getMetrics);
+  } else {
+    emitFinalResult(context, finalText, startTime, getMetrics());
+  }
+}
+
+interface StreamState {
+  thoughtBuffer: string;
+  jsonResponseText: string;
+  pendingDone: Extract<AgentEvent, { type: 'done' }> | null;
+}
+
+function dispatchAgentEvent(
+  event: AgentEvent,
+  state: StreamState,
+  context: StreamConsumerContext,
+  writeProfileName: () => void,
+  includeThinking: boolean,
+): void {
+  switch (event.type) {
+    case 'thinking':
+      state.thoughtBuffer = handleThinking(
+        event.thought,
+        context,
+        writeProfileName,
+        state.thoughtBuffer,
+        includeThinking,
+      );
+      return;
+    case 'text':
+      state.thoughtBuffer = flushThoughtBuffer(
+        state.thoughtBuffer,
+        includeThinking,
+      );
+      state.jsonResponseText = handleText(
+        event.text,
+        context,
+        writeProfileName,
+        state.jsonResponseText,
+      );
+      return;
+    case 'tool-call':
+      state.thoughtBuffer = flushThoughtBuffer(
+        state.thoughtBuffer,
+        includeThinking,
+      );
+      emitToolUse(event.call, context.streamFormatter);
+      return;
+    case 'tool-result':
+      state.thoughtBuffer = flushThoughtBuffer(
+        state.thoughtBuffer,
+        includeThinking,
+      );
+      emitToolResult(event.result, context.streamFormatter);
+      displayToolResult(event.result, context);
+      return;
+    case 'loop-detected':
+      emitStreamError(
+        context.streamFormatter,
+        'warning',
+        'Loop detected, stopping execution',
+      );
+      return;
+    case 'hook-blocked': {
+      const info = event.info;
+      const blockMessage = `Agent execution blocked: ${
+        info.systemMessage?.trim() ?? info.reason
+      }`;
+      process.stderr.write(`[WARNING] ${blockMessage}\n`);
+      return;
+    }
+    case 'idle-timeout':
+      emitStreamError(
+        context.streamFormatter,
+        'error',
+        'Stream idle timeout: no response received within the allowed time.',
+      );
+      throw reconstructError(event.error);
+    case 'error':
+      throw reconstructError(event.error);
+    case 'done':
+      state.pendingDone = event;
+      return;
+    default:
+      return;
+  }
+}
+
 /**
  * Consumes a public {@link AgentEvent} stream produced by `agent.stream()` and
  * maps each event onto the existing non-interactive output helpers (stdout
  * write, JSON accumulation, stream-JSON emission), preserving the user-visible
  * output, exit-code, and stderr behavior of the legacy manual turn loop.
+ *
+ * The loop emits a per-turn `done` (from `Finished`); when a tool is requested
+ * the loop continues past it. This consumer records each `done` and acts only
+ * on the final one at stream exhaustion — returning early would abandon the
+ * generator mid-loop and prevent tool execution.
  */
 export async function processAgentStream(
   events: AsyncIterable<AgentEvent>,
@@ -332,75 +437,27 @@ export async function processAgentStream(
     !context.jsonOutput &&
     !context.streamJsonOutput &&
     context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
-  let thoughtBuffer = '';
-  let jsonResponseText = '';
-
+  const state: StreamState = {
+    thoughtBuffer: '',
+    jsonResponseText: '',
+    pendingDone: null,
+  };
   for await (const event of events) {
-    switch (event.type) {
-      case 'thinking':
-        thoughtBuffer = handleThinking(
-          event.thought,
-          context,
-          writeProfileName,
-          thoughtBuffer,
-          includeThinking,
-        );
-        break;
-      case 'text':
-        thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
-        jsonResponseText = handleText(
-          event.text,
-          context,
-          writeProfileName,
-          jsonResponseText,
-        );
-        break;
-      case 'tool-call':
-        thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
-        emitToolUse(event.call, context.streamFormatter);
-        break;
-      case 'tool-result':
-        thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
-        emitToolResult(event.result, context.streamFormatter);
-        displayToolResult(event.result, context);
-        break;
-      case 'loop-detected':
-        emitStreamError(
-          context.streamFormatter,
-          'warning',
-          'Loop detected, stopping execution',
-        );
-        break;
-      case 'hook-blocked': {
-        const info = event.info;
-        const blockMessage = `Agent execution blocked: ${
-          info.systemMessage?.trim() ?? info.reason
-        }`;
-        process.stderr.write(`[WARNING] ${blockMessage}\n`);
-        break;
-      }
-      case 'idle-timeout':
-        emitStreamError(
-          context.streamFormatter,
-          'error',
-          'Stream idle timeout: no response received within the allowed time.',
-        );
-        throw reconstructError(event.error);
-      case 'error':
-        throw reconstructError(event.error);
-      case 'done':
-        thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
-        jsonResponseText = flushEmojiBuffer(context, jsonResponseText);
-        handleDone(event, context, jsonResponseText, startTime, getMetrics);
-        return;
-      default:
-        break;
-    }
+    dispatchAgentEvent(
+      event,
+      state,
+      context,
+      writeProfileName,
+      includeThinking,
+    );
   }
-
-  // Defensive: emit a final result if the stream ended without a terminal
-  // done event (the Agent stream always ends with one, but guard regardless).
-  thoughtBuffer = flushThoughtBuffer(thoughtBuffer, includeThinking);
-  jsonResponseText = flushEmojiBuffer(context, jsonResponseText);
-  emitFinalResult(context, jsonResponseText, startTime, getMetrics());
+  finalizeStream(
+    state.thoughtBuffer,
+    state.jsonResponseText,
+    state.pendingDone,
+    context,
+    includeThinking,
+    startTime,
+    getMetrics,
+  );
 }
