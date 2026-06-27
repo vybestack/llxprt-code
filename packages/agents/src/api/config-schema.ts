@@ -163,6 +163,52 @@ export const McpServerConfigSchema = z.object({
   targetAudience: z.string().optional(),
   targetServiceAccount: z.string().optional(),
 });
+
+const AgentSkillDefinitionSchema = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    location: z.string(),
+    body: z.string(),
+    disabled: z.boolean().optional(),
+    source: z.enum(['builtin', 'extension', 'user', 'project']).optional(),
+  })
+  .strict();
+
+const AgentSandboxSchema = z
+  .object({
+    command: z.enum(['docker', 'podman', 'sandbox-exec']),
+    image: z.string(),
+  })
+  .strict();
+
+const AgentExtensionSchema = z
+  .object({
+    name: z.string(),
+    version: z.string(),
+    isActive: z.boolean(),
+    path: z.string(),
+    mcpServers: z.record(McpServerConfigSchema).optional(),
+    contextFiles: z.array(z.string()),
+    excludeTools: z.array(z.string()).optional(),
+    hooks: z.record(z.array(z.record(z.unknown()))).optional(),
+    skills: z.array(AgentSkillDefinitionSchema).optional(),
+    settings: z.array(z.record(z.unknown())).optional(),
+    resolvedSettings: z.array(z.record(z.unknown())).optional(),
+    subagents: z
+      .array(
+        z
+          .object({
+            name: z.string(),
+            profile: z.string(),
+            systemPrompt: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+
 const LspServerConfigSchema = z
   .object({
     id: z.string(),
@@ -170,15 +216,25 @@ const LspServerConfigSchema = z
     args: z.array(z.string()).optional(),
     rootUri: z.string().optional(),
   })
-  .passthrough() as z.ZodType<LspServerConfig>;
+  .strict() as z.ZodType<LspServerConfig>;
 
 export const LspConfigSchema = z.union([
   z.boolean(),
   z
     .object({
       servers: z.array(LspServerConfigSchema),
+      includeSeverities: z
+        .array(z.enum(['error', 'warning', 'info', 'hint']))
+        .optional(),
+      maxDiagnosticsPerFile: z.number().optional(),
+      maxProjectDiagnosticsFiles: z.number().optional(),
+      diagnosticTimeout: z.number().optional(),
+      firstTouchTimeout: z.number().optional(),
+      navigationTimeout: z.number().optional(),
+      navigationTools: z.boolean().optional(),
+      requestTimeout: z.number().optional(),
     })
-    .passthrough(),
+    .strict(),
 ]) as z.ZodType<boolean | LspConfig>;
 
 export const AgentConfigSchema = z
@@ -207,7 +263,7 @@ export const AgentConfigSchema = z
     checkpointing: z.boolean().optional(),
     recording: AgentRecordingSchema.optional(),
     policy: z.record(z.unknown()).optional(),
-    extensions: z.array(z.record(z.unknown())).optional(),
+    extensions: z.array(AgentExtensionSchema).optional(),
     ide: AgentIdeSchema.optional(),
     hooks: z.record(z.unknown()).optional(),
     memory: z.string().optional(),
@@ -216,13 +272,13 @@ export const AgentConfigSchema = z
     adminSkillsEnabled: z.boolean().optional(),
     streamIdleTimeoutMs: z.number().optional(),
     toolOutputLimits: AgentToolOutputLimitsSchema.optional(),
-    outputFormat: z.string().optional(),
+    outputFormat: z.enum(['text', 'json', 'stream-json']).optional(),
     shell: AgentShellSchema.optional(),
     contextLimit: z.number().optional(),
     compressionThreshold: z.number().optional(),
-    skills: z.array(z.record(z.unknown())).optional(),
+    skills: z.array(AgentSkillDefinitionSchema).optional(),
     useWriteTodos: z.boolean().optional(),
-    sandbox: z.record(z.unknown()).optional(),
+    sandbox: AgentSandboxSchema.optional(),
     folderTrust: z.boolean().optional(),
     embeddingModel: z.string().optional(),
     debugMode: z.boolean().optional(),

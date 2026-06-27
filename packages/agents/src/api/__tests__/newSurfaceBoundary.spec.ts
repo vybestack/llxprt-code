@@ -97,9 +97,9 @@ describe('new public surfaces are exported from the public root @plan:PLAN-20260
       provider: 'fake',
       model: 'fake-model',
       harness: { forceInteractive: false },
-    } as AgentConfig;
+    } satisfies AgentConfig;
     expect(config.harness).toBeDefined();
-    expect(config.harness?.forceInteractive).toBe(false);
+    expect(config.harness.forceInteractive).toBe(false);
   });
 
   it('SkillInfo shape omits prompt body from public metadata @requirement:boundary', () => {

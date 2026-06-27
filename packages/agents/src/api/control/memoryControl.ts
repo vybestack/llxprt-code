@@ -40,7 +40,11 @@ export class MemoryControl implements AgentMemoryControl {
   }
 
   setMemory(content: string): void {
-    this.deps.config.setUserMemory(content);
+    try {
+      this.deps.config.setUserMemory(content);
+    } catch (err) {
+      throw createControlError('Failed to update memory', err);
+    }
     this.emitLocalMemoryChanged();
   }
 
@@ -61,7 +65,11 @@ export class MemoryControl implements AgentMemoryControl {
   }
 
   setCoreMemory(content: string): void {
-    this.deps.config.setCoreMemory(content);
+    try {
+      this.deps.config.setCoreMemory(content);
+    } catch (err) {
+      throw createControlError('Failed to update core memory', err);
+    }
     this.emitLocalMemoryChanged();
   }
 

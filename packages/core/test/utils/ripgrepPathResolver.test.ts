@@ -30,6 +30,9 @@ describe('RipgrepPathResolver - Cross-platform Path Resolution', () => {
       return filePath === '/mock/package/path/rg';
     });
     (fs.existsSync as unknown) = mockExistsSync;
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(
+      Buffer.from([0xcf, 0xfa, 0xed, 0xfe]),
+    );
 
     const resolvedPath = await getRipgrepPath();
     expect(resolvedPath).toBe('/mock/package/path/rg');

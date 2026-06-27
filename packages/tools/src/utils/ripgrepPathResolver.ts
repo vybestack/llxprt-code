@@ -47,17 +47,17 @@ export function clearRipgrepAvailabilityCache(): void {
   ripgrepAvailabilityCache = null;
 }
 function isCompatibleRipgrepBinary(candidate: string): boolean {
+  if (os.platform() !== 'darwin') {
+    return true;
+  }
   try {
     const header = fs.readFileSync(candidate).subarray(0, 4);
-    if (
-      os.platform() === 'darwin' &&
-      header.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
-    ) {
+    if (header.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))) {
       return false;
     }
     return true;
   } catch {
-    return true;
+    return false;
   }
 }
 
