@@ -34,11 +34,13 @@ function parseAssistantOutput(stdout) {
     .map((line) => {
       try {
         return JSON.parse(line);
-      } catch {
-        return null;
+      } catch (error) {
+        throw new Error(
+          `Failed to parse stream-json line: ${line}\n${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     })
-    .filter((event) => event?.type === 'message' && event.role === 'assistant')
+    .filter((event) => event.type === 'message' && event.role === 'assistant')
     .map((event) => event.content)
     .join('');
 }

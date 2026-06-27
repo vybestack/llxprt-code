@@ -5,7 +5,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -30,6 +36,60 @@ function validateProfile(profile) {
   if (!/^[A-Za-z0-9._-]+$/.test(profile)) {
     throw new Error(`Invalid profile name: ${profile}`);
   }
+}
+
+function normalizeCapturedLine(line) {
+  return line
+    .replace(/█/g, '')
+    .replace(/^\s*│\s?/, '')
+    .trimEnd();
+}
+
+function normalizeCapturedAssistantText(text) {
+  return text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map(normalizeCapturedLine)
+    .join('\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .trim();
+}
+
+function extractAssistantOutput(scrollback) {
+  const normalized = normalizeCapturedAssistantText(scrollback);
+  const alphaIndex = normalized.lastIndexOf('LLXPRT2208_ALPHA');
+  if (alphaIndex < 0) {
+    throw new Error('Captured scrollback did not contain LLXPRT2208_ALPHA');
+  }
+  const doneIndex = normalized.indexOf('LLXPRT2208_DONE', alphaIndex);
+  if (doneIndex < 0) {
+    throw new Error(
+      'Captured scrollback did not contain LLXPRT2208_DONE after LLXPRT2208_ALPHA',
+    );
+  }
+  return normalized.slice(alphaIndex, doneIndex + 'LLXPRT2208_DONE'.length);
+}
+
+function validateCapturedOutput(profile, outDir) {
+  const captureFile = readdirSync(outDir).find((fileName) =>
+    fileName.endsWith(`-issue2208-newlines-${profile}-scrollback.txt`),
+  );
+  if (!captureFile) {
+    throw new Error(`Missing issue2208 capture file in ${outDir}`);
+  }
+  const actual = extractAssistantOutput(
+    readFileSync(path.join(outDir, captureFile), 'utf8'),
+  );
+  if (actual !== EXPECTED) {
+    console.error(`[${profile}] captured assistant output mismatch`);
+    console.error('--- expected ---');
+    console.error(JSON.stringify(EXPECTED));
+    console.error('--- actual ---');
+    console.error(JSON.stringify(actual));
+    return false;
+  }
+  return true;
 }
 
 function createScenario(profile) {
@@ -69,12 +129,6 @@ function createScenario(profile) {
         type: 'capture',
         label: `issue2208-newlines-${profile}`,
         scope: 'scrollback',
-      },
-      {
-        type: 'expect',
-        scope: 'scrollback',
-        regex:
-          'LLXPRT2208_ALPHA[\\s\\S]*Alpha paragraph one\\.[\\s\\S]*LLXPRT2208_BETA[\\s\\S]*[-*] beta item one[\\s\\S]*[-*] beta item two[\\s\\S]*LLXPRT2208_DONE',
       },
       { type: 'key', key: 'Escape' },
       { type: 'key', key: 'C-c' },
@@ -117,7 +171,7 @@ function runProfile(profile) {
   if (result.status === null && result.signal) {
     console.error(`[${profile}] timed out or was terminated: ${result.signal}`);
   }
-  if (result.status === 0) {
+  if (result.status === 0 && validateCapturedOutput(profile, outDir)) {
     console.log(`[${profile}] TUI preserved issue2208 line breaks`);
     rmSync(outDir, { recursive: true, force: true });
     return true;
