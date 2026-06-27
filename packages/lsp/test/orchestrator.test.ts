@@ -141,9 +141,13 @@ describe('Orchestrator unit tests against real implementation', () => {
     expect(typeof hover === 'string' || hover === null).toBe(true);
   });
 
-  it('documentSymbols returns array', async () => {
+  it('documentSymbols returns typed LSP symbols with numeric kind', async () => {
     const symbols = await orchestrator.documentSymbols('/workspace/src/a.ts');
-    expect(Array.isArray(symbols)).toBe(true);
+    expect(symbols[0]).toMatchObject({
+      name: 'fakeSymbol',
+      kind: 12,
+      selectionRange: { start: { line: 0, character: 0 } },
+    });
   });
 
   it('getAllDiagnostics returns touched files only', async () => {

@@ -399,6 +399,115 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
   });
 });
 
+describe('LspClient diagnostics boundary normalization', () => {
+  it('waitForDiagnostics returns normalized project diagnostics with severity mapped to strings', async () => {
+    const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile(
+      '/workspace/src/norm-error.ts',
+      'const x = TYPE_ERROR',
+    );
+
+    const diagnostics = await client.waitForDiagnostics(
+      '/workspace/src/norm-error.ts',
+      2000,
+    );
+
+    expect(diagnostics.length).toBeGreaterThan(0);
+    const error = diagnostics.find((d) => d.message.includes('type error'));
+    expect(error).toBeDefined();
+    expect(error?.severity).toBe('error');
+    expect(error?.code).toBe('FAKE1001');
+  });
+
+  it('waitForDiagnostics normalizes line and column to 1-based offsets', async () => {
+    const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile(
+      '/workspace/src/norm-line.ts',
+      'const x = TYPE_ERROR',
+    );
+
+    const diagnostics = await client.waitForDiagnostics(
+      '/workspace/src/norm-line.ts',
+      2000,
+    );
+
+    const error = diagnostics.find((d) => d.message.includes('type error'));
+    expect(error).toBeDefined();
+    expect(error?.line).toBe(1);
+    expect(error?.column).toBe(1);
+  });
+
+  it('waitForDiagnostics maps warning severity to the warning string', async () => {
+    const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile(
+      '/workspace/src/norm-warn.ts',
+      ['const x = TYPE_ERROR', '// WARN'].join('\n'),
+    );
+
+    const diagnostics = await client.waitForDiagnostics(
+      '/workspace/src/norm-warn.ts',
+      2000,
+    );
+
+    const warning = diagnostics.find((d) => d.message.includes('warning'));
+    expect(warning).toBeDefined();
+    expect(warning?.severity).toBe('warning');
+    expect(warning?.code).toBe('FAKE2001');
+    expect(warning?.line).toBe(2);
+  });
+
+  it('waitForDiagnostics maps info and hint severities to strings', async () => {
+    const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile(
+      '/workspace/src/norm-info-hint.ts',
+      ['// INFO', '// HINT'].join('\n'),
+    );
+
+    const diagnostics = await client.waitForDiagnostics(
+      '/workspace/src/norm-info-hint.ts',
+      2000,
+    );
+
+    const info = diagnostics.find((d) => d.message.includes('info'));
+    const hint = diagnostics.find((d) => d.message.includes('hint'));
+    expect(info?.severity).toBe('info');
+    expect(info?.code).toBe('FAKE3001');
+    expect(hint?.severity).toBe('hint');
+    expect(hint?.code).toBe('FAKE4001');
+  });
+
+  it('waitForDiagnostics drops malformed diagnostics at the client boundary', async () => {
+    const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile(
+      '/workspace/src/malformed-boundary.ts',
+      'const x = TYPE_ERROR',
+    );
+
+    const diagnostics = await client.waitForDiagnostics(
+      '/workspace/src/malformed-boundary.ts',
+      2000,
+    );
+
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.message).toBe('Simulated type error (TYPE_ERROR)');
+  });
+});
+
 const CONTENT_LENGTH_FIXTURE_PATH = fileURLToPath(
   new URL('./fixtures/fake-lsp-server-content-length.ts', import.meta.url),
 );
@@ -561,6 +670,20 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       );
       expect(Array.isArray(symbols)).toBe(true);
       expect(client.isAlive()).toBe(true);
+    });
+
+    it('documentSymbols preserves numeric symbol kinds from the LSP server', async () => {
+      const client = createLspClient(createConfig(), WORKSPACE_ROOT);
+      createdClients.push(client);
+
+      await client.initialize();
+      await client.touchFile('/workspace/src/symbol-kind.ts', 'const x = 1;');
+
+      const symbols = await client.documentSymbols(
+        '/workspace/src/symbol-kind.ts',
+      );
+
+      expect(symbols[0]?.kind).toBe(12);
     });
 
     it('uses DEFAULT_REQUEST_TIMEOUT_MS (30s) when no requestTimeoutMs is configured', () => {

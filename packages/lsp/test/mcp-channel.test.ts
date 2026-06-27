@@ -11,61 +11,14 @@ import { PassThrough } from 'node:stream';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
-import { createMcpChannel } from '../src/channels/mcp-channel.js';
-
-type Location = {
-  uri: string;
-  range: {
-    start: { line: number; character: number };
-    end: { line: number; character: number };
-  };
-};
-
-type DocumentSymbol = {
-  name: string;
-  kind: number;
-  range: Location['range'];
-  selectionRange: Location['range'];
-};
-
-type WorkspaceSymbol = {
-  name: string;
-  kind: number;
-  location: Location;
-};
-
-type Diagnostic = {
-  source: string;
-  code: string;
-  message: string;
-  severity: number;
-  range: Location['range'];
-};
+import {
+  createMcpChannel,
+  type McpOrchestrator,
+} from '../src/channels/mcp-channel.js';
 
 type ToolCallResult = {
   content?: Array<{ type: string; text?: string }>;
   isError?: boolean;
-};
-
-type TestOrchestrator = {
-  gotoDefinition: (
-    filePath: string,
-    line: number,
-    character: number,
-  ) => Promise<Location[]>;
-  findReferences: (
-    filePath: string,
-    line: number,
-    character: number,
-  ) => Promise<Location[]>;
-  hover: (
-    filePath: string,
-    line: number,
-    character: number,
-  ) => Promise<string | null>;
-  documentSymbols: (filePath: string) => Promise<DocumentSymbol[]>;
-  workspaceSymbols: (query: string) => Promise<WorkspaceSymbol[]>;
-  getAllDiagnostics: () => Promise<Record<string, Diagnostic[]>>;
 };
 
 class LineDelimitedTransport implements Transport {
@@ -152,11 +105,11 @@ function createTransportPair(): {
 }
 
 async function createHarness(
-  orchestrator: TestOrchestrator,
+  orchestrator: McpOrchestrator,
 ): Promise<{ client: Client; close: () => Promise<void> }> {
   const { clientTransport, serverInput, serverOutput } = createTransportPair();
   const server = await createMcpChannel(
-    orchestrator as never,
+    orchestrator,
     '/workspace',
     serverInput,
     serverOutput,
@@ -460,26 +413,22 @@ describe('MCP channel behavior', () => {
       getAllDiagnostics: async () => ({
         '/workspace/src/z.ts': [
           {
-            source: 'ts',
-            code: 'TS2',
+            file: 'src/z.ts',
             message: 'z issue',
-            severity: 2,
-            range: {
-              start: { line: 1, character: 0 },
-              end: { line: 1, character: 3 },
-            },
+            severity: 'warning',
+            line: 2,
+            column: 1,
+            code: 'TS2',
           },
         ],
         '/workspace/src/a.ts': [
           {
-            source: 'ts',
-            code: 'TS1',
+            file: 'src/a.ts',
             message: 'a issue',
-            severity: 1,
-            range: {
-              start: { line: 0, character: 1 },
-              end: { line: 0, character: 4 },
-            },
+            severity: 'error',
+            line: 1,
+            column: 2,
+            code: 'TS1',
           },
         ],
       }),
@@ -497,6 +446,8 @@ describe('MCP channel behavior', () => {
     expect(zIndex).toBeGreaterThan(aIndex);
     expect(text).toContain('a issue');
     expect(text).toContain('z issue');
+    expect(text).toContain('src/a.ts:1:2');
+    expect(text).toContain('src/z.ts:2:1');
 
     await harness.close();
   });

@@ -125,6 +125,24 @@ const validateServers = (
     };
   });
 };
+export const toServerRegistryEntries = (
+  servers: readonly LspServerConfig[] | undefined,
+  builtins: readonly ServerRegistryEntry[] = getBuiltinServers(),
+): ServerRegistryEntry[] => {
+  if (!servers) {
+    return [];
+  }
+  return servers.map((server) => {
+    const builtin = builtins.find((entry) => entry.id === server.id);
+    return {
+      id: server.id,
+      displayName: builtin?.displayName ?? server.id,
+      command: server.command,
+      extensions: server.extensions ?? builtin?.extensions ?? [],
+      ...(server.args ? { args: server.args } : {}),
+    };
+  });
+};
 
 const validateOptionalPositiveTimeout = (
   value: unknown,
@@ -239,10 +257,16 @@ function createWriteStreamFromFd(fd: number) {
 
 export async function main(): Promise<void> {
   const bootstrap = parseBootstrapFromEnv();
-  const mergedServers = mergeUserConfig(
-    getBuiltinServers(),
-    bootstrap.config.servers as unknown as ServerRegistryEntry[],
-  ).map((s) => ({
+  const builtins = getBuiltinServers();
+  const bootstrapServerEntries = toServerRegistryEntries(
+    bootstrap.config.servers,
+    builtins,
+  );
+  const registryServers =
+    bootstrapServerEntries.length > 0
+      ? bootstrapServerEntries
+      : mergeUserConfig(builtins, bootstrapServerEntries);
+  const mergedServers = registryServers.map((s) => ({
     id: s.id,
     command: s.command,
     args: s.args ? [...s.args] : undefined,
