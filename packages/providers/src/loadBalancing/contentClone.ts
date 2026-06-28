@@ -161,12 +161,19 @@ function cloneObjectForCompression<T extends object>(
         value: cloneValueForCompression(descriptor.value, seen),
       });
     } else if (descriptor?.get) {
-      Object.defineProperty(clone, key, {
-        configurable: true,
-        enumerable: descriptor.enumerable,
-        writable: true,
-        value: cloneValueForCompression(descriptor.get.call(value), seen),
-      });
+      try {
+        Object.defineProperty(clone, key, {
+          configurable: true,
+          enumerable: descriptor.enumerable,
+          writable: true,
+          value: cloneValueForCompression(descriptor.get.call(value), seen),
+        });
+      } catch (error) {
+        logger.debug(
+          () =>
+            `[content-clone] Getter for property "${String(key)}" threw, skipping: ${String(error)}`,
+        );
+      }
     } else if (descriptor?.set) {
       logger.debug(
         () =>

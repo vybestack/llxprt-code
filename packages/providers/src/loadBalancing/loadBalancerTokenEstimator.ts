@@ -93,15 +93,19 @@ export async function estimateRequestTokens(
           `Tokenizer estimation failed, using generic fallback: ${String(error)}`,
       );
     }
+  } else {
+    tokenizerFailureModel = modelName;
+    logger.debug(
+      () =>
+        `No tokenizer available for ${providerName}/${modelName}, using generic fallback`,
+    );
   }
 
   const result = await estimateWithGeneric(contents);
-  return tokenizerFailureModel === null
-    ? result
-    : {
-        ...result,
-        source: `${result.source} (tokenizer failed: ${tokenizerFailureModel})`,
-      };
+  return {
+    ...result,
+    source: `${result.source} (tokenizer unavailable: ${tokenizerFailureModel})`,
+  };
 }
 
 async function estimateWithTokenizer(

@@ -437,6 +437,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
     expect(openAiCalls).not.toHaveBeenCalled();
     expect(anthropicCalls).not.toHaveBeenCalled();
   });
+
   it('GPT-first with Opus failover uses GPT tokenizer then Opus on failover', async () => {
     const tokenizersUsed: string[] = [];
     const resolverEvents: string[] = [];
@@ -455,7 +456,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
     providerManager.setTokenizerFactory(factory);
 
     let gptCallCount = 0;
-    const gptProvider: IProvider = {
+    providerManager.registerProvider({
       name: 'openai',
       async *generateChatCompletion(): AsyncGenerator<IContent> {
         gptCallCount++;
@@ -468,14 +469,13 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       getDefaultModel: () => 'gpt-4.1',
       getServerTools: () => [],
       invokeServerTool: async () => ({}),
-    };
-    providerManager.registerProvider(gptProvider);
-    const anthropicCallCount = { value: 0 };
+    });
+    let anthropicCallCount = 0;
     providerManager.registerProvider(
       createMockProvider({
         name: 'anthropic',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          anthropicCallCount.value++;
+          anthropicCallCount++;
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
         getDefaultModel: () => 'claude-opus-4',
@@ -511,7 +511,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       createTextContent('hello from mixed profile test'),
     ]);
 
-    expect(anthropicCallCount.value).toBe(1);
+    expect(anthropicCallCount).toBe(1);
     expect(gptCallCount).toBe(1);
     expect(resolverEvents).toContain('gpt-4.1');
     expect(resolverEvents).toContain('claude-opus-4');
