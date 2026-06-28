@@ -355,11 +355,11 @@ export class ProviderContentEnforcer {
     } else if (fallbackSucceeded && !fallbackState.historyRestored) {
       this.deps.logger.warn(
         () =>
-          '[CompressionHandler] Fallback succeeded but did not restore history; restoring original history',
+          '[CompressionHandler] Fallback compression succeeded without applying history; restoring original history',
       );
       this.tryRestoreHistory(
         originalHistory,
-        '[CompressionHandler] Failed to restore history after fallback succeeded without callback',
+        '[CompressionHandler] Failed to restore history after fallback succeeded without applying history',
       );
     }
     await this.deps.historyService.waitForTokenUpdates();
@@ -377,7 +377,8 @@ export class ProviderContentEnforcer {
         this.addHistoryEntries(backup);
       } catch (backupError) {
         this.deps.logger.error(
-          () => '[CompressionHandler] Failed to restore backup history',
+          () =>
+            '[CompressionHandler] Failed to restore both new and backup history; retrying requested history',
           backupError,
         );
         try {

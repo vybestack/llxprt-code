@@ -126,6 +126,7 @@
     "./prompt-config/prompt-resolver.js": "./dist/src/prompt-config/prompt-resolver.js",
     "./runtime/AgentRuntimeContext.js": "./dist/src/runtime/AgentRuntimeContext.js",
     "./runtime/AgentRuntimeLoader.js": "./dist/src/runtime/AgentRuntimeLoader.js",
+    "./runtime/contracts/index.js": "./dist/src/runtime/contracts/index.js",
     "./runtime/contracts/RuntimeProvider.js": "./dist/src/runtime/contracts/RuntimeProvider.js",
     "./runtime/contracts/RuntimeProviderChat.js": "./dist/src/runtime/contracts/RuntimeProviderChat.js",
     "./runtime/runtimeStateFactory.js": "./dist/src/runtime/runtimeStateFactory.js",

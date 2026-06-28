@@ -89,10 +89,10 @@ function createTokenizerFactory(
 ): RuntimeTokenizerFactory {
   return {
     getTokenizer: (
-      _providerName: string,
+      providerName: string,
       model?: string,
     ): RuntimeTokenizer | undefined => {
-      const key = model ?? _providerName;
+      const key = model ?? providerName;
       if (reportSource) {
         reportSource(key);
       }

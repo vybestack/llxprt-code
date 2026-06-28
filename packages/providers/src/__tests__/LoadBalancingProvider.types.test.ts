@@ -170,6 +170,17 @@ describe('LoadBalancingProvider', () => {
 
         expect(isLoadBalancerProfileFormat(mixedTypesArray)).toBe(false);
       });
+
+      it.each([
+        ['null', null],
+        ['undefined', undefined],
+        ['string', 'profile'],
+        ['number', 42],
+        ['boolean', true],
+        ['array without type field', [{ name: 'x' }]],
+      ])('should reject %s as profile input', (_label, input) => {
+        expect(isLoadBalancerProfileFormat(input)).toBe(false);
+      });
     });
 
     describe('ResolvedSubProfile interface', () => {

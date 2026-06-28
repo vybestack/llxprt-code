@@ -4,24 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  LoadBalancerProfile,
-  Profile,
-} from '@vybestack/llxprt-code-settings';
+import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 
 /**
  * Format guard only. Empty profile lists are accepted here so the dedicated
  * profile validation path can produce the existing user-facing error.
  */
 export function isLoadBalancerProfileFormat(
-  profile: Profile,
+  profile: unknown,
 ): profile is LoadBalancerProfile {
-  const hasLoadBalancerType =
-    'type' in profile && profile.type === 'loadbalancer';
-  const profiles = 'profiles' in profile ? profile.profiles : undefined;
+  if (typeof profile !== 'object' || profile === null) {
+    return false;
+  }
+  const candidate = profile as Record<string, unknown>;
   return (
-    hasLoadBalancerType &&
-    Array.isArray(profiles) &&
-    profiles.every((entry) => typeof entry === 'string')
+    candidate.type === 'loadbalancer' &&
+    Array.isArray(candidate.profiles) &&
+    candidate.profiles.every((entry) => typeof entry === 'string')
   );
 }

@@ -32,6 +32,7 @@ const BASE64_MEDIA_CHAR_DIVISOR = 4;
 const MEDIA_DATA_CHAR_CAP = 10_000;
 const CIRCULAR_REFERENCE_CHAR_ESTIMATE = 64;
 const MAX_UNSERIALIZABLE_ESTIMATE_DEPTH = 8;
+const MAX_UNSERIALIZABLE_CHILDREN = 1_000;
 
 export interface EstimationResult {
   tokens: number;
@@ -174,15 +175,23 @@ function estimateUnserializableCharacters(
   seen.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.reduce(
-        (total, entry) =>
-          total + estimateUnserializableCharacters(entry, seen, depth + 1),
-        2,
-      );
+      let total = 2;
+      const childCount = Math.min(value.length, MAX_UNSERIALIZABLE_CHILDREN);
+      for (let index = 0; index < childCount; index++) {
+        total += estimateUnserializableCharacters(
+          value[index],
+          seen,
+          depth + 1,
+        );
+      }
+      return total;
     }
 
     let total = 2;
-    for (const key of Reflect.ownKeys(value)) {
+    const keys = Reflect.ownKeys(value);
+    const keyCount = Math.min(keys.length, MAX_UNSERIALIZABLE_CHILDREN);
+    for (let index = 0; index < keyCount; index++) {
+      const key = keys[index];
       total += String(key).length;
       total += estimateUnserializableCharacters(
         (value as Record<PropertyKey, unknown>)[key],

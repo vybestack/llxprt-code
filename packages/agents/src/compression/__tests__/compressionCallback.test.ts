@@ -106,9 +106,14 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       providerWithCallback as unknown as IProvider,
     );
 
-    const calls = providerWithCallback.setCompressionCallback.mock.calls;
-    expect(calls[0][0]).toStrictEqual(expect.any(Function));
-    expect(calls[calls.length - 1][0]).toBeNull();
+    expect(providerWithCallback.setCompressionCallback).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Function),
+    );
+    expect(providerWithCallback.setCompressionCallback).toHaveBeenNthCalledWith(
+      2,
+      null,
+    );
   });
 
   it('clears compression callback when provider setter rejects attachment', async () => {
@@ -138,9 +143,11 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       ),
     ).rejects.toThrow('attach failed');
 
-    const calls = setCompressionCallback.mock.calls;
-    expect(calls[0][0]).toStrictEqual(expect.any(Function));
-    expect(calls[calls.length - 1][0]).toBeNull();
+    expect(setCompressionCallback).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Function),
+    );
+    expect(setCompressionCallback).toHaveBeenNthCalledWith(2, null);
   });
 
   it('does not throw when provider lacks setCompressionCallback method', async () => {
@@ -158,13 +165,14 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       generateChatCompletion: vi.fn(),
     };
 
+    const expectedContents = historyService.getCuratedForProvider();
     await expect(
       chat['compressionHandler'].enforceProviderContents(
-        historyService.getCuratedForProvider(),
+        expectedContents,
         'test-prompt',
         providerWithoutCallback as unknown as IProvider,
       ),
-    ).resolves.toStrictEqual(historyService.getCuratedForProvider());
+    ).resolves.toStrictEqual(expectedContents);
   });
 
   it('ignores non-callable setCompressionCallback properties', async () => {
@@ -183,13 +191,14 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       setCompressionCallback: 'not-a-function',
     };
 
+    const expectedContents = historyService.getCuratedForProvider();
     await expect(
       chat['compressionHandler'].enforceProviderContents(
-        historyService.getCuratedForProvider(),
+        expectedContents,
         'test-prompt',
         providerWithNonCallableCallback as unknown as IProvider,
       ),
-    ).resolves.toStrictEqual(historyService.getCuratedForProvider());
+    ).resolves.toStrictEqual(expectedContents);
   });
 
   it('attached callback runs compression machinery and returns history contents', async () => {

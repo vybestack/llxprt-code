@@ -3,11 +3,6 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-/**
- * StreamProcessor - Handles API stream requests and response processing.
- * Extracted from chatSession.ts Phase 05.
- * These are the core streaming methods that make API calls and process responses.
- */
 import type { GenerateContentResponse } from '@google/genai';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
@@ -80,10 +75,7 @@ import {
   type StreamAccumulator,
 } from './streamResponseHelpers.js';
 
-/**
- * StreamProcessor handles making API calls and processing streaming responses.
- * Extracted from ChatSession to isolate streaming concerns.
- */
+import { withCompressionCallbackCleanup } from './streamCleanup.js';
 
 /**
  * Extract the allowedFunctionNames array from a tool-config object.
@@ -117,11 +109,7 @@ export class StreamProcessor {
     private readonly generationConfig: GenerateContentConfig,
   ) {}
 
-  /**
-   * Makes an API call with retry and returns a stream processor.
-   * This outer method resolves the provider, makes the API call with retry,
-   * and returns processStreamResponse.
-   */
+  /** Resolves the provider, sends the request with retry, and returns a response stream. */
   async makeApiCallAndProcessStream(
     params: SendMessageParameters,
     promptId: string,
@@ -291,45 +279,16 @@ export class StreamProcessor {
         promptId,
         toolSelection.allowedFunctionNames,
       );
-      return this._withCompressionCallbackCleanup(stream, provider);
+      return withCompressionCallbackCleanup(
+        stream,
+        provider,
+        this.compressionHandler,
+        params.config?.abortSignal,
+      );
     } catch (error) {
       this.compressionHandler.clearProviderCompressionCallback(provider);
       throw error;
     }
-  }
-  private _withCompressionCallbackCleanup(
-    stream: AsyncGenerator<GenerateContentResponse>,
-    provider: IProvider,
-  ): AsyncGenerator<GenerateContentResponse> {
-    let cleanupDone = false;
-    const cleanup = () => {
-      if (cleanupDone) return;
-      cleanupDone = true;
-      this.compressionHandler.clearProviderCompressionCallback(provider);
-    };
-    const finish = async <T>(operation: () => Promise<T>): Promise<T> => {
-      try {
-        return await operation();
-      } finally {
-        cleanup();
-      }
-    };
-
-    return {
-      next: async (value?: unknown) => {
-        const result = await stream.next(value).catch((error: unknown) => {
-          cleanup();
-          throw error;
-        });
-        if (result.done === true) cleanup();
-        return result;
-      },
-      return: (value?: unknown) => finish(() => stream.return(value)),
-      throw: (error?: unknown) => finish(() => stream.throw(error)),
-      [Symbol.asyncIterator]() {
-        return this;
-      },
-    } as unknown as AsyncGenerator<GenerateContentResponse>;
   }
 
   /**
@@ -785,13 +744,10 @@ export class StreamProcessor {
 
   /**
    * Process streaming response chunks into a complete conversation turn.
-   * Yields each chunk immediately as it arrives from the provider stream,
-   * while simultaneously tracking metadata for validation and history.
    *
-   * CRITICAL: This method must yield chunks inline during the for-await loop.
-   * Collecting all chunks first (as was done in a prior refactoring) blocks
-   * the entire pipeline — no output reaches the user, no abort signal checks
-   * run, and stalled provider streams hang indefinitely. See #1846.
+   * CRITICAL: yield chunks inline during the for-await loop. Collecting all
+   * chunks first blocks user output, abort checks, and stalled provider streams.
+   * See issue #1846.
    */
   async *processStreamResponse(
     streamResponse: AsyncGenerator<GenerateContentResponse>,
@@ -878,23 +834,14 @@ export class StreamProcessor {
     );
   }
 
-  /**
-   * Consolidate adjacent text parts.
-   */
   private _consolidateTextParts(modelResponseParts: Part[]): Part[] {
     return consolidateTextParts(modelResponseParts);
   }
 
-  /**
-   * Extract response text from consolidated parts.
-   */
   private _extractResponseText(consolidatedParts: Part[]): string {
     return extractResponseText(consolidatedParts);
   }
 
-  /**
-   * Validate stream completion and throw appropriate errors.
-   */
   private _validateStreamCompletion(
     userInput: Content | Content[],
     outcome: ResponseOutcome,
@@ -910,9 +857,6 @@ export class StreamProcessor {
     );
   }
 
-  /**
-   * Record history with usage metadata and sync token counts.
-   */
   private async _recordHistoryWithUsage(
     userInput: Content | Content[],
     consolidatedParts: Part[],

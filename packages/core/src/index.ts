@@ -607,6 +607,7 @@ export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.j
 export type {
   RuntimeProvider,
   RuntimeProviderManager,
+  RuntimeSessionTokenUsage,
   RuntimeModel,
   RuntimeTokenizer,
   RuntimeTokenizerFactory,

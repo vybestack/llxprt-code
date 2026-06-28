@@ -62,7 +62,10 @@ function cloneValueForCompression<T>(
 function cloneArrayBufferView(value: ArrayBufferView): ArrayBufferView {
   let clonedBuffer: ArrayBuffer;
   try {
-    clonedBuffer = value.buffer.slice(0);
+    clonedBuffer = value.buffer.slice(
+      value.byteOffset,
+      value.byteOffset + value.byteLength,
+    );
   } catch (error) {
     logger.warn(
       () =>
@@ -72,11 +75,7 @@ function cloneArrayBufferView(value: ArrayBufferView): ArrayBufferView {
     throw error;
   }
   if (value instanceof DataView) {
-    return new DataView(
-      clonedBuffer,
-      clonedBuffer.byteLength === 0 ? 0 : value.byteOffset,
-      clonedBuffer.byteLength === 0 ? 0 : value.byteLength,
-    );
+    return new DataView(clonedBuffer, 0, clonedBuffer.byteLength);
   }
   const ctor = value.constructor as {
     new (
@@ -85,15 +84,8 @@ function cloneArrayBufferView(value: ArrayBufferView): ArrayBufferView {
       length: number,
     ): ArrayBufferView;
   };
-  const length =
-    clonedBuffer.byteLength === 0
-      ? 0
-      : (value as unknown as { length: number }).length;
-  return new ctor(
-    clonedBuffer,
-    clonedBuffer.byteLength === 0 ? 0 : value.byteOffset,
-    length,
-  );
+  const length = (value as unknown as { length: number }).length;
+  return new ctor(clonedBuffer, 0, length);
 }
 
 function cloneArrayForCompression(

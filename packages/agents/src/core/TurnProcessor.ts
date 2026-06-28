@@ -368,6 +368,7 @@ export class TurnProcessor {
     this._validateProvider(provider);
     let providerStartTime = 0;
     let providerRequestStarted = false;
+    const overallStartTime = Date.now();
 
     try {
       const iContents = await this.compressionHandler.enforceProviderContents(
@@ -425,7 +426,7 @@ export class TurnProcessor {
     } catch (error) {
       const durationMs = providerRequestStarted
         ? Date.now() - providerStartTime
-        : 0;
+        : Date.now() - overallStartTime;
       logApiError(
         this.runtimeContext,
         this.runtimeContext.state,

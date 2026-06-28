@@ -479,6 +479,8 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       // Wait for window to expire
       await new Promise((resolve) => setTimeout(resolve, 150));
 
+      lb.resetFailoverIndex();
+
       // Second failure (first should be pruned)
       const gen2 = lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
@@ -490,8 +492,8 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       const stats = lb.getStats();
       const backend1State = stats.circuitBreakerStates.backend1;
 
-      // Should have only recent failures (old ones pruned)
-      expect(backend1State.failures.length).toBeLessThan(3);
+      // Should have only the second failure after pruning the expired one.
+      expect(backend1State.failures).toHaveLength(1);
       expect(backend1State.state).toBe('closed'); // Not enough failures in window
     });
   });

@@ -80,7 +80,7 @@ export class CompressionHandler {
   private lastCompressionFailureTime: number | null = null;
   private lastSuccessfulCompressionTime: number | null = null;
   densityDirty: boolean = true;
-  _suppressDensityDirty: boolean = false;
+  private _suppressDensityDirty: boolean = false;
   private _suppressDensityDirtyDepth: number = 0;
   private activeTodosProvider?: () => Promise<string | undefined>;
   lastPromptTokenCount: number | null = null;
@@ -445,6 +445,33 @@ export class CompressionHandler {
     }
   }
 
+  private pushSuppressDensityDirty(): void {
+    this._suppressDensityDirtyDepth++;
+    this._suppressDensityDirty = true;
+  }
+
+  private popSuppressDensityDirty(): void {
+    if (this._suppressDensityDirtyDepth <= 0) {
+      this.logger.warn(
+        () =>
+          '[CompressionHandler] popSuppressDensityDirty called with no matching push; depth already at 0',
+      );
+      this._suppressDensityDirtyDepth = 0;
+      this._suppressDensityDirty = false;
+      return;
+    }
+    this._suppressDensityDirtyDepth--;
+    this._suppressDensityDirty = this._suppressDensityDirtyDepth > 0;
+  }
+
+  setSuppressDensityDirty(value: boolean): void {
+    if (value) {
+      this.pushSuppressDensityDirty();
+    } else {
+      this.popSuppressDensityDirty();
+    }
+  }
+
   /**
    * Public cleanup hook for callers that use enforceProviderContents and then
    * invoke the provider while the compression callback remains attached.
@@ -472,8 +499,7 @@ export class CompressionHandler {
       performCompression: (promptId, options) =>
         this.performCompression(promptId, options),
       performFallbackCompression: async (promptId, applyResult) => {
-        this._suppressDensityDirtyDepth++;
-        this._suppressDensityDirty = true;
+        this.pushSuppressDensityDirty();
         try {
           const context = await this.buildCompressionContext(promptId);
           const applyAndResetPromptCount = (newHistory: IContent[]) => {
@@ -491,13 +517,9 @@ export class CompressionHandler {
               '[CompressionHandler] Provider truncation fallback failed during hard-limit enforcement',
             error,
           );
-          throw error;
+          return false;
         } finally {
-          this._suppressDensityDirtyDepth = Math.max(
-            0,
-            this._suppressDensityDirtyDepth - 1,
-          );
-          this._suppressDensityDirty = this._suppressDensityDirtyDepth > 0;
+          this.popSuppressDensityDirty();
         }
       },
     });
@@ -522,15 +544,7 @@ export class CompressionHandler {
       this.attachCompressionCallback(provider, promptId, enforcer);
       return await enforcer.enforce(contents, promptId, provider);
     } catch (error) {
-      try {
-        this.detachCompressionCallback(provider);
-      } catch (detachError) {
-        this.logger.warn(
-          () =>
-            '[CompressionHandler] Failed to detach compression callback during error recovery',
-          detachError,
-        );
-      }
+      this.clearProviderCompressionCallback(provider);
       throw error;
     }
   }
@@ -558,9 +572,7 @@ export class CompressionHandler {
         this.compressWithFallbackStrategy(context),
       applyFallbackCompressionResult: (result, applyResult) =>
         this.applyFallbackCompressionResult(result, applyResult),
-      setSuppressDensityDirty: (value) => {
-        this._suppressDensityDirty = value;
-      },
+      setSuppressDensityDirty: (value) => this.setSuppressDensityDirty(value),
       recordCompressionFailure: () => this.recordCompressionFailure(),
       resetLastPromptTokenCount: () => {
         this.lastPromptTokenCount = null;
@@ -628,7 +640,7 @@ export class CompressionHandler {
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
-    this._suppressDensityDirty = true;
+    this.setSuppressDensityDirty(true);
     let didCompress = false;
     try {
       didCompress = await this.runCompressionWithRetryAndFallback(
@@ -645,7 +657,7 @@ export class CompressionHandler {
         },
       );
     } finally {
-      this._suppressDensityDirty = false;
+      this.setSuppressDensityDirty(false);
       this.historyService.endCompression(
         compressionSummary,
         preCompressionCount,

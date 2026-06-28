@@ -20,6 +20,13 @@ import process from 'node:process';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
 import type { TokenAccountingDiagnostics } from '@vybestack/llxprt-code-providers';
+
+interface LoadBalancerStatsResult {
+  lastSelected: string | null;
+  totalRequests: number;
+  profileCounts: Record<string, number>;
+}
+
 interface RuntimeSessionTokenUsage {
   input: number;
   output: number;
@@ -27,12 +34,6 @@ interface RuntimeSessionTokenUsage {
   tool: number;
   thought: number;
   total: number;
-}
-
-interface LoadBalancerStatsResult {
-  lastSelected: string | null;
-  totalRequests: number;
-  profileCounts: Record<string, number>;
 }
 
 interface BucketFailoverDiagnosticsHandler {
