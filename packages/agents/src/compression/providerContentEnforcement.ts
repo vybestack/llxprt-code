@@ -384,6 +384,8 @@ export class ProviderContentEnforcer {
         try {
           this.deps.historyService.clear();
           this.addHistoryEntries(history);
+          // Final retry restored the requested history, so the original restore error no longer applies.
+          return;
         } catch (finalError) {
           this.deps.historyService.clear();
           this.deps.logger.error(

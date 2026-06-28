@@ -34,9 +34,18 @@ function isLoadBalancerPolicy(value: unknown): boolean {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((entry) => typeof entry === 'string')
-  );
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  for (let index = 0; index < value.length; index++) {
+    if (
+      !Object.prototype.hasOwnProperty.call(value, index) ||
+      typeof value[index] !== 'string'
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function hasRequiredProfileFields(candidate: Record<string, unknown>): boolean {
@@ -49,5 +58,9 @@ function hasRequiredProfileFields(candidate: Record<string, unknown>): boolean {
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
