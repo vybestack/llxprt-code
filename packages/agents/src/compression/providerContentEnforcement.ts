@@ -382,8 +382,10 @@ export class ProviderContentEnforcer {
           backupError,
         );
         try {
+          this.deps.historyService.clear();
           this.addHistoryEntries(history);
         } catch (finalError) {
+          this.deps.historyService.clear();
           this.deps.logger.error(
             () =>
               '[CompressionHandler] All history restoration attempts failed; history is empty',

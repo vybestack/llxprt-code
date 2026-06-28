@@ -184,6 +184,10 @@ function estimateUnserializableCharacters(
           depth + 1,
         );
       }
+      const omittedCount = value.length - childCount;
+      if (omittedCount > 0) {
+        total += omittedCount * NON_TEXT_BLOCK_CHAR_ESTIMATE;
+      }
       return total;
     }
 
@@ -198,6 +202,10 @@ function estimateUnserializableCharacters(
         seen,
         depth + 1,
       );
+    }
+    const omittedCount = keys.length - keyCount;
+    if (omittedCount > 0) {
+      total += omittedCount * NON_TEXT_BLOCK_CHAR_ESTIMATE;
     }
     return total;
   } finally {

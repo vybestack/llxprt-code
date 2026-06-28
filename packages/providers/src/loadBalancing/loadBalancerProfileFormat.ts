@@ -17,9 +17,37 @@ export function isLoadBalancerProfileFormat(
     return false;
   }
   const candidate = profile as Record<string, unknown>;
+  if (candidate.version !== 1 || candidate.type !== 'loadbalancer') {
+    return false;
+  }
+  if (!isLoadBalancerPolicy(candidate.policy)) {
+    return false;
+  }
+  if (!isStringArray(candidate.profiles)) {
+    return false;
+  }
+  return hasRequiredProfileFields(candidate);
+}
+
+function isLoadBalancerPolicy(value: unknown): boolean {
+  return value === 'roundrobin' || value === 'failover';
+}
+
+function isStringArray(value: unknown): value is string[] {
   return (
-    candidate.type === 'loadbalancer' &&
-    Array.isArray(candidate.profiles) &&
-    candidate.profiles.every((entry) => typeof entry === 'string')
+    Array.isArray(value) && value.every((entry) => typeof entry === 'string')
   );
+}
+
+function hasRequiredProfileFields(candidate: Record<string, unknown>): boolean {
+  return (
+    typeof candidate.provider === 'string' &&
+    typeof candidate.model === 'string' &&
+    isPlainRecord(candidate.modelParams) &&
+    isPlainRecord(candidate.ephemeralSettings)
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

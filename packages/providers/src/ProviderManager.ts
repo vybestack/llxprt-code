@@ -209,7 +209,18 @@ export class ProviderManager implements IProviderManager {
    * @requirement REQ-SP4-004
    */
   setRuntimeContext(runtime: ProviderRuntimeContext): void {
+    const currentActiveProvider = this.getActiveProviderName();
     this.runtime = runtime;
+    this.settingsService = asSettingsService(runtime.settingsService);
+    this.config = runtime.config ?? this.config;
+    if (
+      currentActiveProvider &&
+      this.providers.has(currentActiveProvider) &&
+      isBlankValue(this.settingsService.get('activeProvider'))
+    ) {
+      this.settingsService.set('activeProvider', currentActiveProvider);
+    }
+    this.updateProviderWrapping();
   }
 
   /**

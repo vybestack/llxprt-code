@@ -121,7 +121,7 @@ export class TurnProcessor {
 
     this.lastPromptTokenCount = null;
 
-    const prepared = await this._prepareSendMessage(params, prompt_id);
+    const prepared = this._prepareSendMessage(params);
 
     const provider = this.providerResolver('sendMessage');
     const response = await this._executeSendWithRetry(
@@ -156,18 +156,7 @@ export class TurnProcessor {
     await this.sendPromise;
     this.lastPromptTokenCount = null;
 
-    const userContent: Content | Content[] = normalizeToolInteractionInput(
-      params.message,
-    );
-    const userIContents = this._convertToIContents(userContent);
-
-    const pendingTokens = await this.estimatePendingTokens(userIContents);
-    await this.compressionHandler.ensureCompressionBeforeSend(
-      prompt_id,
-      pendingTokens,
-      'stream',
-      'auto',
-    );
+    const userContent = this._normalizeUserContent(params);
 
     let streamDoneResolver: () => void;
     this.sendPromise = new Promise<void>((resolve) => {
@@ -302,6 +291,12 @@ export class TurnProcessor {
     };
   }
 
+  private _normalizeUserContent(
+    params: SendMessageParameters,
+  ): Content | Content[] {
+    return normalizeToolInteractionInput(params.message);
+  }
+
   private _convertToIContents(userContent: Content | Content[]): IContent[] {
     const contents = Array.isArray(userContent) ? userContent : [userContent];
     const matcher = this.makePositionMatcher();
@@ -333,25 +328,14 @@ export class TurnProcessor {
   }
 
   /**
-   * Prepares user message: validates, converts input, estimates tokens, compresses if needed.
+   * Prepares user message: validates and converts input before provider enforcement.
    */
-  private async _prepareSendMessage(
-    params: SendMessageParameters,
-    prompt_id: string,
-  ): Promise<{
+  private _prepareSendMessage(params: SendMessageParameters): {
     userContent: Content | Content[];
     userIContents: IContent[];
-  }> {
-    const userContent = normalizeToolInteractionInput(params.message);
+  } {
+    const userContent = this._normalizeUserContent(params);
     const userIContents = this._convertToIContents(userContent);
-
-    const pendingTokens = await this.estimatePendingTokens(userIContents);
-    await this.compressionHandler.ensureCompressionBeforeSend(
-      prompt_id,
-      pendingTokens,
-      'send',
-      'auto',
-    );
 
     return { userContent, userIContents };
   }
