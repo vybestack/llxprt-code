@@ -163,6 +163,7 @@ type ReactSharedInternals = {
 };
 
 type ReactWithSharedInternals = typeof React & {
+  _DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactSharedInternals;
   __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: ReactSharedInternals;
 };
 
@@ -175,8 +176,10 @@ const globalWithReact = globalThis as GlobalWithReactInternals;
 globalWithReact.React = React;
 
 // Access and initialize React's shared internals
-const ReactInternals = (React as ReactWithSharedInternals)
-  .__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+const reactWithInternals = React as ReactWithSharedInternals;
+const ReactInternals =
+  reactWithInternals._DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE ??
+  reactWithInternals.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 if (ReactInternals) {
   // Ensure the S property exists (used by React DOM for transition handling)
   if (!Object.prototype.hasOwnProperty.call(ReactInternals, 'S')) {

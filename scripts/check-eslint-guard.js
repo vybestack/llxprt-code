@@ -385,6 +385,162 @@ export function hasTypeScriptSuppression(line) {
 }
 
 /**
+ * Template-aware counterpart to hasInlineEslintDirective. Directive text inside
+ * template literal text is inert, while comments in normal code or template
+ * expressions are still reported.
+ */
+export function hasInlineEslintDirectiveInState(line, incoming) {
+  const initialState =
+    typeof incoming === 'boolean'
+      ? { inTemplate: incoming, exprDepth: 0 }
+      : incoming;
+  let inTemplate = initialState.inTemplate;
+  let exprDepth = initialState.exprDepth;
+  let quote = null;
+  let escaped = false;
+  let i = 0;
+
+  while (i < line.length) {
+    const ch = line[i];
+    const next = line[i + 1];
+
+    if (escaped) {
+      escaped = false;
+      i += 1;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      i += 1;
+      continue;
+    }
+
+    if (quote !== null) {
+      if (ch === quote) {
+        quote = null;
+      }
+      i += 1;
+      continue;
+    }
+
+    const inExecutable = !inTemplate || exprDepth > 0;
+    if (inExecutable) {
+      if (ch === '/' && next === '/') {
+        return DIRECTIVE_PATTERN.test(line.slice(i + 2));
+      }
+      if (ch === '/' && next === '*') {
+        const end = line.indexOf('*/', i + 2);
+        const comment = line.slice(i + 2, end === -1 ? undefined : end);
+        if (DIRECTIVE_PATTERN.test(comment)) {
+          return true;
+        }
+        if (end === -1) {
+          return false;
+        }
+        i = end + 2;
+        continue;
+      }
+      if (!inTemplate && ch === '/' && canStartRegex(line, i)) {
+        i = skipRegex(line, i);
+        continue;
+      }
+    }
+
+    if (inExecutable && (ch === '"' || ch === "'")) {
+      quote = ch;
+      i += 1;
+      continue;
+    }
+
+    if (!inTemplate) {
+      if (ch === '`') {
+        inTemplate = true;
+        exprDepth = 0;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (exprDepth === 0) {
+      if (ch === '$' && next === '{') {
+        exprDepth += 1;
+        i += 2;
+        continue;
+      }
+      if (ch === '`') {
+        inTemplate = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch === '`') {
+      i += 1;
+      let nExpr = 0;
+      let nQuote = null;
+      let nEscaped = false;
+      while (i < line.length) {
+        const nch = line[i];
+        const nnext = line[i + 1];
+        if (nEscaped) {
+          nEscaped = false;
+          i += 1;
+          continue;
+        }
+        if (nch === '\\') {
+          nEscaped = true;
+          i += 1;
+          continue;
+        }
+        if (nQuote !== null) {
+          if (nch === nQuote) {
+            nQuote = null;
+          }
+          i += 1;
+          continue;
+        }
+        if (nch === '"' || nch === "'") {
+          nQuote = nch;
+          i += 1;
+          continue;
+        }
+        if (nch === '$' && nnext === '{') {
+          nExpr += 1;
+          i += 2;
+          continue;
+        }
+        if (nch === '}' && nExpr > 0) {
+          nExpr -= 1;
+          i += 1;
+          continue;
+        }
+        if (nch === '`' && nExpr === 0) {
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+
+    if (ch === '$' && next === '{') {
+      exprDepth += 1;
+      i += 2;
+      continue;
+    }
+    if (ch === '}') {
+      exprDepth -= 1;
+      if (exprDepth < 0) {
+        exprDepth = 0;
+      }
+    }
+    i += 1;
+  }
+
+  return false;
+}
+
+/**
  * Scans a line for a real TypeScript suppression directive
  * (@ts-ignore/@ts-expect-error/@ts-nocheck) in executable code, given the
  * template-literal state at the start of the line. This is the template-aware
@@ -4239,7 +4395,7 @@ function scanTypeScriptTextForEscapeHatches(
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (hasInlineEslintDirective(line)) {
+    if (hasInlineEslintDirectiveInState(line, templateLiteralState)) {
       violations.push({
         file: relativePath,
         lineNumber: i + 1,
@@ -4406,6 +4562,27 @@ function scanEslintConfigForEscapeHatches(rootDir, issueNumber) {
   return violations;
 }
 
+function eslintCommandSegments(command) {
+  return command
+    .split(/\s*(?:&&|\|\||;)\s*/)
+    .map((segment) => segment.trim())
+    .filter((segment) =>
+      /(?:^|\s)(?:cross-env\s+[^&;]*\s+)?eslint(?:\s|$)/.test(segment),
+    );
+}
+
+function eslintSegmentHasMaxWarningsZero(segment) {
+  return /(?:^|\s)--max-warnings(?:\s+|=)0(?:\s|$)/.test(segment);
+}
+
+function lintCiKeepsMaxWarningsZero(lintCi) {
+  const eslintSegments = eslintCommandSegments(lintCi);
+  return (
+    eslintSegments.length > 0 &&
+    eslintSegments.every((segment) => eslintSegmentHasMaxWarningsZero(segment))
+  );
+}
+
 function scanPackageJsonLintCi(rootDir, issueNumber) {
   const packagePath = join(rootDir, 'package.json');
   if (!existsSync(packagePath)) {
@@ -4427,10 +4604,7 @@ function scanPackageJsonLintCi(rootDir, issueNumber) {
     ];
   }
   const lintCi = parsed?.scripts?.['lint:ci'];
-  if (
-    typeof lintCi === 'string' &&
-    /(?:^|\s)--max-warnings(?:\s+|=)0(?:\s|$)/.test(lintCi)
-  ) {
+  if (typeof lintCi === 'string' && lintCiKeepsMaxWarningsZero(lintCi)) {
     return [];
   }
 

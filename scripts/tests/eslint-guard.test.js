@@ -7553,6 +7553,31 @@ describe('scanRepositoryLintEscapeHatches (#2227)', () => {
       ),
     ).toBe(true);
   });
+
+  it('ignores inline ESLint directive text inside template literals', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-eslint-template-'),
+    );
+    mkdirSync(join(tmpDir, 'packages', 'core', 'src'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'packages', 'core', 'src', 'fixture.test.ts'),
+      [
+        'export const inertFixture = `',
+        '  // eslint-' + 'disable-next-line @typescript-eslint/no-explicit-any',
+        '`;',
+        'export const activeDirective = () => {',
+        '  // eslint-' + 'disable-next-line @typescript-eslint/no-explicit-any',
+        '  return 1;',
+        '};',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].lineNumber).toBe(5);
+    expect(violations[0].message).toContain('ESLint disable/enable directives');
+  });
   it('reports TypeScript suppressions in test files, setup files, and helpers', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-2227-suppress-'));
     mkdirSync(join(tmpDir, 'packages', 'cli', 'src', 'test-utils'), {
@@ -7690,6 +7715,30 @@ describe('scanRepositoryLintEscapeHatches (#2227)', () => {
     );
 
     expect(scanRepositoryLintEscapeHatches(tmpDir, '2227')).toEqual([]);
+  });
+
+  it('reports lint:ci when any ESLint invocation lacks max-warnings zero', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-partial-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci':
+              'eslint packages --max-warnings=0 && eslint integration-tests',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('--max-warnings 0');
   });
 
   it('ignores commented config text and reports multiline disabled config entries', () => {

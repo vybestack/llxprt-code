@@ -38,7 +38,10 @@ function recordFromObject(
   value: unknown,
   fallback?: Record<string, unknown>,
 ): Record<string, unknown> {
-  return isPlainRecord(value) ? { ...value } : (fallback ?? {});
+  if (isPlainRecord(value)) {
+    return { ...value };
+  }
+  return fallback ? { ...fallback } : {};
 }
 
 function isAbortSignalAborted(abortSignal?: AbortSignal): boolean {
