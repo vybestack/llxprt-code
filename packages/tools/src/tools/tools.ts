@@ -12,6 +12,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import {
   type IToolMessageBus,
+  type ToolConfirmationResult,
   hasPublish,
   hasPublishSubscribe,
 } from '../interfaces/IToolMessageBus.js';
@@ -93,6 +94,11 @@ interface ConfirmationResponse {
   outcome?: ToolConfirmationOutcome;
 }
 
+function recordFromObject(value: object): Record<string, unknown> {
+  // Shallow-copy params so the message bus cannot mutate top-level properties.
+  return { ...value };
+}
+
 /**
  * Determines whether a confirmation response indicates the action is allowed.
  * Falls back to inferring from the outcome when `confirmed` is not explicitly set.
@@ -114,6 +120,47 @@ function resolveConfirmationFromResponse(
   );
 }
 
+function isToolConfirmationOutcome(
+  outcome: unknown,
+): outcome is ToolConfirmationOutcome {
+  return (
+    typeof outcome === 'string' &&
+    Object.values(ToolConfirmationOutcome).includes(
+      outcome as ToolConfirmationOutcome,
+    )
+  );
+}
+
+export function normalizeConfirmationOutcome(
+  outcome:
+    | ToolConfirmationOutcome
+    | ToolConfirmationResult
+    | ConfirmationResponse
+    | boolean
+    | null
+    | undefined,
+): ToolConfirmationOutcome {
+  if (typeof outcome === 'boolean') {
+    return outcome
+      ? ToolConfirmationOutcome.ProceedOnce
+      : ToolConfirmationOutcome.Cancel;
+  }
+  if (outcome !== null && typeof outcome === 'object') {
+    if (isToolConfirmationOutcome(outcome.outcome)) {
+      return outcome.outcome;
+    }
+    if ('confirmed' in outcome && typeof outcome.confirmed === 'boolean') {
+      return outcome.confirmed
+        ? ToolConfirmationOutcome.ProceedOnce
+        : ToolConfirmationOutcome.Cancel;
+    }
+    return ToolConfirmationOutcome.Cancel;
+  }
+  return isToolConfirmationOutcome(outcome)
+    ? outcome
+    : ToolConfirmationOutcome.Cancel;
+}
+
 /**
  * A convenience base class for ToolInvocation.
  */
@@ -130,7 +177,7 @@ export abstract class BaseToolInvocation<
     readonly _serverName?: string,
   ) {}
 
-  protected requireMessageBus(): any {
+  protected requireMessageBus(): IToolMessageBus {
     if (!this.messageBus) {
       throw new Error('MessageBus is required for this invocation.');
     }
@@ -223,7 +270,7 @@ export abstract class BaseToolInvocation<
     const correlationId = randomUUID();
     const toolCall: FunctionCall = {
       name: this.getToolName(),
-      args: this.params as Record<string, unknown>,
+      args: recordFromObject(this.params),
     };
 
     return new Promise<'ALLOW' | 'DENY' | 'ASK_USER'>((resolve) => {
@@ -305,13 +352,15 @@ export abstract class BaseToolInvocation<
     }
 
     try {
-      const outcome = await this.messageBus.requestConfirmation(
-        {
-          toolName: this.getToolName(),
-          args: this.params as Record<string, unknown>,
-          serverName: this.getServerName(),
-        },
-        abortSignal,
+      const outcome = normalizeConfirmationOutcome(
+        await this.messageBus.requestConfirmation(
+          {
+            toolName: this.getToolName(),
+            args: recordFromObject(this.params),
+            serverName: this.getServerName(),
+          },
+          abortSignal,
+        ),
       );
 
       if (outcome === ToolConfirmationOutcome.Cancel) {
@@ -462,7 +511,7 @@ export abstract class DeclarativeTool<
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    */
-  protected requireMessageBus(): any {
+  protected requireMessageBus(): IToolMessageBus {
     if (!this.messageBus) {
       throw new Error(
         `MessageBus is required to build tool invocations for ${this.name}.`,
@@ -630,7 +679,7 @@ export abstract class BaseDeclarativeTool<
 
   protected abstract createInvocation(
     params: TParams,
-    messageBus?: any,
+    messageBus?: IToolMessageBus,
   ): ToolInvocation<TParams, TResult>;
 }
 

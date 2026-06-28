@@ -33,11 +33,13 @@ type FakeServerMode = {
   delayRequestMethods?: Set<string>;
   crashOnMethod?: string;
   delayRespondMs?: number;
+  emitActiveTouchCount?: boolean;
 };
 
 const mode: FakeServerMode = parseMode(process.argv.slice(2));
 const documents = new Map<string, string>();
 let initialized = false;
+let activeTouchHandlers = 0;
 
 function parseMode(args: string[]): FakeServerMode {
   const parsed: FakeServerMode = {};
@@ -103,6 +105,11 @@ function parseMode(args: string[]): FakeServerMode {
       i += 1;
       continue;
     }
+
+    if (arg === '--emit-active-touch-count') {
+      parsed.emitActiveTouchCount = true;
+      continue;
+    }
   }
 
   return parsed;
@@ -132,6 +139,19 @@ async function sendPublishDiagnostics(
 
 function createDiagnosticsForText(text: string): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
+
+  if (mode.emitActiveTouchCount) {
+    diagnostics.push({
+      message: `Active touch handlers: ${activeTouchHandlers}`,
+      severity: 3,
+      code: 'FAKE_ACTIVE_TOUCH_COUNT',
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 1 },
+      },
+    });
+  }
+
   const lines = text.split(/\r?\n/u);
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -275,16 +295,21 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
       return;
     }
 
-    documents.set(uri, text);
-    await sendPublishDiagnostics({
-      uri,
-      diagnostics: [
-        ...createDiagnosticsForText(text),
-        { message: 123, range: { start: { line: 99, character: 99 } } },
-        { message: 'invalid missing range' },
-        null,
-      ],
-    });
+    activeTouchHandlers += 1;
+    try {
+      documents.set(uri, text);
+      await sendPublishDiagnostics({
+        uri,
+        diagnostics: [
+          ...createDiagnosticsForText(text),
+          { message: 123, range: { start: { line: 99, character: 99 } } },
+          { message: 'invalid missing range' },
+          null,
+        ],
+      });
+    } finally {
+      activeTouchHandlers -= 1;
+    }
     return;
   }
 
@@ -305,12 +330,17 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
 
     const updated =
       params.contentChanges?.[0]?.text ?? documents.get(uri) ?? '';
-    documents.set(uri, updated);
+    activeTouchHandlers += 1;
+    try {
+      documents.set(uri, updated);
 
-    await sendPublishDiagnostics({
-      uri,
-      diagnostics: createDiagnosticsForText(updated),
-    });
+      await sendPublishDiagnostics({
+        uri,
+        diagnostics: createDiagnosticsForText(updated),
+      });
+    } finally {
+      activeTouchHandlers -= 1;
+    }
     return;
   }
 

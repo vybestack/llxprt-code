@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { BaseToolInvocation, type ToolResult } from './tools.js';
+import {
+  BaseToolInvocation,
+  normalizeConfirmationOutcome,
+  type ToolResult,
+} from './tools.js';
 import type {
   IToolMessageBus,
   PublishCapable,
@@ -140,6 +144,84 @@ class PlainBus implements IToolMessageBus {
     return { confirmed: true };
   }
 }
+
+describe('normalizeConfirmationOutcome', () => {
+  it('maps malformed object outcomes to cancel instead of allowing execution', () => {
+    const malformedOutcome = {} as unknown as Parameters<
+      typeof normalizeConfirmationOutcome
+    >[0];
+
+    expect(normalizeConfirmationOutcome(malformedOutcome)).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+  });
+
+  it('maps null or undefined runtime outcomes to cancel instead of allowing execution', () => {
+    expect(normalizeConfirmationOutcome(null)).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+    expect(normalizeConfirmationOutcome(undefined)).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+  });
+
+  it('maps objects with present but invalid outcomes to cancel', () => {
+    const invalidStringOutcome = {
+      outcome: 'invalid-string',
+    } as unknown as Parameters<typeof normalizeConfirmationOutcome>[0];
+    const invalidNumberOutcome = {
+      outcome: 42,
+    } as unknown as Parameters<typeof normalizeConfirmationOutcome>[0];
+
+    expect(normalizeConfirmationOutcome(invalidStringOutcome)).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+    expect(normalizeConfirmationOutcome(invalidNumberOutcome)).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+  });
+
+  it('maps boolean confirmation outcomes to tool outcomes', () => {
+    expect(normalizeConfirmationOutcome(true)).toBe(
+      ToolConfirmationOutcome.ProceedOnce,
+    );
+    expect(normalizeConfirmationOutcome(false)).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+  });
+
+  it('passes through valid structured and enum outcomes', () => {
+    expect(
+      normalizeConfirmationOutcome({
+        outcome: ToolConfirmationOutcome.ProceedAlways,
+      }),
+    ).toBe(ToolConfirmationOutcome.ProceedAlways);
+    expect(
+      normalizeConfirmationOutcome(ToolConfirmationOutcome.ProceedOnce),
+    ).toBe(ToolConfirmationOutcome.ProceedOnce);
+    expect(normalizeConfirmationOutcome(ToolConfirmationOutcome.Cancel)).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+    expect(
+      normalizeConfirmationOutcome({ outcome: ToolConfirmationOutcome.Cancel }),
+    ).toBe(ToolConfirmationOutcome.Cancel);
+  });
+
+  it('maps legacy confirmed objects to confirmation outcomes', () => {
+    expect(normalizeConfirmationOutcome({ confirmed: true })).toBe(
+      ToolConfirmationOutcome.ProceedOnce,
+    );
+    expect(normalizeConfirmationOutcome({ confirmed: false })).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+  });
+
+  it('maps invalid string outcomes to cancel', () => {
+    expect(normalizeConfirmationOutcome('garbage')).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+  });
+});
 
 describe('BaseToolInvocation message bus capabilities', () => {
   describe('hasPublish type guard', () => {
@@ -365,7 +447,7 @@ describe('BaseToolInvocation message bus capabilities', () => {
       const bus: IToolMessageBus = {
         async requestConfirmation() {
           requestConfirmationCalled = true;
-          return { confirmed: true };
+          return ToolConfirmationOutcome.ProceedOnce;
         },
       };
       const invocation = new TestToolInvocation(

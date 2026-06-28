@@ -31,7 +31,7 @@ const ContentSchema = z
   .passthrough();
 
 export function getToolCallDataSchema(historyItemSchema?: z.ZodTypeAny) {
-  const schema = historyItemSchema ?? z.any();
+  const schema = historyItemSchema ?? z.unknown();
 
   return z
     .object({

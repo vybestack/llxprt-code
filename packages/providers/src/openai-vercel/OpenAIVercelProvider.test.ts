@@ -136,8 +136,7 @@ describe('OpenAIVercelProvider', () => {
       if (originalFetch) {
         global.fetch = originalFetch;
       } else {
-        // @ts-expect-error test cleanup
-        delete global.fetch;
+        Reflect.deleteProperty(globalThis, 'fetch');
       }
     });
 
@@ -332,8 +331,7 @@ describe('OpenAIVercelProvider', () => {
       if (originalFetch) {
         global.fetch = originalFetch;
       } else {
-        // @ts-expect-error test cleanup
-        delete global.fetch;
+        Reflect.deleteProperty(globalThis, 'fetch');
       }
     });
 

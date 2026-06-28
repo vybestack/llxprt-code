@@ -306,13 +306,11 @@ export class CoreToolScheduler implements ToolSchedulerContract {
     );
   }
 
-  // Backward-compat shim: accessed via @ts-expect-error in coreToolScheduler.test.ts.
   // Delegates to ToolDispatcher.getToolSuggestion which owns the implementation.
-  protected getToolSuggestion(unknownToolName: string, topN?: number): string {
+  getToolSuggestion(unknownToolName: string, topN?: number): string {
     return this.toolDispatcher.getToolSuggestion(unknownToolName, topN);
   }
 
-  // Backward-compat shim: accessed via @ts-expect-error in coreToolScheduler.publishingError.test.ts.
   // Delegates to ResultAggregator.publishBufferedResults which owns the implementation.
   // This indirection allows existing tests to spy on the scheduler's publishing step
   // without importing ResultAggregator directly.

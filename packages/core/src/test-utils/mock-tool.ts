@@ -5,6 +5,7 @@
  */
 
 import type {
+  IToolMessageBus,
   ToolCallConfirmationDetails,
   ToolInvocation,
   ToolResult,
@@ -35,7 +36,7 @@ interface MockToolOptions {
     updateOutput?: (output: string) => void,
   ) => Promise<ToolResult>;
   params?: object;
-  messageBus?: MessageBus;
+  messageBus?: IToolMessageBus;
 }
 
 function createTestMessageBus(): MessageBus {
@@ -56,7 +57,7 @@ class MockToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly tool: MockTool,
     params: { [key: string]: unknown },
-    messageBus: MessageBus,
+    messageBus: IToolMessageBus,
   ) {
     super(params, messageBus);
   }
@@ -110,6 +111,7 @@ export class MockTool extends BaseDeclarativeTool<
       typeof optionsOrName === 'string'
         ? { name: optionsOrName }
         : optionsOrName;
+    const messageBus = options.messageBus ?? createTestMessageBus();
     super(
       options.name,
       options.displayName ?? options.name,
@@ -122,9 +124,8 @@ export class MockTool extends BaseDeclarativeTool<
         } as object),
       options.isOutputMarkdown ?? false,
       options.canUpdateOutput ?? false,
-      options.messageBus ?? createTestMessageBus(),
+      messageBus,
     );
-
     const defaultExecute: ExecuteFn = async () => ({
       llmContent: `Tool ${this.name} executed successfully.`,
       returnDisplay: `Tool ${this.name} executed successfully.`,
