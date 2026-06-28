@@ -8048,9 +8048,9 @@ describe('packages/agents directive cleanup (#2117)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/agents/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/agents/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -8073,9 +8073,9 @@ describe('packages/storage directive cleanup (#2119)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/storage/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/storage/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -8100,9 +8100,9 @@ describe('packages/auth directive cleanup (#2121)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/auth/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/auth/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -8125,9 +8125,9 @@ describe('packages/settings directive cleanup (#2120)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/settings/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/settings/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -8372,9 +8372,9 @@ describe('packages/policy directive cleanup (#2122)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/policy/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/policy/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -8397,9 +8397,9 @@ describe('packages/a2a-server directive cleanup (#2123)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/a2a-server/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/a2a-server/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
