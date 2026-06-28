@@ -62,9 +62,10 @@ function cloneValueForCompression<T>(
 function cloneArrayBufferView(value: ArrayBufferView): ArrayBufferView {
   let clonedBuffer: ArrayBuffer;
   try {
-    clonedBuffer = value.buffer.slice(
+    clonedBuffer = cloneBufferRange(
+      value.buffer,
       value.byteOffset,
-      value.byteOffset + value.byteLength,
+      value.byteLength,
     );
   } catch (error) {
     logger.warn(
@@ -86,6 +87,20 @@ function cloneArrayBufferView(value: ArrayBufferView): ArrayBufferView {
   };
   const length = (value as unknown as { length: number }).length;
   return new ctor(clonedBuffer, 0, length);
+}
+
+function cloneBufferRange(
+  buffer: ArrayBufferLike,
+  byteOffset: number,
+  byteLength: number,
+): ArrayBuffer {
+  if (buffer instanceof ArrayBuffer) {
+    return buffer.slice(byteOffset, byteOffset + byteLength);
+  }
+
+  const clone = new ArrayBuffer(byteLength);
+  new Uint8Array(clone).set(new Uint8Array(buffer, byteOffset, byteLength));
+  return clone;
 }
 
 function cloneArrayForCompression(
