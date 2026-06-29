@@ -66,8 +66,11 @@ vi.mock('../../src/models/registry.js', async () => {
 
 // Get reset function
 const resetRegistry = async () => {
-  const mod = await import('../../src/models/registry.js');
-  // @ts-expect-error - test helper
+  const mod = (await import(
+    '../../src/models/registry.js'
+  )) as typeof import('../../src/models/registry.js') & {
+    __resetRegistry?: () => void;
+  };
   mod.__resetRegistry?.();
 };
 

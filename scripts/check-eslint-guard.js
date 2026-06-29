@@ -9,6 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
+import ts from 'typescript';
 
 const DEFAULT_BASE = process.env.GITHUB_BASE_REF
   ? 'origin/' + process.env.GITHUB_BASE_REF
@@ -380,6 +381,162 @@ export function hasTypeScriptSuppression(line) {
       i = skipRegex(line, i);
     }
   }
+  return false;
+}
+
+/**
+ * Template-aware counterpart to hasInlineEslintDirective. Directive text inside
+ * template literal text is inert, while comments in normal code or template
+ * expressions are still reported.
+ */
+export function hasInlineEslintDirectiveInState(line, incoming) {
+  const initialState =
+    typeof incoming === 'boolean'
+      ? { inTemplate: incoming, exprDepth: 0 }
+      : incoming;
+  let inTemplate = initialState.inTemplate;
+  let exprDepth = initialState.exprDepth;
+  let quote = null;
+  let escaped = false;
+  let i = 0;
+
+  while (i < line.length) {
+    const ch = line[i];
+    const next = line[i + 1];
+
+    if (escaped) {
+      escaped = false;
+      i += 1;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      i += 1;
+      continue;
+    }
+
+    if (quote !== null) {
+      if (ch === quote) {
+        quote = null;
+      }
+      i += 1;
+      continue;
+    }
+
+    const inExecutable = !inTemplate || exprDepth > 0;
+    if (inExecutable) {
+      if (ch === '/' && next === '/') {
+        return DIRECTIVE_PATTERN.test(line.slice(i + 2));
+      }
+      if (ch === '/' && next === '*') {
+        const end = line.indexOf('*/', i + 2);
+        const comment = line.slice(i + 2, end === -1 ? undefined : end);
+        if (DIRECTIVE_PATTERN.test(comment)) {
+          return true;
+        }
+        if (end === -1) {
+          return false;
+        }
+        i = end + 2;
+        continue;
+      }
+      if (!inTemplate && ch === '/' && canStartRegex(line, i)) {
+        i = skipRegex(line, i);
+        continue;
+      }
+    }
+
+    if (inExecutable && (ch === '"' || ch === "'")) {
+      quote = ch;
+      i += 1;
+      continue;
+    }
+
+    if (!inTemplate) {
+      if (ch === '`') {
+        inTemplate = true;
+        exprDepth = 0;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (exprDepth === 0) {
+      if (ch === '$' && next === '{') {
+        exprDepth += 1;
+        i += 2;
+        continue;
+      }
+      if (ch === '`') {
+        inTemplate = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch === '`') {
+      i += 1;
+      let nExpr = 0;
+      let nQuote = null;
+      let nEscaped = false;
+      while (i < line.length) {
+        const nch = line[i];
+        const nnext = line[i + 1];
+        if (nEscaped) {
+          nEscaped = false;
+          i += 1;
+          continue;
+        }
+        if (nch === '\\') {
+          nEscaped = true;
+          i += 1;
+          continue;
+        }
+        if (nQuote !== null) {
+          if (nch === nQuote) {
+            nQuote = null;
+          }
+          i += 1;
+          continue;
+        }
+        if (nch === '"' || nch === "'") {
+          nQuote = nch;
+          i += 1;
+          continue;
+        }
+        if (nch === '$' && nnext === '{') {
+          nExpr += 1;
+          i += 2;
+          continue;
+        }
+        if (nch === '}' && nExpr > 0) {
+          nExpr -= 1;
+          i += 1;
+          continue;
+        }
+        if (nch === '`' && nExpr === 0) {
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+
+    if (ch === '$' && next === '{') {
+      exprDepth += 1;
+      i += 2;
+      continue;
+    }
+    if (ch === '}') {
+      exprDepth -= 1;
+      if (exprDepth < 0) {
+        exprDepth = 0;
+      }
+    }
+    i += 1;
+  }
+
   return false;
 }
 
@@ -2002,13 +2159,30 @@ function extractInlineRulesEntries(line) {
  * comments are not counted. Used for contextual rules-block tracking in diffs.
  */
 function countDiffBraceDelta(line) {
+  return countDiffBraceDeltaWithBlockState(line, false).delta;
+}
+
+function countDiffBraceDeltaWithBlockState(line, inBlockComment) {
   let delta = 0;
   let quote = null;
   let escaped = false;
+  let stillInBlockComment = inBlockComment;
 
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     const next = line[i + 1];
+    if (quote === null && stillInBlockComment) {
+      if (ch === '*' && next === '/') {
+        stillInBlockComment = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (quote === null && ch === '/' && next === '*') {
+      stillInBlockComment = true;
+      i += 1;
+      continue;
+    }
     if (quote === null && ch === '/' && next === '/') {
       break;
     }
@@ -2033,7 +2207,7 @@ function countDiffBraceDelta(line) {
     }
   }
 
-  return delta;
+  return { delta, inBlockComment: stillInBlockComment };
 }
 
 export function checkDiff(diff) {
@@ -2245,6 +2419,12 @@ export function checkDiff(diff) {
   // const thresholds = { complexity: ['error', 25] -> ['error', 26] }).
   let hasHunkContext = false;
 
+  // Removed completedDirectiveCleanupScopes blocks were historical locks that
+  // duplicated the global eslint-comments/no-use rule. Issue #2227 removes
+  // those redundant blocks, so their local no-use entries are not the global
+  // inline-disable ban that the diff guard protects.
+  let removedCompletedDirectiveCleanupBlockDepth = null;
+  let removedCompletedDirectiveCleanupBlockInComment = false;
   // Template literal tracking for TS suppression detection (#2189 review
   // finding 2). Template literals can span multiple diff lines; the
   // single-line hasTypeScriptSuppression scanner only skips backticks within
@@ -2285,6 +2465,8 @@ export function checkDiff(diff) {
     nonRuleContainerDepth = null;
     removedNonRuleContainerDepth = null;
     hasHunkContext = false;
+    removedCompletedDirectiveCleanupBlockDepth = null;
+    removedCompletedDirectiveCleanupBlockInComment = false;
     templateLiteralState = { inTemplate: false, exprDepth: 0 };
   }
 
@@ -3558,9 +3740,26 @@ export function checkDiff(diff) {
 
       if (
         file === 'eslint.config.js' &&
+        content.includes('files: completedDirectiveCleanupScopes')
+      ) {
+        const triggerBraceScan = countDiffBraceDeltaWithBlockState(
+          content,
+          false,
+        );
+        removedCompletedDirectiveCleanupBlockDepth = 1 + triggerBraceScan.delta;
+        removedCompletedDirectiveCleanupBlockInComment =
+          triggerBraceScan.inBlockComment;
+      }
+      const removedFromCompletedDirectiveCleanupBlock =
+        removedCompletedDirectiveCleanupBlockDepth !== null;
+
+      if (
+        file === 'eslint.config.js' &&
         content.includes('eslint-comments/no-use') &&
         !content.includes("'off'") &&
-        !content.includes('"off"')
+        !content.includes('"off"') &&
+        !isCommentOnlyLine(content) &&
+        !removedFromCompletedDirectiveCleanupBlock
       ) {
         policyState.removedInlineDisableBan = {
           file,
@@ -3574,6 +3773,20 @@ export function checkDiff(diff) {
           lineNumber: currentLine,
           content,
         };
+      }
+
+      if (removedCompletedDirectiveCleanupBlockDepth !== null) {
+        const braceScan = countDiffBraceDeltaWithBlockState(
+          content,
+          removedCompletedDirectiveCleanupBlockInComment,
+        );
+        removedCompletedDirectiveCleanupBlockInComment =
+          braceScan.inBlockComment;
+        removedCompletedDirectiveCleanupBlockDepth += braceScan.delta;
+        if (removedCompletedDirectiveCleanupBlockDepth <= 0) {
+          removedCompletedDirectiveCleanupBlockDepth = null;
+          removedCompletedDirectiveCleanupBlockInComment = false;
+        }
       }
       oldLine += 1;
       continue;
@@ -4071,6 +4284,366 @@ export function scanRootTypeScriptSuppressions(rootDir, issueNumber) {
   return violations;
 }
 
+function repositoryTypeScriptFiles(rootDir) {
+  const roots = [join(rootDir, 'packages'), join(rootDir, 'integration-tests')];
+  return roots.flatMap((root) => listTsFiles(root));
+}
+
+function sourceFileFor(file, content) {
+  return ts.createSourceFile(
+    file,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+}
+
+function collectZodAliases(sourceFile) {
+  const aliases = new Set();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== 'zod'
+    ) {
+      continue;
+    }
+    const importClause = statement.importClause;
+    if (importClause?.name) {
+      aliases.add(importClause.name.text);
+    }
+    const namedBindings = importClause?.namedBindings;
+    if (namedBindings && ts.isNamespaceImport(namedBindings)) {
+      aliases.add(namedBindings.name.text);
+    }
+    if (namedBindings && ts.isNamedImports(namedBindings)) {
+      for (const element of namedBindings.elements) {
+        const importedName = element.propertyName?.text ?? element.name.text;
+        if (importedName === 'z') {
+          aliases.add(element.name.text);
+        }
+      }
+    }
+  }
+  return aliases;
+}
+
+function scanTypeScriptAstForEscapeHatches(
+  file,
+  sourceFile,
+  issueNumber,
+  rootDir,
+) {
+  const violations = [];
+  const relativePath = relative(rootDir, file).replace(/\\/g, '/');
+
+  const zodAliases = collectZodAliases(sourceFile);
+  function addNodeViolation(node, message, content) {
+    const position = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+    violations.push({
+      file: relativePath,
+      lineNumber: position.line + 1,
+      message,
+      content,
+    });
+  }
+
+  // Issue #2227 intentionally scans every repository TypeScript file in
+  // packages and integration-tests, including tests, setup files, and helpers.
+  // The policy forbids explicit any and z.any everywhere in that universe.
+  function visit(node) {
+    if (node.kind === ts.SyntaxKind.AnyKeyword) {
+      addNodeViolation(
+        node,
+        `explicit any type keywords are forbidden in repository TypeScript (#${issueNumber}).`,
+        node.getText(sourceFile),
+      );
+    }
+
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      zodAliases.has(node.expression.expression.text) &&
+      node.expression.name.text === 'any'
+    ) {
+      addNodeViolation(
+        node,
+        `z.any() calls are forbidden in repository TypeScript (#${issueNumber}).`,
+        node.getText(sourceFile),
+      );
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return violations;
+}
+
+function scanTypeScriptTextForEscapeHatches(
+  file,
+  content,
+  issueNumber,
+  rootDir,
+) {
+  const relativePath = relative(rootDir, file).replace(/\\/g, '/');
+  const lines = content.split(String.fromCharCode(10));
+  const violations = [];
+  let templateLiteralState = { inTemplate: false, exprDepth: 0 };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (hasInlineEslintDirectiveInState(line, templateLiteralState)) {
+      violations.push({
+        file: relativePath,
+        lineNumber: i + 1,
+        message: `Inline ESLint disable/enable directives are forbidden in repository TypeScript (#${issueNumber}).`,
+        content: line,
+      });
+    }
+    if (hasTypeScriptSuppressionInState(line, templateLiteralState)) {
+      // Production source is already covered by scanRootTypeScriptSuppressions
+      // (#2189). Issue #2227 extends the durable ban to the remaining checked
+      // repository TypeScript files, including tests, setup files, and helpers.
+      const isAlreadyCoveredByRootScan =
+        isProductionCheckedSourceFile(relativePath);
+      if (!isAlreadyCoveredByRootScan) {
+        violations.push({
+          file: relativePath,
+          lineNumber: i + 1,
+          message: `TypeScript suppression directives (@ts-ignore/@ts-expect-error/@ts-nocheck) are forbidden in repository TypeScript (#${issueNumber}).`,
+          content: line,
+        });
+      }
+    }
+    templateLiteralState = scanTemplateLiteralState(line, templateLiteralState);
+  }
+
+  return violations;
+}
+
+function stripBlockCommentsForSnippet(lines, startsInBlockComment) {
+  const parts = [];
+  let inBlock = startsInBlockComment;
+
+  for (const rawLine of lines) {
+    let remaining = rawLine;
+    let output = '';
+
+    while (remaining.length > 0) {
+      if (inBlock) {
+        const closeIndex = remaining.indexOf('*/');
+        if (closeIndex === -1) {
+          remaining = '';
+          continue;
+        }
+        remaining = remaining.slice(closeIndex + 2);
+        inBlock = false;
+        continue;
+      }
+
+      const openIndex = remaining.indexOf('/*');
+      if (openIndex === -1) {
+        output += remaining;
+        remaining = '';
+        continue;
+      }
+
+      output += remaining.slice(0, openIndex);
+      remaining = remaining.slice(openIndex + 2);
+      inBlock = true;
+    }
+
+    parts.push(output);
+  }
+
+  return parts.join(' ');
+}
+
+function scanEslintConfigForEscapeHatches(rootDir, issueNumber) {
+  const configPath = join(rootDir, 'eslint.config.js');
+  if (!existsSync(configPath)) {
+    return [];
+  }
+
+  const lines = readFileSync(configPath, 'utf8').split(String.fromCharCode(10));
+  const violations = [];
+  const configChecks = [
+    {
+      anchor: /\blegacyDirectiveCleanupScopes\b/,
+      pattern: /\blegacyDirectiveCleanupScopes\b/,
+      message: 'legacyDirectiveCleanupScopes must be removed',
+    },
+    {
+      anchor: /\bcompletedDirectiveCleanupScopes\b/,
+      pattern: /\bcompletedDirectiveCleanupScopes\b/,
+      message: 'completedDirectiveCleanupScopes must be removed',
+    },
+    {
+      anchor: /['"]@typescript-eslint\/no-explicit-any['"]/,
+      pattern:
+        /['"]@typescript-eslint\/no-explicit-any['"]\s*:\s*(?:['"](?:off|warn)['"]|[01]\b)|['"]@typescript-eslint\/no-explicit-any['"]\s*:\s*\[\s*(?:['"](?:off|warn)['"]|[01]\b)/,
+      message:
+        '@typescript-eslint/no-explicit-any off/warn entries are forbidden',
+    },
+    {
+      anchor: /['"]eslint-comments\/no-use['"]/,
+      pattern:
+        /['"]eslint-comments\/no-use['"]\s*:\s*(?:['"]off['"]|0\b)|['"]eslint-comments\/no-use['"]\s*:\s*\[\s*(?:['"]off['"]|0\b)/,
+      message: 'eslint-comments/no-use off entries are forbidden',
+    },
+    {
+      anchor: /\breportUnusedDisableDirectives\b/,
+      pattern:
+        /\breportUnusedDisableDirectives\s*:\s*(?:['"]off['"]|0\b|false\b)/,
+      message: 'reportUnusedDisableDirectives off entries are forbidden',
+    },
+  ];
+
+  let inBlockComment = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let candidateLine = line;
+    let trimmedLine = candidateLine.trim();
+
+    if (inBlockComment) {
+      const closeIndex = candidateLine.indexOf('*/');
+      if (closeIndex === -1) {
+        continue;
+      }
+      inBlockComment = false;
+      candidateLine = candidateLine.slice(closeIndex + 2);
+      trimmedLine = candidateLine.trim();
+    }
+
+    while (trimmedLine.startsWith('/*')) {
+      const closeIndex = candidateLine.indexOf('*/');
+      if (closeIndex === -1) {
+        inBlockComment = true;
+        break;
+      }
+      candidateLine = candidateLine.slice(closeIndex + 2);
+      trimmedLine = candidateLine.trim();
+    }
+
+    if (
+      inBlockComment ||
+      trimmedLine === '' ||
+      isCommentOnlyLine(candidateLine)
+    ) {
+      continue;
+    }
+
+    const snippetLines = [
+      candidateLine,
+      ...lines.slice(i + 1, Math.min(lines.length, i + 5)),
+    ];
+    const configSnippet = stripBlockCommentsForSnippet(
+      snippetLines.map(stripInlineComment),
+      false,
+    );
+    for (const check of configChecks) {
+      if (!check.anchor.test(candidateLine)) {
+        continue;
+      }
+      if (check.pattern.test(configSnippet)) {
+        violations.push({
+          file: 'eslint.config.js',
+          lineNumber: i + 1,
+          message: `${check.message} (#${issueNumber}).`,
+          content: candidateLine,
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
+function eslintCommandSegments(command) {
+  return command
+    .split(/\s*(?:&&|\|\||;)\s*/)
+    .map((segment) => segment.trim())
+    .filter((segment) =>
+      /(?:^|\s)(?:cross-env\s+[^&;]*\s+)?eslint(?:\s|$)/.test(segment),
+    );
+}
+
+function eslintSegmentHasMaxWarningsZero(segment) {
+  return /(?:^|\s)--max-warnings(?:\s+|=)0(?:\s|$)/.test(segment);
+}
+
+function lintCiKeepsMaxWarningsZero(lintCi) {
+  const eslintSegments = eslintCommandSegments(lintCi);
+  return (
+    eslintSegments.length > 0 &&
+    eslintSegments.every((segment) => eslintSegmentHasMaxWarningsZero(segment))
+  );
+}
+
+function scanPackageJsonLintCi(rootDir, issueNumber) {
+  const packagePath = join(rootDir, 'package.json');
+  if (!existsSync(packagePath)) {
+    return [];
+  }
+
+  const source = readFileSync(packagePath, 'utf8');
+  let parsed;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    return [
+      {
+        file: 'package.json',
+        lineNumber: 1,
+        message: `package.json must be valid JSON so lint:ci policy can be checked (#${issueNumber}).`,
+        content: '',
+      },
+    ];
+  }
+  const lintCi = parsed?.scripts?.['lint:ci'];
+  if (typeof lintCi === 'string' && lintCiKeepsMaxWarningsZero(lintCi)) {
+    return [];
+  }
+
+  return [
+    {
+      file: 'package.json',
+      lineNumber: 1,
+      message: `lint:ci must keep --max-warnings 0 for every ESLint invocation (#${issueNumber}).`,
+      content: typeof lintCi === 'string' ? lintCi : '',
+    },
+  ];
+}
+
+export function scanRepositoryLintEscapeHatches(rootDir, issueNumber) {
+  const violations = [];
+  for (const file of repositoryTypeScriptFiles(rootDir)) {
+    const content = readFileSync(file, 'utf8');
+    violations.push(
+      ...scanTypeScriptTextForEscapeHatches(
+        file,
+        content,
+        issueNumber,
+        rootDir,
+      ),
+    );
+    violations.push(
+      ...scanTypeScriptAstForEscapeHatches(
+        file,
+        sourceFileFor(file, content),
+        issueNumber,
+        rootDir,
+      ),
+    );
+  }
+  violations.push(...scanEslintConfigForEscapeHatches(rootDir, issueNumber));
+  violations.push(...scanPackageJsonLintCi(rootDir, issueNumber));
+  return violations;
+}
+
 const SCOPE_STRING_PATTERN = /'([^']+)'|"([^"]+)"|`([^`]+)`/;
 
 /**
@@ -4539,6 +5112,10 @@ function main() {
   // unguarded (#2189 review finding).
   violations.push(...scanRootTypeScriptSuppressions(process.cwd(), '2189'));
 
+  // Issue #2227 durable guard: all repository TypeScript under packages and
+  // integration-tests must be free of lint/type escape hatches, and central
+  // lint policy must not preserve carve-outs for directives or explicit any.
+  violations.push(...scanRepositoryLintEscapeHatches(process.cwd(), '2227'));
   const configPath = join(process.cwd(), 'eslint.config.js');
   if (existsSync(configPath)) {
     const configSource = readFileSync(configPath, 'utf8');

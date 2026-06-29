@@ -587,12 +587,11 @@ describe('Config getHookSystem', () => {
         model: 'test-model',
         cwd: '/tmp/test',
         skillsSupport: true,
+        disabledSkills: ['skill1'],
         onReload: mockOnReload,
       };
 
       const config = new Config(params);
-      // @ts-expect-error - accessing private
-      config.disabledSkills = ['skill1'];
       await initializeTestConfig(config);
 
       const skillManager = config.getSkillManager();

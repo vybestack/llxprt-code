@@ -83,6 +83,12 @@ const SIMPLE_MAPPINGS: readonly SimpleMapping[] = [
     kind: 'copy',
   },
   { configField: 'useWriteTodos', paramField: 'useWriteTodos', kind: 'copy' },
+  { configField: 'skillsSupport', paramField: 'skillsSupport', kind: 'copy' },
+  {
+    configField: 'adminSkillsEnabled',
+    paramField: 'adminSkillsEnabled',
+    kind: 'copy',
+  },
   { configField: 'sandbox', paramField: 'sandbox', kind: 'copy' },
   { configField: 'embeddingModel', paramField: 'embeddingModel', kind: 'copy' },
   { configField: 'debugMode', paramField: 'debugMode', kind: 'copy' },
@@ -145,7 +151,7 @@ function applyArrayMappings(
     params.excludeTools = [...config.excludeTools];
   }
   if (config.skills !== undefined) {
-    params.skills = [...config.skills];
+    params.skills = [...config.skills] as ConfigParameters['skills'];
   }
   if (config.allowedTools !== undefined) {
     params.allowedTools = [...config.allowedTools];
@@ -162,6 +168,9 @@ function applyArrayMappings(
   if (config.disabledHooks !== undefined) {
     params.disabledHooks = [...config.disabledHooks];
   }
+  if (config.disabledSkills !== undefined) {
+    params.disabledSkills = [...config.disabledSkills];
+  }
 }
 
 /** Copies object/record fields with deep clone + readonly→mutable casts. */
@@ -170,7 +179,17 @@ function applyObjectMappings(
   params: ConfigParamsMut,
 ): void {
   if (config.mcpServers !== undefined) {
-    params.mcpServers = clone(config.mcpServers);
+    params.mcpServers = clone(
+      config.mcpServers,
+    ) as ConfigParameters['mcpServers'];
+  }
+  if (config.extensions !== undefined) {
+    params.extensions = clone(
+      config.extensions,
+    ) as ConfigParameters['extensions'];
+  }
+  if (config.lsp !== undefined) {
+    params.lsp = clone(config.lsp) as ConfigParameters['lsp'];
   }
   if (config.hooks !== undefined) {
     params.hooks = clone(config.hooks) as ConfigParameters['hooks'];

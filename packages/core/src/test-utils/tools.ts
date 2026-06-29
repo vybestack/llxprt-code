@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
+  type IToolMessageBus,
   type ToolCallConfirmationDetails,
   type ToolInvocation,
   type ToolResult,
@@ -39,6 +40,17 @@ function isToolResultLike(result: unknown): boolean {
     return false;
   }
   return 'llmContent' in result && 'returnDisplay' in result;
+}
+
+function isCoreMessageBus(bus: IToolMessageBus): bus is MessageBus {
+  return bus instanceof MessageBus;
+}
+
+function requireCoreMessageBus(bus: IToolMessageBus): MessageBus {
+  if (!isCoreMessageBus(bus)) {
+    throw new Error('Core test tool invocations require a core MessageBus.');
+  }
+  return bus;
 }
 
 /**
@@ -134,7 +146,11 @@ export class MockTool extends BaseDeclarativeTool<
   protected createInvocation(params: {
     [key: string]: unknown;
   }): ToolInvocation<{ [key: string]: unknown }, ToolResult> {
-    return new MockToolInvocation(this, params, this.requireMessageBus());
+    return new MockToolInvocation(
+      this,
+      params,
+      requireCoreMessageBus(this.requireMessageBus()),
+    );
   }
 }
 
@@ -216,7 +232,7 @@ export class MockModifiableTool
     return new MockModifiableToolInvocation(
       this,
       params,
-      this.requireMessageBus(),
+      requireCoreMessageBus(this.requireMessageBus()),
     );
   }
 }

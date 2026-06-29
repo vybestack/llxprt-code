@@ -60,7 +60,7 @@ class ListSubagentsToolInvocation extends BaseToolInvocation<
   constructor(
     params: ListSubagentsParams,
     private readonly subagentService: ISubagentService,
-    messageBus: IToolMessageBus,
+    messageBus?: IToolMessageBus,
   ) {
     super(params, messageBus);
   }
@@ -182,9 +182,7 @@ export class ListSubagentsTool extends BaseDeclarativeTool<
         'SubagentManager service is unavailable. Please configure subagents before invoking this tool.',
       );
     }
-    return new ListSubagentsToolInvocation(params, service, {
-      requestConfirmation: async () => undefined,
-    }).execute();
+    return new ListSubagentsToolInvocation(params, service).execute();
   }
 
   protected override validateToolParamValues(): string | null {

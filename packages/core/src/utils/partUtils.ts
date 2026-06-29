@@ -10,7 +10,7 @@ import {
   type GenerateContentResponse,
 } from '@google/genai';
 
-function isEmptyPartValue(value: PartListUnion): boolean {
+function isEmptyPartValue(value: PartListUnion | undefined | null): boolean {
   const v = value as unknown;
   if (v === undefined || v === null || v === false || v === 0) {
     return true;
@@ -23,7 +23,7 @@ function isEmptyPartValue(value: PartListUnion): boolean {
  * If verbose is true, includes summary representations of non-text parts.
  */
 export function partToString(
-  value: PartListUnion,
+  value: PartListUnion | undefined | null,
   options?: { verbose?: boolean },
 ): string {
   if (isEmptyPartValue(value)) {

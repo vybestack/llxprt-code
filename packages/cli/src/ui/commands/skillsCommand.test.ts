@@ -26,6 +26,15 @@ vi.mock('../../config/settings.js', async (importOriginal) => {
   };
 });
 
+function getConfig(
+  context: CommandContext,
+): NonNullable<CommandContext['services']['config']> {
+  if (context.services.config === null) {
+    throw new Error('Expected test config');
+  }
+  return context.services.config;
+}
+
 describe('skillsCommand', () => {
   let context: CommandContext;
 
@@ -296,8 +305,7 @@ describe('skillsCommand', () => {
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         await new Promise((resolve) => setTimeout(resolve, 200));
       });
-      // @ts-expect-error Mocking reloadSkills
-      context.services.config.reloadSkills = reloadSkillsMock;
+      getConfig(context).reloadSkills = reloadSkillsMock;
 
       const actionPromise = reloadCmd.action!(context, '');
 
@@ -344,8 +352,7 @@ describe('skillsCommand', () => {
           { name: 'skill3' },
         ] as SkillDefinition[]);
       });
-      // @ts-expect-error Mocking reloadSkills
-      context.services.config.reloadSkills = reloadSkillsMock;
+      getConfig(context).reloadSkills = reloadSkillsMock;
 
       await reloadCmd.action!(context, '');
 
@@ -368,8 +375,7 @@ describe('skillsCommand', () => {
           { name: 'skill1' },
         ] as SkillDefinition[]);
       });
-      // @ts-expect-error Mocking reloadSkills
-      context.services.config.reloadSkills = reloadSkillsMock;
+      getConfig(context).reloadSkills = reloadSkillsMock;
 
       await reloadCmd.action!(context, '');
 
@@ -393,8 +399,7 @@ describe('skillsCommand', () => {
           { name: 'skill3' },
         ] as SkillDefinition[]);
       });
-      // @ts-expect-error Mocking reloadSkills
-      context.services.config.reloadSkills = reloadSkillsMock;
+      getConfig(context).reloadSkills = reloadSkillsMock;
 
       await reloadCmd.action!(context, '');
 
@@ -432,8 +437,7 @@ describe('skillsCommand', () => {
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         await new Promise((_, reject) => setTimeout(() => reject(error), 200));
       });
-      // @ts-expect-error Mocking reloadSkills
-      context.services.config.reloadSkills = reloadSkillsMock;
+      getConfig(context).reloadSkills = reloadSkillsMock;
 
       const actionPromise = reloadCmd.action!(context, '');
       await vi.advanceTimersByTimeAsync(100);

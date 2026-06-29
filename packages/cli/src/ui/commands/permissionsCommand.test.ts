@@ -37,6 +37,7 @@ describe('permissionsCommand', () => {
   const createMockContext = () => ({
     services: {
       config: null,
+      agent: null,
       settings: {} as never,
       git: undefined,
       logger: {} as never,

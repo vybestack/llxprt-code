@@ -26,6 +26,24 @@ interface ToolConfirmationDetails {
   serverName?: unknown;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function recordFromObject(
+  value: unknown,
+  fallback?: Record<string, unknown>,
+): Record<string, unknown> {
+  if (isPlainRecord(value)) {
+    return { ...value };
+  }
+  return fallback ? { ...fallback } : {};
+}
+
 function isAbortSignalAborted(abortSignal?: AbortSignal): boolean {
   return abortSignal?.aborted === true;
 }
@@ -44,17 +62,13 @@ export class CoreMessageBusAdapter implements IToolMessageBus {
   constructor(private readonly messageBus: MessageBus) {}
 
   async requestConfirmation(
-    details: Record<string, unknown>,
+    rawDetails: unknown,
     abortSignal?: AbortSignal,
   ): Promise<ToolConfirmationOutcome> {
-    const confirmationDetails = details as ToolConfirmationDetails;
+    const details = isPlainRecord(rawDetails) ? rawDetails : {};
+    const confirmationDetails: ToolConfirmationDetails = details;
     const toolName = getConfirmationToolName(confirmationDetails);
-    const args =
-      confirmationDetails.args !== null &&
-      typeof confirmationDetails.args === 'object' &&
-      !Array.isArray(confirmationDetails.args)
-        ? (confirmationDetails.args as Record<string, unknown>)
-        : details;
+    const toolArgs = recordFromObject(confirmationDetails.args, details);
     const serverName =
       typeof confirmationDetails.serverName === 'string'
         ? confirmationDetails.serverName
@@ -66,12 +80,12 @@ export class CoreMessageBusAdapter implements IToolMessageBus {
 
     const toolCall: FunctionCall = {
       name: toolName,
-      args,
+      args: toolArgs,
     };
 
     const confirmed = await this.messageBus.requestConfirmation(
       toolCall,
-      args,
+      toolArgs,
       serverName,
     );
 

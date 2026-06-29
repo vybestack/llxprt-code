@@ -17,6 +17,7 @@ import type {
   ResolvedSubProfile,
   LoadBalancerSubProfile,
 } from '../LoadBalancingProvider.js';
+import { resolveSubProfileModel } from './subProfileHelpers.js';
 
 /**
  * Build the extended stats snapshot from the component maps.
@@ -37,7 +38,7 @@ export function buildExtendedStats(
   const currentTPM = collectCurrentTPM(subProfiles, calculateTPM);
   const backendMetricsRecord = collectBackendMetrics(backendMetrics);
   const members = collectMembers(subProfiles);
-  const lastSelectedModel = resolveSubProfileModel(subProfiles, lastSelected);
+  const lastSelectedModel = resolveLastSelectedModel(subProfiles, lastSelected);
 
   return {
     profileName,
@@ -58,16 +59,7 @@ function collectMembers(
   return subProfiles.map((subProfile) => subProfile.name);
 }
 
-function subProfileModel(
-  subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-): string | null {
-  if ('model' in subProfile) {
-    return subProfile.model;
-  }
-  return subProfile.modelId ?? null;
-}
-
-export function resolveSubProfileModel(
+function resolveLastSelectedModel(
   subProfiles: ResolvedSubProfile[] | LoadBalancerSubProfile[],
   lastSelected: string | null,
 ): string | null {
@@ -77,7 +69,11 @@ export function resolveSubProfileModel(
   const match = subProfiles.find(
     (subProfile) => subProfile.name === lastSelected,
   );
-  return match ? subProfileModel(match) : null;
+  if (!match) {
+    return null;
+  }
+  const model = resolveSubProfileModel(match);
+  return model === '' ? null : model;
 }
 
 function collectProfileCounts(

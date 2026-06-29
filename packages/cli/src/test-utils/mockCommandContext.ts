@@ -37,6 +37,7 @@ const buildDefaultMocks = (): CommandContext => ({
       getAgentClient: vi.fn(),
       getSubagentManager: vi.fn(),
     } as unknown as Config,
+    agent: null,
     settings: { merged: {} } as LoadedSettings,
     git: undefined as GitService | undefined,
     logger: {

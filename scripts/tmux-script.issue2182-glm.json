@@ -1,0 +1,48 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 100000,
+    "scrollbackLines": 20000,
+    "initialWaitMs": 8000
+  },
+  "startCommand": ["node", "scripts/start.js", "--profile-load", "glm"],
+  "yolo": true,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "00-startup", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "Reply with exactly the two words: glm ok",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "esc to cancel",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    { "type": "wait", "ms": 2000 },
+    { "type": "capture", "label": "01-response-screen", "scope": "screen" },
+    {
+      "type": "capture",
+      "label": "01-response-scrollback",
+      "scope": "scrollback"
+    },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

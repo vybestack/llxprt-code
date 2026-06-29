@@ -38,17 +38,14 @@ describe('CoreToolScheduler getToolSuggestion', () => {
     });
 
     // Test that the right tool is selected, with only 1 result, for typos
-    // @ts-expect-error accessing private method
     const misspelledTool = scheduler.getToolSuggestion('list_fils', 1);
     expect(misspelledTool).toBe(' Did you mean "list_files"?');
 
     // Test that the right tool is selected, with only 1 result, for prefixes
-    // @ts-expect-error accessing private method
     const prefixedTool = scheduler.getToolSuggestion('github.list_files', 1);
     expect(prefixedTool).toBe(' Did you mean "list_files"?');
 
     // Test that the right tool is first
-    // @ts-expect-error accessing private method
     const suggestionMultiple = scheduler.getToolSuggestion('list_fils');
     expect(suggestionMultiple).toBe(
       ' Did you mean one of: "list_files", "read_file", "write_file"?',

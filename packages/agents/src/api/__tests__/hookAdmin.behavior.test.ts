@@ -26,7 +26,7 @@
 
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { buildAgent } from './helpers/agentHarness.js';
+import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { HookEventName } from '@vybestack/llxprt-code-core/hooks/types.js';
@@ -74,7 +74,7 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       // The harness agent has enableHooks=false -> getHookSystem() is undefined.
-      expect(agent.getConfig().getHookSystem()).toBeUndefined();
+      expect(internalConfig(agent).getHookSystem()).toBeUndefined();
       const list = agent.hooks.listHooks();
       expect(list).toStrictEqual([]);
     } finally {

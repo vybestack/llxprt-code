@@ -11,9 +11,9 @@ import * as dotenv from 'dotenv';
 
 import type { TelemetryTarget } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-core';
-import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import {
   Config,
+  FileDiscoveryService,
   type ConfigParameters,
   ApprovalMode,
   MessageBus,

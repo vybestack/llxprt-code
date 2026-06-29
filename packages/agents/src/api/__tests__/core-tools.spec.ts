@@ -458,6 +458,33 @@ describe('ToolControl unit @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006 
     expect(responses[0].outcome).toBe(ToolConfirmationOutcome.ProceedOnce);
   });
 
+  it('T12 respondToConfirmation forwards payload overrides and user-confirmation requests through the shared bus @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
+    const handle = createToolControlDeps(sampleTools);
+    const control = new ToolControl(handle.deps);
+    control.notifyConfirmation({
+      confirmationId: 'corr-payload',
+      toolCallId: 'call-payload',
+      name: 'shell',
+      details: {},
+    });
+
+    control.respondToConfirmation(
+      'corr-payload',
+      ToolConfirmationOutcome.SuggestEdit,
+      { editedCommand: 'npm run test -- --runInBand' },
+      true,
+    );
+
+    const responses = handle.responses();
+    expect(responses).toHaveLength(1);
+    expect(responses[0].correlationId).toBe('corr-payload');
+    expect(responses[0].outcome).toBe(ToolConfirmationOutcome.SuggestEdit);
+    expect(responses[0].payload).toStrictEqual({
+      editedCommand: 'npm run test -- --runInBand',
+    });
+    expect(responses[0].requiresUserConfirmation).toBe(true);
+  });
+
   it('respondToConfirmation throws ToolControlError for an id that was never surfaced and does not publish @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006', () => {
     const handle = createToolControlDeps(sampleTools);
     const control = new ToolControl(handle.deps);

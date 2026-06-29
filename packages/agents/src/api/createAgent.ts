@@ -91,16 +91,19 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   const params = { ...frozenParams };
   params.agentClientFactory = agentClientFactory;
   // @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-006 @requirement:REQ-016
+  const forceConfirmations = applyHarnessGates(parsed, params);
   // Registry of scheduler handles created via a caller-injected factory. The
   // facade retains these and Agent.dispose() tears them down (dispose.md lines
   // 40-47). Empty unless a toolSchedulerFactory was supplied.
   const injectedSchedulerHandles: AgentSchedulerHandle[] = [];
   // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
-  // DEFAULT scheduler factory: construct a CoreToolScheduler with the registry
-  // wrapped so every tool surfaces a REAL confirmation (the confirmation-forcing
-  // seam). Without a factory, Config.getOrCreateScheduler throws
+  // DEFAULT scheduler factory: construct a CoreToolScheduler. The harness gate
+  // decides whether the registry is wrapped so every tool surfaces a REAL
+  // confirmation. Without a factory, Config.getOrCreateScheduler throws
   // "toolSchedulerFactory is required".
-  const defaultSchedulerFactory = createDefaultToolSchedulerFactory();
+  const defaultSchedulerFactory = createDefaultToolSchedulerFactory({
+    forceConfirmations,
+  });
   if (toolSchedulerFactory !== undefined) {
     // @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-006 @requirement:REQ-016
     // The caller injected a factory: each per-turn scheduler is still a real,
@@ -117,23 +120,28 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     params.toolSchedulerFactory = defaultSchedulerFactory;
   }
   // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
-  // Make the runtime interactive so the ConfirmationCoordinator's
-  // setupConfirmationPrompt does not throw and the policy engine keeps the
-  // default ASK_USER decision (instead of converting it to DENY in
-  // non-interactive mode). Without this, forced confirmations would never
-  // reach setupConfirmationPrompt.
-  params.interactive = true;
+  // @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01
+  // Forced confirmations require an interactive runtime; otherwise ASK_USER is
+  // converted to DENY before the confirmation coordinator can prompt.
 
   // @pseudocode createAgent.md steps 30-38: construct Config + ONE shared MessageBus
   const config = new Config(params);
   // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
+  // @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01
   // @pseudocode tool-confirmation-merge.md steps 10-31 (policy-ASK seam)
   // Ensure the process working directory is a valid workspace root so that
   // fixture paths using {{CWD}} (expanded by FakeProvider to process.cwd())
   // resolve within the workspace boundary and do not fail tool build
   // validation (ReadFileTool.validatePathWithinWorkspace). Without this, a
   // workingDir narrower than process.cwd() would reject valid paths.
-  config.getWorkspaceContext().addDirectory(process.cwd());
+  //
+  // The harness.includeProcessCwd gate (default true) lets production callers
+  // avoid mutating the workspace with process.cwd() when they supply their own
+  // workingDir.
+  const includeProcessCwd = parsed.harness?.includeProcessCwd ?? true;
+  if (includeProcessCwd) {
+    config.getWorkspaceContext().addDirectory(process.cwd());
+  }
   // Inject a high-priority ASK policy rule that overrides the read-only.toml
   // ALLOW rules (priority 1.050) for ALL tools. This forces the
   // ConfirmationCoordinator's tryFastApprove to fall through (ASK is neither
@@ -144,7 +152,12 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // confirmationDetails (satisfying T2b/T3c/T11). Priority 4.0 sits above
   // every TOML tier (1.x/2.x/3.x) and all settings bands, so it cannot be
   // overridden by user/admin policy either.
-  injectConfirmationForcingPolicy(config.getPolicyEngine());
+  //
+  // The harness.forceConfirmations gate (default true) lets production callers
+  // skip the policy injection when they do not want forced confirmations.
+  if (forceConfirmations) {
+    injectConfirmationForcingPolicy(config.getPolicyEngine());
+  }
   const messageBus = new MessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
@@ -386,6 +399,19 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
   return agent;
 }
 
+function applyHarnessGates(
+  parsed: { readonly harness?: AgentConfig['harness'] },
+  params: { interactive?: boolean },
+): boolean {
+  const forceInteractive = parsed.harness?.forceInteractive ?? true;
+  if (forceInteractive) {
+    params.interactive = true;
+  }
+  return (
+    (parsed.harness?.forceConfirmations ?? true) && params.interactive === true
+  );
+}
+
 /**
  * Applies the initial provider, model, and auth fields through the real runtime
  * mutators after the context is active.
@@ -500,37 +526,42 @@ export function registerProvidersOntoManager(
 /**
  * The DEFAULT tool scheduler factory injected by createAgent when the caller
  * supplies none. Constructs a {@link CoreToolScheduler} backed by the tool
- * registry wrapped so every tool surfaces a REAL confirmation (the
+ * registry, optionally wrapped so every tool surfaces a REAL confirmation (the
  * confirmation-forcing seam).
  *
  * @plan:PLAN-20260617-COREAPI.P17
  * @requirement:REQ-006
  * @pseudocode tool-confirmation-merge.md steps 10-31 (confirmation-forcing seam)
  */
-function createDefaultToolSchedulerFactory(): ToolSchedulerFactory {
-  return (options) => {
-    const registry = wrapRegistryWithConfirmation(options.toolRegistry);
+function createDefaultToolSchedulerFactory(options: {
+  readonly forceConfirmations: boolean;
+}): ToolSchedulerFactory {
+  return (schedulerOptions) => {
+    const registry = options.forceConfirmations
+      ? wrapRegistryWithConfirmation(schedulerOptions.toolRegistry)
+      : schedulerOptions.toolRegistry;
     return new CoreToolScheduler({
-      config: options.config,
-      messageBus: options.messageBus,
+      config: schedulerOptions.config,
+      messageBus: schedulerOptions.messageBus,
       toolRegistry: registry,
-      ...(options.outputUpdateHandler !== undefined
-        ? { outputUpdateHandler: options.outputUpdateHandler }
+      ...(schedulerOptions.outputUpdateHandler !== undefined
+        ? { outputUpdateHandler: schedulerOptions.outputUpdateHandler }
         : {}),
-      ...(options.onAllToolCallsComplete !== undefined
-        ? { onAllToolCallsComplete: options.onAllToolCallsComplete }
+      ...(schedulerOptions.onAllToolCallsComplete !== undefined
+        ? { onAllToolCallsComplete: schedulerOptions.onAllToolCallsComplete }
         : {}),
-      ...(options.onToolCallsUpdate !== undefined
-        ? { onToolCallsUpdate: options.onToolCallsUpdate }
+      ...(schedulerOptions.onToolCallsUpdate !== undefined
+        ? { onToolCallsUpdate: schedulerOptions.onToolCallsUpdate }
         : {}),
-      getPreferredEditor: options.getPreferredEditor,
-      onEditorClose: options.onEditorClose,
-      ...(options.onEditorOpen !== undefined
-        ? { onEditorOpen: options.onEditorOpen }
+      getPreferredEditor: schedulerOptions.getPreferredEditor,
+      onEditorClose: schedulerOptions.onEditorClose,
+      ...(schedulerOptions.onEditorOpen !== undefined
+        ? { onEditorOpen: schedulerOptions.onEditorOpen }
         : {}),
-      ...(options.toolContextInteractiveMode !== undefined
+      ...(schedulerOptions.toolContextInteractiveMode !== undefined
         ? {
-            toolContextInteractiveMode: options.toolContextInteractiveMode,
+            toolContextInteractiveMode:
+              schedulerOptions.toolContextInteractiveMode,
           }
         : {}),
     });

@@ -79,6 +79,13 @@ function projectToolResult(
         x.status === 'error' ||
         (x.status === 'cancelled' &&
           x.outcome === ToolConfirmationOutcome.Cancel),
+      ...(x.response.resultDisplay !== undefined
+        ? { display: x.response.resultDisplay }
+        : {}),
+      ...(x.response.suppressDisplay === true ? { suppressDisplay: true } : {}),
+      ...(x.response.errorType !== undefined
+        ? { errorType: x.response.errorType }
+        : {}),
     };
   }
   return {
@@ -86,6 +93,9 @@ function projectToolResult(
     name: '',
     output: x.responseParts,
     isError: x.error !== undefined,
+    ...(x.resultDisplay !== undefined ? { display: x.resultDisplay } : {}),
+    ...(x.suppressDisplay === true ? { suppressDisplay: true } : {}),
+    ...(x.errorType !== undefined ? { errorType: x.errorType } : {}),
   };
 }
 

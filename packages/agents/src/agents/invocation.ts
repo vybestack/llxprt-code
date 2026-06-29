@@ -39,15 +39,15 @@ export class SubagentInvocation<
    * @param params The validated input parameters for the agent.
    * @param definition The definition object that configures the agent.
    * @param config The global runtime configuration.
-   * @param messageBus Optional message bus for policy enforcement.
+   * @param executorMessageBus Message bus for policy enforcement passed to the agent executor.
    */
   constructor(
     params: AgentInputs,
     private readonly definition: AgentDefinition<TOutput>,
     private readonly config: Config,
-    messageBus: MessageBus,
+    private readonly executorMessageBus: MessageBus,
   ) {
-    super(params, messageBus);
+    super(params, executorMessageBus);
   }
 
   /**
@@ -108,7 +108,7 @@ export class SubagentInvocation<
       const executor = await AgentExecutor.create(
         this.definition,
         this.config,
-        this.requireMessageBus(),
+        this.executorMessageBus,
         onActivity,
       );
 

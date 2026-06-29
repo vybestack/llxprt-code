@@ -51,6 +51,10 @@ import type {
   TurnOptions,
   Unsubscribe,
   Agent,
+  AgentMemoryControl,
+  AgentSkillsControl,
+  AgentWorkspaceControl,
+  AgentLspControl,
 } from './agent.js';
 import type { AgentEvent } from './event-types.js';
 import { mapLoopStream } from './eventAdapter.js';
@@ -72,12 +76,15 @@ import type { TasksControlDeps } from './control/tasksControl.js';
 import { SessionControl } from './control/sessionControl.js';
 import type { SessionControlDeps } from './control/sessionControl.js';
 import { ProfilesControl } from './control/profilesControl.js';
+import { buildNewControls } from './control/newControls.js';
+import type { NewControls } from './control/newControls.js';
 import type { LoopHolder } from './loop/rebuildLoop.js';
 import type { RebuildLoopDeps } from './loop/rebuildLoop.js';
 import type {
   ApprovalHandler,
   DisplayCallbacks,
 } from '../core/agenticLoop/types.js';
+import { registerInternalConfig } from './internalConfigAccess.js';
 import {
   drainToResult,
   buildAgentResult,
@@ -95,32 +102,7 @@ import { computeAuthWinner } from './control/authState.js';
 import type { AuthWinner } from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
 
-/**
- * Aggregate error thrown by {@link AgentImpl.dispose} when one or more teardown
- * steps fail. dispose() collects every failure into {@link errors} and throws
- * this AFTER attempting all cleanup, so a single failing resource never aborts
- * the rest of the teardown.
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- * @pseudocode dispose.md line 101
- */
-export class AggregateDisposeError extends Error {
-  readonly errors: readonly unknown[];
-
-  constructor(errors: readonly unknown[]) {
-    super(AggregateDisposeError.buildMessage(errors));
-    this.name = 'AggregateDisposeError';
-    this.errors = errors;
-    Object.setPrototypeOf(this, AggregateDisposeError.prototype);
-  }
-
-  private static buildMessage(errors: readonly unknown[]): string {
-    const details = errors
-      .map((e) => (e instanceof Error ? e.message : String(e)))
-      .join('; ');
-    return `Agent dispose failed with ${errors.length} error(s): ${details}`;
-  }
-}
+import { AggregateDisposeError } from './disposeErrors.js';
 
 /**
  * The bootstrap dependency bundle injected into AgentImpl by buildAgent.
@@ -212,6 +194,11 @@ export class AgentImpl implements Agent {
   readonly policy: PolicyControl;
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
   readonly tasks: TasksControl;
+  readonly memory: AgentMemoryControl;
+  readonly skills: AgentSkillsControl;
+  readonly workspace: AgentWorkspaceControl;
+  readonly lsp: AgentLspControl;
+  private readonly newControls: NewControls;
 
   /** @pseudocode createAgent.md steps 150-160 */
   readonly ownership: OwnershipRecord;
@@ -289,10 +276,6 @@ export class AgentImpl implements Agent {
 
   constructor(private readonly deps: AgentDeps) {
     this.ownership = deps.ownership;
-    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001
-    // Expose the providerManager + runtimeId so identity probes can assert the
-    // adopted manager is the SAME instance (CRIT-1) and the runtime id is
-    // deterministic (sessionId-derived).
     this.providerManager = deps.providerManager;
     this.runtimeId = deps.runtimeId;
     // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
@@ -348,16 +331,14 @@ export class AgentImpl implements Agent {
     this.hooks = this.buildHookControl();
     this.policy = this.buildPolicyControl();
     this.tasks = this.buildTasksControl();
+    this.newControls = buildNewControls(this.deps.config);
+    this.memory = this.newControls.memory;
+    this.skills = this.newControls.skills;
+    this.workspace = this.newControls.workspace;
+    this.lsp = this.newControls.lsp;
+    registerInternalConfig(this, this.deps.config);
   }
 
-  /**
-   * Builds the SessionControl wired to the live Config + per-agent session id,
-   * resolveClient (the SAME restore path restoreHistory uses), and the
-   * per-agent provider/model accessors, so checkpoint/recording/resume map onto
-   * the real Logger / SessionRecordingService / resumeSession machinery.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
   private buildSessionControl(): SessionControl {
     const sessionDeps: SessionControlDeps = {
       config: this.deps.config,
@@ -589,10 +570,18 @@ export class AgentImpl implements Agent {
   ): AsyncIterable<AgentEvent> {
     // @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013
     // MCP discovery gate: by default await readiness before the model turn. On
-    // discovery FAILURE the stream yields exactly ONE done{reason:'error'} and
-    // stops — no model turn runs.
+    // discovery FAILURE the stream yields a structured `error` event (carrying
+    // the failure message so consumers can surface useful diagnostics) followed
+    // by exactly ONE done{reason:'error'} and stops — no model turn runs.
     const gateError = await this.awaitMcpDiscoveryGate(opts);
     if (gateError !== undefined) {
+      // StructuredError has no `code` field, so the typed AgentError code
+      // (e.g. 'mcp_discovery_failed') is prefixed onto the message to keep it
+      // programmatically distinguishable without widening the public type.
+      yield {
+        type: 'error',
+        error: { message: `[${gateError.code}] ${gateError.message}` },
+      };
       yield { type: 'done', reason: 'error' };
       return;
     }
@@ -601,9 +590,10 @@ export class AgentImpl implements Agent {
       throw new Error('Agent loop is not initialized');
     }
     const message = toPartListUnion(input);
-    const signal =
-      opts?.signal ?? this.deps.loopHolder.activeRunController?.signal;
-    const effectiveSignal = signal ?? new AbortController().signal;
+    const effectiveSignal =
+      opts?.signal ??
+      this.deps.loopHolder.activeRunController?.signal ??
+      new AbortController().signal;
     const loopEvents = loop.run(message, effectiveSignal, opts?.promptId);
     const mapped = mapLoopStream(loopEvents);
     for await (const event of mapped) {
@@ -761,11 +751,6 @@ export class AgentImpl implements Agent {
    */
   getRuntimeId(): string {
     return this.deps.runtimeId;
-  }
-
-  /** @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001 */
-  getConfig(): Config {
-    return this.deps.config;
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
@@ -1352,6 +1337,9 @@ export class AgentImpl implements Agent {
     // the bus emitter's listener tally to its post-dispose baseline (zero).
     this.safeSync(errors, () => {
       this.hooks.detach();
+    });
+    this.safeSync(errors, () => {
+      this.newControls.dispose();
     });
     const subs = holder.subscriptions;
     if (subs !== undefined) {

@@ -37,6 +37,7 @@ import type { AppDialogsResult } from './useAppDialogs.js';
 export interface AppInputParams {
   // From bootstrap
   config: AppBootstrapResult['config'];
+  agent: AppBootstrapResult['agent'];
   settings: AppBootstrapResult['settings'];
   runtime: AppBootstrapResult['runtime'];
   history: AppBootstrapResult['history'];
@@ -175,6 +176,7 @@ function useSlashCommandSetup(
 ) {
   const {
     config,
+    agent,
     settings,
     addItem,
     clearItems,
@@ -195,6 +197,7 @@ function useSlashCommandSetup(
   );
   return useSlashCommandProcessor(
     config,
+    agent,
     settings,
     addItem,
     clearItems,
@@ -327,6 +330,10 @@ function useInputStreamSetup(
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
   const geminiResult = useGeminiStream(
+    // Migration bridge (#1595): this config.getAgentClient() call is the last
+    // remaining direct Config consumer in the streaming path. A later subissue
+    // replaces it with the threaded Agent once the streaming hooks migrate to
+    // the public Agent API; the hooks are intentionally unchanged at this stage.
     config.getAgentClient(),
     history,
     addItem,

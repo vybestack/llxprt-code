@@ -9,12 +9,12 @@
  * @requirement REQ-STAT5-003.1
  * @pseudocode gemini-runtime.md lines 145-248
  *
- * TDD tests for AgentClient runtime state integration (RED phase).
+ * Tests for AgentClient runtime state integration.
  * These tests verify that AgentClient consumes AgentRuntimeState for model/provider/auth
  * instead of reading from Config directly.
  *
- * Expected outcome: These tests FAIL against current implementation because
- * AgentClient still uses Config directly.
+ * AgentClient now accepts AgentRuntimeState as its second constructor argument
+ * and an optional HistoryService as its third constructor argument.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -74,9 +74,8 @@ describe('AgentClient - Runtime State Integration', () => {
       const config = createTestConfig();
       const runtimeState = createTestRuntimeState();
 
-      // This will fail because current AgentClient constructor only accepts Config
+      // AgentClient constructor accepts AgentRuntimeState as second parameter.
       expect(() => {
-        // @ts-expect-error - Testing future constructor signature
         new AgentClient(config, runtimeState);
       }).not.toThrow();
     });
@@ -90,9 +89,8 @@ describe('AgentClient - Runtime State Integration', () => {
       const runtimeState = createTestRuntimeState();
       const historyService = {} as HistoryService; // Mock
 
-      // This will fail because current AgentClient constructor signature doesn't support this
+      // AgentClient constructor accepts HistoryService as third parameter.
       expect(() => {
-        // @ts-expect-error - Testing future constructor signature
         new AgentClient(config, runtimeState, historyService);
       }).not.toThrow();
     });
@@ -118,7 +116,6 @@ describe('AgentClient - Runtime State Integration', () => {
         provider: 'gemini', // Runtime state has gemini
       });
 
-      // @ts-expect-error - Testing future API
       const client = new AgentClient(config, runtimeState);
 
       // When we initialize the client, it should use 'gemini' from runtime state
@@ -139,7 +136,6 @@ describe('AgentClient - Runtime State Integration', () => {
         model: 'gemini-2.0-flash', // Runtime state has different model
       });
 
-      // @ts-expect-error - Testing future API
       const client = new AgentClient(config, runtimeState);
 
       // Model selection should use runtime state value
@@ -159,7 +155,6 @@ describe('AgentClient - Runtime State Integration', () => {
         provider: 'gemini',
       });
 
-      // @ts-expect-error - Testing future API
       const client = new AgentClient(config, runtimeState);
 
       expect(client['runtimeState']).toBeDefined();
@@ -183,7 +178,6 @@ describe('AgentClient - Runtime State Integration', () => {
       const config = createTestConfig();
       const runtimeState = createTestRuntimeState();
 
-      // @ts-expect-error - Testing future API
       const client = new AgentClient(config, runtimeState);
 
       // Verify that the client has subscribed (has an unsubscribe function)
@@ -199,7 +193,6 @@ describe('AgentClient - Runtime State Integration', () => {
       const config = createTestConfig();
       const runtimeState = createTestRuntimeState();
 
-      // @ts-expect-error - Testing future API
       const client = new AgentClient(config, runtimeState);
 
       // Verify subscription exists
@@ -232,7 +225,6 @@ describe('AgentClient - Runtime State Integration', () => {
       const originalModel = runtimeState.model;
       const originalUpdatedAt = runtimeState.updatedAt;
 
-      // @ts-expect-error - Testing future API
       const _client = new AgentClient(config, runtimeState);
 
       // Perform some operations (mocked)
@@ -261,7 +253,6 @@ describe('AgentClient - Runtime State Integration', () => {
       const runtimeState = createTestRuntimeState();
       const historyService = {} as HistoryService; // Mock
 
-      // @ts-expect-error - Testing future API
       const client = new AgentClient(config, runtimeState, historyService);
 
       // Client should store the injected HistoryService
@@ -276,7 +267,6 @@ describe('AgentClient - Runtime State Integration', () => {
       const config = createTestConfig();
       const runtimeState = createTestRuntimeState();
 
-      // @ts-expect-error - Testing future API
       const client = new AgentClient(config, runtimeState);
       // No history service provided
 
@@ -309,7 +299,6 @@ describe('AgentClient - Runtime State Integration', () => {
       } as unknown as AgentRuntimeState;
 
       expect(() => {
-        // @ts-expect-error - Testing future API
         new AgentClient(config, runtimeState);
       }).toThrow(/provider/i);
     });
@@ -330,7 +319,6 @@ describe('AgentClient - Runtime State Integration', () => {
       } as unknown as AgentRuntimeState;
 
       expect(() => {
-        // @ts-expect-error - Testing future API
         new AgentClient(config, runtimeState);
       }).toThrow(/model/i);
     });
@@ -348,7 +336,6 @@ describe('AgentClient - Runtime State Integration', () => {
       }) as AgentRuntimeState;
 
       expect(() => {
-        // @ts-expect-error - Testing future API
         new AgentClient(config, runtimeState);
       }).toThrow(/provider/i);
     });

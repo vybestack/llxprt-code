@@ -13,30 +13,65 @@ import {
   GeminiEventType,
   ApprovalMode,
   ToolConfirmationOutcome,
-  type ToolCall,
   type ToolSchedulerContract,
+  type WaitingToolCall,
+  type AnyDeclarativeTool,
+  type AnyToolInvocation,
 } from '@vybestack/llxprt-code-core';
-import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 import { createMockConfig } from '../utils/testing_utils.js';
+import { CoderAgentEvent } from '../types.js';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
 import type { Mock } from 'vitest';
+
+function createMockEventBus(): ExecutionEventBus {
+  return {
+    publish: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    once: vi.fn(),
+    removeAllListeners: vi.fn(),
+    finished: vi.fn(),
+  };
+}
+
+function createNoopToolCallRequest(): ToolCallRequestInfo {
+  return {
+    callId: 'auto-approval-request',
+    name: 'noop',
+    args: {},
+    isClientInitiated: false,
+    prompt_id: 'prompt-id',
+  };
+}
+
+function createWaitingToolCall(onConfirm: Mock): WaitingToolCall {
+  return {
+    request: {
+      callId: '1',
+      name: 'noop',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-id',
+    },
+    status: 'awaiting_approval',
+    tool: {} as unknown as AnyDeclarativeTool,
+    invocation: {} as unknown as AnyToolInvocation,
+    confirmationDetails: {
+      type: 'info',
+      title: 'Approve noop',
+      prompt: 'Approve noop?',
+      onConfirm,
+    },
+  };
+}
 
 describe('Task', () => {
   it('scheduleToolCalls should not modify the input requests array', async () => {
     const mockConfig = createMockConfig();
 
-    const mockEventBus: ExecutionEventBus = {
-      publish: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn(),
-      once: vi.fn(),
-      removeAllListeners: vi.fn(),
-      finished: vi.fn(),
-    };
+    const mockEventBus = createMockEventBus();
 
-    // The Task constructor is private. We'll bypass it for this unit test.
-    // @ts-expect-error - Calling private constructor for test purposes.
-    const task = new Task(
+    const task = await Task.create(
       'task-id',
       'context-id',
       mockConfig as Config,
@@ -79,17 +114,9 @@ describe('Task', () => {
   describe('acceptAgentMessage', () => {
     it('should set currentTraceId when event has traceId', async () => {
       const mockConfig = createMockConfig();
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
-      // @ts-expect-error - Calling private constructor for test purposes.
-      const task = new Task(
+      const task = await Task.create(
         'task-id',
         'context-id',
         mockConfig as Config,
@@ -97,10 +124,10 @@ describe('Task', () => {
       );
 
       const event = {
-        type: 'content',
+        type: GeminiEventType.Content,
         value: 'test',
         traceId: 'test-trace-id',
-      };
+      } as const;
 
       await task.acceptAgentMessage(event);
 
@@ -115,17 +142,9 @@ describe('Task', () => {
 
     it('handles UserCancelled as explicit user cancel semantics', async () => {
       const mockConfig = createMockConfig();
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
-      // @ts-expect-error - Calling private constructor for test purposes.
-      const task = new Task(
+      const task = await Task.create(
         'task-id',
         'context-id',
         mockConfig as Config,
@@ -155,17 +174,9 @@ describe('Task', () => {
 
     it('handles StreamIdleTimeout as timeout semantics (not user-cancel)', async () => {
       const mockConfig = createMockConfig();
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
-      // @ts-expect-error - Calling private constructor for test purposes.
-      const task = new Task(
+      const task = await Task.create(
         'task-id',
         'context-id',
         mockConfig as Config,
@@ -213,17 +224,9 @@ describe('Task', () => {
   describe('modelInfo propagation', () => {
     it('should store modelInfo when ModelInfo event is received', async () => {
       const mockConfig = createMockConfig();
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
-      // @ts-expect-error - Calling private constructor for test purposes.
-      const task = new Task(
+      const task = await Task.create(
         'task-id',
         'context-id',
         mockConfig as Config,
@@ -247,14 +250,7 @@ describe('Task', () => {
 
     it('should return updated model name from getMetadata when modelInfo is set', async () => {
       const mockConfig = createMockConfig();
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
       const task = await Task.create(
         'task-id',
@@ -279,17 +275,9 @@ describe('Task', () => {
 
     it('should use modelInfo in setTaskStateAndPublishUpdate status updates', async () => {
       const mockConfig = createMockConfig();
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
-      // @ts-expect-error - Calling private constructor for test purposes.
-      const task = new Task(
+      const task = await Task.create(
         'task-id',
         'context-id',
         mockConfig as Config,
@@ -308,7 +296,7 @@ describe('Task', () => {
 
       // Trigger a status update
       task.setTaskStateAndPublishUpdate('working', {
-        kind: 'state-change' as const,
+        kind: CoderAgentEvent.StateChangeEvent,
       });
 
       expect(mockEventBus.publish).toHaveBeenCalledWith(
@@ -322,14 +310,7 @@ describe('Task', () => {
 
     it('should use default model name when no modelInfo received', async () => {
       const mockConfig = createMockConfig();
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
       const task = await Task.create(
         'task-id',
@@ -344,17 +325,9 @@ describe('Task', () => {
 
     it('should overwrite modelInfo when multiple ModelInfo events are received', async () => {
       const mockConfig = createMockConfig();
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
-      // @ts-expect-error - Calling private constructor for test purposes.
-      const task = new Task(
+      const task = await Task.create(
         'task-id',
         'context-id',
         mockConfig as Config,
@@ -391,31 +364,21 @@ describe('Task', () => {
       const mockConfig = createMockConfig();
       mockConfig.getSessionId = () => 'test-session-id';
 
-      const mockEventBus: ExecutionEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-        once: vi.fn(),
-        removeAllListeners: vi.fn(),
-        finished: vi.fn(),
-      };
+      const mockEventBus = createMockEventBus();
 
       const sendMessageStreamMock = vi
         .fn()
         .mockReturnValue((async function* () {})());
 
-      // @ts-expect-error - Calling private constructor
-      const task = new Task(
+      const task = await Task.create(
         'task-id',
         'context-id',
         mockConfig as Config,
         mockEventBus,
       );
-      // Avoid real AgentClient initialization path in unit test.
-      task['agentClient'] = {
-        sendMessageStream: sendMessageStreamMock,
-        getUserTier: vi.fn(),
-      };
+      vi.spyOn(task.agentClient, 'sendMessageStream').mockImplementation(
+        sendMessageStreamMock,
+      );
 
       // Initial state
       expect(task.currentPromptId).toBeUndefined();
@@ -497,78 +460,98 @@ describe('Task', () => {
     let task: Task;
     let mockConfig: Config;
     let mockEventBus: ExecutionEventBus;
+    let schedulerToolCalls: WaitingToolCall[];
+    let scheduleMock: Mock = vi.fn();
 
     beforeEach(async () => {
-      mockConfig = createMockConfig() as Config;
-      mockEventBus = {
-        publish: vi.fn(),
-        on: vi.fn(),
-        off: vi.fn(),
-      } as unknown as ExecutionEventBus;
+      schedulerToolCalls = [];
+      mockConfig = createMockConfig({
+        getOrCreateScheduler: vi.fn().mockImplementation(
+          async (
+            _sessionId: string,
+            callbacks: {
+              onToolCallsUpdate?: (toolCalls: WaitingToolCall[]) => void;
+            },
+          ) => {
+            scheduleMock = vi.fn().mockImplementation(async () => {
+              callbacks.onToolCallsUpdate?.(schedulerToolCalls);
+            });
+            return {
+              schedule: scheduleMock,
+              cancelAll: vi.fn(),
+              dispose: vi.fn(),
+              setCallbacks: vi.fn(),
+              handleConfirmationResponse: vi.fn(),
+            };
+          },
+        ),
+      }) as Config;
+      mockEventBus = createMockEventBus();
 
-      // @ts-expect-error - Calling private constructor for test purposes
-      task = new Task('task-id', 'context-id', mockConfig, mockEventBus);
-      task.scheduler = {
-        // Mock scheduler methods if needed
-      } as unknown as CoreToolScheduler;
+      task = await Task.create(
+        'task-id',
+        'context-id',
+        mockConfig,
+        mockEventBus,
+      );
     });
 
-    it('should auto-approve tool calls when autoExecute is true', () => {
+    it('should auto-approve tool calls when autoExecute is true', async () => {
       task.autoExecute = true;
       const onConfirmSpy = vi.fn();
-      const toolCalls = [
-        {
-          request: { callId: '1' },
-          status: 'awaiting_approval',
-          confirmationDetails: { onConfirm: onConfirmSpy },
-        },
-      ] as unknown as ToolCall[];
+      const toolCalls = [createWaitingToolCall(onConfirmSpy)];
 
-      // @ts-expect-error - Calling private method
-      task._schedulerToolCallsUpdate(toolCalls);
+      schedulerToolCalls = toolCalls;
+      await task.scheduleToolCalls(
+        [createNoopToolCallRequest()],
+        new AbortController().signal,
+      );
 
       expect(onConfirmSpy).toHaveBeenCalledWith(
         ToolConfirmationOutcome.ProceedOnce,
       );
     });
 
-    it('should auto-approve tool calls when approval mode is YOLO', () => {
+    it('should auto-approve tool calls when approval mode is YOLO', async () => {
       (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
       task.autoExecute = false;
       const onConfirmSpy = vi.fn();
-      const toolCalls = [
-        {
-          request: { callId: '1' },
-          status: 'awaiting_approval',
-          confirmationDetails: { onConfirm: onConfirmSpy },
-        },
-      ] as unknown as ToolCall[];
+      const toolCalls = [createWaitingToolCall(onConfirmSpy)];
 
-      // @ts-expect-error - Calling private method
-      task._schedulerToolCallsUpdate(toolCalls);
+      schedulerToolCalls = toolCalls;
+      await task.scheduleToolCalls(
+        [createNoopToolCallRequest()],
+        new AbortController().signal,
+      );
 
       expect(onConfirmSpy).toHaveBeenCalledWith(
         ToolConfirmationOutcome.ProceedOnce,
       );
     });
 
-    it('should NOT auto-approve when autoExecute is false and mode is not YOLO', () => {
+    it('should NOT auto-approve when autoExecute is false and mode is not YOLO', async () => {
       task.autoExecute = false;
       (mockConfig.getApprovalMode as Mock).mockReturnValue(
         ApprovalMode.DEFAULT,
       );
       const onConfirmSpy = vi.fn();
-      const toolCalls = [
-        {
-          request: { callId: '1' },
-          status: 'awaiting_approval',
-          confirmationDetails: { onConfirm: onConfirmSpy },
-        },
-      ] as unknown as ToolCall[];
+      const toolCalls = [createWaitingToolCall(onConfirmSpy)];
 
-      // @ts-expect-error - Calling private method
-      task._schedulerToolCallsUpdate(toolCalls);
+      schedulerToolCalls = toolCalls;
+      await task.scheduleToolCalls(
+        [createNoopToolCallRequest()],
+        new AbortController().signal,
+      );
 
+      expect(scheduleMock).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.any(AbortSignal),
+      );
+      expect(mockEventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: expect.objectContaining({ state: 'input-required' }),
+        }),
+      );
       expect(onConfirmSpy).not.toHaveBeenCalled();
     });
   });

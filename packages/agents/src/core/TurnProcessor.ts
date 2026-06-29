@@ -121,7 +121,7 @@ export class TurnProcessor {
 
     this.lastPromptTokenCount = null;
 
-    const prepared = await this._prepareSendMessage(params, prompt_id);
+    const prepared = this._prepareSendMessage(params);
 
     const provider = this.providerResolver('sendMessage');
     const response = await this._executeSendWithRetry(
@@ -156,18 +156,7 @@ export class TurnProcessor {
     await this.sendPromise;
     this.lastPromptTokenCount = null;
 
-    const userContent: Content | Content[] = normalizeToolInteractionInput(
-      params.message,
-    );
-    const userIContents = this._convertToIContents(userContent);
-
-    const pendingTokens = await this.estimatePendingTokens(userIContents);
-    await this.compressionHandler.ensureCompressionBeforeSend(
-      prompt_id,
-      pendingTokens,
-      'stream',
-      'auto',
-    );
+    const userContent = this._normalizeUserContent(params);
 
     let streamDoneResolver: () => void;
     this.sendPromise = new Promise<void>((resolve) => {
@@ -188,22 +177,15 @@ export class TurnProcessor {
       }
     }
 
-    return this._createStreamGenerator(
-      params,
-      prompt_id,
-      pendingTokens,
-      userContent,
-      () => {
-        abortSignal?.removeEventListener('abort', onAbort);
-        streamDoneResolver!();
-      },
-    );
+    return this._createStreamGenerator(params, prompt_id, userContent, () => {
+      abortSignal?.removeEventListener('abort', onAbort);
+      streamDoneResolver!();
+    });
   }
 
   private async *_createStreamGenerator(
     params: SendMessageParameters,
     prompt_id: string,
-    pendingTokens: number,
     userContent: Content | Content[],
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
@@ -215,7 +197,6 @@ export class TurnProcessor {
         const outcome = yield* this._runStreamAttempt(
           params,
           prompt_id,
-          pendingTokens,
           userContent,
           attempt,
         );
@@ -246,7 +227,6 @@ export class TurnProcessor {
   private async *_runStreamAttempt(
     params: SendMessageParameters,
     prompt_id: string,
-    pendingTokens: number,
     userContent: Content | Content[],
     attempt: number,
   ): AsyncGenerator<StreamEvent, { error: unknown; action: 'retry' | 'stop' }> {
@@ -259,7 +239,6 @@ export class TurnProcessor {
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
         currentParams,
         prompt_id,
-        pendingTokens,
         userContent,
       );
       for await (const chunk of stream) {
@@ -312,6 +291,12 @@ export class TurnProcessor {
     };
   }
 
+  private _normalizeUserContent(
+    params: SendMessageParameters,
+  ): Content | Content[] {
+    return normalizeToolInteractionInput(params.message);
+  }
+
   private _convertToIContents(userContent: Content | Content[]): IContent[] {
     const contents = Array.isArray(userContent) ? userContent : [userContent];
     const matcher = this.makePositionMatcher();
@@ -343,35 +328,16 @@ export class TurnProcessor {
   }
 
   /**
-   * Prepares user message: validates, converts input, estimates tokens, compresses if needed.
+   * Prepares user message: validates and converts input before provider enforcement.
    */
-  private async _prepareSendMessage(
-    params: SendMessageParameters,
-    prompt_id: string,
-  ): Promise<{
+  private _prepareSendMessage(params: SendMessageParameters): {
     userContent: Content | Content[];
     userIContents: IContent[];
-    pendingTokens: number;
-  }> {
-    const userContent = normalizeToolInteractionInput(params.message);
+  } {
+    const userContent = this._normalizeUserContent(params);
     const userIContents = this._convertToIContents(userContent);
 
-    const pendingTokens = await this.estimatePendingTokens(userIContents);
-    await this.compressionHandler.ensureCompressionBeforeSend(
-      prompt_id,
-      pendingTokens,
-      'send',
-      'auto',
-    );
-
-    const provider = this.providerResolver('sendMessage');
-    await this.compressionHandler.enforceContextWindow(
-      pendingTokens,
-      prompt_id,
-      provider,
-    );
-
-    return { userContent, userIContents, pendingTokens };
+    return { userContent, userIContents };
   }
 
   /**
@@ -384,19 +350,27 @@ export class TurnProcessor {
     prompt_id: string,
   ): Promise<GenerateContentResponse> {
     this._validateProvider(provider);
-    const iContents = this.historyService.getCuratedForProvider(userIContents);
-    logApiRequest(
-      this.runtimeContext,
-      this.runtimeContext.state,
-      ContentConverters.toGeminiContents(iContents),
-      this.runtimeContext.state.model,
-      prompt_id,
-    );
-
-    const providerBaseUrl = this.resolveProviderBaseUrl(provider);
-    const startTime = Date.now();
+    let providerStartTime = 0;
+    let providerRequestStarted = false;
+    const overallStartTime = Date.now();
 
     try {
+      const iContents = await this.compressionHandler.enforceProviderContents(
+        this.historyService.getCuratedForProvider(userIContents),
+        prompt_id,
+        provider,
+      );
+      logApiRequest(
+        this.runtimeContext,
+        this.runtimeContext.state,
+        ContentConverters.toGeminiContents(iContents),
+        this.runtimeContext.state.model,
+        prompt_id,
+      );
+
+      const providerBaseUrl = this.resolveProviderBaseUrl(provider);
+      providerRequestStarted = true;
+      providerStartTime = Date.now();
       const response = await retryWithBackoff(
         () =>
           this._executeProviderCall(
@@ -422,7 +396,7 @@ export class TurnProcessor {
         },
       );
 
-      const durationMs = Date.now() - startTime;
+      const durationMs = Date.now() - providerStartTime;
       logApiResponse(
         this.runtimeContext,
         this.runtimeContext.state,
@@ -434,7 +408,9 @@ export class TurnProcessor {
       );
       return response;
     } catch (error) {
-      const durationMs = Date.now() - startTime;
+      const durationMs = providerRequestStarted
+        ? Date.now() - providerStartTime
+        : Date.now() - overallStartTime;
       logApiError(
         this.runtimeContext,
         this.runtimeContext.state,
@@ -446,6 +422,8 @@ export class TurnProcessor {
       this._enrichSchemaDepthError(error);
       this.sendPromise = Promise.resolve();
       throw error;
+    } finally {
+      this.compressionHandler.clearProviderCompressionCallback(provider);
     }
   }
 

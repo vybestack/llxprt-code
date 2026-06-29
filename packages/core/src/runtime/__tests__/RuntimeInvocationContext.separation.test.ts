@@ -331,4 +331,65 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
     expect(context.modelBehavior['reasoning.enabled']).toBe(true);
   });
+
+  /**
+   * @issue #2182
+   * Mixed-provider load balancers leak provider-specific settings into the
+   * modelParams bucket, which providers spread verbatim into API request
+   * bodies. The two reported leaks were the nested `text` object and the
+   * camelCase `streamIdleTimeoutMs`. Neither may reach modelParams, regardless
+   * of provider, because modelParams is what gets serialized into the request.
+   */
+  describe('issue #2182: modelParams must stay free of leaked settings', () => {
+    it('does not place a nested text object into modelParams for anthropic', () => {
+      const context = createRuntimeInvocationContext({
+        runtime: createMockRuntime(),
+        settings: createMockSettings(),
+        providerName: 'anthropic',
+        ephemeralsSnapshot: { text: { verbosity: 'medium' } },
+      });
+
+      expect(context.modelParams['text']).toBeUndefined();
+      expect(context.modelParams['text.verbosity']).toBeUndefined();
+      expect(context.modelBehavior['text.verbosity']).toBe('medium');
+    });
+
+    it('does not place streamIdleTimeoutMs into modelParams for any provider', () => {
+      for (const provider of ['anthropic', 'codex', 'openai']) {
+        const context = createRuntimeInvocationContext({
+          runtime: createMockRuntime(),
+          settings: createMockSettings(),
+          providerName: provider,
+          ephemeralsSnapshot: { streamIdleTimeoutMs: 60_000 },
+        });
+
+        expect(context.modelParams['streamIdleTimeoutMs']).toBeUndefined();
+        expect(context.modelParams['stream_idle_timeout_ms']).toBeUndefined();
+        expect(context.cliSettings['stream-idle-timeout-ms']).toBe(60_000);
+      }
+    });
+
+    it('reproduces the full opusfirst ephemeral snapshot without leaking to modelParams', () => {
+      const context = createRuntimeInvocationContext({
+        runtime: createMockRuntime(),
+        settings: createMockSettings(),
+        providerName: 'anthropic',
+        ephemeralsSnapshot: {
+          streamIdleTimeoutMs: 60_000,
+          text: { verbosity: 'medium' },
+          reasoning: { enabled: true, effort: 'high' },
+          'prompt-caching': '24h',
+        },
+      });
+
+      expect(Object.keys(context.modelParams)).toStrictEqual([]);
+      // Positive routing assertions: each setting must land in its intended
+      // bucket, so a regression that silently drops settings still fails.
+      expect(context.cliSettings['stream-idle-timeout-ms']).toBe(60_000);
+      expect(context.modelBehavior['text.verbosity']).toBe('medium');
+      expect(context.modelBehavior['reasoning.enabled']).toBe(true);
+      expect(context.modelBehavior['reasoning.effort']).toBe('high');
+      expect(context.modelBehavior['prompt-caching']).toBe('24h');
+    });
+  });
 });

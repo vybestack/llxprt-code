@@ -28,8 +28,20 @@ import Ajv2020Pkg from 'ajv/dist/2020.js';
 import AjvPkg from 'ajv';
 import type { ErrorObject } from 'ajv';
 // Ajv's ESM/CJS interop: default/namespace dual export.
-const Ajv2020Class = (Ajv2020Pkg as any).default ?? Ajv2020Pkg;
-const AjvClass = (AjvPkg as any).default ?? AjvPkg;
+type AjvValidateFunction = ((data: unknown) => boolean) & {
+  errors?: ErrorObject[] | null;
+};
+type AjvConstructor = new (options: unknown) => {
+  compile: (schema: unknown) => AjvValidateFunction;
+  addMetaSchema: (schema: unknown, key?: string) => void;
+  addFormat: (name: string, format: unknown) => unknown;
+};
+const Ajv2020Class: AjvConstructor =
+  (Ajv2020Pkg as unknown as { default?: AjvConstructor } & AjvConstructor)
+    .default ?? (Ajv2020Pkg as unknown as AjvConstructor);
+const AjvClass: AjvConstructor =
+  (AjvPkg as unknown as { default?: AjvConstructor } & AjvConstructor)
+    .default ?? (AjvPkg as unknown as AjvConstructor);
 
 /**
  * The JSON Schema draft-07 meta-schema, inlined verbatim from ajv's

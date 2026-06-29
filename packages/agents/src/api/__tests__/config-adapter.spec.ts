@@ -350,19 +350,17 @@ describe('toConfigParameters adapter @plan:PLAN-20260617-COREAPI.P14 @requiremen
   });
 
   it('allows settings keys that name a NON-typed classified field (agent-sub-surface), proving only typed fields are guarded @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-002', () => {
-    // `extensions` and `recording` ARE present in CONFIG_FIELD_CLASSIFICATION
-    // but classified as 'agent-sub-surface' (NOT 'typed'). The typed-field
-    // guard set is built by FILTERING classification === 'typed', so these must
-    // pass through the escape hatch rather than throwing. (If the filter were
-    // dropped — every classified field treated as typed — this would throw.)
+    // `recording` is present in CONFIG_FIELD_CLASSIFICATION but classified as
+    // 'agent-sub-surface' (NOT 'typed'). The typed-field guard set is built by
+    // FILTERING classification === 'typed', so this must pass through the
+    // escape hatch rather than throwing.
     const params = asRecord(
       toConfigParameters({
         provider: 'openai',
         model: 'm',
-        settings: { extensions: ['x'], recording: { enabled: false } },
+        settings: { recording: { enabled: false } },
       }),
     );
-    expect(read(params, 'extensions')).toStrictEqual(['x']);
     expect(read(params, 'recording')).toStrictEqual({ enabled: false });
   });
 
@@ -388,6 +386,19 @@ describe('toConfigParameters adapter @plan:PLAN-20260617-COREAPI.P14 @requiremen
     }
     expect(caught).toBeInstanceOf(AdapterError);
     expect((caught as Error).name).toBe('AdapterError');
+  });
+
+  it('throws AdapterError when settings shadows the typed harness field @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01 @requirement:REQ-002', () => {
+    const build = (): unknown =>
+      toConfigParameters({
+        provider: 'openai',
+        model: 'm',
+        settings: { harness: { forceConfirmations: false } },
+      });
+    expect(build).toThrow(AdapterError);
+    expect(build).toThrow(
+      'field harness must be a typed AgentConfig field, not settings',
+    );
   });
 
   it('returns a frozen params object (immutable result) @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-002', () => {

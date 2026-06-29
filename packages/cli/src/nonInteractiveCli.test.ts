@@ -4,68 +4,39 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  Config,
-  ToolRegistry,
-  ServerGeminiStreamEvent,
-} from '@vybestack/llxprt-code-core';
 import {
-  ToolErrorType,
-  shutdownTelemetry,
-  isTelemetrySdkInitialized,
-  GeminiEventType,
-  StreamIdleTimeoutError,
+  type Config,
+  EmojiFilter,
   DebugLogger,
+  FatalTurnLimitedError,
   JsonStreamEventType,
-  OutputFormat,
+  StreamJsonFormatter,
+  uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
-import type { Part } from '@google/genai';
-import { runNonInteractive } from './nonInteractiveCli.js';
-import { executeToolCall } from '@vybestack/llxprt-code-agents';
+import type { AgentEvent } from '@vybestack/llxprt-code-agents';
+import { processAgentStream } from './nonInteractiveCliSupport.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { LoadedSettings } from './config/settings.js';
-import {
-  createCompletedToolCallResponse,
-  createStreamFromEvents,
-} from './nonInteractiveCli.test-helpers.js';
-
-// Mock core modules
-vi.mock('./ui/hooks/atCommandProcessor.js');
-vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-agents')>();
-  return {
-    ...original,
-    executeToolCall: vi.fn(),
-  };
-});
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
-  return {
-    ...original,
-    shutdownTelemetry: vi.fn(),
-    isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
-    delay: original.delay,
-    nextStreamEventWithIdleTimeout: original.nextStreamEventWithIdleTimeout,
-    StreamIdleTimeoutError: original.StreamIdleTimeoutError,
-  };
-});
-
-const mockGetCommands = vi.hoisted(() => vi.fn());
-const mockCommandServiceCreate = vi.hoisted(() => vi.fn());
-vi.mock('./services/CommandService.js', () => ({
-  CommandService: {
-    create: mockCommandServiceCreate,
-  },
-}));
 
 type ParsedStreamEvent = {
   type: string;
   role?: string;
   content?: string;
+  tool_name?: string;
+  tool_id?: string;
+  status?: string;
+  severity?: string;
+  message?: string;
+  error?: { type?: string; message?: string };
 };
+
+async function* streamFromEvents(
+  events: AgentEvent[],
+): AsyncIterable<AgentEvent> {
+  for (const event of events) {
+    yield event;
+  }
+}
 
 function parseJsonStdoutEvents(
   calls: Array<[unknown, ...unknown[]]>,
@@ -82,247 +53,129 @@ function parseJsonStdoutEvents(
     });
 }
 
-describe('runNonInteractive', () => {
-  let mockConfig: Config;
-  let mockSettings: LoadedSettings;
-  let mockToolRegistry: ToolRegistry;
-  let mockCoreExecuteToolCall: vi.Mock;
-  let mockShutdownTelemetry: vi.Mock;
-  let mockIsTelemetrySdkInitialized: vi.Mock;
+function createMockConfig(overrides?: {
+  sessionId?: string;
+  includeInResponse?: boolean;
+}): Config {
+  return {
+    getSessionId: () => overrides?.sessionId ?? 'test-session',
+    getEphemeralSetting: (key: string) =>
+      key === 'reasoning.includeInResponse'
+        ? overrides?.includeInResponse
+        : undefined,
+  } as unknown as Config;
+}
+
+describe('processAgentStream', () => {
   let consoleErrorSpy: vi.SpyInstance;
   let processStdoutSpy: vi.SpyInstance;
-  let mockAgentClient: {
-    sendMessageStream: vi.Mock;
-  };
-  beforeEach(async () => {
-    mockCoreExecuteToolCall = vi.mocked(executeToolCall);
-    mockShutdownTelemetry = vi.mocked(shutdownTelemetry);
-    mockShutdownTelemetry.mockResolvedValue(undefined);
-    mockIsTelemetrySdkInitialized = vi.mocked(isTelemetrySdkInitialized);
-    mockIsTelemetrySdkInitialized.mockReturnValue(true);
+  let processStderrSpy: vi.SpyInstance;
 
-    mockCommandServiceCreate.mockResolvedValue({
-      getCommands: mockGetCommands,
-    });
-    mockGetCommands.mockReturnValue([]);
-
+  beforeEach(() => {
     consoleErrorSpy = vi
       .spyOn(DebugLogger.prototype, 'error')
       .mockImplementation(() => {});
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-
-    mockToolRegistry = {
-      getTool: vi.fn(),
-      getFunctionDeclarations: vi.fn().mockReturnValue([]),
-    } as unknown as ToolRegistry;
-
-    mockAgentClient = {
-      sendMessageStream: vi.fn(),
-    };
-
-    mockConfig = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-      getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
-      getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
-      getMaxSessionTurns: vi.fn().mockReturnValue(10),
-      getIdeMode: vi.fn().mockReturnValue(false),
-
-      getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-      getDebugMode: vi.fn().mockReturnValue(false),
-      getProviderManager: vi.fn().mockReturnValue(undefined),
-      getOutputFormat: vi.fn().mockReturnValue('text'),
-      getModel: vi.fn().mockReturnValue('test-model'),
-      getFolderTrust: vi.fn().mockReturnValue(false),
-      isTrustedFolder: vi.fn().mockReturnValue(false),
-      getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
-      getSessionId: vi.fn().mockReturnValue('test-session'),
-      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-      getSettingsService: vi
-        .fn()
-        .mockReturnValue({ get: vi.fn(), set: vi.fn() }),
-      storage: {
-        getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
-      },
-    } as unknown as Config;
-
-    mockSettings = {
-      system: { path: '', settings: {} },
-      systemDefaults: { path: '', settings: {} },
-      user: { path: '', settings: {} },
-      workspace: { path: '', settings: {} },
-      errors: [],
-      setValue: vi.fn(),
-      merged: {
-        security: {
-          auth: {
-            enforcedType: undefined,
-          },
-        },
-      },
-      isTrusted: true,
-      migratedInMemorScopes: new Set(),
-      forScope: vi.fn(),
-      computeMergedSettings: vi.fn(),
-    } as unknown as LoadedSettings;
-
-    const { handleAtCommand } = await import(
-      './ui/hooks/atCommandProcessor.js'
-    );
-    vi.mocked(handleAtCommand).mockImplementation(async ({ query }) => ({
-      processedQuery: [{ text: query }],
-    }));
+    processStderrSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('should cancel the turn when the stream goes idle after partial output with explicit timeout', async () => {
-    vi.useFakeTimers();
-    const testTimeoutMs = 30_000; // 30 second timeout for this test
-    try {
-      // Configure mock to return explicit timeout
-      const mockGetEphemeralSetting = vi.fn((key: string) => {
-        if (key === 'stream-idle-timeout-ms') {
-          return testTimeoutMs;
-        }
-        return undefined;
-      });
+  function createContext(overrides?: {
+    jsonOutput?: boolean;
+    streamJsonOutput?: boolean;
+    streamFormatter?: StreamJsonFormatter | null;
+    emojiFilter?: EmojiFilter | undefined;
+    config?: Config;
+  }) {
+    const streamFormatter =
+      overrides?.streamFormatter === undefined
+        ? null
+        : overrides.streamFormatter;
+    return {
+      config: overrides?.config ?? createMockConfig(),
+      jsonOutput: overrides?.jsonOutput ?? false,
+      // In production, streamJsonOutput and streamFormatter are always set
+      // together; derive streamJsonOutput from the formatter unless a test
+      // explicitly overrides it, so the test context matches production.
+      streamJsonOutput: overrides?.streamJsonOutput ?? streamFormatter !== null,
+      streamFormatter,
+      emojiFilter: overrides?.emojiFilter,
+      createProfileNameWriter: () => () => {},
+    };
+  }
 
-      let capturedSignal: AbortSignal | undefined;
-      mockAgentClient.sendMessageStream.mockImplementation(
-        (_messages: Part[], signal: AbortSignal) => {
-          capturedSignal = signal;
-          return (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
-            yield { type: GeminiEventType.Content, value: 'Partial output' };
-            await new Promise<void>(() => {});
-          })();
-        },
-      );
-
-      const runPromise = runNonInteractive({
-        config: {
-          ...mockConfig,
-          getEphemeralSetting: mockGetEphemeralSetting,
-        } as unknown as Config,
-        settings: mockSettings,
-        input: 'Test input',
-        prompt_id: 'prompt-id-idle',
-      });
-
-      await vi.advanceTimersByTimeAsync(0);
-
-      // Capture rejection before advancing timers so it doesn't become
-      // an unhandled rejection (the promise rejects during timer advance)
-      let caughtError: unknown;
-      runPromise.catch((err: unknown) => {
-        caughtError = err;
-      });
-
-      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
-      await runPromise.catch(() => {});
-
-      expect(caughtError).toBeInstanceOf(StreamIdleTimeoutError);
-      expect(capturedSignal?.aborted).toBe(true);
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Operation cancelled.');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('should process input and write text output', async () => {
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'Hello' },
-      { type: GeminiEventType.Content, value: ' World' },
+  it('writes text content to stdout and a trailing newline on normal completion', async () => {
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'Hello' },
+      { type: 'text', text: ' World' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
     );
 
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Test input',
-      prompt_id: 'prompt-id-1',
-    });
-
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledWith(
-      [{ text: 'Test input' }],
-      expect.any(AbortSignal),
-      'prompt-id-1',
-    );
     const meaningfulWrites = processStdoutSpy.mock.calls
       .map(([value]) => value)
       .filter((value) => value !== '');
-
-    // Content may be buffered/processed, check total output
     expect(meaningfulWrites.join('')).toBe('Hello World\n');
-    expect(mockShutdownTelemetry).toHaveBeenCalled();
   });
 
-  it('should emit stream-json message records for newline-only chunks', async () => {
-    mockConfig.getOutputFormat = vi
-      .fn()
-      .mockReturnValue(OutputFormat.STREAM_JSON);
-    mockConfig.getEphemeralSetting = vi.fn((key: string) =>
-      key === 'emojifilter' ? 'allowed' : undefined,
-    );
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'LLXPRT2208_ALPHA' },
-      { type: GeminiEventType.Content, value: '\n\n' },
-      { type: GeminiEventType.Content, value: 'Alpha paragraph one.' },
+  it('emits stream-json message records for each text chunk', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'LLXPRT2208_ALPHA' },
+      { type: 'text', text: '\n\n' },
+      { type: 'text', text: 'Alpha paragraph one.' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Test input',
-      prompt_id: 'prompt-id-stream-json',
-    });
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
     const messages = jsonEvents.filter(
       (event) => event.type === JsonStreamEventType.MESSAGE,
     );
-
     expect(
       messages.map((event) => ({ role: event.role, content: event.content })),
     ).toStrictEqual([
-      { role: 'user', content: 'Test input' },
       { role: 'assistant', content: 'LLXPRT2208_ALPHA' },
       { role: 'assistant', content: '\n\n' },
       { role: 'assistant', content: 'Alpha paragraph one.' },
     ]);
   });
 
-  it('should emit emoji-filter buffered stream-json content as JSON records', async () => {
-    mockConfig.getOutputFormat = vi
-      .fn()
-      .mockReturnValue(OutputFormat.STREAM_JSON);
-    mockConfig.getEphemeralSetting = vi.fn((key: string) =>
-      key === 'emojifilter' ? 'auto' : undefined,
-    );
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'LLXPRT2208_ALPHA' },
-      { type: GeminiEventType.Content, value: '\n\n' },
-      { type: GeminiEventType.Content, value: 'Alpha paragraph one.' },
+  it('emits emoji-filter buffered stream-json content as JSON records', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const emojiFilter = new EmojiFilter({ mode: 'auto' });
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'LLXPRT2208_ALPHA' },
+      { type: 'text', text: '\n\n' },
+      { type: 'text', text: 'Alpha paragraph one.' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
 
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Test input',
-      prompt_id: 'prompt-id-stream-json-buffered',
-    });
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter, emojiFilter }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
     const assistantOutput = jsonEvents
@@ -333,128 +186,53 @@ describe('runNonInteractive', () => {
       )
       .map((event) => event.content)
       .join('');
-
     expect(assistantOutput).toBe('LLXPRT2208_ALPHA\n\nAlpha paragraph one.');
   });
 
-  it('should coalesce thought output before content', async () => {
-    mockConfig.getEphemeralSetting = vi
-      .fn<(key: string) => boolean | undefined>()
-      .mockReturnValue(true);
-
-    const events: ServerGeminiStreamEvent[] = [
-      {
-        type: GeminiEventType.Thought,
-        value: { subject: 'First', description: '' },
-      },
-      {
-        type: GeminiEventType.Thought,
-        value: { subject: 'Second', description: '' },
-      },
-      { type: GeminiEventType.Content, value: 'Content' },
+  it('coalesces thinking events before content into a single think block', async () => {
+    const events: AgentEvent[] = [
+      { type: 'thinking', thought: { subject: 'First', description: '' } },
+      { type: 'thinking', thought: { subject: 'Second', description: '' } },
+      { type: 'text', text: 'Content' },
+      { type: 'done', reason: 'stop' },
     ];
-    mockAgentClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ config: createMockConfig({ includeInResponse: true }) }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
     );
 
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Test input',
-      prompt_id: 'prompt-id-thought',
-    });
-
-    const writes = processStdoutSpy.mock.calls.map(([value]) => value);
-    const output = writes.join('');
+    const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
     expect(output).toContain('<think>First Second</think>');
   });
 
-  it('should handle a single tool call and respond', async () => {
-    const toolCallEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.ToolCallRequest,
-      value: {
-        callId: 'tool-1',
-        name: 'testTool',
-        args: { arg1: 'value1' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-id-2',
+  it('emits a tool-use record and prints successful tool display output', async () => {
+    const events: AgentEvent[] = [
+      {
+        type: 'tool-call',
+        call: { id: 'tool-1', name: 'testTool', args: { arg1: 'value1' } },
       },
-    };
-    const toolResponse: Part[] = [{ text: 'Tool response' }];
-    mockCoreExecuteToolCall.mockResolvedValue(
-      createCompletedToolCallResponse({
-        callId: 'tool-1',
-        responseParts: toolResponse,
-      }),
-    );
-
-    const firstCallEvents: ServerGeminiStreamEvent[] = [toolCallEvent];
-    const secondCallEvents: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'Final answer' },
+      {
+        type: 'tool-result',
+        result: {
+          id: 'tool-1',
+          name: 'testTool',
+          display: 'BeforeTool: File operation logged',
+          isError: false,
+        },
+      },
+      { type: 'text', text: 'Final answer' },
+      { type: 'done', reason: 'stop' },
     ];
 
-    mockAgentClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
-      .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
-
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Use a tool',
-      prompt_id: 'prompt-id-2',
-    });
-
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledTimes(2);
-    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
-      mockConfig,
-      expect.objectContaining({ name: 'testTool', agentId: 'primary' }),
-      expect.any(AbortSignal),
-      expect.objectContaining({ messageBus: undefined }),
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
     );
-    expect(mockAgentClient.sendMessageStream).toHaveBeenNthCalledWith(
-      2,
-      [{ text: 'Tool response' }],
-      expect.any(AbortSignal),
-      'prompt-id-2',
-    );
-    expect(processStdoutSpy).toHaveBeenCalledWith('Final answer');
-    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
-  });
-
-  it('should print successful tool resultDisplay output in text mode', async () => {
-    const toolCallEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.ToolCallRequest,
-      value: {
-        callId: 'tool-display-1',
-        name: 'testTool',
-        args: { arg1: 'value1' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-id-display',
-      },
-    };
-
-    mockCoreExecuteToolCall.mockResolvedValue(
-      createCompletedToolCallResponse({
-        callId: 'tool-display-1',
-        responseParts: [{ text: 'Tool response' }],
-        resultDisplay: 'BeforeTool: File operation logged',
-      }),
-    );
-
-    mockAgentClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
-      .mockReturnValueOnce(
-        createStreamFromEvents([
-          { type: GeminiEventType.Content, value: 'Final answer' },
-        ]),
-      );
-
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Use a tool',
-      prompt_id: 'prompt-id-display',
-    });
 
     expect(processStdoutSpy).toHaveBeenCalledWith(
       'BeforeTool: File operation logged\n',
@@ -463,41 +241,67 @@ describe('runNonInteractive', () => {
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');
   });
 
-  it('should not print tool resultDisplay when suppressDisplay is true', async () => {
-    const toolCallEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.ToolCallRequest,
-      value: {
-        callId: 'tool-display-2',
-        name: 'testTool',
-        args: { arg1: 'value1' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-id-display-suppress',
+  it('emits a tool-use stream-json record in stream-json mode', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'tool-call',
+        call: { id: 'tool-1', name: 'testTool', args: { arg1: 'value1' } },
       },
-    };
+      {
+        type: 'tool-result',
+        result: {
+          id: 'tool-1',
+          name: 'testTool',
+          isError: false,
+        },
+      },
+      { type: 'done', reason: 'stop' },
+    ];
 
-    mockCoreExecuteToolCall.mockResolvedValue(
-      createCompletedToolCallResponse({
-        callId: 'tool-display-2',
-        responseParts: [{ text: 'Tool response' }],
-        resultDisplay: 'This should not be shown',
-        suppressDisplay: true,
-      }),
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
     );
 
-    mockAgentClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
-      .mockReturnValueOnce(
-        createStreamFromEvents([
-          { type: GeminiEventType.Content, value: 'Final answer' },
-        ]),
-      );
-
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Use a tool',
-      prompt_id: 'prompt-id-display-suppress',
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const toolUse = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.TOOL_USE,
+    );
+    expect(toolUse).toMatchObject({ tool_name: 'testTool', tool_id: 'tool-1' });
+    const toolResult = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.TOOL_RESULT,
+    );
+    expect(toolResult).toMatchObject({
+      tool_id: 'tool-1',
+      status: 'success',
     });
+  });
+
+  it('does not print tool display when suppressDisplay is true', async () => {
+    const events: AgentEvent[] = [
+      {
+        type: 'tool-result',
+        result: {
+          id: 'tool-display-2',
+          name: 'testTool',
+          display: 'This should not be shown',
+          isError: false,
+          suppressDisplay: true,
+        },
+      },
+      { type: 'text', text: 'Final answer' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
 
     expect(processStdoutSpy).not.toHaveBeenCalledWith(
       'This should not be shown\n',
@@ -506,296 +310,253 @@ describe('runNonInteractive', () => {
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');
   });
 
-  it('should execute tool calls in non-interactive mode via AgentClient stream path', async () => {
-    const firstCallEvents: ServerGeminiStreamEvent[] = [
+  it('logs a tool error and allows the model to continue', async () => {
+    const events: AgentEvent[] = [
       {
-        type: GeminiEventType.ToolCallRequest,
-        value: {
-          callId: 'call-1',
-          name: 'testTool',
-          args: { arg: 'value' },
-          isClientInitiated: false,
-          prompt_id: 'prompt-provider',
+        type: 'tool-result',
+        result: {
+          id: 'tool-1',
+          name: 'errorTool',
+          display: 'Execution failed',
+          isError: true,
         },
       },
-    ];
-    const secondCallEvents: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'All done' },
-    ];
-
-    mockAgentClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
-      .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
-
-    mockCoreExecuteToolCall.mockResolvedValue({
-      response: {
-        callId: 'call-1',
-        responseParts: [
-          {
-            functionResponse: {
-              id: 'call-1',
-              name: 'testTool',
-              response: { output: 'tool result' },
-            },
-          },
-        ],
-        resultDisplay: undefined,
-        error: undefined,
-        errorType: undefined,
-        agentId: 'primary',
-      },
-    });
-
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Use the non-gemini provider',
-      prompt_id: 'prompt-provider',
-    });
-
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledTimes(2);
-    expect(mockAgentClient.sendMessageStream).toHaveBeenNthCalledWith(
-      1,
-      [{ text: 'Use the non-gemini provider' }],
-      expect.any(AbortSignal),
-      'prompt-provider',
-    );
-    expect(mockAgentClient.sendMessageStream).toHaveBeenNthCalledWith(
-      2,
-      [
-        {
-          functionResponse: {
-            id: 'call-1',
-            name: 'testTool',
-            response: { output: 'tool result' },
-          },
-        },
-      ],
-      expect.any(AbortSignal),
-      'prompt-provider',
-    );
-    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
-      mockConfig,
-      expect.objectContaining({
-        name: 'testTool',
-        callId: 'call-1',
-        agentId: 'primary',
-      }),
-      expect.any(AbortSignal),
-      expect.objectContaining({ messageBus: undefined }),
-    );
-    expect(processStdoutSpy).toHaveBeenCalledWith('All done');
-    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
-  });
-
-  it('should count tool-call turns toward max session turns in stream path', async () => {
-    vi.mocked(mockConfig.getMaxSessionTurns).mockReturnValue(1);
-    const firstCallEvents: ServerGeminiStreamEvent[] = [
-      {
-        type: GeminiEventType.ToolCallRequest,
-        value: {
-          callId: 'call-1',
-          name: 'testTool',
-          args: { arg: 'value' },
-          isClientInitiated: false,
-          prompt_id: 'prompt-provider',
-        },
-      },
+      { type: 'text', text: 'Sorry, let me try again.' },
+      { type: 'done', reason: 'stop' },
     ];
 
-    mockAgentClient.sendMessageStream.mockReturnValueOnce(
-      createStreamFromEvents(firstCallEvents),
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
     );
 
-    mockCoreExecuteToolCall.mockResolvedValue({
-      response: {
-        callId: 'call-1',
-        responseParts: [
-          {
-            functionResponse: {
-              id: 'call-1',
-              name: 'testTool',
-              response: { output: 'tool result' },
-            },
-          },
-        ],
-        resultDisplay: undefined,
-        error: undefined,
-        errorType: undefined,
-        agentId: 'primary',
-      },
-    });
-
-    await expect(
-      runNonInteractive({
-        config: mockConfig,
-        settings: mockSettings,
-        input: 'Use the non-gemini provider',
-        prompt_id: 'prompt-provider',
-      }),
-    ).rejects.toThrow(
-      'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
-    );
-
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledTimes(1);
-  });
-
-  it('should handle error during tool execution and should send error back to the model', async () => {
-    const toolCallEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.ToolCallRequest,
-      value: {
-        callId: 'tool-1',
-        name: 'errorTool',
-        args: {},
-        isClientInitiated: false,
-        prompt_id: 'prompt-id-3',
-      },
-    };
-    mockCoreExecuteToolCall.mockResolvedValue({
-      response: {
-        callId: 'tool-1',
-        responseParts: [
-          {
-            functionResponse: {
-              name: 'errorTool',
-              response: {
-                output: 'Error: Execution failed',
-              },
-            },
-          },
-        ],
-        resultDisplay: 'Execution failed',
-        error: new Error('Execution failed'),
-        errorType: ToolErrorType.EXECUTION_FAILED,
-        agentId: 'primary',
-      },
-    });
-    const finalResponse: ServerGeminiStreamEvent[] = [
-      {
-        type: GeminiEventType.Content,
-        value: 'Sorry, let me try again.',
-      },
-    ];
-    mockAgentClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
-      .mockReturnValueOnce(createStreamFromEvents(finalResponse));
-
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Trigger tool error',
-      prompt_id: 'prompt-id-3',
-    });
-
-    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
-      mockConfig,
-      expect.objectContaining({ name: 'errorTool', agentId: 'primary' }),
-      expect.any(AbortSignal),
-      expect.objectContaining({ messageBus: undefined }),
-    );
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Error executing tool errorTool: Execution failed',
-    );
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledTimes(2);
-    expect(mockAgentClient.sendMessageStream).toHaveBeenNthCalledWith(
-      2,
-      [
-        {
-          functionResponse: {
-            name: 'errorTool',
-            response: {
-              output: 'Error: Execution failed',
-            },
-          },
-        },
-      ],
-      expect.any(AbortSignal),
-      'prompt-id-3',
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('Sorry, let me try again.');
   });
 
-  it('should exit with error if sendMessageStream throws initially', async () => {
-    const apiError = new Error('API connection failed');
-    mockAgentClient.sendMessageStream.mockImplementation(() => {
-      throw apiError;
-    });
+  it('throws FatalTurnLimitedError when the agent reports max-turns', async () => {
+    const events: AgentEvent[] = [{ type: 'done', reason: 'max-turns' }];
 
     await expect(
-      runNonInteractive({
-        config: mockConfig,
-        settings: mockSettings,
-        input: 'Initial fail',
-        prompt_id: 'prompt-id-4',
-      }),
-    ).rejects.toThrow(apiError);
+      processAgentStream(
+        streamFromEvents(events),
+        createContext(),
+        Date.now(),
+        () => uiTelemetryService.getMetrics(),
+      ),
+    ).rejects.toThrow(FatalTurnLimitedError);
   });
 
-  it('should not exit if a tool is not found, and should send error back to model', async () => {
-    const toolCallEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.ToolCallRequest,
-      value: {
-        callId: 'tool-1',
-        name: 'nonexistentTool',
-        args: {},
-        isClientInitiated: false,
-        prompt_id: 'prompt-id-5',
-      },
-    };
-    mockCoreExecuteToolCall.mockResolvedValue({
-      response: {
-        callId: 'tool-1',
-        responseParts: [],
-        resultDisplay: 'Tool "nonexistentTool" not found in registry.',
-        error: new Error('Tool "nonexistentTool" not found in registry.'),
-        errorType: ToolErrorType.TOOL_NOT_REGISTERED,
-        agentId: 'primary',
-      },
+  it('throws when the agent reports an error event', async () => {
+    const events: AgentEvent[] = [
+      { type: 'error', error: { message: 'API connection failed' } },
+    ];
+
+    await expect(
+      processAgentStream(
+        streamFromEvents(events),
+        createContext(),
+        Date.now(),
+        () => uiTelemetryService.getMetrics(),
+      ),
+    ).rejects.toThrow('API connection failed');
+  });
+
+  it('emits a flat JSON object with session_id, response, and stats on completion', async () => {
+    const metrics = uiTelemetryService.getMetrics();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'The capital is Paris.' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({
+        jsonOutput: true,
+        config: createMockConfig({ sessionId: 'json-session' }),
+      }),
+      Date.now(),
+      () => metrics,
+    );
+
+    const jsonLine = processStdoutSpy.mock.calls
+      .map(([value]) => String(value).trimEnd())
+      .filter((value) => value.startsWith('{'))
+      .join('');
+    const parsed = JSON.parse(jsonLine);
+    expect(parsed).toHaveProperty('session_id', 'json-session');
+    expect(parsed).toHaveProperty('response', 'The capital is Paris.');
+    expect(parsed).toHaveProperty('stats');
+    expect(typeof parsed.stats).toBe('object');
+  });
+
+  it('emits a loop-detected stream warning and completes', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      { type: 'loop-detected' },
+      { type: 'text', text: 'partial' },
+      { type: 'done', reason: 'loop-detected' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const warning = jsonEvents.find(
+      (event) =>
+        event.type === JsonStreamEventType.ERROR &&
+        event.severity === 'warning',
+    );
+    expect(warning).toMatchObject({
+      message: 'Loop detected, stopping execution',
     });
-    const finalResponse: ServerGeminiStreamEvent[] = [
+  });
+
+  it('writes no final result on an aborted completion', async () => {
+    const events: AgentEvent[] = [{ type: 'done', reason: 'aborted' }];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Operation cancelled.');
+    const meaningfulWrites = processStdoutSpy.mock.calls
+      .map(([value]) => value)
+      .filter((value) => value !== '');
+    expect(meaningfulWrites).toHaveLength(0);
+  });
+
+  it('writes a stop message to stderr on hook-stopped completion', async () => {
+    const events: AgentEvent[] = [
       {
-        type: GeminiEventType.Content,
-        value: "Sorry, I can't find that tool.",
+        type: 'done',
+        reason: 'hook-stopped',
+        stop: { reason: 'policy', systemMessage: '  blocked by hook  ' },
       },
     ];
 
-    mockAgentClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
-      .mockReturnValueOnce(createStreamFromEvents(finalResponse));
-
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Trigger tool not found',
-      prompt_id: 'prompt-id-5',
-    });
-
-    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
-      mockConfig,
-      expect.objectContaining({ name: 'nonexistentTool', agentId: 'primary' }),
-      expect.any(AbortSignal),
-      expect.objectContaining({ messageBus: undefined }),
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
     );
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Error executing tool nonexistentTool: Tool "nonexistentTool" not found in registry.',
-    );
-    expect(mockAgentClient.sendMessageStream).toHaveBeenCalledTimes(2);
-    expect(processStdoutSpy).toHaveBeenCalledWith(
-      "Sorry, I can't find that tool.",
+
+    expect(processStderrSpy).toHaveBeenCalledWith(
+      'Agent execution stopped: blocked by hook\n',
     );
   });
 
-  it('should exit when max session turns are exceeded', async () => {
-    vi.mocked(mockConfig.getMaxSessionTurns).mockReturnValue(0);
-    await expect(
-      runNonInteractive({
-        config: mockConfig,
-        settings: mockSettings,
-        input: 'Trigger loop',
-        prompt_id: 'prompt-id-6',
-      }),
-    ).rejects.toThrow(
-      'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
+  it('emits a stream-json RESULT event with stats on completion', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const metrics = uiTelemetryService.getMetrics();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'done' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter }),
+      1000,
+      () => metrics,
     );
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const result = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.RESULT,
+    );
+    expect(result).toBeDefined();
+  });
+
+  it('writes a warning to stderr and continues on a hook-blocked event', async () => {
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'partial' },
+      {
+        type: 'hook-blocked',
+        info: { reason: 'policy', systemMessage: '  blocked by hook  ' },
+      },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    expect(processStderrSpy).toHaveBeenCalledWith(
+      '[WARNING] Agent execution blocked: blocked by hook\n',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('partial');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('emits a stream-json error and throws on an idle-timeout event', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'idle-timeout',
+        error: { message: 'no response received within the allowed time.' },
+      },
+    ];
+
+    await expect(
+      processAgentStream(
+        streamFromEvents(events),
+        createContext({ streamFormatter }),
+        Date.now(),
+        () => uiTelemetryService.getMetrics(),
+      ),
+    ).rejects.toThrow('no response received within the allowed time.');
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const streamError = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.ERROR,
+    );
+    expect(streamError?.message).toContain('Stream idle timeout');
+  });
+
+  it('preserves the tool errorType in the stream-json TOOL_RESULT record', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const events: AgentEvent[] = [
+      {
+        type: 'tool-result',
+        result: {
+          id: 'tool-perm-1',
+          name: 'editTool',
+          isError: true,
+          display: 'Permission denied',
+          errorType: 'PERMISSION_DENIED',
+        },
+      },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter }),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const toolResult = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.TOOL_RESULT,
+    );
+    expect(toolResult?.status).toBe('error');
+    expect(toolResult?.error?.type).toBe('PERMISSION_DENIED');
   });
 });

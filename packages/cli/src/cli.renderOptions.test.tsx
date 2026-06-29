@@ -15,9 +15,16 @@ import {
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 
 import { LoadedSettings } from './config/settings.js';
+
+const createFakeAgent = (config: Config): Agent =>
+  ({
+    dispose: vi.fn().mockResolvedValue(undefined),
+    getConfig: () => config,
+  }) as unknown as Agent;
 
 vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
@@ -123,7 +130,13 @@ describe('startInteractiveUI ink render options', () => {
 
       const settings = createLoadedSettings();
 
-      await startInteractiveUI(config, settings, [], tempDir);
+      await startInteractiveUI(
+        config,
+        createFakeAgent(config),
+        settings,
+        [],
+        tempDir,
+      );
 
       expect(renderSpy).toHaveBeenCalledTimes(1);
       const [_reactElement, options] = renderSpy.mock.calls[0];
@@ -157,7 +170,13 @@ describe('startInteractiveUI ink render options', () => {
         accessibility: { screenReader: true },
       });
 
-      await startInteractiveUI(config, createLoadedSettings(), [], tempDir);
+      await startInteractiveUI(
+        config,
+        createFakeAgent(config),
+        createLoadedSettings(),
+        [],
+        tempDir,
+      );
 
       expect(renderSpy).toHaveBeenCalledTimes(1);
       const [_reactElement, options] = renderSpy.mock.calls[0];

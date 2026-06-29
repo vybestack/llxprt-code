@@ -32,6 +32,8 @@ import { resolve, join } from 'node:path';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { getInternalConfig } from '../../internalConfigAccess.js';
 import {
   createAgent,
   type Agent,
@@ -47,6 +49,7 @@ const HARNESS_DIR = stripSandboxSegment(
   fileURLToPath(new URL('.', import.meta.url)),
 );
 const FIXTURES_DIR = resolve(HARNESS_DIR, '..', 'fixtures');
+const TEMP_ROOT = mkdtempSync(join(tmpdir(), 'llxprt-agent-tests-'));
 
 // ─── Public-safe re-exports (so specs avoid deep imports) ───────────────────
 
@@ -62,6 +65,9 @@ export type {
   DoneReason,
 } from '@vybestack/llxprt-code-agents';
 export { createAgent } from '@vybestack/llxprt-code-agents';
+export function internalConfig(agent: Agent): Config {
+  return getInternalConfig(agent);
+}
 
 // ─── Agent construction via the production env seam ─────────────────────────
 
@@ -118,6 +124,7 @@ export {
   /** Absolute path to the fixtures directory (exposed for assertions). */
   FIXTURES_DIR as fixturesDir,
 };
+export { TEMP_ROOT as tempRoot };
 
 /**
  * Builds an agent backed by an inline (programmatic) JSONL content string,

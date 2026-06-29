@@ -340,7 +340,6 @@ describe('Density Optimization Integration (P19)', () => {
         'utf-8',
       );
 
-      // Find all calls to ensureDensityOptimized (excluding the method declaration)
       const callSites = source
         .split('\n')
         .filter(
@@ -351,11 +350,16 @@ describe('Density Optimization Integration (P19)', () => {
             !line.includes('* '),
         );
 
-      // Should have exactly 2 call sites (ensureCompressionBeforeSend + enforceContextWindow)
-      const awaitCalls = callSites.filter((line) =>
+      const directAwaitCalls = callSites.filter((line) =>
         line.includes('await this.ensureDensityOptimized()'),
       );
-      expect(awaitCalls.length).toBe(2);
+      const injectedSequentialCalls = callSites.filter((line) =>
+        line.includes(
+          'ensureDensityOptimized: () => this.ensureDensityOptimized()',
+        ),
+      );
+      expect(directAwaitCalls.length).toBe(1);
+      expect(injectedSequentialCalls.length).toBe(2);
     });
   });
 });

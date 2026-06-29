@@ -4,12 +4,11 @@
  * @plan:PLAN-20260621-COREAPIREMED.P06
  */
 
-import type { Content } from '@google/genai';
+import type { Content, Part } from '@google/genai';
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   ApprovalMode,
-  Config,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -17,7 +16,10 @@ import type {
   HookInput,
   HookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from '@vybestack/llxprt-code-tools';
 import type { PolicyDecision } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
 import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
@@ -37,6 +39,7 @@ export type AgentHistoryItem = IContent;
 
 export type AgentInput =
   | string
+  | readonly Part[]
   | Readonly<{ readonly text: string; readonly role?: 'user' | 'system' }>;
 
 export type McpDiscoveryMode = 'await' | 'skip';
@@ -128,6 +131,7 @@ export interface ProviderStatus {
 }
 
 export type ToolDecision = ToolConfirmationOutcome;
+export type ToolDecisionPayload = ToolConfirmationPayload;
 
 export type McpDiscoveryState =
   | 'idle'
@@ -316,7 +320,12 @@ export interface AgentToolControl {
   list(): readonly ToolInfo[];
   setEnabled(names: readonly string[]): Promise<void>;
   onConfirmationRequest(cb: (req: ToolConfirmation) => void): Unsubscribe;
-  respondToConfirmation(confirmationId: string, decision: ToolDecision): void;
+  respondToConfirmation(
+    confirmationId: string,
+    decision: ToolDecision,
+    payload?: ToolDecisionPayload,
+    requiresUserConfirmation?: boolean,
+  ): void;
   onToolUpdate(cb: (u: ToolUpdate) => void): Unsubscribe;
   setEditorCallbacks(cbs: EditorCallbacks): void;
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
@@ -495,6 +504,105 @@ export interface AgentTasksControl {
   cancelAllRunning(): number;
 }
 
+/**
+ * Runtime memory operations (REQ-010). Backed by Config memory methods so
+ * clients no longer need raw Config escape hatches for memory access.
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02
+ */
+export interface MemoryRefreshResult {
+  readonly memoryContent: string;
+  readonly fileCount: number;
+  readonly filePaths: readonly string[];
+}
+
+export interface MemoryChangedEvent {
+  readonly fileCount: number;
+  readonly coreMemoryFileCount?: number;
+}
+
+export interface AgentMemoryControl {
+  getMemory(): string;
+  setMemory(content: string): void;
+  getFileCount(): number;
+  getFilePaths(): readonly string[];
+  getCoreMemory(): string | undefined;
+  getCoreFileCount(): number;
+  setCoreMemory(content: string): void;
+  refresh(): Promise<MemoryRefreshResult>;
+  onMemoryChanged(cb: (event: MemoryChangedEvent) => void): Unsubscribe;
+}
+
+/**
+ * Projected public view of a discovered skill.
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03
+ */
+export interface SkillInfo {
+  readonly name: string;
+  readonly description?: string;
+  readonly disabled?: boolean;
+  readonly source?: string;
+  readonly location?: string;
+}
+
+/**
+ * Skills query/reload operations (REQ-013). Backed by Config.getSkillManager()
+ * so clients no longer need raw Config for skill queries.
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03
+ */
+export interface AgentSkillsControl {
+  list(opts?: { readonly includeDisabled?: boolean }): readonly SkillInfo[];
+  get(name: string): SkillInfo | undefined;
+  reload(): Promise<void>;
+  isAdminEnabled(): boolean;
+}
+
+/**
+ * Narrow read-only/modifying workspace accessors (REQ-001). Backed by
+ * Config.getWorkspaceContext()/getTargetDir()/getProjectRoot() so clients
+ * no longer need raw Config for workspace queries.
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P04
+ */
+export interface AgentWorkspaceControl {
+  getDirectories(): readonly string[];
+  addDirectory(path: string): void;
+  getWorkingDirectory(): string;
+  getProjectRoot(): string;
+}
+
+/**
+ * Projected public view of an LSP server status. Mirrors the ide-integration
+ * ServerStatus shape without leaking the raw LspServiceClient.
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05
+ */
+export interface LspServerStatus {
+  readonly serverId: string;
+  readonly healthy: boolean;
+  readonly detail?: string;
+  readonly state?: 'ok' | 'broken' | 'starting' | 'idle';
+  readonly status?: string;
+}
+
+/**
+ * Public LSP status snapshot. `disabled` is true when LSP is not configured or
+ * unavailable; `servers` is always an array (empty when no servers).
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05
+ */
+export interface LspStatusSnapshot {
+  readonly disabled: boolean;
+  readonly servers: readonly LspServerStatus[];
+  readonly unavailableReason?: string;
+}
+
+/**
+ * Read-only LSP status inspection (REQ-010). Backed by
+ * Config.getLspConfig()/getLspServiceClient() so clients no longer need
+ * raw Config for LSP status.
+ * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05
+ */
+export interface AgentLspControl {
+  status(): Promise<LspStatusSnapshot>;
+}
+
 export interface Agent {
   chat(input: AgentInput, opts?: TurnOptions): Promise<AgentResult>;
   stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent>;
@@ -524,7 +632,6 @@ export interface Agent {
    * @requirement:REQ-005
    */
   getRuntimeId(): string;
-  getConfig(): Config;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
   getEphemeralSetting(key: string): unknown;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
@@ -546,6 +653,14 @@ export interface Agent {
   readonly policy: AgentPolicyControl;
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
   readonly tasks: AgentTasksControl;
+  /** @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02 */
+  readonly memory: AgentMemoryControl;
+  /** @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03 */
+  readonly skills: AgentSkillsControl;
+  /** @plan:PLAN-20260626-RUNTIMEBOUNDARY.P04 */
+  readonly workspace: AgentWorkspaceControl;
+  /** @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05 */
+  readonly lsp: AgentLspControl;
 
   getHistory(): Promise<readonly AgentMessage[]>;
   setHistory(

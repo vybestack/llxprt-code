@@ -35,11 +35,12 @@ describe('Runtime State Regression Guards', () => {
         sessionId: 'test-session',
       });
 
-      // Attempt to mutate (should throw - Object.freeze enforces immutability at runtime)
+      // The mutable view bypasses compile-time readonly checks so this assertion
+      // can verify the runtime Object.freeze behavior.
       const originalProvider = state.provider;
+      const mutableState = state as { provider: string };
       expect(() => {
-        // @ts-expect-error - Testing immutability
-        state.provider = 'anthropic';
+        mutableState.provider = 'anthropic';
       }).toThrow(/Cannot assign to read only property/);
 
       // State remains unchanged (runtime enforcement confirmed)
@@ -71,11 +72,11 @@ describe('Runtime State Regression Guards', () => {
         sessionId: 'test-session',
       });
 
-      // TypeScript prevents this at compile time
-      // Runtime enforcement via Object.freeze (throws in strict mode)
+      // The mutable view bypasses compile-time readonly checks so this assertion
+      // can verify the runtime Object.freeze behavior.
+      const mutableState = state as { model: string };
       expect(() => {
-        // @ts-expect-error - Testing immutability
-        state.model = 'new-model';
+        mutableState.model = 'new-model';
       }).toThrow(/Cannot assign to read only property/); // Runtime immutability enforced!
 
       // Verify state unchanged

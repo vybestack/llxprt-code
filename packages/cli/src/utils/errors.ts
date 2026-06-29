@@ -136,12 +136,18 @@ export function handleCancellationError(_config: Config): never {
 }
 
 /**
+ * Shared message used when the max-session-turns limit is reached. Single
+ * source of truth for both the non-interactive Agent stream path and the
+ * {@link handleMaxTurnsExceededError} handler.
+ */
+export const MAX_TURNS_MESSAGE =
+  'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.';
+
+/**
  * Handles max session turns exceeded consistently.
  */
 export function handleMaxTurnsExceededError(_config: Config): never {
-  const maxTurnsError = new FatalTurnLimitedError(
-    'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
-  );
+  const maxTurnsError = new FatalTurnLimitedError(MAX_TURNS_MESSAGE);
 
   globalThis.console.error(maxTurnsError.message);
   process.exit(maxTurnsError.exitCode);

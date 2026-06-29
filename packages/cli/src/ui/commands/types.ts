@@ -23,6 +23,7 @@ import type {
   SubmitPromptActionReturn,
   CommandActionReturn,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -51,6 +52,13 @@ export interface CommandContext {
   services: {
     // Follow-up (#1569, abhipatel12): Ensure that config is never null.
     config: Config | null;
+    /**
+     * The rich Agent facade adopted from the CLI Config via fromConfig().
+     * Provides auth, mcp, tools, hooks, policy, tasks, session, profiles
+     * sub-surfaces so commands avoid deep Config/core access.
+     * Null until bootstrap constructs it (or in non-interactive/test paths).
+     */
+    agent: Agent | null;
     settings: LoadedSettings;
     git: GitService | undefined;
     logger: Logger;

@@ -18,6 +18,7 @@ import {
 } from './tools.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 import type { IAsyncTaskService, AsyncTaskInfo } from '../interfaces/index.js';
+import { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 import { ToolErrorType } from '../types/tool-error.js';
 
 export interface CheckAsyncTasksParams {
@@ -329,7 +330,7 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
       );
     }
     return new CheckAsyncTasksInvocation(params, service, {
-      requestConfirmation: async () => undefined,
+      requestConfirmation: async () => ToolConfirmationOutcome.ProceedOnce,
     }).execute();
   }
 

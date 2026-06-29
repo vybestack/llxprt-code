@@ -31,6 +31,7 @@ const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const ideIntegrationPackagePrefix = '@vybestack/llxprt-code-ide-integration/';
+const agentsPackagePrefix = '@vybestack/llxprt-code-agents/';
 const providersEntry = resolve(__dirname, '../providers/index.ts');
 const providersSrcDir = resolve(__dirname, '../providers/src/') + '/';
 const coreEntry = resolve(__dirname, '../core/index.ts');
@@ -57,6 +58,8 @@ const settingsSrcDir = resolve(__dirname, '../settings/src/') + '/';
 const ideIntegrationEntry = resolve(__dirname, '../ide-integration/index.ts');
 const ideIntegrationSrcDir =
   resolve(__dirname, '../ide-integration/src/') + '/';
+const agentsEntry = resolve(__dirname, '../agents/index.ts');
+const agentsSrcDir = resolve(__dirname, '../agents/src/') + '/';
 
 function resolveTsSource(baseDir: string, specifier: string): string {
   const direct = baseDir + specifier;
@@ -140,6 +143,15 @@ const workspaceAliasPlugin = {
       return resolveTsSource(
         ideIntegrationSrcDir,
         source.slice(ideIntegrationPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-agents') {
+      return agentsEntry;
+    }
+    if (source.startsWith(agentsPackagePrefix)) {
+      return resolveTsSource(
+        agentsSrcDir,
+        source.slice(agentsPackagePrefix.length),
       );
     }
     if (source === 'ajv/dist/2020.js') {
