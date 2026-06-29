@@ -387,6 +387,9 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'stream-idle-timeout-ms',
+    // settings.json stores this under the camelCase key; the alias keeps it a
+    // recognized CLI setting so it is not treated as an unknown pass-through
+    // model-param and leaked into API request bodies. @issue #2182
     aliases: ['streamIdleTimeoutMs'],
     category: 'cli-behavior',
     description:

@@ -179,16 +179,33 @@ function syncModelLabel(params: SyncModelLabelParams): void {
     setCurrentModelLabel,
   } = params;
 
-  const effectiveLabel = resolveModelDisplayLabel
-    ? resolveModelDisplayLabel()
-    : computeEffectiveModelLabel(
-        payload,
-        config,
-        getActiveModelName,
-        getActiveProviderName,
-      );
+  const fallbackLabel = () =>
+    computeEffectiveModelLabel(
+      payload,
+      config,
+      getActiveModelName,
+      getActiveProviderName,
+    );
 
-  const shouldUpdateLabel = !isInitial || !currentLabel || currentLabel === '';
+  let effectiveLabel: string;
+  if (resolveModelDisplayLabel) {
+    try {
+      effectiveLabel = resolveModelDisplayLabel();
+    } catch (error) {
+      // The consumer resolver reaches into runtime accessors that can throw
+      // during init/teardown; never let that crash the footer — fall back to
+      // the payload/provider-derived label instead.
+      debugLogger.debug(
+        () =>
+          `[Model Update] resolveModelDisplayLabel threw; using fallback label: ${error}`,
+      );
+      effectiveLabel = fallbackLabel();
+    }
+  } else {
+    effectiveLabel = fallbackLabel();
+  }
+
+  const shouldUpdateLabel = !isInitial || !currentLabel;
   if (shouldUpdateLabel && effectiveLabel !== currentLabel) {
     debugLogger.debug(
       `[Model Update] Updating footer label from ${currentLabel} to ${effectiveLabel}`,

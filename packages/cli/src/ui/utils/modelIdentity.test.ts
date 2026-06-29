@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatModelIdentity,
+  formatLoadBalancerIdentity,
   resolveModelIdentity,
   LB_PENDING_PLACEHOLDER,
   type ModelIdentityRuntime,
@@ -101,92 +102,52 @@ describe('formatModelIdentity', () => {
   describe('load-balancer sessions', () => {
     it('renders lb:profile:subProfile:model after a sub-profile is selected', () => {
       expect(
-        formatModelIdentity({
+        formatLoadBalancerIdentity({
           profileName: 'my-lb',
-          providerName: 'load-balancer',
-          modelName: 'my-lb',
-          loadBalancer: {
-            profileName: 'my-lb',
-            activeSubProfile: 'fast-sub',
-            activeModel: 'gpt-4o-mini',
-          },
+          activeSubProfile: 'fast-sub',
+          activeModel: 'gpt-4o-mini',
         }),
       ).toBe('lb:my-lb:fast-sub:gpt-4o-mini');
     });
 
     it('uses the pending placeholder for both sub-profile and model before first selection', () => {
       expect(
-        formatModelIdentity({
+        formatLoadBalancerIdentity({
           profileName: 'my-lb',
-          providerName: 'load-balancer',
-          modelName: 'my-lb',
-          loadBalancer: {
-            profileName: 'my-lb',
-            activeSubProfile: null,
-            activeModel: null,
-          },
+          activeSubProfile: null,
+          activeModel: null,
         }),
       ).toBe(`lb:my-lb:${LB_PENDING_PLACEHOLDER}:${LB_PENDING_PLACEHOLDER}`);
     });
 
     it('uses the pending placeholder for the model when the sub-profile is known but model is not', () => {
       expect(
-        formatModelIdentity({
+        formatLoadBalancerIdentity({
           profileName: 'my-lb',
-          providerName: 'load-balancer',
-          modelName: 'my-lb',
-          loadBalancer: {
-            profileName: 'my-lb',
-            activeSubProfile: 'fast-sub',
-            activeModel: null,
-          },
+          activeSubProfile: 'fast-sub',
+          activeModel: null,
         }),
       ).toBe(`lb:my-lb:fast-sub:${LB_PENDING_PLACEHOLDER}`);
     });
 
     it('treats empty or whitespace-only sub-profile and model as pending', () => {
       expect(
-        formatModelIdentity({
+        formatLoadBalancerIdentity({
           profileName: 'my-lb',
-          providerName: 'load-balancer',
-          modelName: 'my-lb',
-          loadBalancer: {
-            profileName: 'my-lb',
-            activeSubProfile: '',
-            activeModel: '  ',
-          },
+          activeSubProfile: '',
+          activeModel: '  ',
         }),
       ).toBe(`lb:my-lb:${LB_PENDING_PLACEHOLDER}:${LB_PENDING_PLACEHOLDER}`);
     });
 
     it('falls back to "load-balancer" when the load-balancer profile name is missing', () => {
       expect(
-        formatModelIdentity({
-          profileName: null,
-          providerName: 'load-balancer',
-          modelName: 'load-balancer',
-          loadBalancer: {
-            profileName: '',
-            activeSubProfile: 'sub-a',
-            activeModel: 'claude-3',
-          },
-        }),
-      ).toBe('lb:load-balancer:sub-a:claude-3');
-    });
-
-    it('prefers the load-balancer identity over the standard profile identity', () => {
-      const result = formatModelIdentity({
-        profileName: 'my-lb',
-        providerName: 'load-balancer',
-        modelName: 'my-lb',
-        loadBalancer: {
-          profileName: 'my-lb',
+        formatLoadBalancerIdentity({
+          profileName: '',
           activeSubProfile: 'sub-a',
           activeModel: 'claude-3',
-        },
-      });
-      expect(result.startsWith('lb:')).toBe(true);
-      expect(result).not.toBe('my-lb:my-lb');
+        }),
+      ).toBe('lb:load-balancer:sub-a:claude-3');
     });
   });
 });

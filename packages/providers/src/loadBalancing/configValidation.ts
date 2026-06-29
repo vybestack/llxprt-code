@@ -36,26 +36,35 @@ function validateSubProfileIdentity(
 }
 
 function validateResolvedSubProfile(subProfile: ResolvedSubProfile): void {
-  if (!subProfile.model || typeof subProfile.model !== 'string') {
+  if (
+    typeof subProfile.model !== 'string' ||
+    subProfile.model.trim().length === 0
+  ) {
     throw new Error(
       `ResolvedSubProfile "${subProfile.name}" must have a valid "model" field (non-empty string)`,
     );
   }
 
-  // Use runtime-widened local to reject null explicitly (typeof null === 'object')
+  // Runtime-widened locals reject null AND arrays explicitly, matching the
+  // isRecord() guard in loadBalancerTypes.ts (typeof null === 'object' and
+  // typeof [] === 'object' would otherwise slip through).
   const ephemeralSettingsRuntime: unknown = subProfile.ephemeralSettings;
   if (
     typeof ephemeralSettingsRuntime !== 'object' ||
-    ephemeralSettingsRuntime === null
+    ephemeralSettingsRuntime === null ||
+    Array.isArray(ephemeralSettingsRuntime)
   ) {
     throw new Error(
       `ResolvedSubProfile "${subProfile.name}" must have a valid "ephemeralSettings" field (object)`,
     );
   }
 
-  // Use runtime-widened local to reject null explicitly (typeof null === 'object')
   const modelParamsRuntime: unknown = subProfile.modelParams;
-  if (typeof modelParamsRuntime !== 'object' || modelParamsRuntime === null) {
+  if (
+    typeof modelParamsRuntime !== 'object' ||
+    modelParamsRuntime === null ||
+    Array.isArray(modelParamsRuntime)
+  ) {
     throw new Error(
       `ResolvedSubProfile "${subProfile.name}" must have a valid "modelParams" field (object)`,
     );
@@ -75,7 +84,7 @@ export function validateLoadBalancerConfig(
     );
   }
 
-  validateLoadBalancingStrategy((config as { strategy: unknown }).strategy);
+  validateLoadBalancingStrategy(config.strategy);
 
   // Failover strategy requires at least 2 sub-profiles
   if (config.strategy === 'failover' && config.subProfiles.length < 2) {

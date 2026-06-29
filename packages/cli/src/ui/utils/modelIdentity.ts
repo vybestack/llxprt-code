@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { debugLogger } from '@vybestack/llxprt-code-core';
+
 /**
  * Placeholder shown for a load-balancer sub-profile or model that has not yet
  * been selected for the current session.
@@ -24,7 +26,6 @@ export interface ModelIdentityInput {
   providerName: string | null;
   modelName: string | null;
   fallback?: string;
-  loadBalancer?: LoadBalancerIdentity;
 }
 
 interface LoadBalancerStatsShape {
@@ -52,7 +53,13 @@ function cleaned(value: string | null | undefined): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
-function formatLoadBalancerIdentity(lb: LoadBalancerIdentity): string {
+/**
+ * Format a load-balancer identity string: `lb:<lbProfile>:<subProfile>:<model>`.
+ * Missing sub-profile/model render as the pending placeholder. This is the sole
+ * source of truth for the LB identity; standard fields (profile/provider/model)
+ * do not participate.
+ */
+export function formatLoadBalancerIdentity(lb: LoadBalancerIdentity): string {
   const lbName = cleaned(lb.profileName) ?? LOAD_BALANCER_PROVIDER_NAME;
   const sub = cleaned(lb.activeSubProfile) ?? LB_PENDING_PLACEHOLDER;
   const model = cleaned(lb.activeModel) ?? LB_PENDING_PLACEHOLDER;
@@ -68,18 +75,15 @@ function joinPrimaryAndModel(
 }
 
 /**
- * Build the user-facing model identity string from the supplied context.
+ * Build the user-facing model identity string for non-load-balancer sessions.
+ * Load-balancer sessions are formatted separately via
+ * {@link formatLoadBalancerIdentity}.
  *
- * - Load-balancer sessions: `lb:<lbProfile>:<subProfile>:<model>`.
  * - Standard profile sessions: `<profile>:<model>` (or `<profile>`).
  * - Direct provider sessions: `<provider>:<model>` (or `<provider>` / `<model>`).
  * - Otherwise the supplied fallback, or `unknown`.
  */
 export function formatModelIdentity(input: ModelIdentityInput): string {
-  if (input.loadBalancer) {
-    return formatLoadBalancerIdentity(input.loadBalancer);
-  }
-
   const profileName = cleaned(input.profileName);
   if (profileName) {
     return joinPrimaryAndModel(profileName, input.modelName);
@@ -129,7 +133,13 @@ function readLoadBalancerStats(
       return null;
     }
     return asLoadBalancerStats(provider.getStats());
-  } catch {
+  } catch (error) {
+    // Graceful degradation: the footer falls back to `none` placeholders.
+    // Log (debug-only) so operators can diagnose why, instead of failing
+    // silently like the rest of the load-balancer paths avoid.
+    debugLogger.debug(
+      () => `[modelIdentity] Failed to read load-balancer stats: ${error}`,
+    );
     return null;
   }
 }
@@ -147,20 +157,13 @@ export function resolveModelIdentity(
 
   if (status.providerName === LOAD_BALANCER_PROVIDER_NAME) {
     const stats = readLoadBalancerStats(runtime);
-    const loadBalancer: LoadBalancerIdentity = {
+    return formatLoadBalancerIdentity({
       profileName:
         cleaned(stats?.profileName) ??
         cleaned(profileName) ??
         LOAD_BALANCER_PROVIDER_NAME,
       activeSubProfile: stats?.lastSelected ?? null,
       activeModel: stats?.lastSelectedModel ?? null,
-    };
-    return formatModelIdentity({
-      profileName,
-      providerName: status.providerName,
-      modelName: status.modelName,
-      fallback,
-      loadBalancer,
     });
   }
 

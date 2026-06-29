@@ -84,6 +84,38 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
     });
   });
 
+  describe('lastSelectedModel when a sub-profile omits its model', () => {
+    it('is null after selecting a sub-profile that has no modelId', async () => {
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'no-model-id-test',
+        strategy: 'round-robin',
+        subProfiles: [
+          // modelId intentionally omitted → resolveSubProfileModel() === ''
+          { name: 'no-model', providerName: 'gemini' },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const original = providerManager.getProviderByName.bind(providerManager);
+      providerManager.getProviderByName = () => makeMockProvider('gemini');
+
+      try {
+        await drain(
+          provider.generateChatCompletion({
+            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+          }),
+        );
+        const stats = provider.getStats();
+        // The sub-profile is selected/tracked...
+        expect(stats.lastSelected).toBe('no-model');
+        // ...but with no model it reports null rather than an empty string.
+        expect(stats.lastSelectedModel).toBeNull();
+      } finally {
+        providerManager.getProviderByName = original;
+      }
+    });
+  });
+
   describe('lastSelectedModel after selection (round-robin)', () => {
     it('reports the model of the most recently selected sub-profile', async () => {
       const lbConfig: LoadBalancingProviderConfig = {

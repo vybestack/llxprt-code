@@ -151,8 +151,12 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
     // is provider stats/config state, rather than silently duplicating it.
     expect(content).toContain('- Current Profile: my-lb');
     expect(content).toContain('- Load Balancer Profile: my-lb');
-    expect(content).toMatch(/runtime profile/i);
-    expect(content).toMatch(/stats\/config/i);
+    // Assert the full disambiguating phrases (not just loose substrings) so the
+    // test fails if the explanatory note is weakened or removed.
+    expect(content).toMatch(/"Current Profile"[^\n]*is runtime profile state/i);
+    expect(content).toMatch(
+      /"Load Balancer Profile"[^\n]*is provider stats\/config state/i,
+    );
   });
 
   it('does not duplicate the same value under ambiguous labels', async () => {
