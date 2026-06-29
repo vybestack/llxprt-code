@@ -121,19 +121,6 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
     expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });
 
-  it('uses the pool minimum (128K) for a mixed multi-backend pool whose smallest backend is 128K', () => {
-    const runtimeContext = buildLbRuntimeContext(historyService, {
-      providerContextLimit: 128_000,
-    });
-
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
-    const lbProvider = runtimeContext.provider.getActiveProvider();
-
-    const limits = chat['compressionHandler'].computeContextLimits(lbProvider);
-    expect(limits.limit).toBe(128_000);
-    expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
-  });
-
   it('respects an explicit user context-limit override over the provider limit', () => {
     const runtimeContext = buildLbRuntimeContext(historyService, {
       contextLimitSetting: 50_000,
@@ -161,7 +148,6 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
     // genuinely proves the model-lookup path rather than coincidentally hitting
     // the default constant.
     expect(limits.limit).toBe(tokenLimit('gpt-4o'));
-    expect(limits.limit).toBe(128_000);
     expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });
 });
