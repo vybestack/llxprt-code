@@ -19,7 +19,6 @@ type GeminiEvent = ServerGeminiStreamEvent;
 
 function createDeps(overrides: Partial<StreamEventDeps> = {}): StreamEventDeps {
   return {
-    config: { getModel: () => 'test-model' } as never,
     addItem: vi.fn(),
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
@@ -40,6 +39,7 @@ function createDeps(overrides: Partial<StreamEventDeps> = {}): StreamEventDeps {
     setPendingHistoryItem: vi.fn(),
     setLastGeminiActivityTime: vi.fn(),
     setThought: vi.fn(),
+    getContentPrefixIdentity: vi.fn(() => null),
     handleContentEvent: vi.fn((_value, buffer) => buffer),
     handleUserCancelledEvent: vi.fn(),
     handleErrorEvent: vi.fn(),

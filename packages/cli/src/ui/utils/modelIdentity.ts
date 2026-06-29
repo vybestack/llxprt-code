@@ -5,6 +5,11 @@
  */
 
 import { debugLogger } from '@vybestack/llxprt-code-core';
+import {
+  getActiveProviderStatus,
+  getActiveProfileName,
+  getCliProviderManager,
+} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
 
 /**
  * Placeholder shown for a load-balancer sub-profile or model that has not yet
@@ -173,4 +178,48 @@ export function resolveModelIdentity(
     modelName: status.modelName,
     fallback,
   });
+}
+
+/**
+ * Build a {@link ModelIdentityRuntime} from the standalone CLI provider
+ * accessors. The standalone `getActiveProviderStatus()` returns extra fields
+ * (displayLabel, isPaidMode, baseURL) that are not needed for identity
+ * resolution, so only the minimal shape is projected out.
+ */
+export function createCliModelIdentityRuntime(): ModelIdentityRuntime {
+  return {
+    getActiveProviderStatus: () => {
+      const status = getActiveProviderStatus();
+      return {
+        providerName: status.providerName,
+        modelName: status.modelName,
+      };
+    },
+    getActiveProfileName: () => getActiveProfileName(),
+    getCliProviderManager: () => getCliProviderManager(),
+  };
+}
+
+/**
+ * Resolve the content-prefix identity for a response: `profileName:modelName`
+ * (NO load-balancer quad). Returns `null` when no profile is active so callers
+ * can omit the prefix entirely. For load-balancer profiles, the active
+ * sub-profile model is used (falling back to the LB provider's model name).
+ */
+export function resolveContentPrefixIdentity(
+  runtime: ModelIdentityRuntime,
+): string | null {
+  const status = runtime.getActiveProviderStatus();
+  const profileName = cleaned(runtime.getActiveProfileName());
+  if (!profileName) {
+    return null;
+  }
+  let model: string | null;
+  if (status.providerName === LOAD_BALANCER_PROVIDER_NAME) {
+    const stats = readLoadBalancerStats(runtime);
+    model = cleaned(stats?.lastSelectedModel) ?? cleaned(status.modelName);
+  } else {
+    model = cleaned(status.modelName);
+  }
+  return joinPrimaryAndModel(profileName, model);
 }
