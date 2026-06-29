@@ -31,10 +31,6 @@ const ALIAS_NORMALIZATION_RULES: Record<string, string> = {
   'tool-choice': 'tool_choice',
   toolChoice: 'tool_choice',
   'disabled-tools': 'tools.disabled',
-  // settings.json stores this under the camelCase key; without an alias it is
-  // treated as an unknown pass-through model-param and leaks into API bodies.
-  // @issue #2182
-  streamIdleTimeoutMs: 'stream-idle-timeout-ms',
 };
 
 const HEADER_PRESERVE_SET = new Set([

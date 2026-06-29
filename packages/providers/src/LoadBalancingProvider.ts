@@ -12,6 +12,7 @@ import type {
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderManager } from './ProviderManager.js';
+import { coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { LoadBalancerFailoverError } from './errors.js';
@@ -45,9 +46,9 @@ import {
   resolveSubProfileModel,
 } from './loadBalancing/subProfileHelpers.js';
 import type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
+import { validateLoadBalancerConfig } from './loadBalancing/configValidation.js';
 import {
   isResolvedSubProfile,
-  validateLoadBalancingStrategy,
   type BackendMetrics,
   type CompressionCallback,
   type CircuitBreakerState,
@@ -70,7 +71,6 @@ export type {
 } from './loadBalancing/loadBalancerTypes.js';
 export { isResolvedSubProfile } from './loadBalancing/loadBalancerTypes.js';
 export type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
-
 export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfileFormat.js';
 
 /**
@@ -127,70 +127,7 @@ export class LoadBalancingProvider implements IProvider {
    * @plan PLAN-20251211issue486c - Updated to handle ResolvedSubProfile
    */
   private validateConfig(config: LoadBalancingProviderConfig): void {
-    // Check for empty subProfiles array
-    if (config.subProfiles.length === 0) {
-      throw new Error(
-        'LoadBalancingProvider requires at least one sub-profile in configuration',
-      );
-    }
-
-    validateLoadBalancingStrategy((config as { strategy: unknown }).strategy);
-
-    // Failover strategy requires at least 2 sub-profiles
-    if (config.strategy === 'failover' && config.subProfiles.length < 2) {
-      throw new Error(
-        'Failover strategy requires at least 2 sub-profiles (minimum 2 backends for failover)',
-      );
-    }
-
-    // Validate each sub-profile
-    for (const subProfile of config.subProfiles) {
-      if (!subProfile.name || typeof subProfile.name !== 'string') {
-        throw new Error(
-          'Each sub-profile must have a valid "name" field (non-empty string)',
-        );
-      }
-
-      if (
-        !subProfile.providerName ||
-        typeof subProfile.providerName !== 'string'
-      ) {
-        throw new Error(
-          `Sub-profile "${subProfile.name}" must have a valid "providerName" field (non-empty string)`,
-        );
-      }
-
-      // Additional validation for ResolvedSubProfile
-      if (isResolvedSubProfile(subProfile)) {
-        if (!subProfile.model || typeof subProfile.model !== 'string') {
-          throw new Error(
-            `ResolvedSubProfile "${subProfile.name}" must have a valid "model" field (non-empty string)`,
-          );
-        }
-
-        // Use runtime-widened local to reject null explicitly (typeof null === 'object')
-        const ephemeralSettingsRuntime: unknown = subProfile.ephemeralSettings;
-        if (
-          typeof ephemeralSettingsRuntime !== 'object' ||
-          ephemeralSettingsRuntime === null
-        ) {
-          throw new Error(
-            `ResolvedSubProfile "${subProfile.name}" must have a valid "ephemeralSettings" field (object)`,
-          );
-        }
-
-        // Use runtime-widened local to reject null explicitly (typeof null === 'object')
-        const modelParamsRuntime: unknown = subProfile.modelParams;
-        if (
-          typeof modelParamsRuntime !== 'object' ||
-          modelParamsRuntime === null
-        ) {
-          throw new Error(
-            `ResolvedSubProfile "${subProfile.name}" must have a valid "modelParams" field (object)`,
-          );
-        }
-      }
-    }
+    validateLoadBalancerConfig(config);
   }
   selectNextSubProfile(): ResolvedSubProfile | LoadBalancerSubProfile {
     const subProfile = this.config.subProfiles[this.roundRobinIndex];
@@ -497,13 +434,58 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   /**
-   * Increment stats for a sub-profile
+   * Mark a sub-profile as the active selection. This is the UI-refresh trigger:
+   * it updates `lastSelected` and emits LoadBalancerSelectionChanged whenever the
+   * active backend changes, so the status footer can recompute
+   * `lb:<lb>:<sub>:<model>` the moment a backend is chosen — independent of
+   * whether the request ultimately succeeds. Both strategies call this as soon
+   * as they pick a backend (round-robin before delegating, failover when it
+   * selects/attempts each backend), so a failing primary is announced too.
+   */
+  private markActiveSelection(subProfileName: string): void {
+    const selectionChanged = this.lastSelected !== subProfileName;
+    this.lastSelected = subProfileName;
+    if (selectionChanged) {
+      this.emitSelectionChanged(subProfileName);
+    }
+  }
+
+  /**
+   * Record a successful request for a sub-profile (success accounting only).
+   * Selection marking/emission is handled by markActiveSelection so it also
+   * fires for failover backends that are tried before this success path.
    * Phase 5: Stats Integration
    */
   private incrementStats(subProfileName: string): void {
+    this.markActiveSelection(subProfileName);
     this.stats.set(subProfileName, (this.stats.get(subProfileName) ?? 0) + 1);
-    this.lastSelected = subProfileName;
     this.totalRequests++;
+  }
+
+  /**
+   * Notify the rest of the app that the active sub-profile changed so the
+   * status footer can recompute the load-balancer identity
+   * (`lb:<lb>:<sub>:<model>`). This emits a dedicated
+   * LoadBalancerSelectionChanged event (NOT ModelChanged): a sub-profile
+   * rotation is a UI-refresh trigger, not an actual model switch, so it must
+   * not be conflated with real model changes by other subscribers.
+   */
+  private emitSelectionChanged(subProfileName: string): void {
+    try {
+      const subProfile = this.config.subProfiles.find(
+        (candidate) => candidate.name === subProfileName,
+      );
+      const model = subProfile ? resolveSubProfileModel(subProfile) : null;
+      coreEvents.emitLoadBalancerSelectionChanged({
+        profileName: this.config.profileName,
+        subProfileName,
+        model,
+      });
+    } catch (error) {
+      this.logger.debug(
+        () => `Failed to emit load-balancer selection trigger: ${error}`,
+      );
+    }
   }
 
   /**
@@ -904,6 +886,12 @@ export class LoadBalancingProvider implements IProvider {
       () =>
         `[LB:failover] Trying backend: ${subProfile.name} (start time: ${startTime})`,
     );
+
+    // Announce the active selection the moment this backend is chosen so the
+    // footer reflects the backend actually serving the request, even if the
+    // primary is failing and we are about to fall over. Success accounting
+    // still happens via incrementStats() after the stream completes.
+    this.markActiveSelection(subProfile.name);
 
     const resolvedOptions = this.buildResolvedOptions(subProfile, options);
     const delegateProvider = this.providerManager.getProviderByName(

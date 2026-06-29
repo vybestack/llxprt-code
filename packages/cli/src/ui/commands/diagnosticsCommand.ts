@@ -18,14 +18,11 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 import path from 'node:path';
 import process from 'node:process';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import type {
+  ExtendedLoadBalancerStats,
+  TokenAccountingDiagnostics,
+} from '@vybestack/llxprt-code-providers';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
-import type { TokenAccountingDiagnostics } from '@vybestack/llxprt-code-providers';
-
-interface LoadBalancerStatsResult {
-  lastSelected: string | null;
-  totalRequests: number;
-  profileCounts: Record<string, number>;
-}
 
 interface RuntimeSessionTokenUsage {
   input: number;
@@ -84,7 +81,7 @@ function isBucketFailoverHandler(handler: unknown): boolean {
 }
 
 function isLoadBalancingProvider(provider: unknown): provider is {
-  getStats: () => LoadBalancerStatsResult;
+  getStats: () => ExtendedLoadBalancerStats;
   getTokenAccountingDiagnostics?: () => TokenAccountingDiagnostics;
 } {
   return (
@@ -190,6 +187,20 @@ function appendFailoverInfo(
   }
 }
 
+function appendProfileDistribution(
+  diagnostics: string[],
+  lbStats: ExtendedLoadBalancerStats,
+): void {
+  diagnostics.push('- Profile Distribution:');
+  for (const [profile, count] of Object.entries(lbStats.profileCounts)) {
+    const percentage =
+      lbStats.totalRequests > 0
+        ? ((count / lbStats.totalRequests) * 100).toFixed(1)
+        : '0';
+    diagnostics.push(`  - ${profile}: ${count} requests (${percentage}%)`);
+  }
+}
+
 function appendTokenAccountingDiagnostics(
   diagnostics: string[],
   runtimeApi: ReturnType<typeof getRuntimeApi>,
@@ -260,16 +271,19 @@ function appendLoadBalancerStats(
     }
     const lbStats = lbProvider.getStats();
     diagnostics.push('\n## Load Balancer Stats');
+    diagnostics.push(
+      '_Note: "Current Profile" above is runtime profile state (the profile loaded by the CLI); "Load Balancer Profile" below is provider stats/config state (reported by the load-balancer provider). They commonly share the same value._',
+    );
+    diagnostics.push(`- Load Balancer Profile: ${lbStats.profileName}`);
+    diagnostics.push(
+      `- Member Sub-Profiles: ${
+        lbStats.members.length > 0 ? lbStats.members.join(', ') : 'none'
+      }`,
+    );
     diagnostics.push(`- Active Sub-Profile: ${lbStats.lastSelected ?? 'none'}`);
+    diagnostics.push(`- Active Model: ${lbStats.lastSelectedModel ?? 'none'}`);
     diagnostics.push(`- Total Requests: ${lbStats.totalRequests}`);
-    diagnostics.push('- Profile Distribution:');
-    for (const [profile, count] of Object.entries(lbStats.profileCounts)) {
-      const percentage =
-        lbStats.totalRequests > 0
-          ? ((count / lbStats.totalRequests) * 100).toFixed(1)
-          : '0';
-      diagnostics.push(`  - ${profile}: ${count} requests (${percentage}%)`);
-    }
+    appendProfileDistribution(diagnostics, lbStats);
 
     if (supportsTokenAccountingDiagnostics(lbProvider)) {
       appendTokenAccountingDiagnostics(diagnostics, runtimeApi, lbProvider);

@@ -50,6 +50,8 @@ export interface LoadBalancerStats {
 }
 
 export interface ExtendedLoadBalancerStats extends LoadBalancerStats {
+  members: string[];
+  lastSelectedModel: string | null;
   backendMetrics: Record<string, BackendMetrics>;
   circuitBreakerStates: Record<string, CircuitBreakerState>;
   currentTPM: Record<string, number>;

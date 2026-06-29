@@ -44,8 +44,9 @@ export interface UseModelTrackingResult {
   /**
    * Profile-aware display label for the footer. Reflects profile/provider/model
    * identity so the footer updates even when the raw model string is unchanged.
+   * `undefined` until useModelRuntimeSync computes the first identity.
    */
-  currentModelLabel: string;
+  currentModelLabel: string | undefined;
   setCurrentModelLabel: (label: string) => void;
 }
 
@@ -53,7 +54,13 @@ export function useModelTracking({
   config,
 }: UseModelTrackingParams): UseModelTrackingResult {
   const [currentModel, setCurrentModel] = useState(config.getModel());
-  const [currentModelLabel, setCurrentModelLabel] = useState(config.getModel());
+  // Seed the profile-aware label undefined so useModelRuntimeSync computes the
+  // profile-qualified identity (e.g. `profileName:modelName`) on its initial
+  // sync. Seeding it with the raw model would trip the hook's "already set"
+  // guard and leave the footer showing the bare model until the next event.
+  const [currentModelLabel, setCurrentModelLabel] = useState<
+    string | undefined
+  >(undefined);
 
   // Update currentModel when settings change - get it from the SAME place as diagnostics
   useEffect(() => {
