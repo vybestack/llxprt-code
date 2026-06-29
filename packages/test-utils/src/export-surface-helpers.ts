@@ -105,13 +105,6 @@ function exportSpecifierExportsIdentifier(
     return false;
   }
 
-  if (element.propertyName !== undefined) {
-    return (
-      element.propertyName.text === identifier ||
-      element.name.text === identifier
-    );
-  }
-
   return element.name.text === identifier;
 }
 
@@ -195,7 +188,7 @@ export function exportsIdentifierFromSource(
   );
 }
 
-export function exportsWholeModuleFromSource(
+export function exportsModuleFromSource(
   source: string,
   moduleSpecifierText: string,
   options: ExportSurfaceOptions = {},
@@ -211,7 +204,8 @@ export function exportsWholeModuleFromSource(
       ts.isStringLiteral(moduleSpecifier) &&
       moduleSpecifier.text === moduleSpecifierText;
     const exportsWholeModule =
-      statement.exportClause === undefined &&
+      (statement.exportClause === undefined ||
+        ts.isNamespaceExport(statement.exportClause)) &&
       (!statement.isTypeOnly || includesTypeOnly(options));
 
     return matchesModule && exportsWholeModule;

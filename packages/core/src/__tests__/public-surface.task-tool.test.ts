@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   exportsIdentifierFromSource,
-  exportsWholeModuleFromSource,
+  exportsModuleFromSource,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'vitest';
 import * as coreRoot from '@vybestack/llxprt-code-core';
@@ -40,12 +40,9 @@ describe('issue #2250: core public surface no longer re-exports duplicate TaskTo
     ).toBe(false);
   });
 
-  it('does not wildcard re-export the entire tools package', () => {
+  it('does not re-export the entire tools package into the core root surface', () => {
     expect(
-      exportsWholeModuleFromSource(
-        rootBarrelSource,
-        '@vybestack/llxprt-code-tools',
-      ),
+      exportsModuleFromSource(rootBarrelSource, '@vybestack/llxprt-code-tools'),
     ).toBe(false);
   });
 });

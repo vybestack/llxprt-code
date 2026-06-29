@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   exportsIdentifierFromSource,
-  exportsWholeModuleFromSource,
+  exportsModuleFromSource,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'vitest';
 import * as toolsRoot from '@vybestack/llxprt-code-tools';
@@ -40,9 +40,9 @@ describe('issue #2250: tools package public surface no longer exposes duplicate 
     ).toBe(false);
   });
 
-  it('does not wildcard re-export the duplicate task module', () => {
-    expect(
-      exportsWholeModuleFromSource(rootBarrelSource, './tools/task.js'),
-    ).toBe(false);
+  it('does not re-export the duplicate task module into the tools root surface', () => {
+    expect(exportsModuleFromSource(rootBarrelSource, './tools/task.js')).toBe(
+      false,
+    );
   });
 });
