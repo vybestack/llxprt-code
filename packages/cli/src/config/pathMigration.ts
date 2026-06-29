@@ -77,6 +77,21 @@ const EXCLUDED_ENTRIES = new Set(['secure-store']);
  */
 const TMP_SKILLS_DIR = 'skills';
 
+/**
+ * Filename of the migration-completion marker. Stored in the data dir so that
+ * unrelated writes to the config dir (prompt installs, profile saves, oauth,
+ * etc.) cannot be mistaken for "migration already done" (#2237). The data dir
+ * is app-managed state, which is the natural home for a one-time stamp.
+ */
+const MIGRATION_MARKER_FILE = '.migration-complete.json';
+
+/**
+ * Current migration scheme version recorded in the marker. Bumping this in a
+ * future migration scheme allows a fresh pass to run even if an older marker
+ * exists.
+ */
+const MIGRATION_MARKER_VERSION = 1;
+
 export interface MigrationDestinations {
   readonly configDir: string;
   readonly dataDir: string;
@@ -123,15 +138,92 @@ function getDestDir(
 }
 
 /**
- * Returns true when the legacy `~/.llxprt/` directory has content and the
- * config category directory does not yet exist (or is empty). The config
- * dir is used as the primary indicator of whether migration was already
- * performed, since it contains the most critical files (settings.json,
- * profiles, etc.).
+ * Path to the migration-completion marker for a given set of destinations.
+ */
+function migrationMarkerPath(destinations: MigrationDestinations): string {
+  return path.join(destinations.dataDir, MIGRATION_MARKER_FILE);
+}
+
+/**
+ * Returns true when a migration-completion marker of the current scheme
+ * version (or newer) is present. This is the authoritative "already migrated"
+ * signal — it is independent of unrelated config-dir writes (#2237).
+ */
+export function isMigrationComplete(
+  destinations: MigrationDestinations,
+): boolean {
+  const markerPath = migrationMarkerPath(destinations);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(markerPath, 'utf-8');
+  } catch (error) {
+    const nodeErr = error as NodeJS.ErrnoException;
+    if (nodeErr.code !== 'ENOENT') {
+      logger.debug(`Cannot read migration marker ${markerPath}: ${nodeErr}`);
+    }
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { version?: number };
+    return (
+      typeof parsed.version === 'number' &&
+      parsed.version >= MIGRATION_MARKER_VERSION
+    );
+  } catch {
+    // Corrupt marker — treat as NOT complete so the (merge-safe) migration
+    // re-runs and self-heals (#2237). A successful re-run writes a fresh, valid
+    // marker, so this cannot loop. Permanently trusting a corrupt marker would
+    // strand the very config this migration exists to recover.
+    logger.debug(
+      `Migration marker ${markerPath} is corrupt; re-running migration to self-heal.`,
+    );
+    return false;
+  }
+}
+
+/**
+ * Writes the migration-completion marker into the data dir, creating the
+ * directory if necessary. Best-effort: failures are logged, not thrown.
+ */
+export function markMigrationComplete(
+  destinations: MigrationDestinations,
+): void {
+  const markerPath = migrationMarkerPath(destinations);
+  try {
+    fs.mkdirSync(destinations.dataDir, { recursive: true });
+    const payload = JSON.stringify(
+      {
+        version: MIGRATION_MARKER_VERSION,
+        completedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    );
+    // Write atomically (temp file + rename) so a crash mid-write cannot leave a
+    // truncated/corrupt marker behind.
+    const tmpPath = `${markerPath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpPath, payload, 'utf-8');
+    fs.renameSync(tmpPath, markerPath);
+  } catch (error) {
+    logger.debug(`Cannot write migration marker ${markerPath}: ${error}`);
+  }
+}
+
+/**
+ * Returns true when the legacy `~/.llxprt/` directory has migratable content
+ * and no migration-completion marker exists yet.
+ *
+ * The marker (not config-dir content) is the "already migrated" signal: many
+ * subsystems write the config dir independently of the migration (prompt
+ * installs, profile saves, oauth), so config-dir content must NOT short-circuit
+ * the migration (#2237). Because {@link performMigration} merges without
+ * overwriting, re-running on an already-partially-populated config dir safely
+ * backfills only the missing entries (subagents/, commands/, etc.).
  *
  * Returns false when:
  * - The legacy directory does not exist or is empty (fresh install)
- * - The config directory already has content (migration already done)
+ * - The migration-completion marker is already present
  */
 export function shouldMigrate(
   legacyDir: string,
@@ -145,10 +237,7 @@ export function shouldMigrate(
     return false;
   }
 
-  if (
-    fs.existsSync(destinations.configDir) &&
-    directoryHasContent(destinations.configDir)
-  ) {
+  if (isMigrationComplete(destinations)) {
     return false;
   }
 
@@ -177,6 +266,10 @@ export function performMigration(
 
   let filesCopied = 0;
   const visited = new Set<string>();
+  // Accumulates a message for every entry that could not be copied. A non-empty
+  // list means the pass was partial, so the caller must NOT stamp the
+  // completion marker — the next launch retries and self-heals (#2237).
+  const errors: string[] = [];
 
   let entries: fs.Dirent[];
   try {
@@ -187,6 +280,7 @@ export function performMigration(
       migrated: false,
       reason: 'cannot read legacy directory',
       filesCopied: 0,
+      error: true,
     };
   }
 
@@ -203,7 +297,7 @@ export function performMigration(
         entry.isDirectory() &&
         !entry.isSymbolicLink()
       ) {
-        filesCopied += migrateTmpDir(legacyDir, destinations, visited);
+        filesCopied += migrateTmpDir(legacyDir, destinations, visited, errors);
       } else {
         const destDir = getDestDir(category, destinations);
         fs.mkdirSync(destDir, { recursive: true });
@@ -215,25 +309,35 @@ export function performMigration(
           legacyDir,
           destDir,
           visited,
+          errors,
         );
       }
     } catch (error) {
+      errors.push(`${entry.name}: ${String(error)}`);
       logger.debug(`Failed to migrate entry '${entry.name}': ${String(error)}`);
     }
   }
 
+  const hadErrors = errors.length > 0;
+
   if (filesCopied === 0) {
     return {
       migrated: false,
-      reason: 'no files to migrate (only excluded entries)',
+      reason: hadErrors
+        ? 'migration incomplete (no files copied; some entries failed)'
+        : 'no files to migrate (only excluded entries)',
       filesCopied: 0,
+      error: hadErrors || undefined,
     };
   }
 
   return {
     migrated: true,
-    reason: 'migration complete',
+    reason: hadErrors
+      ? 'migration incomplete (some entries failed)'
+      : 'migration complete',
     filesCopied,
+    error: hadErrors || undefined,
   };
 }
 
@@ -245,6 +349,7 @@ function migrateTmpDir(
   legacyDir: string,
   destinations: MigrationDestinations,
   visited: Set<string>,
+  errors: string[],
 ): number {
   let count = 0;
   const tmpPath = path.join(legacyDir, 'tmp');
@@ -253,6 +358,7 @@ function migrateTmpDir(
   try {
     tmpEntries = fs.readdirSync(tmpPath, { withFileTypes: true });
   } catch (error) {
+    errors.push(`tmp: ${String(error)}`);
     logger.debug(`Cannot read tmp directory ${tmpPath}: ${String(error)}`);
     return 0;
   }
@@ -267,6 +373,7 @@ function migrateTmpDir(
         legacyDir,
         destinations.configDir,
         visited,
+        errors,
       );
     } else {
       // Route tmp/<x> → logDir/tmp/<x>
@@ -278,6 +385,7 @@ function migrateTmpDir(
         legacyDir,
         destinations.logDir,
         visited,
+        errors,
       );
     }
   }
@@ -307,12 +415,9 @@ export function runStartupMigration(): MigrationResult {
   };
 
   if (!shouldMigrate(legacyDir, destinations)) {
-    if (
-      fs.existsSync(destinations.configDir) &&
-      directoryHasContent(destinations.configDir)
-    ) {
+    if (isMigrationComplete(destinations)) {
       logger.debug(
-        'Platform config already populated; skipping migration from legacy path.',
+        'Migration marker present; skipping migration from legacy path.',
       );
     }
     return { migrated: false, reason: 'no migration needed', filesCopied: 0 };
@@ -327,6 +432,14 @@ export function runStartupMigration(): MigrationResult {
   try {
     const result = performMigration(legacyDir, destinations);
     logMigrationStatus(legacyDir, destinations, result);
+    // Record completion so unrelated config-dir writes can't re-trigger or
+    // (previously) permanently block migration (#2237). Written whenever the
+    // pass did not error — including the benign "nothing left to copy" case —
+    // so healthy installs are stamped and don't re-scan every startup. Failed
+    // passes intentionally leave no marker so the next launch retries.
+    if (result.error !== true) {
+      markMigrationComplete(destinations);
+    }
     return result;
   } catch (error) {
     logger.error('Configuration migration failed:', error);
@@ -362,21 +475,6 @@ export function logMigrationStatus(
 
 // ─── internal helpers ───────────────────────────────────────────────────────
 
-function directoryHasContent(dir: string): boolean {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(dir);
-  } catch (error) {
-    const nodeErr = error as NodeJS.ErrnoException;
-    if (nodeErr.code === 'ENOENT') {
-      return false;
-    }
-    logger.debug(`Cannot read directory ${dir}: ${String(error)}`);
-    return true;
-  }
-  return entries.length > 0;
-}
-
 /**
  * Returns true when the directory contains at least one entry that would
  * actually be copied (i.e. is not in {@link EXCLUDED_ENTRIES}).
@@ -411,6 +509,34 @@ function pathEntryExists(p: string): boolean {
 }
 
 /**
+ * Copies a single regular file to `destPath`, then best-effort preserves the
+ * source mode. Records any copy failure in `errors`. Returns 1 when the file
+ * was copied, 0 when the copy failed. The mode-preservation step never affects
+ * the return value (a failed chmod still counts as a successful copy).
+ */
+function copyFileWithMode(
+  srcPath: string,
+  destPath: string,
+  errors: string[],
+): number {
+  try {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.copyFileSync(srcPath, destPath);
+  } catch (error) {
+    errors.push(`${srcPath}: ${String(error)}`);
+    logger.debug(`Cannot copy file ${srcPath}: ${String(error)}`);
+    return 0;
+  }
+  try {
+    const { mode } = fs.statSync(srcPath);
+    fs.chmodSync(destPath, mode);
+  } catch {
+    // mode preservation is best-effort; the file copy already succeeded
+  }
+  return 1;
+}
+
+/**
  * Copies a single entry (file, directory, or symlink) from `srcPath` to
  * `destPath`, using merge semantics — existing destination files are never
  * overwritten. Returns the count of regular files copied.
@@ -421,11 +547,13 @@ function copyEntry(
   legacyRoot: string,
   destRoot: string,
   visited: Set<string>,
+  errors: string[],
 ): number {
   let stat: fs.Stats;
   try {
     stat = fs.lstatSync(srcPath);
   } catch (error) {
+    errors.push(`${srcPath}: ${String(error)}`);
     logger.debug(`Skipping inaccessible entry: ${srcPath}: ${String(error)}`);
     return 0;
   }
@@ -434,26 +562,25 @@ function copyEntry(
     if (pathEntryExists(destPath)) {
       return 0;
     }
-    createSymlinkClone(srcPath, destPath, legacyRoot, destRoot);
-    return 1;
+    return createSymlinkClone(srcPath, destPath, legacyRoot, destRoot, errors);
   }
 
   if (stat.isFile()) {
     if (pathEntryExists(destPath)) {
       return 0;
     }
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    fs.copyFileSync(srcPath, destPath);
-    try {
-      fs.chmodSync(destPath, stat.mode);
-    } catch {
-      // chmod is best-effort; file copy succeeded
-    }
-    return 1;
+    return copyFileWithMode(srcPath, destPath, errors);
   }
 
   if (stat.isDirectory()) {
-    return copyDirFiltered(srcPath, destPath, legacyRoot, destRoot, visited);
+    return copyDirFiltered(
+      srcPath,
+      destPath,
+      legacyRoot,
+      destRoot,
+      visited,
+      errors,
+    );
   }
 
   return 0;
@@ -471,11 +598,13 @@ function copyDirFiltered(
   legacyRoot: string,
   destRoot: string,
   visited: Set<string>,
+  errors: string[],
 ): number {
   let realSrc: string;
   try {
     realSrc = fs.realpathSync(src);
   } catch (error) {
+    errors.push(`${src}: ${String(error)}`);
     logger.debug(
       `Skipping inaccessible entry (broken symlink?): ${src}: ${String(error)}`,
     );
@@ -493,6 +622,7 @@ function copyDirFiltered(
   try {
     entries = fs.readdirSync(src, { withFileTypes: true });
   } catch (error) {
+    errors.push(`${src}: ${String(error)}`);
     logger.debug(`Cannot read directory ${src}: ${String(error)}`);
     return count;
   }
@@ -508,19 +638,18 @@ function copyDirFiltered(
         legacyRoot,
         destRoot,
         visited,
+        errors,
       );
     } else if (entry.isFile() && !pathEntryExists(destPath)) {
-      fs.copyFileSync(srcPath, destPath);
-      const srcStat = fs.statSync(srcPath);
-      try {
-        fs.chmodSync(destPath, srcStat.mode);
-      } catch {
-        // chmod is best-effort; file copy succeeded
-      }
-      count++;
+      count += copyFileWithMode(srcPath, destPath, errors);
     } else if (entry.isSymbolicLink() && !pathEntryExists(destPath)) {
-      createSymlinkClone(srcPath, destPath, legacyRoot, destRoot);
-      count++;
+      count += createSymlinkClone(
+        srcPath,
+        destPath,
+        legacyRoot,
+        destRoot,
+        errors,
+      );
     }
   }
 
@@ -538,13 +667,15 @@ function createSymlinkClone(
   destPath: string,
   legacyRoot: string,
   newRoot: string,
-): void {
+  errors: string[],
+): number {
   let target: string;
   try {
     target = fs.readlinkSync(srcPath);
   } catch (error) {
+    errors.push(`${srcPath}: ${String(error)}`);
     logger.debug(`Cannot read symlink ${srcPath}: ${String(error)}`);
-    return;
+    return 0;
   }
   try {
     if (path.isAbsolute(target)) {
@@ -565,7 +696,10 @@ function createSymlinkClone(
         fs.symlinkSync(rebased, destPath);
       }
     }
+    return 1;
   } catch (error) {
+    errors.push(`${destPath}: ${String(error)}`);
     logger.debug(`Cannot create symlink at ${destPath}: ${String(error)}`);
+    return 0;
   }
 }
