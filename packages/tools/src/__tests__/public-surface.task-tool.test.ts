@@ -41,8 +41,10 @@ describe('issue #2250: tools package public surface no longer exposes duplicate 
   });
 
   it('does not re-export the duplicate task module into the tools root surface', () => {
-    expect(exportsModuleFromSource(rootBarrelSource, './tools/task.js')).toBe(
-      false,
-    );
+    expect(
+      exportsModuleFromSource(rootBarrelSource, './tools/task.js', {
+        includeTypeOnly: true,
+      }),
+    ).toBe(false);
   });
 });

@@ -42,7 +42,13 @@ describe('issue #2250: core public surface no longer re-exports duplicate TaskTo
 
   it('does not re-export the entire tools package into the core root surface', () => {
     expect(
-      exportsModuleFromSource(rootBarrelSource, '@vybestack/llxprt-code-tools'),
+      exportsModuleFromSource(
+        rootBarrelSource,
+        '@vybestack/llxprt-code-tools',
+        {
+          includeTypeOnly: true,
+        },
+      ),
     ).toBe(false);
   });
 });
