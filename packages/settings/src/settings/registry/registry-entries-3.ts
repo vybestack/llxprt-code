@@ -387,6 +387,7 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'stream-idle-timeout-ms',
+    aliases: ['streamIdleTimeoutMs'],
     category: 'cli-behavior',
     description:
       'Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog.',

@@ -73,6 +73,10 @@ describe('resolveAlias — alias normalization', () => {
     expect(resolveAlias('disabled-tools')).toBe('tools.disabled');
   });
 
+  it('resolves streamIdleTimeoutMs to stream-idle-timeout-ms', () => {
+    expect(resolveAlias('streamIdleTimeoutMs')).toBe('stream-idle-timeout-ms');
+  });
+
   it('preserves user-agent without underscore conversion', () => {
     expect(resolveAlias('user-agent')).toBe('user-agent');
   });
@@ -205,6 +209,25 @@ describe('separateSettings — settings categorization', () => {
   it('resolves max-tokens alias to max_tokens in modelParams', () => {
     const result = separateSettings({ 'max-tokens': 4096 });
     expect(result.modelParams.max_tokens).toBe(4096);
+  });
+
+  it('places streamIdleTimeoutMs (camelCase) in cliSettings, never modelParams', () => {
+    const result = separateSettings({ streamIdleTimeoutMs: 0 });
+    expect(result.cliSettings['stream-idle-timeout-ms']).toBe(0);
+    expect(result.modelParams.streamIdleTimeoutMs).toBeUndefined();
+    expect(result.modelParams['stream-idle-timeout-ms']).toBeUndefined();
+  });
+
+  it('does not leak streamIdleTimeoutMs into modelParams for anthropic', () => {
+    const result = separateSettings({ streamIdleTimeoutMs: 5000 }, 'anthropic');
+    expect(result.modelParams.streamIdleTimeoutMs).toBeUndefined();
+    expect(result.cliSettings['stream-idle-timeout-ms']).toBe(5000);
+  });
+
+  it('does not leak streamIdleTimeoutMs into modelParams for openai', () => {
+    const result = separateSettings({ streamIdleTimeoutMs: 5000 }, 'openai');
+    expect(result.modelParams.streamIdleTimeoutMs).toBeUndefined();
+    expect(result.cliSettings['stream-idle-timeout-ms']).toBe(5000);
   });
 
   it('excludes seed from modelParams when provider is anthropic', () => {
