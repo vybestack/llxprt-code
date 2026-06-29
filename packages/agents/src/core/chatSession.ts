@@ -566,14 +566,6 @@ export class ChatSession {
     this.compressionHandler.densityDirty = value;
   }
 
-  get _suppressDensityDirty(): boolean {
-    return this.compressionHandler._suppressDensityDirty;
-  }
-
-  set _suppressDensityDirty(value: boolean) {
-    this.compressionHandler._suppressDensityDirty = value;
-  }
-
   async ensureDensityOptimized(): Promise<void> {
     return this.compressionHandler.ensureDensityOptimized();
   }

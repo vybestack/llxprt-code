@@ -512,6 +512,8 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
         // consume
       }
 
+      lb.resetFailoverIndex();
+
       // Second request: backend1 now succeeds
       const gen2 = lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test2' }] }],

@@ -61,6 +61,10 @@ export interface RuntimeProvider {
   clearAuthCache?(): void;
   clearAuth?(): void;
 
+  setCompressionCallback?(
+    callback: ((contents: IContent[]) => Promise<IContent[]>) | null,
+  ): void;
+
   getServerTools(): string[];
   invokeServerTool(
     toolName: string,

@@ -2,13 +2,6 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
- *
- * @plan PLAN-20251211issue486b
- * Phase 1: LoadBalancingProvider Skeleton Implementation
- *
- * This provider wraps multiple sub-profile configurations and delegates
- * requests to the appropriate provider based on a round-robin strategy.
- * Selection happens at REQUEST TIME, not profile load time.
  */
 
 import type {
@@ -20,9 +13,7 @@ import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderManager } from './ProviderManager.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
-import type { Profile } from '@vybestack/llxprt-code-settings';
 import { LoadBalancerFailoverError } from './errors.js';
 import { CircuitBreakerManager } from './loadBalancing/circuitBreakerManager.js';
 import { TPMTracker } from './loadBalancing/tpmTracker.js';
@@ -38,147 +29,49 @@ import {
 } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
 import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
+import { cloneContentsForCompression } from './loadBalancing/contentClone.js';
+import {
+  LoadBalancerAllContextLimitsExceededError,
+  LoadBalancerCompressionCallbackError,
+  LoadBalancerContextLimitError,
+} from './loadBalancing/contextLimitError.js';
+import {
+  estimateRequestTokens,
+  type EstimationResult,
+} from './loadBalancing/loadBalancerTokenEstimator.js';
+import { getTargetContextLimit } from './loadBalancing/targetContextLimit.js';
+import {
+  getMinMemberContextWindow,
+  resolveSubProfileModel,
+} from './loadBalancing/subProfileHelpers.js';
+import type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
+import {
+  isResolvedSubProfile,
+  validateLoadBalancingStrategy,
+  type BackendMetrics,
+  type CompressionCallback,
+  type CircuitBreakerState,
+  type ExtendedLoadBalancerStats,
+  type FailoverSettings,
+  type LoadBalancerSubProfile,
+  type LoadBalancingProviderConfig,
+  type ResolvedSubProfile,
+} from './loadBalancing/loadBalancerTypes.js';
+export type {
+  BackendMetrics,
+  CircuitBreakerState,
+  CompressionCallback,
+  ExtendedLoadBalancerStats,
+  FailoverSettings,
+  LoadBalancerStats,
+  LoadBalancerSubProfile,
+  LoadBalancingProviderConfig,
+  ResolvedSubProfile,
+} from './loadBalancing/loadBalancerTypes.js';
+export { isResolvedSubProfile } from './loadBalancing/loadBalancerTypes.js';
+export type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
 
-/**
- * Sub-profile configuration for load balancing
- */
-export interface LoadBalancerSubProfile {
-  name: string;
-  providerName: string;
-  modelId?: string;
-  baseURL?: string;
-  authToken?: string;
-}
-
-/**
- * Load balancing provider configuration
- * @plan PLAN-20251211issue486c - Updated to support ResolvedSubProfile
- * @plan PLAN-20251212issue488 - Added failover strategy
- */
-export interface LoadBalancingProviderConfig {
-  profileName: string;
-  strategy: 'round-robin' | 'failover';
-  subProfiles: ResolvedSubProfile[] | LoadBalancerSubProfile[];
-  contextLimit?: number;
-  lbProfileEphemeralSettings?: Record<string, unknown>;
-  lbProfileModelParams?: Record<string, unknown>;
-}
-function validateLoadBalancingStrategy(strategy: unknown): void {
-  if (strategy !== 'round-robin' && strategy !== 'failover') {
-    throw new Error(
-      `Invalid strategy "${String(strategy)}". Supported: "round-robin", "failover".`,
-    );
-  }
-}
-
-/**
- * Backend performance metrics
- * @plan PLAN-20251212issue489 - Phase 1
- */
-export interface BackendMetrics {
-  requests: number;
-  successes: number;
-  failures: number;
-  timeouts: number;
-  tokens: number;
-  totalLatencyMs: number;
-  avgLatencyMs: number;
-}
-
-/**
- * Circuit breaker state for a backend
- * @plan PLAN-20251212issue489 - Phase 1
- */
-export interface CircuitBreakerState {
-  state: 'closed' | 'open' | 'half-open';
-  failures: Array<{ timestamp: number; error: Error }>;
-  openedAt?: number;
-  lastAttempt?: number;
-}
-
-/**
- * Load balancer statistics interface
- */
-export interface LoadBalancerStats {
-  profileName: string;
-  totalRequests: number;
-  lastSelected: string | null;
-  profileCounts: Record<string, number>;
-}
-
-/**
- * Extended load balancer statistics with metrics
- * @plan PLAN-20251212issue489 - Phase 1
- */
-export interface ExtendedLoadBalancerStats extends LoadBalancerStats {
-  backendMetrics: Record<string, BackendMetrics>;
-  circuitBreakerStates: Record<string, CircuitBreakerState>;
-  currentTPM: Record<string, number>;
-}
-
-/**
- * Resolved sub-profile with all settings needed for provider instantiation
- * @plan PLAN-20251211issue486c
- */
-export interface ResolvedSubProfile {
-  name: string;
-  providerName: string;
-  model: string;
-  baseURL?: string;
-  authToken?: string;
-  authKeyfile?: string;
-  contextWindow?: number;
-  ephemeralSettings: Record<string, unknown>;
-  modelParams: Record<string, unknown>;
-}
-
-/**
- * Type guard to identify load balancer profile format
- * @plan PLAN-20251211issue486c
- */
-export function isLoadBalancerProfileFormat(profile: Profile): boolean {
-  const hasType = 'type' in profile && profile.type === 'loadbalancer';
-  const hasProfilesArray =
-    'profiles' in profile && Array.isArray(profile.profiles);
-  return (
-    hasType &&
-    hasProfilesArray &&
-    profile.profiles.every((p) => typeof p === 'string')
-  );
-}
-
-/**
- * Type guard to identify ResolvedSubProfile
- * @plan PLAN-20251211issue486c
- */
-export function isResolvedSubProfile(
-  profile: ResolvedSubProfile | LoadBalancerSubProfile,
-): profile is ResolvedSubProfile {
-  return (
-    'model' in profile &&
-    'ephemeralSettings' in profile &&
-    'modelParams' in profile
-  );
-}
-
-/**
- * Failover settings extracted from ephemeral settings
- * @plan PLAN-20251212issue488
- * @plan PLAN-20251212issue489 - Phase 1: Extended with advanced settings
- */
-export interface FailoverSettings {
-  retryCount: number;
-  retryDelayMs: number;
-  failoverOnNetworkErrors: boolean;
-  failoverStatusCodes: number[] | undefined;
-  // Advanced failover settings (Phase 3, Issue #489)
-  tpmThreshold: number | undefined;
-  timeoutMs: number | undefined;
-  circuitBreakerEnabled: boolean;
-  circuitBreakerFailureThreshold: number;
-  circuitBreakerFailureWindowMs: number;
-  circuitBreakerRecoveryTimeoutMs: number;
-}
+export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfileFormat.js';
 
 /**
  * Load balancing provider that distributes requests across multiple sub-profiles
@@ -190,14 +83,16 @@ export class LoadBalancingProvider implements IProvider {
   private stats: Map<string, number> = new Map();
   private lastSelected: string | null = null;
   private totalRequests = 0;
-  // Circuit breaker state tracking (Phase 2, Issue #489)
   private circuitBreakerStates: Map<string, CircuitBreakerState> = new Map();
-  // TPM buckets: Map<minuteBucket, Map<profileName, tokenCount>> (Phase 4, Issue #489)
   private tpmBuckets: Map<number, Map<string, number>> = new Map();
-  // Backend metrics tracking (Phase 5, Issue #489)
   private backendMetrics: Map<string, BackendMetrics> = new Map();
-  // Sticky failover index - tracks current backend across requests (Issue #902)
   private currentFailoverIndex = 0;
+  private compressionCallback: CompressionCallback | null = null;
+  private accountingSource: string | null = null;
+  private lastEstimatedTokens: number | null = null;
+  private diagnosticsSelectedSubProfile: string | null = null;
+  private diagnosticsActiveProvider: string | null = null;
+  private diagnosticsActiveModel: string | null = null;
 
   constructor(
     private readonly config: LoadBalancingProviderConfig,
@@ -297,12 +192,6 @@ export class LoadBalancingProvider implements IProvider {
       }
     }
   }
-
-  /**
-   * Select the next sub-profile using round-robin strategy
-   * Returns the sub-profile at the current index, then increments and wraps around
-   * @plan PLAN-20251211issue486c - Updated to return union type
-   */
   selectNextSubProfile(): ResolvedSubProfile | LoadBalancerSubProfile {
     const subProfile = this.config.subProfiles[this.roundRobinIndex];
     this.roundRobinIndex =
@@ -310,11 +199,6 @@ export class LoadBalancingProvider implements IProvider {
     return subProfile;
   }
 
-  /**
-   * Expose the load balancer profile as a synthetic model so runtime context
-   * surfaces the load balancer's effective context window instead of whichever
-   * delegate provider happened to be active previously.
-   */
   async getModels(): Promise<IModel[]> {
     const contextWindow = this.getEffectiveContextLimit();
     return [
@@ -329,30 +213,124 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   private getEffectiveContextLimit(): number | undefined {
-    return this.config.contextLimit;
-  }
-
-  private enforceContextLimit(options: GenerateChatOptions): void {
-    const contextLimit = this.getEffectiveContextLimit();
-    if (contextLimit === undefined) {
-      return;
+    if (
+      this.config.contextLimit !== undefined &&
+      this.config.contextLimit > 0
+    ) {
+      return this.config.contextLimit;
     }
-
-    const estimatedTokens = estimateTokens(JSON.stringify(options.contents));
-    if (estimatedTokens <= contextLimit) {
-      return;
-    }
-
-    throw new Error(
-      `Load balancer profile "${this.config.profileName}" context limit exceeded: estimated ${estimatedTokens} tokens exceeds configured limit ${contextLimit}`,
-    );
+    return getMinMemberContextWindow(this.config.subProfiles);
   }
 
   /**
-   * Generate chat completion by delegating to selected sub-profile provider
-   * Phase 3c: Request Delegation with Settings Merge Implementation
-   * @plan PLAN-20251211issue486c
+   * Estimate request tokens for a given sub-profile using its provider/model
+   * tokenizer via the injected RuntimeTokenizerFactory, falling back to a
+   * generic estimate. Updates token-accounting diagnostics.
+   * @plan PLAN-2207-LB-TOKEN-ACCOUNTING
    */
+  private async estimateForSubProfile(
+    contents: IContent[],
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+  ): Promise<EstimationResult> {
+    const model = resolveSubProfileModel(subProfile);
+    const factory = this.providerManager.getTokenizerFactory();
+    const result = await estimateRequestTokens(
+      contents,
+      subProfile.providerName,
+      model,
+      { tokenizerFactory: factory },
+    );
+    this.accountingSource = result.source;
+    this.lastEstimatedTokens = result.tokens;
+    this.diagnosticsSelectedSubProfile = subProfile.name;
+    this.diagnosticsActiveProvider = subProfile.providerName;
+    this.diagnosticsActiveModel = model || null;
+    return result;
+  }
+
+  /**
+   * Enforce the target context limit for a sub-profile, attempting compression
+   * before throwing when the estimate exceeds the limit.
+   * @plan PLAN-2207-LB-TOKEN-ACCOUNTING
+   */
+  private async enforceTokenLimitForTarget(
+    options: GenerateChatOptions,
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+  ): Promise<GenerateChatOptions> {
+    const sharedLimit = this.getEffectiveContextLimit();
+    const contextLimit = getTargetContextLimit(subProfile, sharedLimit);
+    if (contextLimit === undefined) {
+      return options;
+    }
+
+    let result = await this.estimateForSubProfile(options.contents, subProfile);
+    if (result.tokens <= contextLimit) {
+      return options;
+    }
+
+    if (this.compressionCallback) {
+      this.logger.debug(
+        () =>
+          `[LB:token-guard] Estimate ${result.tokens} exceeds limit ${contextLimit} for ${subProfile.name}, attempting compression`,
+      );
+      let clonedContents: IContent[];
+      try {
+        clonedContents = cloneContentsForCompression(options.contents);
+      } catch (cloneError) {
+        this.logger.debug(
+          () =>
+            `[LB:token-guard] Content clone failed for ${subProfile.name}: ${String(cloneError)}`,
+        );
+        throw new LoadBalancerContextLimitError({
+          profileName: this.config.profileName,
+          subProfileName: subProfile.name,
+          tokens: result.tokens,
+          contextLimit,
+          cause:
+            cloneError instanceof Error
+              ? cloneError
+              : new Error(String(cloneError)),
+        });
+      }
+      let compressed: IContent[];
+      try {
+        compressed = await this.compressionCallback(clonedContents);
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `[LB:token-guard] Compression callback failed for ${subProfile.name}: ${String(error)}`,
+        );
+        throw new LoadBalancerCompressionCallbackError({
+          profileName: this.config.profileName,
+          subProfileName: subProfile.name,
+          cause: error instanceof Error ? error : new Error(String(error)),
+        });
+      }
+      const compressedOptions = {
+        ...options,
+        contents: compressed,
+      };
+      result = await this.estimateForSubProfile(
+        compressedOptions.contents,
+        subProfile,
+      );
+      if (result.tokens <= contextLimit) {
+        this.logger.debug(
+          () =>
+            `[LB:token-guard] Compression reduced estimate to ${result.tokens} for ${subProfile.name}`,
+        );
+        return compressedOptions;
+      }
+    }
+
+    throw new LoadBalancerContextLimitError({
+      profileName: this.config.profileName,
+      subProfileName: subProfile.name,
+      tokens: result.tokens,
+      contextLimit,
+    });
+  }
+
   generateChatCompletion(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
@@ -374,8 +352,7 @@ export class LoadBalancingProvider implements IProvider {
     } else {
       options = optionsOrContent;
     }
-
-    this.enforceContextLimit(options);
+    this.resetTokenAccountingDiagnostics();
 
     // Branch on strategy
     if (this.config.strategy === 'failover') {
@@ -389,13 +366,13 @@ export class LoadBalancingProvider implements IProvider {
       () => `Selected sub-profile: ${subProfile.name} for request`,
     );
 
-    // Phase 5: Track stats for selected sub-profile
+    const enforcedOptions = await this.enforceTokenLimitForTarget(
+      options,
+      subProfile,
+    );
+
     this.incrementStats(subProfile.name);
-
-    // Record request start for backend metrics (Issue #489)
     const startTime = this.recordRequestStart(subProfile.name);
-
-    // Phase 3 Step 2: Get delegate provider from ProviderManager
     const delegateProvider = this.providerManager.getProviderByName(
       subProfile.providerName,
     );
@@ -411,13 +388,11 @@ export class LoadBalancingProvider implements IProvider {
         `Delegating to provider: ${delegateProvider.name} (sub-profile: ${subProfile.name})`,
     );
 
-    // Phase 3c: Build options.resolved with proper settings merge
     const resolvedOptions = this.buildRoundRobinResolvedOptions(
       subProfile,
-      options,
+      enforcedOptions,
     );
 
-    // Phase 3 Step 5: Delegate and yield chunks with metrics tracking
     yield* this.yieldWithMetrics(
       delegateProvider,
       resolvedOptions,
@@ -440,7 +415,8 @@ export class LoadBalancingProvider implements IProvider {
       lbProfileModelParams: this.config.lbProfileModelParams,
       logger: this.logger,
       providerName: this.name,
-      getEffectiveContextLimit: () => this.getEffectiveContextLimit(),
+      getEffectiveContextLimit: () =>
+        getTargetContextLimit(subProfile, this.getEffectiveContextLimit()),
     });
   }
 
@@ -502,7 +478,6 @@ export class LoadBalancingProvider implements IProvider {
    * Will be implemented in later phases to aggregate tools from delegate providers
    */
   getServerTools(): string[] {
-    // Stub implementation - returns empty array
     return [];
   }
 
@@ -549,14 +524,35 @@ export class LoadBalancingProvider implements IProvider {
     );
   }
 
-  /**
-   * Reset statistics (optional method for testing/debugging)
-   * Phase 5: Stats Integration
-   */
   resetStats(): void {
     this.stats.clear();
     this.lastSelected = null;
     this.totalRequests = 0;
+    this.resetTokenAccountingDiagnostics();
+  }
+
+  setCompressionCallback(callback: CompressionCallback | null): void {
+    this.compressionCallback = callback;
+  }
+
+  private resetTokenAccountingDiagnostics(): void {
+    this.accountingSource = null;
+    this.lastEstimatedTokens = null;
+    this.diagnosticsSelectedSubProfile = null;
+    this.diagnosticsActiveProvider = null;
+    this.diagnosticsActiveModel = null;
+  }
+
+  getTokenAccountingDiagnostics(): TokenAccountingDiagnostics {
+    return {
+      profileName: this.config.profileName,
+      selectedSubProfile: this.diagnosticsSelectedSubProfile,
+      activeProvider: this.diagnosticsActiveProvider,
+      activeModel: this.diagnosticsActiveModel,
+      accountingSource: this.accountingSource ?? 'unknown',
+      sharedContextLimit: this.getEffectiveContextLimit() ?? null,
+      lastEstimatedTokens: this.lastEstimatedTokens,
+    };
   }
 
   /**
@@ -713,6 +709,7 @@ export class LoadBalancingProvider implements IProvider {
     const settings = this.extractFailoverSettings();
     const errors: Array<{ profile: string; error: Error }> = [];
     const numProfiles = this.config.subProfiles.length;
+    const contextLimitErrors: Array<{ profile: string; error: Error }> = [];
 
     // Check if all backends are unhealthy (circuit breakers open)
     this.validateNotAllUnhealthy(settings, numProfiles);
@@ -736,6 +733,7 @@ export class LoadBalancingProvider implements IProvider {
         options,
         settings,
         errors,
+        contextLimitErrors,
         currentIndex,
         numProfiles,
       );
@@ -747,7 +745,20 @@ export class LoadBalancingProvider implements IProvider {
       currentIndex = (currentIndex + 1) % numProfiles;
     }
 
-    throw new LoadBalancerFailoverError(this.config.profileName, errors);
+    if (errors.length === 0 && contextLimitErrors.length > 0) {
+      throw new LoadBalancerAllContextLimitsExceededError({
+        profileName: this.config.profileName,
+        failures: contextLimitErrors.map(({ profile, error }) => ({
+          profile,
+          error,
+        })),
+      });
+    }
+
+    throw new LoadBalancerFailoverError(this.config.profileName, [
+      ...errors,
+      ...contextLimitErrors,
+    ]);
   }
 
   private shouldSkipBackend(
@@ -801,6 +812,7 @@ export class LoadBalancingProvider implements IProvider {
     options: GenerateChatOptions,
     settings: FailoverSettings,
     errors: Array<{ profile: string; error: Error }>,
+    contextLimitErrors: Array<{ profile: string; error: Error }>,
     currentIndex: number,
     numProfiles: number,
   ): AsyncGenerator<IContent, boolean> {
@@ -809,19 +821,42 @@ export class LoadBalancingProvider implements IProvider {
 
     while (attempts < maxAttempts) {
       attempts++;
-      const startTime = this.recordRequestStart(subProfile.name);
+      let startTime = 0;
+      let requestStarted = false;
       const chunksYielded = { value: false };
       try {
+        const enforcedOptions = await this.enforceTokenLimitForTarget(
+          options,
+          subProfile,
+        );
+        startTime = this.recordRequestStart(subProfile.name);
+        requestStarted = true;
         yield* this.attemptBackendRequest(
           subProfile,
-          options,
+          enforcedOptions,
           settings,
           startTime,
           chunksYielded,
         );
-        this.currentFailoverIndex = 0;
+        this.currentFailoverIndex = currentIndex;
         return true;
       } catch (error) {
+        if (
+          error instanceof LoadBalancerCompressionCallbackError ||
+          error instanceof LoadBalancerContextLimitError
+        ) {
+          contextLimitErrors.push({ profile: subProfile.name, error });
+          this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
+          return false;
+        }
+        if (!requestStarted) {
+          errors.push({
+            profile: subProfile.name,
+            error: error instanceof Error ? error : new Error(String(error)),
+          });
+          this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
+          return false;
+        }
         const handled = this.handleFailoverError(
           error,
           subProfile,
@@ -971,17 +1006,12 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   /**
-   * Get auth token - required by ProviderManager.normalizeRuntimeInputs validation
-   * @plan:PLAN-20251211issue486b - Auth token resolution
-   *
-   * The load-balancer doesn't use this token directly; it passes authToken
-   * via options.resolved to the delegate provider. This method exists to
-   * satisfy ProviderManager's canResolveAuth check so it doesn't fail
-   * validation before delegation can happen.
+   * Get auth token - required by ProviderManager.normalizeRuntimeInputs validation.
+   * The load-balancer does not use this token directly; it passes authToken via
+   * options.resolved to the delegate provider. This method exists to satisfy
+   * ProviderManager's auth-resolution check before delegation can happen.
    */
   async getAuthToken(): Promise<string> {
-    // Return the first sub-profile's auth token if available.
-    // subProfiles is validated non-empty in the constructor.
     const firstSubProfile = this.config.subProfiles[0];
     return firstSubProfile.authToken ?? '';
   }

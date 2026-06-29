@@ -19,11 +19,21 @@ import path from 'node:path';
 import process from 'node:process';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
+import type { TokenAccountingDiagnostics } from '@vybestack/llxprt-code-providers';
 
 interface LoadBalancerStatsResult {
   lastSelected: string | null;
   totalRequests: number;
   profileCounts: Record<string, number>;
+}
+
+interface RuntimeSessionTokenUsage {
+  input: number;
+  output: number;
+  cache: number;
+  tool: number;
+  thought: number;
+  total: number;
 }
 
 interface BucketFailoverDiagnosticsHandler {
@@ -73,14 +83,52 @@ function isBucketFailoverHandler(handler: unknown): boolean {
   );
 }
 
-function isLoadBalancingProvider(
-  provider: unknown,
-): provider is { getStats: () => LoadBalancerStatsResult } {
+function isLoadBalancingProvider(provider: unknown): provider is {
+  getStats: () => LoadBalancerStatsResult;
+  getTokenAccountingDiagnostics?: () => TokenAccountingDiagnostics;
+} {
   return (
     provider !== null &&
     typeof provider === 'object' &&
     'getStats' in provider &&
     typeof (provider as { getStats?: unknown }).getStats === 'function'
+  );
+}
+
+function supportsTokenAccountingDiagnostics(provider: {
+  getTokenAccountingDiagnostics?: () => TokenAccountingDiagnostics;
+}): provider is {
+  getTokenAccountingDiagnostics: () => TokenAccountingDiagnostics;
+} {
+  return typeof provider.getTokenAccountingDiagnostics === 'function';
+}
+
+interface OptionalDiagnosticField {
+  label: string;
+  value: string | number | null;
+  fallback: string;
+}
+
+function appendOptionalDiagnostics(
+  diagnostics: string[],
+  fields: OptionalDiagnosticField[],
+): void {
+  for (const { label, value, fallback } of fields) {
+    diagnostics.push(`- ${label}: ${value ?? fallback}`);
+  }
+}
+
+function isSessionTokenUsage(
+  value: unknown,
+): value is RuntimeSessionTokenUsage {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  const tokenFields = ['total', 'input', 'output', 'cache', 'tool', 'thought'];
+  return tokenFields.every(
+    (field) =>
+      typeof candidate[field] === 'number' && Number.isFinite(candidate[field]),
   );
 }
 
@@ -142,6 +190,59 @@ function appendFailoverInfo(
   }
 }
 
+function appendTokenAccountingDiagnostics(
+  diagnostics: string[],
+  runtimeApi: ReturnType<typeof getRuntimeApi>,
+  lbProvider: {
+    getTokenAccountingDiagnostics: () => TokenAccountingDiagnostics;
+  },
+): void {
+  const tokenAccounting = lbProvider.getTokenAccountingDiagnostics();
+  const sessionTokens = runtimeApi.getSessionTokenUsage();
+  appendOptionalDiagnostics(diagnostics, [
+    {
+      label: 'Load Balancer Profile',
+      value: tokenAccounting.profileName,
+      fallback: 'none',
+    },
+    {
+      label: 'Selected Sub-Profile',
+      value: tokenAccounting.selectedSubProfile,
+      fallback: 'none',
+    },
+    {
+      label: 'Selected Provider',
+      value: tokenAccounting.activeProvider,
+      fallback: 'none',
+    },
+    {
+      label: 'Selected Model',
+      value: tokenAccounting.activeModel,
+      fallback: 'none',
+    },
+    {
+      label: 'Accounting Source',
+      value: tokenAccounting.accountingSource,
+      fallback: 'unknown',
+    },
+    {
+      label: 'Shared Context Limit',
+      value: tokenAccounting.sharedContextLimit,
+      fallback: 'unbounded',
+    },
+    {
+      label: 'Request-Estimated Tokens',
+      value: tokenAccounting.lastEstimatedTokens,
+      fallback: 'n/a',
+    },
+  ]);
+  if (isSessionTokenUsage(sessionTokens)) {
+    diagnostics.push(
+      `- Session Status Tokens: ${sessionTokens.total} total (input ${sessionTokens.input}, output ${sessionTokens.output}, cache ${sessionTokens.cache}, tool ${sessionTokens.tool}, thought ${sessionTokens.thought})`,
+    );
+  }
+}
+
 function appendLoadBalancerStats(
   diagnostics: string[],
   logger: DebugLogger,
@@ -168,6 +269,10 @@ function appendLoadBalancerStats(
           ? ((count / lbStats.totalRequests) * 100).toFixed(1)
           : '0';
       diagnostics.push(`  - ${profile}: ${count} requests (${percentage}%)`);
+    }
+
+    if (supportsTokenAccountingDiagnostics(lbProvider)) {
+      appendTokenAccountingDiagnostics(diagnostics, runtimeApi, lbProvider);
     }
   } catch (error) {
     logger.debug(
