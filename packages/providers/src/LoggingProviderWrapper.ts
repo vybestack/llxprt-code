@@ -613,7 +613,7 @@ export class LoggingProviderWrapper implements IProvider {
           firstChunkTime = performance.now() - startTime;
         }
 
-        const content = this.extractSimpleContent(chunk);
+        const content = extractSimpleContent(chunk);
         if (content) {
           responseContent += content;
         }
@@ -669,10 +669,6 @@ export class LoggingProviderWrapper implements IProvider {
   // Simple content extraction without complex provider-specific logic
   private hasTokenBearingOutput(chunk: unknown): boolean {
     return hasTokenBearingOutput(chunk);
-  }
-
-  private extractSimpleContent(chunk: unknown): string {
-    return extractSimpleContent(chunk);
   }
 
   private async logResponse(
