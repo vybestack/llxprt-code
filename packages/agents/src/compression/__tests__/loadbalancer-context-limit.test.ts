@@ -121,16 +121,17 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
     expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });
 
-  it('honors the min-across-pool value when the provider reports the smaller window', () => {
+  it('uses the pool minimum (128K) for a mixed multi-backend pool whose smallest backend is 128K', () => {
     const runtimeContext = buildLbRuntimeContext(historyService, {
-      providerContextLimit: 200_000,
+      providerContextLimit: 128_000,
     });
 
     const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
     const lbProvider = runtimeContext.provider.getActiveProvider();
 
     const limits = chat['compressionHandler'].computeContextLimits(lbProvider);
-    expect(limits.limit).toBe(200_000);
+    expect(limits.limit).toBe(128_000);
+    expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });
 
   it('respects an explicit user context-limit override over the provider limit', () => {
@@ -148,15 +149,19 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
 
   it('falls back to the model lookup for a non-LB provider lacking getContextLimit', () => {
     const runtimeContext = buildLbRuntimeContext(historyService, {
-      stateModel: 'gemini-2.0-flash',
-      stateProvider: 'gemini',
+      stateModel: 'gpt-4o',
+      stateProvider: 'openai',
     });
 
     const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
     const provider = runtimeContext.provider.getActiveProvider();
 
     const limits = chat['compressionHandler'].computeContextLimits(provider);
-    expect(limits.limit).toBe(tokenLimit('gemini-2.0-flash'));
-    expect(limits.limit).toBe(DEFAULT_TOKEN_LIMIT);
+    // gpt-4o resolves to 128K, distinct from DEFAULT_TOKEN_LIMIT (1M), so this
+    // genuinely proves the model-lookup path rather than coincidentally hitting
+    // the default constant.
+    expect(limits.limit).toBe(tokenLimit('gpt-4o'));
+    expect(limits.limit).toBe(128_000);
+    expect(limits.limit).not.toBe(DEFAULT_TOKEN_LIMIT);
   });
 });
