@@ -827,6 +827,10 @@ export class LoggingProviderWrapper implements IProvider {
     accumulateTokenUsage(tokenCounts, config, this.wrapped.name, this.debug);
   }
 
+  private resolveLoggingConfig(candidate: unknown): Config | undefined {
+    return resolveLoggingConfig(candidate);
+  }
+
   private async logToolCall(
     config: Config | undefined,
     toolName: string,
@@ -914,7 +918,7 @@ export class LoggingProviderWrapper implements IProvider {
     config?: unknown,
   ): Promise<unknown> {
     const startTime = Date.now();
-    const loggingConfig = resolveLoggingConfig(config);
+    const loggingConfig = this.resolveLoggingConfig(config);
 
     try {
       const result = await this.wrapped.invokeServerTool(
