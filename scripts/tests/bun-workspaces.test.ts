@@ -13,6 +13,16 @@ import semver from 'semver';
 const repoRoot = resolve(__dirname, '..', '..');
 
 /**
+ * The exact Bun version validated for S1. `bun install` behavior (lockfile
+ * migration, lifecycle-script blocking, native-dependency resolution) is
+ * version-sensitive, so the pin in `.bun-version` is an intentional, reviewed
+ * decision. Asserting the exact value — rather than merely "some semver" — makes
+ * any future bump or downgrade trip CI until this constant and the rationale in
+ * dev-docs/bun.md are updated deliberately together.
+ */
+const EXPECTED_BUN_VERSION = '1.3.14';
+
+/**
  * The exact, intentional set of packages whose install/postinstall lifecycle
  * scripts Bun is permitted to run. Bun blocks lifecycle scripts by default;
  * only packages that produce a required native binary are trusted. This is an
@@ -143,9 +153,16 @@ describe('Bun package-manager configuration (S1)', () => {
     expect(parsed.install?.linker).toBe('hoisted');
   });
 
-  it('.bun-version pins a concrete semver', () => {
-    const content = readFileSync(join(repoRoot, '.bun-version'), 'utf-8');
-    expect(content.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  it('.bun-version pins the exact validated Bun version', () => {
+    const content = readFileSync(
+      join(repoRoot, '.bun-version'),
+      'utf-8',
+    ).trim();
+    // Defense-in-depth: it must be a valid semver AND the specific version S1
+    // validated, so an unreviewed bump/downgrade fails CI rather than silently
+    // changing install behavior.
+    expect(semver.valid(content)).not.toBeNull();
+    expect(content).toBe(EXPECTED_BUN_VERSION);
   });
 
   it('declares every workspace package that exists on disk', () => {
