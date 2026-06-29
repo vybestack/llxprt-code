@@ -119,8 +119,10 @@ export class TestRig {
     const dirConfig = setupTestDirectory(testDir, {
       fakeResponsesPath: options.fakeResponsesPath,
     });
-    this.fakeResponsesPath = dirConfig.fakeResponsesPath;
-    this.originalFakeResponsesPath = dirConfig.originalFakeResponsesPath;
+    if (dirConfig.fakeResponsesPath !== undefined) {
+      this.fakeResponsesPath = dirConfig.fakeResponsesPath;
+      this.originalFakeResponsesPath = dirConfig.originalFakeResponsesPath;
+    }
 
     writeSettingsFile(testDir, __dirname, options.settings);
     writeProfileFile(testDir);
