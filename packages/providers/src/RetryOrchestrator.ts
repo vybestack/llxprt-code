@@ -221,6 +221,10 @@ export class RetryOrchestrator implements IProvider {
     return this.wrappedProvider.getModelParams?.();
   }
 
+  getContextLimit?(): number | undefined {
+    return this.wrappedProvider.getContextLimit?.();
+  }
+
   clearAuthCache?(): void {
     this.wrappedProvider.clearAuthCache?.();
   }

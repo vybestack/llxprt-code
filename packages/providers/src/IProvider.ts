@@ -109,6 +109,13 @@ export interface IProvider {
   getModelParams?(): Record<string, unknown> | undefined;
 
   /**
+   * Return the effective context limit (token window) for this provider, or
+   * undefined when it cannot be determined. Used by the agent layer to compute
+   * proactive compression thresholds (e.g. for load-balancer pools).
+   */
+  getContextLimit?(): number | undefined;
+
+  /**
    * Clear authentication cache (for OAuth logout)
    */
   clearAuthCache?(): void;
