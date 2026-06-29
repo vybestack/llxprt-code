@@ -237,7 +237,7 @@ export class TestRig {
     ) {
       fs.copyFileSync(this.fakeResponsesPath, this.originalFakeResponsesPath);
     }
-    if (this.testDir !== null && env['KEEP_OUTPUT'] === undefined) {
+    if (this.testDir !== null && !env['KEEP_OUTPUT']) {
       try {
         fs.rmSync(this.testDir, { recursive: true, force: true });
       } catch (error) {
