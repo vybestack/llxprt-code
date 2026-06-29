@@ -12,7 +12,6 @@
 
 import type React from 'react';
 import {
-  type Config,
   type ServerGeminiContentEvent as ContentEvent,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
@@ -23,14 +22,9 @@ import {
   MessageType,
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
-import {
-  getCurrentProfileName,
-  buildSplitContent,
-  buildFullSplitItem,
-} from './streamUtils.js';
+import { buildSplitContent, buildFullSplitItem } from './streamUtils.js';
 
 export interface ContentEventDeps {
-  config: Config;
   addItem: UseHistoryManagerReturn['addItem'];
   sanitizeContent: (text: string) => {
     text: string;
@@ -44,6 +38,7 @@ export interface ContentEventDeps {
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >;
+  getContentPrefixIdentity: () => string | null;
 }
 
 function ensureGeminiPendingItem(
@@ -135,7 +130,11 @@ export function processContentEvent(
     return '';
   }
 
-  const liveProfileName = getCurrentProfileName(deps.config);
+  // Normalize empty/whitespace to null so downstream `!= null` checks treat
+  // it as absent — consistent with resolveContentPrefixIdentity's cleaned()
+  // behavior (issue #2263).
+  const rawIdentity = deps.getContentPrefixIdentity();
+  const liveProfileIdentity = rawIdentity === '' ? null : rawIdentity;
   const pendingType = getPendingGeminiType(deps.pendingHistoryItemRef.current);
   const combined = currentGeminiMessageBuffer + eventValue;
   const {
@@ -167,7 +166,7 @@ export function processContentEvent(
     deps.pendingHistoryItemRef,
     deps.setPendingHistoryItem,
     deps.flushPendingHistoryItem,
-    liveProfileName,
+    liveProfileIdentity,
     deps.thinkingBlocksRef,
     userMessageTimestamp,
   );
@@ -180,7 +179,7 @@ export function processContentEvent(
   )?.profileName;
   const { splitPoint, beforeText, afterItem } = buildSplitContent(
     sanitizedCombined,
-    liveProfileName,
+    liveProfileIdentity,
     existingProfileName ?? null,
     deps.thinkingBlocksRef.current,
     pendingType,
@@ -191,7 +190,7 @@ export function processContentEvent(
       buildFullSplitItem(
         item,
         sanitizedCombined,
-        liveProfileName,
+        liveProfileIdentity,
         deps.thinkingBlocksRef.current,
       ),
     );
@@ -201,7 +200,7 @@ export function processContentEvent(
   return applySplitResult(
     beforeText,
     pendingType,
-    liveProfileName,
+    liveProfileIdentity,
     deps.thinkingBlocksRef,
     deps.setPendingHistoryItem,
     deps.addItem,

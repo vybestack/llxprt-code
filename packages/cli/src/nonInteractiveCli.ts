@@ -39,6 +39,10 @@ import {
   getErrorFallbackModel,
 } from './utils/apiErrorFormatting.js';
 import { firstNonEmptyString } from './utils/coalesce.js';
+import {
+  resolveContentPrefixIdentity,
+  createCliModelIdentityRuntime,
+} from './ui/utils/modelIdentity.js';
 
 interface RunNonInteractiveParams {
   config: Config;
@@ -49,24 +53,40 @@ interface RunNonInteractiveParams {
   deferTelemetryShutdown?: boolean;
 }
 
-function createProfileNameWriter(
+export function createProfileNameWriter(
   config: Config,
   jsonOutput: boolean,
   streamFormatter: StreamJsonFormatter | null,
+  getIdentity: (() => string | null) | null = null,
 ): () => void {
+  const resolveIdentity =
+    getIdentity ??
+    (() => {
+      try {
+        return resolveContentPrefixIdentity(createCliModelIdentityRuntime());
+      } catch (error) {
+        // Degraded path: fall back to the bare profile name (no model suffix)
+        // so the prefix is still shown. Log so the format divergence is
+        // observable to operators.
+        debugLogger.debug(
+          () =>
+            `[nonInteractiveCli] resolveContentPrefixIdentity failed; using bare profile name: ${error}`,
+        );
+        const settingsService = config.getSettingsService() as Omit<
+          ReturnType<Config['getSettingsService']>,
+          'getCurrentProfileName'
+        > & {
+          getCurrentProfileName?: () => string | null;
+        };
+        return settingsService.getCurrentProfileName?.() ?? null;
+      }
+    });
   let firstEventInTurn = true;
   return () => {
     if (firstEventInTurn && !jsonOutput && !streamFormatter) {
-      const settingsService = config.getSettingsService() as Omit<
-        ReturnType<Config['getSettingsService']>,
-        'getCurrentProfileName'
-      > & {
-        getCurrentProfileName?: () => string | null;
-      };
-      const activeProfileName = settingsService.getCurrentProfileName?.();
-      if (activeProfileName) {
-        process.stdout.write(`[${activeProfileName}]
-`);
+      const identity = resolveIdentity();
+      if (identity) {
+        process.stdout.write(`[${identity}]\n`);
       }
     }
     firstEventInTurn = false;

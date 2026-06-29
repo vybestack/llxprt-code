@@ -9,6 +9,7 @@ import {
   formatModelIdentity,
   formatLoadBalancerIdentity,
   resolveModelIdentity,
+  resolveContentPrefixIdentity,
   LB_PENDING_PLACEHOLDER,
   type ModelIdentityRuntime,
 } from './modelIdentity.js';
@@ -309,5 +310,141 @@ describe('resolveModelIdentity', () => {
       profileName: null,
     });
     expect(resolveModelIdentity(runtime, 'prev-label')).toBe('prev-label');
+  });
+});
+
+describe('resolveContentPrefixIdentity', () => {
+  it('returns profileName:modelName for a standard profile session', () => {
+    const runtime = makeRuntime({
+      providerName: 'openai',
+      modelName: 'gpt-4',
+      profileName: 'work',
+    });
+    expect(resolveContentPrefixIdentity(runtime)).toBe('work:gpt-4');
+  });
+
+  it('returns just the profile name when no model is available', () => {
+    const runtime = makeRuntime({
+      providerName: 'openai',
+      modelName: null,
+      profileName: 'work',
+    });
+    expect(resolveContentPrefixIdentity(runtime)).toBe('work');
+  });
+
+  it('returns profileName:activeModel for a load-balancer session after selection', () => {
+    const runtime = makeRuntime({
+      providerName: 'load-balancer',
+      modelName: 'my-lb',
+      profileName: 'my-lb',
+      lbStats: {
+        profileName: 'my-lb',
+        lastSelected: 'fast-sub',
+        lastSelectedModel: 'gpt-4o-mini',
+      },
+    });
+    expect(resolveContentPrefixIdentity(runtime)).toBe('my-lb:gpt-4o-mini');
+  });
+
+  it('falls back to status.modelName for a load-balancer session before selection', () => {
+    const runtime = makeRuntime({
+      providerName: 'load-balancer',
+      modelName: 'my-lb',
+      profileName: 'my-lb',
+      lbStats: {
+        profileName: 'my-lb',
+        lastSelected: null,
+        lastSelectedModel: null,
+      },
+    });
+    expect(resolveContentPrefixIdentity(runtime)).toBe('my-lb:my-lb');
+  });
+
+  it('returns just the profile name for a load-balancer session when no model is known', () => {
+    const runtime = makeRuntime({
+      providerName: 'load-balancer',
+      modelName: null,
+      profileName: 'my-lb',
+      lbStats: {
+        profileName: 'my-lb',
+        lastSelected: null,
+        lastSelectedModel: null,
+      },
+    });
+    expect(resolveContentPrefixIdentity(runtime)).toBe('my-lb');
+  });
+
+  it('returns null when no profile is active (direct provider)', () => {
+    const runtime = makeRuntime({
+      providerName: 'gemini',
+      modelName: 'gemini-2.5-pro',
+      profileName: null,
+    });
+    expect(resolveContentPrefixIdentity(runtime)).toBeNull();
+  });
+
+  it('returns null when nothing is active at all', () => {
+    const runtime = makeRuntime({
+      providerName: null,
+      modelName: null,
+      profileName: null,
+    });
+    expect(resolveContentPrefixIdentity(runtime)).toBeNull();
+  });
+
+  describe('load-balancer error/edge degradation', () => {
+    it('uses the LB sub-profile model when getStats succeeds', () => {
+      const runtime = makeRuntime({
+        providerName: 'load-balancer',
+        modelName: 'my-lb',
+        profileName: 'my-lb',
+        lbStats: {
+          profileName: 'my-lb',
+          lastSelected: 'fast-sub',
+          lastSelectedModel: 'gpt-4o-mini',
+        },
+      });
+      expect(resolveContentPrefixIdentity(runtime)).toBe('my-lb:gpt-4o-mini');
+    });
+
+    it('falls back to the LB provider model when getStats returns null', () => {
+      const runtime = makeRuntime({
+        providerName: 'load-balancer',
+        modelName: 'my-lb',
+        profileName: 'my-lb',
+        getStatsReturnsNull: true,
+      });
+      expect(resolveContentPrefixIdentity(runtime)).toBe('my-lb:my-lb');
+    });
+
+    it('falls back to the LB provider model when the provider is missing', () => {
+      const runtime = makeRuntime({
+        providerName: 'load-balancer',
+        modelName: 'my-lb',
+        profileName: 'my-lb',
+        providerMissing: true,
+      });
+      expect(resolveContentPrefixIdentity(runtime)).toBe('my-lb:my-lb');
+    });
+
+    it('falls back to the LB provider model when getStats throws', () => {
+      const runtime = makeRuntime({
+        providerName: 'load-balancer',
+        modelName: 'my-lb',
+        profileName: 'my-lb',
+        lbStatsThrows: true,
+      });
+      expect(resolveContentPrefixIdentity(runtime)).toBe('my-lb:my-lb');
+    });
+
+    it('falls back to the LB provider model when the provider manager is null', () => {
+      const runtime = makeRuntime({
+        providerName: 'load-balancer',
+        modelName: 'my-lb',
+        profileName: 'my-lb',
+        providerManagerNull: true,
+      });
+      expect(resolveContentPrefixIdentity(runtime)).toBe('my-lb:my-lb');
+    });
   });
 });
