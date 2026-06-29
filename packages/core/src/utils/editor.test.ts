@@ -328,7 +328,6 @@ describe('editor utils', () => {
     });
 
     it('should return null for an unsupported editor', () => {
-      // @ts-expect-error Testing unsupported editor
       const command = getDiffCommand('old.txt', 'new.txt', 'foobar');
       expect(command).toBeNull();
     });
@@ -353,7 +352,7 @@ describe('editor utils', () => {
         (spawn as Mock).mockReturnValue({ on: mockSpawnOn });
 
         await openDiff('old.txt', 'new.txt', editor);
-        const diffCommand = getDiffCommand('old.txt', 'new.txt', editor)!;
+        const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
         expect(spawn).toHaveBeenCalledWith(
           diffCommand.command,
           diffCommand.args,
@@ -399,7 +398,7 @@ describe('editor utils', () => {
     for (const editor of terminalEditors) {
       it(`should call spawnSync for ${editor}`, async () => {
         await openDiff('old.txt', 'new.txt', editor);
-        const diffCommand = getDiffCommand('old.txt', 'new.txt', editor)!;
+        const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
         expect(spawnSync).toHaveBeenCalledWith(
           diffCommand.command,
           diffCommand.args,
@@ -414,7 +413,6 @@ describe('editor utils', () => {
       const consoleErrorSpy = vi
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
-      // @ts-expect-error Testing unsupported editor
       await openDiff('old.txt', 'new.txt', 'foobar');
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'No diff tool available. Install a supported editor.',

@@ -19,6 +19,7 @@ import {
   type ToolResult,
   type ToolInvocation,
   ToolConfirmationOutcome,
+  normalizeConfirmationOutcome,
   type ToolCallConfirmationDetails,
   type ToolExecuteConfirmationDetails,
   type PolicyUpdateOptions,
@@ -738,12 +739,14 @@ export class ShellTool extends BaseDeclarativeTool<
 
     const confirmation = await invocation.shouldConfirmExecute(signal);
     if (confirmation !== false) {
-      const outcome = this.messageBus
-        ? ((await this.messageBus.requestConfirmation(
-            confirmation,
-            signal,
-          )) as ToolConfirmationOutcome)
+      const confirmationResult = this.messageBus
+        ? await this.messageBus.requestConfirmation(confirmation, signal)
         : ToolConfirmationOutcome.ProceedOnce;
+      const outcome = normalizeConfirmationOutcome(confirmationResult);
+      const payload =
+        confirmationResult !== null && typeof confirmationResult === 'object'
+          ? confirmationResult.payload
+          : undefined;
       if (outcome === ToolConfirmationOutcome.Cancel) {
         return {
           llmContent: `Shell command cancelled: ${params.command}`,
@@ -755,7 +758,7 @@ export class ShellTool extends BaseDeclarativeTool<
         };
       }
       if ('onConfirm' in confirmation) {
-        await confirmation.onConfirm(outcome);
+        await confirmation.onConfirm(outcome, payload);
       }
     }
 

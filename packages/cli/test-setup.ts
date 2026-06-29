@@ -156,16 +156,30 @@ vi.mock('ink', () => import('./test-utils/ink-stub.ts'), {
 // but ReactSharedInternals might be undefined or missing the S property.
 // We need to ensure React's shared internals are properly initialized.
 
-// First, ensure React is available globally
-if (typeof globalThis !== 'undefined') {
-  // @ts-expect-error - Necessary for React DOM compatibility in tests
-  globalThis.React = React;
-}
+type ReactSharedInternals = {
+  S?: unknown;
+  T?: unknown;
+  H?: unknown;
+};
+
+type ReactWithSharedInternals = typeof React & {
+  _DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactSharedInternals;
+  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: ReactSharedInternals;
+};
+
+type GlobalWithReactInternals = typeof globalThis & {
+  React?: typeof React;
+  ReactSharedInternals?: ReactSharedInternals;
+};
+
+const globalWithReact = globalThis as GlobalWithReactInternals;
+globalWithReact.React = React;
 
 // Access and initialize React's shared internals
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ReactInternals = (React as any)
-  .__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+const reactWithInternals = React as ReactWithSharedInternals;
+const ReactInternals =
+  reactWithInternals._DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE ??
+  reactWithInternals.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 if (ReactInternals) {
   // Ensure the S property exists (used by React DOM for transition handling)
   if (!Object.prototype.hasOwnProperty.call(ReactInternals, 'S')) {
@@ -180,10 +194,7 @@ if (ReactInternals) {
   }
 
   // Make sure ReactSharedInternals is available globally as React DOM expects it
-  if (typeof globalThis !== 'undefined') {
-    // @ts-expect-error - ReactSharedInternals global assignment for React DOM compatibility
-    globalThis.ReactSharedInternals = ReactInternals;
-  }
+  globalWithReact.ReactSharedInternals = ReactInternals;
 }
 
 import './src/test-utils/customMatchers.js';

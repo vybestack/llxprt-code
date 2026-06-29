@@ -141,6 +141,16 @@ export function getDiffCommand(
   oldPath: string,
   newPath: string,
   editor: EditorType,
+): DiffCommand;
+export function getDiffCommand(
+  oldPath: string,
+  newPath: string,
+  editor: string,
+): DiffCommand | null;
+export function getDiffCommand(
+  oldPath: string,
+  newPath: string,
+  editor: string,
 ): DiffCommand | null {
   if (!isValidEditorType(editor)) {
     return null;
@@ -194,8 +204,10 @@ export function getDiffCommand(
         command: 'hx',
         args: ['--vsplit', '--', oldPath, newPath],
       };
-    default:
-      return null;
+    default: {
+      const exhaustiveEditor: never = editor;
+      throw new Error(`Unsupported editor type: ${exhaustiveEditor}`);
+    }
   }
 }
 
@@ -207,14 +219,15 @@ export function getDiffCommand(
 export async function openDiff(
   oldPath: string,
   newPath: string,
-  editor: EditorType,
+  editor: string,
   onEditorClose?: () => void,
 ): Promise<void> {
-  const diffCommand = getDiffCommand(oldPath, newPath, editor);
-  if (!diffCommand) {
+  if (!isValidEditorType(editor)) {
     debugLogger.error('No diff tool available. Install a supported editor.');
-    return undefined;
+    return;
   }
+
+  const diffCommand = getDiffCommand(oldPath, newPath, editor);
 
   if (isTerminalEditor(editor)) {
     try {
@@ -231,7 +244,7 @@ export async function openDiff(
       coreEvents.emit(CoreEvent.ExternalEditorClosed);
       onEditorClose?.();
     }
-    return undefined;
+    return;
   }
 
   await new Promise<void>((resolve, reject) => {
@@ -254,5 +267,4 @@ export async function openDiff(
       reject(error);
     });
   });
-  return undefined;
 }

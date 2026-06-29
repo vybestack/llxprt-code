@@ -34,8 +34,8 @@ const mockClearcutLogger = {
   },
 };
 
-// @ts-expect-error - ClearcutLogger is a mock for testing
-global.ClearcutLogger = mockClearcutLogger;
+(globalThis as { ClearcutLogger?: typeof mockClearcutLogger }).ClearcutLogger =
+  mockClearcutLogger;
 
 describe('loggers', () => {
   const mockLogger = {

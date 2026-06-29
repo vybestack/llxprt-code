@@ -12,8 +12,7 @@ import type { DebugSettings } from './types.js';
 describe('ConfigurationManager', () => {
   beforeEach(() => {
     // Reset singleton instance before each test
-    // @ts-expect-error - Accessing private static for test cleanup
-    ConfigurationManager.instance = undefined;
+    ConfigurationManager.resetForTesting();
 
     // Clean up environment variables
     delete process.env.DEBUG;

@@ -159,8 +159,7 @@ describe('CommandService', () => {
 
     // Expect it to throw a TypeError at runtime because the array is frozen.
     expect(() => {
-      // @ts-expect-error - Testing immutability is intentional here.
-      commands.push(mockCommandB);
+      Array.prototype.push.call(commands, mockCommandB);
     }).toThrow(TypeError);
 
     // Verify the original array was not mutated.

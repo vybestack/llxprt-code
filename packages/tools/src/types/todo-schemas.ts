@@ -17,7 +17,7 @@ const IdSchema = z
 export const TodoToolCallSchema = z.object({
   id: IdSchema,
   name: z.string(),
-  parameters: z.record(z.any()),
+  parameters: z.record(z.unknown()),
   timestamp: z.date(),
 });
 

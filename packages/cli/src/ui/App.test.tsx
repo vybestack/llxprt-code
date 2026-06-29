@@ -309,17 +309,6 @@ vi.mock('./hooks/useHistoryManager.js', () => ({
   })),
 }));
 
-vi.mock('../config/config.js', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    // @ts-expect-error - this is fine
-    ...actual,
-    loadHierarchicalGeminiMemory: vi
-      .fn()
-      .mockResolvedValue({ memoryContent: '', fileCount: 0 }),
-  };
-});
-
 vi.mock('./components/Tips.js', () => ({
   Tips: vi.fn(() => null),
 }));

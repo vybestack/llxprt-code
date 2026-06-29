@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
 import { createOrchestrator } from '../src/service/orchestrator';
-import type { LspConfig } from '../src/service/diagnostics';
+import type { Diagnostic, LspConfig } from '../src/service/diagnostics';
 
 const WORKSPACE_ROOT = '/workspace';
 const FIXTURE_PATH = new URL('./fixtures/fake-lsp-server.ts', import.meta.url)
@@ -26,6 +26,12 @@ function createFakeServer(
 
 function createConfig(servers: LspConfig['servers']): LspConfig {
   return { servers };
+}
+
+function activeTouchCounts(diagnostics: Diagnostic[]): string[] {
+  return diagnostics
+    .filter((diagnostic) => diagnostic.code === 'FAKE_ACTIVE_TOUCH_COUNT')
+    .map((diagnostic) => diagnostic.message);
 }
 
 describe('Orchestrator unit tests against real implementation', () => {
@@ -177,13 +183,38 @@ describe('Orchestrator unit tests against real implementation', () => {
     expect(orchestrator.getDiagnosticEpoch()).toBe(0);
   });
 
-  it('serializes per-client operations', async () => {
-    const spy = vi.spyOn(orchestrator as any, 'enqueueClientOp');
-    await Promise.all([
-      orchestrator.checkFile('/workspace/src/a.ts', 'const a = TYPE_ERROR'),
-      orchestrator.checkFile('/workspace/src/a.ts', 'const b = TYPE_ERROR'),
-    ]);
-    expect(spy).toHaveBeenCalled();
+  it('serializes per-client operations', { timeout: 15_000 }, async () => {
+    const delayed = createOrchestrator(
+      {
+        ...createConfig([
+          createFakeServer(
+            'fake-serial',
+            ['.ts'],
+            ['--delay-ms', '100', '--emit-active-touch-count'],
+          ),
+        ]),
+        diagnosticsTimeoutMs: 2_000,
+        firstTouchTimeoutMs: 2_000,
+      },
+      WORKSPACE_ROOT,
+    );
+    try {
+      const [firstDiagnostics, secondDiagnostics] = await Promise.all([
+        delayed.checkFile('/workspace/src/a.ts', 'const a = TYPE_ERROR'),
+        delayed.checkFile('/workspace/src/b.ts', 'const b = TYPE_ERROR'),
+      ]);
+
+      expect(firstDiagnostics.length).toBeGreaterThan(0);
+      expect(secondDiagnostics.length).toBeGreaterThan(0);
+      expect(activeTouchCounts(firstDiagnostics)).toEqual([
+        'Active touch handlers: 1',
+      ]);
+      expect(activeTouchCounts(secondDiagnostics)).toEqual([
+        'Active touch handlers: 1',
+      ]);
+    } finally {
+      await delayed.shutdown();
+    }
   });
 
   it('property: unknown extensions always produce empty diagnostics', async () => {

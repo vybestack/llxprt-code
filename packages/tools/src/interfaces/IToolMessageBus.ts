@@ -21,8 +21,15 @@
  * Implemented by: CoreMessageBusAdapter in packages/core.
  */
 
-export type { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
-import type { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
+import type {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from '../types/tool-confirmation-types.js';
+
+export type {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from '../types/tool-confirmation-types.js';
 
 /** Options for policy update after confirmation. */
 export interface PolicyUpdateOptions {
@@ -47,8 +54,13 @@ export interface ToolMessageEvent {
   payload?: unknown;
 }
 
-/** Unsubscribe function returned by subscribe. */
+/** Unsubscribe function returned by `PublishSubscribeCapable.subscribe`. */
 export type Unsubscribe = () => void;
+
+export interface ToolConfirmationResult {
+  outcome: ToolConfirmationOutcome;
+  payload?: ToolConfirmationPayload;
+}
 
 /**
  * Optional capability: direct publish on the message bus.
@@ -99,11 +111,24 @@ export function hasPublishSubscribe(
 export interface IToolMessageBus {
   /**
    * Request user confirmation for a tool call.
-   * @param details - Serializable confirmation details object.
-   * @param abortSignal - Optional abort signal for cancellation.
+   *
+   * The rest-parameter shape preserves structural compatibility with the
+   * existing core MessageBus, whose confirmation method accepts
+   * (toolCall, args, serverName), while tools call the adapter with
+   * (details, abortSignal). Implementations must validate the runtime shape
+   * they support before acting on the values.
+   *
    * @returns The outcome of the confirmation request.
    */
-  requestConfirmation(...args: any[]): Promise<any>;
+  requestConfirmation(
+    ...args: unknown[]
+  ): Promise<
+    | ToolConfirmationOutcome
+    | ToolConfirmationResult
+    | boolean
+    | null
+    | undefined
+  >;
 
   /**
    * Publish a policy update after confirmation.
@@ -114,11 +139,4 @@ export interface IToolMessageBus {
     outcome: ToolConfirmationOutcome,
     options?: PolicyUpdateOptions,
   ): Promise<void>;
-
-  /**
-   * Optional: subscribe to message bus events.
-   * @param handler - Handler function for events.
-   * @returns Unsubscribe function.
-   */
-  subscribe?: any;
 }

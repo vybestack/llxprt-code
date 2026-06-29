@@ -24,6 +24,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { hasPublishSubscribe } from '../interfaces/index.js';
+import { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 import type {
   IToolHost,
   IToolRegistryHost,
@@ -40,6 +42,8 @@ import type {
   ITodoService,
   ISettingsService,
   IPromptRegistryService,
+  PublishSubscribeCapable,
+  PolicyUpdateOptions,
 } from '../interfaces/index.js';
 
 /**
@@ -226,32 +230,37 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   describe('IToolMessageBus contract', () => {
     it('requires requestConfirmation and publishPolicyUpdate', async () => {
       const bus: IToolMessageBus = {
-        requestConfirmation: async (_details: Record<string, unknown>) =>
-          'proceed_once',
-        publishPolicyUpdate: async (_outcome: string, _options?: unknown) => {},
+        requestConfirmation: async (..._args: unknown[]) =>
+          ToolConfirmationOutcome.ProceedOnce,
+        publishPolicyUpdate: async (
+          _outcome: ToolConfirmationOutcome,
+          _options?: PolicyUpdateOptions,
+        ) => {},
       };
       assertImplements<IToolMessageBus>(bus);
 
       const outcome = await bus.requestConfirmation({ tool: 'shell' });
-      expect(outcome).toBe('proceed_once');
+      expect(outcome).toBe(ToolConfirmationOutcome.ProceedOnce);
     });
 
-    it('subscribe is optional', () => {
+    it('subscribe is optional capability outside the base interface', () => {
       const busWithoutSubscribe: IToolMessageBus = {
-        requestConfirmation: async () => 'cancel',
+        requestConfirmation: async () => ToolConfirmationOutcome.Cancel,
         publishPolicyUpdate: async () => {},
       };
       assertImplements<IToolMessageBus>(busWithoutSubscribe);
-      expect(busWithoutSubscribe.subscribe).toBeUndefined();
+      expect(hasPublishSubscribe(busWithoutSubscribe)).toBe(false);
     });
 
-    it('subscribe returns unsubscribe function when provided', () => {
-      const bus: IToolMessageBus = {
-        requestConfirmation: async () => 'cancel',
+    it('subscribe returns unsubscribe function when publish-subscribe capability is provided', () => {
+      const bus: IToolMessageBus & PublishSubscribeCapable = {
+        requestConfirmation: async () => ToolConfirmationOutcome.Cancel,
         publishPolicyUpdate: async () => {},
-        subscribe: (_handler: unknown) => () => {},
+        publish: () => {},
+        subscribe: (_event: string, _handler) => () => {},
       };
-      const unsub = bus.subscribe!(() => {});
+      expect(hasPublishSubscribe(bus)).toBe(true);
+      const unsub = bus.subscribe('policy-update', () => {});
       expect(typeof unsub).toBe('function');
     });
   });

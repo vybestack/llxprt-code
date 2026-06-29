@@ -25,6 +25,7 @@ import {
   scanModuleDirectives,
   scanPackageDirectives,
   scanPackageTypeScriptSuppressions,
+  scanRepositoryLintEscapeHatches,
   scanRootTypeScriptSuppressions,
 } from '../check-eslint-guard.js';
 
@@ -7416,6 +7417,400 @@ describe('scanPackageTypeScriptSuppressions (#2189)', () => {
     });
   }
 });
+describe('scanRepositoryLintEscapeHatches (#2227)', () => {
+  it('reports explicit any keywords in production, test, setup, and helper TypeScript files', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-2227-any-'));
+    mkdirSync(join(tmpDir, 'packages', 'core', 'src', 'test-utils'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(tmpDir, 'packages', 'core', 'src', 'example.ts'),
+      ['export function parse(value: any) {', '  return value;', '}'].join(
+        '\n',
+      ),
+    );
+    writeFileSync(
+      join(tmpDir, 'packages', 'core', 'src', 'example.test.ts'),
+      ['export const fixture = {} as any;'].join('\n'),
+    );
+    writeFileSync(
+      join(tmpDir, 'packages', 'core', 'src', 'test-setup.ts'),
+      ['export const setup: any = {};'].join('\n'),
+    );
+    writeFileSync(
+      join(tmpDir, 'packages', 'core', 'src', 'test-utils', 'helper.ts'),
+      ['export type Helper = any;'].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(4);
+    expect(violations.map((v) => v.file).sort()).toEqual([
+      'packages/core/src/example.test.ts',
+      'packages/core/src/example.ts',
+      'packages/core/src/test-setup.ts',
+      'packages/core/src/test-utils/helper.ts',
+    ]);
+    expect(violations.every((v) => v.message.includes('explicit any'))).toBe(
+      true,
+    );
+    expect(formatViolations(violations)).toContain('explicit any');
+  });
+
+  it('does not report any text in strings, comments, or identifier names', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-any-negative-'),
+    );
+    mkdirSync(join(tmpDir, 'packages', 'core', 'src'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'packages', 'core', 'src', 'example.ts'),
+      [
+        '// the word any in a comment is not a type escape hatch',
+        'export type AnyMap = Record<string, unknown>;',
+        'export const description = "hello any world";',
+        'export const MyAny = description;',
+      ].join('\n'),
+    );
+
+    expect(scanRepositoryLintEscapeHatches(tmpDir, '2227')).toEqual([]);
+  });
+  it('reports z.any calls in checked TypeScript files', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-2227-zany-'));
+    mkdirSync(join(tmpDir, 'packages', 'tools', 'src'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'packages', 'tools', 'src', 'schema.ts'),
+      [
+        "import { z } from 'zod';",
+        'export const schema = z.object({ value: z.any() });',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('z.any');
+    expect(violations[0].lineNumber).toBe(2);
+  });
+
+  it('reports z.any calls through default zod imports', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-zany-default-'),
+    );
+    mkdirSync(join(tmpDir, 'packages', 'tools', 'src'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'packages', 'tools', 'src', 'schema.ts'),
+      [
+        "import z from 'zod';",
+        'export const schema = z.object({ value: z.any() });',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('z.any');
+    expect(violations[0].lineNumber).toBe(2);
+  });
+
+  it('reports all inline ESLint directive variants in checked TypeScript files', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-eslint-directive-'),
+    );
+    mkdirSync(join(tmpDir, 'packages', 'core', 'src'), { recursive: true });
+    const directiveVariants = [
+      'disable-next-line @typescript-eslint/no-explicit-any',
+      'disable-line @typescript-eslint/no-explicit-any',
+      'disable @typescript-eslint/no-explicit-any',
+      'enable @typescript-eslint/no-explicit-any',
+    ];
+
+    for (const [index, directive] of directiveVariants.entries()) {
+      writeFileSync(
+        join(tmpDir, 'packages', 'core', 'src', `feature-${index}.test.ts`),
+        [
+          'export function fixture() {',
+          // Build fixture directives in pieces so the guard does not flag
+          // the test source that defines the fixtures.
+          '  // eslint-' + directive,
+          '  return 1;',
+          '}',
+        ].join('\n'),
+      );
+    }
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(4);
+    expect(violations.map((violation) => violation.file).sort()).toEqual([
+      'packages/core/src/feature-0.test.ts',
+      'packages/core/src/feature-1.test.ts',
+      'packages/core/src/feature-2.test.ts',
+      'packages/core/src/feature-3.test.ts',
+    ]);
+    expect(
+      violations.every((violation) =>
+        violation.message.includes('ESLint disable/enable directives'),
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores inline ESLint directive text inside template literals', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-eslint-template-'),
+    );
+    mkdirSync(join(tmpDir, 'packages', 'core', 'src'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'packages', 'core', 'src', 'fixture.test.ts'),
+      [
+        'export const inertFixture = `',
+        '  // eslint-' + 'disable-next-line @typescript-eslint/no-explicit-any',
+        '`;',
+        'export const activeDirective = () => {',
+        '  // eslint-' + 'disable-next-line @typescript-eslint/no-explicit-any',
+        '  return 1;',
+        '};',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].lineNumber).toBe(5);
+    expect(violations[0].message).toContain('ESLint disable/enable directives');
+  });
+  it('reports TypeScript suppressions in test files, setup files, and helpers', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-2227-suppress-'));
+    mkdirSync(join(tmpDir, 'packages', 'cli', 'src', 'test-utils'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(tmpDir, 'packages', 'cli', 'src', 'feature.test.ts'),
+      [
+        'export function testOnly() {',
+        '  // @ts-expect-error invalid fixture',
+        '  return 1;',
+        '}',
+      ].join('\n'),
+    );
+    writeFileSync(
+      join(tmpDir, 'packages', 'cli', 'src', 'test-setup.ts'),
+      ['// @ts-ignore setup escape hatch', 'export const setup = true;'].join(
+        '\n',
+      ),
+    );
+    writeFileSync(
+      join(tmpDir, 'packages', 'cli', 'src', 'test-utils', 'helper.ts'),
+      [
+        '// @ts-nocheck helper escape hatch',
+        'export const helper = true;',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(3);
+    expect(violations.map((v) => v.file).sort()).toEqual([
+      'packages/cli/src/feature.test.ts',
+      'packages/cli/src/test-setup.ts',
+      'packages/cli/src/test-utils/helper.ts',
+    ]);
+    expect(formatViolations(violations)).toContain('TypeScript suppression');
+  });
+
+  it('reports policy config carve-outs for directive and any rules exactly once', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-2227-config-'));
+    writeFileSync(
+      join(tmpDir, 'eslint.config.js'),
+      [
+        'const legacyDirectiveCleanupScopes = ["packages/cli/test-setup.ts"];',
+        'const completedDirectiveCleanupScopes = ["packages/core/src/**/*.ts"];',
+        'export default [{',
+        '  linterOptions: { reportUnusedDisableDirectives: "off" },',
+        '  rules: {',
+        '    "@typescript-eslint/no-explicit-any": "off",',
+        '    "eslint-comments/no-use": "off",',
+        '  },',
+        '}];',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(5);
+    expect(violations.map((violation) => violation.lineNumber)).toEqual([
+      1, 2, 4, 6, 7,
+    ]);
+    expect(formatViolations(violations)).toContain(
+      'legacyDirectiveCleanupScopes',
+    );
+    expect(formatViolations(violations)).toContain(
+      'completedDirectiveCleanupScopes',
+    );
+    expect(formatViolations(violations)).toContain('no-explicit-any');
+    expect(formatViolations(violations)).toContain('eslint-comments/no-use');
+    expect(formatViolations(violations)).toContain(
+      'reportUnusedDisableDirectives',
+    );
+  });
+
+  it('reports warn and numeric config carve-outs for directive and any rules', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-config-severities-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'eslint.config.js'),
+      [
+        'export default [{',
+        '  rules: {',
+        '    "@typescript-eslint/no-explicit-any": "warn",',
+        '    "eslint-comments/no-use": 0,',
+        '  },',
+        '}];',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(2);
+    expect(formatViolations(violations)).toContain('no-explicit-any');
+    expect(formatViolations(violations)).toContain('eslint-comments/no-use');
+  });
+
+  it('reports array-form config carve-outs for directive and any rules', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-config-array-severities-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'eslint.config.js'),
+      [
+        'export default [{',
+        '  rules: {',
+        '    "@typescript-eslint/no-explicit-any": ["off"],',
+        '    "eslint-comments/no-use": [0],',
+        '  },',
+        '}];',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(2);
+    expect(formatViolations(violations)).toContain('no-explicit-any');
+    expect(formatViolations(violations)).toContain('eslint-comments/no-use');
+  });
+  it('accepts both max-warnings zero spellings in lint:ci', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-2227-package-ok-'));
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci':
+              'eslint packages --max-warnings=0 && eslint integration-tests --max-warnings 0',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    expect(scanRepositoryLintEscapeHatches(tmpDir, '2227')).toEqual([]);
+  });
+
+  it('reports lint:ci when any ESLint invocation lacks max-warnings zero', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-partial-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            'lint:ci':
+              'eslint packages --max-warnings=0 && eslint integration-tests',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('--max-warnings 0');
+  });
+
+  it('ignores commented config text and reports multiline disabled config entries', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-config-comments-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'eslint.config.js'),
+      [
+        '/*',
+        '  const legacyDirectiveCleanupScopes = ["packages/cli/test-setup.ts"];',
+        '*/',
+        'export default [{',
+        '  rules: {',
+        '    "eslint-comments/no-use":',
+        '      "off",',
+        '  },',
+        '}];',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].lineNumber).toBe(6);
+    expect(violations[0].message).toContain('eslint-comments/no-use');
+  });
+
+  it('does not skip forbidden config after a block comment closes on the same line', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-config-comment-close-'),
+    );
+    writeFileSync(
+      join(tmpDir, 'eslint.config.js'),
+      [
+        '/* legacyDirectiveCleanupScopes */ "eslint-comments/no-use": "off",',
+      ].join('\n'),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain('eslint-comments/no-use');
+  });
+  it('reports removal of max-warnings zero from lint:ci', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-2227-package-'));
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+
+      JSON.stringify({ scripts: { 'lint:ci': 'eslint .' } }, null, 2),
+    );
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].lineNumber).toBe(1);
+    expect(violations[0].message).toContain('max-warnings 0');
+  });
+
+  it('reports malformed package.json instead of crashing', () => {
+    const tmpDir = mkdtempSync(
+      join(tmpdir(), 'eslint-guard-2227-package-bad-'),
+    );
+    writeFileSync(join(tmpDir, 'package.json'), '{');
+
+    const violations = scanRepositoryLintEscapeHatches(tmpDir, '2227');
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].file).toBe('package.json');
+    expect(violations[0].message).toContain('valid JSON');
+  });
+});
 
 describe('scanRootTypeScriptSuppressions (#2189 review finding)', () => {
   // The durable root scan mirrors the diff-based checkDiff coverage universe
@@ -7653,9 +8048,9 @@ describe('packages/agents directive cleanup (#2117)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/agents/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/agents/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -7678,9 +8073,9 @@ describe('packages/storage directive cleanup (#2119)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/storage/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/storage/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -7705,9 +8100,9 @@ describe('packages/auth directive cleanup (#2121)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/auth/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/auth/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -7730,9 +8125,9 @@ describe('packages/settings directive cleanup (#2120)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/settings/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/settings/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -7977,9 +8372,9 @@ describe('packages/policy directive cleanup (#2122)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/policy/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/policy/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {
@@ -8002,9 +8397,9 @@ describe('packages/a2a-server directive cleanup (#2123)', () => {
     expect(offenders, 'Found directives: ' + offenders.join(', ')).toEqual([]);
   });
 
-  it('is locked in completedDirectiveCleanupScopes with a broad glob', () => {
+  it('is not listed in completedDirectiveCleanupScopes', () => {
     const completed = extractScopeArray('completedDirectiveCleanupScopes');
-    expect(completed).toContain('packages/a2a-server/src/**/*.{ts,tsx}');
+    expect(completed).not.toContain('packages/a2a-server/src/**/*.{ts,tsx}');
   });
 
   it('is no longer in legacyDirectiveCleanupScopes', () => {

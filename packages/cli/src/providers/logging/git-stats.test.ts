@@ -412,15 +412,8 @@ describe('Git Statistics Tracking', () => {
       // - excludePatterns
       // - statisticsLevel
       // etc.
-      expect(() => {
-        // @ts-expect-error - These methods should not exist
-        tracker.setFileTypeFilter?.(['ts', 'js']);
-      }).not.toThrow(); // Method simply doesn't exist, no error
-
-      expect(() => {
-        // @ts-expect-error - These methods should not exist
-        tracker.setMaxFileSize?.(1000);
-      }).not.toThrow(); // Method simply doesn't exist, no error
+      expect('setFileTypeFilter' in tracker).toBe(false);
+      expect('setMaxFileSize' in tracker).toBe(false);
     });
   });
 
