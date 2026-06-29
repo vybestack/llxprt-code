@@ -47,6 +47,7 @@ interface ContextLimits {
   completionBudget: number;
   limit: number;
   marginAdjustedLimit: number;
+  compressionThreshold: number;
 }
 
 interface PendingExtractionResult {
@@ -67,35 +68,33 @@ export class ProviderContentEnforcer {
     provider?: IProvider,
   ): Promise<IContent[]> {
     await this.deps.historyService.waitForTokenUpdates();
-    const { completionBudget, limit, marginAdjustedLimit } =
-      this.computeContextLimits(provider);
+    const {
+      completionBudget,
+      limit,
+      marginAdjustedLimit,
+      compressionThreshold,
+    } = this.computeContextLimits(provider);
     const initialProjected = await this.estimateProviderProjection(
       contents,
       completionBudget,
     );
     const extraction = this.extractPendingContents(contents);
-    if (initialProjected <= marginAdjustedLimit) {
-      if (!extraction.safeToRecompose) {
-        return contents;
-      }
-      const recomposedContents = this.recomposeProviderContents(
-        extraction.pendingContents,
-      );
-      const recomposedProjected = await this.estimateProviderProjection(
-        recomposedContents,
+    if (initialProjected <= compressionThreshold) {
+      return this.returnSafeContents(contents, extraction, initialProjected, {
         completionBudget,
-      );
-      if (recomposedProjected <= marginAdjustedLimit) {
-        return recomposedContents;
-      }
-    }
-    if (!extraction.safeToRecompose) {
-      this.throwUnsafeExtractionOverflow(
         limit,
-        initialProjected,
         marginAdjustedLimit,
-        completionBudget,
-      );
+        compressionThreshold,
+      });
+    }
+    const unsafeContents = this.returnUnsafeExtractionContentsIfSafe(
+      contents,
+      extraction,
+      initialProjected,
+      { completionBudget, limit, marginAdjustedLimit, compressionThreshold },
+    );
+    if (unsafeContents !== undefined) {
+      return unsafeContents;
     }
     await this.deps.ensureDensityOptimized();
     await this.deps.historyService.waitForTokenUpdates();
@@ -158,6 +157,53 @@ export class ProviderContentEnforcer {
       promptId,
       extraction.pendingContents,
     );
+  }
+
+  private returnUnsafeExtractionContentsIfSafe(
+    contents: IContent[],
+    extraction: PendingExtractionResult,
+    initialProjected: number,
+    limits: ContextLimits,
+  ): IContent[] | undefined {
+    if (extraction.safeToRecompose) {
+      return undefined;
+    }
+    if (initialProjected <= limits.marginAdjustedLimit) {
+      return contents;
+    }
+    this.throwUnsafeExtractionOverflow(
+      limits.limit,
+      initialProjected,
+      limits.marginAdjustedLimit,
+      limits.completionBudget,
+    );
+  }
+
+  private async returnSafeContents(
+    contents: IContent[],
+    extraction: PendingExtractionResult,
+    initialProjected: number,
+    limits: ContextLimits,
+  ): Promise<IContent[]> {
+    const unsafeContents = this.returnUnsafeExtractionContentsIfSafe(
+      contents,
+      extraction,
+      initialProjected,
+      limits,
+    );
+    if (unsafeContents !== undefined) {
+      return unsafeContents;
+    }
+    const recomposedContents = this.recomposeProviderContents(
+      extraction.pendingContents,
+    );
+    const recomposedProjected = await this.estimateProviderProjection(
+      recomposedContents,
+      limits.completionBudget,
+    );
+    return recomposedProjected <= limits.marginAdjustedLimit
+      ? recomposedContents
+      : contents;
   }
 
   private async runCompressionAndRecompose(
@@ -421,6 +467,16 @@ export class ProviderContentEnforcer {
     return Math.max(1, safetyAdjustedLimit);
   }
 
+  private computeCompressionThreshold(
+    limit: number,
+    completionBudget: number,
+  ): number {
+    const threshold =
+      this.deps.runtimeContext.ephemerals.compressionThreshold();
+    const effectiveLimit = Math.max(0, limit - completionBudget);
+    return threshold * effectiveLimit + completionBudget;
+  }
+
   private computeContextLimits(provider?: IProvider): ContextLimits {
     const completionBudget = Math.max(
       0,
@@ -440,6 +496,10 @@ export class ProviderContentEnforcer {
       completionBudget,
       limit,
       marginAdjustedLimit: this.computeMarginAdjustedLimit(limit),
+      compressionThreshold: this.computeCompressionThreshold(
+        limit,
+        completionBudget,
+      ),
     };
   }
 
