@@ -9,6 +9,7 @@ import {
   PerformCompressionResult,
   type AgentChatContract,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { HistoryItemCompression } from '../types.js';
 import { MessageType } from '../types.js';
 import type { SlashCommand } from './types.js';
@@ -42,6 +43,33 @@ function resolveCompressionStatus(
   }
 }
 
+function resolveAgentCompressionStatus(
+  status: 'compressed' | 'skipped' | 'failed',
+  originalTokenCount: number | undefined,
+  newTokenCount: number | undefined,
+): CompressionStatus {
+  if (status === 'failed') {
+    return CompressionStatus.COMPRESSION_FAILED;
+  }
+  // The agent's CompressionResult collapses both SKIPPED_COOLDOWN (treated as
+  // COMPRESSION_FAILED by the legacy path) and SKIPPED_EMPTY (treated as NOOP)
+  // into a single 'skipped' status. This divergence is tracked debt — see #1595
+  // for expanding the CompressionResult.status union.
+  if (status === 'skipped') {
+    return CompressionStatus.NOOP;
+  }
+  if (originalTokenCount === undefined || newTokenCount === undefined) {
+    return CompressionStatus.NOOP;
+  }
+  if (newTokenCount < originalTokenCount) {
+    return CompressionStatus.COMPRESSED;
+  }
+  if (newTokenCount > originalTokenCount) {
+    return CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT;
+  }
+  return CompressionStatus.NOOP;
+}
+
 function makePendingCompression(): HistoryItemCompression {
   return {
     type: MessageType.COMPRESSION,
@@ -50,6 +78,26 @@ function makePendingCompression(): HistoryItemCompression {
       originalTokenCount: null,
       newTokenCount: null,
       compressionStatus: null,
+    },
+  };
+}
+
+async function executeCompressionViaAgent(
+  agent: Agent,
+  promptId: string,
+): Promise<HistoryItemCompression> {
+  const result = await agent.compress({ promptId });
+  return {
+    type: MessageType.COMPRESSION,
+    compression: {
+      isPending: false,
+      originalTokenCount: result.originalTokenCount ?? null,
+      newTokenCount: result.newTokenCount ?? null,
+      compressionStatus: resolveAgentCompressionStatus(
+        result.status,
+        result.originalTokenCount,
+        result.newTokenCount,
+      ),
     },
   };
 }
@@ -105,6 +153,21 @@ export const compressCommand: SlashCommand = {
     try {
       ui.setPendingItem(makePendingCompression());
       const promptId = `compress-${Date.now()}`;
+      const agent = context.services.agent;
+      if (agent) {
+        try {
+          const compressionResult = await executeCompressionViaAgent(
+            agent,
+            promptId,
+          );
+          ui.addItem(compressionResult);
+          return;
+        } catch {
+          // Fall through to the legacy Config-based path if agent compression
+          // fails, so users still get compression.
+        }
+      }
+      // Fallback: Config path (tracked migration debt for null agent).
       const agentClient = context.services.config?.getAgentClient();
       if (agentClient == null || agentClient.hasChatInitialized() !== true) {
         ui.addItem(

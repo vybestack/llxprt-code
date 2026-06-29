@@ -9,6 +9,7 @@ import type {
   RecordingIntegration,
   Todo,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { HistoryItem, ConfirmationRequest } from '../types.js';
@@ -71,6 +72,7 @@ interface TodoContextValue {
  */
 export const useSlashCommandProcessor = (
   config: Config | null,
+  agent: Agent | null,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],
   clearItems: UseHistoryManagerReturn['clearItems'],
@@ -88,6 +90,7 @@ export const useSlashCommandProcessor = (
 ) =>
   useSlashCommandProcessorCore({
     config,
+    agent,
     settings,
     addItem,
     clearItems,

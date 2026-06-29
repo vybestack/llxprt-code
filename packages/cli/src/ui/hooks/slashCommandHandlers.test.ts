@@ -34,6 +34,7 @@ function createDeps(
     commandContext: {
       services: {
         config: null,
+        agent: null,
         settings:
           {} as SlashCommandHandlerDeps['commandContext']['services']['settings'],
         git: undefined,

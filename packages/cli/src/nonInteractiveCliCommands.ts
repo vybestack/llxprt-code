@@ -66,6 +66,7 @@ export const handleSlashCommand = async (
     const context: CommandContext = {
       services: {
         config,
+        agent: null,
         settings,
         git: undefined,
         logger,

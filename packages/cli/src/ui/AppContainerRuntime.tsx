@@ -77,6 +77,7 @@ function buildInputParams(
 ): AppInputParams {
   return {
     config: bootstrap.config,
+    agent: bootstrap.agent,
     settings: bootstrap.settings,
     runtime: bootstrap.runtime,
     history: bootstrap.history,
