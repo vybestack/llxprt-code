@@ -18,9 +18,11 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 import path from 'node:path';
 import process from 'node:process';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-providers';
+import type {
+  ExtendedLoadBalancerStats,
+  TokenAccountingDiagnostics,
+} from '@vybestack/llxprt-code-providers';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
-import type { TokenAccountingDiagnostics } from '@vybestack/llxprt-code-providers';
 
 interface RuntimeSessionTokenUsage {
   input: number;

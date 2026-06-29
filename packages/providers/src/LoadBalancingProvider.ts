@@ -46,9 +46,9 @@ import {
   resolveSubProfileModel,
 } from './loadBalancing/subProfileHelpers.js';
 import type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
+import { validateLoadBalancerConfig } from './loadBalancing/configValidation.js';
 import {
   isResolvedSubProfile,
-  validateLoadBalancingStrategy,
   type BackendMetrics,
   type CompressionCallback,
   type CircuitBreakerState,
@@ -127,70 +127,7 @@ export class LoadBalancingProvider implements IProvider {
    * @plan PLAN-20251211issue486c - Updated to handle ResolvedSubProfile
    */
   private validateConfig(config: LoadBalancingProviderConfig): void {
-    // Check for empty subProfiles array
-    if (config.subProfiles.length === 0) {
-      throw new Error(
-        'LoadBalancingProvider requires at least one sub-profile in configuration',
-      );
-    }
-
-    validateLoadBalancingStrategy((config as { strategy: unknown }).strategy);
-
-    // Failover strategy requires at least 2 sub-profiles
-    if (config.strategy === 'failover' && config.subProfiles.length < 2) {
-      throw new Error(
-        'Failover strategy requires at least 2 sub-profiles (minimum 2 backends for failover)',
-      );
-    }
-
-    // Validate each sub-profile
-    for (const subProfile of config.subProfiles) {
-      if (!subProfile.name || typeof subProfile.name !== 'string') {
-        throw new Error(
-          'Each sub-profile must have a valid "name" field (non-empty string)',
-        );
-      }
-
-      if (
-        !subProfile.providerName ||
-        typeof subProfile.providerName !== 'string'
-      ) {
-        throw new Error(
-          `Sub-profile "${subProfile.name}" must have a valid "providerName" field (non-empty string)`,
-        );
-      }
-
-      // Additional validation for ResolvedSubProfile
-      if (isResolvedSubProfile(subProfile)) {
-        if (!subProfile.model || typeof subProfile.model !== 'string') {
-          throw new Error(
-            `ResolvedSubProfile "${subProfile.name}" must have a valid "model" field (non-empty string)`,
-          );
-        }
-
-        // Use runtime-widened local to reject null explicitly (typeof null === 'object')
-        const ephemeralSettingsRuntime: unknown = subProfile.ephemeralSettings;
-        if (
-          typeof ephemeralSettingsRuntime !== 'object' ||
-          ephemeralSettingsRuntime === null
-        ) {
-          throw new Error(
-            `ResolvedSubProfile "${subProfile.name}" must have a valid "ephemeralSettings" field (object)`,
-          );
-        }
-
-        // Use runtime-widened local to reject null explicitly (typeof null === 'object')
-        const modelParamsRuntime: unknown = subProfile.modelParams;
-        if (
-          typeof modelParamsRuntime !== 'object' ||
-          modelParamsRuntime === null
-        ) {
-          throw new Error(
-            `ResolvedSubProfile "${subProfile.name}" must have a valid "modelParams" field (object)`,
-          );
-        }
-      }
-    }
+    validateLoadBalancerConfig(config);
   }
   selectNextSubProfile(): ResolvedSubProfile | LoadBalancerSubProfile {
     const subProfile = this.config.subProfiles[this.roundRobinIndex];
