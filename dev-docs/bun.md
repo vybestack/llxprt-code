@@ -229,7 +229,7 @@ type-aware lint results are identical under both package managers.
 
 Running `bun install` prints a warning:
 
-```
+```text
 warn: Bun currently does not support nested "overrides"
 ```
 

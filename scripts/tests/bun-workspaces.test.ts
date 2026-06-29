@@ -39,6 +39,24 @@ const EXPECTED_TRUSTED_DEPENDENCIES: readonly string[] = [
   'tree-sitter-bash',
 ];
 
+/**
+ * Native-binary packages called out by the S1 migration scope that must work
+ * under Bun but are deliberately NOT trusted. Unlike the allowlist above, these
+ * ship their platform binaries through prebuilt `optionalDependencies`
+ * (e.g. `@lydell/node-pty-darwin-arm64`) and declare no `install`/`postinstall`
+ * lifecycle script, so granting them trust would be unnecessary install-time
+ * code execution (a supply-chain risk) rather than a build requirement. The
+ * test below pins this reasoning: each package must remain a real, declared
+ * dependency AND stay out of the trust list, so a regression in either
+ * direction (accidental trust, or the dependency being dropped) fails loudly.
+ */
+const PREBUILT_NATIVE_UNTRUSTED: readonly string[] = [
+  '@lydell/node-pty',
+  '@ast-grep/napi',
+  '@napi-rs/keyring',
+  'web-tree-sitter',
+];
+
 interface PackageJson {
   workspaces?: string[];
   trustedDependencies?: string[];
@@ -229,6 +247,37 @@ describe('Bun package-manager configuration (S1)', () => {
 
     for (const name of trusted) {
       expect(declaredNames.has(name)).toBe(true);
+    }
+  });
+
+  it('keeps prebuilt-binary native deps declared but untrusted', () => {
+    // The S1 scope names @lydell/node-pty, @ast-grep/napi, @napi-rs/keyring,
+    // and web-tree-sitter as native dependencies that must install under Bun.
+    // They obtain their binaries from prebuilt platform optionalDependencies
+    // and declare no install/postinstall lifecycle script, so the correct
+    // posture is: present as a real dependency, absent from the trust list.
+    // This guards both directions — a dropped dependency or an accidental
+    // trust grant (unreviewed install-time execution) — for these specific
+    // packages, complementing the exact-allowlist test above.
+    const root = readRootPackage();
+    const trusted = new Set(root.trustedDependencies ?? []);
+
+    const declaredNames = new Set<string>();
+    for (const pkg of readWorkspacePackages()) {
+      for (const section of DEPENDENCY_SECTIONS) {
+        const deps = pkg[section];
+        if (!deps) {
+          continue;
+        }
+        for (const name of Object.keys(deps)) {
+          declaredNames.add(name);
+        }
+      }
+    }
+
+    for (const name of PREBUILT_NATIVE_UNTRUSTED) {
+      expect(declaredNames.has(name)).toBe(true);
+      expect(trusted.has(name)).toBe(false);
     }
   });
 
