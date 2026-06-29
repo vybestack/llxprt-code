@@ -17,7 +17,7 @@ Set up your session the way you want, then save it:
 
 ```
 /provider anthropic
-/model claude-opus-4-6
+/model claude-opus-4-8
 /key load anthropic
 /profile save model work-claude
 ```
@@ -130,12 +130,12 @@ llxprt --profile-load my-profile
 
 ```
 /provider anthropic
-/model claude-opus-4-6
+/model claude-opus-4-8
 /key load anthropic
 /profile save model primary-claude
 
 /provider openai
-/model gpt-5.2
+/model gpt-5.5
 /key load openai
 /profile save model backup-openai
 
@@ -151,7 +151,7 @@ llxprt --profile-load my-profile
 /auth anthropic login personal@gmail.com
 
 /provider anthropic
-/model claude-opus-4-6
+/model claude-opus-4-8
 /profile save model claude-multi team1@company.com team2@company.com personal@gmail.com
 ```
 
@@ -165,7 +165,7 @@ Profiles work with any OpenAI-compatible or Anthropic-compatible endpoint. Here'
 {
   "version": 1,
   "provider": "openai",
-  "model": "hf:moonshotai/Kimi-K2-Thinking",
+  "model": "hf:moonshotai/Kimi-K2.6",
   "modelParams": {
     "temperature": 1
   },

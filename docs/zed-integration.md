@@ -40,7 +40,7 @@ Open Zed settings (`Cmd+,` on macOS, `Ctrl+,` on Linux) and add an agent server.
         "--provider",
         "openai",
         "--model",
-        "hf:moonshotai/Kimi-K2-Thinking",
+        "hf:moonshotai/Kimi-K2.6",
         "--key-name",
         "synthetic",
         "--baseurl",
@@ -60,7 +60,7 @@ Profiles are the cleanest approach — they capture provider, model, key, base U
 
 ```
 /provider openai
-/model hf:moonshotai/Kimi-K2-Thinking
+/model hf:moonshotai/Kimi-K2.6
 /key load synthetic
 /set base-url https://api.synthetic.new/openai/v1
 /profile save model kimi-k2

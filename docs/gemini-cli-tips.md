@@ -35,14 +35,18 @@ Or use a keyfile for CI/automation:
 llxprt --provider xai --keyfile ~/.llxprt/keys/.xai_key
 ```
 
-For OAuth providers (Gemini, Anthropic, Codex, Qwen), enable them:
+For OAuth providers (Gemini, Anthropic, Codex, Qwen), enable any of them:
 
 ```
 /auth gemini enable
 /auth anthropic enable
+/auth codex enable
+/auth qwen enable
 ```
 
 With `/auth <provider> enable`, authentication is lazy — a browser opens automatically when you make your first request. Use `/auth <provider> login` to open the browser immediately.
+
+> **Note on Gemini "Login with Google":** In mid-2026 Google moved free consumer "Login with Google" access for Gemini CLI toward [Antigravity](https://antigravity.google). LLxprt's `/auth gemini` OAuth continues to work for **paid Gemini API keys** and **Gemini Code Assist Standard/Enterprise** accounts; if a free Google login no longer authorizes, use a Gemini API key with `/keyfile` instead. See [Authentication](./cli/authentication.md) and [Google Cloud auth](./cli/google-cloud-auth.md).
 
 See [Authentication](./cli/authentication.md) for full details.
 

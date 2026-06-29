@@ -33,9 +33,7 @@ For providers without aliases, use the OpenAI protocol:
 /model model-name
 ```
 
-## Common Providers
-
-### Model geometry and budgeting (all providers)
+## Model Geometry and Budgeting (all providers)
 
 When you set a model, configure both context-limit (ephemeral) and max_tokens (model param):
 
@@ -57,116 +55,39 @@ Examples:
 - Large coding session: context-limit 121000, max_tokens 10000 → prompt budget ≈ 110k (minus safety).
 - Writing mode: context-limit 190000, max_tokens 8000 → prompt budget ≈ 181k (minus safety).
 
-> **Reasoning tips:**  
-> MiniMax M2.1 relies on interleaved thinking tokens, so keep prior reasoning in context (`/set reasoning.stripFromContext none`).  
-> Kimi K2 can trim older reasoning when you need to manage its 256k window (`/set reasoning.stripFromContext allButLast` or `all`) while still surfacing recent thinking blocks.
+> **Auth-variant note:** Context windows often differ between API-key access and OAuth/subscription access for the same model. The numbers below name the variant where it matters. When in doubt, start lower and increase until you hit a provider limit error.
 
-### OpenAI (API Key)
+> **Reasoning tips:**
+> Interleaved-thinking models (e.g. MiniMax, Kimi) rely on prior reasoning tokens, so keep recent reasoning in context (`/set reasoning.stripFromContext none`).
+> When you need to manage a large window, trim older reasoning while surfacing recent thinking blocks (`/set reasoning.stripFromContext allButLast` or `all`).
 
-```bash
-/provider openai
-/keyfile ~/.openai_key
-/model gpt-5.2
-```
-
-#### Model geometry & recommended settings (OpenAI)
-
-Common models: gpt-5.2, gpt-5.2-nano
-
-Guidance:
-
-- gpt-5.2 context: 200k (via Codex/API key), max output 32k
-- gpt-5.2-nano: Faster, smaller variant for simpler tasks
-- **Note**: gpt-5.2 does NOT support temperature - use `/set reasoning.effort` instead
-- Reasoning effort: `low`, `medium`, `high`, `xhigh`
-- Example setup:
-
-```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-/set reasoning.effort high  # replaces temperature for reasoning models
-```
-
-**Common models:** `gpt-5.2`, `gpt-5.2-nano`
+## Subscription & OAuth Providers
 
 ### OpenAI Codex (ChatGPT Plus/Pro OAuth)
 
-Use your ChatGPT Plus or Pro subscription directly:
+Use your ChatGPT Plus or Pro subscription directly — no API key needed:
 
 ```bash
 /auth codex enable
 /provider codex
-/model gpt-5.2
+/model gpt-5.5
 ```
 
-This uses OAuth to authenticate with your ChatGPT subscription - no API key needed.
+This uses OAuth to authenticate with your ChatGPT subscription.
 
-### Kimi (Moonshot AI)
+#### Model geometry & recommended settings (Codex)
 
-Kimi offers the K2 Thinking model with deep reasoning and multi-step tool orchestration.
-
-#### Using OAuth (Subscription)
-
-```bash
-/auth kimi enable
-/provider kimi
-/model kimi-k2-thinking
-```
-
-#### Using API Key
+- Context: 262,144 tokens (Codex OAuth)
+- gpt-5.x reasoning models do NOT support temperature — use `/set reasoning.effort` instead
+- Reasoning effort: `low`, `medium`, `high`, `xhigh`
 
 ```bash
-/provider kimi
-/keyfile ~/.kimi_key
-/model kimi-k2-thinking
-```
-
-#### Model geometry & recommended settings (Kimi)
-
-- Context: 262,144 tokens
-- Architecture: Trillion-parameter MoE (32B active)
-- Strengths: Deep reasoning, 200-300 sequential tool calls, native thinking mode
-
-Example setup:
-
-```bash
-/set context-limit 262000
+/set context-limit 262144
 /set modelparam max_tokens 8192
-/set reasoning.enabled true
-/set reasoning.includeInResponse true
+/set reasoning.effort high
 ```
 
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "kimi",
-  "model": "kimi-k2-thinking",
-  "modelParams": { "max_tokens": 8192 },
-  "ephemeralSettings": {
-    "context-limit": 262000,
-    "reasoning.enabled": true,
-    "reasoning.includeInResponse": true
-  }
-}
-```
-
-#### Kimi K2 via Synthetic/Chutes
-
-Kimi K2 Thinking is also available through third-party providers:
-
-```bash
-# Via Synthetic
-/provider synthetic
-/keyfile ~/.synthetic_key
-/model hf:moonshotai/Kimi-K2-Thinking
-
-# Via Chutes
-/provider chutes
-/keyfile ~/.chutes_key
-/model kimi-k2-thinking
-```
+**Common models:** `gpt-5.5`, `gpt-5.3-codex`, `gpt-5.2-codex`
 
 ### Anthropic (Claude)
 
@@ -175,7 +96,7 @@ Kimi K2 Thinking is also available through third-party providers:
 ```bash
 /provider anthropic
 /key sk-ant-your-key
-/model claude-sonnet-4-5-20250929
+/model claude-opus-4-8
 ```
 
 #### Or OAuth (Claude Pro/Max)
@@ -184,22 +105,21 @@ Kimi K2 Thinking is also available through third-party providers:
 /auth anthropic enable
 ```
 
-Note: OAuth is lazy - authentication happens when you first use the provider.
+Note: OAuth is lazy — authentication happens when you first use the provider.
 
 #### Model geometry & recommended settings (Anthropic)
 
-Common models: claude-haiku-4-5-20251001, claude-sonnet-4-5-20250929, claude-opus-4-5-20251101
+Common models: `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5`
 
 Guidance:
 
-- Start with context-limit 200000.
+- Default context-limit 200000 (Opus). Sonnet may support a larger window depending on your Anthropic plan; the very large (1M-class) windows are plan/credit-gated rather than always-on. Check Anthropic's documentation for your current limits.
 - If you enable thinking, increase max_tokens as needed and keep ≥1k tokens of safety.
-- Example setup:
 
 ```bash
- /set context-limit 200000
- /set modelparam max_tokens 4096
- /set modelparam temperature 0.7
+/set context-limit 200000
+/set modelparam max_tokens 4096
+/set reasoning.effort high
 ```
 
 **Profile JSON:**
@@ -208,13 +128,11 @@ Guidance:
 {
   "version": 1,
   "provider": "anthropic",
-  "model": "claude-sonnet-4-5-20250929",
-  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
+  "model": "claude-opus-4-8",
+  "modelParams": { "max_tokens": 4096 },
   "ephemeralSettings": { "context-limit": 200000 }
 }
 ```
-
-**Common models:** `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929`, `claude-opus-4-5-20251101`
 
 **Environment variable:** `export ANTHROPIC_API_KEY=sk-ant-...`
 
@@ -225,22 +143,31 @@ Guidance:
 ```bash
 /provider gemini
 /key your-gemini-key
-/model gemini-3-flash-preview
+/model gemini-2.5-pro
 ```
+
+#### Or OAuth
+
+```bash
+/auth gemini enable
+```
+
+Note: OAuth is lazy — authentication happens when you first use the provider.
+
+> **Important (gemini-cli → Antigravity):** Google ended free consumer "Login with Google" access for the Gemini CLI integration in mid-2026, directing individual users to **Antigravity**. OAuth via `/auth gemini` still works for **paid Gemini API keys** and **Gemini Code Assist Standard/Enterprise** accounts. If a free personal Google login no longer authorizes, use a Gemini **API key** instead. See [Google Cloud auth](../cli/google-cloud-auth.md).
 
 #### Model geometry & recommended settings (Gemini)
 
-Common models: gemini-3-flash-preview, gemini-3-pro-preview
+Common models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
 
 Guidance:
 
-- Use context-limit 1048576 for Gemini 3 models; lower if you see provider limit errors.
-- Max output tokens: 65536
-- Example setup:
+- Context-limit up to 1048576 (API key) for Gemini 2.5 models; lower if you see provider limit errors. OAuth/Code-Assist windows can be smaller depending on plan.
+- Max output tokens: up to 65536
 
 ```bash
 /set context-limit 1048576
-/set modelparam max_tokens 4096   # Gemini often uses camelCase params in native SDKs, but LLxprt forwards what you set
+/set modelparam max_tokens 4096
 ```
 
 **Profile JSON:**
@@ -249,20 +176,158 @@ Guidance:
 {
   "version": 1,
   "provider": "gemini",
-  "model": "gemini-3-flash-preview",
+  "model": "gemini-2.5-pro",
   "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
   "ephemeralSettings": { "context-limit": 1048576 }
 }
 ```
 
+**Environment variable:** `export GEMINI_API_KEY=...`
+
+### Qwen
+
+#### OAuth
+
+```bash
+/auth qwen enable
+/provider qwen
+/model qwen3-coder-plus
+```
+
+#### Using Alias with API Key
+
+```bash
+/provider qwen
+/key your-qwen-key
+/model qwen3-coder-plus
+```
+
+> **Tier note:** Qwen's free OAuth tier availability has changed over time. If OAuth login no longer grants free access, use a DashScope/Qwen **API key**. See [authentication](../cli/authentication.md) for current details.
+
+#### Model geometry & recommended settings (Qwen)
+
+Common models: `qwen3-coder-plus`, `qwen3-coder`
+
+Guidance:
+
+- Start with context-limit 200000; lower if you hit provider limits.
+- This alias is for Qwen's own service. It is **not** used for Cerebras.
+
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+```
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "qwen",
+  "model": "qwen3-coder-plus",
+  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
+  "ephemeralSettings": { "context-limit": 200000 }
+}
+```
+
+## API-Key Providers (with aliases)
+
+### OpenAI (API Key)
+
+```bash
+/provider openai
+/keyfile ~/.openai_key
+/model gpt-5.5
+```
+
+#### Model geometry & recommended settings (OpenAI)
+
+Common models: `gpt-5.5`, `gpt-5.4`, `gpt-5.2`
+
+Guidance:
+
+- gpt-5.x reasoning models do NOT support temperature — use `/set reasoning.effort` instead
+- Reasoning effort: `low`, `medium`, `high`, `xhigh`
+
+```bash
+/set context-limit 400000 # adjust to your model's actual window (check provider docs)
+/set modelparam max_tokens 8192
+/set reasoning.effort high
+```
+
+### Kimi (Moonshot AI)
+
+Kimi offers the K2-family models with deep reasoning and multi-step tool orchestration.
+
+#### Using API Key
+
+```bash
+/provider kimi
+/keyfile ~/.kimi_key
+/model kimi-for-coding
+```
+
+#### Model geometry & recommended settings (Kimi)
+
+- Context: 262,144 tokens
+- Max output: 32,768 tokens
+- Architecture: Trillion-parameter MoE (32B active)
+- Strengths: Deep reasoning, 200-300 sequential tool calls, native thinking mode
+
+```bash
+/set context-limit 262144
+/set modelparam max_tokens 32768
+/set reasoning.enabled true
+/set reasoning.includeInResponse true
+```
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "kimi",
+  "model": "kimi-for-coding",
+  "modelParams": { "max_tokens": 32768 },
+  "ephemeralSettings": {
+    "context-limit": 262144,
+    "reasoning.enabled": true,
+    "reasoning.includeInResponse": true
+  }
+}
+```
+
+#### Kimi K2 via Synthetic/Chutes
+
+Kimi K2 is also available through third-party providers:
+
+```bash
+# Via Synthetic
+/provider synthetic
+/keyfile ~/.synthetic_key
+/model hf:moonshotai/Kimi-K2.6
+
+# Via Chutes
+/provider chutes-ai
+/keyfile ~/.chutes_key
+/model moonshotai/Kimi-K2.6
+```
+
+### Synthetic (Hugging Face Models)
+
+```bash
+/provider synthetic
+/key your-synthetic-key
+/model hf:zai-org/GLM-4.7
+```
+
 #### Model geometry & recommended settings (Synthetic)
 
-Popular models: hf:zai-org/GLM-4.7, hf:mistralai/Mixtral-8x7B
+Popular models: `hf:zai-org/GLM-4.7`, `hf:moonshotai/Kimi-K2.6`
 
 Guidance:
 
 - Context varies by model/runtime. Start with context-limit 200000 and adjust.
-- Example setup:
 
 ```bash
 /set context-limit 200000
@@ -277,75 +342,66 @@ Guidance:
   "provider": "synthetic",
   "model": "hf:zai-org/GLM-4.7",
   "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
-  "ephemeralSettings": {}
-}
-```
-
-#### Or OAuth
-
-```bash
-/auth gemini enable
-```
-
-Note: OAuth is lazy - authentication happens when you first use the provider.
-
-**Common models:** `gemini-3-flash-preview`, `gemini-3-pro-preview`
-
-**Environment variable:** `export GEMINI_API_KEY=...`
-
-### Synthetic (Hugging Face Models)
-
-````bash
-/provider synthetic
-/key your-synthetic-key
-
-#### Model geometry & recommended settings (Qwen)
-
-Common models: qwen3-coder-pro, qwen3-coder
-
-Guidance:
-- Use /auth qwen enable for OAuth (free) or /provider qwen for API key usage.
-- Start with context-limit 200000; lower if you hit provider limits.
-- Example setup:
-```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-````
-
-**Important:** This alias is for Qwen's own service. It is not used for Cerebras.
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "qwen",
-  "model": "qwen3-coder-pro",
-  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
   "ephemeralSettings": { "context-limit": 200000 }
 }
 ```
 
-/model hf:zai-org/GLM-4.7
+### Chutes AI
 
-````
+```bash
+/provider chutes-ai    # Has built-in alias
+# OR
+/provider openai
+/baseurl https://api.chutes.ai/v1/
+/key your-chutes-key
+/model zai-org/GLM-5-TEE
+```
 
-**Popular models:** `hf:zai-org/GLM-4.7`, `hf:mistralai/Mixtral-8x7B`
+#### Model geometry & recommended settings (Chutes AI)
 
-### Qwen (Free)
-
-#### OAuth (Free)
-
-
-#### Model geometry & recommended settings (xAI)
-
-Model: grok-3 (example)
-
-- Example setup:
 ```bash
 /set context-limit 200000
 /set modelparam max_tokens 4096
-````
+```
+
+### DeepSeek
+
+```bash
+/provider deepseek
+/key your-deepseek-key
+/model deepseek-v4-flash
+```
+
+### Z.AI
+
+```bash
+/provider zai
+/key your-zai-key
+/model glm-5
+```
+
+### Makora
+
+```bash
+/provider makora
+/key your-makora-key
+/model nvidia/Kimi-K2.6-NVFP4
+```
+
+## Models Requiring Custom BaseURL
+
+These providers use the OpenAI-compatible endpoint approach (most also have built-in aliases shown above).
+
+### xAI (Grok)
+
+```bash
+/provider xai          # Has built-in alias
+# OR
+/provider openai
+/baseurl https://api.x.ai/v1/
+/key your-xai-key
+/model grok-4
+```
 
 **Profile JSON:**
 
@@ -353,7 +409,7 @@ Model: grok-3 (example)
 {
   "version": 1,
   "provider": "openai",
-  "model": "grok-3",
+  "model": "grok-4",
   "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
   "ephemeralSettings": {
     "context-limit": 200000,
@@ -362,47 +418,16 @@ Model: grok-3 (example)
 }
 ```
 
-```bash
-/auth qwen enable
-```
-
-#### Using Alias with API Key
+### OpenRouter
 
 ```bash
-/provider qwen
-/key your-qwen-key
-/model qwen3-coder-pro
-```
-
-### Models Requiring Custom BaseURL
-
-These providers use the OpenAI-compatible endpoint approach:
-
-#### xAI (Grok)
-
-```bash
-/provider openai
-/baseurl https://api.x.ai/v1/
-/key your-xai-key
-/model grok-3
-```
-
-#### OpenRouter
-
-````bash
+/provider openrouter   # Has built-in alias
+# OR
 /provider openai
 /baseurl https://openrouter.ai/api/v1/
 /key your-openrouter-key
-
-#### Model geometry & recommended settings (OpenRouter)
-
-Example model: qwen/qwen3-coder
-
-- Example setup:
-```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-````
+/model nvidia/nemotron-nano-9b-v2
+```
 
 **Profile JSON:**
 
@@ -410,7 +435,7 @@ Example model: qwen/qwen3-coder
 {
   "version": 1,
   "provider": "openai",
-  "model": "qwen/qwen3-coder",
+  "model": "nvidia/nemotron-nano-9b-v2",
   "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
   "ephemeralSettings": {
     "context-limit": 200000,
@@ -419,124 +444,40 @@ Example model: qwen/qwen3-coder
 }
 ```
 
-#### Model geometry & recommended settings (Fireworks)
-
-Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
-
-- Example setup:
+### Fireworks
 
 ```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-```
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "openai",
-  "model": "accounts/fireworks/models/llama-v3p3-70b-instruct",
-  "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
-  "ephemeralSettings": {
-    "context-limit": 200000,
-    "base-url": "https://api.fireworks.ai/inference/v1"
-  }
-}
-```
-
-#### OpenRouter
-
-```bash
-/provider openai
-/baseurl https://openrouter.ai/api/v1/
-/key your-openrouter-key
-/model qwen/qwen3-coder
-```
-
-#### Fireworks
-
-```bash
+/provider fireworks    # Has built-in alias
+# OR
 /provider openai
 /baseurl https://api.fireworks.ai/inference/v1/
 /key your-fireworks-key
-/model accounts/fireworks/models/llama-v3p3-70b-instruct
+/model fireworks/minimax-m3
 ```
 
-#### Cerebras (GLM-4.7)
+### Cerebras Code
 
 ```bash
+/provider cerebras-code   # Has built-in alias
+# OR
 /provider openai
 /baseurl https://api.cerebras.ai/v1/
 /key your-cerebras-key
-/model zai-glm-4.7
+/model qwen-3-coder-480b
 # Recommended runtime tuning:
 /set context-limit 131000
 /set modelparam max_tokens 10000
-/set modelparam temperature 1
 ```
 
 **Notes:**
 
-- GLM-4.7 model supports 200k context, but **Cerebras endpoint limits to ~131k**.
-- Budget room for completions: effective prompt budget = context-limit − max_tokens − safety.
-- The /provider qwen alias is for Qwen's own service, not for Cerebras.
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "openai",
-  "model": "zai-glm-4.7",
-  "modelParams": {
-    "temperature": 1,
-    "max_tokens": 10000
-  },
-  "ephemeralSettings": {
-    "context-limit": 131000,
-    "base-url": "https://api.cerebras.ai/v1",
-    "shell-replacement": true
-  }
-}
-```
-
-#### Chutes AI
-
-```bash
-/provider chutes    # Has built-in alias
-# OR
-/provider openai
-/baseurl https://api.chutes.ai/v1/
-/key your-chutes-key
-/model your-model
-```
+- The Cerebras endpoint may limit context below a model's full window; budget room for completions.
+- Effective prompt budget = context-limit − max_tokens − safety.
+- The `/provider qwen` alias is for Qwen's own service, not for Cerebras.
 
 ## Local Models
 
-#### Model geometry & recommended settings (Chutes AI)
-
-- Example setup:
-
-```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-```
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "openai",
-  "model": "your-model",
-  "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
-  "ephemeralSettings": {
-    "context-limit": 200000,
-    "base-url": "https://api.chutes.ai/v1"
-  }
-}
-```
+For complete local-model guidance, see [Using Local Models](../local-models.md).
 
 ### LM Studio
 
@@ -550,44 +491,41 @@ Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
 
 ### llama.cpp
 
-````bash
+```bash
 /provider llama-cpp    # Has built-in alias
 # OR
 /provider openai
+/baseurl http://localhost:8080/v1/
+/model your-model
+```
 
-### Model geometry & recommended settings (Local)
+#### Model geometry & recommended settings (Local)
 
-Context depends on your local runtime and model build. Start with:
+Context depends on your local runtime and model build. Start small and increase:
+
 ```bash
 /set context-limit 32000
 /set modelparam max_tokens 2048
-# Increase gradually as your runtime allows.
-````
-
-**Ollama tip:**
-
-```bash
-/provider openai
-/baseurl http://localhost:11434/v1
-/key dummy-key
-/model codellama:13b
 ```
-
-/baseurl http://localhost:8080/v1/
-/model your-model
-
-````
 
 ### Ollama
 
+Ollama exposes an OpenAI-compatible endpoint. Use the `openai` provider with a local base URL (there is no separate local `ollama` alias; the built-in `ollama-cloud` alias is for the hosted ollama.com service):
+
 ```bash
-/provider ollama      # Has built-in alias
-# OR
 /provider openai
 /baseurl http://localhost:11434/v1/
-/key dummy-key        # Ollama may require a dummy key
-/model codellama:13b
-````
+/key dummy-key        # Ollama may require a non-empty key
+/model qwen2.5-coder
+```
+
+For the hosted Ollama Cloud service:
+
+```bash
+/provider ollama-cloud
+/key your-ollama-key
+/model kimi-k2.6
+```
 
 ## Authentication Methods
 
@@ -605,11 +543,12 @@ Set directly with `/key` or load from file:
 
 ### OAuth
 
-Three providers support OAuth for authentication:
+**Four** providers support OAuth for authentication: Anthropic, Codex (ChatGPT), Gemini, and Qwen.
 
 ```bash
 # Enable OAuth provider (lazy authentication - happens on first use)
 /auth anthropic enable
+/auth codex enable
 /auth gemini enable
 /auth qwen enable
 

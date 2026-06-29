@@ -15,15 +15,15 @@
 Get started immediately with powerful LLM options:
 
 ```bash
-# Free Gemini models
+# Gemini (Google account or API key)
 /auth gemini enable
 /provider gemini
-/model gemini-3-flash-preview
+/model gemini-2.5-flash
 
 # Your Claude Pro / Max subscription
 /auth anthropic enable
 /provider anthropic
-/model claude-sonnet-4-8
+/model claude-opus-4-8
 
 # Your ChatGPT Plus / Pro subscription (Codex)
 /auth codex enable
@@ -41,9 +41,9 @@ Get started immediately with powerful LLM options:
 - **Use Your Existing Subscriptions**: Use Claude Pro/Max, ChatGPT Plus/Pro (Codex) directly via OAuth. Use Kimi/Synthetic/Chutes subscriptions via keys.
 - **Multi-Account Failover**: Configure multiple OAuth accounts that automatically failover on rate limits
 - **Load Balancer Profiles**: Balance requests across providers or accounts with automatic failover
-- **Free Tier Support**: Start coding immediately with Gemini or Qwen free tiers
+- **Free & Low-Cost Tiers**: Start with a Google account (Gemini) or a Qwen account — see [authentication](./docs/cli/authentication.md) for current tier availability
 - **Provider Flexibility**: Switch between any Anthropic, Gemini, OpenAI, Kimi, or OpenAI-compatible provider
-- **Top Open Models**: Works seamlessly with GLM 5, Kimi K2.5, MiniMax M2.5, and Qwen 3 Coder Next
+- **Top Open Models**: Works seamlessly with GLM 5.2, Kimi K2.6, MiniMax M3, and Qwen 3 Coder Next
 - **Local Models**: Run models locally with LM Studio, llama.cpp for complete privacy
 - **Privacy First**: No telemetry by default, local processing available
 - **Subagent Flexibility**: Create agents with different models, providers, or settings
@@ -63,7 +63,7 @@ npm install -g @vybestack/llxprt-code
 llxprt
 
 # Try without installing
-npx @vybestack/llxprt-code --provider synthetic --model hf:zai-org/GLM-5 --keyfile ~/.synthetic_key "simplify the README.md"
+npx @vybestack/llxprt-code --provider synthetic --model hf:zai-org/GLM-4.7 --keyfile ~/.synthetic_key "simplify the README.md"
 ```
 
 ## What is LLxprt Code?
@@ -112,11 +112,11 @@ llxprt
 ## Key Features
 
 - **Subscription OAuth** - Use Claude Pro/Max, ChatGPT Plus/Pro (Codex), or Kimi subscriptions directly
-- **Free Tiers** - Gemini, Qwen free tiers with generous limits
+- **Free & Low-Cost Tiers** - Gemini (Google account) and Qwen — see [authentication](./docs/cli/authentication.md) for current availability
 - **Multi-Account Failover** - Configure multiple OAuth buckets that failover automatically on rate limits
 - **Load Balancer Profiles** - Balance across providers/accounts with roundrobin or failover policies
 - **Extensive Provider Support** - Anthropic, Gemini, OpenAI, Kimi, and any OpenAI-compatible provider [**Provider Guide →**](./docs/providers/quick-reference.md)
-- **Top Open Models** - GLM 5, Kimi K2.5, MiniMax M2.5, Qwen 3 Coder Next
+- **Top Open Models** - GLM 5.2, Kimi K2.6, MiniMax M3, Qwen 3 Coder Next
 - **Local Model Support** - LM Studio, llama.cpp, Ollama for complete privacy
 - **Profile System** - Save provider configurations and model settings
 - **Advanced Subagents** - Isolated AI assistants with different models/providers
@@ -163,30 +163,28 @@ LLxprt Code works seamlessly with the best open-weight models:
 /model kimi-for-coding
 # Or via Synthetic/Chutes:
 /provider synthetic
-/model hf:moonshotai/Kimi-K2.5
+/model hf:moonshotai/Kimi-K2.6
 ```
 
 ### GLM 5.2
 
-- **Context Window**: 200,000 tokens
-- **Max Output**: 131,072 tokens
-- **Architecture**: Mixture-of-Experts with 355B total parameters (32B active)
+- **Context Window**: 1M tokens (API key)
+- **Max Output**: 128K tokens
+- **Architecture**: Mixture-of-Experts with 744B total parameters (40B active)
 - **Strengths**: Coding, multi-step planning, tool integration
 
 ### MiniMax M3
 
-- **Context Window**: 1M tokens
-- **Architecture**: MoE with 230B total parameters (10B active)
-- **Strengths**: Coding workflows, multi-step agents, tool calling
-- **Cost**: Only 8% of Claude Sonnet, ~2x faster
+- **Context Window**: 1M tokens (API key)
+- **Architecture**: MoE with 428B total parameters (23B active)
+- **Strengths**: Coding workflows, multi-step agents, tool calling, native multimodal input
 
 ### Qwen 3 Coder Next
 
-- **Context Window**: 262,144 tokens
-- **Max Output**: 65,536 tokens
-- **Architecture**: MoE with 480B total parameters (35B active)
+- **Context Window**: 262,144 tokens (256K native, extendable to ~1M with YaRN)
+- **Architecture**: Hybrid-attention MoE with 80B total parameters (3B active)
 - **Strengths**: Agentic coding, browser automation, tool usage
-- **Performance**: State-of-the-art on SWE-bench Verified (69.6%)
+- **Performance**: Strong on SWE-bench Verified (~70%)
 
 ## Local Models
 
@@ -198,9 +196,10 @@ Run models completely offline for maximum privacy:
 /baseurl http://localhost:1234/v1/
 /model your-local-model
 
-# With Ollama
-/provider ollama
-/model codellama:13b
+# With Ollama (OpenAI-compatible endpoint)
+/provider openai
+/baseurl http://localhost:11434/v1/
+/model qwen2.5-coder
 ```
 
 Supported local providers:
