@@ -5,9 +5,9 @@
  */
 
 import {
-  normalizeToolName,
+  canonicalizeToolName as canonicalizeToolsToolName,
+  INVALID_TOOL_NAME,
   ToolErrorType,
-  toSnakeCase,
   type SubagentConfig as ToolsSubagentConfig,
   type SubagentRequest,
   type SubagentResult,
@@ -40,32 +40,9 @@ export interface ToolGovernance {
   excluded: Set<string>;
 }
 
-function hasMultipleWords(name: string): boolean {
-  const withoutFirst = name.slice(1);
-  return /[A-Z]/.test(withoutFirst) || name.includes('_') || name.includes('-');
-}
-
 export function canonicalizeToolName(rawName: string): string {
-  const trimmed = rawName.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  let nameToProcess = trimmed;
-
-  if (trimmed.endsWith('Tool') && trimmed.length > 4) {
-    const withoutTool = trimmed.slice(0, -4);
-    if (hasMultipleWords(withoutTool)) {
-      nameToProcess = withoutTool;
-    }
-  }
-
-  const normalized = normalizeToolName(nameToProcess);
-  if (normalized !== null) {
-    return normalized;
-  }
-
-  return toSnakeCase(nameToProcess).toLowerCase();
+  const canonicalName = canonicalizeToolsToolName(rawName);
+  return canonicalName === INVALID_TOOL_NAME ? '' : canonicalName;
 }
 
 export function buildToolGovernance(

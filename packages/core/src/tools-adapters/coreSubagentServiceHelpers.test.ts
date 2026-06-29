@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildToolGovernance,
   isToolBlocked,
+  canonicalizeToolName,
   type ToolGovernance,
 } from './coreSubagentServiceHelpers.js';
 
@@ -151,5 +152,50 @@ describe('coreSubagentServiceHelpers buildToolGovernance + isToolBlocked integra
     expect(isToolBlocked('read_file', governance)).toBe(false);
     expect(isToolBlocked('shell', governance)).toBe(false);
     expect(isToolBlocked('write_file', governance)).toBe(false);
+  });
+});
+
+// Issue #2184: the core duplicate canonicalizeToolName must mirror the tools
+// package behavior for API-qualified name stripping, while preserving its own
+// existing invalid-return behavior (empty string for blank/invalid input).
+describe('coreSubagentServiceHelpers canonicalizeToolName (Issue #2184)', () => {
+  it('strips functions. namespace prefix', () => {
+    expect(canonicalizeToolName('functions.run_shell_command')).toBe(
+      'run_shell_command',
+    );
+  });
+
+  it('strips arbitrary namespace prefix', () => {
+    expect(canonicalizeToolName('github.list_files')).toBe('list_files');
+  });
+
+  it('strips multi-segment namespace prefixes', () => {
+    expect(canonicalizeToolName('a.b.run_shell_command')).toBe(
+      'run_shell_command',
+    );
+    expect(canonicalizeToolName('github.repo.read_file')).toBe('read_file');
+  });
+
+  it('strips namespace prefix then strips Tool suffix', () => {
+    expect(canonicalizeToolName('functions.RunShellCommandTool')).toBe(
+      'run_shell_command',
+    );
+  });
+
+  it('treats single-dot names as namespace-qualified names', () => {
+    expect(canonicalizeToolName('tool.v1')).toBe('v1');
+    expect(canonicalizeToolName('run.cmd')).toBe('cmd');
+  });
+
+  it('returns empty string for blank and trailing-dot names', () => {
+    expect(canonicalizeToolName('')).toBe('');
+    expect(canonicalizeToolName('   ')).toBe('');
+    expect(canonicalizeToolName('functions.')).toBe('');
+  });
+
+  it('keeps existing non-dotted behavior unchanged', () => {
+    expect(canonicalizeToolName('read_file')).toBe('read_file');
+    expect(canonicalizeToolName('WriteFileTool')).toBe('write_file');
+    expect(canonicalizeToolName('READ_FILE')).toBe('read_file');
   });
 });

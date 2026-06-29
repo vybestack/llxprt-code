@@ -94,10 +94,22 @@ export function canonicalizeToolName(rawName: string): string {
     return INVALID_TOOL_NAME;
   }
 
-  let nameToProcess = trimmed;
+  // Issue #2184: strip API namespace prefixes (e.g. functions.run_shell_command)
+  // before suffix stripping and normalization. Unambiguous qualified names
+  // resolve to the registry tool name.
+  let afterNamespace = trimmed;
+  const lastDotIndex = trimmed.lastIndexOf('.');
+  if (lastDotIndex !== -1) {
+    afterNamespace = trimmed.slice(lastDotIndex + 1);
+    if (!afterNamespace) {
+      return INVALID_TOOL_NAME;
+    }
+  }
 
-  if (trimmed.endsWith('Tool') && trimmed.length > 4) {
-    const withoutTool = trimmed.slice(0, -4);
+  let nameToProcess = afterNamespace;
+
+  if (afterNamespace.endsWith('Tool') && afterNamespace.length > 4) {
+    const withoutTool = afterNamespace.slice(0, -4);
     if (hasMultipleWords(withoutTool)) {
       nameToProcess = withoutTool;
     }

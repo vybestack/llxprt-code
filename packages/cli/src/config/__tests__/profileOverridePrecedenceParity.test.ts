@@ -85,6 +85,27 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
+vi.mock('@vybestack/llxprt-code-settings', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-settings');
+  return {
+    ...actual,
+    ProfileManager: vi.fn(() => ({
+      loadProfile: vi.fn(async (profileName: string) => {
+        if (profileName === 'env-profile') {
+          return {
+            provider: 'gemini',
+            model: 'gemini-1.5-flash',
+            ephemeralSettings: {},
+          };
+        }
+        throw new Error(`Profile '${profileName}' not found`);
+      }),
+    })),
+  };
+});
+
 vi.mock('../profileBootstrap.js', async () => {
   const actual = await vi.importActual<typeof import('../profileBootstrap.js')>(
     '../profileBootstrap.js',
@@ -327,18 +348,6 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
         shutdown: vi.fn(),
       }),
     },
-    ProfileManager: vi.fn(() => ({
-      loadProfile: vi.fn(async (profileName: string) => {
-        if (profileName === 'env-profile') {
-          return {
-            provider: 'gemini',
-            model: 'gemini-1.5-flash',
-            ephemeralSettings: {},
-          };
-        }
-        throw new Error(`Profile '${profileName}' not found`);
-      }),
-    })),
     loadEnvironment: vi.fn(),
     loadServerHierarchicalMemory: vi.fn().mockResolvedValue({
       memoryContent: '',
@@ -501,9 +510,13 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
 
   it('without --provider, explicit profile load is attempted before settings.defaultProfile', async () => {
     const settings: Settings = { defaultProfile: 'default-profile' };
-    await expect(
-      runConfig(settings, ['--profile-load', 'env-profile']),
-    ).rejects.toThrow("Profile 'env-profile' not found");
+    const config = await runConfig(settings, ['--profile-load', 'env-profile']);
+
+    expect(config).toBeDefined();
+    const explicitCall = profileSnapshotCalls.find(
+      (c) => c.profileName === 'env-profile',
+    );
+    expect(explicitCall).toBeDefined();
     const defaultProfileCall = profileSnapshotCalls.find(
       (c) => c.profileName === 'default-profile',
     );

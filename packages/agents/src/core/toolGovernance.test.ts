@@ -12,6 +12,7 @@ import {
   type ToolGovernanceConfig,
   type ToolGovernance,
 } from './toolGovernance.js';
+import { INVALID_TOOL_NAME } from '@vybestack/llxprt-code-tools';
 
 function createMockConfig(options: {
   ephemerals?: Record<string, unknown>;
@@ -243,6 +244,50 @@ describe('canonicalizeToolName', () => {
 
       expect(uniqueResults.size).toBe(1);
       expect(normalized[0]).toBe('write_file');
+    });
+  });
+
+  // Issue #2184: API-qualified tool names (e.g. functions.run_shell_command)
+  // must resolve to the registry tool name by stripping the namespace prefix.
+  describe('API-qualified namespace stripping (Issue #2184)', () => {
+    it('should strip functions. prefix from qualified name', () => {
+      expect(canonicalizeToolName('functions.run_shell_command')).toBe(
+        'run_shell_command',
+      );
+    });
+
+    it('should strip arbitrary namespace prefix from qualified name', () => {
+      expect(canonicalizeToolName('github.list_files')).toBe('list_files');
+    });
+
+    it('should strip multi-segment namespace prefixes from qualified names', () => {
+      expect(canonicalizeToolName('a.b.run_shell_command')).toBe(
+        'run_shell_command',
+      );
+      expect(canonicalizeToolName('github.repo.read_file')).toBe('read_file');
+    });
+
+    it('should strip namespace prefix then strip Tool suffix', () => {
+      expect(canonicalizeToolName('functions.RunShellCommandTool')).toBe(
+        'run_shell_command',
+      );
+    });
+
+    it('should treat single-dot names as namespace-qualified names', () => {
+      expect(canonicalizeToolName('tool.v1')).toBe('v1');
+      expect(canonicalizeToolName('run.cmd')).toBe('cmd');
+    });
+
+    it('should return INVALID_TOOL_NAME for blank and trailing-dot names', () => {
+      expect(canonicalizeToolName('')).toBe(INVALID_TOOL_NAME);
+      expect(canonicalizeToolName('   ')).toBe(INVALID_TOOL_NAME);
+      expect(canonicalizeToolName('functions.')).toBe(INVALID_TOOL_NAME);
+    });
+
+    it('should keep existing non-dotted behavior unchanged', () => {
+      expect(canonicalizeToolName('read_file')).toBe('read_file');
+      expect(canonicalizeToolName('WriteFileTool')).toBe('write_file');
+      expect(canonicalizeToolName('READ_FILE')).toBe('read_file');
     });
   });
 });
