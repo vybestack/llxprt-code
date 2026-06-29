@@ -470,11 +470,15 @@ export class ProviderContentEnforcer {
   private computeCompressionThreshold(
     limit: number,
     completionBudget: number,
+    marginAdjustedLimit: number,
   ): number {
     const threshold =
       this.deps.runtimeContext.ephemerals.compressionThreshold();
     const effectiveLimit = Math.max(0, limit - completionBudget);
-    return threshold * effectiveLimit + completionBudget;
+    return Math.min(
+      marginAdjustedLimit,
+      threshold * effectiveLimit + completionBudget,
+    );
   }
 
   private computeContextLimits(provider?: IProvider): ContextLimits {
@@ -492,13 +496,15 @@ export class ProviderContentEnforcer {
       this.deps.runtimeContext.state.model,
       userContextLimit,
     );
+    const marginAdjustedLimit = this.computeMarginAdjustedLimit(limit);
     return {
       completionBudget,
       limit,
-      marginAdjustedLimit: this.computeMarginAdjustedLimit(limit),
+      marginAdjustedLimit,
       compressionThreshold: this.computeCompressionThreshold(
         limit,
         completionBudget,
+        marginAdjustedLimit,
       ),
     };
   }
