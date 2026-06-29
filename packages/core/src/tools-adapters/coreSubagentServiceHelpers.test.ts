@@ -187,10 +187,12 @@ describe('coreSubagentServiceHelpers canonicalizeToolName (Issue #2184)', () => 
     expect(canonicalizeToolName('run.cmd')).toBe('cmd');
   });
 
-  it('returns empty string for blank and trailing-dot names', () => {
+  it('returns empty string for blank and empty namespace segments', () => {
     expect(canonicalizeToolName('')).toBe('');
     expect(canonicalizeToolName('   ')).toBe('');
     expect(canonicalizeToolName('functions.')).toBe('');
+    expect(canonicalizeToolName('.run_shell_command')).toBe('');
+    expect(canonicalizeToolName('functions..run_shell_command')).toBe('');
   });
 
   it('keeps existing non-dotted behavior unchanged', () => {

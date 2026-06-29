@@ -98,12 +98,13 @@ export function canonicalizeToolName(rawName: string): string {
   // before suffix stripping and normalization. Unambiguous qualified names
   // resolve to the registry tool name.
   let afterNamespace = trimmed;
-  const lastDotIndex = trimmed.lastIndexOf('.');
-  if (lastDotIndex !== -1) {
-    afterNamespace = trimmed.slice(lastDotIndex + 1);
-    if (!afterNamespace) {
+  const segments = trimmed.split('.');
+  if (segments.length > 1) {
+    if (segments.some((segment) => segment.length === 0)) {
       return INVALID_TOOL_NAME;
     }
+
+    afterNamespace = segments[segments.length - 1];
   }
 
   let nameToProcess = afterNamespace;

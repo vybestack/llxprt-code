@@ -634,5 +634,18 @@ describe('TaskTool', () => {
         outputs: { result: 'The output' },
       });
     });
+
+    it('preserves output_spec when qualified whitelist resolution leaves zero tools', async () => {
+      const launchRequest = await executeIssue2184Invocation({
+        tool_whitelist: ['functions.does_not_exist'],
+        output_spec: { result: 'The output' },
+      });
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+      expect(launchRequest?.outputConfig).toStrictEqual({
+        outputs: { result: 'The output' },
+      });
+    });
   });
 });

@@ -278,10 +278,16 @@ describe('canonicalizeToolName', () => {
       expect(canonicalizeToolName('run.cmd')).toBe('cmd');
     });
 
-    it('should return INVALID_TOOL_NAME for blank and trailing-dot names', () => {
+    it('should return INVALID_TOOL_NAME for blank and empty namespace segments', () => {
       expect(canonicalizeToolName('')).toBe(INVALID_TOOL_NAME);
       expect(canonicalizeToolName('   ')).toBe(INVALID_TOOL_NAME);
       expect(canonicalizeToolName('functions.')).toBe(INVALID_TOOL_NAME);
+      expect(canonicalizeToolName('.run_shell_command')).toBe(
+        INVALID_TOOL_NAME,
+      );
+      expect(canonicalizeToolName('functions..run_shell_command')).toBe(
+        INVALID_TOOL_NAME,
+      );
     });
 
     it('should keep existing non-dotted behavior unchanged', () => {
