@@ -93,12 +93,16 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
   });
 
   afterEach(async () => {
+    let firstError: unknown;
     for (const fn of cleanupFns) {
-      await fn().catch(() => {
-        /* best-effort cleanup */
-      });
+      try {
+        await fn();
+      } catch (err) {
+        firstError ??= err;
+      }
     }
     cleanupFns = [];
+    rethrowCapturedError(firstError);
   });
 
   it('createAgent builds a usable Agent from a public AgentConfig (no CLI, no UI, no Config co-assembly) @requirement:REQ-2204-1 @scenario:create', async () => {

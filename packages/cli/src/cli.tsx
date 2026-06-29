@@ -99,6 +99,7 @@ import {
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
 export {
+  dispatchInteractiveOrNonInteractive,
   formatNonInteractiveError,
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
