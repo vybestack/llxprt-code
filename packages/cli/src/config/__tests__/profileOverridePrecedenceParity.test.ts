@@ -502,8 +502,8 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
   it('without --provider, explicit profile load is attempted before settings.defaultProfile', async () => {
     const settings: Settings = { defaultProfile: 'default-profile' };
     await expect(
-      runConfig(settings, ['--profile-load', 'env-profile']),
-    ).rejects.toThrow("Profile 'env-profile' not found");
+      runConfig(settings, ['--profile-load', 'missing-profile']),
+    ).rejects.toThrow("Profile 'missing-profile' not found");
     const defaultProfileCall = profileSnapshotCalls.find(
       (c) => c.profileName === 'default-profile',
     );
