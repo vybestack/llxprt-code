@@ -24,7 +24,6 @@ import {
   type ToolCallRequestInfo,
   parseAndFormatApiError,
   type ThinkingBlock,
-  tokenLimit,
   type ThoughtSummary,
   type ServerGeminiContentEvent,
 } from '@vybestack/llxprt-code-core';
@@ -74,6 +73,7 @@ import {
   prepareQueryForGemini as prepareQueryImpl,
   type PrepareQueryDeps,
 } from './queryPreparer.js';
+import { getTokenLimitForConfiguredContext } from './contextLimit.js';
 interface StreamEventHandlersResult {
   handleContentEvent: (
     eventValue: ServerGeminiContentEvent['value'],
@@ -123,23 +123,6 @@ interface StreamEventHandlersResult {
     queryToSend: PartListUnion | null;
     shouldProceed: boolean;
   }>;
-}
-
-function getConfiguredContextLimit(config: Config): number | undefined {
-  const rawContextLimit = config.getEphemeralSetting('context-limit');
-  return typeof rawContextLimit === 'number' &&
-    Number.isFinite(rawContextLimit) &&
-    rawContextLimit > 0
-    ? rawContextLimit
-    : undefined;
-}
-
-export function getTokenLimitForConfiguredContext(config: Config): number {
-  const contextLimit = getConfiguredContextLimit(config);
-  const model = config.getModel();
-  return contextLimit === undefined
-    ? tokenLimit(model)
-    : tokenLimit(model, contextLimit);
 }
 
 interface StreamEventHandlerDeps {
