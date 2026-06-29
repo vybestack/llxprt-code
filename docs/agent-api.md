@@ -1263,3 +1263,42 @@ These decisions shaped the public surface and are recorded here for posterity:
   non-serializable internals like `abortController` and live `RegExp`), and
   **delegate-don't-cache** (every method delegates to the bound runtime/config
   on each call rather than holding a stale snapshot).
+
+## A2A Server Follow-up (Next Release)
+
+<!-- @plan:PLAN-20260629-ISSUE2204 @requirement:REQ-2204-A2A -->
+
+Issue #2204 enforces the public-API boundary for the **interactive CLI** and
+**non-interactive prompt mode** — the two primary near-term clients. The A2A
+server (`packages/a2a-server`) is intentionally **out of scope** for this
+release because it was ported from upstream incompletely and needs holistic
+follow-up work. This section records the known A2A limitations so they are
+explicit next-release work rather than hidden runtime coupling.
+
+**Current state (not yet migrated):**
+
+- The A2A server does **not** consume the high-level public `Agent` surface
+  (`createAgent` / `fromConfig` / `agent.stream` / `agent.chat`). Instead it
+  imports the lower-level `AgentClient` directly from
+  `@vybestack/llxprt-code-agents` and constructs its own `Config` internally
+  via `executor.ts` (`getConfig()`).
+- It bypasses the `createAgent`/`fromConfig` composition root that the CLI and
+  the replaceable-client smoke test use, so it does not yet benefit from the
+  single-Agent / single-ProviderManager ownership invariants enforced by the
+  public API.
+
+**Next-release work (do NOT attempt in #2204):**
+
+1. Migrate `packages/a2a-server/src/agent/executor.ts` and
+   `task-runtime-helpers.ts` to construct the agent via the public
+   `createAgent` / `fromConfig` API rather than instantiating `AgentClient`
+   and building a `Config` directly.
+2. Drive task execution through `agent.stream()` / `agent.chat()` and consume
+   the typed `AgentEvent` stream, instead of the bespoke executor loop.
+3. Add an A2A-specific import-boundary guard analogous to
+   `scripts/check-cli-import-boundary.mjs` once the A2A server is migrated.
+
+The import-boundary choices in #2204 (public root + `app-service.js` allowed;
+deep runtime construction forbidden for CLI clients) do **not** block future
+A2A adoption — the same public surface is available to the A2A server once its
+port is completed.

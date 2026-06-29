@@ -11,7 +11,6 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Config } from '@vybestack/llxprt-code-core';
 import {
   getOpenAIProviderInfo,
   type ProviderMessage as Message,
@@ -31,12 +30,9 @@ export interface UseOpenAIProviderInfoReturn extends OpenAIProviderInfo {
 
 /**
  * React hook to access OpenAI provider information including conversation cache
- * @param config The Config instance from the app
  * @returns OpenAI provider information and helper methods
  */
-export function useOpenAIProviderInfo(
-  _config: Config,
-): UseOpenAIProviderInfoReturn {
+export function useOpenAIProviderInfo(): UseOpenAIProviderInfoReturn {
   const runtime = useRuntimeApi();
   const getProviderInfo = useCallback(() => {
     const services = runtime.getCliRuntimeServices();

@@ -236,6 +236,10 @@ jobs:
         run: |-
           npm run lint:eslint-guard
 
+      - name: 'Run CLI import-boundary guard'
+        run: |-
+          npm run lint:cli-boundary
+
       - name: 'Run linter'
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
