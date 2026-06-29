@@ -528,17 +528,32 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   /**
-   * Increment stats for a sub-profile
-   * Phase 5: Stats Integration
+   * Mark a sub-profile as the active selection. This is the UI-refresh trigger:
+   * it updates `lastSelected` and emits LoadBalancerSelectionChanged whenever the
+   * active backend changes, so the status footer can recompute
+   * `lb:<lb>:<sub>:<model>` the moment a backend is chosen — independent of
+   * whether the request ultimately succeeds. Both strategies call this as soon
+   * as they pick a backend (round-robin before delegating, failover when it
+   * selects/attempts each backend), so a failing primary is announced too.
    */
-  private incrementStats(subProfileName: string): void {
+  private markActiveSelection(subProfileName: string): void {
     const selectionChanged = this.lastSelected !== subProfileName;
-    this.stats.set(subProfileName, (this.stats.get(subProfileName) ?? 0) + 1);
     this.lastSelected = subProfileName;
-    this.totalRequests++;
     if (selectionChanged) {
       this.emitSelectionChanged(subProfileName);
     }
+  }
+
+  /**
+   * Record a successful request for a sub-profile (success accounting only).
+   * Selection marking/emission is handled by markActiveSelection so it also
+   * fires for failover backends that are tried before this success path.
+   * Phase 5: Stats Integration
+   */
+  private incrementStats(subProfileName: string): void {
+    this.markActiveSelection(subProfileName);
+    this.stats.set(subProfileName, (this.stats.get(subProfileName) ?? 0) + 1);
+    this.totalRequests++;
   }
 
   /**
@@ -905,6 +920,12 @@ export class LoadBalancingProvider implements IProvider {
       () =>
         `[LB:failover] Trying backend: ${subProfile.name} (start time: ${startTime})`,
     );
+
+    // Announce the active selection the moment this backend is chosen so the
+    // footer reflects the backend actually serving the request, even if the
+    // primary is failing and we are about to fall over. Success accounting
+    // still happens via incrementStats() after the stream completes.
+    this.markActiveSelection(subProfile.name);
 
     const resolvedOptions = this.buildResolvedOptions(subProfile, options);
     const delegateProvider = this.providerManager.getProviderByName(
