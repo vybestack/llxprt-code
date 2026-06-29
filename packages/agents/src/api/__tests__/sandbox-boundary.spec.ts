@@ -31,7 +31,7 @@ import {
 describe('Sandbox boundary @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-002 @requirement:REQ-021', () => {
   it('T18e sandbox is accepted at createAgent time and the sandboxed agent runs a turn @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-002', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-      sandbox: { profile: 'restricted', network: 'disabled' },
+      sandbox: { command: 'docker', image: 'sandbox:restricted' },
     });
     try {
       // The sandbox config was accepted at construction; the agent operates by
@@ -48,7 +48,7 @@ describe('Sandbox boundary @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-002 
   it('T18e changing the sandbox is the recreate path: a NEW agent with a different sandbox independently runs a turn @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-021', async () => {
     // Agent #1 — restricted sandbox, runs a turn to completion.
     const first = await buildAgent('plain-text.jsonl', {
-      sandbox: { profile: 'restricted', network: 'disabled' },
+      sandbox: { command: 'docker', image: 'sandbox:restricted' },
     });
     try {
       const firstEvents = await drain(first.agent.stream('first turn'));
@@ -62,7 +62,7 @@ describe('Sandbox boundary @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-002 
     // NYI → natural fail; at GREEN both agents operate under their respective
     // sandbox configs.
     const second = await buildAgent('plain-text.jsonl', {
-      sandbox: { profile: 'permissive', network: 'enabled' },
+      sandbox: { command: 'podman', image: 'sandbox:permissive' },
     });
     try {
       const secondEvents = await drain(second.agent.stream('second turn'));

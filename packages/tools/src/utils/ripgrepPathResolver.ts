@@ -46,11 +46,31 @@ export async function isRipgrepAvailable(): Promise<boolean> {
 export function clearRipgrepAvailabilityCache(): void {
   ripgrepAvailabilityCache = null;
 }
+function isCompatibleRipgrepBinary(candidate: string): boolean {
+  if (os.platform() !== 'darwin') {
+    return true;
+  }
+  try {
+    const fd = fs.openSync(candidate, 'r');
+    try {
+      const header = Buffer.alloc(4);
+      const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
+      if (bytesRead < header.length) {
+        return false;
+      }
+      return !header.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]));
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
 
 async function tryPackagedRipgrep(): Promise<string | null> {
   try {
     const { rgPath } = await import('@lvce-editor/ripgrep');
-    if (fs.existsSync(rgPath)) {
+    if (fs.existsSync(rgPath) && isCompatibleRipgrepBinary(rgPath)) {
       return rgPath;
     }
   } catch {

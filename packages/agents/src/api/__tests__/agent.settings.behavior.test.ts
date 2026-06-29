@@ -26,6 +26,7 @@ import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { internalConfig } from './helpers/agentHarness.js';
 
 const dangerousPathSegments = new Set([
   '__proto__',
@@ -41,11 +42,11 @@ function isInertSettingKey(key: string): boolean {
 }
 
 describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requirement:REQ-002 @requirement:REQ-INT-003', () => {
-  it('T3 getConfig() returns the SAME caller-supplied Config instance (identity) @requirement:REQ-002 @scenario:identity @given:a real CLI-style Config wrapped by fromConfig @when:agent.getConfig() @then:the returned Config is the SAME instance supplied to fromConfig', async () => {
+  it('T3 internalConfig(agent) returns the SAME caller-supplied Config instance (identity) @requirement:REQ-002 @scenario:identity @given:a real CLI-style Config wrapped by fromConfig @when:internalConfig(agent) @then:the returned Config is the SAME instance supplied to fromConfig', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const agent: Agent = await fromConfig({ config: built.config });
-      expect(agent.getConfig()).toBe(built.config);
+      expect(internalConfig(agent)).toBe(built.config);
       await agent.dispose();
     } finally {
       await built.cleanup();

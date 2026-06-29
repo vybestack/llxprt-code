@@ -123,9 +123,9 @@ export const CONFIG_FIELD_CLASSIFICATION: readonly ClassificationEntry[] = [
   },
   {
     field: 'extensions',
-    classification: 'agent-sub-surface',
+    classification: 'typed',
     rationale:
-      'Extension add/remove is a durable app-service subpath (R-BOUNDARY); runtime extensionsEnabled gating is typed below.',
+      'Maps to ConfigParameters.extensions; settings must not shadow the typed extension seed.',
   },
   {
     field: 'ide',
@@ -173,6 +173,21 @@ export const CONFIG_FIELD_CLASSIFICATION: readonly ClassificationEntry[] = [
     classification: 'typed',
     rationale:
       'Maps to ConfigParameters.compressionThreshold (automatic compression gate).',
+  },
+  {
+    field: 'skillsSupport',
+    classification: 'typed',
+    rationale: 'Maps to ConfigParameters.skillsSupport.',
+  },
+  {
+    field: 'disabledSkills',
+    classification: 'typed',
+    rationale: 'Maps to ConfigParameters.disabledSkills.',
+  },
+  {
+    field: 'adminSkillsEnabled',
+    classification: 'typed',
+    rationale: 'Maps to ConfigParameters.adminSkillsEnabled.',
   },
   {
     field: 'skills',
@@ -271,6 +286,18 @@ export const CONFIG_FIELD_CLASSIFICATION: readonly ClassificationEntry[] = [
     classification: 'typed',
     rationale:
       'Maps to ConfigParameters.interactive (controls coordinator throw scope).',
+  },
+  {
+    field: 'lsp',
+    classification: 'typed',
+    rationale:
+      'Maps to ConfigParameters.lsp for public Agent LSP status/control.',
+  },
+  {
+    field: 'harness',
+    classification: 'typed',
+    rationale:
+      'First-class createAgent harness seam gating; settings must not shadow typed public API fields.',
   },
   {
     field: 'onApproval',

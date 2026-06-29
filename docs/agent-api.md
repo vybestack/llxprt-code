@@ -169,6 +169,52 @@ by the adapter, and it **throws** if a key shadows a typed field. It is **not
 semver-covered** and may change without notice — prefer typed fields whenever
 one exists.
 
+### Harness options (production gating)
+
+```ts
+readonly harness?: AgentHarnessOptions;
+```
+
+`createAgent` is optimized for the embedder/fixture path: by default it forces
+three harness seams that make fixtures and interactive embedding convenient but
+are **unsafe for production CLI callers**:
+
+1. **`forceInteractive`** (default `true`) — overwrites `interactive` to `true`
+   so the confirmation coordinator does not throw and the policy engine keeps
+   its default `ASK_USER` decision.
+2. **`forceConfirmations`** (default `true`) — injects a high-priority ASK
+   policy rule so every tool surfaces a confirmation request (the
+   confirmation-forcing seam).
+3. **`includeProcessCwd`** (default `true`) — adds `process.cwd()` to the
+   workspace context so fixture paths resolve within the workspace boundary.
+
+Production callers (and the CLI migration path) can disable any combination:
+
+```ts
+const agent = await createAgent({
+  provider: 'openai',
+  model: 'gpt-4',
+  interactive: false,
+  approvalMode: ApprovalMode.DEFAULT,
+  harness: {
+    forceInteractive: false, // respect caller interactive:false
+    forceConfirmations: false, // do NOT inject the confirmation-forcing rule
+    includeProcessCwd: false, // do NOT mutate workspace with process.cwd()
+  },
+});
+```
+
+When all three are disabled, `createAgent` honors the caller's `interactive` and
+`approvalMode` values verbatim, injects no extra policy rules, and leaves the
+workspace context untouched. The defaults remain `true` so existing embedders
+and fixture-driven tests continue to work without changes.
+
+> **CLI migration note.** The supported near-term CLI adoption entrypoint is
+> [`fromConfig`](#adopting-an-existing-config-fromconfig), which adopts an
+> already-constructed CLI-style `Config` and never applies these harness seams.
+> `createAgent` with `harness` disabled is the embedder path for callers who
+> want `createAgent`'s provider/auth/setup without the unsafe defaults.
+
 ### Sandbox
 
 `sandbox?: SandboxConfig` configures process/file sandboxing for tool execution.
@@ -178,7 +224,7 @@ The type is re-exported from core; see the
 ## The `Agent` Control Plane
 
 An `Agent` is the live runtime facade. It exposes top-level methods for sending
-turns and switching provider/model/params, plus nine `readonly` sub-surfaces
+turns and switching provider/model/params, plus thirteen `readonly` sub-surfaces
 for focused control. See
 [`packages/agents/src/api/agent.ts`](../packages/agents/src/api/agent.ts) for the
 full interface.
@@ -565,6 +611,121 @@ console.log(`Cancelled ${cancelled} running task(s).`);
 > `listRunning()` → `[]`, `get(id)` → `undefined`, `cancel(id)` → `false`,
 > `cancelAllRunning()` → `0`.
 
+#### `agent.memory` — `AgentMemoryControl`
+
+Runtime memory operations (added by #2199). Delegates to the bound `Config`'s
+memory surface so clients read/write runtime memory without a raw Config
+escape hatch:
+
+```ts
+agent.memory.getMemory(): string
+agent.memory.setMemory(content: string): void
+agent.memory.getFileCount(): number
+agent.memory.getFilePaths(): readonly string[]
+agent.memory.getCoreMemory(): string | undefined
+agent.memory.getCoreFileCount(): number
+agent.memory.setCoreMemory(content: string): void
+agent.memory.refresh(): Promise<MemoryRefreshResult>
+agent.memory.onMemoryChanged(cb: (event: MemoryChangedEvent) => void): Unsubscribe
+```
+
+`getMemory()` / `setMemory(content)` read and write the user memory (the
+`LLXPRT.md` content the agent includes in its system instruction).
+`getFileCount()` / `getFilePaths()` return the count and paths of discovered
+memory files. `getCoreMemory()` / `getCoreFileCount()` / `setCoreMemory()`
+access the core (non-project) memory. `refresh()` reloads memory from disk and
+returns `{ memoryContent, fileCount, filePaths }`. `onMemoryChanged(cb)`
+subscribes to memory changes, passes `{ fileCount, coreMemoryFileCount? }`, and
+returns an `Unsubscribe` function.
+
+```ts
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+console.log(agent.memory.getMemory());
+const unsub = agent.memory.onMemoryChanged((event) => {
+  console.log(`memory reloaded from ${event.fileCount} file(s)`);
+});
+const refreshed = await agent.memory.refresh();
+console.log(refreshed.memoryContent);
+unsub();
+```
+
+#### `agent.skills` — `AgentSkillsControl`
+
+Skills query/reload operations (added by #2199). Delegates to
+`Config.getSkillManager()` so clients manage skills without a raw Config
+escape hatch:
+
+```ts
+agent.skills.list(opts?: { includeDisabled?: boolean }): readonly SkillInfo[]
+agent.skills.get(name: string): SkillInfo | undefined
+agent.skills.reload(): Promise<void>
+agent.skills.isAdminEnabled(): boolean
+```
+
+`SkillInfo` = `{ name: string; description?: string; disabled?: boolean; source?: string; location?: string }`. It intentionally omits skill body/prompt content.
+
+`list()` returns enabled skills by default; pass `{ includeDisabled: true }`
+to include disabled skills. `get(name)` returns a single skill by name, or
+`undefined`. `reload()` re-discovers skills
+from disk. `isAdminEnabled()` reports whether the skill system is
+administratively enabled.
+
+```ts
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+for (const skill of agent.skills.list()) {
+  console.log(skill.name, skill.disabled);
+}
+await agent.skills.reload();
+```
+
+#### `agent.workspace` — `AgentWorkspaceControl`
+
+Narrow workspace accessors (added by #2199). Delegates to
+`Config.getWorkspaceContext()` / `getTargetDir()` / `getProjectRoot()` so
+clients inspect workspace directories without a raw Config escape hatch:
+
+```ts
+agent.workspace.getDirectories(): readonly string[]
+agent.workspace.addDirectory(path: string): void
+agent.workspace.getWorkingDirectory(): string
+agent.workspace.getProjectRoot(): string
+```
+
+`getDirectories()` returns all workspace root directories. `addDirectory(path)`
+adds a directory to the workspace context. `getWorkingDirectory()` returns the
+target working directory. `getProjectRoot()` returns the project root directory.
+
+```ts
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+console.log(agent.workspace.getDirectories());
+console.log(agent.workspace.getProjectRoot());
+```
+
+#### `agent.lsp` — `AgentLspControl`
+
+Read-only LSP status inspection (added by #2199). Delegates to
+`Config.getLspConfig()` / `Config.getLspServiceClient()` so clients check LSP
+status without a raw Config escape hatch. Does not leak the raw
+`LspServiceClient`:
+
+```ts
+agent.lsp.status(): Promise<LspStatusSnapshot>
+```
+
+`LspStatusSnapshot` = `{ disabled: boolean; servers: readonly LspServerStatus[]; unavailableReason?: string }`.
+`LspServerStatus` = `{ serverId: string; healthy: boolean; detail?: string; state?: 'ok' | 'broken' | 'starting' | 'idle'; status?: string }`.
+
+`status()` returns a snapshot. `disabled` is `true` when LSP is not configured
+or the service client is unavailable; `servers` is always an array (empty when
+no servers). `unavailableReason` is present when the client exists but is not
+alive.
+
+```ts
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+const lsp = await agent.lsp.status();
+console.log(lsp.disabled, lsp.servers);
+```
+
 ### `dispose()`
 
 ```ts
@@ -731,8 +892,9 @@ import { fromConfig } from '@vybestack/llxprt-code-agents';
 // Config builder). fromConfig ADOPTS it — it does not clone or rebuild it.
 const agent = await fromConfig({ config });
 
-// The adopted Config is projected back by reference.
-console.log(agent.getConfig() === config); // true
+// Client code should use the Agent's public projections rather than reaching
+// back into the raw Config.
+console.log(agent.getRuntimeId());
 ```
 
 ### Ownership semantics (critical)
@@ -791,14 +953,13 @@ delegated to the `Config`** — the agent is a thin pass-through, so the exact
 rules the `Config` applies (numeric coercion, enum validation, throws on invalid
 values) are the rules the agent enforces.
 
-### `agent.getConfig()`
+### No raw `Config` escape hatch
 
-Returns the adopted (or, for `createAgent`, the owned) `Config` by reference:
-
-```ts
-const agent = await fromConfig({ config });
-agent.getConfig() === config; // true — same instance
-```
+The public `Agent` interface intentionally does **not** expose a raw `Config`
+reference. `fromConfig` still adopts and delegates to the caller-owned `Config`,
+but clients should use the typed Agent projections below (`memory`, `skills`,
+`workspace`, `lsp`, settings, policy, tools, tasks, etc.) instead of relying on
+internal runtime objects.
 
 ### `agent.getEphemeralSetting(key)` / `setEphemeralSetting(key, value)`
 
@@ -820,16 +981,15 @@ agent.setEphemeralSetting('streaming', 123); // throws: message contains "must r
 
 ### `agent.getEphemeralSettings()`
 
-Returns a **read-only** snapshot of all ephemeral settings. After the same
-mutations, it deep-equals the underlying `Config`'s snapshot:
+Returns a **read-only** snapshot of all ephemeral settings. It projects the
+same normalized state the bound runtime `Config` owns:
 
 ```ts
 agent.setEphemeralSetting('context-limit', 50000);
 agent.setEphemeralSetting('streaming', 'disabled');
 
 const viaAgent = agent.getEphemeralSettings();
-const viaConfig = agent.getConfig().getEphemeralSettings();
-// viaAgent deep-equals viaConfig (the agent projects the Config's state).
+// viaAgent contains { 'context-limit': 50000, streaming: 'disabled' }.
 ```
 
 <!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
@@ -933,7 +1093,7 @@ Anything under a package's internal source tree has no stability guarantee.
 Issue #2143 promoted a set of enums and projected types to the **public root**
 (`@vybestack/llxprt-code-agents`) so a #1595 developer can construct and inspect
 these values without a deep import into the core package's internals or an
-`agent.getConfig()` escape hatch.
+raw Config escape hatch.
 
 ### VALUE enums
 
@@ -1071,9 +1231,10 @@ These decisions shaped the public surface and are recorded here for posterity:
 - **Entry wording (B11):** the public API ships from
   `@vybestack/llxprt-code-agents`, never `-core` — avoiding a `core → agents`
   cycle.
-- **Control-plane scope:** the nine sub-surfaces (`profiles`, `tools`, `mcp`,
-  `auth`, `ide`, `session`, `hooks`, `policy`, `tasks`) are part of the public
-  contract, alongside the top-level turn/provider/model/approval-mode methods.
+- **Control-plane scope:** the thirteen sub-surfaces (`profiles`, `tools`,
+  `mcp`, `auth`, `ide`, `session`, `hooks`, `policy`, `tasks`, `memory`,
+  `skills`, `workspace`, `lsp`) are part of the public contract, alongside the
+  top-level turn/provider/model/approval-mode methods.
 - **Confirmation handling (B7):** a **wired** approval handler that
   rejects/throws is **safely denied** (`Cancel`) by `AgenticLoop` so the loop
   never hangs. When **no** handler is wired, the agent neither silently proceeds
@@ -1095,7 +1256,7 @@ These decisions shaped the public surface and are recorded here for posterity:
   the `policy` / `tasks` sub-controllers, the extended `hooks` administration,
   the extended `auth` detailed metadata, the extended `mcp` OAuth/details, and
   `agent.tools.keys` close the capability gaps that previously forced a
-  `getConfig()` escape hatch or a deep import into the core package's internals.
+  raw Config escape hatch or a deep import into the core package's internals.
   They are a prerequisite to the #1595 public-API trim, shipped under three
   constraints: **masked-only** (raw secrets/tokens are never returned — only
   `maskedKey` or reference metadata), **projected public types** (omit

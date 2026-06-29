@@ -45,6 +45,7 @@ import {
   isTextEvent,
   isToolCallEvent,
   isToolResultEvent,
+  internalConfig,
 } from './helpers/agentHarness.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
@@ -71,7 +72,7 @@ describe('mutation P23 — target 1: post-auth client guard (createAgent.ts:253-
     try {
       // The success path binds the createAgent-owned Config (an
       // AgentBootstrapError on the throw-branch would have rejected the build).
-      const config = agent.getConfig();
+      const config = internalConfig(agent);
       expect(config).toBeDefined();
       // A populated provider/model proves the post-auth client is live and
       // the runtime was activated.
