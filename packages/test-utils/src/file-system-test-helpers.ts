@@ -58,20 +58,43 @@ export type FileSystemStructure = {
 async function create(dir: string, structure: FileSystemStructure) {
   for (const [name, content] of Object.entries(structure)) {
     const newPath = path.join(dir, name);
-    if (typeof content === 'string') {
-      await fs.writeFile(newPath, content);
-    } else if (Array.isArray(content)) {
-      await fs.mkdir(newPath, { recursive: true });
-      for (const item of content) {
-        if (typeof item === 'string') {
-          await fs.writeFile(path.join(newPath, item), '');
-        } else {
-          await create(newPath, item);
-        }
-      }
-    } else if (typeof content === 'object' && content !== null) {
-      await fs.mkdir(newPath, { recursive: true });
-      await create(newPath, content);
+    await createEntry(newPath, content);
+  }
+}
+
+/**
+ * Create a single filesystem entry (file, empty-file array, or subdirectory).
+ */
+async function createEntry(
+  newPath: string,
+  content: string | FileSystemStructure | Array<string | FileSystemStructure>,
+): Promise<void> {
+  if (typeof content === 'string') {
+    await fs.writeFile(newPath, content);
+    return;
+  }
+  if (Array.isArray(content)) {
+    await createArrayEntries(newPath, content);
+    return;
+  }
+  await fs.mkdir(newPath, { recursive: true });
+  await create(newPath, content);
+}
+
+/**
+ * Create an array of empty files and subdirectories under a directory.
+ */
+async function createArrayEntries(
+  dir: string,
+  entries: Array<string | FileSystemStructure>,
+): Promise<void> {
+  await fs.mkdir(dir, { recursive: true });
+  for (const item of entries) {
+    if (typeof item === 'string') {
+      await fs.writeFile(path.join(dir, item), '');
+    } else {
+      await fs.mkdir(dir, { recursive: true });
+      await create(dir, item);
     }
   }
 }
