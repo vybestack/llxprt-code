@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
+import {
+  coreEvents,
+  CoreEvent,
+  type LoadBalancerSelectionPayload,
+} from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
@@ -18,13 +22,16 @@ import {
 
 /**
  * The footer only re-renders the load-balancer identity when a core event
- * fires. The provider therefore MUST emit a model-change trigger whenever it
- * selects a (new) sub-profile, so the UI can recompute `lb:<lb>:<sub>:<model>`.
+ * fires. The provider therefore MUST emit a dedicated
+ * LoadBalancerSelectionChanged event whenever it selects a (new) sub-profile,
+ * so the UI can recompute `lb:<lb>:<sub>:<model>`. A sub-profile rotation is a
+ * UI-refresh trigger, NOT an actual model switch, so it must use its own event
+ * rather than reusing ModelChanged.
  *
  * These are behavioral tests driving the REAL round-robin selection path
  * (no stubbed selection logic); only the leaf delegate provider is a boundary.
  */
-describe('LoadBalancingProvider selection emits a model-change trigger', () => {
+describe('LoadBalancingProvider selection emits a dedicated selection event', () => {
   let settingsService: SettingsService;
   let providerManager: ProviderManager;
 
@@ -66,7 +73,7 @@ describe('LoadBalancingProvider selection emits a model-change trigger', () => {
     coreEvents.removeAllListeners();
   });
 
-  it('emits ModelChanged when a sub-profile is selected for a request', async () => {
+  it('emits LoadBalancerSelectionChanged (not ModelChanged) when a sub-profile is selected', async () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'glm',
       strategy: 'round-robin',
@@ -88,6 +95,10 @@ describe('LoadBalancingProvider selection emits a model-change trigger', () => {
     coreEvents.on(CoreEvent.ModelChanged, () => {
       modelChangedCount += 1;
     });
+    const selectionPayloads: LoadBalancerSelectionPayload[] = [];
+    coreEvents.on(CoreEvent.LoadBalancerSelectionChanged, (payload) => {
+      selectionPayloads.push(payload);
+    });
 
     try {
       await drainOneRequest(provider, 0);
@@ -95,8 +106,16 @@ describe('LoadBalancingProvider selection emits a model-change trigger', () => {
       providerManager.getProviderByName = originalGetProvider;
     }
 
-    // First request selects a sub-profile for the first time => must signal.
-    expect(modelChangedCount).toBeGreaterThanOrEqual(1);
+    // First request selects a sub-profile for the first time => must signal
+    // via the dedicated event, carrying the full identity, and must NOT abuse
+    // the ModelChanged event (a sub-profile rotation is not a model switch).
+    expect(modelChangedCount).toBe(0);
+    expect(selectionPayloads).toHaveLength(1);
+    expect(selectionPayloads[0]).toStrictEqual({
+      profileName: 'glm',
+      subProfileName: 'zai',
+      model: 'glm-4-zai',
+    });
     expect(provider.getStats().lastSelected).toBe('zai');
   });
 
@@ -118,9 +137,9 @@ describe('LoadBalancingProvider selection emits a model-change trigger', () => {
       return originalGetProvider(name);
     };
 
-    const selections: string[] = [];
-    coreEvents.on(CoreEvent.ModelChanged, () => {
-      selections.push(provider.getStats().lastSelected ?? 'none');
+    const selections: Array<string | null | undefined> = [];
+    coreEvents.on(CoreEvent.LoadBalancerSelectionChanged, (payload) => {
+      selections.push(payload.subProfileName);
     });
 
     try {

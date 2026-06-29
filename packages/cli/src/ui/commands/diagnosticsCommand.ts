@@ -168,6 +168,9 @@ function appendLoadBalancerStats(
     }
     const lbStats = lbProvider.getStats();
     diagnostics.push('\n## Load Balancer Stats');
+    diagnostics.push(
+      '_Note: "Current Profile" above is runtime profile state (the profile loaded by the CLI); "Load Balancer Profile" below is provider stats/config state (reported by the load-balancer provider). They commonly share the same value._',
+    );
     diagnostics.push(`- Load Balancer Profile: ${lbStats.profileName}`);
     diagnostics.push(
       `- Member Sub-Profiles: ${

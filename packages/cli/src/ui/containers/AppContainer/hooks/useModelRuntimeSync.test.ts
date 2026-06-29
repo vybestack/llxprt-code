@@ -548,7 +548,7 @@ describe('useModelRuntimeSync profile-qualified footer identity (issue #2193)', 
     expect(setCurrentModelLabel).toHaveBeenCalledWith('work:gpt-4');
   });
 
-  it('recomputes the footer label when a ModelChanged trigger fires (load-balancer selection)', () => {
+  it('recomputes the footer label when a LoadBalancerSelectionChanged trigger fires', () => {
     const setCurrentModel = vi.fn();
     const setCurrentModelLabel = vi.fn();
     const setContextLimit = vi.fn();
@@ -578,9 +578,13 @@ describe('useModelRuntimeSync profile-qualified footer identity (issue #2193)', 
     // Initial sync seeds the pending identity.
     expect(setCurrentModelLabel).toHaveBeenLastCalledWith('lb:glm:none:none');
 
-    // The provider emits a bare ModelChanged trigger when it selects a
-    // sub-profile; the footer label must refresh to the live identity.
-    coreEvents.emitModelChanged('glm');
+    // The provider emits a dedicated LoadBalancerSelectionChanged event when it
+    // selects a sub-profile; the footer label must refresh to the live identity.
+    coreEvents.emitLoadBalancerSelectionChanged({
+      profileName: 'glm',
+      subProfileName: 'zai',
+      model: 'glm-4-zai',
+    });
 
     expect(setCurrentModelLabel).toHaveBeenLastCalledWith(
       'lb:glm:zai:glm-4-zai',

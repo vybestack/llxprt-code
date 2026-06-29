@@ -67,7 +67,7 @@ function subProfileModel(
   return subProfile.modelId ?? null;
 }
 
-function resolveSubProfileModel(
+export function resolveSubProfileModel(
   subProfiles: ResolvedSubProfile[] | LoadBalancerSubProfile[],
   lastSelected: string | null,
 ): string | null {

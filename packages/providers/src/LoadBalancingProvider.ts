@@ -37,7 +37,10 @@ import {
   wrapWithTimeout as wrapWithFirstChunkTimeout,
   isTimeoutError,
 } from './loadBalancing/streamTimeout.js';
-import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
+import {
+  buildExtendedStats,
+  resolveSubProfileModel,
+} from './loadBalancing/statsBuilder.js';
 import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
 
 /**
@@ -534,24 +537,32 @@ export class LoadBalancingProvider implements IProvider {
     this.lastSelected = subProfileName;
     this.totalRequests++;
     if (selectionChanged) {
-      this.emitSelectionChanged();
+      this.emitSelectionChanged(subProfileName);
     }
   }
 
   /**
    * Notify the rest of the app that the active sub-profile changed so the
    * status footer can recompute the load-balancer identity
-   * (`lb:<lb>:<sub>:<model>`). The footer derives the full identity from the
-   * provider stats, so this only needs to be a lightweight trigger carrying
-   * the load-balancer profile name as the model value.
+   * (`lb:<lb>:<sub>:<model>`). This emits a dedicated
+   * LoadBalancerSelectionChanged event (NOT ModelChanged): a sub-profile
+   * rotation is a UI-refresh trigger, not an actual model switch, so it must
+   * not be conflated with real model changes by other subscribers.
    */
-  private emitSelectionChanged(): void {
+  private emitSelectionChanged(subProfileName: string): void {
     try {
-      coreEvents.emitModelChanged(this.config.profileName);
+      const model = resolveSubProfileModel(
+        this.config.subProfiles,
+        subProfileName,
+      );
+      coreEvents.emitLoadBalancerSelectionChanged({
+        profileName: this.config.profileName,
+        subProfileName,
+        model,
+      });
     } catch (error) {
       this.logger.debug(
-        () =>
-          `Failed to emit model-change trigger for load-balancer selection: ${error}`,
+        () => `Failed to emit load-balancer selection trigger: ${error}`,
       );
     }
   }

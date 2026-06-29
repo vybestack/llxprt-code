@@ -129,6 +129,32 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
     expect(content).toContain('- Member Sub-Profiles: fast-sub, smart-sub');
   });
 
+  it('explains the runtime-profile vs provider-stats/config distinction when both share a value', async () => {
+    setupLoadBalancerRuntime({
+      runtimeProfileName: 'my-lb',
+      lbStats: makeLbStats({
+        profileName: 'my-lb',
+        lastSelected: 'fast-sub',
+        lastSelectedModel: 'gpt-4o-mini',
+        members: ['fast-sub', 'smart-sub'],
+        totalRequests: 1,
+        profileCounts: { 'fast-sub': 1 },
+      }),
+    });
+
+    const result = await diagnosticsCommand.action?.(mockContext, '');
+    const content = (result as MessageActionReturn).content;
+
+    // Both "Current Profile" and "Load Balancer Profile" legitimately print
+    // the same value (my-lb). The issue #2193 acceptance criterion requires
+    // the output to EXPLAIN that one is runtime profile state and the other
+    // is provider stats/config state, rather than silently duplicating it.
+    expect(content).toContain('- Current Profile: my-lb');
+    expect(content).toContain('- Load Balancer Profile: my-lb');
+    expect(content).toMatch(/runtime profile/i);
+    expect(content).toMatch(/stats\/config/i);
+  });
+
   it('does not duplicate the same value under ambiguous labels', async () => {
     setupLoadBalancerRuntime({
       runtimeProfileName: 'my-lb',

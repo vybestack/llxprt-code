@@ -100,20 +100,7 @@ export function useModelRuntimeSync({
 
     syncModelAndContextLimit(undefined, true);
 
-    const handleModelChanged = () => syncModelAndContextLimit();
-    const handleModelProfileChanged = (payload: ModelProfileInfoPayload) =>
-      syncModelAndContextLimit(payload);
-    const handleSettingsChanged = () => syncModelAndContextLimit();
-
-    coreEvents.on(CoreEvent.ModelChanged, handleModelChanged);
-    coreEvents.on(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
-    coreEvents.on(CoreEvent.SettingsChanged, handleSettingsChanged);
-
-    return () => {
-      coreEvents.off(CoreEvent.ModelChanged, handleModelChanged);
-      coreEvents.off(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
-      coreEvents.off(CoreEvent.SettingsChanged, handleSettingsChanged);
-    };
+    return subscribeToModelRuntimeEvents(syncModelAndContextLimit);
   }, [
     config,
     getActiveModelName,
@@ -122,6 +109,42 @@ export function useModelRuntimeSync({
     setCurrentModelLabel,
     setContextLimit,
   ]);
+}
+
+/**
+ * Subscribes the footer sync routine to the runtime events that should refresh
+ * the model identity, returning a cleanup function that detaches every
+ * listener. ModelChanged/SettingsChanged are bare resync triggers;
+ * ModelProfileChanged carries a payload; LoadBalancerSelectionChanged is a
+ * dedicated UI-refresh trigger fired when a load-balancer rotates sub-profiles
+ * (issue #2193).
+ */
+function subscribeToModelRuntimeEvents(
+  syncModelAndContextLimit: (payload?: ModelProfileInfoPayload) => void,
+): () => void {
+  const handleModelChanged = () => syncModelAndContextLimit();
+  const handleModelProfileChanged = (payload: ModelProfileInfoPayload) =>
+    syncModelAndContextLimit(payload);
+  const handleSettingsChanged = () => syncModelAndContextLimit();
+  const handleLoadBalancerSelectionChanged = () => syncModelAndContextLimit();
+
+  coreEvents.on(CoreEvent.ModelChanged, handleModelChanged);
+  coreEvents.on(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
+  coreEvents.on(CoreEvent.SettingsChanged, handleSettingsChanged);
+  coreEvents.on(
+    CoreEvent.LoadBalancerSelectionChanged,
+    handleLoadBalancerSelectionChanged,
+  );
+
+  return () => {
+    coreEvents.off(CoreEvent.ModelChanged, handleModelChanged);
+    coreEvents.off(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
+    coreEvents.off(CoreEvent.SettingsChanged, handleSettingsChanged);
+    coreEvents.off(
+      CoreEvent.LoadBalancerSelectionChanged,
+      handleLoadBalancerSelectionChanged,
+    );
+  };
 }
 
 interface SyncModelLabelParams {
