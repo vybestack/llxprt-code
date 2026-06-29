@@ -332,7 +332,7 @@ export function performMigration(
   }
 
   return {
-    migrated: true,
+    migrated: !hadErrors,
     reason: hadErrors
       ? 'migration incomplete (some entries failed)'
       : 'migration complete',
@@ -511,8 +511,14 @@ function pathEntryExists(p: string): boolean {
 /**
  * Copies a single regular file to `destPath`, then best-effort preserves the
  * source mode. Records any copy failure in `errors`. Returns 1 when the file
- * was copied, 0 when the copy failed. The mode-preservation step never affects
- * the return value (a failed chmod still counts as a successful copy).
+ * was copied, 0 when the copy was skipped or failed. The mode-preservation step
+ * never affects the return value (a failed chmod still counts as a successful
+ * copy).
+ *
+ * Uses `COPYFILE_EXCL` so the copy fails atomically if the destination already
+ * exists. This closes the time-of-check/time-of-use gap left by the caller's
+ * {@link pathEntryExists} guard: a file that appears between the check and the
+ * copy is preserved (the `EEXIST` is treated as a benign skip, not an error).
  */
 function copyFileWithMode(
   srcPath: string,
@@ -521,8 +527,12 @@ function copyFileWithMode(
 ): number {
   try {
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    fs.copyFileSync(srcPath, destPath);
+    fs.copyFileSync(srcPath, destPath, fs.constants.COPYFILE_EXCL);
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      // Destination appeared after the caller's existence check; preserve it.
+      return 0;
+    }
     errors.push(`${srcPath}: ${String(error)}`);
     logger.debug(`Cannot copy file ${srcPath}: ${String(error)}`);
     return 0;

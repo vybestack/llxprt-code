@@ -552,7 +552,12 @@ describe('performMigration — edge cases', () => {
         const result = performMigration(legacyDir, destinations);
 
         expect(result.error).toBe(true);
+        // A partial failure must NOT be reported as a completed migration,
+        // otherwise logMigrationStatus prints success and cli.tsx skips the
+        // legacy-dir fallback for the stranded categories.
+        expect(result.migrated).toBe(false);
         // The readable entry was still migrated (best-effort copy continues).
+        expect(result.filesCopied).toBeGreaterThanOrEqual(1);
         expect(
           fs.existsSync(path.join(destinations.configDir, 'settings.json')),
         ).toBe(true);
