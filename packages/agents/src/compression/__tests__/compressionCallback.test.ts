@@ -18,6 +18,7 @@ import {
 import { ChatSession } from '../../core/chatSession.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
 
 function expectCapturedCallback(
@@ -307,6 +308,31 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
     expect(result).toContainEqual(pending);
     expect(result.at(-1)).toStrictEqual(pending);
+  });
+
+  it('compresses provider payloads that remain above the compression threshold after density optimization', async () => {
+    const runtimeContext = buildRuntimeContext(historyService, {
+      contextLimit: 100000,
+      compressionThreshold: 0.0001,
+    });
+    historyService.add(makeUserMessage('previous assistant context'));
+    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const compressionHandler = chat['compressionHandler'];
+    const performCompression = vi
+      .spyOn(compressionHandler, 'performCompression')
+      .mockResolvedValue(PerformCompressionResult.COMPRESSED);
+    const pending = makeUserMessage('threshold crossing request '.repeat(50));
+
+    await compressionHandler.enforceProviderContents(
+      historyService.getCuratedForProvider([pending]),
+      'test-prompt',
+      { name: 'fake', generateChatCompletion: vi.fn() } as unknown as IProvider,
+    );
+
+    expect(performCompression).toHaveBeenCalledWith('test-prompt', {
+      bypassCooldown: true,
+      trigger: 'auto',
+    });
   });
 
   it('preserves a pending matching tool response without duplicating history', async () => {

@@ -106,7 +106,7 @@ export class ProviderContentEnforcer {
       optimizedContents,
       completionBudget,
     );
-    if (postOptProjected <= marginAdjustedLimit) {
+    if (postOptProjected <= compressionThreshold) {
       return optimizedContents;
     }
 
