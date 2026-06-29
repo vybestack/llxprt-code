@@ -116,8 +116,21 @@ function getConfiguredContextLimit(config: Config): number | undefined {
     : undefined;
 }
 
+function getProviderContextLimit(config: Config): number | undefined {
+  try {
+    const providerManager = config.getContentGeneratorConfig()?.providerManager;
+    const limit = providerManager?.getActiveProvider()?.getContextLimit?.();
+    return typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+      ? limit
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function getTokenLimitForConfiguredContext(config: Config): number {
-  const contextLimit = getConfiguredContextLimit(config);
+  const contextLimit =
+    getConfiguredContextLimit(config) ?? getProviderContextLimit(config);
   const model = config.getModel();
   return contextLimit === undefined
     ? tokenLimit(model)
