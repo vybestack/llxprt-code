@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import TOML from '@iarna/toml';
 import semver from 'semver';
 
@@ -84,6 +84,17 @@ function readWorkspacePackages(): PackageJson[] {
   const root = readRootPackage();
   const packages: PackageJson[] = [root];
   for (const workspace of root.workspaces ?? []) {
+    // The workspaces array currently uses explicit paths. A glob pattern (e.g.
+    // "packages/*") would produce a literal path that existsSync silently
+    // returns false for, dropping every workspace and making the coverage
+    // tests pass vacuously. Fail loudly instead so the test is updated to
+    // expand globs rather than degrading into a no-op.
+    if (workspace.includes('*')) {
+      throw new Error(
+        `Glob workspace patterns are not supported by this test: "${workspace}". ` +
+          'Update readWorkspacePackages to expand globs.',
+      );
+    }
     const pkgPath = join(repoRoot, workspace, 'package.json');
     if (existsSync(pkgPath)) {
       packages.push(JSON.parse(readFileSync(pkgPath, 'utf-8')) as PackageJson);
@@ -130,12 +141,28 @@ describe('Bun package-manager configuration (S1)', () => {
     }
 
     // Every on-disk package directory must be covered by the workspaces array.
-    const packagesDir = join(repoRoot, 'packages');
+    // Derive the directories to scan from the parents of the declared
+    // workspaces rather than hardcoding "packages/", so a workspace added
+    // under a new root (e.g. "apps/") is still checked.
     const declaredSet = new Set(workspaces.map((w) => resolve(repoRoot, w)));
-    const onDiskPackages = readdirSync(packagesDir)
-      .map((entry) => join(packagesDir, entry))
-      .filter((dir) => statSync(dir).isDirectory())
-      .filter((dir) => existsSync(join(dir, 'package.json')));
+    const scanRoots = new Set(
+      workspaces.map((w) => dirname(resolve(repoRoot, w))),
+    );
+    const onDiskPackages: string[] = [];
+    for (const scanRoot of scanRoots) {
+      if (!existsSync(scanRoot)) {
+        continue;
+      }
+      for (const entry of readdirSync(scanRoot)) {
+        const dir = join(scanRoot, entry);
+        if (
+          statSync(dir).isDirectory() &&
+          existsSync(join(dir, 'package.json'))
+        ) {
+          onDiskPackages.push(dir);
+        }
+      }
+    }
 
     for (const dir of onDiskPackages) {
       expect(declaredSet.has(resolve(dir))).toBe(true);
@@ -215,9 +242,17 @@ describe('Bun package-manager configuration (S1)', () => {
     const override = root.overrides?.['typescript'];
     expect(typeof override).toBe('string');
 
-    const lock = JSON.parse(
-      readFileSync(join(repoRoot, 'package-lock.json'), 'utf-8'),
-    ) as PackageLock;
+    const lockPath = join(repoRoot, 'package-lock.json');
+    if (!existsSync(lockPath)) {
+      // Dual-lockfile coexistence is intentional for S1. If the project later
+      // migrates fully to Bun and drops package-lock.json, this test should be
+      // updated rather than crashing with an opaque ENOENT.
+      throw new Error(
+        `package-lock.json not found at ${lockPath}; cannot verify the ` +
+          'TypeScript override matches the npm-resolved version.',
+      );
+    }
+    const lock = JSON.parse(readFileSync(lockPath, 'utf-8')) as PackageLock;
     const npmResolved = lock.packages?.['node_modules/typescript']?.version;
     expect(npmResolved).toBeDefined();
 

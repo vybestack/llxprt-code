@@ -15,6 +15,24 @@ const path = require('path');
 const os = require('os');
 
 /**
+ * Detects which package manager invoked this lifecycle script.
+ *
+ * Lifecycle scripts run under `node`, so `process.versions.bun` is not set even
+ * when Bun drives the install. The reliable signal is `npm_config_user_agent`,
+ * which Bun sets to `bun/<version> ...` and npm sets to `npm/<version> ...`.
+ *
+ * @returns {'bun' | 'npm'} The detected installer ('npm' is the default for npm
+ *   and any other/unknown manager so existing behavior is preserved).
+ */
+function detectInstaller() {
+  const userAgent = process.env.npm_config_user_agent || '';
+  if (userAgent.startsWith('bun/')) {
+    return 'bun';
+  }
+  return 'npm';
+}
+
+/**
  * Resolves the @vybestack directory for cleanup.
  * Prefers npm_config_prefix-based paths (correct for npm staging during global installs),
  * falling back to __dirname-based paths if prefix is not available.
@@ -61,6 +79,13 @@ function resolveVybestackDir() {
  * and can be left behind if the install fails or is interrupted.
  */
 function cleanupTempDirectories() {
+  // This cleanup targets temp directories left by npm's atomic-rename staging
+  // during global installs. Bun does not create them, so under Bun this is a
+  // deliberate no-op.
+  if (detectInstaller() === 'bun') {
+    return;
+  }
+
   // Only run cleanup for global installs
   if (process.env.npm_config_global !== 'true') {
     return;

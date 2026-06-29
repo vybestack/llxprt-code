@@ -12,6 +12,24 @@ const { execSync } = require('child_process');
 
 const lockfilePath = path.join(__dirname, '..', 'package-lock.json');
 
+/**
+ * Detects which package manager invoked this lifecycle script.
+ *
+ * Lifecycle scripts run under `node`, so `process.versions.bun` is not set even
+ * when Bun drives the install. The reliable signal is `npm_config_user_agent`,
+ * which Bun sets to `bun/<version> ...` and npm sets to `npm/<version> ...`.
+ *
+ * @returns {'bun' | 'npm'} The detected installer ('npm' is the default for npm
+ *   and any other/unknown manager so existing behavior is preserved).
+ */
+function detectInstaller() {
+  const userAgent = process.env.npm_config_user_agent || '';
+  if (userAgent.startsWith('bun/')) {
+    return 'bun';
+  }
+  return 'npm';
+}
+
 function stripPeerFlagsFromLockfile() {
   if (!fs.existsSync(lockfilePath)) {
     return;
@@ -46,6 +64,15 @@ function stripPeerFlagsFromLockfile() {
       error.message,
     );
   }
+}
+
+// Under Bun this script is a deliberate no-op: Bun does not consume
+// package-lock.json (so the peer-flag sanitization is irrelevant and must not
+// mutate it), and the GitHub-source bundle bootstrap below shells out to npm,
+// which would defeat a `bun install`. S1 only adopts Bun as the package
+// manager; the bundle/build path stays on npm until a later subissue.
+if (detectInstaller() === 'bun') {
+  process.exit(0);
 }
 
 stripPeerFlagsFromLockfile();

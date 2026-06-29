@@ -94,6 +94,24 @@ trusted. These are the 15 entries in `trustedDependencies`:
   that do not produce a runtime-required artifact, so they do not need to run
   during install.
 
+### Native runtime modules that need no trust at all
+
+A reader scanning `trustedDependencies` may be surprised that the repository's
+two most prominent native modules are **absent**:
+
+- **`@ast-grep/napi`** — the native engine behind AST-aware code search.
+- **`@napi-rs/keyring`** — the native OS credential store used by auth.
+
+Both are used by the runtime and both ship native `*.node` binaries, yet
+neither belongs in `trustedDependencies` because **neither defines an `install`
+or `postinstall` lifecycle script**. Like `esbuild`, their platform binaries are
+delivered by separate optional packages (`@ast-grep/napi-<platform>`,
+`@napi-rs/keyring-<platform>`) that Bun installs directly. There is no script to
+gate, so trusting them would be meaningless — and because the test below asserts
+the trust list matches the allowlist **exactly**, adding them would actually
+fail CI. This was verified empirically: after a clean `bun install` with neither
+package trusted, the `*.node` binaries for both were present in `node_modules`.
+
 This list is enforced by a behavioral test
 ([`scripts/tests/bun-workspaces.test.ts`](../scripts/tests/bun-workspaces.test.ts))
 in two complementary ways:
@@ -130,6 +148,46 @@ later subissue.
 > lockfile/peer checks wired into the build pipeline). Do not remove
 > `package-lock.json` until those scripts are migrated — that work belongs to a
 > later subissue, not S1.
+
+## Root Lifecycle Scripts (`preinstall` / `postinstall`)
+
+The root `package.json` registers two lifecycle scripts that run on **every**
+install of the repository root: [`scripts/preinstall.cjs`](../scripts/preinstall.cjs)
+and [`scripts/postinstall.cjs`](../scripts/postinstall.cjs). Unlike the
+_dependency_ lifecycle scripts gated by `trustedDependencies` above, a package
+manager always runs the scripts of the package being installed, so these run
+under Bun too. Both were written for npm and had to be made package-manager
+aware for S1.
+
+Lifecycle scripts execute under `node`, so `process.versions.bun` is **not**
+set even when Bun drives the install. The reliable signal is the
+`npm_config_user_agent` environment variable, which Bun sets to `bun/<version>
+…` and npm sets to `npm/<version> …`. Both scripts share a small
+`detectInstaller()` helper that reads this variable and returns `'bun'` or
+`'npm'` (defaulting to `'npm'` for any unknown manager so existing behavior is
+preserved).
+
+- **`postinstall.cjs`** normally does two npm-specific things: it strips
+  unsupported `"peer": true` flags from `package-lock.json`, and — on a
+  bundle-less GitHub-source checkout — it bootstraps a build by shelling out to
+  `npm install --workspaces`, `npm run build`, and `npm run bundle`. **Under
+  Bun both must be skipped:** Bun does not consume `package-lock.json` (so
+  mutating it would be wrong), and the bootstrap shells out to npm, which would
+  defeat the `bun install` the user just ran. The script therefore exits early
+  (`process.exit(0)`) when `detectInstaller()` returns `'bun'`, before either
+  action. Under npm the behavior is byte-for-byte unchanged.
+- **`preinstall.cjs`** cleans stale OS temp directories from previous runs.
+  Under Bun it is a guarded no-op, both because the cleanup targets npm's
+  install temp layout and to keep the Bun install path side-effect-free.
+
+This behavior is locked down by a deterministic, fixture-based behavioral test
+([`scripts/tests/postinstall-manager-aware.test.ts`](../scripts/tests/postinstall-manager-aware.test.ts)).
+It builds a throwaway clean-checkout fixture (the real `postinstall.cjs`, a
+peer-flagged lockfile, a `packages/` source dir, and no bundle) and shadows
+`npm` on `PATH` with a stub, then asserts that a **Bun** invocation neither
+shells out to npm nor mutates the lockfile, while an **npm** invocation still
+bootstraps and still strips the peer flags. (The test is skipped on Windows,
+where the shell stub is not portable; `test:scripts` runs on macOS in CI.)
 
 ## TypeScript Version Parity (`overrides`)
 
