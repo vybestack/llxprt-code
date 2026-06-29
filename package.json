@@ -23,6 +23,23 @@
     "packages/test-utils",
     "packages/vscode-ide-companion"
   ],
+  "trustedDependencies": [
+    "@ast-grep/lang-c",
+    "@ast-grep/lang-cpp",
+    "@ast-grep/lang-csharp",
+    "@ast-grep/lang-go",
+    "@ast-grep/lang-java",
+    "@ast-grep/lang-json",
+    "@ast-grep/lang-kotlin",
+    "@ast-grep/lang-php",
+    "@ast-grep/lang-python",
+    "@ast-grep/lang-ruby",
+    "@ast-grep/lang-rust",
+    "@ast-grep/lang-scala",
+    "@ast-grep/lang-swift",
+    "@lvce-editor/ripgrep",
+    "tree-sitter-bash"
+  ],
   "private": "true",
   "repository": {
     "type": "git",
@@ -113,7 +130,8 @@
     "ws@>=8.0.0 <9": "8.21.0",
     "uuid@>=9.0.0 <12": "11.1.1",
     "js-yaml@>=4.0.0 <5": "4.2.0",
-    "brace-expansion@>=5.0.0 <6": "5.0.6"
+    "brace-expansion@>=5.0.0 <6": "5.0.6",
+    "typescript": "5.8.3"
   },
   "bin": {
     "llxprt": "bundle/llxprt.js"
