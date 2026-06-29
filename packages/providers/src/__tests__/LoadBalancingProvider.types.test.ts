@@ -170,6 +170,56 @@ describe('LoadBalancingProvider', () => {
 
         expect(isLoadBalancerProfileFormat(mixedTypesArray)).toBe(false);
       });
+
+      it('should reject sparse profiles arrays', () => {
+        const sparseProfilesArray = {
+          version: 1 as const,
+          type: 'loadbalancer' as const,
+          policy: 'roundrobin' as const,
+          profiles: new Array(2),
+          provider: '',
+          model: '',
+          modelParams: {},
+          ephemeralSettings: {},
+        };
+
+        expect(isLoadBalancerProfileFormat(sparseProfilesArray)).toBe(false);
+      });
+
+      it.each([
+        [
+          'modelParams Date',
+          { modelParams: new Date(), ephemeralSettings: {} },
+        ],
+        ['modelParams Map', { modelParams: new Map(), ephemeralSettings: {} }],
+        [
+          'ephemeralSettings Set',
+          { modelParams: {}, ephemeralSettings: new Set() },
+        ],
+      ])('should reject non-plain %s', (_label, overrides) => {
+        const profile = {
+          version: 1 as const,
+          type: 'loadbalancer' as const,
+          policy: 'roundrobin' as const,
+          profiles: ['profile1'],
+          provider: '',
+          model: '',
+          ...overrides,
+        };
+
+        expect(isLoadBalancerProfileFormat(profile)).toBe(false);
+      });
+
+      it.each([
+        ['null', null],
+        ['undefined', undefined],
+        ['string', 'profile'],
+        ['number', 42],
+        ['boolean', true],
+        ['array without type field', [{ name: 'x' }]],
+      ])('should reject %s as profile input', (_label, input) => {
+        expect(isLoadBalancerProfileFormat(input)).toBe(false);
+      });
     });
 
     describe('ResolvedSubProfile interface', () => {

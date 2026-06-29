@@ -7,6 +7,8 @@
   "type": "module",
   "scripts": {
     "build": "node ../../scripts/build_package.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

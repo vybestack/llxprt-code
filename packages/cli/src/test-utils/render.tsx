@@ -87,6 +87,7 @@ const mockRuntimeApi: MockRuntimeApi = {
   setActiveModel: async () => {},
   listAvailableModels: () => [],
   getActiveModelName: () => 'mock-model',
+  getActiveProfileName: () => null,
   getActiveProviderStatus: () => ({ status: 'ready' }),
   getActiveModelParams: () => ({}),
   getEphemeralSettings: () => ({}),

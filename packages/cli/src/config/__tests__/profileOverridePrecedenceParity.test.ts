@@ -288,6 +288,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
     })),
     listAvailableModels: vi.fn(async () => []),
     getActiveModelName: vi.fn(() => null),
+    getActiveProfileName: vi.fn(() => null),
     getActiveModelParams: vi.fn(() => ({})),
     getEphemeralSettings: vi.fn(() => ({})),
     getEphemeralSetting: vi.fn(() => undefined),
@@ -502,8 +503,8 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
   it('without --provider, explicit profile load is attempted before settings.defaultProfile', async () => {
     const settings: Settings = { defaultProfile: 'default-profile' };
     await expect(
-      runConfig(settings, ['--profile-load', 'explicit-missing-profile']),
-    ).rejects.toThrow("Profile 'explicit-missing-profile' not found");
+      runConfig(settings, ['--profile-load', 'missing-cli-profile']),
+    ).rejects.toThrow("Profile 'missing-cli-profile' not found");
     const defaultProfileCall = profileSnapshotCalls.find(
       (c) => c.profileName === 'default-profile',
     );

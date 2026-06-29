@@ -336,19 +336,33 @@ async function runSubmitQueryCore(
   try {
     await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
   } catch (error: unknown) {
-    handleSubmissionError(
-      error,
-      cbd.addItem,
-      cbd.config,
-      cbd.onAuthError,
-      turn.userMessageTimestamp,
-    );
+    // Only surface errors for the active turn. A superseded turn's stale
+    // errors (e.g. AbortError or auth failures from a cancelled request)
+    // must not leak into the newer turn (issue #2259).
+    if (isCurrentTurn(cbd, turn)) {
+      handleSubmissionError(
+        error,
+        cbd.addItem,
+        cbd.config,
+        cbd.onAuthError,
+        turn.userMessageTimestamp,
+      );
+    }
   } finally {
-    cbd.setIsResponding(false);
-    try {
-      await cbd.recordingIntegration?.flushAtTurnBoundary();
-    } catch {
-      /* non-fatal */
+    // Only clear isResponding when this turn is still the active one. When a
+    // newer turn supersedes this one it replaces abortControllerRef.current
+    // with a fresh AbortController; if the signals differ, the newer turn
+    // already set isResponding(true) and clearing it here would cancel the
+    // new turn (issue #2259).
+    if (isCurrentTurn(cbd, turn)) {
+      cbd.setIsResponding(false);
+    }
+    if (isCurrentTurn(cbd, turn)) {
+      try {
+        await cbd.recordingIntegration?.flushAtTurnBoundary();
+      } catch {
+        /* non-fatal */
+      }
     }
   }
 }
@@ -426,6 +440,17 @@ async function executeStream(
   // send → stream → schedule → execute → feed-back → repeat.
   await runLoop(queryToSend, turn.abortSignal, turn.promptId);
 
+  // A newer turn may have started while runLoop was settling (e.g. the user
+  // cancelled this turn and submitted a new prompt). If the current
+  // AbortController no longer belongs to this turn, skip post-stream cleanup
+  // so it does not clobber the newer turn's state. Clear loopDetectedRef
+  // silently to prevent a stale detection from leaking into the new turn
+  // (issue #2259).
+  if (!isCurrentTurn(deps, turn)) {
+    deps.loopDetectedRef.current = false;
+    return;
+  }
+
   if (deps.pendingHistoryItemRef.current) {
     deps.flushPendingHistoryItem(turn.userMessageTimestamp);
     deps.setPendingHistoryItem(null);
@@ -434,4 +459,14 @@ async function executeStream(
     deps.loopDetectedRef.current = false;
     handleLoopDetectedEvent();
   }
+}
+
+/**
+ * Returns true when `turn` is still the active turn. When a newer turn starts
+ * (via initTurn) it replaces abortControllerRef.current with a fresh
+ * AbortController; comparing signals proves this turn owns the current
+ * AbortController (issue #2259).
+ */
+function isCurrentTurn(deps: UseSubmitQueryDeps, turn: TurnInit): boolean {
+  return deps.abortControllerRef.current?.signal === turn.abortSignal;
 }

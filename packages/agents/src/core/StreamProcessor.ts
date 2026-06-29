@@ -3,13 +3,6 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/**
- * StreamProcessor - Handles API stream requests and response processing.
- * Extracted from chatSession.ts Phase 05.
- * These are the core streaming methods that make API calls and process responses.
- */
-
 import type { GenerateContentResponse } from '@google/genai';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
@@ -82,10 +75,7 @@ import {
   type StreamAccumulator,
 } from './streamResponseHelpers.js';
 
-/**
- * StreamProcessor handles making API calls and processing streaming responses.
- * Extracted from ChatSession to isolate streaming concerns.
- */
+import { withCompressionCallbackCleanup } from './streamCleanup.js';
 
 /**
  * Extract the allowedFunctionNames array from a tool-config object.
@@ -119,15 +109,10 @@ export class StreamProcessor {
     private readonly generationConfig: GenerateContentConfig,
   ) {}
 
-  /**
-   * Makes an API call with retry and returns a stream processor.
-   * This is the outer method that resolves the provider, enforces context window,
-   * makes the API call with retry, and returns processStreamResponse.
-   */
+  /** Resolves the provider, sends the request with retry, and returns a response stream. */
   async makeApiCallAndProcessStream(
     params: SendMessageParameters,
     promptId: string,
-    pendingTokens: number,
     userContent: Content | Content[],
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const provider = this.providerResolver('stream');
@@ -142,13 +127,6 @@ export class StreamProcessor {
         configModel: this.runtimeContext.state.model,
         baseUrl: providerBaseUrl,
       },
-    );
-
-    // Enforce context window limits before proceeding
-    await this.compressionHandler.enforceContextWindow(
-      pendingTokens,
-      promptId,
-      provider,
     );
 
     // Check if provider supports IContent interface
@@ -271,30 +249,46 @@ export class StreamProcessor {
     const { requestPayload, baseRuntimeContext, runtimeContext } =
       this._prepareRequestPayload(requestContents, tools, params);
 
-    const finalContents = await this._fireBeforeModelHook(
-      configForHooks,
-      requestPayload.contents,
-      tools as ProviderToolset | undefined,
-      toolSelection.allowedFunctionNames,
-    );
-    requestPayload.contents = finalContents;
+    try {
+      const finalContents = await this._fireBeforeModelHook(
+        configForHooks,
+        requestPayload.contents,
+        tools as ProviderToolset | undefined,
+        toolSelection.allowedFunctionNames,
+      );
+      requestPayload.contents =
+        await this.compressionHandler.enforceProviderContents(
+          finalContents,
+          promptId,
+          provider,
+        );
 
-    logOutgoingRequest(
-      this.runtimeContext,
-      requestPayload,
-      this.runtimeContext.state.model,
-      promptId,
-    );
+      logOutgoingRequest(
+        this.runtimeContext,
+        requestPayload,
+        this.runtimeContext.state.model,
+        promptId,
+      );
 
-    return this._sendProviderRequest(
-      provider,
-      requestPayload,
-      runtimeContext,
-      baseRuntimeContext,
-      params,
-      promptId,
-      toolSelection.allowedFunctionNames,
-    );
+      const stream = await this._sendProviderRequest(
+        provider,
+        requestPayload,
+        runtimeContext,
+        baseRuntimeContext,
+        params,
+        promptId,
+        toolSelection.allowedFunctionNames,
+      );
+      return withCompressionCallbackCleanup(
+        stream,
+        provider,
+        this.compressionHandler,
+        params.config?.abortSignal,
+      );
+    } catch (error) {
+      this.compressionHandler.clearProviderCompressionCallback(provider);
+      throw error;
+    }
   }
 
   /**
@@ -750,13 +744,10 @@ export class StreamProcessor {
 
   /**
    * Process streaming response chunks into a complete conversation turn.
-   * Yields each chunk immediately as it arrives from the provider stream,
-   * while simultaneously tracking metadata for validation and history.
    *
-   * CRITICAL: This method must yield chunks inline during the for-await loop.
-   * Collecting all chunks first (as was done in a prior refactoring) blocks
-   * the entire pipeline — no output reaches the user, no abort signal checks
-   * run, and stalled provider streams hang indefinitely. See #1846.
+   * CRITICAL: yield chunks inline during the for-await loop. Collecting all
+   * chunks first blocks user output, abort checks, and stalled provider streams.
+   * See issue #1846.
    */
   async *processStreamResponse(
     streamResponse: AsyncGenerator<GenerateContentResponse>,
@@ -843,23 +834,14 @@ export class StreamProcessor {
     );
   }
 
-  /**
-   * Consolidate adjacent text parts.
-   */
   private _consolidateTextParts(modelResponseParts: Part[]): Part[] {
     return consolidateTextParts(modelResponseParts);
   }
 
-  /**
-   * Extract response text from consolidated parts.
-   */
   private _extractResponseText(consolidatedParts: Part[]): string {
     return extractResponseText(consolidatedParts);
   }
 
-  /**
-   * Validate stream completion and throw appropriate errors.
-   */
   private _validateStreamCompletion(
     userInput: Content | Content[],
     outcome: ResponseOutcome,
@@ -875,9 +857,6 @@ export class StreamProcessor {
     );
   }
 
-  /**
-   * Record history with usage metadata and sync token counts.
-   */
   private async _recordHistoryWithUsage(
     userInput: Content | Content[],
     consolidatedParts: Part[],

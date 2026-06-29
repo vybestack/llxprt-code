@@ -27,6 +27,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import { loadSettings } from '../../config/settings.js';
+import { resolveModelIdentity } from '../utils/modelIdentity.js';
 import {
   SessionStateProvider,
   useSessionState,
@@ -79,10 +80,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   const statusSnapshot = runtime.getActiveProviderStatus();
 
   const initialState: SessionState = {
-    currentModel:
-      statusSnapshot.providerName && statusSnapshot.modelName
-        ? `${statusSnapshot.providerName}:${statusSnapshot.modelName}`
-        : (statusSnapshot.modelName ?? config.getModel()),
+    currentModel: resolveModelIdentity(runtime, config.getModel()),
     isPaidMode: statusSnapshot.isPaidMode,
     lastProvider: statusSnapshot.providerName ?? undefined,
     userTier: undefined,
@@ -243,10 +241,7 @@ function useModelChangeWatcher(
     const checkModelChange = () => {
       const runtime = getRuntimeApi();
       const status = runtime.getActiveProviderStatus();
-      const displayModel =
-        status.providerName && status.modelName
-          ? `${status.providerName}:${status.modelName}`
-          : (status.modelName ?? config.getModel());
+      const displayModel = resolveModelIdentity(runtime, config.getModel());
       if (displayModel !== sessionState.currentModel) {
         dispatch({ type: 'SET_CURRENT_MODEL', payload: displayModel });
       }

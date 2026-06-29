@@ -16,6 +16,8 @@ import * as os from 'os';
 import {
   shouldMigrate,
   performMigration,
+  isMigrationComplete,
+  markMigrationComplete,
   type MigrationDestinations,
   type MigrationResult,
 } from './pathMigration.js';
@@ -86,13 +88,110 @@ describe('shouldMigrate', () => {
     expect(shouldMigrate(legacyDir, destinations)).toBe(false);
   });
 
-  it('returns false when config dir already has content (already migrated)', async () => {
-    writeFiles(legacyDir, { 'settings.json': '{}' });
+  // Regression for #2237: the config dir is populated independently of the
+  // migration (PromptService installs prompts, ProfileManager saves profiles,
+  // oauth/settings writers, etc.). Content in the config dir must NOT be
+  // treated as "migration already done", otherwise read-only categories like
+  // subagents/ are never copied.
+  it('returns true when config dir has content but no completion marker (pre-seeded by app)', async () => {
+    writeFiles(legacyDir, {
+      'settings.json': '{}',
+      'subagents/researcher.json': '{"name": "researcher"}',
+    });
+    // Simulate the app having seeded prompts/profiles before migration ran.
     writeFiles(destinations.configDir, {
-      'settings.json': '{"migrated": true}',
+      'prompts/core.md': '# seeded by PromptService',
+      'profiles/p.json': '{"seeded": true}',
     });
 
+    expect(shouldMigrate(legacyDir, destinations)).toBe(true);
+  });
+
+  it('returns false once the migration-completion marker is present', async () => {
+    writeFiles(legacyDir, { 'settings.json': '{}' });
+    markMigrationComplete(destinations);
+
     expect(shouldMigrate(legacyDir, destinations)).toBe(false);
+  });
+});
+
+describe('migration-completion marker (#2237)', () => {
+  let legacyDir: string;
+  let destBase: string;
+  let destinations: MigrationDestinations;
+
+  beforeEach(async () => {
+    legacyDir = await makeTempDir();
+    destBase = await makeTempDir();
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+    destinations = makeDestinations(destBase);
+  });
+
+  afterEach(async () => {
+    await fs.promises.rm(legacyDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+  });
+
+  it('isMigrationComplete is false before any migration', () => {
+    expect(isMigrationComplete(destinations)).toBe(false);
+  });
+
+  it('markMigrationComplete makes isMigrationComplete return true', () => {
+    markMigrationComplete(destinations);
+    expect(isMigrationComplete(destinations)).toBe(true);
+  });
+
+  it('marker survives unrelated config-dir content (independent of config dir)', () => {
+    markMigrationComplete(destinations);
+    writeFiles(destinations.configDir, { 'prompts/core.md': '# seeded' });
+    expect(isMigrationComplete(destinations)).toBe(true);
+  });
+
+  it('markMigrationComplete creates the data dir if it does not exist', () => {
+    expect(fs.existsSync(destinations.dataDir)).toBe(false);
+    markMigrationComplete(destinations);
+    expect(isMigrationComplete(destinations)).toBe(true);
+  });
+
+  // The marker constant is intentionally not exported; tests reference the
+  // documented on-disk filename directly.
+  const MARKER_FILE = '.migration-complete.json';
+
+  function writeMarker(content: string): void {
+    fs.mkdirSync(destinations.dataDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(destinations.dataDir, MARKER_FILE),
+      content,
+      'utf-8',
+    );
+  }
+
+  it('treats a corrupt marker as NOT complete so migration re-runs (self-heal #2237)', () => {
+    writeMarker('{ this is not valid json');
+    expect(isMigrationComplete(destinations)).toBe(false);
+  });
+
+  it('treats a marker with no numeric version as NOT complete', () => {
+    writeMarker(JSON.stringify({ completedAt: '2025-01-01T00:00:00.000Z' }));
+    expect(isMigrationComplete(destinations)).toBe(false);
+  });
+
+  it('treats a marker with an older scheme version as NOT complete', () => {
+    writeMarker(JSON.stringify({ version: 0 }));
+    expect(isMigrationComplete(destinations)).toBe(false);
+  });
+
+  it('treats a marker with a newer scheme version as complete', () => {
+    writeMarker(JSON.stringify({ version: 999 }));
+    expect(isMigrationComplete(destinations)).toBe(true);
+  });
+
+  it('does not leave a temp file behind after writing the marker', () => {
+    markMigrationComplete(destinations);
+    const leftovers = fs
+      .readdirSync(destinations.dataDir)
+      .filter((name) => name.includes('.tmp'));
+    expect(leftovers).toStrictEqual([]);
   });
 });
 
@@ -433,6 +532,41 @@ describe('performMigration — edge cases', () => {
       fs.existsSync(path.join(destinations.configDir, 'settings.json')),
     ).toBe(true);
   });
+
+  // Partial-failure semantics (#2237): if ANY entry cannot be copied the pass
+  // must report error:true so runStartupMigration does not stamp the marker —
+  // otherwise the failed categories would be permanently stranded. root can
+  // read 0o000 dirs, so skip when running as root.
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'reports error:true when an entry cannot be read (does not silently succeed)',
+    () => {
+      // A readable entry that should still be copied...
+      writeFiles(legacyDir, { 'settings.json': '{}' });
+      // ...and an unreadable subagents/ dir that will fail to copy.
+      const unreadable = path.join(legacyDir, 'subagents');
+      fs.mkdirSync(unreadable, { recursive: true });
+      fs.writeFileSync(path.join(unreadable, 'a.json'), '{}');
+      fs.chmodSync(unreadable, 0o000);
+
+      try {
+        const result = performMigration(legacyDir, destinations);
+
+        expect(result.error).toBe(true);
+        // A partial failure must NOT be reported as a completed migration,
+        // otherwise logMigrationStatus prints success and cli.tsx skips the
+        // legacy-dir fallback for the stranded categories.
+        expect(result.migrated).toBe(false);
+        // The readable entry was still migrated (best-effort copy continues).
+        expect(result.filesCopied).toBeGreaterThanOrEqual(1);
+        expect(
+          fs.existsSync(path.join(destinations.configDir, 'settings.json')),
+        ).toBe(true);
+      } finally {
+        // Restore perms so afterEach cleanup can remove the tree.
+        fs.chmodSync(unreadable, 0o755);
+      }
+    },
+  );
 });
 
 describe('performMigration — merge mode', () => {
@@ -501,6 +635,67 @@ describe('performMigration — merge mode', () => {
         'utf-8',
       ),
     ).toContain('"v": 3');
+  });
+});
+
+describe('performMigration — #2237 pre-seeded config dir backfill', () => {
+  let legacyDir: string;
+  let destBase: string;
+  let destinations: MigrationDestinations;
+
+  beforeEach(async () => {
+    legacyDir = await makeTempDir();
+    destBase = await makeTempDir();
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+    destinations = makeDestinations(destBase);
+  });
+
+  afterEach(async () => {
+    await fs.promises.rm(legacyDir, { recursive: true, force: true });
+    await fs.promises.rm(destBase, { recursive: true, force: true });
+  });
+
+  it('backfills subagents/ (and other read-only categories) into a config dir already seeded by the app', () => {
+    // App already seeded prompts + profiles into the config dir before
+    // migration ran (the exact #2237 trigger).
+    writeFiles(destinations.configDir, {
+      'prompts/core.md': '# seeded',
+      'profiles/seeded.json': '{"seeded": true}',
+    });
+    // Legacy still holds the read-only categories the app never self-creates.
+    writeFiles(legacyDir, {
+      'subagents/researcher.json': '{"name": "researcher"}',
+      'commands/oc.toml': 'cmd = true',
+      'policies/auto.toml': 'policy = true',
+      'LLXPRT.md': '# memory',
+    });
+
+    const result = performMigration(legacyDir, destinations);
+
+    expect(result.migrated).toBe(true);
+    // Backfilled entries now present.
+    expect(
+      fs.readFileSync(
+        path.join(destinations.configDir, 'subagents/researcher.json'),
+        'utf-8',
+      ),
+    ).toContain('researcher');
+    expect(
+      fs.existsSync(path.join(destinations.configDir, 'commands/oc.toml')),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(destinations.configDir, 'policies/auto.toml')),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(destinations.configDir, 'LLXPRT.md'))).toBe(
+      true,
+    );
+    // Pre-seeded files left untouched.
+    expect(
+      fs.readFileSync(
+        path.join(destinations.configDir, 'profiles/seeded.json'),
+        'utf-8',
+      ),
+    ).toContain('seeded');
   });
 });
 

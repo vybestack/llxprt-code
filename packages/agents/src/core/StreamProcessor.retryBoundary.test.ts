@@ -104,7 +104,12 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
     };
 
     const mockCompressionHandler = {
-      enforceContextWindow: vi.fn().mockResolvedValue(undefined),
+      enforceProviderContents: vi
+        .fn()
+        .mockImplementation((contents: IContent[]) =>
+          Promise.resolve(contents),
+        ),
+      clearProviderCompressionCallback: vi.fn(),
       lastPromptTokenCount: 0,
     };
 
@@ -505,8 +510,17 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
         ),
       ).rejects.toThrow('ECONNRESET');
 
-      // Verify the API call was actually attempted
+      // Verify the API call was actually attempted and provider callback cleanup ran.
       expect(apiCallMade).toBe(true);
+      expect(
+        (
+          processor as unknown as {
+            compressionHandler: {
+              clearProviderCompressionCallback: ReturnType<typeof vi.fn>;
+            };
+          }
+        ).compressionHandler.clearProviderCompressionCallback,
+      ).toHaveBeenCalledWith(mockProvider);
     });
   });
 });
@@ -563,9 +577,7 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
           baseUrl: 'https://test.example.com',
         },
       },
-      compressionHandler: {
-        enforceContextWindow: vi.fn().mockResolvedValue(undefined),
-      },
+      compressionHandler: {},
       providerResolver: vi.fn(() => provider),
       _executeStreamApiCall: executeStreamApiCall,
       processStreamResponse,
@@ -575,7 +587,6 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
     const stream = await processor.makeApiCallAndProcessStream(
       { config: {} } as SendMessageParameters,
       'test-prompt',
-      0,
       { role: 'user', parts: [{ text: 'hello' }] },
     );
 

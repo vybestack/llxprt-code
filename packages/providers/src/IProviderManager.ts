@@ -7,6 +7,7 @@
 import { type IProvider } from './IProvider.js';
 import { type HydratedModel } from '@vybestack/llxprt-code-core/models/hydration.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 
 /**
  * Manager for handling multiple providers
@@ -109,4 +110,19 @@ export interface IProviderManager {
    * Reset token usage for the current session
    */
   resetSessionTokenUsage(): void;
+
+  /**
+   * Set the runtime tokenizer factory used for model-aware token estimation
+   * (e.g. by LoadBalancingProvider request accounting).
+   * @plan PLAN-2207-LB-TOKEN-ACCOUNTING
+   */
+  setTokenizerFactory(factory: RuntimeTokenizerFactory | undefined): void;
+
+  /**
+   * Get the runtime tokenizer factory, falling back to the Config-attached
+   * factory after setConfig has wired runtime factories. Returns undefined
+   * during early initialization or when no tokenizer factory is available.
+   * @plan PLAN-2207-LB-TOKEN-ACCOUNTING
+   */
+  getTokenizerFactory(): RuntimeTokenizerFactory | undefined;
 }

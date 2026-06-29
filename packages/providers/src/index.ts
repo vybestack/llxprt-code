@@ -52,6 +52,8 @@ export {
   type ExtendedLoadBalancerStats,
   type BackendMetrics,
   type CircuitBreakerState,
+  type CompressionCallback,
+  type TokenAccountingDiagnostics,
   type ResolvedSubProfile,
 } from './LoadBalancingProvider.js';
 
@@ -77,6 +79,12 @@ export {
   isAuthBucketFailureReason,
   type BucketFailureReason,
 } from './errors.js';
+export {
+  LoadBalancerAllContextLimitsExceededError,
+  LoadBalancerCompressionCallbackError,
+  LoadBalancerContextLimitError,
+  type LoadBalancerContextLimitFailure,
+} from './loadBalancing/contextLimitError.js';
 
 // --- Provider types ---
 export type {

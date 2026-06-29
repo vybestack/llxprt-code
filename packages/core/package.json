@@ -54,6 +54,8 @@
     "./services/history/ContentConverters.js": "./dist/src/services/history/ContentConverters.js",
     "./services/history/HistoryService.js": "./dist/src/services/history/HistoryService.js",
     "./services/history/IContent.js": "./dist/src/services/history/IContent.js",
+    "./services/history/historyProviderPipeline.js": "./dist/src/services/history/historyProviderPipeline.js",
+    "./services/history/historyTokenEstimation.js": "./dist/src/services/history/historyTokenEstimation.js",
     "./storage/ConversationFileWriter.js": {
       "types": "./dist/src/storage/ConversationFileWriter.d.ts",
       "import": "./dist/src/storage/ConversationFileWriter.js"
@@ -124,6 +126,7 @@
     "./prompt-config/prompt-resolver.js": "./dist/src/prompt-config/prompt-resolver.js",
     "./runtime/AgentRuntimeContext.js": "./dist/src/runtime/AgentRuntimeContext.js",
     "./runtime/AgentRuntimeLoader.js": "./dist/src/runtime/AgentRuntimeLoader.js",
+    "./runtime/contracts/index.js": "./dist/src/runtime/contracts/index.js",
     "./runtime/contracts/RuntimeProvider.js": "./dist/src/runtime/contracts/RuntimeProvider.js",
     "./runtime/contracts/RuntimeProviderChat.js": "./dist/src/runtime/contracts/RuntimeProviderChat.js",
     "./runtime/runtimeStateFactory.js": "./dist/src/runtime/runtimeStateFactory.js",
