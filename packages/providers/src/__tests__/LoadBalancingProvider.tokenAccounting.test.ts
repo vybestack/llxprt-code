@@ -103,6 +103,67 @@ async function consumeIterator(
   return results;
 }
 
+function setupTwoTargetFailoverGuard(providerManager: ProviderManager): {
+  provider: LoadBalancingProvider;
+  openAiCalls: ReturnType<typeof vi.fn>;
+  anthropicCalls: ReturnType<typeof vi.fn>;
+} {
+  const factory = createTokenizerFactory({
+    'gpt-4.1': createFixedTokenizer(50),
+    'claude-opus-4': createFixedTokenizer(2),
+  });
+  providerManager.setTokenizerFactory(factory);
+  const openAiCalls = vi.fn();
+  const anthropicCalls = vi.fn();
+  providerManager.registerProvider(
+    createMockProvider({
+      name: 'openai',
+      async *generateChatCompletion(): AsyncGenerator<IContent> {
+        openAiCalls();
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+      },
+      getDefaultModel: () => 'gpt-4.1',
+    }),
+  );
+  providerManager.registerProvider(
+    createMockProvider({
+      name: 'anthropic',
+      async *generateChatCompletion(): AsyncGenerator<IContent> {
+        anthropicCalls();
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+      },
+    }),
+  );
+
+  return {
+    provider: new LoadBalancingProvider(
+      {
+        profileName: 'two-target-failover-guard',
+        strategy: 'failover',
+        contextLimit: 10,
+        lbProfileEphemeralSettings: {
+          'failover-retry-count': 1,
+          'failover-retry-delay-ms': 0,
+        },
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'gpt',
+            providerName: 'openai',
+            model: 'gpt-4.1',
+          }),
+          createResolvedSubProfile({
+            name: 'opus',
+            providerName: 'anthropic',
+            model: 'claude-opus-4',
+          }),
+        ],
+      },
+      providerManager,
+    ),
+    openAiCalls,
+    anthropicCalls,
+  };
+}
 describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -396,57 +457,8 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
   });
 
   it('skips failover targets rejected by local context guard before provider call or metrics', async () => {
-    const factory = createTokenizerFactory({
-      'gpt-4.1': createFixedTokenizer(50),
-      'claude-opus-4': createFixedTokenizer(2),
-    });
-    providerManager.setTokenizerFactory(factory);
-    const openAiCalls = vi.fn();
-    const anthropicCalls = vi.fn();
-    providerManager.registerProvider(
-      createMockProvider({
-        name: 'openai',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          openAiCalls();
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-        },
-        getDefaultModel: () => 'gpt-4.1',
-      }),
-    );
-    providerManager.registerProvider(
-      createMockProvider({
-        name: 'anthropic',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          anthropicCalls();
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
-      }),
-    );
-
-    const provider = new LoadBalancingProvider(
-      {
-        profileName: 'failover-local-reject',
-        strategy: 'failover',
-        contextLimit: 10,
-        lbProfileEphemeralSettings: {
-          'failover-retry-count': 1,
-          'failover-retry-delay-ms': 0,
-        },
-        subProfiles: [
-          createResolvedSubProfile({
-            name: 'gpt',
-            providerName: 'openai',
-            model: 'gpt-4.1',
-          }),
-          createResolvedSubProfile({
-            name: 'opus',
-            providerName: 'anthropic',
-            model: 'claude-opus-4',
-          }),
-        ],
-      },
-      providerManager,
-    );
+    const { provider, openAiCalls, anthropicCalls } =
+      setupTwoTargetFailoverGuard(providerManager);
 
     await consumeIterator(provider, [createTextContent('large request')]);
 
@@ -456,6 +468,27 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
     expect(anthropicCalls).toHaveBeenCalledTimes(1);
     expect(stats.circuitBreakerStates.gpt).toBeUndefined();
     expect(stats.lastSelected).toBe('opus');
+  });
+
+  it('continues failover when compression callback fails for one target', async () => {
+    const { provider, openAiCalls, anthropicCalls } =
+      setupTwoTargetFailoverGuard(providerManager);
+    const compressionCallback = vi.fn(async () => {
+      throw new Error('compression unavailable');
+    });
+    provider.setCompressionCallback(compressionCallback);
+
+    const results = await consumeIterator(provider, [
+      createTextContent('large request'),
+    ]);
+
+    expect(compressionCallback).toHaveBeenCalledTimes(1);
+    expect(openAiCalls).not.toHaveBeenCalled();
+    expect(anthropicCalls).toHaveBeenCalledTimes(1);
+    expect(results).toStrictEqual([
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
+    ]);
+    expect(provider.getStats().lastSelected).toBe('opus');
   });
 
   it('uses target contextWindow when explicit limit is larger than selected backend window', async () => {

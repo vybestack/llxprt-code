@@ -21,10 +21,7 @@ import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
-import {
-  LoadBalancerAllContextLimitsExceededError,
-  LoadBalancerCompressionCallbackError,
-} from '../loadBalancing/contextLimitError.js';
+import { LoadBalancerAllContextLimitsExceededError } from '../loadBalancing/contextLimitError.js';
 
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -376,7 +373,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
     ).rejects.toThrow(LoadBalancerAllContextLimitsExceededError);
   });
 
-  it('propagates compression callback failures without failover retry', async () => {
+  it('continues failover after compression callback failure', async () => {
     const factory = createTokenizerFactory({
       'gpt-4.1': createFixedTokenizer(50),
       'claude-opus-4': createFixedTokenizer(2),
@@ -398,7 +395,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
         name: 'anthropic',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           anthropicCalls();
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
       }),
     );
@@ -431,11 +428,15 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       throw new Error('compression callback failed');
     });
 
-    await expect(
-      consumeIterator(provider, [createTextContent('needs compression')]),
-    ).rejects.toThrow(LoadBalancerCompressionCallbackError);
+    const results = await consumeIterator(provider, [
+      createTextContent('needs compression'),
+    ]);
+
     expect(openAiCalls).not.toHaveBeenCalled();
-    expect(anthropicCalls).not.toHaveBeenCalled();
+    expect(anthropicCalls).toHaveBeenCalledTimes(1);
+    expect(results).toStrictEqual([
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
+    ]);
   });
 
   it('GPT-first with Opus failover uses GPT tokenizer then Opus on failover', async () => {

@@ -841,10 +841,10 @@ export class LoadBalancingProvider implements IProvider {
         this.currentFailoverIndex = currentIndex;
         return true;
       } catch (error) {
-        if (error instanceof LoadBalancerCompressionCallbackError) {
-          throw error;
-        }
-        if (error instanceof LoadBalancerContextLimitError) {
+        if (
+          error instanceof LoadBalancerCompressionCallbackError ||
+          error instanceof LoadBalancerContextLimitError
+        ) {
           contextLimitErrors.push({ profile: subProfile.name, error });
           this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
           return false;
