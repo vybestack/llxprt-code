@@ -77,11 +77,27 @@ export interface ModelProfileInfoPayload {
   displayLabel: string;
 }
 
+/**
+ * Payload for the 'load-balancer-selection-changed' event.
+ * Emitted by the load-balancer provider when it selects a (new) sub-profile,
+ * so the footer can recompute the `lb:<lb>:<sub>:<model>` identity. This is a
+ * UI-refresh trigger only; it does not signal an actual model switch.
+ */
+export interface LoadBalancerSelectionPayload {
+  /** The load-balancer profile name. */
+  profileName: string;
+  /** The newly selected sub-profile name, when available. */
+  subProfileName?: string | null;
+  /** The model used by the selected sub-profile, when available. */
+  model?: string | null;
+}
+
 export enum CoreEvent {
   UserFeedback = 'user-feedback',
   MemoryChanged = 'memory-changed',
   ModelChanged = 'model-changed',
   ModelProfileChanged = 'model-profile-changed',
+  LoadBalancerSelectionChanged = 'load-balancer-selection-changed',
   ConsoleLog = 'console-log',
   Output = 'output',
   ExternalEditorClosed = 'external-editor-closed',
@@ -156,6 +172,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (payload: ModelProfileInfoPayload) => void,
   ): this;
   override on(
+    event: CoreEvent.LoadBalancerSelectionChanged,
+    listener: (payload: LoadBalancerSelectionPayload) => void,
+  ): this;
+  override on(
     event: CoreEvent.ConsoleLog,
     listener: (payload: ConsoleLogPayload) => void,
   ): this;
@@ -192,6 +212,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (payload: ModelProfileInfoPayload) => void,
   ): this;
   override off(
+    event: CoreEvent.LoadBalancerSelectionChanged,
+    listener: (payload: LoadBalancerSelectionPayload) => void,
+  ): this;
+  override off(
     event: CoreEvent.ConsoleLog,
     listener: (payload: ConsoleLogPayload) => void,
   ): this;
@@ -225,6 +249,10 @@ export class CoreEventEmitter extends EventEmitter {
     payload: ModelProfileInfoPayload,
   ): boolean;
   override emit(
+    event: CoreEvent.LoadBalancerSelectionChanged,
+    payload: LoadBalancerSelectionPayload,
+  ): boolean;
+  override emit(
     event: CoreEvent.ConsoleLog,
     payload: ConsoleLogPayload,
   ): boolean;
@@ -252,6 +280,18 @@ export class CoreEventEmitter extends EventEmitter {
    */
   emitModelProfileChanged(payload: ModelProfileInfoPayload): void {
     this.emit(CoreEvent.ModelProfileChanged, payload);
+  }
+
+  /**
+   * Notifies subscribers (e.g. the footer) that a load-balancer profile has
+   * selected a (new) sub-profile, so profile-qualified identity can be
+   * recomputed. This is a UI-refresh trigger and is intentionally distinct
+   * from {@link emitModelChanged}, which signals an actual model switch.
+   */
+  emitLoadBalancerSelectionChanged(
+    payload: LoadBalancerSelectionPayload,
+  ): void {
+    this.emit(CoreEvent.LoadBalancerSelectionChanged, payload);
   }
 
   /**

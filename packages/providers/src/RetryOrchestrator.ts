@@ -230,6 +230,23 @@ export class RetryOrchestrator implements IProvider {
   }
 
   /**
+   * Delegate getStats() to the wrapped provider when supported (e.g.
+   * LoadBalancingProvider). Without this passthrough the footer and
+   * diagnostics read stats through the wrapper chain and receive undefined,
+   * because this orchestrator sits between LoggingProviderWrapper and the
+   * underlying provider.
+   */
+  getStats(): unknown {
+    const candidate = this.wrappedProvider as {
+      getStats?: () => unknown;
+    };
+    if (typeof candidate.getStats === 'function') {
+      return candidate.getStats();
+    }
+    return undefined;
+  }
+
+  /**
    * Main method with retry orchestration logic
    * Supports both overloaded signatures accepted by the provider contract
    */
