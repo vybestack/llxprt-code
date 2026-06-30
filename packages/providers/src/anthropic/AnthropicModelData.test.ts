@@ -153,9 +153,7 @@ describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
   describe('getContextWindowForModel', () => {
     it('returns 200000 (auth default) for claude-sonnet-5 and dated variants', () => {
       expect(getContextWindowForModel('claude-sonnet-5')).toBe(200000);
-      expect(getContextWindowForModel('claude-sonnet-5-20260630')).toBe(
-        200000,
-      );
+      expect(getContextWindowForModel('claude-sonnet-5-20260630')).toBe(200000);
     });
 
     it('still returns 400000 for claude-sonnet-4 models', () => {
