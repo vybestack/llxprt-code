@@ -402,6 +402,10 @@ jobs:
   bun_install_smoke:
     name: 'Bun Install Smoke'
     runs-on: 'ubuntu-latest'
+    # A monorepo smoke install completes in well under a minute; cap the job so a
+    # hung `bun install` (registry stall or workspace-resolution deadlock) fails
+    # fast instead of occupying a runner up to the 6-hour GitHub Actions default.
+    timeout-minutes: 15
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}

@@ -73,12 +73,23 @@ function deriveLifecycleEntryScripts(): string[] {
 }
 
 /**
+ * Memoized result of {@link getPackedPaths}. `npm pack --dry-run` is a slow
+ * child process and the packed file set is constant for the duration of a test
+ * run, so it is computed once and shared across the tests that need it.
+ */
+let packedPathsCache: Set<string> | undefined;
+
+/**
  * Returns the exact set of file paths that `npm publish` would include in the
  * tarball, computed via `npm pack --dry-run --json` so the test exercises npm's
  * real `files`/.npmignore resolution rather than re-implementing it. Paths are
  * POSIX-style and relative to the package root (e.g. "scripts/preinstall.cjs").
+ * The result is memoized so repeated calls do not re-spawn `npm pack`.
  */
 function getPackedPaths(): Set<string> {
+  if (packedPathsCache !== undefined) {
+    return packedPathsCache;
+  }
   const stdout = execFileSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -91,7 +102,8 @@ function getPackedPaths(): Set<string> {
       'npm pack --dry-run --json did not return the expected { files: [...] } shape.',
     );
   }
-  return new Set(entry.files.map((f) => f.path));
+  packedPathsCache = new Set(entry.files.map((f) => f.path));
+  return packedPathsCache;
 }
 
 /**
@@ -116,7 +128,10 @@ function findRelativeDependencySpecifiers(source: string): string[] {
   const patterns = [
     /\brequire\(\s*['"](\.[^'"]+)['"]\s*\)/g, // require('./x')
     /\brequire\.resolve\(\s*['"](\.[^'"]+)['"]\s*\)/g, // require.resolve('./x')
-    /\bfrom\s+['"](\.[^'"]+)['"]/g, // import ... from './x'
+    // import ... from './x' — anchored to a leading `import` keyword so a bare
+    // "from './x'" in prose/comments cannot produce a false specifier. The
+    // `[^'";]*?` only spans the import clause, never crossing a quote or `;`.
+    /\bimport\b[^'";]*?\bfrom\s+['"](\.[^'"]+)['"]/g,
     /\bimport\(\s*['"](\.[^'"]+)['"]\s*\)/g, // import('./x')
   ];
   for (const pattern of patterns) {

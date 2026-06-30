@@ -110,6 +110,7 @@ const REVIEWED_UNTRUSTED_INSTALL_SCRIPTS: readonly string[] = [
 ];
 
 interface PackageJson {
+  name?: string;
   workspaces?: string[];
   trustedDependencies?: string[];
   overrides?: Record<string, string | Record<string, string>>;
@@ -642,17 +643,9 @@ describe('Bun package-manager configuration (S1)', () => {
     const override = root.overrides?.['typescript'];
     expect(typeof override).toBe('string');
 
-    const lockPath = join(repoRoot, 'package-lock.json');
-    if (!existsSync(lockPath)) {
-      // Dual-lockfile coexistence is intentional for S1. If the project later
-      // migrates fully to Bun and drops package-lock.json, this test should be
-      // updated rather than crashing with an opaque ENOENT.
-      throw new Error(
-        `package-lock.json not found at ${lockPath}; cannot verify the ` +
-          'TypeScript override matches the npm-resolved version.',
-      );
-    }
-    const lock = JSON.parse(readFileSync(lockPath, 'utf-8')) as PackageLock;
+    // Reuse the shared loader (asserts the committed npm lockfile is present and
+    // valid) instead of re-implementing the existence check and parse inline.
+    const lock = readPackageLock();
     const npmResolved = lock.packages?.['node_modules/typescript']?.version;
     expect(npmResolved).toBeDefined();
 

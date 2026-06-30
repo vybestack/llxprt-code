@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 
@@ -37,8 +37,11 @@ describe('detectInstaller', () => {
 
   it('defaults to npm when no user-agent is present', () => {
     // Lifecycle scripts must preserve the pre-existing npm behavior when the
-    // signal is absent, so an empty environment resolves to npm.
+    // signal is absent, so an empty environment resolves to npm. An explicitly
+    // empty string is the same "no signal" case and must not be mistaken for a
+    // manager prefix.
     expect(detectInstaller({})).toBe('npm');
+    expect(detectInstaller({ npm_config_user_agent: '' })).toBe('npm');
   });
 
   it('treats other managers (pnpm, Yarn) as npm to preserve existing behavior', () => {
@@ -84,18 +87,14 @@ describe('detectInstaller', () => {
 
   it('reads from process.env by default', () => {
     // The lifecycle scripts call detectInstaller() with no argument and rely on
-    // the default reading process.env. Verify that contract by temporarily
-    // setting the real environment variable.
-    const previous = process.env.npm_config_user_agent;
-    try {
-      process.env.npm_config_user_agent = 'bun/1.3.14 host';
-      expect(detectInstaller()).toBe('bun');
-    } finally {
-      if (previous === undefined) {
-        delete process.env.npm_config_user_agent;
-      } else {
-        process.env.npm_config_user_agent = previous;
-      }
-    }
+    // the default reading process.env. Verify that contract using vi.stubEnv so
+    // the real environment is restored automatically (see afterEach) instead of
+    // hand-rolled try/finally save-and-restore.
+    vi.stubEnv('npm_config_user_agent', 'bun/1.3.14 host');
+    expect(detectInstaller()).toBe('bun');
   });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });

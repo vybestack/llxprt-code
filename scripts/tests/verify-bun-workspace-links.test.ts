@@ -231,4 +231,19 @@ describe('verifyBunWorkspaceLinks', () => {
     expect(failures[0]).toMatch(/@fixture\/cli/);
     expect(failures[0]).not.toMatch(/@fixture\/core/);
   });
+
+  it('reports a workspace whose package.json is malformed instead of throwing', () => {
+    // A corrupt workspace manifest must be funneled into the failure list (the
+    // verifier's contract), not raised as an unhandled SyntaxError that crashes
+    // the CI job with a raw stack trace.
+    const dir = buildFixture({
+      specs: [{ path: 'packages/core', name: '@fixture/core', link: 'link' }],
+    });
+    writeFileSync(join(dir, 'packages/core', 'package.json'), '{ not valid');
+
+    const failures = runIn(dir);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/Could not parse package\.json/);
+    expect(failures[0]).toMatch(/packages\/core/);
+  });
 });

@@ -129,7 +129,12 @@ function makeFixture(): Fixture {
 
       return {
         status: result.status,
-        stderr: result.stderr ?? '',
+        // Surface a spawn failure (result.error, e.g. ENOENT) in the message: on
+        // such a failure status is null and stderr is empty, which would
+        // otherwise assert as an opaque "expected null to be 0".
+        stderr:
+          (result.error ? `spawn failed: ${result.error.message}\n` : '') +
+          (result.stderr ?? ''),
         npmInvoked: existsSync(sentinel),
         lockfile: readFileSync(lockfilePath, 'utf8'),
         bundleExists: existsSync(join(dir, 'bundle', 'llxprt.js')),

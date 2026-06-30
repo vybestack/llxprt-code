@@ -25,17 +25,33 @@ import { argv } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Runs the workspace-link verification against the repository rooted at the
- * current working directory.
+ * Parses the root manifest once, runs every workspace-link check, and returns
+ * both the failure list and the count of declared workspaces. Keeping the parse
+ * in a single place lets the CLI report a success count without re-reading
+ * package.json.
  *
- * @returns {string[]} A list of human-readable failure messages. Empty when
- *   every declared workspace is locally linked.
+ * @returns {{ failures: string[], workspaceCount: number }}
  */
-export function verifyBunWorkspaceLinks() {
+function collectWorkspaceLinkResults() {
   // The authoritative set verified here is every workspace DECLARED in
   // package.json's `workspaces` array (an explicit list of paths, no globs).
   // Each declared workspace must be locally linked by the package manager.
-  const root = JSON.parse(readFileSync('package.json', 'utf8'));
+  //
+  // A malformed or unreadable root package.json must surface through this
+  // function's failure-list contract (return diagnostics -> exit 1), not as an
+  // unhandled SyntaxError/ENOENT that crashes with a raw stack trace.
+  let root;
+  try {
+    root = JSON.parse(readFileSync('package.json', 'utf8'));
+  } catch (err) {
+    return {
+      failures: [
+        'Failed to read or parse package.json: ' +
+          (err instanceof Error ? err.message : String(err)),
+      ],
+      workspaceCount: 0,
+    };
+  }
   const workspaces = root.workspaces ?? [];
 
   // Guard against a vacuous pass: if `workspaces` is missing, not an array, or
@@ -43,11 +59,14 @@ export function verifyBunWorkspaceLinks() {
   // without verifying anything. Treat that as a hard failure — this monorepo
   // always declares a non-empty workspace list.
   if (!Array.isArray(workspaces) || workspaces.length === 0) {
-    return [
-      'package.json must declare a non-empty `workspaces` array; ' +
-        `found ${JSON.stringify(workspaces)}. The workspace link check has ` +
-        'nothing to verify, which would let it pass vacuously.',
-    ];
+    return {
+      failures: [
+        'package.json must declare a non-empty `workspaces` array; ' +
+          `found ${JSON.stringify(workspaces)}. The workspace link check has ` +
+          'nothing to verify, which would let it pass vacuously.',
+      ],
+      workspaceCount: 0,
+    };
   }
 
   // This check assumes each workspace entry is a concrete directory path: it
@@ -62,12 +81,15 @@ export function verifyBunWorkspaceLinks() {
     typeof ws === 'string' ? /[*?[\]{}!()]/.test(ws) : true,
   );
   if (globbed.length > 0) {
-    return [
-      'package.json `workspaces` must list concrete directory paths, not ' +
-        `glob patterns; found ${JSON.stringify(globbed)}. This workspace ` +
-        'link check resolves each entry as a literal workspace directory and ' +
-        'cannot expand globs.',
-    ];
+    return {
+      failures: [
+        'package.json `workspaces` must list concrete directory paths, not ' +
+          `glob patterns; found ${JSON.stringify(globbed)}. This workspace ` +
+          'link check resolves each entry as a literal workspace directory ' +
+          'and cannot expand globs.',
+      ],
+      workspaceCount: workspaces.length,
+    };
   }
 
   // A bare `existsSync(node_modules/<name>)` is too weak: it cannot tell a
@@ -88,20 +110,43 @@ export function verifyBunWorkspaceLinks() {
   const notLinkedLocally = [];
   let linked = 0;
 
+  const malformed = [];
   for (const ws of workspaces) {
     const wpkgPath = `${ws}/package.json`;
     if (!existsSync(wpkgPath)) {
       missingPkgJson.push(ws);
       continue;
     }
-    const wpkg = JSON.parse(readFileSync(wpkgPath, 'utf8'));
+    // Parsing a workspace package.json, and realpath-resolving the node_modules
+    // entry/workspace directory, can throw (corrupt JSON, broken symlink,
+    // ELOOP). Funnel those into the diagnostic list so the verifier keeps its
+    // "collect failures -> exit 1" contract instead of throwing mid-loop.
+    let wpkg;
+    try {
+      wpkg = JSON.parse(readFileSync(wpkgPath, 'utf8'));
+    } catch (err) {
+      malformed.push(
+        `${ws}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      continue;
+    }
     const entry = `node_modules/${wpkg.name}`;
     if (!existsSync(entry)) {
       missing.push(`${ws} (${wpkg.name})`);
       continue;
     }
-    const actual = realpathSync(entry);
-    const expected = realpathSync(resolve(ws));
+    let actual;
+    let expected;
+    try {
+      actual = realpathSync(entry);
+      expected = realpathSync(resolve(ws));
+    } catch (err) {
+      notLinkedLocally.push(
+        `${ws} (${wpkg.name}): could not resolve the node_modules link ` +
+          `(${err instanceof Error ? err.message : String(err)})`,
+      );
+      continue;
+    }
     if (actual !== expected) {
       notLinkedLocally.push(
         `${ws} (${wpkg.name}): node_modules entry resolves to ${actual}, ` +
@@ -131,6 +176,12 @@ export function verifyBunWorkspaceLinks() {
         notLinkedLocally.join('\n  - '),
     );
   }
+  if (malformed.length > 0) {
+    failures.push(
+      'Could not parse package.json for declared workspace(s):\n  - ' +
+        malformed.join('\n  - '),
+    );
+  }
   // Defence in depth: even if no per-workspace failure was recorded, the count
   // of locally-linked workspaces must equal the number declared. This catches
   // any silent gap between iteration and verification.
@@ -141,7 +192,18 @@ export function verifyBunWorkspaceLinks() {
     );
   }
 
-  return failures;
+  return { failures, workspaceCount: workspaces.length };
+}
+
+/**
+ * Runs the workspace-link verification against the repository rooted at the
+ * current working directory.
+ *
+ * @returns {string[]} A list of human-readable failure messages. Empty when
+ *   every declared workspace is locally linked.
+ */
+export function verifyBunWorkspaceLinks() {
+  return collectWorkspaceLinkResults().failures;
 }
 
 /**
@@ -150,18 +212,16 @@ export function verifyBunWorkspaceLinks() {
  * the pure check can be unit-tested without spawning a process.
  */
 function main() {
-  const failures = verifyBunWorkspaceLinks();
+  const { failures, workspaceCount } = collectWorkspaceLinkResults();
   if (failures.length > 0) {
     console.error(failures.join('\n'));
     process.exitCode = 1;
     return;
   }
 
-  const root = JSON.parse(readFileSync('package.json', 'utf8'));
-  const count = root.workspaces.length;
   console.log(
-    `Verified all ${count} declared workspace package(s) link to their ` +
-      'in-repo source.',
+    `Verified all ${workspaceCount} declared workspace package(s) link to ` +
+      'their in-repo source.',
   );
 }
 
