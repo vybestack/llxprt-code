@@ -573,4 +573,147 @@ describe('createAgentRuntimeContext', () => {
       expect(context.ephemerals.compressionProfile()).toBeUndefined();
     });
   });
+  describe('ephemerals.contextLimit() — provider-derived limit (issue #2251)', () => {
+    it('returns the provider-derived context limit for a load-balancer model', () => {
+      const lbState: AgentRuntimeState = {
+        ...mockState,
+        provider: 'load-balancer',
+        model: 'load-balancer',
+      };
+      const lbProviderRuntime: ProviderRuntimeContext = {
+        ...mockProviderRuntime,
+        provider: 'load-balancer',
+        model: 'load-balancer',
+      };
+      const lbProvider: IProvider = {
+        name: 'load-balancer',
+        getContextLimit: () => 200_000,
+      } as unknown as IProvider;
+      const lbProviderAdapter: AgentRuntimeProviderAdapter = {
+        getActiveProvider: vi.fn().mockReturnValue(lbProvider),
+        setActiveProvider: vi.fn(),
+      };
+
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: lbState,
+        settings: {},
+        provider: lbProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: lbProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.contextLimit()).toBe(200_000);
+    });
+
+    it('returns the min-across-pool value from the provider', () => {
+      const lbState: AgentRuntimeState = {
+        ...mockState,
+        provider: 'load-balancer',
+        model: 'load-balancer',
+      };
+      const lbProvider: IProvider = {
+        name: 'load-balancer',
+        getContextLimit: () => 150_000,
+      } as unknown as IProvider;
+      const lbProviderAdapter: AgentRuntimeProviderAdapter = {
+        getActiveProvider: vi.fn().mockReturnValue(lbProvider),
+        setActiveProvider: vi.fn(),
+      };
+
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: lbState,
+        settings: {},
+        provider: lbProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.contextLimit()).toBe(150_000);
+    });
+
+    it('prefers the explicit user contextLimit override over the provider limit', () => {
+      const lbState: AgentRuntimeState = {
+        ...mockState,
+        provider: 'load-balancer',
+        model: 'load-balancer',
+      };
+      const lbProvider: IProvider = {
+        name: 'load-balancer',
+        getContextLimit: () => 200_000,
+      } as unknown as IProvider;
+      const lbProviderAdapter: AgentRuntimeProviderAdapter = {
+        getActiveProvider: vi.fn().mockReturnValue(lbProvider),
+        setActiveProvider: vi.fn(),
+      };
+
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: lbState,
+        settings: { contextLimit: 80_000 },
+        provider: lbProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.contextLimit()).toBe(80_000);
+    });
+
+    it('falls back to the model default when the provider lacks getContextLimit', () => {
+      const lbState: AgentRuntimeState = {
+        ...mockState,
+        provider: 'load-balancer',
+        model: 'load-balancer',
+      };
+      const lbProvider: IProvider = {
+        name: 'load-balancer',
+      } as unknown as IProvider;
+      const lbProviderAdapter: AgentRuntimeProviderAdapter = {
+        getActiveProvider: vi.fn().mockReturnValue(lbProvider),
+        setActiveProvider: vi.fn(),
+      };
+
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: lbState,
+        settings: {},
+        provider: lbProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.contextLimit()).toBe(1_048_576);
+    });
+
+    it('falls back to the model default when getActiveProvider throws', () => {
+      const lbState: AgentRuntimeState = {
+        ...mockState,
+        provider: 'load-balancer',
+        model: 'load-balancer',
+      };
+      const throwingProviderAdapter: AgentRuntimeProviderAdapter = {
+        getActiveProvider: vi.fn(() => {
+          throw new Error('no active provider');
+        }),
+        setActiveProvider: vi.fn(),
+      };
+
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: lbState,
+        settings: {},
+        provider: throwingProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.contextLimit()).toBe(1_048_576);
+    });
+  });
 });

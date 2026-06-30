@@ -4,46 +4,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { getTokenLimitForConfiguredContext } from '../contextLimit.js';
 
-const mockTokenLimit = vi.hoisted(() =>
-  vi.fn(
-    (_model: string, userContextLimit?: number) =>
-      userContextLimit ?? 1_000_000,
-  ),
-);
-
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return { ...actual, tokenLimit: mockTokenLimit };
-});
-
-describe('useStreamEventHandlers context-limit helpers', () => {
-  beforeEach(() => {
-    mockTokenLimit.mockImplementation(
-      (_model: string, userContextLimit?: number) =>
-        userContextLimit ?? 1_000_000,
-    );
-  });
-
-  it('uses configured context-limit for overflow guidance token limits', async () => {
-    const { getTokenLimitForConfiguredContext } = await import(
-      '../useStreamEventHandlers.js'
-    );
+/**
+ * The overflow-guidance token-limit helper delegates to the shared resolver in
+ * @vybestack/llxprt-code-agents (single source of truth for the
+ * user-override → provider-limit → model-name precedence, issue #2251).
+ * These tests assert the real resolved value through the thin cli wrapper.
+ */
+describe('contextLimit helper (cli wrapper)', () => {
+  it('resolves the configured context-limit for the overflow guidance token limit', () => {
     const configWithContextLimit = {
       getModel: vi.fn(() => 'gemini-2.5-pro'),
-      getEphemeralSetting: vi.fn((key: string) => {
-        if (key === 'context-limit') {
-          return 200_000;
-        }
-        return undefined;
-      }),
+      getEphemeralSetting: vi.fn((key: string) =>
+        key === 'context-limit' ? 200_000 : undefined,
+      ),
     } as unknown as Config;
 
-    getTokenLimitForConfiguredContext(configWithContextLimit);
+    const limit = getTokenLimitForConfiguredContext(configWithContextLimit);
 
-    expect(mockTokenLimit).toHaveBeenCalledWith('gemini-2.5-pro', 200_000);
+    expect(limit).toBe(200_000);
+  });
+
+  it('falls back to the model-name window when no context-limit is configured', () => {
+    // gpt-4o resolves to a 128K window, distinct from DEFAULT_TOKEN_LIMIT (1M),
+    // so the model-lookup path is genuinely exercised.
+    const configWithoutLimit = {
+      getModel: vi.fn(() => 'gpt-4o'),
+      getEphemeralSetting: vi.fn(() => undefined),
+    } as unknown as Config;
+
+    const limit = getTokenLimitForConfiguredContext(configWithoutLimit);
+
+    expect(limit).toBe(128_000);
   });
 });

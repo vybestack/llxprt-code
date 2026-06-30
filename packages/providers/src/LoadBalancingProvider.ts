@@ -149,6 +149,10 @@ export class LoadBalancingProvider implements IProvider {
     ];
   }
 
+  getContextLimit(): number | undefined {
+    return this.getEffectiveContextLimit();
+  }
+
   private getEffectiveContextLimit(): number | undefined {
     if (
       this.config.contextLimit !== undefined &&
