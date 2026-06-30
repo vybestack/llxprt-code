@@ -38,7 +38,7 @@ llxprt
 
 **Qwen (Alibaba)** — for coding tasks (API key via DashScope):
 
-```
+```bash
 llxprt
 /provider qwen
 /key save qwen your-dashscope-key

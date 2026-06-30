@@ -26,7 +26,7 @@ Gemini uses the Gemini Code Assist login. Anthropic and Codex use your existing 
 
 > **Note on Gemini access (mid-2026):** Google moved free consumer "Login with Google" access for the standalone Gemini CLI toward [Antigravity](https://antigravity.google); `/auth gemini` continues to work for paid Gemini API keys and Gemini Code Assist Standard/Enterprise.
 >
-> **Qwen is now API-key-only.** Qwen's free OAuth tier ended 2026-04-15 and the OAuth provider has been removed. Use a DashScope API key (`DASHSCOPE_API_KEY`) or an OpenRouter API key with the `qwen` alias.
+> **Qwen is now API-key-only.** Qwen's free OAuth tier ended 2026-04-15 and the OAuth provider has been removed. Use a DashScope API key (`DASHSCOPE_API_KEY`) with the `qwen` alias, or use the `openrouter` provider with an OpenRouter API key.
 
 Authentication happens lazily — the browser opens when you make your first request, not when you run the command. Once authenticated, tokens are stored in your OS keyring and refresh automatically.
 

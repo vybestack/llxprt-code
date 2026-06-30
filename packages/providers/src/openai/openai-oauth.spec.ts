@@ -251,8 +251,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
 
-      // OAuth manager should not be called
+      // OAuth manager should stay fully unused (neither entrypoint called)
       expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
     /**
@@ -303,8 +304,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
 
-      // OAuth manager should not be called
+      // OAuth manager should stay fully unused (neither entrypoint called)
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
+      expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
     });
 
     /**
@@ -428,7 +430,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       // Then: Should NOT be authenticated (OAuth no longer supported for Qwen)
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
+      // OAuth manager should stay fully unused (neither entrypoint called)
       expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
     /**
@@ -593,8 +597,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
 
-      // OAuth manager should not be called
+      // OAuth manager should stay fully unused (neither entrypoint called)
       expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
     /**
@@ -652,8 +657,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
 
-      // OAuth manager should not be called (OAuth not supported)
+      // OAuth manager should stay fully unused (neither entrypoint called)
       expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
   });
 

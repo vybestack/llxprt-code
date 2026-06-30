@@ -227,7 +227,7 @@ describe('OAuth Provider Premature Initialization', () => {
      * @requirement ISSUE-308-FIX
      * @scenario Selective OAuth initialization for specific provider
      * @given Multiple OAuth providers registered
-     * @when Only Anthropic token is requested
+     * @when Only Gemini token is requested
      * @then Should not read credentials file when OAuth is not enabled
      * @and Should return null without file access
      */
@@ -238,16 +238,17 @@ describe('OAuth Provider Premature Initialization', () => {
       oauthManager.registerProvider(geminiProvider);
       oauthManager.registerProvider(anthropicProvider);
 
-      // Request only Anthropic token
-      const anthropicToken = await oauthManager.getToken('anthropic');
+      // Request only Gemini token (the provider with the oauth_creds.json file
+      // side effect), proving the disabled-OAuth short-circuit is exercised
+      const geminiToken = await oauthManager.getToken('gemini');
 
       // Should not have attempted to read Gemini credentials
       expect(mockFs.readFile).not.toHaveBeenCalledWith(
         expect.stringContaining('oauth_creds.json'),
       );
 
-      // Anthropic should return null (no credentials) without file access
-      expect(anthropicToken).toBeNull();
+      // Gemini should return null (no credentials) without file access
+      expect(geminiToken).toBeNull();
     });
   });
 
