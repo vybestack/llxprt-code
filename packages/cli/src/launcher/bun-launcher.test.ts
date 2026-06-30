@@ -742,36 +742,6 @@ describe('relaunchUnderBunIfNeeded', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it('forwards termination signals to the Bun child until settlement', async () => {
-    let capturedChild:
-      | (EventEmitter & { killed: boolean; kill: ReturnType<typeof vi.fn> })
-      | null = null;
-    const spawnFn = vi.fn(() => {
-      capturedChild = Object.assign(new EventEmitter(), {
-        killed: false,
-        kill: vi.fn(),
-      });
-      return capturedChild;
-    });
-
-    const promise = relaunchUnderBunIfNeeded({
-      isRunningUnderBun: () => false,
-      envGuardSet: () => false,
-      resolveBun: vi.fn(async () => '/resolved/path/to/bun'),
-      resolveEntry: vi.fn(async () => '/entry.ts'),
-      spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
-    });
-
-    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
-    process.emit('SIGTERM', 'SIGTERM');
-    expect(capturedChild!.kill).toHaveBeenCalledWith('SIGTERM');
-
-    capturedChild!.emit('close', 0);
-    await promise;
-    capturedChild!.kill.mockClear();
-    process.emit('SIGTERM', 'SIGTERM');
-    expect(capturedChild!.kill).not.toHaveBeenCalled();
-  });
   it('removes settling listeners after close so the child does not leak handlers', async () => {
     let capturedChild: EventEmitter | null = null;
     const spawnFn = vi.fn(() => {

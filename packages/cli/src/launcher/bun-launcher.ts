@@ -222,6 +222,7 @@ const SIGNAL_EXIT_CODES: Partial<Record<NodeJS.Signals, number>> = {
   SIGPIPE: 141,
   SIGALRM: 142,
   SIGTERM: 143,
+  SIGBREAK: 149,
 };
 
 function exitCodeForClose(
@@ -259,6 +260,7 @@ const FORWARDED_SIGNALS: readonly NodeJS.Signals[] = [
   'SIGINT',
   'SIGTERM',
   'SIGHUP',
+  'SIGBREAK',
 ];
 
 function waitForChildExit(

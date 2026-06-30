@@ -102,12 +102,18 @@ function resolveDistProjectRoot(moduleDir: string): string | null {
   return ascend(moduleDir, DIST_LAUNCHER_LAYOUT.length);
 }
 
+function isCliPackageDir(dir: string): boolean {
+  return (
+    basename(dir) === CLI_PACKAGE_DIR && basename(dirname(dir)) === PACKAGES_DIR
+  );
+}
+
 function bundleSearchRoots(moduleDir: string): string[] {
   const roots: string[] = [];
   const distProjectRoot = resolveDistProjectRoot(moduleDir);
   for (const dir of ancestorDirs(moduleDir)) {
     roots.push(dir);
-    if (dir === distProjectRoot) {
+    if (dir === distProjectRoot && !isCliPackageDir(dir)) {
       return roots;
     }
     if (basename(dir) === PACKAGES_DIR) {

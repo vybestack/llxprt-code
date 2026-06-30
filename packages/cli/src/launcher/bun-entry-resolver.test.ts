@@ -156,6 +156,19 @@ describe('resolveBunEntry', () => {
       expect(result).toBe('/inst/@vybestack/llxprt-code/bundle/llxprt.js');
     });
 
+    it('falls back from packages/cli dist layout to the repo-root bundle', async () => {
+      const pathChecker = vi.fn(
+        async (target: string) => target === '/repo/bundle/llxprt.js',
+      );
+
+      const result = await resolveBunEntry({
+        moduleDir: '/repo/packages/cli/dist/src/launcher',
+        pathChecker,
+      });
+
+      expect(result).toBe('/repo/bundle/llxprt.js');
+      expect(pathChecker).toHaveBeenCalledWith('/repo/bundle/llxprt.js');
+    });
     it('returns null when no entry is readable from a dist/src/launcher layout', async () => {
       const pathChecker = vi.fn(async () => false);
 
