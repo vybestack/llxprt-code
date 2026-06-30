@@ -207,7 +207,13 @@ describe('AuthDialog', () => {
       true,
     );
 
-    const { stdin, unmount } = renderWithProviders(
+    mockGetAuthStatus
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { provider: 'gemini', authenticated: false, oauthEnabled: true },
+      ]);
+
+    const { lastFrame, stdin, unmount } = renderWithProviders(
       <AuthDialog onSelect={onSelect} settings={settings} />,
     );
     await wait();
@@ -218,6 +224,7 @@ describe('AuthDialog', () => {
     expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
     expect(mockAuthenticate).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain('[ON]');
     unmount();
   });
 
