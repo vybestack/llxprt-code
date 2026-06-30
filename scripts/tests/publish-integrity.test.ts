@@ -107,6 +107,71 @@ function getPackedPaths(): Set<string> {
 }
 
 /**
+ * Removes JavaScript line (`//…`) and block comments from source while
+ * preserving the contents of string and template literals. This is a
+ * deliberately small delimiter-aware lexer — not a full parser — whose sole
+ * job is to stop the specifier patterns below from matching commented-out
+ * references such as `// import './helper.js'`. String/template bodies are
+ * copied verbatim (honouring backslash escapes) so a `//` or `/*` sequence
+ * inside a quoted path or URL is never mistaken for the start of a comment.
+ */
+function stripLineAndBlockComments(source: string): string {
+  let out = '';
+  let i = 0;
+  const n = source.length;
+  // Active string/template delimiter while inside a literal; null while in code.
+  let quote: string | null = null;
+  while (i < n) {
+    const ch = source[i];
+    const next = source[i + 1];
+    if (quote !== null) {
+      out += ch;
+      if (ch === '\\' && i + 1 < n) {
+        // Preserve the escaped character verbatim so an escaped quote does not
+        // prematurely close the literal.
+        out += next;
+        i += 2;
+        continue;
+      }
+      if (ch === quote) {
+        quote = null;
+      }
+      i += 1;
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') {
+      quote = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      // Line comment: drop everything up to (but keep) the newline so the
+      // surrounding line structure is preserved for the patterns.
+      i += 2;
+      while (i < n && source[i] !== '\n') {
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      // Block comment: drop through the closing delimiter, emitting a single
+      // space so adjacent tokens cannot be accidentally glued together.
+      i += 2;
+      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
+        i += 1;
+      }
+      i += 2;
+      out += ' ';
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+/**
  * Extracts the specifiers of every *relative* dependency (require() and static
  * import) referenced by a CommonJS/ESM source file. Bare specifiers (npm
  * packages, node: builtins) are intentionally ignored: those are resolved from
@@ -125,6 +190,10 @@ function getPackedPaths(): Set<string> {
  */
 function findRelativeDependencySpecifiers(source: string): string[] {
   const specifiers: string[] = [];
+  // Strip comments first so a commented-out reference — e.g.
+  // `// import './helper.js'` or `/* require('./old.cjs') */` — cannot invent a
+  // phantom dependency and false-fail the tarball integrity check.
+  const code = stripLineAndBlockComments(source);
   const patterns = [
     /\brequire\(\s*['"](\.[^'"]+)['"]\s*\)/g, // require('./x')
     /\brequire\.resolve\(\s*['"](\.[^'"]+)['"]\s*\)/g, // require.resolve('./x')
@@ -141,7 +210,7 @@ function findRelativeDependencySpecifiers(source: string): string[] {
   ];
   for (const pattern of patterns) {
     let match: RegExpExecArray | null;
-    while ((match = pattern.exec(source)) !== null) {
+    while ((match = pattern.exec(code)) !== null) {
       specifiers.push(match[1]);
     }
   }
@@ -288,5 +357,46 @@ describe('findRelativeDependencySpecifiers (tarball-walker regex coverage)', () 
     // cannot be tricked into chasing a non-existent specifier.
     const source = `// copied from './not-a-real-import.js' for reference\n`;
     expect(findRelativeDependencySpecifiers(source)).toStrictEqual([]);
+  });
+
+  it('ignores commented-out imports/requires (line and block comments)', () => {
+    // A commented-out reference must NOT register as a real dependency,
+    // otherwise the tarball walker would chase a phantom specifier and
+    // false-fail the integrity check even though no code imports it. This
+    // covers every supported form behind both `//` and block comments —
+    // including the bare side-effect `import './x'` that the `from`-anchor
+    // alone does not defend against.
+    const source = [
+      `// import './commented-side-effect.js';`,
+      `  //import helper from './commented-binding.js';`,
+      `// require('./commented-require.cjs');`,
+      `// const x = require.resolve('./commented-resolve.js');`,
+      `// await import('./commented-dynamic.js');`,
+      `/* import { thing } from './block-commented.mjs'; */`,
+      `/*`,
+      ` * import './multiline-block.js';`,
+      ` */`,
+    ].join('\n');
+    expect(findRelativeDependencySpecifiers(source)).toStrictEqual([]);
+  });
+
+  it('still captures real imports that sit alongside comments and quoted slashes', () => {
+    // The comment stripper must not over-reach: genuine code on the same or
+    // adjacent lines as comments is still scanned, and a `//` or `/*` that
+    // lives inside a string literal (e.g. a URL) must be treated as data, not
+    // as the start of a comment that would swallow the trailing real import.
+    const source = [
+      `import './real-side-effect.js'; // import './fake.js'`,
+      `const url = 'https://example.com/not-a-comment';`,
+      `require('./real-require.cjs'); /* require('./fake.cjs') */`,
+      `import helper from './real-binding.js';`,
+    ].join('\n');
+    expect(findRelativeDependencySpecifiers(source).sort()).toStrictEqual(
+      [
+        './real-binding.js',
+        './real-require.cjs',
+        './real-side-effect.js',
+      ].sort(),
+    );
   });
 });
