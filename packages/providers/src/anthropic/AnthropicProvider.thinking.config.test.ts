@@ -474,6 +474,72 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(request.thinking?.type).toBe('enabled');
       expect(request.thinking?.budget_tokens).toBe(10000);
     });
+
+    it('should use adaptive thinking for Sonnet 5 when no explicit budgetTokens @issue:2289', async () => {
+      settingsService.set('reasoning.enabled', true);
+      // Don't set budgetTokens
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-5',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('adaptive');
+      expect(request.thinking?.budget_tokens).toBeUndefined();
+    });
+
+    it('should map xhigh effort to max for Sonnet 5 @issue:2289', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.effort', 'xhigh');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-5',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.output_config?.effort).toBe('max');
+    });
   });
 
   describe('Streaming Thinking Tests @requirement:REQ-ANTHROPIC-THINK-002', () => {

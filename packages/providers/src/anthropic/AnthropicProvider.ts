@@ -35,7 +35,7 @@ import {
   DEFAULT_MODELS,
   getMaxTokensForModel as getMaxTokensForModelFn,
   getContextWindowForModel as getContextWindowForModelFn,
-  getLatestClaude4Model as getLatestClaude4ModelFn,
+  getLatestClaudeModel as getLatestClaudeModelFn,
 } from './AnthropicModelData.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
@@ -271,17 +271,23 @@ export class AnthropicProvider extends BaseProvider {
         });
       }
 
-      // Add "latest" aliases for Claude 4 tiers (opus, sonnet). We pick the newest
-      // version of each tier based on the sorted order created above.
+      // Add "latest" aliases for Claude tiers (opus, sonnet). We pick the newest
+      // version of each tier (e.g. Sonnet 5 outranks Sonnet 4) based on the
+      // sorted order created above.
       const addLatestAlias = (tier: 'opus' | 'sonnet') => {
+        // Match any major version of the tier (e.g. claude-sonnet-4-*,
+        // claude-sonnet-5, claude-sonnet-5-YYYYMMDD) so the alias tracks the
+        // newest release rather than a single hardcoded generation.
+        const tierRegex = new RegExp(`^claude-${tier}-(\\d+)`);
         const tierModels = models
-          .filter((m) => m.id.startsWith(`claude-${tier}-4-`))
+          .filter((m) => tierRegex.test(m.id))
           .sort((a, b) => b.id.localeCompare(a.id));
         if (tierModels.length > 0) {
           const latest = tierModels[0];
+          const majorVersion = tierRegex.exec(latest.id)?.[1] ?? '4';
           models.push({
             ...latest,
-            id: `claude-${tier}-4-latest`,
+            id: `claude-${tier}-${majorVersion}-latest`,
             name: latest.name.replace(/-\d{8}$/, '-latest'),
           });
         }
@@ -322,13 +328,13 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Helper method to get the latest Claude 4 model ID for a given tier.
+   * Helper method to get the latest Claude model ID for a given tier.
    * This can be used when you want to ensure you're using the latest model.
    * @param tier - The model tier: 'opus', 'sonnet', or 'haiku'
    * @returns The latest model ID for that tier
    */
-  getLatestClaude4Model(tier: 'opus' | 'sonnet' | 'haiku' = 'sonnet'): string {
-    return getLatestClaude4ModelFn(tier);
+  getLatestClaudeModel(tier: 'opus' | 'sonnet' | 'haiku' = 'sonnet'): string {
+    return getLatestClaudeModelFn(tier);
   }
 
   private getMaxTokensForModel(modelId: string): number {

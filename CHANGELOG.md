@@ -8,6 +8,7 @@
 
 ### Added
 
+- Added **Claude Sonnet 5** (`claude-sonnet-5`) to the model menu: it is now selectable in the profile-create wizard, appears in the Anthropic provider model list (both OAuth and default paths), and resolves correct max output tokens (128K), context window (200K subscription default; 1M is API-only/plan-gated), and token limits. The "latest" sonnet alias logic now tracks Sonnet 5, and adaptive thinking / `effort` wiring covers it (#2289).
 - Async task execution: Launch subagents with `async=true` to run in background (#244)
 - `check_async_tasks` tool for model to query async task status
 - `/tasks list` command to show all async tasks

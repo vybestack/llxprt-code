@@ -51,6 +51,10 @@ const EXACT_LIMITS: Record<string, TokenCount> = {
   'claude-opus-4-latest': 200_000,
   'claude-sonnet-4-6': 200_000,
   'claude-sonnet-4-latest': 400_000,
+  // Claude Sonnet 5 defaults to the Claude Code / subscription 200K context
+  // window. The advertised 1M window is API-only and plan-gated; override via
+  // /set or a profile (context-limit).
+  'claude-sonnet-5': 200_000,
   'claude-3-7-opus-20250115': 300_000,
   'claude-3-7-sonnet-20250115': 300_000,
   'claude-3-opus-20240229': 200_000,

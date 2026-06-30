@@ -15,7 +15,7 @@ import type {
   AnthropicMessage,
   AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
-import { isOpus46Plus } from './AnthropicModelData.js';
+import { supportsAdaptiveThinking } from './AnthropicModelData.js';
 
 /**
  * A content block with cache_control attached.
@@ -219,6 +219,7 @@ export function attachPromptCaching(
 /**
  * Build thinking configuration for Anthropic API
  * @issue #1307: Correct adaptive thinking support for Opus 4.6
+ * @issue #2289: Extended to Sonnet 5 (also supports adaptive thinking)
  */
 export function buildThinkingConfig(options: {
   reasoningEnabled: boolean;
@@ -234,10 +235,10 @@ export function buildThinkingConfig(options: {
     return {};
   }
 
-  const opus46Plus = isOpus46Plus(options.model);
+  const adaptiveCapable = supportsAdaptiveThinking(options.model);
 
   if (
-    opus46Plus &&
+    adaptiveCapable &&
     options.reasoningBudgetTokens == null &&
     options.adaptiveThinking !== false
   ) {
