@@ -31,6 +31,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { RESPONSES_API_MODELS } from '../../openai/RESPONSES_API_MODELS.js';
+import type { IModel } from '../../IModel.js';
 
 const STANDARD_BASE_URL = 'https://api.openai.com/v1';
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
@@ -44,6 +45,15 @@ function mockOkResponse(data: unknown): Response {
 
 function mockNonOkResponse(status: number): Response {
   return new Response(JSON.stringify({}), { status });
+}
+
+function buildExpectedResponsesModels(provider: string): IModel[] {
+  return RESPONSES_API_MODELS.map((modelId) => ({
+    id: modelId,
+    name: modelId,
+    provider,
+    supportedToolFormats: ['openai'],
+  }));
 }
 
 describe('OpenAIResponsesProvider - Model Listing', () => {
@@ -218,6 +228,20 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
         `${CODEX_BASE_URL}/models`,
         expect.objectContaining({ method: 'GET' }),
       );
+      expect(models).toStrictEqual([
+        {
+          id: 'gpt-4o',
+          name: 'gpt-4o',
+          provider: 'openai-responses',
+          supportedToolFormats: ['openai'],
+        },
+        {
+          id: 'o3-mini',
+          name: 'o3-mini',
+          provider: 'openai-responses',
+          supportedToolFormats: ['openai'],
+        },
+      ]);
 
       // The base provider must not synthesize the Codex-only models. Those are
       // only available via the /provider codex alias (codex.config staticModels).
@@ -240,15 +264,12 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
+      expect(models).toStrictEqual(
+        buildExpectedResponsesModels('openai-responses'),
+      );
       // Fallback is the standard Responses API list — no hardcoded Codex list.
       for (const codexId of CODEX_ONLY_IDS) {
         expect(modelIds).not.toContain(codexId);
-      }
-      expect(modelIds).toContain('o3-mini');
-      expect(modelIds).toContain('gpt-4o');
-      for (const model of models) {
-        expect(model.provider).toBe('openai-responses');
-        expect(model.supportedToolFormats).toStrictEqual(['openai']);
       }
     });
 
@@ -257,14 +278,12 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const models = await provider.getModels();
       const modelIds = models.map((m) => m.id);
 
+      expect(models).toStrictEqual(
+        buildExpectedResponsesModels('openai-responses'),
+      );
       expect(fetchSpy).not.toHaveBeenCalled();
       for (const codexId of CODEX_ONLY_IDS) {
         expect(modelIds).not.toContain(codexId);
-      }
-      expect(modelIds).toContain('o3-mini');
-      for (const model of models) {
-        expect(model.provider).toBe('openai-responses');
-        expect(model.supportedToolFormats).toStrictEqual(['openai']);
       }
     });
   });
