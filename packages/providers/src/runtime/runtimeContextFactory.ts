@@ -316,11 +316,11 @@ function resolveOAuthManager(
   const tokenStore =
     sharedTokenStore ??
     (sharedTokenStore = createTokenStore() as KeyringTokenStore);
-  const oauthSettings = createFileOAuthSettingsProvider();
   if (optionsOAuthManager) {
     registerStandardOAuthProviders(optionsOAuthManager);
     return optionsOAuthManager;
   }
+  const oauthSettings = createFileOAuthSettingsProvider();
   const oauthManager = new OAuthManager(tokenStore, oauthSettings, {
     messageBus: sessionMessageBus,
   });

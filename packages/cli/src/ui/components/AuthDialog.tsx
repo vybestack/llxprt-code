@@ -26,6 +26,7 @@ interface AuthDialogState {
   enabledProviders: Set<string>;
   setEnabledProviders: React.Dispatch<React.SetStateAction<Set<string>>>;
   authStatuses: Map<string, AuthStatus>;
+  refreshAuthStatuses: () => Promise<void>;
 }
 
 function getEnabledProviders(
@@ -173,6 +174,21 @@ function useAuthDialogState(
     () => new Map(),
   );
 
+  const refreshAuthStatuses = useCallback(async (): Promise<void> => {
+    const oauthManager = runtime.getCliOAuthManager();
+    if (!oauthManager) return;
+    try {
+      const statuses = await oauthManager.getAuthStatus();
+      if (!mountedRef.current) return;
+      setAuthStatuses(
+        new Map(statuses.map((status) => [status.provider, status])),
+      );
+      syncEnabledProvidersFromAuthStatus(setEnabledProviders, statuses);
+    } catch {
+      if (mountedRef.current) setAuthStatuses(new Map());
+    }
+  }, [mountedRef, runtime, setEnabledProviders]);
+
   useEffect(() => {
     setEnabledProviders(
       getEnabledProviders(settings.merged.oauthEnabledProviders),
@@ -180,28 +196,14 @@ function useAuthDialogState(
   }, [settings.merged.oauthEnabledProviders]);
 
   useEffect(() => {
-    const oauthManager = runtime.getCliOAuthManager();
-    const getAuthStatus = oauthManager?.getAuthStatus;
-    if (getAuthStatus === undefined) return;
-
-    void (async () => {
-      try {
-        const statuses = await getAuthStatus.call(oauthManager);
-        if (!mountedRef.current) return;
-        setAuthStatuses(
-          new Map(statuses.map((status) => [status.provider, status])),
-        );
-        syncEnabledProvidersFromAuthStatus(setEnabledProviders, statuses);
-      } catch {
-        if (mountedRef.current) setAuthStatuses(new Map());
-      }
-    })();
-  }, [mountedRef, runtime]);
+    void refreshAuthStatuses();
+  }, [refreshAuthStatuses]);
 
   return {
     enabledProviders,
     setEnabledProviders,
     authStatuses,
+    refreshAuthStatuses,
   };
 }
 
@@ -246,8 +248,12 @@ export function AuthDialog({
   const [errorMessage, setErrorMessage] = useState<string | null>(
     firstNonEmptyString(initialErrorMessage) ?? null,
   );
-  const { enabledProviders, setEnabledProviders, authStatuses } =
-    useAuthDialogState(settings, runtime, mountedRef);
+  const {
+    enabledProviders,
+    setEnabledProviders,
+    authStatuses,
+    refreshAuthStatuses,
+  } = useAuthDialogState(settings, runtime, mountedRef);
   const items = useMemo(
     () => buildAuthItems(enabledProviders, authStatuses),
     [enabledProviders, authStatuses],
@@ -283,16 +289,19 @@ export function AuthDialog({
             }
             return next;
           });
+          await refreshAuthStatuses();
         } catch (error) {
           if (mountedRef.current) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
             setErrorMessage(
-              `Failed to toggle OAuth for ${providerName}: ${error}`,
+              `Failed to toggle OAuth for ${providerName}: ${errorMessage}`,
             );
           }
         }
       })();
     },
-    [mountedRef, onSelect, runtime, setEnabledProviders],
+    [mountedRef, onSelect, refreshAuthStatuses, runtime, setEnabledProviders],
   );
 
   useCloseAuthDialogOnEscape(onSelect);

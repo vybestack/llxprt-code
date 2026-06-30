@@ -234,7 +234,11 @@ describe('AuthDialog', () => {
         path: '',
       },
       {
-        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        settings: {
+          ui: { customThemes: {} },
+          mcpServers: {},
+          oauthEnabledProviders: { gemini: true },
+        },
         path: '',
       },
       {
