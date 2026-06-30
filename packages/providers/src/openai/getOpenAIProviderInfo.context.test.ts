@@ -174,4 +174,30 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       'custom-model',
     );
   });
+
+  it('routes gpt-5.4-mini to the Responses API by default', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('model', 'gpt-5.4-mini');
+
+    const providerStub: OpenAIProviderLike = {
+      name: 'openai',
+    };
+    const providerManager = createProviderManagerStub(providerStub);
+
+    const config = createRuntimeConfigStub(settingsService, {
+      getProvider: () => 'openai',
+      getProviderManager: () => providerManager,
+      getModel: () => 'gpt-5.4-mini',
+    });
+
+    const runtimeContext = createProviderRuntimeContext({
+      settingsService,
+      config,
+    });
+    setActiveProviderRuntimeContext(runtimeContext);
+
+    const info = getOpenAIProviderInfo(providerManager);
+    expect(info.currentModel).toBe('gpt-5.4-mini');
+    expect(info.isResponsesAPI).toBe(true);
+  });
 });
