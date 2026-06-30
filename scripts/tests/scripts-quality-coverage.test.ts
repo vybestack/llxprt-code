@@ -144,7 +144,11 @@ describe('Issue #2282: scripts strict code-quality coverage', () => {
   it(
     'does not apply type-aware rules (scripts have no tsconfig project)',
     () => {
-      const rules = effectiveRulesFor('scripts/start.js');
+      // Use a .ts file because type-aware @typescript-eslint rules only
+      // activate for files the TS parser processes with projectService. A .js
+      // file would pass vacuously (the parser never attempts type resolution
+      // for plain JS), so asserting against .ts locks the real contract.
+      const rules = effectiveRulesFor('scripts/generate-settings-doc.ts');
       // Type-aware rules require a tsconfig project (projectService), which the
       // scripts tree lacks. This is a documented, intentional limitation, not a
       // suppression. These rules must not be promoted to error for scripts.

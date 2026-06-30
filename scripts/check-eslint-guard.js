@@ -4113,12 +4113,15 @@ function listGitTrackedCheckedSourceFiles(rootDir) {
   try {
     raw = git(['ls-files'], rootDir);
   } catch {
+    // git is unavailable (e.g. temp-dir test fixtures outside a repo) — fall
+    // back to the filesystem walk so those tests keep working.
     return listCheckedSourceFiles(rootDir);
   }
+  // git succeeded: filter to tracked files only. An empty result means the
+  // root has no tracked checked sources (all gitignored or fresh repo), so
+  // return an empty list rather than falling back to the unfiltered walk,
+  // which would reintroduce the exact false positives this filter prevents.
   const tracked = new Set(raw.split(String.fromCharCode(10)).filter(Boolean));
-  if (tracked.size === 0) {
-    return listCheckedSourceFiles(rootDir);
-  }
   return listCheckedSourceFiles(rootDir).filter((file) => {
     const rel = relative(rootDir, file).replace(/\\/g, '/');
     return tracked.has(rel);
