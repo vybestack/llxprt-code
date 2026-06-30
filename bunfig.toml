@@ -1,0 +1,4 @@
+[install]
+# Reproduce npm's hoisted node_modules topology so tooling that walks
+# node_modules behaves identically under bun and npm during the migration.
+linker = "hoisted"
