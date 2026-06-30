@@ -139,7 +139,6 @@ export function canonicalizeToolName(rawName: string): string {
 }
 
 /**
-/**
  * Convert string to snake_case.
  */
 export function toSnakeCase(value: string): string {

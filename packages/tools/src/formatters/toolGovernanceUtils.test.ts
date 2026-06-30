@@ -68,6 +68,7 @@ describe('tool governance candidate generation', () => {
     expect(getToolNameCandidates('functions.tool.v1')).toStrictEqual([
       'functions.tool.v1',
       'tool.v1',
+      'v1',
     ]);
   });
 
@@ -246,5 +247,40 @@ describe('tool governance blocking', () => {
     expect(isToolBlocked('write_file', governance)).toBe(true);
     expect(isToolBlocked('functions.task', governance)).toBe(true);
     expect(isToolBlocked('read_file', governance)).toBe(true);
+  });
+
+  it('disabled takes precedence over allowed', () => {
+    const governance = buildToolGovernance(
+      createConfig({
+        ephemerals: {
+          'tools.allowed': ['read_file'],
+          'tools.disabled': ['read_file'],
+        },
+      }),
+    );
+
+    expect(isToolBlocked('read_file', governance)).toBe(true);
+  });
+
+  it('API-qualified variants match unqualified allowed names', () => {
+    const governance = buildToolGovernance(
+      createConfig({
+        ephemerals: {
+          'tools.allowed': ['read_file'],
+        },
+      }),
+    );
+
+    expect(isToolBlocked('read_file', governance)).toBe(false);
+    expect(isToolBlocked('api.v1.read_file', governance)).toBe(false);
+  });
+
+  it('generates last-segment alias for function-prefixed 3-segment names', () => {
+    expect(getToolNameCandidates('function.a.read_file')).toContain(
+      'read_file',
+    );
+    expect(getToolNameCandidates('functions.a.read_file')).toContain(
+      'read_file',
+    );
   });
 });

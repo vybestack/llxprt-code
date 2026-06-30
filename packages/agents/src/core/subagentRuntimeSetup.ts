@@ -82,7 +82,18 @@ function isSubagentExcludedDeclaration(decl: unknown): boolean {
   return typeof declName === 'string' && isSubagentExcludedToolName(declName);
 }
 
-function getDeclarationWhitelistName(decl: unknown): string | undefined {
+function resolveAllowedToolEntryCanonical(
+  name: string,
+  allowedNames: ReadonlySet<string>,
+): string | undefined {
+  const candidates = getToolNameCandidates(name);
+  return candidates.find((candidate) => allowedNames.has(candidate));
+}
+
+function getDeclarationWhitelistName(
+  decl: unknown,
+  registryNames?: ReadonlySet<string>,
+): string | undefined {
   if (typeof decl !== 'object' || decl === null || !('name' in decl)) {
     return undefined;
   }
@@ -92,15 +103,17 @@ function getDeclarationWhitelistName(decl: unknown): string | undefined {
     return undefined;
   }
 
-  return getToolNameCandidates(declName)[0];
-}
+  if (registryNames !== undefined) {
+    const resolved = resolveAllowedToolEntryCanonical(declName, registryNames);
+    if (resolved === undefined) {
+      debugLogger.warn(
+        `Declaration tool "${declName}" is not in the registry and is skipped.`,
+      );
+    }
+    return resolved;
+  }
 
-function resolveAllowedToolEntryCanonical(
-  name: string,
-  allowedNames: ReadonlySet<string>,
-): string | undefined {
-  const candidates = getToolNameCandidates(name);
-  return candidates.find((candidate) => allowedNames.has(candidate));
+  return getToolNameCandidates(declName)[0];
 }
 
 /**
@@ -317,7 +330,7 @@ function applyToolWhitelistToEphemerals(
     );
   const declarationWhitelist = toolConfig.tools
     .filter((entry) => typeof entry !== 'string')
-    .map(getDeclarationWhitelistName)
+    .map((entry) => getDeclarationWhitelistName(entry, registryNames))
     .filter((entry): entry is string => entry !== undefined);
   const normalizedWhitelist = [
     ...normalizedStringWhitelist,
@@ -348,11 +361,7 @@ function applyToolWhitelistToEphemerals(
     : new Set<string>();
 
   const allowedSet = hasExistingAllowed
-    ? normalizedWhitelist.filter((entry) =>
-        getToolNameCandidates(entry).some((candidate) =>
-          existingAllowed.has(candidate),
-        ),
-      )
+    ? normalizedWhitelist.filter((entry) => existingAllowed.has(entry))
     : normalizedWhitelist;
 
   ephemerals['tools.allowed'] = Array.from(new Set(allowedSet));
@@ -391,6 +400,19 @@ function resolveDeclarationEntry(
   if (typeof entry !== 'string') {
     if (isSubagentExcludedDeclaration(entry)) {
       return null;
+    }
+    const declarationName = entry.name;
+    if (declarationName && ctx.allowedNames.size > 0) {
+      const resolved = resolveAllowedToolEntryCanonical(
+        declarationName,
+        ctx.allowedNames,
+      );
+      if (resolved === undefined) {
+        debugLogger.warn(
+          `Declaration tool "${declarationName}" is not permitted by the runtime view and is skipped.`,
+        );
+        return null;
+      }
     }
     return entry;
   }

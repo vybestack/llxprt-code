@@ -86,7 +86,7 @@ function buildToolNameCandidates(parsed: ParsedToolName): string[] {
     if (segments.length > 2) {
       appendCandidate(candidates, segments.slice(1).join('.'));
     }
-    if (segments.length === 2 || prefix === 'api') {
+    if (segments.length === 2 || API_TOOL_NAMESPACE_PREFIXES.has(prefix)) {
       appendCandidate(candidates, segments[segments.length - 1]);
     }
   }

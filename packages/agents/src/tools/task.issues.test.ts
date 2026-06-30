@@ -678,7 +678,7 @@ describe('TaskTool', () => {
           tool_whitelist: [
             'functions.run_shell_command',
             'functions.task',
-            'something.list_subagents',
+            'functions.list_subagents',
           ],
         },
         ['run_shell_command', 'task', 'list_subagents'],

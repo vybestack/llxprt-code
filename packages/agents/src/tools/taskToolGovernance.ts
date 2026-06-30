@@ -16,9 +16,6 @@ import {
 } from '../core/toolGovernance.js';
 import type { TaskToolParams } from './task.js';
 
-const normalizeToolNameForPolicy = (name: string): string =>
-  canonicalizeToolName(name);
-
 /**
  * Internal normalized parameters derived from the public `TaskToolParams`.
  */
@@ -75,7 +72,7 @@ export function buildGovernedToolWhitelist(
     }
 
     const candidates = getToolNameCandidates(name);
-    if (candidates.some((canonical) => excluded.has(canonical))) {
+    if (isSubagentExcludedToolName(name, excluded)) {
       return undefined;
     }
     if (candidates.some((canonical) => governance.disabled.has(canonical))) {
@@ -103,7 +100,7 @@ export function buildGovernedToolWhitelist(
   const uniqueByCanonical = new Set<string>();
   const deduped: string[] = [];
   for (const tool of validTools) {
-    const canonical = normalizeToolNameForPolicy(tool);
+    const canonical = canonicalizeToolName(tool);
     if (!canonical || uniqueByCanonical.has(canonical)) {
       continue;
     }

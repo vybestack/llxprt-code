@@ -462,6 +462,17 @@ describe('buildRuntimeFunctionDeclarations', () => {
     expect(decls.map((decl) => decl.name)).toStrictEqual(['custom_tool']);
   });
 
+  it('skips non-string FunctionDeclaration names absent from the runtime view', () => {
+    const toolsView = createMockToolsView(['read_file']);
+    const missingDecl = { name: 'custom_tool', description: 'custom' };
+    const readDecl = { name: 'read_file', description: 'read' };
+
+    const decls = buildRuntimeFunctionDeclarations(toolsView, {
+      tools: [missingDecl, readDecl],
+    });
+
+    expect(decls).toStrictEqual([readDecl]);
+  });
   // Issue #2069: non-string FunctionDeclaration with no name is preserved
   // (cannot match excluded tools).
   it('preserves non-string FunctionDeclaration with no name', () => {

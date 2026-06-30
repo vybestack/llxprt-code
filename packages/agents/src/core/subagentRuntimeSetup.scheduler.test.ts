@@ -533,6 +533,30 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     ]);
   });
 
+  it('applyToolWhitelistToEphemerals skips non-string declaration names absent from enabled registry', () => {
+    const fixture = makeSchedulerFixture('sess-2184');
+    const toolRegistry = {
+      ...fixture.toolRegistry,
+      getEnabledTools: () => [{ name: 'read_file' }],
+    };
+    const config = createToolExecutionConfig(
+      fixture.runtimeBundle,
+      toolRegistry,
+      fixture.foregroundConfig,
+      undefined,
+      undefined,
+      {
+        tools: [
+          { name: 'read_file', description: 'read' },
+          { name: 'custom_tool', description: 'custom' },
+        ],
+      },
+    );
+
+    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
+      'read_file',
+    ]);
+  });
   it('applyToolWhitelistToEphemerals fail-closes when only excluded non-string declarations remain', () => {
     const fixture = makeSchedulerFixture('sess-2184');
     const config = createToolExecutionConfig(
