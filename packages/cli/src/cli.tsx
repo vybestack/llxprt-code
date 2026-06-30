@@ -56,10 +56,6 @@ import {
   type RecordingIntegration,
   type IContent,
   type LockHandle,
-  coreEvents,
-  CoreEvent,
-  type OutputPayload,
-  type ConsoleLogPayload,
   patchStdio,
   writeToStderr,
   writeToStdout,
@@ -105,6 +101,7 @@ import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
 import { firstNonEmptyString } from './utils/coalesce.js';
+import { initializeOutputListenersAndFlush } from './utils/outputFlush.js';
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import {
@@ -677,28 +674,4 @@ function setWindowTitle(title: string, settings: LoadedSettings) {
       writeToStdout(`\x1b]0;\x07`);
     });
   }
-}
-
-export function initializeOutputListenersAndFlush() {
-  // If there are no listeners for output, make sure we flush so output is not
-  // lost.
-  if (coreEvents.listenerCount(CoreEvent.Output) === 0) {
-    // In non-interactive mode, ensure we drain any buffered output or logs to stderr
-    coreEvents.on(CoreEvent.Output, (payload: OutputPayload) => {
-      if (payload.isStderr) {
-        writeToStderr(payload.chunk, payload.encoding);
-      } else {
-        writeToStdout(payload.chunk, payload.encoding);
-      }
-    });
-
-    coreEvents.on(CoreEvent.ConsoleLog, (payload: ConsoleLogPayload) => {
-      if (payload.type === 'error' || payload.type === 'warn') {
-        writeToStderr(payload.content);
-      } else {
-        writeToStdout(payload.content);
-      }
-    });
-  }
-  coreEvents.drainBacklogs();
 }
