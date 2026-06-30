@@ -42,8 +42,6 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import { convertToolsToOpenAIVercel } from './schemaConverter.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';
@@ -105,7 +103,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
-    _oauthManager?: OAuthManager,
   ) {
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;

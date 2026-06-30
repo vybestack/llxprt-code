@@ -717,10 +717,10 @@ describe('getHigherPriorityAuth', () => {
   });
 
   it('uses uppercase provider name for env var check', async () => {
-    process.env.QWEN_API_KEY = 'qwen-env-key';
+    process.env.MISTRAL_API_KEY = 'mistral-env-key';
     const settings = makeLoadedSettings();
 
-    const result = await getHigherPriorityAuth('qwen', settings);
+    const result = await getHigherPriorityAuth('mistral', settings);
     expect(result).toBe('Environment Variable');
   });
 
@@ -731,7 +731,7 @@ describe('getHigherPriorityAuth', () => {
     expect(result).toBeNull();
   });
 
-  it('does not check openai base URL mismatch for non-qwen providers', async () => {
+  it('does not check provider-specific base URL mismatches for other providers', async () => {
     const settings = makeLoadedSettings({
       providerBaseUrls: { openai: 'https://api.openai.com/v1' },
     });

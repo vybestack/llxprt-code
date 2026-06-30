@@ -224,12 +224,16 @@ describe('KeyringTokenStore DI behavioral tests', () => {
       logger: createNoOpLogger(),
     });
 
-    await tokenStore.saveToken('qwen', VALID_TOKEN);
+    await tokenStore.saveToken('device-code-test', VALID_TOKEN);
     await tokenStore.saveToken('anthropic', VALID_TOKEN);
     await tokenStore.saveToken('gemini', VALID_TOKEN);
 
     const providers = await tokenStore.listProviders();
-    expect(providers).toStrictEqual(['anthropic', 'gemini', 'qwen']);
+    expect(providers).toStrictEqual([
+      'anthropic',
+      'device-code-test',
+      'gemini',
+    ]);
   });
 
   it('listProviders deduplicates across buckets', async () => {

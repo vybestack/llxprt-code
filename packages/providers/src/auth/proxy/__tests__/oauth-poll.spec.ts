@@ -259,7 +259,7 @@ describe('oauth_poll handler', () => {
     keyStorage = new InMemoryProviderKeyStorage();
     testFlow = new TestDeviceCodeFlow();
 
-    const flowFactories = new Map([['qwen', () => testFlow]]);
+    const flowFactories = new Map([['device-code-test', () => testFlow]]);
 
     const opts: CredentialProxyServerOptions = {
       tokenStore: backingStore,
@@ -294,7 +294,9 @@ describe('oauth_poll handler', () => {
       // Flow returns pending on first poll
       testFlow.setPollSequence([{ error: 'authorization_pending' }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       expect(init.ok).toBe(true);
       expect(init.data?.flow_type).toBe('device_code');
 
@@ -310,7 +312,9 @@ describe('oauth_poll handler', () => {
     it('returns pending with increased interval on slow_down', async () => {
       testFlow.setPollSequence([{ error: 'slow_down', newInterval: 10 }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -323,13 +327,15 @@ describe('oauth_poll handler', () => {
     it('backing store has NO token while pending', async () => {
       testFlow.setPollSequence([{ error: 'authorization_pending' }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
 
       // CRITICAL: No token should be stored while pending
-      const stored = await backingStore.getToken('qwen');
+      const stored = await backingStore.getToken('device-code-test');
       expect(stored).toBeNull();
     });
   });
@@ -347,7 +353,9 @@ describe('oauth_poll handler', () => {
 
       testFlow.setPollSequence([{ token: expectedToken }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -368,13 +376,15 @@ describe('oauth_poll handler', () => {
 
       testFlow.setPollSequence([{ token: expectedToken }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
 
       // CRITICAL: Verify BACKING STORE has the token
-      const stored = await backingStore.getToken('qwen');
+      const stored = await backingStore.getToken('device-code-test');
       expect(stored).not.toBeNull();
       expect(stored?.access_token).toBe('stored_access_token');
     });
@@ -393,7 +403,9 @@ describe('oauth_poll handler', () => {
         { token: finalToken },
       ]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
 
       // First poll - pending
       const poll1 = await client.request('oauth_poll', {
@@ -416,7 +428,7 @@ describe('oauth_poll handler', () => {
       expect(token3?.access_token).toBe('final_token_after_wait');
 
       // Verify backing store
-      const stored = await backingStore.getToken('qwen');
+      const stored = await backingStore.getToken('device-code-test');
       expect(stored?.access_token).toBe('final_token_after_wait');
     });
   });
@@ -436,7 +448,9 @@ describe('oauth_poll handler', () => {
         },
       ]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -461,13 +475,15 @@ describe('oauth_poll handler', () => {
         },
       ]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
 
       // Backing store must have refresh_token
-      const stored = await backingStore.getToken('qwen');
+      const stored = await backingStore.getToken('device-code-test');
       expect(stored?.refresh_token).toBe('MUST_BE_IN_BACKING_STORE');
     });
   });
@@ -486,7 +502,9 @@ describe('oauth_poll handler', () => {
         },
       ]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
 
       // First poll completes
       const poll1 = await client.request('oauth_poll', {
@@ -511,7 +529,9 @@ describe('oauth_poll handler', () => {
         { error: 'authorization_pending' },
       ]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
 
       // Multiple polls should all succeed with pending
       for (let i = 0; i < 3; i++) {
@@ -546,7 +566,9 @@ describe('oauth_poll handler', () => {
     it('calls flow.pollForToken with device_code from session', async () => {
       testFlow.setPollSequence([{ error: 'authorization_pending' }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -559,7 +581,9 @@ describe('oauth_poll handler', () => {
     it('provider access_denied error propagates as ACCESS_DENIED', async () => {
       testFlow.setPollSequence([{ error: 'access_denied' }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -571,7 +595,9 @@ describe('oauth_poll handler', () => {
     it('provider expired_token error propagates as SESSION_EXPIRED', async () => {
       testFlow.setPollSequence([{ error: 'expired_token' }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -598,7 +624,9 @@ describe('oauth_poll handler', () => {
     it('pending response has status and optional interval', async () => {
       testFlow.setPollSequence([{ error: 'authorization_pending' }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -620,7 +648,9 @@ describe('oauth_poll handler', () => {
         },
       ]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -649,7 +679,7 @@ describe('oauth_poll handler', () => {
       ]);
 
       const init = await client.request('oauth_initiate', {
-        provider: 'qwen',
+        provider: 'device-code-test',
         bucket: 'enterprise',
       });
       await client.request('oauth_poll', {
@@ -657,11 +687,14 @@ describe('oauth_poll handler', () => {
       });
 
       // Verify token stored with correct bucket
-      const stored = await backingStore.getToken('qwen', 'enterprise');
+      const stored = await backingStore.getToken(
+        'device-code-test',
+        'enterprise',
+      );
       expect(stored?.access_token).toBe('bucket_token');
 
       // Default bucket should NOT have this token
-      const defaultBucket = await backingStore.getToken('qwen');
+      const defaultBucket = await backingStore.getToken('device-code-test');
       expect(defaultBucket).toBeNull();
     });
   });
@@ -672,7 +705,9 @@ describe('oauth_poll handler', () => {
     it('poll passes correct device_code to provider (from session, NOT request)', async () => {
       testFlow.setPollSequence([{ error: 'authorization_pending' }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       await client.request('oauth_poll', {
         session_id: init.data?.session_id,
         // Note: NOT passing device_code - it should come from session
@@ -703,7 +738,9 @@ describe('oauth_poll handler', () => {
         },
       ]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -715,7 +752,7 @@ describe('oauth_poll handler', () => {
       expect(token?.access_token).toContain(nonce);
 
       // Backing store must also have nonce
-      const stored = await backingStore.getToken('qwen');
+      const stored = await backingStore.getToken('device-code-test');
       expect(stored?.access_token).toContain(nonce);
       expect(stored?.refresh_token).toContain(nonce);
     });
@@ -727,7 +764,9 @@ describe('oauth_poll handler', () => {
     it('pending response matches canonical schema', async () => {
       testFlow.setPollSequence([{ error: 'authorization_pending' }]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });
@@ -751,7 +790,9 @@ describe('oauth_poll handler', () => {
         },
       ]);
 
-      const init = await client.request('oauth_initiate', { provider: 'qwen' });
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
       const poll = await client.request('oauth_poll', {
         session_id: init.data?.session_id,
       });

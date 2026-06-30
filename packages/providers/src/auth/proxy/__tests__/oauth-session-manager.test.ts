@@ -266,7 +266,7 @@ describe('PKCESessionStore', () => {
       peerA,
     );
     const expiringId = store.createSession(
-      'qwen',
+      'device-code-test',
       'default',
       'device_code',
       { c: 1 },

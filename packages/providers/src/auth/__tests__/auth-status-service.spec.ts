@@ -238,13 +238,15 @@ describe('AuthStatusService.isAuthenticated', () => {
     const tokenStore = makeTokenStore({
       getToken: vi.fn().mockResolvedValue(validToken),
     });
-    const provider = makeProvider('qwen', { isAuthenticated: isAuthMock });
+    const provider = makeProvider('device-code-test', {
+      isAuthenticated: isAuthMock,
+    });
     const service = makeService({
       providers: [provider],
       tokenStore,
       oauthEnabled: true,
     });
-    const result = await service.isAuthenticated('qwen');
+    const result = await service.isAuthenticated('device-code-test');
     // Override threw → fallback → valid token found → true
     expect(result).toBe(true);
     expect(isAuthMock).toHaveBeenCalled();
@@ -261,13 +263,15 @@ describe('AuthStatusService.isAuthenticated', () => {
     const tokenStore = makeTokenStore({
       getToken: vi.fn().mockResolvedValue(validToken),
     });
-    const provider = makeProvider('qwen', { isAuthenticated: isAuthMock });
+    const provider = makeProvider('device-code-test', {
+      isAuthenticated: isAuthMock,
+    });
     const service = makeService({
       providers: [provider],
       tokenStore,
       oauthEnabled: true,
     });
-    const result = await service.isAuthenticated('qwen');
+    const result = await service.isAuthenticated('device-code-test');
     // Override returned false → fallback → valid token found → true
     expect(result).toBe(true);
   });
@@ -335,7 +339,7 @@ describe('AuthStatusService.logout', () => {
       getToken: vi.fn().mockResolvedValue(token),
       listBuckets: vi.fn().mockResolvedValue(['default']),
     });
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const proactiveRenewalManager = makeProactiveRenewalManager();
     const service = makeService({
       tokenStore,
@@ -343,27 +347,33 @@ describe('AuthStatusService.logout', () => {
       proactiveRenewalManager,
     });
 
-    await service.logout('qwen');
+    await service.logout('device-code-test');
 
     expect(provider.logout).toHaveBeenCalledWith(token);
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'default');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'default',
+    );
     expect(
       proactiveRenewalManager.clearRenewalsForProvider as ReturnType<
         typeof vi.fn
       >,
-    ).toHaveBeenCalledWith('qwen', 'default');
+    ).toHaveBeenCalledWith('device-code-test', 'default');
   });
 
   it('removes token even when provider.logout throws', async () => {
-    const provider = makeProvider('qwen', {
+    const provider = makeProvider('device-code-test', {
       logout: vi.fn().mockRejectedValue(new Error('remote revoke failed')),
     });
     const tokenStore = makeTokenStore();
     const service = makeService({ tokenStore, providers: [provider] });
 
-    await service.logout('qwen'); // should not throw
+    await service.logout('device-code-test'); // should not throw
 
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'default');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'default',
+    );
   });
 
   it('does NOT perform Gemini filesystem cleanup in logout (G2: provider handles it)', async () => {
@@ -385,7 +395,7 @@ describe('AuthStatusService.logout', () => {
     const tokenStore = makeTokenStore({
       listBuckets: vi.fn().mockResolvedValue(['default', 'bucket-a']),
     });
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const proactiveRenewalManager = makeProactiveRenewalManager();
     const service = makeService({
       tokenStore,
@@ -393,22 +403,25 @@ describe('AuthStatusService.logout', () => {
       proactiveRenewalManager,
     });
 
-    await service.logout('qwen', 'bucket-a');
+    await service.logout('device-code-test', 'bucket-a');
 
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-a');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-a',
+    );
     expect(
       proactiveRenewalManager.clearRenewalsForProvider as ReturnType<
         typeof vi.fn
       >,
-    ).toHaveBeenCalledWith('qwen', 'bucket-a');
+    ).toHaveBeenCalledWith('device-code-test', 'bucket-a');
   });
 
   it('flushes runtime auth scope after logout', async () => {
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const tokenStore = makeTokenStore();
     const service = makeService({ tokenStore, providers: [provider] });
 
-    await service.logout('qwen');
+    await service.logout('device-code-test');
 
     expect(flushMockRef.current).toBeDefined();
     expect(flushMockRef.current).toHaveBeenCalled();
@@ -446,7 +459,7 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
 
   it('calls clearAuth generically for non-gemini provider', async () => {
     const coreProvider = {
-      name: 'qwen',
+      name: 'device-code-test',
       clearAuthCache: vi.fn(),
       clearAuth: vi.fn(),
       clearState: vi.fn(),
@@ -454,11 +467,11 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
     providerRef.current = coreProvider;
     providerManagerRef.current?.getProviderByName.mockReturnValue(coreProvider);
 
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const tokenStore = makeTokenStore();
     const service = makeService({ tokenStore, providers: [provider] });
 
-    await service.logout('qwen');
+    await service.logout('device-code-test');
 
     // The generic path should call all three methods
     expect(coreProvider.clearAuthCache).toHaveBeenCalled();
@@ -468,7 +481,7 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
 
   it('isolated failures in clearProviderAuthCaches do not prevent flushRuntimeAuthScope', async () => {
     const coreProvider = {
-      name: 'qwen',
+      name: 'device-code-test',
       clearAuthCache: vi.fn().mockImplementation(() => {
         throw new Error('clearAuthCache failed');
       }),
@@ -482,12 +495,12 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
     providerRef.current = coreProvider;
     providerManagerRef.current?.getProviderByName.mockReturnValue(coreProvider);
 
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const tokenStore = makeTokenStore();
     const service = makeService({ tokenStore, providers: [provider] });
 
     // Should not throw even though all cache clearing fails
-    await service.logout('qwen');
+    await service.logout('device-code-test');
 
     // flush must still execute despite all failures
     expect(flushMockRef.current).toBeDefined();
@@ -607,19 +620,24 @@ describe('AuthStatusService.getAuthStatus', () => {
 describe('AuthStatusService.logoutAll', () => {
   it('logs out every provider returned by tokenStore.listProviders', async () => {
     const tokenStore = makeTokenStore({
-      listProviders: vi.fn().mockResolvedValue(['qwen', 'anthropic']),
+      listProviders: vi
+        .fn()
+        .mockResolvedValue(['device-code-test', 'anthropic']),
       listBuckets: vi.fn().mockResolvedValue(['default']),
     });
-    const qwen = makeProvider('qwen');
+    const deviceCodeProvider = makeProvider('device-code-test');
     const anthropic = makeProvider('anthropic');
     const service = makeService({
       tokenStore,
-      providers: [qwen, anthropic],
+      providers: [deviceCodeProvider, anthropic],
     });
 
     await service.logoutAll();
 
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'default');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'default',
+    );
     expect(tokenStore.removeToken).toHaveBeenCalledWith('anthropic', 'default');
   });
 });
@@ -631,14 +649,23 @@ describe('AuthStatusService.logoutAllBuckets', () => {
         .fn()
         .mockResolvedValue(['default', 'bucket-a', 'bucket-b']),
     });
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const service = makeService({ tokenStore, providers: [provider] });
 
-    await service.logoutAllBuckets('qwen');
+    await service.logoutAllBuckets('device-code-test');
 
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'default');
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-a');
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-b');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'default',
+    );
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-a',
+    );
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-b',
+    );
   });
 });
 
@@ -648,9 +675,9 @@ describe('AuthStatusService.listBuckets', () => {
       listBuckets: vi.fn().mockResolvedValue(['default', 'bucket-a']),
     });
     const service = makeService({ tokenStore });
-    const buckets = await service.listBuckets('qwen');
+    const buckets = await service.listBuckets('device-code-test');
     expect(buckets).toStrictEqual(['default', 'bucket-a']);
-    expect(tokenStore.listBuckets).toHaveBeenCalledWith('qwen');
+    expect(tokenStore.listBuckets).toHaveBeenCalledWith('device-code-test');
   });
 });
 
@@ -673,7 +700,7 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
     });
     const service = makeService({ tokenStore });
 
-    const statuses = await service.getAuthStatusWithBuckets('qwen');
+    const statuses = await service.getAuthStatusWithBuckets('device-code-test');
 
     expect(statuses).toHaveLength(2);
     const defaultStatus = statuses.find((s) => s.bucket === 'default');
@@ -695,7 +722,7 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
     });
     const service = makeService({ tokenStore });
 
-    const statuses = await service.getAuthStatusWithBuckets('qwen');
+    const statuses = await service.getAuthStatusWithBuckets('device-code-test');
 
     expect(statuses).toHaveLength(1);
     const defaultStatus = statuses[0];
@@ -723,7 +750,7 @@ describe('AuthStatusService.logout session-bucket clear', () => {
     (
       bucketManager.getSessionBucket as ReturnType<typeof vi.fn>
     ).mockImplementation((providerName: string, metadata?: unknown) =>
-      providerName === 'qwen' &&
+      providerName === 'device-code-test' &&
       (metadata === undefined || metadata === sessionMetadata)
         ? 'target-bucket'
         : undefined,
@@ -740,7 +767,7 @@ describe('AuthStatusService.logout session-bucket clear', () => {
       doGetProfileBuckets: vi.fn().mockResolvedValue([]),
     } as unknown as TokenAccessCoordinator;
 
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const tokenStore = makeTokenStore();
     const service = new AuthStatusService(
       tokenStore,
@@ -750,13 +777,15 @@ describe('AuthStatusService.logout session-bucket clear', () => {
       tokenAccessCoordinator,
     );
 
-    await service.logout('qwen', 'target-bucket');
+    await service.logout('device-code-test', 'target-bucket');
 
     expect(bucketManager.clearSessionBucket).toHaveBeenCalledWith(
-      'qwen',
+      'device-code-test',
       sessionMetadata,
     );
-    expect(bucketManager.clearSessionBucket).toHaveBeenCalledWith('qwen');
+    expect(bucketManager.clearSessionBucket).toHaveBeenCalledWith(
+      'device-code-test',
+    );
   });
 
   it('does not clear session buckets when current session bucket does not match bucketToUse', async () => {
@@ -778,7 +807,7 @@ describe('AuthStatusService.logout session-bucket clear', () => {
       doGetProfileBuckets: vi.fn().mockResolvedValue([]),
     } as unknown as TokenAccessCoordinator;
 
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const tokenStore = makeTokenStore();
     const service = new AuthStatusService(
       tokenStore,
@@ -788,7 +817,7 @@ describe('AuthStatusService.logout session-bucket clear', () => {
       tokenAccessCoordinator,
     );
 
-    await service.logout('qwen', 'target-bucket');
+    await service.logout('device-code-test', 'target-bucket');
 
     expect(bucketManager.clearSessionBucket).not.toHaveBeenCalled();
   });
@@ -809,7 +838,7 @@ describe('AuthStatusService.logout proactive renewal cleanup', () => {
     const tokenStore = makeTokenStore({
       getToken: vi.fn().mockResolvedValue(token),
     });
-    const provider = makeProvider('qwen');
+    const provider = makeProvider('device-code-test');
     const proactiveRenewalManager = makeProactiveRenewalManager();
     const service = makeService({
       tokenStore,
@@ -817,14 +846,14 @@ describe('AuthStatusService.logout proactive renewal cleanup', () => {
       proactiveRenewalManager,
     });
 
-    await service.logout('qwen', 'bucket-x');
+    await service.logout('device-code-test', 'bucket-x');
 
     // Must be called with the exact provider+bucket
     expect(
       proactiveRenewalManager.clearRenewalsForProvider as ReturnType<
         typeof vi.fn
       >,
-    ).toHaveBeenCalledExactlyOnceWith('qwen', 'bucket-x');
+    ).toHaveBeenCalledExactlyOnceWith('device-code-test', 'bucket-x');
 
     // Over-broad cleanup methods must NOT be called
     expect(

@@ -146,7 +146,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
     // Register mock OAuth providers
     oauthManager.registerProvider(createMockProvider('anthropic'));
     oauthManager.registerProvider(createMockProvider('gemini'));
-    oauthManager.registerProvider(createMockProvider('qwen'));
+    oauthManager.registerProvider(createMockProvider('device-code-test'));
     oauthManager.registerProvider(createMockProvider('openai'));
   });
 
@@ -298,18 +298,23 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       await tokenStore.saveToken('gemini', geminiWork, 'work-company');
       await tokenStore.saveToken('gemini', geminiPersonal, 'personal-gmail');
 
-      // Create buckets for qwen
-      const qwenWork = createMockToken('work-company');
-      await tokenStore.saveToken('qwen', qwenWork, 'work-company');
+      // Create buckets for device-code-test
+      const deviceCodeWork = createMockToken('work-company');
+      await tokenStore.saveToken(
+        'device-code-test',
+        deviceCodeWork,
+        'work-company',
+      );
 
       // Verify provider isolation
       const anthropicBuckets = await tokenStore.listBuckets('anthropic');
       const geminiBuckets = await tokenStore.listBuckets('gemini');
-      const qwenBuckets = await tokenStore.listBuckets('qwen');
+      const deviceCodeBuckets =
+        await tokenStore.listBuckets('device-code-test');
 
       expect(anthropicBuckets).toHaveLength(2);
       expect(geminiBuckets).toHaveLength(2);
-      expect(qwenBuckets).toHaveLength(1);
+      expect(deviceCodeBuckets).toHaveLength(1);
 
       // Verify tokens are provider-specific
       const anthropicToken = await tokenStore.getToken(

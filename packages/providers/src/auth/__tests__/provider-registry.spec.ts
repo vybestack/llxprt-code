@@ -119,10 +119,10 @@ describe('ProviderRegistry', () => {
     });
 
     it('returns registered provider', () => {
-      const provider = createMockProvider('qwen');
+      const provider = createMockProvider('device-code-test');
       registry.registerProvider(provider);
 
-      expect(registry.getProvider('qwen')).toBe(provider);
+      expect(registry.getProvider('device-code-test')).toBe(provider);
     });
   });
 
@@ -132,14 +132,14 @@ describe('ProviderRegistry', () => {
     });
 
     it('returns all registered provider names sorted', () => {
-      registry.registerProvider(createMockProvider('qwen'));
+      registry.registerProvider(createMockProvider('device-code-test'));
       registry.registerProvider(createMockProvider('anthropic'));
       registry.registerProvider(createMockProvider('gemini'));
 
       expect(registry.getSupportedProviders()).toStrictEqual([
         'anthropic',
+        'device-code-test',
         'gemini',
-        'qwen',
       ]);
     });
   });
@@ -256,11 +256,11 @@ describe('ProviderRegistry', () => {
   describe('with settings integration', () => {
     it('settings oauthEnabledProviders is checked first', () => {
       const settings = createLoadedSettings({
-        oauthEnabledProviders: { qwen: true, gemini: false },
+        oauthEnabledProviders: { 'device-code-test': true, gemini: false },
       });
       const settingsRegistry = new ProviderRegistry(settings);
 
-      expect(settingsRegistry.isOAuthEnabled('qwen')).toBe(true);
+      expect(settingsRegistry.isOAuthEnabled('device-code-test')).toBe(true);
       expect(settingsRegistry.isOAuthEnabled('gemini')).toBe(false);
       expect(settingsRegistry.isOAuthEnabled('anthropic')).toBe(false);
     });

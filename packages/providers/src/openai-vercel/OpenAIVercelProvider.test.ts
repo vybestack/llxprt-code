@@ -225,16 +225,10 @@ describe('OpenAIVercelProvider', () => {
 
   describe('OAuth Support', () => {
     it('does not support OAuth for Qwen endpoints (API-key-only via DashScope)', () => {
-      const oauthManager = {
-        getToken: vi.fn(async () => null),
-        isAuthenticated: vi.fn(async () => false),
-      };
-
       const provider = new OpenAIVercelProvider(
         undefined,
         'https://dashscope.aliyuncs.com/compatible-mode/v1',
         undefined,
-        oauthManager,
       );
 
       const supportsOAuth = (
@@ -255,16 +249,10 @@ describe('OpenAIVercelProvider', () => {
     });
 
     it('does not treat schemeless non-Qwen URLs containing Qwen substrings as Qwen endpoints', () => {
-      const oauthManager = {
-        getToken: vi.fn(async () => null),
-        isAuthenticated: vi.fn(async () => false),
-      };
-
       const provider = new OpenAIVercelProvider(
         undefined,
         'evil.com/dashscope.aliyuncs.com',
         undefined,
-        oauthManager,
       );
 
       const supportsOAuth = (
