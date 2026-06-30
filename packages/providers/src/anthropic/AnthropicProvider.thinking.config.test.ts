@@ -72,7 +72,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
     it('should use default budget_tokens of 10000 when not specified', async () => {
       // Use global settings (not provider-specific) for reasoning
       settingsService.set('reasoning.enabled', true);
-      // Don't set budgetTokens - should default to 10000
+      // Don't set budgetTokens - should default to 10000.
+      // Pin a non-adaptive model: the provider default is Opus 4.8 (adaptive),
+      // but this test validates the manual-mode budget default of 10000.
 
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'response' }],
@@ -87,7 +89,13 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-4-5-20250929',
+            },
+          },
+        }),
       );
       await generator.next();
 

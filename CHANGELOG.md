@@ -16,6 +16,10 @@
 - `task-max-async` setting to limit concurrent async tasks (default: 5)
 - Auto-trigger notifications when async tasks complete
 
+### Changed
+
+- The Anthropic provider's default model is now **Claude Opus 4.8** (`claude-opus-4-8`), aligning `getDefaultModel()` with the `anthropic` alias config (`anthropic.config` already declared `claude-opus-4-8` as its `defaultModel`) (#2289).
+
 ### Migration
 
 - Direct consumers constructing `AuthPrecedenceResolver` and expecting it to resolve named auth keys must pass `providerKeyStorage` in the constructor options or use core's `createAuthPrecedenceResolver()` factory. The CLI profile flow already resolves named keys to concrete provider API keys before provider construction.
