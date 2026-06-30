@@ -38,6 +38,7 @@
     "@ast-grep/lang-scala",
     "@ast-grep/lang-swift",
     "@lvce-editor/ripgrep",
+    "bun",
     "tree-sitter-bash"
   ],
   "private": true,
