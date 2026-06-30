@@ -42,8 +42,6 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import { convertToolsToOpenAIVercel } from './schemaConverter.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';
@@ -105,19 +103,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
-    oauthManager?: OAuthManager,
   ) {
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
-
-    const providerConfig = config as
-      | (IProviderConfig & {
-          forceQwenOAuth?: boolean;
-        })
-      | undefined;
-    const forceQwenOAuth = providerConfig?.forceQwenOAuth === true;
-
-    const shouldEnableQwenOAuth = isQwenBaseURL(baseURL) || forceQwenOAuth;
 
     super(
       {
@@ -125,31 +113,14 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         apiKey: normalizedApiKey,
         baseURL,
         envKeyNames: ['OPENAI_API_KEY'],
-        isOAuthEnabled: shouldEnableQwenOAuth && !!oauthManager,
-        oauthProvider: shouldEnableQwenOAuth ? 'qwen' : undefined,
-        oauthManager,
+        isOAuthEnabled: false,
       },
       config,
     );
   }
 
   protected override supportsOAuth(): boolean {
-    const providerConfig = this.providerConfig as
-      | (IProviderConfig & {
-          forceQwenOAuth?: unknown;
-        })
-      | undefined;
-    const forceQwenOAuth = providerConfig?.forceQwenOAuth;
-    const isForceQwenOAuthTruthy = Boolean(forceQwenOAuth) === true;
-    if (isForceQwenOAuthTruthy) {
-      return true;
-    }
-    if (this.name === 'qwen') {
-      return true;
-    }
-    if (isQwenBaseURL(this.getBaseURL())) {
-      return true;
-    }
+    // Standard OpenAI-compatible endpoints don't support OAuth
     return false;
   }
 
@@ -178,16 +149,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   private getClientConfig(
     options: NormalizedGenerateChatOptions,
   ): ProviderClientConfig {
-    const providerConfig = this.providerConfig as
-      | (IProviderConfig & {
-          forceQwenOAuth?: boolean;
-        })
-      | undefined;
-    const forceQwenOAuth = providerConfig?.forceQwenOAuth === true;
     return {
       baseURL: this.baseProviderConfig.baseURL,
       providerName: this.name,
-      forceQwenOAuth,
       requiresAuth: options.settings.getProviderSettings(this.name)[
         'requires-auth'
       ] as boolean | undefined,

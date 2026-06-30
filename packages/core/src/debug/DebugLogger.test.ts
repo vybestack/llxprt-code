@@ -127,19 +127,26 @@ describe('DebugLogger', () => {
    * @scenario Zero overhead when disabled
    * @given logger disabled
    * @when log called 1000 times
-   * @then Execution time < 1ms
+   * @then No work is performed (no write, no string formatting) and wall-clock stays within budget
    */
   it('should have zero overhead when disabled @plan:PLAN-20250120-DEBUGLOGGING.P04', () => {
     const logger = new DebugLogger('llxprt:test');
     logger.enabled = false;
 
+    // Behavioral guarantee: the disabled path must be a pure no-op.
+    // This is deterministic and is the real "zero overhead" contract.
+    const writeSpy = vi.spyOn(logger.fileOutput, 'write');
+
+    // Secondary timing check: generous budget for CI runner variance.
+    // The previous 3 ms bound was routinely exceeded on shared GitHub runners.
     const start = performance.now();
     for (let i = 0; i < 1000; i++) {
       logger.log('test message');
     }
     const duration = performance.now() - start;
 
-    expect(duration).toBeLessThan(3);
+    expect(writeSpy).not.toHaveBeenCalled();
+    expect(duration).toBeLessThan(10);
   });
 
   /**

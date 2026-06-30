@@ -263,14 +263,18 @@ describe('ProxyTokenStore', () => {
   it('listProviders returns provider names from server response', async () => {
     server = createTestServer(socketPath, () => ({
       ok: true,
-      data: { providers: ['anthropic', 'gemini', 'qwen'] },
+      data: { providers: ['anthropic', 'gemini', 'device-code-test'] },
     }));
     await listenAsync(server, socketPath);
 
     store = new ProxyTokenStore(socketPath);
     const providers = await store.listProviders();
 
-    expect(providers).toStrictEqual(['anthropic', 'gemini', 'qwen']);
+    expect(providers).toStrictEqual([
+      'anthropic',
+      'gemini',
+      'device-code-test',
+    ]);
   });
 
   /**

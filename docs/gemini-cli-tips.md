@@ -4,12 +4,12 @@ If you're coming from Gemini CLI, this guide highlights the key differences and 
 
 ## Command Name Differences
 
-| Gemini CLI            | LLxprt Code       | Notes                                              |
-| --------------------- | ----------------- | -------------------------------------------------- |
-| `gemini`              | `llxprt`          | CLI binary name                                    |
-| `@resume`             | `/continue`       | Resume a previous session                          |
-| `%` (shell escape)    | `!` or shell tool | Run shell commands                                 |
-| `/auth` (Google-only) | `/auth`           | Multiple providers: gemini, anthropic, codex, qwen |
+| Gemini CLI            | LLxprt Code       | Notes                                        |
+| --------------------- | ----------------- | -------------------------------------------- |
+| `gemini`              | `llxprt`          | CLI binary name                              |
+| `@resume`             | `/continue`       | Resume a previous session                    |
+| `%` (shell escape)    | `!` or shell tool | Run shell commands                           |
+| `/auth` (Google-only) | `/auth`           | Multiple providers: gemini, anthropic, codex |
 
 ## Authentication: Use the Keyring
 
@@ -35,13 +35,12 @@ Or use a keyfile for CI/automation:
 llxprt --provider xai --keyfile ~/.llxprt/keys/.xai_key
 ```
 
-For OAuth providers (Gemini, Anthropic, Codex, Qwen), enable any of them:
+For OAuth providers (Gemini, Anthropic, Codex), enable any of them:
 
 ```
 /auth gemini enable
 /auth anthropic enable
 /auth codex enable
-/auth qwen enable
 ```
 
 With `/auth <provider> enable`, authentication is lazy — a browser opens automatically when you make your first request. Use `/auth <provider> login` to open the browser immediately.

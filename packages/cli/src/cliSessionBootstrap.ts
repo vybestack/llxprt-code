@@ -27,7 +27,7 @@ import {
 } from '@vybestack/llxprt-code-settings';
 import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import { registerCleanup } from './utils/cleanup.js';
-import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { promises as fsPromises } from 'fs';
 import { join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';

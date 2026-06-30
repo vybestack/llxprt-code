@@ -160,7 +160,6 @@ function buildRuntimeToolSchema(
 export interface ProviderClientConfig {
   baseURL: string | undefined;
   providerName: string;
-  forceQwenOAuth: boolean;
   requiresAuth: boolean | undefined;
   customHeaders: Record<string, string> | undefined;
 }
@@ -177,8 +176,7 @@ export async function createOpenAIClient(
   const authToken =
     (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
   const baseURL = options.resolved.baseURL ?? clientConfig.baseURL;
-  const shouldForceSystemRole =
-    clientConfig.forceQwenOAuth || isQwenBaseURL(baseURL);
+  const shouldForceSystemRole = isQwenBaseURL(baseURL);
 
   const authExempt =
     clientConfig.requiresAuth === false || isLocalEndpoint(baseURL);

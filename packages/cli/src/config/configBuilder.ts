@@ -15,33 +15,26 @@ import {
   type PolicyEngineConfig,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
-import {
-  AgentClient,
-  CoreToolScheduler,
-  createTaskToolRegistration,
-} from '@vybestack/llxprt-code-agents';
-import { registerAgentRuntimeFactories } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+import { createAgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-agents';
+import { registerAgentRuntimeFactories } from '@vybestack/llxprt-code-providers/runtime.js';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { loadSettings } from './settings.js';
 import { appEvents } from '../utils/events.js';
+import type { Settings } from './settings.js';
+import type { CliArgs } from './cliArgParser.js';
+import type { ContextResolutionResult } from './interactiveContext.js';
+import type { ProviderModelResult } from './providerModelResolver.js';
+import { firstNonEmptyString } from '../utils/coalesce.js';
 
 // @plan PLAN-20260610-ISSUE1592.P01
 // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
 // Register the concrete agent runtime factories with the providers package's
 // dependency-inversion seam. The implementations live in the agents package,
 // which depends on providers; importing them directly inside providers would
-// create a providers→agents cycle, so the CLI (composition root) injects them.
-registerAgentRuntimeFactories({
-  agentClientFactory: (config, runtimeState) =>
-    new AgentClient(config, runtimeState),
-  toolSchedulerFactory: (options) => new CoreToolScheduler(options),
-  taskToolRegistration: () => createTaskToolRegistration(),
-});
-import type { Settings } from './settings.js';
-import type { CliArgs } from './cliArgParser.js';
-import type { ContextResolutionResult } from './interactiveContext.js';
-import type { ProviderModelResult } from './providerModelResolver.js';
-import { firstNonEmptyString } from '../utils/coalesce.js';
+// create a providers→agents cycle, so the CLI (composition root) injects them
+// via the curated public factory helper (#2204).
+const agentRuntimeFactoryBindings = createAgentRuntimeFactoryBindings();
+registerAgentRuntimeFactories(agentRuntimeFactoryBindings);
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -339,15 +332,13 @@ export function buildConfig(input: ConfigBuildInput): Config {
     ...buildSessionBaseArgs(input, toolConfig, telemetry, sanitizationConfig),
     ...buildFeatureArgs(input, hooksConfig),
     // @plan PLAN-20260610-ISSUE1592.P01
-    // @requirement REQ-INV-001
-    agentClientFactory: (config, runtimeState) =>
-      new AgentClient(config, runtimeState),
-    // @plan PLAN-20260610-ISSUE1592.P01
-    // @requirement REQ-INV-002
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
-    // @plan PLAN-20260610-ISSUE1592.P03
-    // @requirement REQ-INV-003
-    taskToolRegistration: createTaskToolRegistration(),
+    // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
+    // The concrete factories are constructed once via the curated public
+    // helper (createAgentRuntimeFactoryBindings) and reused here so Config
+    // and the providers DI seam share identical bindings (#2204).
+    agentClientFactory: agentRuntimeFactoryBindings.agentClientFactory,
+    toolSchedulerFactory: agentRuntimeFactoryBindings.toolSchedulerFactory,
+    taskToolRegistration: agentRuntimeFactoryBindings.taskToolRegistration(),
   });
 }
 

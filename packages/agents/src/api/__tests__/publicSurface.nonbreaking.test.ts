@@ -83,6 +83,10 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     expect(root.fromConfig).not.toBe(root.createAgent);
   });
 
+  it('exposes the configured context-limit resolver as a public runtime function', () => {
+    expect(typeof root.getTokenLimitForConfiguredContext).toBe('function');
+  });
+
   it('Test D: internals.js value exports (AgentClient, PostTurnAction) remain intact', () => {
     // REQ-004.1: the concrete AgentClient class stays a runtime value on the
     // documented internals subpath.

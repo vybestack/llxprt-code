@@ -450,7 +450,7 @@ function useInputFinish(
   core: ReturnType<typeof useInputCore>,
   stream: ReturnType<typeof useInputStream>,
 ) {
-  const { config, settings, setIdePromptAnswered, isProcessing } = p;
+  const { settings, setIdePromptAnswered, isProcessing } = p;
   const { handleSlashCommand, vimModeEnabled, vimMode, toggleVimEnabled } =
     core;
   const {
@@ -495,7 +495,7 @@ function useInputFinish(
     stream.lastOutputTime,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({
-    config,
+    agent: p.agent,
     addItem: p.addItem,
   });
   const handleSettingsRestart = useCallback(() => {

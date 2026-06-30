@@ -120,7 +120,6 @@ describe('AuthDialog', () => {
       // OAuth-only dialog shows regardless of API key presence
       expect(lastFrame()).toContain('OAuth Authentication');
       expect(lastFrame()).toContain('Gemini (Google OAuth)');
-      expect(lastFrame()).toContain('Qwen (OAuth)');
     });
 
     it('should display authentication status for each provider', async () => {
@@ -131,12 +130,6 @@ describe('AuthDialog', () => {
           method: 'oauth',
           expiresIn: 3600,
           oauthEnabled: true,
-        },
-        {
-          provider: 'qwen',
-          authenticated: false,
-          method: 'none',
-          oauthEnabled: false,
         },
         {
           provider: 'anthropic',
@@ -164,7 +157,6 @@ describe('AuthDialog', () => {
             mcpServers: {},
             oauthEnabledProviders: {
               gemini: true,
-              qwen: false,
               anthropic: true,
             },
           },
@@ -184,7 +176,6 @@ describe('AuthDialog', () => {
 
       const frame = lastFrame();
       expect(frame).toContain('Gemini (Google OAuth) [ON] (Authenticated)');
-      expect(frame).toContain('Qwen (OAuth) [OFF] (Not authenticated)');
       expect(frame).toContain('Anthropic Claude (OAuth) [ON] (Authenticated)');
     });
   });
@@ -262,7 +253,7 @@ describe('AuthDialog', () => {
 
     expect(lastFrame()).toContain('Initial error');
 
-    stdin.write('5');
+    stdin.write('4');
     await wait();
     expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
     unmount();
@@ -298,7 +289,7 @@ describe('AuthDialog', () => {
     );
     await wait();
 
-    stdin.write('5');
+    stdin.write('4');
     await wait();
     expect(onSelect).toHaveBeenCalledWith(undefined, SettingScope.User);
     unmount();

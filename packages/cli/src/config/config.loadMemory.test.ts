@@ -187,7 +187,7 @@ vi.mock('./profileBootstrap.js', () => ({
   ),
 }));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
+vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () => runtimeStateRef.value.providerManager;
   const applyProfileSnapshot = vi.fn(async () => ({
     providerName: 'openai',
@@ -219,6 +219,12 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
   return {
     registerAgentRuntimeFactories: vi.fn(),
     resetAgentRuntimeFactories: vi.fn(),
+    ephemeralSettingHelp: {},
+    parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
+      success: true,
+      value: rawValue,
+    })),
+    applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
     applyProfileSnapshot,
     getCliRuntimeContext,
     setCliRuntimeContext,

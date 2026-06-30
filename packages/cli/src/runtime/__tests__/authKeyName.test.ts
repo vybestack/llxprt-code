@@ -202,7 +202,7 @@ describe('--key-name bootstrap parsing @plan:PLAN-20260211-SECURESTORE.P17', () 
 describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURESTORE.P17', () => {
   let mockKeyring: KeyringAdapter & { store: Map<string, string> };
   let tempDir: string;
-  let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js');
+  let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
   let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js');
   let cleanupHandle: (() => Promise<void> | void) | null = null;
 
@@ -211,9 +211,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'auth-key-name-test-'));
     mockStorageRef = createTestStorage(mockKeyring, tempDir);
 
-    runtimeMod = await import(
-      '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
-    );
+    runtimeMod = await import('@vybestack/llxprt-code-providers/runtime.js');
     contextFactoryMod = await import(
       '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js'
     );
@@ -473,7 +471,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
   describe('Issue #208 auth-key-name clear behavior', () => {
     let mockKeyring: KeyringAdapter & { store: Map<string, string> };
     let tempDir: string;
-    let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js');
+    let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
     let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js');
     let cleanupHandle: (() => Promise<void> | void) | null = null;
 
@@ -484,9 +482,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       );
       mockStorageRef = createTestStorage(mockKeyring, tempDir);
 
-      runtimeMod = await import(
-        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
-      );
+      runtimeMod = await import('@vybestack/llxprt-code-providers/runtime.js');
       contextFactoryMod = await import(
         '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js'
       );

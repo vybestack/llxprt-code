@@ -10,7 +10,7 @@ import { registerCleanup } from './utils/cleanup.js';
 import {
   switchActiveProvider,
   setActiveModel,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 
 export interface ForegroundAgentOptions {
   config: Config;

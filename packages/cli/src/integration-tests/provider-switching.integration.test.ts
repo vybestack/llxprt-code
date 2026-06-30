@@ -37,7 +37,7 @@ import {
   getActiveModelParams,
   registerCliProviderInfrastructure,
   resetCliProviderInfrastructure,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import { setProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 
 /**

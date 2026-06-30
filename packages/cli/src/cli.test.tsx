@@ -353,38 +353,55 @@ describe('cli.tsx main function', () => {
     const appEventsMock = vi.mocked(appEvents);
     const rejectionError = new Error('Test unhandled rejection');
 
-    setupUnhandledRejectionHandler();
-    // Simulate an unhandled rejection.
-    // We are not using Promise.reject here as vitest will catch it.
-    // Instead we will dispatch the event manually.
-    process.emit('unhandledRejection', rejectionError, Promise.resolve());
+    // Use the returned disposer so the test-installed listener is removed
+    // after the test and does not leak into sibling tests.
+    const removeHandler = setupUnhandledRejectionHandler();
+    try {
+      // Simulate an unhandled rejection.
+      // We are not using Promise.reject here as vitest will catch it.
+      // Instead we will dispatch the event manually.
+      process.emit('unhandledRejection', rejectionError, Promise.resolve());
 
-    // We need to wait for the rejection handler to be called.
-    await new Promise(process.nextTick);
+      // We need to wait for the rejection handler to be called.
+      await new Promise(process.nextTick);
 
-    expect(appEventsMock.emit).toHaveBeenCalledWith(AppEvent.OpenDebugConsole);
-    expect(appEventsMock.emit).toHaveBeenCalledWith(
-      AppEvent.LogError,
-      expect.stringContaining('Unhandled Promise Rejection'),
-    );
-    expect(appEventsMock.emit).toHaveBeenCalledWith(
-      AppEvent.LogError,
-      expect.stringContaining('Please file a bug report using the /bug tool.'),
-    );
+      expect(appEventsMock.emit).toHaveBeenCalledWith(
+        AppEvent.OpenDebugConsole,
+      );
+      expect(appEventsMock.emit).toHaveBeenCalledWith(
+        AppEvent.LogError,
+        expect.stringContaining('Unhandled Promise Rejection'),
+      );
+      expect(appEventsMock.emit).toHaveBeenCalledWith(
+        AppEvent.LogError,
+        expect.stringContaining(
+          'Please file a bug report using the /bug tool.',
+        ),
+      );
 
-    // Simulate a second rejection
-    const secondRejectionError = new Error('Second test unhandled rejection');
-    process.emit('unhandledRejection', secondRejectionError, Promise.resolve());
-    await new Promise(process.nextTick);
+      // Simulate a second rejection
+      const secondRejectionError = new Error('Second test unhandled rejection');
+      process.emit(
+        'unhandledRejection',
+        secondRejectionError,
+        Promise.resolve(),
+      );
+      await new Promise(process.nextTick);
 
-    // Ensure emit was only called once for OpenDebugConsole
-    const openDebugConsoleCalls = appEventsMock.emit.mock.calls.filter(
-      (call) => call[0] === AppEvent.OpenDebugConsole,
-    );
-    expect(openDebugConsoleCalls.length).toBe(1);
-
-    // Avoid the process.exit error from being thrown.
-    processExitSpy.mockRestore();
+      // Ensure emit was only called once for OpenDebugConsole
+      const openDebugConsoleCalls = appEventsMock.emit.mock.calls.filter(
+        (call) => call[0] === AppEvent.OpenDebugConsole,
+      );
+      expect(openDebugConsoleCalls.length).toBe(1);
+    } finally {
+      // Always tear down the test-installed listener so it does not leak
+      // even if an assertion above throws.
+      removeHandler();
+      // Restore process.exit here (not at the end of the try block) so the
+      // spy is removed even if an assertion throws — matching the teardown
+      // pattern of removeHandler() above.
+      processExitSpy.mockRestore();
+    }
   });
 
   it('initializes content generator config before interactive provider usage', async () => {

@@ -55,7 +55,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     value: 'qwen',
     label: 'Qwen',
     needsBaseUrl: false,
-    supportsOAuth: true,
+    supportsOAuth: false,
     knownModels: ['qwen3-coder-pro', 'qwen3-coder'],
   },
   {
@@ -110,8 +110,8 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     value: 'qwenvercel',
     label: 'Qwen Vercel',
     needsBaseUrl: true,
-    defaultBaseUrl: 'https://portal.qwen.ai/v1',
-    supportsOAuth: true,
+    defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    supportsOAuth: false,
   },
   {
     value: 'Fireworks',

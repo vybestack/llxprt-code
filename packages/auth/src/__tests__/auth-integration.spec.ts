@@ -57,7 +57,7 @@ interface MockProvider {
 describe('Auth Integration: Complete Precedence Flow and Provider Coordination', () => {
   let mockConfig: MockConfig;
   let mockOAuthManager: MockOAuthManager;
-  let mockQwenProvider: MockProvider;
+  let mockDeviceCodeProvider: MockProvider;
   let mockGeminiProvider: MockProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
@@ -82,8 +82,8 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
     };
 
     // Mock provider instances
-    mockQwenProvider = {
-      name: 'qwen',
+    mockDeviceCodeProvider = {
+      name: 'device-code-test',
       isAuthenticated: vi.fn(),
       resolveAuthentication: vi.fn(),
       makeApiCall: vi.fn(),
@@ -120,11 +120,11 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       );
 
       // When: Provider resolves authentication with CLI key
-      vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () => cliArg,
-      );
+      vi.mocked(
+        mockDeviceCodeProvider.resolveAuthentication,
+      ).mockImplementation(async () => cliArg);
 
-      const resolvedAuth = await mockQwenProvider.resolveAuthentication();
+      const resolvedAuth = await mockDeviceCodeProvider.resolveAuthentication();
 
       // Then: Should use CLI key (highest precedence)
       expect(resolvedAuth).toBe(cliArg);
@@ -148,14 +148,17 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       );
 
       // When: Provider resolves authentication without CLI key
-      vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () => {
-          if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-          return mockOAuthManager.getToken('qwen', integrationMetadata('qwen'));
-        },
-      );
+      vi.mocked(
+        mockDeviceCodeProvider.resolveAuthentication,
+      ).mockImplementation(async () => {
+        if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
+        return mockOAuthManager.getToken(
+          'device-code-test',
+          integrationMetadata('device-code-test'),
+        );
+      });
 
-      const resolvedAuth = await mockQwenProvider.resolveAuthentication();
+      const resolvedAuth = await mockDeviceCodeProvider.resolveAuthentication();
 
       // Then: Should use environment variable (second precedence)
       expect(resolvedAuth).toBe('env-key-456');
@@ -177,17 +180,21 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       vi.mocked(mockOAuthManager.getHigherPriorityAuth).mockResolvedValue(null);
 
       // When: Provider resolves authentication with OAuth only
-      vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () =>
-          mockOAuthManager.getToken('qwen', integrationMetadata('qwen')),
+      vi.mocked(
+        mockDeviceCodeProvider.resolveAuthentication,
+      ).mockImplementation(async () =>
+        mockOAuthManager.getToken(
+          'device-code-test',
+          integrationMetadata('device-code-test'),
+        ),
       );
 
-      const resolvedAuth = await mockQwenProvider.resolveAuthentication();
+      const resolvedAuth = await mockDeviceCodeProvider.resolveAuthentication();
 
       // Then: Should use OAuth token (lowest precedence)
       expect(resolvedAuth).toBe('oauth-token-789');
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
+        'device-code-test',
         expect.anything(),
       );
     });
@@ -196,20 +203,20 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
   describe('OAuth Enablement Persistence', () => {
     /**
      * @scenario OAuth enablement persists across sessions
-     * @given OAuth enabled for qwen
+     * @given OAuth enabled for device-code-test
      * @when System restarts (new instances)
      * @then OAuth remains enabled
      * @and Can be toggled again
      */
     it('should persist OAuth enablement across system restarts', async () => {
-      // Given: OAuth enabled for qwen in first session
+      // Given: OAuth enabled for device-code-test in first session
       vi.mocked(mockOAuthManager.toggleOAuthEnabled).mockResolvedValue(true);
       vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(true);
       vi.mocked(mockConfig.getOAuthEnabled).mockReturnValue(true);
 
       // When: Enable OAuth in first session
       const firstToggleResult =
-        await mockOAuthManager.toggleOAuthEnabled('qwen');
+        await mockOAuthManager.toggleOAuthEnabled('device-code-test');
       expect(firstToggleResult).toBe(true);
 
       // Simulate system restart with new instances
@@ -217,41 +224,43 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       vi.mocked(newOAuthManager.isOAuthEnabled).mockResolvedValue(true); // Persisted state
 
       // Then: OAuth should remain enabled after restart
-      const persistedState = await newOAuthManager.isOAuthEnabled('qwen');
+      const persistedState =
+        await newOAuthManager.isOAuthEnabled('device-code-test');
       expect(persistedState).toBe(true);
 
       // And: Can be toggled again (disable)
       vi.mocked(newOAuthManager.toggleOAuthEnabled).mockResolvedValue(false);
       const secondToggleResult =
-        await newOAuthManager.toggleOAuthEnabled('qwen');
+        await newOAuthManager.toggleOAuthEnabled('device-code-test');
       expect(secondToggleResult).toBe(false);
     });
 
     /**
      * @scenario Independent enablement per provider
      * @given Multiple providers registered
-     * @when OAuth enabled for qwen only
-     * @then Qwen OAuth enabled, Gemini OAuth disabled
+     * @when OAuth enabled for device-code-test only
+     * @then Device-code test provider OAuth enabled, Gemini OAuth disabled
      * @and States persist independently
      */
     it('should maintain independent OAuth enablement per provider', async () => {
       // Given: Multiple providers with different OAuth states
       vi.mocked(mockOAuthManager.isOAuthEnabled).mockImplementation(
-        async (provider) => provider === 'qwen', // Only qwen enabled
+        async (provider) => provider === 'device-code-test', // Only device-code-test enabled
       );
 
       // When: Check enablement for both providers
-      const qwenEnabled = await mockOAuthManager.isOAuthEnabled('qwen');
+      const deviceCodeEnabled =
+        await mockOAuthManager.isOAuthEnabled('device-code-test');
       const geminiEnabled = await mockOAuthManager.isOAuthEnabled('gemini');
 
       // Then: Should reflect independent states
-      expect(qwenEnabled).toBe(true);
+      expect(deviceCodeEnabled).toBe(true);
       expect(geminiEnabled).toBe(false);
 
       // And: Status should reflect independent OAuth enablement
       vi.mocked(mockOAuthManager.getAuthStatus).mockResolvedValue([
         {
-          provider: 'qwen',
+          provider: 'device-code-test',
           authenticated: false,
           oauthEnabled: true,
         },
@@ -263,9 +272,9 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       ]);
 
       const status = await mockOAuthManager.getAuthStatus();
-      expect(status.find((s) => s.provider === 'qwen')?.oauthEnabled).toBe(
-        true,
-      );
+      expect(
+        status.find((s) => s.provider === 'device-code-test')?.oauthEnabled,
+      ).toBe(true);
       expect(status.find((s) => s.provider === 'gemini')?.oauthEnabled).toBe(
         false,
       );
@@ -287,31 +296,36 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         .mockResolvedValueOnce(null) // First call - not authenticated
         .mockResolvedValue('oauth-token-123'); // Subsequent calls - authenticated
 
-      const oauthMetadata = integrationMetadata('qwen');
+      const oauthMetadata = integrationMetadata('device-code-test');
 
       // Mock provider API call that triggers lazy authentication
-      vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
-        const token = await mockOAuthManager.getToken('qwen', oauthMetadata);
-        if (!token) {
-          // Simulate lazy OAuth triggering
-          await mockOAuthManager.getToken('qwen', oauthMetadata); // This would trigger OAuth in real implementation
-          return 'api-call-success-with-oauth';
-        }
-        return 'api-call-success-cached';
-      });
+      vi.mocked(mockDeviceCodeProvider.makeApiCall).mockImplementation(
+        async () => {
+          const token = await mockOAuthManager.getToken(
+            'device-code-test',
+            oauthMetadata,
+          );
+          if (!token) {
+            // Simulate lazy OAuth triggering
+            await mockOAuthManager.getToken('device-code-test', oauthMetadata); // This would trigger OAuth in real implementation
+            return 'api-call-success-with-oauth';
+          }
+          return 'api-call-success-cached';
+        },
+      );
 
       // When: Make first API call (should trigger OAuth)
-      const firstCallResult = await mockQwenProvider.makeApiCall();
+      const firstCallResult = await mockDeviceCodeProvider.makeApiCall();
 
       // Then: Should succeed with OAuth
       expect(firstCallResult).toBe('api-call-success-with-oauth');
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
+        'device-code-test',
         expect.anything(),
       );
 
       // When: Make second API call (should use cached token)
-      const secondCallResult = await mockQwenProvider.makeApiCall();
+      const secondCallResult = await mockDeviceCodeProvider.makeApiCall();
 
       // Then: Should succeed with cached token
       expect(secondCallResult).toBe('api-call-success-cached');
@@ -328,25 +342,30 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       // Given: OAuth disabled, no other auth methods
       vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(false);
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
-      const oauthMetadata = integrationMetadata('qwen');
+      const oauthMetadata = integrationMetadata('device-code-test');
 
       // Mock provider API call that checks authentication
-      vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
-        const token = await mockOAuthManager.getToken('qwen', oauthMetadata);
-        if (!token) {
-          throw new Error('No authentication available');
-        }
-        return 'api-call-success';
-      });
+      vi.mocked(mockDeviceCodeProvider.makeApiCall).mockImplementation(
+        async () => {
+          const token = await mockOAuthManager.getToken(
+            'device-code-test',
+            oauthMetadata,
+          );
+          if (!token) {
+            throw new Error('No authentication available');
+          }
+          return 'api-call-success';
+        },
+      );
 
       // When: Attempt API call without authentication
-      await expect(mockQwenProvider.makeApiCall()).rejects.toThrow(
+      await expect(mockDeviceCodeProvider.makeApiCall()).rejects.toThrow(
         'No authentication available',
       );
 
       // Then: OAuth should not have been triggered
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
+        'device-code-test',
         expect.anything(),
       );
       // No OAuth flow should have been initiated since it's disabled
@@ -356,7 +375,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
   describe('Provider Coordination with Auth System', () => {
     /**
      * @scenario Multiple providers coordinate with shared auth system
-     * @given Qwen and Gemini providers both using OAuth manager
+     * @given Device-code test provider and Gemini providers both using OAuth manager
      * @when Each provider resolves authentication independently
      * @then Each triggers OAuth only for its own provider
      * @and Auth states remain independent
@@ -364,15 +383,16 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
     it('should coordinate multiple providers with shared auth system', async () => {
       // Given: Both providers use same OAuth manager with different states
       vi.mocked(mockOAuthManager.isOAuthEnabled).mockImplementation(
-        async (provider) => provider === 'qwen', // Only Qwen enabled
+        async (provider) => provider === 'device-code-test', // Only Device-code test provider enabled
       );
       vi.mocked(mockOAuthManager.getToken).mockImplementation(
-        async (provider) => (provider === 'qwen' ? 'qwen-oauth-token' : null), // Gemini has no token
+        async (provider) =>
+          provider === 'device-code-test' ? 'device-code-oauth-token' : null, // Gemini has no token
       );
 
       // Mock provider authentication resolution
-      const qwenMetadata = {
-        providerId: 'qwen',
+      const deviceCodeMetadata = {
+        providerId: 'device-code-test',
         profileId: 'default',
         runtimeAuthScopeId: 'integration-shared',
       } satisfies Record<string, unknown>;
@@ -382,24 +402,27 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         runtimeAuthScopeId: 'integration-shared',
       } satisfies Record<string, unknown>;
 
-      vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () => mockOAuthManager.getToken('qwen', qwenMetadata),
+      vi.mocked(
+        mockDeviceCodeProvider.resolveAuthentication,
+      ).mockImplementation(async () =>
+        mockOAuthManager.getToken('device-code-test', deviceCodeMetadata),
       );
       vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
         async () => mockOAuthManager.getToken('gemini', geminiMetadata),
       );
 
       // When: Both providers resolve authentication
-      const qwenAuth = await mockQwenProvider.resolveAuthentication();
+      const deviceCodeAuth =
+        await mockDeviceCodeProvider.resolveAuthentication();
       const geminiAuth = await mockGeminiProvider.resolveAuthentication();
 
       // Then: Each provider gets appropriate result
-      expect(qwenAuth).toBe('qwen-oauth-token');
+      expect(deviceCodeAuth).toBe('device-code-oauth-token');
       expect(geminiAuth).toBe(null);
 
       // And: OAuth manager called for each provider independently
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
+        'device-code-test',
         expect.anything(),
       );
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
@@ -419,7 +442,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       // Given: OAuth manager with multiple providers in different states
       vi.mocked(mockOAuthManager.getAuthStatus).mockResolvedValue([
         {
-          provider: 'qwen',
+          provider: 'device-code-test',
           authenticated: true,
           oauthEnabled: true,
           expiresIn: 3600,
@@ -437,11 +460,13 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       // Then: Should show consistent state for all providers
       expect(status).toHaveLength(2);
 
-      const qwenStatus = status.find((s) => s.provider === 'qwen');
+      const deviceCodeStatus = status.find(
+        (s) => s.provider === 'device-code-test',
+      );
       const geminiStatus = status.find((s) => s.provider === 'gemini');
 
-      expect(qwenStatus).toStrictEqual({
-        provider: 'qwen',
+      expect(deviceCodeStatus).toStrictEqual({
+        provider: 'device-code-test',
         authenticated: true,
         oauthEnabled: true,
         expiresIn: 3600,
@@ -463,11 +488,12 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
      * @then All steps succeed with proper coordination
      */
     it('should handle complete user workflow end-to-end', async () => {
-      // Step 1: Enable OAuth for qwen
+      // Step 1: Enable OAuth for device-code-test
       vi.mocked(mockOAuthManager.toggleOAuthEnabled).mockResolvedValue(true);
       vi.mocked(mockOAuthManager.getHigherPriorityAuth).mockResolvedValue(null);
 
-      const enableResult = await mockOAuthManager.toggleOAuthEnabled('qwen');
+      const enableResult =
+        await mockOAuthManager.toggleOAuthEnabled('device-code-test');
       expect(enableResult).toBe(true);
 
       // Step 2: Simulate API call that triggers lazy OAuth
@@ -475,15 +501,17 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(
         'oauth-token-from-lazy-trigger',
       );
-      vi.mocked(mockQwenProvider.makeApiCall).mockResolvedValue('api-success');
+      vi.mocked(mockDeviceCodeProvider.makeApiCall).mockResolvedValue(
+        'api-success',
+      );
 
-      const apiResult = await mockQwenProvider.makeApiCall();
+      const apiResult = await mockDeviceCodeProvider.makeApiCall();
       expect(apiResult).toBe('api-success');
 
       // Step 3: Check status shows OAuth enabled and authenticated
       vi.mocked(mockOAuthManager.getAuthStatus).mockResolvedValue([
         {
-          provider: 'qwen',
+          provider: 'device-code-test',
           authenticated: true,
           oauthEnabled: true,
           expiresIn: 3600,
@@ -492,7 +520,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
 
       const finalStatus = await mockOAuthManager.getAuthStatus();
       expect(finalStatus[0]).toMatchObject({
-        provider: 'qwen',
+        provider: 'device-code-test',
         authenticated: true,
         oauthEnabled: true,
       });
@@ -509,21 +537,25 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       // Given: Mixed authentication setup
       process.env.OPENAI_API_KEY = 'env-api-key-for-gemini';
       vi.mocked(mockOAuthManager.isOAuthEnabled).mockImplementation(
-        async (provider) => provider === 'qwen', // Only Qwen uses OAuth
+        async (provider) => provider === 'device-code-test', // Only Device-code test provider uses OAuth
       );
       vi.mocked(mockOAuthManager.getToken).mockImplementation(
-        async (provider) => (provider === 'qwen' ? 'qwen-oauth-token' : null),
+        async (provider) =>
+          provider === 'device-code-test' ? 'device-code-oauth-token' : null,
       );
 
       // Mock providers with different auth strategies
-      const qwenMetadata = {
-        providerId: 'qwen',
+      const deviceCodeMetadata = {
+        providerId: 'device-code-test',
         profileId: 'default',
         runtimeAuthScopeId: 'integration-mixed',
       } satisfies Record<string, unknown>;
 
-      vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () => mockOAuthManager.getToken('qwen', qwenMetadata), // OAuth only
+      vi.mocked(
+        mockDeviceCodeProvider.resolveAuthentication,
+      ).mockImplementation(
+        async () =>
+          mockOAuthManager.getToken('device-code-test', deviceCodeMetadata), // OAuth only
       );
       vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
         async () =>
@@ -534,16 +566,17 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       );
 
       // When: Both providers resolve authentication
-      const qwenAuth = await mockQwenProvider.resolveAuthentication();
+      const deviceCodeAuth =
+        await mockDeviceCodeProvider.resolveAuthentication();
       const geminiAuth = await mockGeminiProvider.resolveAuthentication();
 
       // Then: Each uses appropriate method without interference
-      expect(qwenAuth).toBe('qwen-oauth-token'); // OAuth for Qwen
+      expect(deviceCodeAuth).toBe('device-code-oauth-token'); // OAuth for Device-code test provider
       expect(geminiAuth).toBe('env-api-key-for-gemini'); // Env var for Gemini
 
       // And: OAuth manager only called for OAuth-enabled provider
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
+        'device-code-test',
         expect.anything(),
       );
       expect(mockOAuthManager.getToken).not.toHaveBeenCalledWith(

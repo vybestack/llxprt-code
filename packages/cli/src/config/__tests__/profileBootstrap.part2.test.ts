@@ -7,9 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseInlineProfile } from '../profileBootstrap.js';
 
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-  resetAgentRuntimeFactories: vi.fn(),
+vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerCliProviderInfrastructure: vi.fn(),
 }));
 
