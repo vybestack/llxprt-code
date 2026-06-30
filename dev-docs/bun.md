@@ -65,13 +65,15 @@ package that is not explicitly listed in the root `package.json`
 code execution from transitive dependencies during install.
 
 Only packages whose lifecycle scripts produce **required native binaries** are
-trusted. These are the 15 entries in `trustedDependencies`:
+trusted. These are the 16 entries in `trustedDependencies`:
 
 - **`@lvce-editor/ripgrep`** — its postinstall fetches and places the `rg`
   binary used for project search. Declared in the root and in `packages/tools`.
 - **`@ast-grep/lang-*`** (13 packages) — each ships a `postinstall.js` that
   downloads/extracts the platform-specific parser prebuild (`*.node`/`*.so`)
   for that language. Declared across `packages/core` and `packages/tools`.
+- **`bun`** — its postinstall installs the pinned Bun runtime used by the Node
+  launcher to relaunch the CLI internally.
 - **`tree-sitter-bash`** — ships prebuilt native bindings under
   `prebuilds/<platform>/`. Declared in `packages/core`.
 

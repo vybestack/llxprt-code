@@ -47,6 +47,7 @@ const EXPECTED_TRUSTED_DEPENDENCIES: readonly string[] = [
   '@ast-grep/lang-scala',
   '@ast-grep/lang-swift',
   '@lvce-editor/ripgrep',
+  'bun',
   'tree-sitter-bash',
 ];
 
