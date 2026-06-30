@@ -79,7 +79,7 @@ Then reference it in Zed:
 }
 ```
 
-### OAuth Providers (Codex, Gemini, Anthropic, Qwen)
+### OAuth Providers (Codex, Gemini, Anthropic)
 
 If your profile uses OAuth instead of an API key, you must authenticate **before** launching Zed — the ACP mode can't open a browser for you. Run an interactive LLxprt session first:
 

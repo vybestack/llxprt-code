@@ -37,10 +37,10 @@ export interface OAuthManagerRuntimeMessageBusDeps {
 
 /**
  * Interface for OAuth provider abstraction.
- * Each provider (e.g., Anthropic, Gemini, Qwen) implements this interface.
+ * Each provider (e.g., Anthropic, Gemini, Codex) implements this interface.
  */
 export interface OAuthProvider {
-  /** Provider name (e.g., 'gemini', 'qwen') */
+  /** Provider name (e.g., 'gemini', 'anthropic') */
   name: string;
 
   /**
@@ -86,7 +86,7 @@ export interface OAuthProvider {
 
   /**
    * Optional UI callback for emitting OAuth events (e.g. history item creation).
-   * Concrete providers (gemini, qwen, anthropic, codex) implement this so the
+   * Concrete providers (gemini, anthropic, codex) implement this so the
    * composition root can attach the CLI's history callback without reaching
    * into the manager's private provider registry.
    */

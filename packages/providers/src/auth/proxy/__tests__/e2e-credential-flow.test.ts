@@ -473,7 +473,13 @@ describe('E2E Credential Flow (Phase 37)', () => {
 
       try {
         // Store tokens for multiple providers
-        const providers = ['anthropic', 'gemini', 'openai', 'qwen', 'codex'];
+        const providers = [
+          'anthropic',
+          'gemini',
+          'openai',
+          'device-code-test',
+          'codex',
+        ];
         for (const provider of providers) {
           await tokenStore.saveToken(
             provider,

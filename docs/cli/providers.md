@@ -12,7 +12,7 @@ LLxprt Code ships with aliases for these providers — just use `/provider <name
 | Google Gemini                 | `gemini`        | gemini-2.5-pro             | OAuth or API key |
 | OpenAI (API)                  | `openai`        | gpt-5.5                    | API key          |
 | OpenAI (ChatGPT subscription) | `codex`         | gpt-5.5                    | OAuth            |
-| Qwen                          | `qwen`          | qwen3-coder-plus           | OAuth or API key |
+| Qwen                          | `qwen`          | qwen3-coder-plus           | API key          |
 | xAI                           | `xai`           | grok-4                     | API key          |
 | Kimi                          | `kimi`          | kimi-for-coding            | API key          |
 | DeepSeek                      | `deepseek`      | deepseek-v4-flash          | API key          |
@@ -47,13 +47,12 @@ llxprt --provider Synthetic
 
 ### OAuth (Recommended for Subscriptions)
 
-If you have an existing subscription with Anthropic, OpenAI (via Codex), Google, or Qwen, use OAuth — no API key needed:
+If you have an existing subscription with Anthropic, OpenAI (via Codex), or Google, use OAuth — no API key needed:
 
 ```text
 /auth anthropic enable
 /auth codex enable
 /auth gemini enable
-/auth qwen enable
 ```
 
 From the command line:

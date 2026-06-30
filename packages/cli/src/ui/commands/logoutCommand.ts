@@ -93,7 +93,7 @@ async function logoutViaRuntimeApi(
 export const logoutCommand: SlashCommand = {
   name: 'logout',
   description:
-    'logout from OAuth authentication for a provider (gemini, qwen, anthropic)',
+    'logout from OAuth authentication for a provider (gemini, anthropic, codex)',
   kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
@@ -105,7 +105,7 @@ export const logoutCommand: SlashCommand = {
         type: 'message',
         messageType: 'error',
         content:
-          'Please specify a provider to logout from: /logout <provider>\nSupported providers: gemini, qwen, anthropic',
+          'Please specify a provider to logout from: /logout <provider>\nSupported providers: gemini, anthropic, codex',
       };
     }
     const agent = context.services.agent;

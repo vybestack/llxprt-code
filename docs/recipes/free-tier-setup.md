@@ -2,7 +2,7 @@
 
 This recipe guides you through setting up LLxprt Code with low-cost AI providers. Both Gemini and Qwen can be a great way to get started.
 
-> **Important — tier availability changes:** Free OAuth access for these providers has shifted over time. In mid-2026 Google moved free consumer "Login with Google" Gemini-CLI access toward [Antigravity](https://antigravity.google); OAuth via `/auth gemini` continues to work for **paid Gemini API keys** and **Gemini Code Assist Standard/Enterprise** accounts. Qwen's free OAuth tier availability has likewise varied. If a free login no longer authorizes, use an **API key** instead. See [authentication](../cli/authentication.md) for current details. The steps below work for either OAuth or API-key auth.
+> **Important — tier availability changes:** Free OAuth access for these providers has shifted over time. In mid-2026 Google moved free consumer "Login with Google" Gemini-CLI access toward [Antigravity](https://antigravity.google); OAuth via `/auth gemini` continues to work for **paid Gemini API keys** and **Gemini Code Assist Standard/Enterprise** accounts. **Qwen's free OAuth tier ended 2026-04-15** and the OAuth provider has been removed — use a DashScope API key (`DASHSCOPE_API_KEY`) or an OpenRouter API key with the `qwen` alias. See [authentication](../cli/authentication.md) for current details.
 
 ## When to Use This Setup
 
@@ -13,10 +13,10 @@ This recipe guides you through setting up LLxprt Code with low-cost AI providers
 
 ## Provider Overview
 
-| Provider | Context Limit       | Auth                                      |
-| -------- | ------------------- | ----------------------------------------- |
-| Gemini   | 1,048,576 (API key) | Google account (OAuth) or Gemini API key  |
-| Qwen     | 200,000             | Qwen account (OAuth) or DashScope API key |
+| Provider | Context Limit       | Auth                                     |
+| -------- | ------------------- | ---------------------------------------- |
+| Gemini   | 1,048,576 (API key) | Google account (OAuth) or Gemini API key |
+| Qwen     | 200,000             | DashScope API key                        |
 
 > Context windows can differ between API-key and OAuth/subscription access; the figures above reflect API-key access.
 
@@ -82,15 +82,15 @@ Save this to `~/.llxprt/profiles/gemini-free.json`:
 
 ## Qwen Setup
 
-Qwen offers excellent coding capabilities.
+Qwen offers excellent coding capabilities and is now API-key-only via Alibaba Cloud DashScope.
 
-### Step 1: Enable OAuth
+### Step 1: Set Your API Key
+
+Qwen's free OAuth tier ended 2026-04-15. Use a DashScope API key:
 
 ```bash
-/auth qwen enable
+/keyfile ~/.qwen_key
 ```
-
-If the Qwen login no longer authorizes a free tier (see the note above), set a DashScope API key instead with `/keyfile ~/.qwen_key`.
 
 ### Step 2: Set Your Model
 
@@ -105,17 +105,7 @@ If the Qwen login no longer authorizes a free tier (see the note above), set a D
 /set modelparam max_tokens 4096
 ```
 
-### Step 4: Authenticate
-
-Make any request to trigger the device code flow:
-
-```bash
-Hello, can you help me with a coding task?
-```
-
-You'll see a device code and URL. Visit the URL, enter the code, and grant permissions.
-
-### Step 5: Save Profile
+### Step 4: Save Profile
 
 ```bash
 /profile save qwen-free
@@ -216,14 +206,12 @@ Save this to `~/.llxprt/profiles/free-tier-lb.json`:
 If you get authentication errors:
 
 ```bash
-# Re-authenticate
+# Re-authenticate Gemini
 /auth gemini logout
 /auth gemini enable
-
-# Or for Qwen
-/auth qwen logout
-/auth qwen enable
 ```
+
+Qwen no longer supports OAuth — if you see Qwen auth errors, verify your DashScope API key is set correctly with `/keyfile ~/.qwen_key`.
 
 ### Rate Limit Errors
 

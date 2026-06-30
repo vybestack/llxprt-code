@@ -71,8 +71,6 @@ function detectFlowType(
     case 'anthropic':
     case 'gemini':
       return 'pkce_redirect';
-    case 'qwen':
-      return 'device_code';
     case 'codex':
       return 'browser_redirect';
     default:

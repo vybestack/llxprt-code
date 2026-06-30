@@ -15,14 +15,14 @@ export const OAuthTokenSchema = z.object({
   expiry: z.number(), // Unix timestamp
   scope: z.string().nullable().optional(),
   token_type: z.enum(['Bearer', 'bearer']), // OpenAI returns lowercase 'bearer'
-  resource_url: z.string().optional(), // For Qwen OAuth - indicates the API endpoint to use
+  resource_url: z.string().optional(), // Optional API endpoint returned by some OAuth providers
 });
 
 /**
  * Provider OAuth configuration schema
  */
 export const ProviderOAuthConfigSchema = z.object({
-  provider: z.enum(['gemini', 'qwen']),
+  provider: z.enum(['gemini']),
   clientId: z.string(),
   authorizationEndpoint: z.string().url(),
   tokenEndpoint: z.string().url(),
@@ -38,7 +38,7 @@ export const DeviceCodeResponseSchema = z.object({
   verification_uri: z.string().url(),
   verification_uri_complete: z.string().url().optional(),
   expires_in: z.number(),
-  interval: z.number().optional(), // Qwen doesn't include this field
+  interval: z.number().optional(), // Optional; not all providers include this field
 });
 
 /**
@@ -49,8 +49,8 @@ export const TokenResponseSchema = z.object({
   token_type: z.string(),
   expires_in: z.number().optional(),
   refresh_token: z.string().optional(),
-  scope: z.string().nullable().optional(), // Qwen may return null for scope
-  resource_url: z.string().optional(), // Qwen OAuth returns the API endpoint to use
+  scope: z.string().nullable().optional(), // Some providers may return null for scope
+  resource_url: z.string().optional(), // Optional API endpoint returned by some OAuth providers
 });
 
 /**

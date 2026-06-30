@@ -9,7 +9,8 @@ OAuth lets you authenticate with AI providers without managing API keys. Tokens 
 | **Gemini** (Google AI)       | Browser-based | Browser opens automatically |
 | **Anthropic**                | Browser-based | Browser opens automatically |
 | **Codex** (ChatGPT Plus/Pro) | Browser-based | Browser opens automatically |
-| **Qwen** (Alibaba Cloud)     | Browser-based | Browser opens automatically |
+
+> **Qwen is now API-key-only.** Qwen's free OAuth tier ended 2026-04-15 and the OAuth provider has been removed. Use a DashScope API key (`DASHSCOPE_API_KEY`) or an OpenRouter API key with the `qwen` alias.
 
 ## Enabling OAuth
 
@@ -19,7 +20,6 @@ Use the `/auth` command inside a session:
 /auth gemini enable
 /auth anthropic enable
 /auth codex enable
-/auth qwen enable
 ```
 
 With `/auth <provider> enable`, authentication is **lazy** — nothing happens until you make your first request to that provider. At that point, a browser opens and you complete the login.

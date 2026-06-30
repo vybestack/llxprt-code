@@ -42,7 +42,7 @@ describe('FileOAuthSettingsProvider', () => {
         JSON.stringify({
           oauthEnabledProviders: { gemini: true, anthropic: false },
           providerApiKeys: { openai: 'sk-test' },
-          providerKeyfiles: { qwen: '/keys/qwen.key' },
+          providerKeyfiles: { 'test-provider': '/keys/test-provider.key' },
           providerBaseUrls: { openai: 'https://api.example.com' },
         }),
         'utf-8',
@@ -54,7 +54,9 @@ describe('FileOAuthSettingsProvider', () => {
       expect(provider.isOAuthEnabled('unknown')).toBe(false);
       expect(provider.getProviderApiKey('openai')).toBe('sk-test');
       expect(provider.getProviderApiKey('unknown')).toBeUndefined();
-      expect(provider.getProviderKeyfile('qwen')).toBe('/keys/qwen.key');
+      expect(provider.getProviderKeyfile('test-provider')).toBe(
+        '/keys/test-provider.key',
+      );
       expect(provider.getProviderBaseUrl('openai')).toBe(
         'https://api.example.com',
       );

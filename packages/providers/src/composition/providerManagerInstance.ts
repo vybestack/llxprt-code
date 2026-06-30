@@ -377,7 +377,6 @@ function registerOAuthProviders(
     tokenStore,
     addItem,
   );
-  void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
   void ensureOAuthProviderRegistered(
     'anthropic',
     oauthManager,

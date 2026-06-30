@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the discontinued Qwen OAuth provider. Qwen discontinued its OAuth free tier on 2026-04-15; the OAuth flow, device-flow implementation, and all OAuth wiring have been removed. Qwen models remain reachable via **API key** through Alibaba Cloud DashScope (OpenAI-compatible endpoint `https://dashscope.aliyuncs.com/compatible-mode/v1`, environment variable `DASHSCOPE_API_KEY`). The `qwen` and `qwenvercel` aliases are now API-key-only. Users should obtain a DashScope API key (or use an OpenRouter API key) instead of `/auth qwen enable`. OAuth providers are now three: Gemini, Anthropic, and Codex.
+
 ### Added
 
 - Async task execution: Launch subagents with `async=true` to run in background (#244)

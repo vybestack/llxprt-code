@@ -46,7 +46,6 @@ export { OAuthBucketManager } from './OAuthBucketManager.js';
 export { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 export { CodexOAuthProvider } from './codex-oauth-provider.js';
 export { GeminiOAuthProvider } from './gemini-oauth-provider.js';
-export { QwenOAuthProvider } from './qwen-oauth-provider.js';
 
 // ─── Usage Info ──────────────────────────────────────────────────────────────
 export {
@@ -55,7 +54,6 @@ export {
   getAllCodexUsageInfo,
   getAllGeminiUsageInfo,
   getHigherPriorityAuth,
-  isQwenCompatibleUrl,
 } from './provider-usage-info.js';
 
 // ─── Proxy Credential Store Factory ──────────────────────────────────────────

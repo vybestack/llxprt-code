@@ -42,9 +42,9 @@ function createNoOpLogger(): IDebugLogger {
 describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
   let tokenStore: KeyringTokenStore;
 
-  const validQwenToken: OAuthToken = {
-    access_token: 'qwen-access-token-123',
-    refresh_token: 'qwen-refresh-token-456',
+  const validTestToken: OAuthToken = {
+    access_token: 'test-provider-access-token-123',
+    refresh_token: 'test-provider-refresh-token-456',
     expiry: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
     scope: 'read write',
     token_type: 'Bearer' as const,
@@ -67,19 +67,23 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
 
   describe('Token CRUD Operations', () => {
     it('should save and retrieve token for new provider', async () => {
-      await tokenStore.saveToken('qwen', validQwenToken);
-      const retrieved = await tokenStore.getToken('qwen');
+      await tokenStore.saveToken('device-code-test', validTestToken);
+      const retrieved = await tokenStore.getToken('device-code-test');
       expect(retrieved).toBeDefined();
-      expect(retrieved?.access_token).toBe('qwen-access-token-123');
+      expect(retrieved?.access_token).toBe('test-provider-access-token-123');
     });
 
     it('should retrieve saved token with all fields intact', async () => {
-      await tokenStore.saveToken('qwen', validQwenToken);
-      const retrievedToken = await tokenStore.getToken('qwen');
-      expect(retrievedToken).toStrictEqual(validQwenToken);
-      expect(retrievedToken?.access_token).toBe('qwen-access-token-123');
-      expect(retrievedToken?.refresh_token).toBe('qwen-refresh-token-456');
-      expect(retrievedToken?.expiry).toBe(validQwenToken.expiry);
+      await tokenStore.saveToken('device-code-test', validTestToken);
+      const retrievedToken = await tokenStore.getToken('device-code-test');
+      expect(retrievedToken).toStrictEqual(validTestToken);
+      expect(retrievedToken?.access_token).toBe(
+        'test-provider-access-token-123',
+      );
+      expect(retrievedToken?.refresh_token).toBe(
+        'test-provider-refresh-token-456',
+      );
+      expect(retrievedToken?.expiry).toBe(validTestToken.expiry);
       expect(retrievedToken?.scope).toBe('read write');
       expect(retrievedToken?.token_type).toBe('Bearer');
     });
@@ -101,40 +105,46 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
     });
 
     it('should remove token and return null on subsequent gets', async () => {
-      await tokenStore.saveToken('qwen', validQwenToken);
-      await tokenStore.removeToken('qwen');
-      const retrieved = await tokenStore.getToken('qwen');
+      await tokenStore.saveToken('device-code-test', validTestToken);
+      await tokenStore.removeToken('device-code-test');
+      const retrieved = await tokenStore.getToken('device-code-test');
       expect(retrieved).toBeNull();
     });
   });
 
   describe('Multi-Provider Scenarios', () => {
     it('should handle multiple providers independently', async () => {
-      await tokenStore.saveToken('qwen', validQwenToken);
+      await tokenStore.saveToken('device-code-test', validTestToken);
       await tokenStore.saveToken('gemini', _validGeminiToken);
-      const qwenToken = await tokenStore.getToken('qwen');
+      const testProviderToken = await tokenStore.getToken('device-code-test');
       const geminiToken = await tokenStore.getToken('gemini');
-      expect(qwenToken).toStrictEqual(validQwenToken);
+      expect(testProviderToken).toStrictEqual(validTestToken);
       expect(geminiToken).toStrictEqual(_validGeminiToken);
-      expect(qwenToken?.access_token).not.toBe(geminiToken?.access_token);
+      expect(testProviderToken?.access_token).not.toBe(
+        geminiToken?.access_token,
+      );
     });
 
     it('should list all providers with stored tokens in sorted order', async () => {
-      await tokenStore.saveToken('qwen', validQwenToken);
+      await tokenStore.saveToken('device-code-test', validTestToken);
       await tokenStore.saveToken('gemini', _validGeminiToken);
-      await tokenStore.saveToken('anthropic', validQwenToken);
+      await tokenStore.saveToken('anthropic', validTestToken);
       const providers = await tokenStore.listProviders();
-      expect(providers.sort()).toStrictEqual(['anthropic', 'gemini', 'qwen']);
+      expect(providers.sort()).toStrictEqual([
+        'anthropic',
+        'device-code-test',
+        'gemini',
+      ]);
       expect(providers).toHaveLength(3);
     });
 
     it('should maintain provider isolation when removing tokens', async () => {
-      await tokenStore.saveToken('qwen', validQwenToken);
+      await tokenStore.saveToken('device-code-test', validTestToken);
       await tokenStore.saveToken('gemini', _validGeminiToken);
-      await tokenStore.removeToken('qwen');
-      const qwenToken = await tokenStore.getToken('qwen');
+      await tokenStore.removeToken('device-code-test');
+      const testProviderToken = await tokenStore.getToken('device-code-test');
       const geminiToken = await tokenStore.getToken('gemini');
-      expect(qwenToken).toBeNull();
+      expect(testProviderToken).toBeNull();
       expect(geminiToken).toStrictEqual(_validGeminiToken);
       const providers = await tokenStore.listProviders();
       expect(providers).toStrictEqual(['gemini']);
@@ -164,13 +174,13 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
         token_type: 'Bearer' as const,
       };
 
-      await tokenStore.saveToken('qwen', validQwenToken);
-      await tokenStore.saveToken('qwen', _updatedToken);
-      const retrieved = await tokenStore.getToken('qwen');
+      await tokenStore.saveToken('device-code-test', validTestToken);
+      await tokenStore.saveToken('device-code-test', _updatedToken);
+      const retrieved = await tokenStore.getToken('device-code-test');
       expect(retrieved).toStrictEqual(_updatedToken);
       expect(retrieved?.access_token).toBe('updated-access-token');
       expect(retrieved?.scope).toBe('limited-scope');
-      expect(retrieved).not.toStrictEqual(validQwenToken);
+      expect(retrieved).not.toStrictEqual(validTestToken);
     });
 
     it('should handle tokens with optional fields correctly', async () => {
@@ -198,9 +208,9 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       ];
 
       for (const provider of specialProviders) {
-        await tokenStore.saveToken(provider, validQwenToken);
+        await tokenStore.saveToken(provider, validTestToken);
         const retrieved = await tokenStore.getToken(provider);
-        expect(retrieved).toStrictEqual(validQwenToken);
+        expect(retrieved).toStrictEqual(validTestToken);
       }
     });
 
@@ -209,7 +219,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
 
       for (const provider of invalidProviders) {
         await expect(
-          tokenStore.saveToken(provider, validQwenToken),
+          tokenStore.saveToken(provider, validTestToken),
         ).rejects.toThrow(/Invalid.*name/);
       }
     });
@@ -219,7 +229,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
     it('should handle concurrent token operations safely', async () => {
       const providers = ['concurrent1', 'concurrent2', 'concurrent3'];
       const tokens = providers.map((provider, index) => ({
-        ...validQwenToken,
+        ...validTestToken,
         access_token: `concurrent-token-${index}`,
       }));
 
@@ -313,7 +323,11 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
     it('should not include other providers buckets in listing', async () => {
       await tokenStore.saveToken('anthropic', workToken, 'work-company');
       await tokenStore.saveToken('gemini', personalToken, 'work-company');
-      await tokenStore.saveToken('qwen', workToken, 'personal-gmail');
+      await tokenStore.saveToken(
+        'device-code-test',
+        workToken,
+        'personal-gmail',
+      );
 
       const anthropicBuckets = await tokenStore.listBuckets('anthropic');
       const geminiBuckets = await tokenStore.listBuckets('gemini');

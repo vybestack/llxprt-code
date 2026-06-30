@@ -165,13 +165,13 @@ describe.skipIf(skipInCI)(
   () => {
     let manager: OAuthManager;
     let tokenStore: MockTokenStore;
-    let qwenProvider: MockOAuthProvider;
+    let deviceCodeProvider: MockOAuthProvider;
     let geminiProvider: MockOAuthProvider;
 
     beforeEach(() => {
       tokenStore = new MockTokenStore();
       manager = new OAuthManager(tokenStore);
-      qwenProvider = new MockOAuthProvider('qwen');
+      deviceCodeProvider = new MockOAuthProvider('device-code-test');
       geminiProvider = new MockOAuthProvider('gemini');
     });
 
@@ -180,37 +180,37 @@ describe.skipIf(skipInCI)(
        * @requirement REQ-001.1
        * @scenario Register OAuth provider
        * @given OAuthManager instance
-       * @when registerProvider(qwenProvider) called
+       * @when registerProvider(deviceCodeProvider) called
        * @then Provider available for authentication
        * @and Listed in getSupportedProviders()
        */
       it('should register OAuth provider and make it available', () => {
         expect(() => {
-          manager.registerProvider(qwenProvider);
+          manager.registerProvider(deviceCodeProvider);
         }).not.toThrow();
 
         // Provider should be available in getSupportedProviders()
         const providers = manager.getSupportedProviders();
-        expect(providers).toContain('qwen');
+        expect(providers).toContain('device-code-test');
       });
 
       /**
        * @requirement REQ-001.3
        * @scenario Multiple provider registration
        * @given Empty OAuth manager
-       * @when Register qwen and gemini providers
+       * @when Register device-code-test and gemini providers
        * @then Both providers available
        * @and Can authenticate with either
        */
       it('should register multiple providers independently', () => {
         expect(() => {
-          manager.registerProvider(qwenProvider);
+          manager.registerProvider(deviceCodeProvider);
           manager.registerProvider(geminiProvider);
         }).not.toThrow();
 
         // Both providers should be available
         const providers = manager.getSupportedProviders();
-        expect(providers).toContain('qwen');
+        expect(providers).toContain('device-code-test');
         expect(providers).toContain('gemini');
         expect(providers).toHaveLength(2);
       });
@@ -218,16 +218,16 @@ describe.skipIf(skipInCI)(
       /**
        * @requirement REQ-001.1
        * @scenario List OAuth-capable providers
-       * @given Qwen and Gemini registered
+       * @given Device-code test provider and Gemini registered
        * @when getSupportedProviders() called
-       * @then Returns ['gemini', 'qwen'] sorted
+       * @then Returns ['device-code-test', 'gemini'] sorted
        */
       it('should list registered providers in sorted order', () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
         manager.registerProvider(geminiProvider);
 
         const providers = manager.getSupportedProviders();
-        expect(providers).toStrictEqual(['gemini', 'qwen']); // Should be sorted
+        expect(providers).toStrictEqual(['device-code-test', 'gemini']); // Should be sorted
       });
     });
 
@@ -235,13 +235,13 @@ describe.skipIf(skipInCI)(
       /**
        * @requirement REQ-001.3
        * @scenario Toggle OAuth enablement for provider
-       * @given Registered qwen provider with OAuth disabled
-       * @when toggleOAuthEnabled('qwen') called
-       * @then OAuth is enabled for qwen
+       * @given Registered device-code-test provider with OAuth disabled
+       * @when toggleOAuthEnabled('device-code-test') called
+       * @then OAuth is enabled for device-code-test
        * @and No OAuth flow is triggered immediately
        */
       it('should toggle OAuth enablement without triggering auth flow', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
 
         // Mock the toggle method (would be implemented in real OAuthManager)
         const mockToggle = vi.fn().mockResolvedValue(true);
@@ -251,23 +251,23 @@ describe.skipIf(skipInCI)(
 
         const result = await (
           manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled('qwen');
+        ).toggleOAuthEnabled('device-code-test');
         expect(result).toBe(true);
 
         // Verify provider's initiateAuth was NOT called
-        expect(qwenProvider.wasAuthInitiated()).toBe(false);
+        expect(deviceCodeProvider.wasAuthInitiated()).toBe(false);
       });
 
       /**
        * @requirement REQ-001.1
        * @scenario OAuth enablement check
        * @given Provider registered with OAuth enabled
-       * @when isOAuthEnabled('qwen') called
+       * @when isOAuthEnabled('device-code-test') called
        * @then Returns current enablement state
        * @and No OAuth flow is triggered
        */
       it('should check OAuth enablement status without triggering auth', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
 
         // Mock the enablement check method
         const mockIsEnabled = vi.fn().mockResolvedValue(false);
@@ -277,11 +277,11 @@ describe.skipIf(skipInCI)(
 
         const result = await (
           manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
-        ).isOAuthEnabled('qwen');
+        ).isOAuthEnabled('device-code-test');
         expect(result).toBe(false);
 
         // Verify OAuth flow was not initiated
-        expect(qwenProvider.wasAuthInitiated()).toBe(false);
+        expect(deviceCodeProvider.wasAuthInitiated()).toBe(false);
       });
 
       /**
@@ -293,30 +293,30 @@ describe.skipIf(skipInCI)(
        * @and Enablement state persists separately
        */
       it('should toggle OAuth enablement for multiple providers independently', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
         manager.registerProvider(geminiProvider);
 
         // Mock toggle methods for both providers
         const mockToggle = vi
           .fn()
-          .mockResolvedValueOnce(true) // Enable qwen
+          .mockResolvedValueOnce(true) // Enable device-code-test
           .mockResolvedValueOnce(false); // Disable gemini
         (
           manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
         ).toggleOAuthEnabled = mockToggle;
 
-        const qwenResult = await (
+        const deviceCodeResult = await (
           manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled('qwen');
+        ).toggleOAuthEnabled('device-code-test');
         const geminiResult = await (
           manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
         ).toggleOAuthEnabled('gemini');
 
-        expect(qwenResult).toBe(true); // OAuth enabled for qwen
+        expect(deviceCodeResult).toBe(true); // OAuth enabled for device-code-test
         expect(geminiResult).toBe(false); // OAuth disabled for gemini
 
         // Neither provider should have auth initiated
-        expect(qwenProvider.wasAuthInitiated()).toBe(false);
+        expect(deviceCodeProvider.wasAuthInitiated()).toBe(false);
         expect(geminiProvider.wasAuthInitiated()).toBe(false);
       });
     });
@@ -325,13 +325,13 @@ describe.skipIf(skipInCI)(
       /**
        * @requirement REQ-003.1
        * @scenario Lazy OAuth triggering on API call
-       * @given OAuth enabled for qwen but not authenticated
-       * @when getToken('qwen') called during API request
+       * @given OAuth enabled for device-code-test but not authenticated
+       * @when getToken('device-code-test') called during API request
        * @then Triggers OAuth flow lazily
        * @and Returns token after authentication
        */
       it('should trigger OAuth flow lazily when token needed for API call', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
 
         // Mock OAuth as enabled but provider not authenticated yet
         const mockIsEnabled = vi.fn().mockResolvedValue(true);
@@ -340,24 +340,24 @@ describe.skipIf(skipInCI)(
         ).isOAuthEnabled = mockIsEnabled;
 
         // When getToken is called, it should trigger authentication
-        const token = await manager.getToken('qwen');
+        const token = await manager.getToken('device-code-test');
         expect(token).not.toBeNull();
         expect(token).toBeDefined();
 
         // OAuth flow should have been initiated lazily
-        expect(qwenProvider.wasAuthInitiated()).toBe(true);
+        expect(deviceCodeProvider.wasAuthInitiated()).toBe(true);
       });
 
       /**
        * @requirement REQ-003.1
        * @scenario Independent lazy OAuth triggering
-       * @given OAuth enabled for qwen and gemini, neither authenticated
-       * @when getToken('qwen') called
-       * @then Triggers OAuth for qwen only
+       * @given OAuth enabled for device-code-test and gemini, neither authenticated
+       * @when getToken('device-code-test') called
+       * @then Triggers OAuth for device-code-test only
        * @and Gemini remains unauthenticated until needed
        */
       it('should trigger OAuth independently for each provider when needed', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
         manager.registerProvider(geminiProvider);
 
         // Mock OAuth as enabled for both
@@ -366,11 +366,11 @@ describe.skipIf(skipInCI)(
           manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
         ).isOAuthEnabled = mockIsEnabled;
 
-        // Only request qwen token
-        const qwenToken = await manager.getToken('qwen');
+        // Only request device-code-test token
+        const deviceCodeToken = await manager.getToken('device-code-test');
 
-        expect(qwenToken).not.toBeNull();
-        expect(qwenProvider.wasAuthInitiated()).toBe(true);
+        expect(deviceCodeToken).not.toBeNull();
+        expect(deviceCodeProvider.wasAuthInitiated()).toBe(true);
 
         // Gemini should not have been triggered
         expect(geminiProvider.wasAuthInitiated()).toBe(false);
@@ -385,7 +385,7 @@ describe.skipIf(skipInCI)(
        * @and Returns new valid token
        */
       it('should automatically refresh expiring tokens', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
 
         // Mock OAuth as enabled
         const mockIsEnabled = vi.fn().mockReturnValue(true);
@@ -394,7 +394,7 @@ describe.skipIf(skipInCI)(
         ).isOAuthEnabled = mockIsEnabled;
 
         // First authenticate to get a token
-        await manager.authenticate('qwen');
+        await manager.authenticate('device-code-test');
 
         // Set an expiring token in the token store (expiry is Unix timestamp in seconds)
         const expiringToken = {
@@ -404,12 +404,12 @@ describe.skipIf(skipInCI)(
           token_type: 'Bearer' as const,
           scope: 'read',
         };
-        await tokenStore.saveToken('qwen', expiringToken);
+        await tokenStore.saveToken('device-code-test', expiringToken);
 
         // Set the provider to return a refreshed token when refresh is triggered
-        qwenProvider.setExpiringToken(); // This sets the provider's internal token for refresh
+        deviceCodeProvider.setExpiringToken(); // This sets the provider's internal token for refresh
 
-        const token = await manager.getToken('qwen');
+        const token = await manager.getToken('device-code-test');
 
         // Should get a refreshed token (access token string)
         expect(token).not.toBeNull();
@@ -425,19 +425,19 @@ describe.skipIf(skipInCI)(
        */
       it('should return null for OAuth disabled provider without triggering auth', async () => {
         const disabledSettings = createLoadedSettings({
-          oauthEnabledProviders: { qwen: false },
+          oauthEnabledProviders: { 'device-code-test': false },
         });
         const managerWithSettings = new OAuthManager(
           tokenStore,
           disabledSettings,
         );
-        managerWithSettings.registerProvider(qwenProvider);
+        managerWithSettings.registerProvider(deviceCodeProvider);
 
-        const token = await managerWithSettings.getToken('qwen');
+        const token = await managerWithSettings.getToken('device-code-test');
         expect(token).toBeNull();
 
         // OAuth should not have been triggered
-        expect(qwenProvider.wasAuthInitiated()).toBe(false);
+        expect(deviceCodeProvider.wasAuthInitiated()).toBe(false);
       });
     });
 
@@ -445,34 +445,36 @@ describe.skipIf(skipInCI)(
       /**
        * @requirement REQ-005.4
        * @scenario Get auth status including OAuth enablement
-       * @given Qwen OAuth enabled and authenticated, Gemini OAuth disabled
+       * @given Device-code test provider OAuth enabled and authenticated, Gemini OAuth disabled
        * @when getAuthStatus() called
        * @then Returns status for both providers
        * @and Shows OAuth enablement state
        */
       it('should report OAuth enablement status for all providers', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
         manager.registerProvider(geminiProvider);
 
-        // Mock OAuth enabled for qwen, disabled for gemini
+        // Mock OAuth enabled for device-code-test, disabled for gemini
         const mockIsEnabled = vi
           .fn()
-          .mockImplementation((provider) => provider === 'qwen');
+          .mockImplementation((provider) => provider === 'device-code-test');
         (
           manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
         ).isOAuthEnabled = mockIsEnabled;
 
-        // Authenticate qwen through lazy triggering
-        await manager.getToken('qwen');
+        // Authenticate device-code-test through lazy triggering
+        await manager.getToken('device-code-test');
 
         const statuses = await manager.getAuthStatus();
 
         expect(statuses).toHaveLength(2);
-        const qwenStatus = statuses.find((s) => s.provider === 'qwen');
+        const deviceCodeStatus = statuses.find(
+          (s) => s.provider === 'device-code-test',
+        );
         const geminiStatus = statuses.find((s) => s.provider === 'gemini');
 
-        expect(qwenStatus?.authenticated).toBe(true);
-        expect(qwenStatus?.oauthEnabled).toBe(true);
+        expect(deviceCodeStatus?.authenticated).toBe(true);
+        expect(deviceCodeStatus?.oauthEnabled).toBe(true);
         expect(geminiStatus?.authenticated).toBe(false);
         expect(geminiStatus?.oauthEnabled).toBe(false);
       });
@@ -485,15 +487,17 @@ describe.skipIf(skipInCI)(
        * @then Includes time until expiry
        */
       it('should include token expiry time in status', async () => {
-        manager.registerProvider(qwenProvider);
-        await manager.authenticate('qwen');
+        manager.registerProvider(deviceCodeProvider);
+        await manager.authenticate('device-code-test');
 
         const statuses = await manager.getAuthStatus();
-        const qwenStatus = statuses.find((s) => s.provider === 'qwen');
+        const deviceCodeStatus = statuses.find(
+          (s) => s.provider === 'device-code-test',
+        );
 
-        expect(qwenStatus?.authenticated).toBe(true);
-        expect(qwenStatus?.expiresIn).toBeDefined();
-        expect(qwenStatus?.expiresIn).toBeGreaterThan(0);
+        expect(deviceCodeStatus?.authenticated).toBe(true);
+        expect(deviceCodeStatus?.expiresIn).toBeDefined();
+        expect(deviceCodeStatus?.expiresIn).toBeGreaterThan(0);
       });
 
       /**
@@ -505,29 +509,31 @@ describe.skipIf(skipInCI)(
        * @and Differentiates between OAuth enablement and auth types
        */
       it('should report mixed OAuth enablement and authentication states accurately', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
         manager.registerProvider(geminiProvider);
 
         // Mock mixed OAuth enablement states
         const mockIsEnabled = vi
           .fn()
-          .mockImplementation((provider) => provider === 'qwen');
+          .mockImplementation((provider) => provider === 'device-code-test');
         (
           manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
         ).isOAuthEnabled = mockIsEnabled;
 
-        // Only trigger authentication for qwen
-        await manager.getToken('qwen');
+        // Only trigger authentication for device-code-test
+        await manager.getToken('device-code-test');
 
         const statuses = await manager.getAuthStatus();
 
         expect(statuses).toHaveLength(2);
 
-        const qwenStatus = statuses.find((s) => s.provider === 'qwen');
+        const deviceCodeStatus = statuses.find(
+          (s) => s.provider === 'device-code-test',
+        );
         const geminiStatus = statuses.find((s) => s.provider === 'gemini');
 
-        expect(qwenStatus?.authenticated).toBe(true);
-        expect(qwenStatus?.oauthEnabled).toBe(true);
+        expect(deviceCodeStatus?.authenticated).toBe(true);
+        expect(deviceCodeStatus?.oauthEnabled).toBe(true);
         expect(geminiStatus?.authenticated).toBe(false);
         expect(geminiStatus?.oauthEnabled).toBe(false);
       });
@@ -617,11 +623,11 @@ describe.skipIf(skipInCI)(
        * @then Returns only OAuth-capable providers
        */
       it('should filter and return only OAuth-capable providers', () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
         manager.registerProvider(geminiProvider);
 
         const providers = manager.getSupportedProviders();
-        expect(providers).toContain('qwen');
+        expect(providers).toContain('device-code-test');
         expect(providers).toContain('gemini');
         // Only OAuth providers should be returned
       });
@@ -636,28 +642,28 @@ describe.skipIf(skipInCI)(
        */
       it('should return providers in consistent sorted order regardless of registration order', () => {
         // Register in different order
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
         manager.registerProvider(geminiProvider);
         const firstOrder = manager.getSupportedProviders();
 
         const manager2 = new OAuthManager(tokenStore);
         manager2.registerProvider(geminiProvider);
-        manager2.registerProvider(qwenProvider);
+        manager2.registerProvider(deviceCodeProvider);
         const secondOrder = manager2.getSupportedProviders();
 
         expect(firstOrder).toStrictEqual(secondOrder);
-        expect(firstOrder).toStrictEqual(['gemini', 'qwen']);
+        expect(firstOrder).toStrictEqual(['device-code-test', 'gemini']);
       });
 
       it('should list buckets through the public OAuthManager API', async () => {
-        await tokenStore.saveToken('qwen:work', {
+        await tokenStore.saveToken('device-code-test:work', {
           access_token: 'work-token',
           refresh_token: 'work-refresh',
           expiry: Math.floor(Date.now() / 1000) + 3600,
           token_type: 'Bearer',
           scope: 'read',
         });
-        await tokenStore.saveToken('qwen:personal', {
+        await tokenStore.saveToken('device-code-test:personal', {
           access_token: 'personal-token',
           refresh_token: 'personal-refresh',
           expiry: Math.floor(Date.now() / 1000) + 3600,
@@ -665,10 +671,9 @@ describe.skipIf(skipInCI)(
           scope: 'read',
         });
 
-        await expect(manager.listBuckets('qwen')).resolves.toStrictEqual([
-          'personal',
-          'work',
-        ]);
+        await expect(
+          manager.listBuckets('device-code-test'),
+        ).resolves.toStrictEqual(['personal', 'work']);
       });
 
       it('prefers an explicit bucket over a single configured profile bucket during auth fallback', async () => {
@@ -742,7 +747,7 @@ describe.skipIf(skipInCI)(
        * @and Token is available after lazy authentication
        */
       it('should support complete OAuth enablement and lazy auth lifecycle', async () => {
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
 
         // Enable OAuth (would persist in real implementation)
         const mockToggle = vi.fn().mockResolvedValue(true);
@@ -756,14 +761,14 @@ describe.skipIf(skipInCI)(
 
         await (
           manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled('qwen');
+        ).toggleOAuthEnabled('device-code-test');
 
         // Lazy authentication should trigger when token is needed
-        const token = await manager.getToken('qwen');
+        const token = await manager.getToken('device-code-test');
 
         expect(token).not.toBeNull();
         expect(token).toBeDefined();
-        expect(qwenProvider.wasAuthInitiated()).toBe(true);
+        expect(deviceCodeProvider.wasAuthInitiated()).toBe(true);
       });
 
       /**
@@ -776,7 +781,7 @@ describe.skipIf(skipInCI)(
        */
       it('should persist OAuth enablement and tokens across manager instances', async () => {
         // Enable OAuth and authenticate with first manager
-        manager.registerProvider(qwenProvider);
+        manager.registerProvider(deviceCodeProvider);
 
         const mockToggle = vi.fn().mockResolvedValue(true);
         const mockIsEnabled = vi.fn().mockResolvedValue(true);
@@ -789,12 +794,12 @@ describe.skipIf(skipInCI)(
 
         await (
           manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled('qwen');
-        await manager.getToken('qwen'); // Triggers lazy auth
+        ).toggleOAuthEnabled('device-code-test');
+        await manager.getToken('device-code-test'); // Triggers lazy auth
 
         // Create new manager with same token store
         const newManager = new OAuthManager(tokenStore);
-        const newProvider = new MockOAuthProvider('qwen');
+        const newProvider = new MockOAuthProvider('device-code-test');
         newManager.registerProvider(newProvider);
 
         // Mock OAuth as still enabled in new manager
@@ -802,7 +807,7 @@ describe.skipIf(skipInCI)(
           newManager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
         ).isOAuthEnabled = mockIsEnabled;
 
-        const token = await newManager.getToken('qwen');
+        const token = await newManager.getToken('device-code-test');
 
         expect(token).not.toBeNull();
         expect(token).toBeDefined();
@@ -906,7 +911,7 @@ describe('OAuthManager.attachAddItemToProviders', () => {
   it('propagates the addItem callback to a registered provider that implements setAddItem', () => {
     const tokenStore = new MockTokenStore();
     const manager = new OAuthManager(tokenStore);
-    const provider = new AddItemRecordingProvider('qwen');
+    const provider = new AddItemRecordingProvider('device-code-test');
     manager.registerProvider(provider);
 
     const addItem: OAuthUICallback = () => 42;
@@ -921,7 +926,7 @@ describe('OAuthManager.attachAddItemToProviders', () => {
   it('propagates the addItem callback to every supported provider', () => {
     const tokenStore = new MockTokenStore();
     const manager = new OAuthManager(tokenStore);
-    const providerA = new AddItemRecordingProvider('qwen');
+    const providerA = new AddItemRecordingProvider('device-code-test');
     const providerB = new AddItemRecordingProvider('gemini');
     manager.registerProvider(providerA);
     manager.registerProvider(providerB);
@@ -962,7 +967,7 @@ describe('OAuthManager.attachAddItemToProviders', () => {
 
     const tokenStore = new MockTokenStore();
     const manager = new OAuthManager(tokenStore);
-    const recordingProvider = new AddItemRecordingProvider('qwen');
+    const recordingProvider = new AddItemRecordingProvider('device-code-test');
     const plainProvider = new NoSetAddItemProvider();
     manager.registerProvider(recordingProvider);
     manager.registerProvider(plainProvider);

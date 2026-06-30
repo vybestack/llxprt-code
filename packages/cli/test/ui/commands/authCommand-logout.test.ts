@@ -25,7 +25,6 @@ import {
 } from '@vybestack/llxprt-code-storage';
 import {
   OAuthManager,
-  QwenOAuthProvider,
   GeminiOAuthProvider,
   AnthropicOAuthProvider,
 } from '@vybestack/llxprt-code-providers/auth.js';
@@ -114,14 +113,12 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new QwenOAuthProvider(tokenStore));
       oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
       oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
     });
 
     afterEach(async () => {
       try {
-        await tokenStore.removeToken('qwen');
         await tokenStore.removeToken('gemini');
         await tokenStore.removeToken('anthropic');
       } catch {
@@ -150,15 +147,15 @@ describe.skipIf(skipInCI)(
         token_type: 'Bearer',
       };
 
-      await tokenStore.saveToken('qwen', token);
+      await tokenStore.saveToken('gemini', token);
 
-      const result = await authCommand.execute(context, 'qwen logout');
+      const result = await authCommand.execute(context, 'gemini logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('info');
       expect(messageResult.content).toContain('Successfully logged out');
-      expect(messageResult.content).toContain('qwen');
+      expect(messageResult.content).toContain('gemini');
     });
 
     /**
@@ -197,7 +194,6 @@ describe.skipIf(skipInCI)(
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('error');
       expect(messageResult.content).toContain('Supported providers');
-      expect(messageResult.content).toContain('qwen');
       expect(messageResult.content).toContain('gemini');
       expect(messageResult.content).toContain('anthropic');
     });
@@ -212,16 +208,16 @@ describe.skipIf(skipInCI)(
      */
     it('should return success message even with no existing token', async () => {
       // Ensure no token exists
-      const existingToken = await tokenStore.getToken('qwen');
+      const existingToken = await tokenStore.getToken('gemini');
       expect(existingToken).toBeNull();
 
-      const result = await authCommand.execute(context, 'qwen logout');
+      const result = await authCommand.execute(context, 'gemini logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('info');
       expect(messageResult.content).toContain('Successfully logged out');
-      expect(messageResult.content).toContain('qwen');
+      expect(messageResult.content).toContain('gemini');
     });
 
     /**
@@ -234,9 +230,9 @@ describe.skipIf(skipInCI)(
      */
     it('should parse logout arguments correctly', async () => {
       const testCases = [
-        'qwen logout',
-        '  qwen   logout  ', // Extra whitespace
-        'qwen    logout', // Multiple spaces
+        'gemini logout',
+        '  gemini   logout  ', // Extra whitespace
+        'gemini    logout', // Multiple spaces
       ];
 
       for (const args of testCases) {
@@ -245,7 +241,7 @@ describe.skipIf(skipInCI)(
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
         expect(messageResult.messageType).toBe('info');
-        expect(messageResult.content).toContain('qwen');
+        expect(messageResult.content).toContain('gemini');
       }
     });
 
@@ -259,10 +255,10 @@ describe.skipIf(skipInCI)(
      */
     it('should handle case sensitivity for logout action', async () => {
       const testCases = [
-        'qwen logout',
-        'qwen LOGOUT',
-        'qwen Logout',
-        'qwen LogOut',
+        'gemini logout',
+        'gemini LOGOUT',
+        'gemini Logout',
+        'gemini LogOut',
       ];
 
       for (const args of testCases) {
@@ -316,7 +312,7 @@ describe.skipIf(skipInCI)(
         throw new Error('OAuth manager failure');
       };
 
-      const result = await authCommand.execute(context, 'qwen logout');
+      const result = await authCommand.execute(context, 'gemini logout');
 
       // Restore original method
       oauthManager.logout = originalLogout;
@@ -325,7 +321,7 @@ describe.skipIf(skipInCI)(
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('error');
       expect(messageResult.content).toContain('Failed to logout');
-      expect(messageResult.content).toContain('qwen');
+      expect(messageResult.content).toContain('gemini');
       expect(messageResult.content).toContain('OAuth manager failure');
     });
   },
@@ -346,14 +342,12 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new QwenOAuthProvider(tokenStore));
       oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
       oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
     });
 
     afterEach(async () => {
       try {
-        await tokenStore.removeToken('qwen');
         await tokenStore.removeToken('gemini');
         await tokenStore.removeToken('anthropic');
       } catch {
@@ -420,7 +414,7 @@ describe.skipIf(skipInCI)(
      * @then Provider names handled consistently
      */
     it('should handle provider name formatting consistently', async () => {
-      const providerVariations = ['qwen', 'Qwen', 'QWEN'];
+      const providerVariations = ['gemini', 'Gemini', 'GEMINI'];
 
       for (const provider of providerVariations) {
         const result = await authCommand.execute(context, `${provider} logout`);
@@ -428,7 +422,7 @@ describe.skipIf(skipInCI)(
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
 
-        if (provider === 'qwen') {
+        if (provider === 'gemini') {
           // Exact match should work
           expect(messageResult.messageType).toBe('info');
           expect(messageResult.content).toContain('Successfully logged out');
@@ -452,7 +446,6 @@ describe.skipIf(skipInCI)(
       const availableProviders = oauthManager.getSupportedProviders();
 
       // Should include all registered providers
-      expect(availableProviders).toContain('qwen');
       expect(availableProviders).toContain('gemini');
       expect(availableProviders).toContain('anthropic');
 
@@ -483,14 +476,12 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new QwenOAuthProvider(tokenStore));
       oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
       oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
     });
 
     afterEach(async () => {
       try {
-        await tokenStore.removeToken('qwen');
         await tokenStore.removeToken('gemini');
         await tokenStore.removeToken('anthropic');
       } catch {
@@ -513,15 +504,15 @@ describe.skipIf(skipInCI)(
      * @then Success message contains required information
      */
     it('should provide informative success messages', async () => {
-      const result = await authCommand.execute(context, 'qwen logout');
+      const result = await authCommand.execute(context, 'gemini logout');
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('info');
 
       const content = messageResult.content;
-      expect(content).toMatch(/successfully|logged out|qwen/i);
-      expect(content).toContain('qwen');
+      expect(content).toMatch(/successfully|logged out|gemini/i);
+      expect(content).toContain('gemini');
     });
 
     /**
@@ -555,7 +546,7 @@ describe.skipIf(skipInCI)(
      */
     it('should use appropriate message types', async () => {
       // Success case should be 'info'
-      const successResult = await authCommand.execute(context, 'qwen logout');
+      const successResult = await authCommand.execute(context, 'gemini logout');
       expect(successResult.type).toBe('message');
       expect((successResult as MessageActionReturn).messageType).toBe('info');
 
@@ -576,9 +567,9 @@ describe.skipIf(skipInCI)(
     it('should provide clear and actionable feedback', async () => {
       // Test various scenarios for message clarity
       const testCases = [
-        { args: 'qwen logout', expectSuccess: true },
-        { args: 'invalid logout', expectSuccess: false },
         { args: 'gemini logout', expectSuccess: true },
+        { args: 'invalid logout', expectSuccess: false },
+        { args: 'anthropic logout', expectSuccess: true },
       ];
 
       for (const testCase of testCases) {
@@ -649,14 +640,12 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
     context = createMockContext();
 
     // Register test providers
-    oauthManager.registerProvider(new QwenOAuthProvider(tokenStore));
     oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
     oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
   });
 
   afterEach(async () => {
     try {
-      await tokenStore.removeToken('qwen');
       await tokenStore.removeToken('gemini');
       await tokenStore.removeToken('anthropic');
     } catch {
@@ -674,7 +663,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 1: Command parsing with random whitespace
    */
   it.prop([
-    fc.constantFrom('qwen', 'gemini', 'anthropic'),
+    fc.constantFrom('gemini', 'anthropic'),
     fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5), // Only whitespace, shorter
     fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5),
   ])(
@@ -700,7 +689,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 3: Command argument variations
    */
   it.prop([
-    fc.constantFrom('qwen', 'gemini', 'anthropic'),
+    fc.constantFrom('gemini', 'anthropic'),
     fc.constantFrom('logout', 'LOGOUT', 'Logout', 'logOut', 'LogOut'),
   ])(
     'should handle command argument case variations',
@@ -730,7 +719,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 4: Concurrent command execution
    */
   it.prop([
-    fc.array(fc.constantFrom('qwen', 'gemini', 'anthropic'), {
+    fc.array(fc.constantFrom('gemini', 'anthropic'), {
       minLength: 2,
       maxLength: 10,
     }),
@@ -767,7 +756,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * @requirement REQ-002
    * Property Test 5: Message content validation
    */
-  it.prop([fc.constantFrom('qwen', 'gemini', 'anthropic')])(
+  it.prop([fc.constantFrom('gemini', 'anthropic')])(
     'should always include provider name in response messages',
     async (provider) => {
       const result = await authCommand.execute(context, `${provider} logout`);

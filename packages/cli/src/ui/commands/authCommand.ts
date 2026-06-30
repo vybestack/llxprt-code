@@ -18,7 +18,6 @@ import type {
 import { CommandKind } from './types.js';
 import {
   OAuthManager,
-  QwenOAuthProvider,
   GeminiOAuthProvider,
   AnthropicOAuthProvider,
   CodexOAuthProvider,
@@ -47,7 +46,6 @@ function getOAuthManager(): OAuthManager {
     const tokenStore = createTokenStore();
     oauthManager = new OAuthManager(tokenStore);
     oauthManager.registerProvider(new GeminiOAuthProvider());
-    oauthManager.registerProvider(new QwenOAuthProvider());
     oauthManager.registerProvider(new AnthropicOAuthProvider());
   }
 
@@ -711,7 +709,6 @@ export const authCommand: SlashCommand = {
 
       // Register OAuth providers
       oauthManager.registerProvider(new GeminiOAuthProvider());
-      oauthManager.registerProvider(new QwenOAuthProvider());
       oauthManager.registerProvider(new AnthropicOAuthProvider());
       oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
 

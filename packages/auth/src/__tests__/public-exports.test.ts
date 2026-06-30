@@ -22,7 +22,6 @@ import {
   flushRuntimeAuthScope,
   KeyringTokenStore,
   CodexDeviceFlow,
-  QwenDeviceFlow,
   AnthropicDeviceFlow,
   OAuthError,
   OAuthErrorFactory,
@@ -122,11 +121,6 @@ describe('Auth package public export tests', () => {
     it('CodexDeviceFlow is exported from main entry', () => {
       expect(CodexDeviceFlow).toBeDefined();
       expect(typeof CodexDeviceFlow).toBe('function');
-    });
-
-    it('QwenDeviceFlow is exported from main entry', () => {
-      expect(QwenDeviceFlow).toBeDefined();
-      expect(typeof QwenDeviceFlow).toBe('function');
     });
 
     it('AnthropicDeviceFlow is exported from main entry', () => {
