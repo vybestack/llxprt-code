@@ -72,9 +72,8 @@ export function normalizeToolName(rawName: string): string | null {
 }
 
 /**
- * Sentinel returned by {@link canonicalizeToolName} and
- * {@link canonicalizeApiQualifiedToolName} when the input name is blank,
- * whitespace-only, or contains empty dotted segments.
+ * Sentinel returned by {@link canonicalizeToolName} when the input name is
+ * blank, whitespace-only, or contains empty dotted segments.
  */
 export const INVALID_TOOL_NAME = '__invalid_tool_name__';
 
@@ -117,8 +116,7 @@ function stripToolSuffixFromLastSegment(name: string): string {
  * Dotted registry names are preserved (namespace prefixes are not stripped) for
  * global governance/registry lookups. `Tool` suffix normalization applies only
  * to the last dotted segment, so `functions.RunShellCommandTool` becomes
- * `functions.run_shell_command`. Use {@link canonicalizeApiQualifiedToolName}
- * when resolving public API-qualified whitelist inputs to registry names.
+ * `functions.run_shell_command`.
  *
  * Returns {@link INVALID_TOOL_NAME} for blank/whitespace-only input or names
  * containing empty dotted segments so callers can treat unusable names
@@ -141,27 +139,6 @@ export function canonicalizeToolName(rawName: string): string {
 }
 
 /**
- * Canonicalize a public API-qualified tool name for explicit whitelist inputs.
- *
- * API clients may address tools through namespaces such as
- * `functions.run_shell_command`. This helper resolves those aliases to the
- * registry-facing tool name by taking only the final dotted segment and applying
- * {@link canonicalizeToolName}. All namespace segments are discarded, not just
- * known prefixes.
- *
- * This does not change the global tool canonicalization semantics used by
- * schedulers and hooks.
- */
-export function canonicalizeApiQualifiedToolName(rawName: string): string {
-  const trimmed = validateToolNameInput(rawName);
-  if (trimmed === null) {
-    return INVALID_TOOL_NAME;
-  }
-
-  const registryName = trimmed.split('.').pop()!;
-  return canonicalizeToolName(registryName);
-}
-
 /**
  * Convert string to snake_case.
  */

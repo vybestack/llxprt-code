@@ -88,14 +88,16 @@ export {
   isValidToolName as isValidFormatterToolName,
   findMatchingTool,
   canonicalizeToolName,
-  canonicalizeApiQualifiedToolName,
   INVALID_TOOL_NAME,
 } from './formatters/toolNameUtils.js';
 
 export {
+  buildSubagentExcludedToolNames,
   buildToolGovernance,
   getToolNameCandidates,
+  isSubagentExcludedToolName,
   isToolBlocked,
+  SUBAGENT_EXCLUDED_TOOL_NAMES,
   type ToolGovernance,
   type ToolGovernanceConfig,
 } from './formatters/toolGovernanceUtils.js';

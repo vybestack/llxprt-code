@@ -5,11 +5,12 @@
  */
 
 import {
+  buildSubagentExcludedToolNames,
   buildToolGovernance,
-  canonicalizeApiQualifiedToolName as canonicalizeSharedApiQualifiedToolName,
   canonicalizeToolName as canonicalizeSharedToolName,
   getToolNameCandidates,
   INVALID_TOOL_NAME,
+  isSubagentExcludedToolName,
   isToolBlocked,
   ToolErrorType,
   type SubagentConfig as ToolsSubagentConfig,
@@ -22,19 +23,16 @@ import type { SubagentConfig as CoreSubagentConfig } from '../config/types.js';
 import { ContextState, type OutputObject } from '../core/subagentTypes.js';
 
 export {
+  buildSubagentExcludedToolNames,
   buildToolGovernance,
   getToolNameCandidates,
+  isSubagentExcludedToolName,
   isToolBlocked,
   type ToolGovernance,
 };
 
 export function canonicalizeToolName(rawName: string): string {
   const canonicalName = canonicalizeSharedToolName(rawName);
-  return canonicalName === INVALID_TOOL_NAME ? '' : canonicalName;
-}
-
-export function canonicalizeApiQualifiedToolName(rawName: string): string {
-  const canonicalName = canonicalizeSharedApiQualifiedToolName(rawName);
   return canonicalName === INVALID_TOOL_NAME ? '' : canonicalName;
 }
 
@@ -200,18 +198,5 @@ export function resolveTimeoutSeconds(
   return Math.min(effectiveTimeout, maxTimeoutSeconds);
 }
 
-export function buildExcludedToolNames(): Set<string> {
-  return new Set(
-    ['task', 'list_subagents']
-      .map((name) => canonicalizeToolName(name))
-      .filter((name) => name.length > 0),
-  );
-}
-
-export function isExcludedToolName(
-  name: string,
-  excluded: Set<string>,
-): boolean {
-  const canonical = canonicalizeToolName(name);
-  return canonical.length > 0 && excluded.has(canonical);
-}
+export const buildExcludedToolNames = buildSubagentExcludedToolNames;
+export const isExcludedToolName = isSubagentExcludedToolName;

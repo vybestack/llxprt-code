@@ -8,8 +8,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
+  buildSubagentExcludedToolNames,
   buildToolGovernance,
   getToolNameCandidates,
+  isSubagentExcludedToolName,
   isToolBlocked,
 } from '../core/toolGovernance.js';
 import type { TaskToolParams } from './task.js';
@@ -32,32 +34,6 @@ export interface TaskToolInvocationParams {
 }
 
 /**
- * The set of tool names always excluded from subagent tool whitelists
- * (canonicalized).
- */
-export function buildExcludedToolNames(): Set<string> {
-  return new Set(
-    ['task', 'list_subagents']
-      .map((name) => normalizeToolNameForPolicy(name))
-      .filter((name) => name.length > 0),
-  );
-}
-
-/**
- * Returns true when the canonical form of `name` is in the excluded set.
- */
-export function isExcludedToolName(
-  name: string,
-  excluded: Set<string>,
-): boolean {
-  const candidates = getToolNameCandidates(name);
-  return (
-    candidates.length === 0 ||
-    candidates.some((canonical) => excluded.has(canonical))
-  );
-}
-
-/**
  * Builds the governed tool whitelist from candidate tools and the registry,
  * filtering excluded tools, blocked tools, and tools not present in the
  * registry. Returns `undefined` when the result is empty so callers can apply
@@ -72,7 +48,7 @@ export function buildGovernedToolWhitelist(
     return undefined;
   }
 
-  const excluded = buildExcludedToolNames();
+  const excluded = buildSubagentExcludedToolNames();
   const governance = buildToolGovernance(config);
   const allowedRegistryTools = registry
     .getEnabledTools()
@@ -81,7 +57,7 @@ export function buildGovernedToolWhitelist(
       (name): name is string =>
         typeof name === 'string' &&
         name.length > 0 &&
-        !isExcludedToolName(name, excluded),
+        !isSubagentExcludedToolName(name, excluded),
     );
 
   const allowedByCanonical = new Map<string, string>();
@@ -151,10 +127,10 @@ export function filterExcludedFromWhitelist(
     return undefined;
   }
 
-  const excluded = buildExcludedToolNames();
+  const excluded = buildSubagentExcludedToolNames();
   const filtered = candidateTools.filter(
     (name): name is string =>
-      typeof name === 'string' && !isExcludedToolName(name, excluded),
+      typeof name === 'string' && !isSubagentExcludedToolName(name, excluded),
   );
 
   return filtered.length > 0 ? filtered : undefined;

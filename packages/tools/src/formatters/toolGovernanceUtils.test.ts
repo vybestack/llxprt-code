@@ -6,9 +6,12 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  buildSubagentExcludedToolNames,
   buildToolGovernance,
   getToolNameCandidates,
+  isSubagentExcludedToolName,
   isToolBlocked,
+  SUBAGENT_EXCLUDED_TOOL_NAMES,
   type ToolGovernance,
   type ToolGovernanceConfig,
 } from './toolGovernanceUtils.js';
@@ -76,6 +79,35 @@ describe('tool governance candidate generation', () => {
     expect(getToolNameCandidates('functions..run_shell_command')).toStrictEqual(
       [],
     );
+  });
+});
+
+describe('subagent excluded tool helpers', () => {
+  it('returns a fresh set of canonical subagent excluded tool names', () => {
+    const excluded = buildSubagentExcludedToolNames();
+
+    expect(excluded).not.toBe(SUBAGENT_EXCLUDED_TOOL_NAMES);
+    expect(excluded).toStrictEqual(new Set(['task', 'list_subagents']));
+  });
+
+  it('matches API aliases but keeps GitHub namespace names exact', () => {
+    const excluded = buildSubagentExcludedToolNames();
+
+    expect(isSubagentExcludedToolName('task', excluded)).toBe(true);
+    expect(isSubagentExcludedToolName('functions.task', excluded)).toBe(true);
+    expect(
+      isSubagentExcludedToolName('functions.list_subagents', excluded),
+    ).toBe(true);
+    expect(isSubagentExcludedToolName('github.task', excluded)).toBe(false);
+    expect(isSubagentExcludedToolName('github.list_subagents', excluded)).toBe(
+      false,
+    );
+  });
+
+  it('treats malformed names as excluded to fail closed', () => {
+    expect(isSubagentExcludedToolName('')).toBe(true);
+    expect(isSubagentExcludedToolName('functions.')).toBe(true);
+    expect(isSubagentExcludedToolName('functions..task')).toBe(true);
   });
 });
 

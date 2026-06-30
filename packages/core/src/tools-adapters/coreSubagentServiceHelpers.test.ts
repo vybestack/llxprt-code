@@ -8,7 +8,6 @@ import { describe, it, expect } from 'vitest';
 import {
   buildToolGovernance,
   isToolBlocked,
-  canonicalizeApiQualifiedToolName,
   canonicalizeToolName,
   getToolNameCandidates,
   type ToolGovernance,
@@ -339,59 +338,5 @@ describe('coreSubagentServiceHelpers canonicalizeToolName', () => {
     expect(canonicalizeToolName('read_file')).toBe('read_file');
     expect(canonicalizeToolName('WriteFileTool')).toBe('write_file');
     expect(canonicalizeToolName('READ_FILE')).toBe('read_file');
-  });
-});
-
-// Issue #2184: API-qualified names are only stripped for whitelist inputs while
-// preserving the core wrapper's empty-string invalid-name contract.
-describe('coreSubagentServiceHelpers canonicalizeApiQualifiedToolName', () => {
-  it('strips functions. namespace prefix', () => {
-    expect(
-      canonicalizeApiQualifiedToolName('functions.run_shell_command'),
-    ).toBe('run_shell_command');
-  });
-
-  it('strips arbitrary namespace prefix', () => {
-    expect(canonicalizeApiQualifiedToolName('github.list_files')).toBe(
-      'list_files',
-    );
-  });
-
-  it('strips multi-segment namespace prefixes', () => {
-    expect(canonicalizeApiQualifiedToolName('a.b.run_shell_command')).toBe(
-      'run_shell_command',
-    );
-    expect(canonicalizeApiQualifiedToolName('github.repo.read_file')).toBe(
-      'read_file',
-    );
-  });
-
-  it('strips namespace prefix then strips Tool suffix', () => {
-    expect(
-      canonicalizeApiQualifiedToolName('functions.RunShellCommandTool'),
-    ).toBe('run_shell_command');
-  });
-
-  it('treats single-dot whitelist names as namespace-qualified names', () => {
-    expect(canonicalizeApiQualifiedToolName('tool.v1')).toBe('v1');
-    expect(canonicalizeApiQualifiedToolName('run.cmd')).toBe('cmd');
-  });
-
-  it('returns empty string for blank and empty namespace segments', () => {
-    expect(canonicalizeApiQualifiedToolName('')).toBe('');
-    expect(canonicalizeApiQualifiedToolName('   ')).toBe('');
-    expect(canonicalizeApiQualifiedToolName('functions.')).toBe('');
-    expect(canonicalizeApiQualifiedToolName('.run_shell_command')).toBe('');
-    expect(
-      canonicalizeApiQualifiedToolName('functions..run_shell_command'),
-    ).toBe('');
-  });
-
-  it('keeps existing non-dotted behavior unchanged', () => {
-    expect(canonicalizeApiQualifiedToolName('read_file')).toBe('read_file');
-    expect(canonicalizeApiQualifiedToolName('WriteFileTool')).toBe(
-      'write_file',
-    );
-    expect(canonicalizeApiQualifiedToolName('READ_FILE')).toBe('read_file');
   });
 });

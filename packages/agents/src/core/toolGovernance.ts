@@ -5,12 +5,14 @@
  */
 
 export {
+  buildSubagentExcludedToolNames,
   buildToolGovernance,
-  canonicalizeApiQualifiedToolName,
   canonicalizeToolName,
   getToolNameCandidates,
   INVALID_TOOL_NAME,
+  isSubagentExcludedToolName,
   isToolBlocked,
+  SUBAGENT_EXCLUDED_TOOL_NAMES,
   type ToolGovernance,
   type ToolGovernanceConfig,
 } from '@vybestack/llxprt-code-tools';

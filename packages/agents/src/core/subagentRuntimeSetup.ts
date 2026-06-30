@@ -42,7 +42,11 @@ import {
   INVALID_TOOL_NAME,
 } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { getToolNameCandidates } from './toolGovernance.js';
+import {
+  getToolNameCandidates,
+  isSubagentExcludedToolName,
+  SUBAGENT_EXCLUDED_TOOL_NAMES,
+} from './toolGovernance.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
@@ -63,25 +67,6 @@ import {
 // ---------------------------------------------------------------------------
 // Simple utilities
 // ---------------------------------------------------------------------------
-
-/**
- * Tools that must never be exposed to a subagent because they would allow
- * nested subagent spawning (recursive task delegation) or enumeration of the
- * parent's subagent registry from within a sandboxed runtime.
- */
-const SUBAGENT_EXCLUDED_TOOLS: ReadonlySet<string> = new Set(
-  ['task', 'list_subagents'].map(canonicalizeToolName),
-);
-
-/**
- * Returns true when a canonical (or raw) tool name is excluded from subagent
- * runtimes (task/list_subagents).
- */
-function isSubagentExcludedToolName(name: string): boolean {
-  return getToolNameCandidates(name).some((candidate) =>
-    SUBAGENT_EXCLUDED_TOOLS.has(candidate),
-  );
-}
 
 /**
  * Returns true when a non-string FunctionDeclaration entry is excluded from
@@ -269,7 +254,7 @@ export function createToolExecutionConfig(
     // Issue #2069: scheduler governance must fail-closed for subagent-excluded
     // tools (task/list_subagents) so they can never be executed by a subagent
     // runtime, regardless of registry resolution or ephemeral whitelist state.
-    getExcludeTools: () => Array.from(SUBAGENT_EXCLUDED_TOOLS),
+    getExcludeTools: () => Array.from(SUBAGENT_EXCLUDED_TOOL_NAMES),
     getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),

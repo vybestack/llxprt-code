@@ -34,6 +34,26 @@ interface ParsedToolName {
 
 const API_TOOL_NAMESPACE_PREFIXES = new Set(['api', 'function', 'functions']);
 
+export const SUBAGENT_EXCLUDED_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'task',
+  'list_subagents',
+]);
+
+export function buildSubagentExcludedToolNames(): Set<string> {
+  return new Set(SUBAGENT_EXCLUDED_TOOL_NAMES);
+}
+
+export function isSubagentExcludedToolName(
+  name: string,
+  excluded: ReadonlySet<string> = SUBAGENT_EXCLUDED_TOOL_NAMES,
+): boolean {
+  const candidates = getToolNameCandidates(name);
+  return (
+    candidates.length === 0 ||
+    candidates.some((canonical) => excluded.has(canonical))
+  );
+}
+
 function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((item) => typeof item === 'string')
