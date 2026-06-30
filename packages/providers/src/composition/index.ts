@@ -64,6 +64,7 @@ export type { AliasAwareBaseProvider } from './aliasProviderFactory.js';
 // ─── OAuth provider registration ─────────────────────────────────────────────
 export {
   ensureOAuthProviderRegistered,
+  registerStandardOAuthProviders,
   isOAuthProviderRegistered,
   resetRegisteredProviders,
 } from './oauth-provider-registration.js';

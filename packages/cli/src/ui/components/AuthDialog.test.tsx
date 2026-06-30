@@ -10,12 +10,14 @@ import { renderWithProviders } from '../../test-utils/render.js';
 
 const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();
+const mockToggleOAuthEnabled = vi.fn();
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
     getCliOAuthManager: () => ({
       authenticate: mockAuthenticate,
       getAuthStatus: mockGetAuthStatus,
+      toggleOAuthEnabled: mockToggleOAuthEnabled,
     }),
   }),
 }));
@@ -24,6 +26,7 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
   getOAuthManager: () => ({
     authenticate: mockAuthenticate,
     getAuthStatus: mockGetAuthStatus,
+    toggleOAuthEnabled: mockToggleOAuthEnabled,
   }),
 }));
 
@@ -40,8 +43,10 @@ describe('AuthDialog', () => {
     vi.clearAllMocks();
     mockGetAuthStatus.mockReset();
     mockAuthenticate.mockReset();
+    mockToggleOAuthEnabled.mockReset();
     mockGetAuthStatus.mockResolvedValue([]);
     mockAuthenticate.mockResolvedValue(undefined);
+    mockToggleOAuthEnabled.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -180,7 +185,7 @@ describe('AuthDialog', () => {
     });
   });
 
-  it('should authenticate provider when selected', async () => {
+  it('should toggle OAuth enabled when provider is selected', async () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
@@ -210,10 +215,91 @@ describe('AuthDialog', () => {
     stdin.write('1');
     await wait();
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('gemini', undefined, {
-      signalAuthCompletion: true,
-    });
-    expect(onSelect).toHaveBeenCalledWith('oauth_gemini', SettingScope.User);
+    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('should toggle OAuth OFF when toggleOAuthEnabled returns false', async () => {
+    mockToggleOAuthEnabled.mockResolvedValue(false);
+    const onSelect = vi.fn();
+    const settings: LoadedSettings = new LoadedSettings(
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      {
+        settings: {},
+        path: '',
+      },
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      true,
+    );
+
+    const { lastFrame, stdin, unmount } = renderWithProviders(
+      <AuthDialog onSelect={onSelect} settings={settings} />,
+    );
+    await wait();
+
+    const beforeFrame = lastFrame();
+    expect(beforeFrame).toContain('[ON]');
+
+    stdin.write('1');
+    await wait();
+
+    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    const afterFrame = lastFrame();
+    expect(afterFrame).toContain('[OFF]');
+    unmount();
+  });
+
+  it('should show error message when toggleOAuthEnabled rejects', async () => {
+    mockToggleOAuthEnabled.mockRejectedValue(new Error('Network failure'));
+    const onSelect = vi.fn();
+    const settings: LoadedSettings = new LoadedSettings(
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      {
+        settings: {},
+        path: '',
+      },
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      {
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
+        path: '',
+      },
+      true,
+    );
+
+    const { lastFrame, stdin, unmount } = renderWithProviders(
+      <AuthDialog onSelect={onSelect} settings={settings} />,
+    );
+    await wait();
+
+    stdin.write('1');
+    await wait();
+
+    expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('gemini');
+    expect(onSelect).not.toHaveBeenCalled();
+
+    const frame = lastFrame();
+    expect(frame).toContain('Failed to toggle OAuth for gemini');
     unmount();
   });
 

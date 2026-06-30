@@ -39,6 +39,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
 import { createFileOAuthSettingsProvider } from '../auth/file-oauth-settings.js';
+import { registerStandardOAuthProviders } from '../composition/oauth-provider-registration.js';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
@@ -316,12 +317,15 @@ function resolveOAuthManager(
     sharedTokenStore ??
     (sharedTokenStore = createTokenStore() as KeyringTokenStore);
   const oauthSettings = createFileOAuthSettingsProvider();
-  return (
-    optionsOAuthManager ??
-    new OAuthManager(tokenStore, oauthSettings, {
-      messageBus: sessionMessageBus,
-    })
-  );
+  if (optionsOAuthManager) {
+    registerStandardOAuthProviders(optionsOAuthManager);
+    return optionsOAuthManager;
+  }
+  const oauthManager = new OAuthManager(tokenStore, oauthSettings, {
+    messageBus: sessionMessageBus,
+  });
+  registerStandardOAuthProviders(oauthManager, tokenStore);
+  return oauthManager;
 }
 
 /**

@@ -18,11 +18,9 @@ import type {
 import { CommandKind } from './types.js';
 import {
   OAuthManager,
-  GeminiOAuthProvider,
-  AnthropicOAuthProvider,
-  CodexOAuthProvider,
   createTokenStore,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import { registerStandardOAuthProviders } from '@vybestack/llxprt-code-providers/composition.js';
 import { LoadedSettingsOAuthAdapter } from '../../auth/oauth-settings-adapter.js';
 import { DebugLogger, MessageBus } from '@vybestack/llxprt-code-core';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
@@ -40,16 +38,16 @@ const logger = new DebugLogger('llxprt:ui:auth-command');
  */
 function getOAuthManager(): OAuthManager {
   const runtime = getRuntimeApi();
-  let oauthManager = runtime.getCliOAuthManager();
+  const oauthManager = runtime.getCliOAuthManager();
 
-  if (!oauthManager) {
-    const tokenStore = createTokenStore();
-    oauthManager = new OAuthManager(tokenStore);
-    oauthManager.registerProvider(new GeminiOAuthProvider());
-    oauthManager.registerProvider(new AnthropicOAuthProvider());
+  if (oauthManager) {
+    return oauthManager;
   }
 
-  return oauthManager;
+  const tokenStore = createTokenStore();
+  const fallback = new OAuthManager(tokenStore);
+  registerStandardOAuthProviders(fallback, tokenStore);
+  return fallback;
 }
 
 /**
@@ -238,15 +236,12 @@ export class AuthCommandExecutor {
   ): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages
     const trimmedArgs = args?.trim() ?? '';
-    const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0); // Remove empty parts
-    const provider = parts[0];
-    const action = parts[1];
+    const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0);
+    const provider = parts[0]?.toLowerCase();
+    const action = parts[1]?.toLowerCase();
     const param = parts[2];
 
-    // For error messages, we want to show the provider as the user typed it
-    // This should be the first word from the arguments, trimmed of leading/trailing spaces
-    // but preserving any internal structure
-    const originalProvider = provider || ''; // Use the parsed provider for consistency
+    const originalProvider = parts[0] || '';
 
     // If no provider specified, show the auth dialog
     if (!provider) {
@@ -707,10 +702,7 @@ export const authCommand: SlashCommand = {
         },
       );
 
-      // Register OAuth providers
-      oauthManager.registerProvider(new GeminiOAuthProvider());
-      oauthManager.registerProvider(new AnthropicOAuthProvider());
-      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
+      registerStandardOAuthProviders(oauthManager, tokenStore);
 
       runtime.registerCliProviderInfrastructure(providerManager, oauthManager, {
         messageBus: runtimeMessageBus,
