@@ -149,6 +149,47 @@ later subissue.
 > `package-lock.json` until those scripts are migrated — that work belongs to a
 > later subissue, not S1.
 
+### Lockfile drift guard
+
+Two committed lockfiles can silently diverge: a contributor who adds or removes
+a dependency and regenerates only one of them would leave the other stale, so
+`npm install` and `bun install` would build different trees. To catch this,
+[`scripts/tests/bun-workspaces.test.ts`](../scripts/tests/bun-workspaces.test.ts)
+asserts structural parity between `package.json` and **both** committed
+lockfiles. The checks run symmetrically against `bun.lock` and
+`package-lock.json` so neither lockfile can drift unnoticed:
+
+1. **Workspace membership** — the set of workspace paths the lockfile records
+   (each keys members by path and the root as `""`) equals the set the root
+   `package.json` `workspaces` array declares.
+2. **Root dependency graph** — for the root workspace (`""`), both the union of
+   dependency _names_ and each dependency's _declared range_ (across
+   `dependencies`, `devDependencies`, `optionalDependencies`, and
+   `peerDependencies`) in `package.json` equal what the lockfile mirrored.
+3. **Per-workspace dependency graph** — the same name-set and declared-range
+   comparison for every non-root workspace, so a dependency (or a version-range
+   bump) applied to e.g. `packages/core` without regenerating the lockfiles
+   fails loudly.
+
+The comparison covers dependency **names** and their **declared ranges** (the
+`^x.y.z` specifiers written in `package.json`), but deliberately **not** the
+resolved/pinned versions. The declared graph is authored input that both
+lockfiles copy verbatim, so it must not diverge; resolved version selection is
+each lockfile's own concern and the two can legitimately differ, because each
+resolver independently picks a concrete version from the same range (the
+TypeScript override section covers a case where that divergence was undesirable
+and had to be actively pinned away). Validating the declared range — not just
+the name — means a range bump applied to only one lockfile is caught, while
+still allowing the resolvers to disagree on the concrete resolved version.
+
+`bun.lock` is parsed as JSONC (Bun emits trailing commas) via the `jsonc-parser`
+dependency; `package-lock.json` is strict JSON. Parse errors and a missing
+lockfile are both surfaced as thrown failures, so a corrupted or absent lockfile
+fails the suite loudly rather than passing vacuously. The workspace list driving
+every axis comes from a single `readDeclaredWorkspaceManifests()` helper that
+hard-fails if a declared workspace is missing its `package.json` (rather than
+silently skipping it), so the guard cannot be quietly hollowed out.
+
 ## Root Lifecycle Scripts (`preinstall` / `postinstall`)
 
 The root `package.json` registers two lifecycle scripts that run on **every**
@@ -166,6 +207,34 @@ set even when Bun drives the install. The reliable signal is the
 `detectInstaller()` helper that reads this variable and returns `'bun'` or
 `'npm'` (defaulting to `'npm'` for any unknown manager so existing behavior is
 preserved).
+
+That helper lives in a single shared module,
+[`scripts/detect-installer.cjs`](../scripts/detect-installer.cjs), which both
+lifecycle scripts `require()`. It was extracted from a byte-identical copy that
+previously lived in each script so the detection logic has exactly one
+definition (and one set of tests). The function accepts an injectable `env`
+parameter (defaulting to `process.env`) so its behavior can be unit-tested
+without mutating the real process environment; its dedicated behavioral test is
+[`scripts/tests/detect-installer.test.ts`](../scripts/tests/detect-installer.test.ts),
+which pins the `bun/`-prefix contract (including that a stray `bun` substring
+elsewhere in the user agent is **not** misclassified) and the npm default for
+pnpm/Yarn/unknown managers.
+
+Because `detect-installer.cjs` is a runtime dependency of the published
+package's `postinstall` script, it must be included in the npm tarball. It is
+listed in the root `package.json` `files` allowlist alongside
+`preinstall.cjs`/`postinstall.cjs`; omitting it would make the published
+package's `postinstall` fail at install time with `MODULE_NOT_FOUND`. This is
+guarded by
+[`scripts/tests/publish-integrity.test.ts`](../scripts/tests/publish-integrity.test.ts),
+which runs `npm pack --dry-run`, walks the transitive closure of **static,
+string-literal relative `require()`** calls starting from the lifecycle entry
+scripts, and asserts every locally-required `.cjs` file in that closure is
+actually packed. The walk deliberately resolves only literal relative
+specifiers (e.g. `require('./detect-installer.cjs')`); it does not follow
+computed/dynamic requires or bare package specifiers, which matches how the
+simple, dependency-free lifecycle scripts are written and keeps the guard from
+silently passing on an unresolvable dynamic path.
 
 - **`postinstall.cjs`** normally does two npm-specific things: it strips
   unsupported `"peer": true` flags from `package-lock.json`, and — on a
@@ -238,6 +307,84 @@ This comes from the single nested override in the root `package.json`
 `jws@4.0.1` under `jsonwebtoken` regardless of this warning. It is safe to
 ignore and is explicitly **not** fixed during S1 (removing the override could
 change resolution and is out of scope).
+
+## CI: Bun Install Smoke
+
+A dedicated CI job, `bun_install_smoke` in
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml), guards the core S1
+acceptance criterion: that a clean checkout installs and links every workspace
+under Bun. It pins the toolchain via `.bun-version` (`bun-version-file`), runs
+`bun install`, then verifies with a small Node script that every declared
+workspace package resolves to its **in-repo** directory (using `realpathSync` to
+prove the `node_modules/<name>` entry is a link to the local workspace, not some
+other resolution).
+
+> **Why the check uses `realpathSync`, not bare existence.** The root package
+> and `packages/cli` are **both** named `@vybestack/llxprt-code`. A bare
+> `existsSync(node_modules/@vybestack/llxprt-code)` could therefore be satisfied
+> by a registry copy rather than the local `packages/cli` link, giving a false
+> pass. The smoke job instead resolves the real path of every workspace entry
+> and requires it to point inside the repository, so it cannot false-pass on a
+> shadowed package. This strict check now applies to **all 16** workspaces,
+> including `packages/cli`, with no exemptions.
+>
+> This is only sound because S1 also removed a latent trap: the root
+> `package.json` previously listed its own published name
+> (`"@vybestack/llxprt-code": "^0.8.0"`) in `dependencies`. npm masked it (the
+> local workspace always wins), but Bun honored the registry range and installed
+> a **stale published 0.8.x** copy instead of linking the local `packages/cli`,
+> silently shadowing in-repo source and pulling in its entire transitive tree.
+> Nothing imports the bare root name at runtime, so the self-dependency was
+> purely harmful; it has been deleted, and the
+> `does not declare a self-dependency on the root package name` parity test
+> guards against any automated version bump reintroducing it.
+
+### Why plain `bun install` and not `--frozen-lockfile`
+
+CI runs a plain `bun install`, **not** `bun install --frozen-lockfile`. The
+behavior below was observed under Bun **1.3.14** (the version pinned in
+`.bun-version`); re-verify it after a Bun upgrade rather than assuming it still
+holds. Two scenarios must be kept distinct:
+
+- **From-scratch regeneration** (`rm bun.lock && bun install`) **is**
+  deterministic: repeated clean runs produce a byte-identical `bun.lock`. The
+  committed `bun.lock` is exactly this regenerate-from-scratch artifact.
+- **Incremental install against the already-committed `bun.lock`** is **not**
+  stable. Bun re-normalizes the existing lockfile on essentially every pass: a
+  first `bun install` rewrites a few hundred lines of transitive resolution,
+  and a second consecutive `bun install` drifts further still — i.e. it does not
+  even converge against its _own_ previous output, let alone the committed file.
+
+That second point is why the lockfile is **not** guarded by a post-install diff.
+Neither `bun install --frozen-lockfile` (perpetually red against the committed
+file) nor a softer `bun install && git diff --exit-code -- bun.lock` gate is
+usable, because both assume an incremental install is a fixed point — which it
+is not here. The root cause is structural to this monorepo: the root package and
+`packages/cli` share the name `@vybestack/llxprt-code`, combined with `file:../`
+workspace links and a large `overrides` block. A plain `bun install` against the
+committed lockfile still installs all 16 workspaces correctly; it is only the
+re-normalized lockfile _text_ that is unstable, so we regenerate-and-commit
+`bun.lock` deliberately rather than diff-gating it in CI.
+
+To reproduce the non-determinism locally (expect a non-empty diff on the second
+run despite no dependency change):
+
+```bash
+bun install && git checkout -- bun.lock   # normalize working tree
+bun install && git --no-pager diff --stat -- bun.lock   # drift on pass 1
+bun install && git --no-pager diff --stat -- bun.lock   # further drift on pass 2
+```
+
+Note the scope of what replaces the frozen check here. The parity tests above
+catch **declared dependency-graph drift** between `package.json`, `bun.lock`,
+and `package-lock.json` — workspace membership plus each workspace's declared
+dependency names and ranges. They deliberately do **not** compare the
+_resolved_ (transitive) versions each lockfile pins, because Bun's
+re-normalization makes that comparison unstable for the structural reasons
+above. So this guards against the high-value failure mode — a dependency added,
+removed, or re-ranged in `package.json` without regenerating both lockfiles —
+but it is not a byte-for-byte frozen-install equivalent for the fully resolved
+tree.
 
 ## Quick Start
 
