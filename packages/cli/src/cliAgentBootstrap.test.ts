@@ -19,7 +19,7 @@ vi.mock('@vybestack/llxprt-code-agents', () => ({
   fromConfig: fromConfigMock,
 }));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
 }));

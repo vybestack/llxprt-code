@@ -134,6 +134,14 @@ class TestOAuthFlow {
     }
     return this.initiateResult;
   }
+
+  async pollForToken(_deviceCode: string): Promise<OAuthToken> {
+    return {
+      access_token: 'test-access-token',
+      token_type: 'Bearer',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+    };
+  }
 }
 
 // ─── Test Flow Factories ─────────────────────────────────────────────────────
@@ -152,14 +160,14 @@ function createAnthropicFlow(): TestOAuthFlow {
   return flow;
 }
 
-function createQwenFlow(): TestOAuthFlow {
+function createDeviceCodeFlow(): TestOAuthFlow {
   const flow = new TestOAuthFlow('device_code');
   flow.setInitiateResult({
-    device_code: 'qwen_device_code_xyz789',
-    user_code: 'QWEN-1234',
-    verification_uri: 'https://account.aliyun.com/device',
+    device_code: 'device_code_xyz789',
+    user_code: 'DEVICE-1234',
+    verification_uri: 'https://auth.example.com/device',
     verification_uri_complete:
-      'https://account.aliyun.com/device?code=QWEN-1234',
+      'https://auth.example.com/device?code=DEVICE-1234',
     expires_in: 1800,
     interval: 5,
   });
@@ -206,7 +214,7 @@ describe('oauth_initiate handler', () => {
     keyStorage = new InMemoryProviderKeyStorage();
     flowFactories = new Map([
       ['anthropic', createAnthropicFlow],
-      ['qwen', createQwenFlow],
+      ['deviceflow', createDeviceCodeFlow],
     ]);
 
     const opts: CredentialProxyServerOptions = {
@@ -256,14 +264,14 @@ describe('oauth_initiate handler', () => {
 
     /**
      * @requirement R-OAUTH-02
-     * @scenario Qwen provider uses device code flow
-     * @given A configured server with qwen flow factory
-     * @when oauth_initiate is called for qwen
+     * @scenario Device-code provider uses device code flow
+     * @given A configured server with a device-code flow provider factory
+     * @when oauth_initiate is called for the device-code provider
      * @then Response contains flow_type: 'device_code'
      */
-    it('qwen provider returns device_code flow type', async () => {
+    it('device-code provider returns device_code flow type', async () => {
       const response = await client.request('oauth_initiate', {
-        provider: 'qwen',
+        provider: 'deviceflow',
       });
 
       expect(response.ok).toBe(true);
@@ -310,37 +318,37 @@ describe('oauth_initiate handler', () => {
 
     /**
      * @requirement R-OAUTH-05
-     * @scenario Qwen auth URL comes from real flow, not hardcoded
-     * @given A configured qwen flow factory
+     * @scenario Device-code provider auth URL comes from real flow, not hardcoded
+     * @given A configured device-code flow provider factory
      * @when oauth_initiate is called
-     * @then auth_url contains aliyun.com (from test flow config)
+     * @then auth_url contains example.com (from test flow config)
      */
-    it('qwen returns aliyun.com URL, not fake', async () => {
+    it('device-code provider returns example.com URL, not fake', async () => {
       const response = await client.request('oauth_initiate', {
-        provider: 'qwen',
+        provider: 'deviceflow',
       });
 
       expect(response.ok).toBe(true);
-      expect(response.data?.auth_url).toContain('aliyun.com');
-      expect(response.data?.auth_url).not.toContain('example.com');
+      expect(response.data?.auth_url).toContain('example.com');
+      expect(response.data?.auth_url).not.toContain('test');
     });
 
     /**
      * @requirement R-OAUTH-06
      * @scenario Device code flow includes user_code in response
-     * @given A device_code flow provider (qwen)
+     * @given A device_code flow provider (deviceflow)
      * @when oauth_initiate is called
      * @then Response includes user_code from the flow
      */
     it('device_code flow includes user_code', async () => {
       const response = await client.request('oauth_initiate', {
-        provider: 'qwen',
+        provider: 'deviceflow',
       });
 
       expect(response.ok).toBe(true);
       expect(response.data?.flow_type).toBe('device_code');
       expect(response.data?.user_code).toBeDefined();
-      expect(response.data?.user_code).toBe('QWEN-1234');
+      expect(response.data?.user_code).toBe('DEVICE-1234');
     });
   });
 
@@ -465,7 +473,7 @@ describe('oauth_initiate handler', () => {
      */
     it('returns pollIntervalMs for polling', async () => {
       const response = await client.request('oauth_initiate', {
-        provider: 'qwen',
+        provider: 'deviceflow',
       });
 
       expect(response.ok).toBe(true);
@@ -548,20 +556,20 @@ describe('oauth_initiate handler', () => {
 
     /**
      * @requirement R-OAUTH-17
-     * @scenario Qwen provider-specific response shape
-     * @given Qwen flow factory
+     * @scenario Device-code provider-specific response shape
+     * @given A device-code flow provider factory
      * @when oauth_initiate is called
      * @then Response matches device_code expected shape with user_code
      */
-    it('qwen -> device_code flow, returns user_code + verification_uri', async () => {
+    it('deviceflow -> device_code flow, returns user_code + verification_uri', async () => {
       const response = await client.request('oauth_initiate', {
-        provider: 'qwen',
+        provider: 'deviceflow',
       });
 
       expect(response.ok).toBe(true);
       expect(response.data?.flow_type).toBe('device_code');
       expect(response.data?.user_code).toBeDefined();
-      expect(response.data?.auth_url).toContain('aliyun.com');
+      expect(response.data?.auth_url).toContain('example.com');
     });
 
     /**
@@ -579,13 +587,13 @@ describe('oauth_initiate handler', () => {
       expect(anthropicResponse.ok).toBe(true);
       expect(anthropicResponse.data?.flow_type).toBe('pkce_redirect');
 
-      // Test qwen flow response matches expected shape
-      const qwenResponse = await client.request('oauth_initiate', {
-        provider: 'qwen',
+      // Test device-code flow response matches expected shape
+      const deviceFlowResponse = await client.request('oauth_initiate', {
+        provider: 'deviceflow',
       });
-      expect(qwenResponse.ok).toBe(true);
-      expect(qwenResponse.data?.flow_type).toBe('device_code');
-      expect(qwenResponse.data?.user_code).toBeDefined();
+      expect(deviceFlowResponse.ok).toBe(true);
+      expect(deviceFlowResponse.data?.flow_type).toBe('device_code');
+      expect(deviceFlowResponse.data?.user_code).toBeDefined();
     });
   });
 
@@ -620,12 +628,12 @@ describe('oauth_initiate handler', () => {
      */
     it('user_code matches flow configuration, not hardcoded', async () => {
       const response = await client.request('oauth_initiate', {
-        provider: 'qwen',
+        provider: 'deviceflow',
       });
 
       expect(response.ok).toBe(true);
       // Must match the configured user_code, not a generic value
-      expect(response.data?.user_code).toBe('QWEN-1234');
+      expect(response.data?.user_code).toBe('DEVICE-1234');
     });
   });
 });

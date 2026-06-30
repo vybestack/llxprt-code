@@ -11,7 +11,6 @@
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
   GeminiOAuthProvider,
-  QwenOAuthProvider,
   AnthropicOAuthProvider,
   CodexOAuthProvider,
 } from '../auth/index.js';
@@ -68,9 +67,6 @@ export function ensureOAuthProviderRegistered(
   switch (providerName) {
     case 'gemini':
       oauthProvider = new GeminiOAuthProvider(effectiveTokenStore, addItem);
-      break;
-    case 'qwen':
-      oauthProvider = new QwenOAuthProvider(effectiveTokenStore, addItem);
       break;
     case 'anthropic':
       oauthProvider = new AnthropicOAuthProvider(effectiveTokenStore, addItem);

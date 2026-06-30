@@ -379,7 +379,7 @@ function resolveProviderBaseUrlFromProvider(
   context: ProviderSwitchContext,
 ): string | undefined {
   if (context.name === 'qwen') {
-    return 'https://portal.qwen.ai/v1';
+    return 'https://dashscope.aliyuncs.com/compatible-mode/v1';
   }
   return extractProviderBaseUrl(context.providerForBaseUrl);
 }

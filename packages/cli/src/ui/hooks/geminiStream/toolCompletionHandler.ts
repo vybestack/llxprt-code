@@ -11,7 +11,7 @@
  * partitions completed tools and triggers memory refresh for the CLI display.
  */
 
-import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
 import { classifyCompletedTools as classifyCompletedToolsEngine } from '@vybestack/llxprt-code-agents';
 import type { TrackedToolCall } from '../useReactToolScheduler.js';

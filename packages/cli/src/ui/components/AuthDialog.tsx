@@ -107,11 +107,6 @@ function buildAuthItems(
       value: 'oauth_gemini',
     },
     {
-      key: 'oauth_qwen',
-      label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}${getStatusLabel('qwen', authStatuses)}`,
-      value: 'oauth_qwen',
-    },
-    {
       key: 'oauth_anthropic',
       label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}${getStatusLabel('anthropic', authStatuses)}`,
       value: 'oauth_anthropic',

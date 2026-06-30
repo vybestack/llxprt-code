@@ -28,7 +28,7 @@ import {
   switchActiveProvider,
   type IsolatedRuntimeActivationOptions,
   type IsolatedRuntimeContextHandle,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   cleanupTempDirectory,
   createTempDirectory,

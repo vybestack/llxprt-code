@@ -143,13 +143,13 @@ describe('mergeRefreshedToken', () => {
   it('resource_url: preserved when new does not have it', () => {
     const tokenWithResource: OAuthTokenWithExtras = {
       ...currentToken,
-      resource_url: 'https://api.qwen.example.com',
+      resource_url: 'https://api.provider.example.com',
     };
     const result = mergeRefreshedToken(tokenWithResource, {
       access_token: 'new-at',
       expiry: 1700001000,
     });
-    expect(result.resource_url).toBe('https://api.qwen.example.com');
+    expect(result.resource_url).toBe('https://api.provider.example.com');
   });
 
   /**

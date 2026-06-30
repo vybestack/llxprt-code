@@ -32,7 +32,7 @@ vi.mock('./skills/uninstall.js', () => ({
   uninstallCommand: { command: 'uninstall <name> [--scope]' },
 }));
 
-vi.mock('../utils/outputFlush.js', () => ({
+vi.mock('../cliSessionDispatch.js', () => ({
   initializeOutputListenersAndFlush: vi.fn(),
 }));
 

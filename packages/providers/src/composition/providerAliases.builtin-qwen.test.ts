@@ -30,6 +30,16 @@ describe('Built-in provider aliases (Qwen defaults)', () => {
       expect(ephemerals).toBeDefined();
       expect(ephemerals?.['context-limit']).toBe(200000);
       expect(ephemerals?.max_tokens).toBe(50000);
+
+      // Qwen aliases are now API-key-only via Alibaba Cloud DashScope
+      expect(entry?.config['base-url']).toBe(
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      );
+      expect(entry?.config.apiKeyEnv).toBe('DASHSCOPE_API_KEY');
+      expect(
+        (entry?.config as { providerConfig?: { forceQwenOAuth?: boolean } })
+          .providerConfig?.forceQwenOAuth,
+      ).toBeUndefined();
     };
 
     assertQwenDefaults('qwen');

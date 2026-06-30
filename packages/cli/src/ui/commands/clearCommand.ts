@@ -19,7 +19,7 @@ import {
   type SlashCommand,
   type CommandContext,
 } from './types.js';
-import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';
 
 /**
  * Helper to trigger session end hook with fail-open behavior.

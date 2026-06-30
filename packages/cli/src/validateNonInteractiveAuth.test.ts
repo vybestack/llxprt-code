@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { NonInteractiveConfig } from './validateNonInterActiveAuth.js';
-import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
+import type { NonInteractiveConfig } from './validateNonInteractiveAuth.js';
+import { validateNonInteractiveAuth } from './validateNonInteractiveAuth.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-describe('validateNonInterActiveAuth', () => {
+describe('validateNonInteractiveAuth', () => {
   // Store all auth-related env vars that need to be cleaned up
   const authEnvVars = [
     'GEMINI_API_KEY',

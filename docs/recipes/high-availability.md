@@ -102,11 +102,11 @@ Prioritize free/cheap providers, falling back to premium only when needed:
 /model gemini-2.5-flash
 /profile save model free-gemini
 
-# Qwen backup
-/auth qwen enable
+# Qwen backup (API key only — OAuth tier ended 2026-04-15)
 /provider qwen
+/keyfile ~/.qwen_key
 /model qwen3-coder-plus
-/profile save model free-qwen
+/profile save model cheap-qwen
 
 # Cheap paid fallback
 /provider anthropic
@@ -119,7 +119,7 @@ Prioritize free/cheap providers, falling back to premium only when needed:
 /profile save model premium-claude
 
 # Combine with failover
-/profile save loadbalancer cost-optimized failover free-gemini free-qwen cheap-claude premium-claude
+/profile save loadbalancer cost-optimized failover free-gemini cheap-qwen cheap-claude premium-claude
 ```
 
 ## Capability-Optimized Configuration
@@ -176,8 +176,9 @@ Use your existing subscriptions:
 /auth anthropic enable   # Claude Pro/Max
 /auth codex enable       # ChatGPT Plus/Pro
 /auth gemini enable      # Gemini (Google account or API key)
-/auth qwen enable        # Qwen (tier availability varies — see authentication docs)
 ```
+
+Qwen is now API-key-only (OAuth tier ended 2026-04-15) — use a DashScope API key with `/keyfile`.
 
 Kimi uses an API key (not OAuth) — set it with `/key` or `/keyfile`:
 

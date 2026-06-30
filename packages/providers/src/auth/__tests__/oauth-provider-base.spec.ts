@@ -47,7 +47,7 @@ describe('InitializationState', () => {
 });
 
 // ---------------------------------------------------------------------------
-// InitializationGuard — wrap mode (Anthropic/Gemini/Qwen)
+// InitializationGuard — wrap mode
 // ---------------------------------------------------------------------------
 
 describe('InitializationGuard (wrap mode)', () => {

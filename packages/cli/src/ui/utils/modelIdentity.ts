@@ -9,7 +9,7 @@ import {
   getActiveProviderStatus,
   getActiveProfileName,
   getCliProviderManager,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 
 /**
  * Placeholder shown for a load-balancer sub-profile or model that has not yet

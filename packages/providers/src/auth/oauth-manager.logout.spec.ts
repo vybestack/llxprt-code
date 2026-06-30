@@ -86,7 +86,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       clearState?: () => void;
       clearAuthCache?: () => void;
     } = {
-      name: 'qwen',
+      name: 'device-code-test',
       initiateAuth: vi.fn(async () => ({
         access_token: 'mock-token',
         refresh_token: 'mock-refresh',
@@ -103,7 +103,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
     manager.registerProvider(provider);
     providerRef.current = provider;
 
-    await manager.logout('qwen');
+    await manager.logout('device-code-test');
 
     expect(providerManagerRef.current).toBeDefined();
     providerManagerRef.current?.getProviderByName.mockReturnValue(provider);
@@ -129,7 +129,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
     const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
-      name: 'qwen',
+      name: 'device-code-test',
       initiateAuth: vi.fn(async () => ({
         access_token: 'mock-token',
         refresh_token: 'mock-refresh',
@@ -144,11 +144,14 @@ describe('OAuthManager.logout runtime cache handling', () => {
     manager.registerProvider(provider);
     providerRef.current = provider;
 
-    manager.setSessionBucket('qwen', 'bucket-a');
+    manager.setSessionBucket('device-code-test', 'bucket-a');
 
-    await manager.logout('qwen');
+    await manager.logout('device-code-test');
 
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-a');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-a',
+    );
   });
 
   it('removes bucket tokens when logging out all buckets', async () => {
@@ -170,7 +173,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
     const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
-      name: 'qwen',
+      name: 'device-code-test',
       initiateAuth: vi.fn(async () => ({
         access_token: 'mock-token',
         refresh_token: 'mock-refresh',
@@ -185,11 +188,20 @@ describe('OAuthManager.logout runtime cache handling', () => {
     manager.registerProvider(provider);
     providerRef.current = provider;
 
-    await manager.logoutAllBuckets('qwen');
+    await manager.logoutAllBuckets('device-code-test');
 
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'default');
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-a');
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-b');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'default',
+    );
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-a',
+    );
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-b',
+    );
   });
 
   it('removes bucket tokens for every provider when logging out all providers', async () => {
@@ -197,9 +209,11 @@ describe('OAuthManager.logout runtime cache handling', () => {
       saveToken: vi.fn(),
       getToken: vi.fn().mockResolvedValue(null),
       removeToken: vi.fn().mockResolvedValue(undefined),
-      listProviders: vi.fn().mockResolvedValue(['qwen', 'anthropic']),
+      listProviders: vi
+        .fn()
+        .mockResolvedValue(['device-code-test', 'anthropic']),
       listBuckets: vi.fn(async (provider: string) => {
-        if (provider === 'qwen') {
+        if (provider === 'device-code-test') {
           return ['default', 'bucket-a'];
         }
         if (provider === 'anthropic') {
@@ -216,18 +230,19 @@ describe('OAuthManager.logout runtime cache handling', () => {
 
     const manager = new OAuthManager(tokenStore);
 
-    const qwenProvider: OAuthProvider & { logout?: () => Promise<void> } = {
-      name: 'qwen',
-      initiateAuth: vi.fn(async () => ({
-        access_token: 'qwen-token',
-        refresh_token: 'qwen-refresh',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        token_type: 'Bearer' as const,
-      })),
-      getToken: vi.fn(async () => null),
-      refreshToken: vi.fn(async () => null),
-      logout: vi.fn().mockResolvedValue(undefined),
-    };
+    const deviceCodeProvider: OAuthProvider & { logout?: () => Promise<void> } =
+      {
+        name: 'device-code-test',
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'device-code-test-token',
+          refresh_token: 'device-code-test-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
+        getToken: vi.fn(async () => null),
+        refreshToken: vi.fn(async () => null),
+        logout: vi.fn().mockResolvedValue(undefined),
+      };
 
     const anthropicProvider: OAuthProvider & { logout?: () => Promise<void> } =
       {
@@ -243,14 +258,20 @@ describe('OAuthManager.logout runtime cache handling', () => {
         logout: vi.fn().mockResolvedValue(undefined),
       };
 
-    manager.registerProvider(qwenProvider);
+    manager.registerProvider(deviceCodeProvider);
     manager.registerProvider(anthropicProvider);
-    providerRef.current = qwenProvider;
+    providerRef.current = deviceCodeProvider;
 
     await manager.logoutAll();
 
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'default');
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-a');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'default',
+    );
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'device-code-test',
+      'bucket-a',
+    );
     expect(tokenStore.removeToken).toHaveBeenCalledWith('anthropic', 'default');
     expect(tokenStore.removeToken).toHaveBeenCalledWith(
       'anthropic',
@@ -275,7 +296,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
     const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
-      name: 'qwen',
+      name: 'device-code-test',
       initiateAuth: vi.fn(async () => ({
         access_token: 'mock-token',
         refresh_token: 'mock-refresh',
@@ -290,29 +311,29 @@ describe('OAuthManager.logout runtime cache handling', () => {
     manager.registerProvider(provider);
     providerRef.current = provider;
 
-    manager.setSessionBucket('qwen', 'default');
-    manager.setSessionBucket('qwen', 'bucket-a', {
+    manager.setSessionBucket('device-code-test', 'default');
+    manager.setSessionBucket('device-code-test', 'bucket-a', {
       profileId: 'profile-a',
-      providerId: 'qwen',
+      providerId: 'device-code-test',
     });
-    manager.setSessionBucket('qwen', 'bucket-b', {
+    manager.setSessionBucket('device-code-test', 'bucket-b', {
       profileId: 'profile-b',
-      providerId: 'qwen',
+      providerId: 'device-code-test',
     });
 
-    await manager.logoutAllBuckets('qwen');
+    await manager.logoutAllBuckets('device-code-test');
 
-    expect(manager.getSessionBucket('qwen')).toBeUndefined();
+    expect(manager.getSessionBucket('device-code-test')).toBeUndefined();
     expect(
-      manager.getSessionBucket('qwen', {
+      manager.getSessionBucket('device-code-test', {
         profileId: 'profile-a',
-        providerId: 'qwen',
+        providerId: 'device-code-test',
       }),
     ).toBeUndefined();
     expect(
-      manager.getSessionBucket('qwen', {
+      manager.getSessionBucket('device-code-test', {
         profileId: 'profile-b',
-        providerId: 'qwen',
+        providerId: 'device-code-test',
       }),
     ).toBeUndefined();
   });
@@ -333,29 +354,29 @@ describe('OAuthManager.logout runtime cache handling', () => {
 
     const manager = new OAuthManager(tokenStore);
 
-    manager.setSessionBucket('qwen', 'default');
-    manager.setSessionBucket('qwen', 'bucket-a', {
+    manager.setSessionBucket('device-code-test', 'default');
+    manager.setSessionBucket('device-code-test', 'bucket-a', {
       profileId: 'profile-a',
-      providerId: 'qwen',
+      providerId: 'device-code-test',
     });
-    manager.setSessionBucket('qwen', 'bucket-b', {
+    manager.setSessionBucket('device-code-test', 'bucket-b', {
       profileId: 'profile-b',
-      providerId: 'qwen',
+      providerId: 'device-code-test',
     });
 
-    manager.clearSessionBucket('qwen');
+    manager.clearSessionBucket('device-code-test');
 
-    expect(manager.getSessionBucket('qwen')).toBeUndefined();
+    expect(manager.getSessionBucket('device-code-test')).toBeUndefined();
     expect(
-      manager.getSessionBucket('qwen', {
+      manager.getSessionBucket('device-code-test', {
         profileId: 'profile-a',
-        providerId: 'qwen',
+        providerId: 'device-code-test',
       }),
     ).toBe('bucket-a');
     expect(
-      manager.getSessionBucket('qwen', {
+      manager.getSessionBucket('device-code-test', {
         profileId: 'profile-b',
-        providerId: 'qwen',
+        providerId: 'device-code-test',
       }),
     ).toBe('bucket-b');
   });

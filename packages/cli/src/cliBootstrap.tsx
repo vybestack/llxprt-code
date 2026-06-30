@@ -62,7 +62,7 @@ import {
   getActiveModelParams,
   loadProfileByName,
   applyCliArgumentOverrides,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import { writeFileSync } from 'node:fs';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 

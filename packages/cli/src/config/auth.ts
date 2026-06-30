@@ -12,7 +12,6 @@ export function validateAuthMethod(authMethod: string): string | null {
   if (
     authMethod === 'oauth_gemini' ||
     authMethod === 'oauth-gemini' ||
-    authMethod === 'oauth_qwen' ||
     authMethod === 'oauth_anthropic'
   ) {
     return null;

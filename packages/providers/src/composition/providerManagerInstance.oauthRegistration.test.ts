@@ -188,7 +188,7 @@ describe('Anthropic OAuth registration with environment key', () => {
     expect(anthropicArgs?.[0]).toBeUndefined();
   });
 
-  it('passes the shared OAuth manager into OpenAIVercelProvider', async () => {
+  it('threads OAuth manager only into OAuth-capable alias providers', async () => {
     vi.doMock('./oauth-provider-registration.js', () => ({
       ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
       isOAuthProviderRegistered: vi.fn(),
@@ -219,10 +219,20 @@ describe('Anthropic OAuth registration with environment key', () => {
     });
     registerProviderManagerSingleton(manager, oauthManager);
 
+    expect(openaiCtor).toHaveBeenCalled();
     expect(openaivercelCtor).toHaveBeenCalled();
+    expect(openaiResponsesCtor).toHaveBeenCalled();
+
+    const openaiArgs = openaiCtor.mock.calls[0] as unknown[] | undefined;
     const openaivercelArgs = openaivercelCtor.mock.calls[0] as
       | unknown[]
       | undefined;
-    expect(openaivercelArgs?.[3]).toBeTruthy();
+    const openaiResponsesArgs = openaiResponsesCtor.mock.calls[0] as
+      | unknown[]
+      | undefined;
+
+    expect(openaiArgs).toHaveLength(3);
+    expect(openaivercelArgs).toHaveLength(3);
+    expect(openaiResponsesArgs?.[3]).toBe(oauthManager);
   });
 });

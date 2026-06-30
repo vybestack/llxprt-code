@@ -19,7 +19,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
-import { registerCliProviderInfrastructure } from '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js';
+import { registerCliProviderInfrastructure } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 

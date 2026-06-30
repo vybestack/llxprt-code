@@ -47,7 +47,7 @@ If you use OAuth, you can attach one or more bucket names to a profile. Buckets 
 
 ### Multi-Bucket Failover
 
-Save a profile with multiple OAuth buckets. When one account hits rate limits, LLxprt Code automatically moves to the next — this works with all OAuth providers (Anthropic, Codex, Gemini, Qwen):
+Save a profile with multiple OAuth buckets. When one account hits rate limits, LLxprt Code automatically moves to the next — this works with all OAuth providers (Anthropic, Codex, Gemini):
 
 ```
 /auth anthropic login work1@company.com

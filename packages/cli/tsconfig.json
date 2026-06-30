@@ -164,7 +164,7 @@
     "src/ui/utils/computeStats.test.ts",
     "src/ui/utils/stdinErrorHandler.test.ts",
     "src/ui/themes/theme.test.ts",
-    "src/validateNonInterActiveAuth.test.ts",
+    "src/validateNonInteractiveAuth.test.ts",
     "src/services/prompt-processors/shellProcessor.test.ts"
   ],
   "references": [

@@ -22,7 +22,6 @@
 import {
   AnthropicDeviceFlow,
   CodexDeviceFlow,
-  QwenDeviceFlow,
   type OAuthToken,
 } from '@vybestack/llxprt-code-auth';
 import { createKeyringTokenStore } from '@vybestack/llxprt-code-core';
@@ -45,17 +44,6 @@ export interface SandboxProxyHandle {
 
 let serverInstance: CredentialProxyServer | undefined;
 let actualSocketPath: string | undefined;
-
-/**
- * Qwen OAuth device flow configuration.
- * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P08
- */
-const QWEN_DEVICE_FLOW_CONFIG = {
-  clientId: 'f0304373b74a44d2b584a3fb70ca9e56',
-  authorizationEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/device/code',
-  tokenEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/token',
-  scopes: ['openid', 'profile', 'email', 'model.completion'],
-};
 
 /**
  * Adapter that wraps CodexDeviceFlow to match OAuthFlowInterface.
@@ -140,10 +128,6 @@ function buildDefaultFlowFactories(): Map<string, () => OAuthFlowInterface> {
   return new Map([
     ['anthropic', () => new AnthropicDeviceFlow() as OAuthFlowInterface],
     ['codex', () => new CodexFlowAdapter()],
-    [
-      'qwen',
-      () => new QwenDeviceFlow(QWEN_DEVICE_FLOW_CONFIG) as OAuthFlowInterface,
-    ],
   ]);
 }
 

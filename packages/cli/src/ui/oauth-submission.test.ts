@@ -45,20 +45,22 @@ describe('submitOAuthCode', () => {
     expect(geminiProvider.submitAuthCode).toHaveBeenCalledWith('test-code-123');
   });
 
-  it('should submit auth code to Qwen provider', () => {
-    const qwenProvider = createMockProvider('qwen');
-    const providers = new Map([['qwen', qwenProvider]]);
+  it('should submit auth code to device-code test provider', () => {
+    const deviceCodeProvider = createMockProvider('device-code-test');
+    const providers = new Map([['device-code-test', deviceCodeProvider]]);
     const oauthManager = createMockOAuthManager(providers);
 
     const deps: OAuthSubmissionDependencies = {
       getOAuthManager: () => oauthManager,
-      getActiveProvider: () => 'qwen',
+      getActiveProvider: () => 'device-code-test',
     };
 
     const result = submitOAuthCode(deps, 'test-code-456');
 
     expect(result).toBe(true);
-    expect(qwenProvider.submitAuthCode).toHaveBeenCalledWith('test-code-456');
+    expect(deviceCodeProvider.submitAuthCode).toHaveBeenCalledWith(
+      'test-code-456',
+    );
   });
 
   it('should submit auth code to Anthropic provider', () => {

@@ -155,7 +155,6 @@ export function createOpenAIAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
-  oauthManager: OAuthManager,
 ): OpenAIProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -193,7 +192,6 @@ export function createOpenAIAliasProvider(
     aliasApiKey ?? undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
-    oauthManager,
   );
 
   overrideAliasDefaultModel(provider, entry);
@@ -269,7 +267,6 @@ export function createOpenAIVercelAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
-  oauthManager: OAuthManager,
 ): OpenAIVercelProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -307,7 +304,6 @@ export function createOpenAIVercelAliasProvider(
     aliasApiKey ?? undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
-    oauthManager,
   );
 
   overrideAliasDefaultModel(provider, entry);
@@ -404,7 +400,6 @@ export function registerAliasProviders(
           openaiApiKey,
           openaiBaseUrl,
           openaiProviderConfig,
-          oauthManager,
         );
         if (provider) {
           providerManagerInstance.registerProvider(provider as never);
@@ -431,7 +426,6 @@ export function registerAliasProviders(
           openaiApiKey,
           openaiBaseUrl,
           openaiProviderConfig,
-          oauthManager,
         );
         if (provider) {
           providerManagerInstance.registerProvider(provider as never);

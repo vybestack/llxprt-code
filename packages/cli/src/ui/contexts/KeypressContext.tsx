@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { useStdin } from 'ink';
 import type React from 'react';
@@ -660,13 +659,7 @@ function useKeypressSetup(
   }, [stdin, setRawMode, broadcast]);
 }
 
-export function KeypressProvider({
-  children,
-  config: _config,
-}: {
-  children: React.ReactNode;
-  config?: Config;
-}) {
+export function KeypressProvider({ children }: { children: React.ReactNode }) {
   const { stdin, setRawMode } = useStdin();
   const subscribers = useRef<Set<KeypressHandler>>(new Set()).current;
   const subscribe = useCallback(

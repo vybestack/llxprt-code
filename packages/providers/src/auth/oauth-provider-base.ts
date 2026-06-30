@@ -27,7 +27,7 @@ export enum InitializationState {
  *
  * Two error modes:
  * - 'wrap': wraps unknown errors via OAuthErrorFactory.fromUnknown and stores
- *   initializationError (Anthropic, Gemini, Qwen semantics)
+ *   initializationError (provider-specific OAuth semantics)
  * - 'rethrow': rethrows unknown errors directly without wrapping (Codex semantics)
  */
 export class InitializationGuard {
@@ -164,7 +164,7 @@ export class AuthCodeDialog {
 /**
  * Returns true when the token is expired or will expire within bufferSeconds.
  *
- * Shared by Anthropic and Qwen providers (identical 30-second buffer logic).
+ * Shared by OAuth providers that apply identical 30-second buffer logic.
  */
 export function isTokenExpired(token: OAuthToken, bufferSeconds = 30): boolean {
   const now = Date.now() / 1000;

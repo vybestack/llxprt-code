@@ -25,7 +25,7 @@ import {
   getActiveModelParams,
   buildRuntimeProfileSnapshot,
   clearActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import { assertDefined } from '../test-utils/assertions.js';
 import {
   createTempDirectory,

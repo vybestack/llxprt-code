@@ -100,8 +100,6 @@ export type {
 // ─── Device Flows ────────────────────────────────────────────────────────────
 export { AnthropicDeviceFlow } from './flows/anthropic-device-flow.js';
 export { CodexDeviceFlow, CODEX_CONFIG } from './flows/codex-device-flow.js';
-export { QwenDeviceFlow } from './flows/qwen-device-flow.js';
-export type { DeviceFlowConfig } from './flows/qwen-device-flow.js';
 
 // ─── Proxy Infrastructure ────────────────────────────────────────────────────
 export {

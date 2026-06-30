@@ -184,8 +184,6 @@ export {
   OAuthErrorFactory,
   CodexDeviceFlow,
   AnthropicDeviceFlow,
-  QwenDeviceFlow,
-  type DeviceFlowConfig,
 } from '@vybestack/llxprt-code-auth';
 // @plan:PLAN-20260608-ISSUE1586.P15
 // @requirement:REQ-API-001.2

@@ -9,7 +9,6 @@ import { OAuthManager } from './oauth-manager.js';
 import { KeyringTokenStore } from './types.js';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
 import { GeminiOAuthProvider } from './gemini-oauth-provider.js';
-import { QwenOAuthProvider } from './qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import { promises as fs } from 'node:fs';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
@@ -78,7 +77,6 @@ describe('OAuth Provider Premature Initialization', () => {
     const settings = createLoadedSettings({
       oauthEnabledProviders: {
         gemini: false,
-        qwen: false,
         anthropic: false,
       },
     });
@@ -116,13 +114,11 @@ describe('OAuth Provider Premature Initialization', () => {
      */
     it('should not initialize any OAuth providers when registering multiple providers', async () => {
       const geminiProvider = new GeminiOAuthProvider(tokenStore);
-      const qwenProvider = new QwenOAuthProvider(tokenStore);
       const anthropicProvider = new AnthropicOAuthProvider(tokenStore);
 
       // Register all providers - should not trigger initialization
       expect(() => {
         oauthManager.registerProvider(geminiProvider);
-        oauthManager.registerProvider(qwenProvider);
         oauthManager.registerProvider(anthropicProvider);
       }).not.toThrow();
 
@@ -132,7 +128,6 @@ describe('OAuth Provider Premature Initialization', () => {
       // Verify all providers are registered
       const providers = oauthManager.getSupportedProviders();
       expect(providers).toContain('gemini');
-      expect(providers).toContain('qwen');
       expect(providers).toContain('anthropic');
     });
 
@@ -140,16 +135,16 @@ describe('OAuth Provider Premature Initialization', () => {
      * @requirement ISSUE-308-FIX
      * @scenario MCP operations should not trigger OAuth initialization
      * @given OAuth providers are registered
-     * @when MCP-related operations are performed (no Gemini usage)
-     * @then Should not trigger Gemini OAuth initialization
+     * @when MCP-related operations are performed (no provider usage)
+     * @then Should not trigger any OAuth initialization
      * @and Should not attempt to read OAuth credentials
      */
     it('should not initialize OAuth during MCP operations', async () => {
       const geminiProvider = new GeminiOAuthProvider(tokenStore);
-      const qwenProvider = new QwenOAuthProvider(tokenStore);
+      const anthropicProvider = new AnthropicOAuthProvider(tokenStore);
 
       oauthManager.registerProvider(geminiProvider);
-      oauthManager.registerProvider(qwenProvider);
+      oauthManager.registerProvider(anthropicProvider);
 
       // Simulate MCP operations that might access provider manager
       // These operations should not trigger any OAuth initialization
@@ -158,7 +153,7 @@ describe('OAuth Provider Premature Initialization', () => {
 
       // Verify MCP operations completed successfully
       expect(providers).toContain('gemini');
-      expect(providers).toContain('qwen');
+      expect(providers).toContain('anthropic');
       expect(statuses).toHaveLength(2);
 
       // Verify no OAuth initialization was triggered
@@ -166,10 +161,10 @@ describe('OAuth Provider Premature Initialization', () => {
 
       // Verify providers remain unauthenticated (no OAuth triggered)
       const geminiStatus = statuses.find((s) => s.provider === 'gemini');
-      const qwenStatus = statuses.find((s) => s.provider === 'qwen');
+      const anthropicStatus = statuses.find((s) => s.provider === 'anthropic');
 
       expect(geminiStatus?.authenticated).toBe(false);
-      expect(qwenStatus?.authenticated).toBe(false);
+      expect(anthropicStatus?.authenticated).toBe(false);
     });
 
     /**
@@ -232,27 +227,28 @@ describe('OAuth Provider Premature Initialization', () => {
      * @requirement ISSUE-308-FIX
      * @scenario Selective OAuth initialization for specific provider
      * @given Multiple OAuth providers registered
-     * @when Only Qwen token is requested
-     * @then Should initialize Qwen OAuth only
-     * @and Should not initialize Gemini OAuth
+     * @when Only Gemini token is requested
+     * @then Should not read credentials file when OAuth is not enabled
+     * @and Should return null without file access
      */
-    it('should only initialize the specific OAuth provider when its token is requested', async () => {
+    it('should not read OAuth credentials when OAuth is not enabled', async () => {
       const geminiProvider = new GeminiOAuthProvider(tokenStore);
-      const qwenProvider = new QwenOAuthProvider(tokenStore);
+      const anthropicProvider = new AnthropicOAuthProvider(tokenStore);
 
       oauthManager.registerProvider(geminiProvider);
-      oauthManager.registerProvider(qwenProvider);
+      oauthManager.registerProvider(anthropicProvider);
 
-      // Request only Qwen token
-      const qwenToken = await oauthManager.getToken('qwen');
+      // Request only Gemini token (the provider with the oauth_creds.json file
+      // side effect), proving the disabled-OAuth short-circuit is exercised
+      const geminiToken = await oauthManager.getToken('gemini');
 
       // Should not have attempted to read Gemini credentials
       expect(mockFs.readFile).not.toHaveBeenCalledWith(
         expect.stringContaining('oauth_creds.json'),
       );
 
-      // Qwen should return null (no credentials) without file access
-      expect(qwenToken).toBeNull();
+      // Gemini should return null (no credentials) without file access
+      expect(geminiToken).toBeNull();
     });
   });
 
