@@ -151,6 +151,7 @@ const StubProvider = StubProviderClass;
 
 const providers: Record<string, StubProviderInstance> = {
   openai: new StubProvider('openai'),
+  qwen: new StubProvider('qwen'),
   qwenvercel: new StubProvider('qwenvercel'),
   gemini: new StubProvider('gemini'),
   anthropic: new StubProvider('anthropic'),
@@ -690,6 +691,51 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       expect(
         stubConfig.getEphemeralSetting('reasoning.enabled'),
       ).toBeUndefined();
+    });
+  });
+
+  // --- Qwen is API-key-only via Alibaba Cloud DashScope (OAuth removed) ---
+
+  describe('qwen resolves to the DashScope API-key base URL', () => {
+    const DASHSCOPE_BASE_URL =
+      'https://dashscope.aliyuncs.com/compatible-mode/v1';
+
+    beforeEach(() => {
+      aliasEntries.push({
+        alias: 'qwen',
+        source: 'builtin',
+        filePath: '/fake/qwen.config',
+        config: {
+          baseProvider: 'openai',
+          'base-url': DASHSCOPE_BASE_URL,
+          defaultModel: 'qwen3-coder-plus',
+          apiKeyEnv: 'DASHSCOPE_API_KEY',
+          ephemeralSettings: {
+            'context-limit': 200000,
+            max_tokens: 50000,
+          },
+        },
+      });
+    });
+
+    it('pins the qwen base-url ephemeral to the DashScope compatible-mode endpoint', async () => {
+      await switchActiveProvider('qwen');
+
+      expect(stubConfig.getEphemeralSetting('base-url')).toBe(
+        DASHSCOPE_BASE_URL,
+      );
+      expect(stubSettingsService.getProviderSettings('qwen')['base-url']).toBe(
+        DASHSCOPE_BASE_URL,
+      );
+    });
+
+    it('applies the qwen alias default model on switch', async () => {
+      await switchActiveProvider('qwen');
+
+      expect(stubConfig.getModel()).toBe('qwen3-coder-plus');
+      expect(stubSettingsService.getProviderSettings('qwen').model).toBe(
+        'qwen3-coder-plus',
+      );
     });
   });
 
