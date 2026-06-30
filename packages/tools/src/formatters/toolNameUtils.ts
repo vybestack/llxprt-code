@@ -73,7 +73,7 @@ export function normalizeToolName(rawName: string): string | null {
 
 /**
  * Sentinel returned by {@link canonicalizeToolName} when the input name is
- * blank or whitespace-only.
+ * blank, whitespace-only, or contains empty dotted segments.
  */
 export const INVALID_TOOL_NAME = '__invalid_tool_name__';
 
@@ -82,26 +82,53 @@ function hasMultipleWords(name: string): boolean {
   return /[A-Z]/.test(withoutFirst) || name.includes('_') || name.includes('-');
 }
 
+function hasEmptyDottedSegment(name: string): boolean {
+  return name.split('.').some((segment) => segment === '');
+}
+
+function validateToolNameInput(rawName: string): string | null {
+  const trimmed = rawName.trim();
+  if (!trimmed || hasEmptyDottedSegment(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+function stripToolSuffixFromLastSegment(name: string): string {
+  const segments = name.split('.');
+  const lastSegment = segments[segments.length - 1];
+  if (!lastSegment.endsWith('Tool') || lastSegment.length <= 4) {
+    return name;
+  }
+
+  const withoutTool = lastSegment.slice(0, -4);
+  if (!hasMultipleWords(withoutTool)) {
+    return name;
+  }
+
+  segments[segments.length - 1] = withoutTool;
+  return segments.join('.');
+}
+
 /**
- * Canonicalize a tool name to its normalized snake_case identifier.
+ * Canonicalize a tool name to its normalized identifier.
  *
- * Returns {@link INVALID_TOOL_NAME} for blank/whitespace-only input so callers
- * can treat unusable names deterministically.
+ * Dotted registry names are preserved (namespace prefixes are not stripped) for
+ * global governance/registry lookups. `Tool` suffix normalization applies only
+ * to the last dotted segment, so `functions.RunShellCommandTool` becomes
+ * `functions.run_shell_command`.
+ *
+ * Returns {@link INVALID_TOOL_NAME} for blank/whitespace-only input or names
+ * containing empty dotted segments so callers can treat unusable names
+ * deterministically.
  */
 export function canonicalizeToolName(rawName: string): string {
-  const trimmed = rawName.trim();
-  if (!trimmed) {
+  const trimmed = validateToolNameInput(rawName);
+  if (trimmed === null) {
     return INVALID_TOOL_NAME;
   }
 
-  let nameToProcess = trimmed;
-
-  if (trimmed.endsWith('Tool') && trimmed.length > 4) {
-    const withoutTool = trimmed.slice(0, -4);
-    if (hasMultipleWords(withoutTool)) {
-      nameToProcess = withoutTool;
-    }
-  }
+  const nameToProcess = stripToolSuffixFromLastSegment(trimmed);
 
   const normalized = normalizeToolName(nameToProcess);
   if (normalized !== null) {

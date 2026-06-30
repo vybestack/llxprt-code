@@ -9,9 +9,11 @@ import {
   buildToolGovernance,
   isToolBlocked,
   canonicalizeToolName,
+  getToolNameCandidates,
   type ToolGovernanceConfig,
   type ToolGovernance,
 } from './toolGovernance.js';
+import { INVALID_TOOL_NAME } from '@vybestack/llxprt-code-tools';
 
 function createMockConfig(options: {
   ephemerals?: Record<string, unknown>;
@@ -245,6 +247,41 @@ describe('canonicalizeToolName', () => {
       expect(normalized[0]).toBe('write_file');
     });
   });
+
+  describe('dotted name handling', () => {
+    it('should keep arbitrary dotted names in global canonicalization', () => {
+      expect(canonicalizeToolName('tool.v1')).toBe('tool.v1');
+      expect(canonicalizeToolName('run.cmd')).toBe('run.cmd');
+    });
+
+    it('should keep API namespace prefixes in global canonicalization', () => {
+      expect(canonicalizeToolName('functions.run_shell_command')).toBe(
+        'functions.run_shell_command',
+      );
+      expect(canonicalizeToolName('github.list_files')).toBe(
+        'github.list_files',
+      );
+    });
+
+    it('should apply Tool-suffix stripping to the final dotted segment', () => {
+      expect(canonicalizeToolName('functions.RunShellCommandTool')).toBe(
+        'functions.run_shell_command',
+      );
+      expect(canonicalizeToolName('myns.Tool')).toBe('myns.tool');
+    });
+
+    it('should return INVALID_TOOL_NAME for blank and empty dotted segments', () => {
+      expect(canonicalizeToolName('')).toBe(INVALID_TOOL_NAME);
+      expect(canonicalizeToolName('   ')).toBe(INVALID_TOOL_NAME);
+      expect(canonicalizeToolName('functions.')).toBe(INVALID_TOOL_NAME);
+      expect(canonicalizeToolName('.run_shell_command')).toBe(
+        INVALID_TOOL_NAME,
+      );
+      expect(canonicalizeToolName('functions..run_shell_command')).toBe(
+        INVALID_TOOL_NAME,
+      );
+    });
+  });
 });
 
 describe('isToolBlocked', () => {
@@ -412,6 +449,45 @@ describe('isToolBlocked', () => {
       expect(isToolBlocked('WriteFileTool', governance)).toBe(true);
     });
   });
+  describe('tool name candidate generation', () => {
+    it('returns only the canonical form for plain and unknown-prefix dotted names', () => {
+      expect(getToolNameCandidates('read_file')).toStrictEqual(['read_file']);
+      expect(getToolNameCandidates('other.v1')).toStrictEqual(['other.v1']);
+    });
+
+    it('returns an empty array for invalid and malformed tool names', () => {
+      expect(getToolNameCandidates('')).toStrictEqual([]);
+      expect(getToolNameCandidates('   ')).toStrictEqual([]);
+      expect(getToolNameCandidates('functions.')).toStrictEqual([]);
+      expect(getToolNameCandidates('.run_shell_command')).toStrictEqual([]);
+      expect(
+        getToolNameCandidates('functions..run_shell_command'),
+      ).toStrictEqual([]);
+    });
+
+    it('adds a short alias for two-segment known API prefixes', () => {
+      expect(
+        getToolNameCandidates('functions.run_shell_command'),
+      ).toStrictEqual(['functions.run_shell_command', 'run_shell_command']);
+    });
+
+    it('does not treat GitHub namespaces as API aliases', () => {
+      expect(getToolNameCandidates('github.read_file')).toStrictEqual([
+        'github.read_file',
+      ]);
+      expect(getToolNameCandidates('github.repo.read_file')).toStrictEqual([
+        'github.repo.read_file',
+      ]);
+    });
+
+    it('adds a final-segment alias for versioned api-prefixed strict candidates', () => {
+      expect(getToolNameCandidates('api.v1.run_shell_command')).toStrictEqual([
+        'api.v1.run_shell_command',
+        'v1.run_shell_command',
+        'run_shell_command',
+      ]);
+    });
+  });
 });
 
 describe('buildToolGovernance + isToolBlocked integration', () => {
@@ -427,6 +503,67 @@ describe('buildToolGovernance + isToolBlocked integration', () => {
     expect(isToolBlocked('writeFile', governance)).toBe(true);
   });
 
+  it('checks API-qualified aliases during blocking checks', () => {
+    const governance: ToolGovernance = {
+      allowed: new Set<string>(),
+      allowedExplicit: false,
+      disabled: new Set(['run_shell_command']),
+      excluded: new Set<string>(),
+    };
+
+    expect(isToolBlocked('run_shell_command', governance)).toBe(true);
+    expect(isToolBlocked('functions.run_shell_command', governance)).toBe(true);
+  });
+
+  it('checks API-qualified aliases for dotted registry tools', () => {
+    const governance: ToolGovernance = {
+      allowed: new Set<string>(),
+      allowedExplicit: false,
+      disabled: new Set(['tool.v1']),
+      excluded: new Set<string>(),
+    };
+
+    expect(isToolBlocked('tool.v1', governance)).toBe(true);
+    expect(isToolBlocked('functions.tool.v1', governance)).toBe(true);
+    expect(isToolBlocked('other.v1', governance)).toBe(false);
+    expect(isToolBlocked('functions.other.v1', governance)).toBe(false);
+  });
+
+  it('does not over-match GitHub namespace names to unqualified tools', () => {
+    const governance: ToolGovernance = {
+      allowed: new Set<string>(),
+      allowedExplicit: false,
+      disabled: new Set(['read_file', 'repo', 'repo.read_file', 'v1']),
+      excluded: new Set<string>(),
+    };
+
+    expect(isToolBlocked('github.read_file', governance)).toBe(false);
+    expect(isToolBlocked('github.repo', governance)).toBe(false);
+    expect(isToolBlocked('github.repo.read_file', governance)).toBe(false);
+    expect(isToolBlocked('github.tool.v1', governance)).toBe(false);
+
+    const exactGovernance: ToolGovernance = {
+      ...governance,
+      disabled: new Set([...governance.disabled, 'github.repo.read_file']),
+    };
+
+    expect(isToolBlocked('github.repo.read_file', exactGovernance)).toBe(true);
+  });
+
+  it('checks API-qualified aliases against explicit allowed tools', () => {
+    const governance: ToolGovernance = {
+      allowed: new Set(['run_shell_command']),
+      allowedExplicit: true,
+      disabled: new Set<string>(),
+      excluded: new Set<string>(),
+    };
+
+    expect(isToolBlocked('functions.run_shell_command', governance)).toBe(
+      false,
+    );
+    expect(isToolBlocked('functions.write_file', governance)).toBe(true);
+  });
+
   it('should normalize allowed tools for consistent whitelist checking', () => {
     const config = createMockConfig({
       ephemerals: { 'tools.allowed': ['ReadFile', 'Glob'] },
@@ -436,6 +573,41 @@ describe('buildToolGovernance + isToolBlocked integration', () => {
 
     expect(isToolBlocked('read_file', governance)).toBe(false);
     expect(isToolBlocked('glob', governance)).toBe(false);
+    expect(isToolBlocked('write_file', governance)).toBe(true);
+  });
+
+  it('normalizes API-qualified governance inputs from config', () => {
+    const config = createMockConfig({
+      ephemerals: {
+        'tools.allowed': ['functions.run_shell_command'],
+        'tools.disabled': ['functions.write_file'],
+      },
+      excludeTools: ['functions.task'],
+    });
+
+    const governance = buildToolGovernance(config);
+
+    expect(governance.allowed).toContain('run_shell_command');
+    expect(governance.disabled).toContain('write_file');
+    expect(governance.excluded).toContain('task');
+    expect(isToolBlocked('functions.run_shell_command', governance)).toBe(
+      false,
+    );
+    expect(isToolBlocked('functions.write_file', governance)).toBe(true);
+    expect(isToolBlocked('functions.task', governance)).toBe(true);
+  });
+
+  it('normalizes versioned api governance inputs from config', () => {
+    const config = createMockConfig({
+      ephemerals: {
+        'tools.allowed': ['api.v1.run_shell_command'],
+      },
+    });
+
+    const governance = buildToolGovernance(config);
+
+    expect(governance.allowed).toContain('run_shell_command');
+    expect(isToolBlocked('run_shell_command', governance)).toBe(false);
     expect(isToolBlocked('write_file', governance)).toBe(true);
   });
 

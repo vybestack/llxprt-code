@@ -499,4 +499,237 @@ describe('TaskTool', () => {
       expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
     });
   });
+
+  // Issue #2184: API-qualified tool names (e.g. functions.run_shell_command)
+  // must resolve to the registry tool name. Unknown qualified names must
+  // remain fail-closed. Qualified excluded tools must still be stripped.
+  describe('Issue #2184: API-qualified tool name resolution', () => {
+    type LaunchRequest = {
+      toolConfig?: { tools?: string[] };
+      outputConfig?: unknown;
+    };
+
+    function createIssue2184Harness(
+      registryTools: string[],
+      ephemerals: Record<string, unknown> = {},
+    ) {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        // Required by SubAgentScope; these tests exercise the interactive path.
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-2184',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithRegistry = {
+        getSessionId: () => 'session-2184',
+        getEphemeralSettings: () => ephemerals,
+        getExcludeTools: () => [],
+        getToolRegistry: () => ({
+          getEnabledTools: () => registryTools.map((name) => ({ name })),
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithRegistry, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+      return { launch, tool };
+    }
+
+    async function executeIssue2184Invocation(
+      params: Pick<TaskToolParams, 'tool_whitelist' | 'output_spec'>,
+      registryTools = ['run_shell_command'],
+      ephemerals: Record<string, unknown> = {},
+    ): Promise<LaunchRequest | undefined> {
+      const { launch, tool } = createIssue2184Harness(
+        registryTools,
+        ephemerals,
+      );
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Do work',
+        ...params,
+      });
+
+      await invocation.execute(new AbortController().signal, undefined);
+
+      return launch.mock.calls[0]?.[0] as LaunchRequest | undefined;
+    }
+
+    it("resolves functions.run_shell_command to 'run_shell_command' via the registry", async () => {
+      const launchRequest = await executeIssue2184Invocation({
+        tool_whitelist: ['functions.run_shell_command'],
+      });
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+        'run_shell_command',
+      ]);
+    });
+
+    it('does not treat GitHub namespaces as API aliases for registry tools', async () => {
+      const readFileLaunchRequest = await executeIssue2184Invocation(
+        { tool_whitelist: ['github.read_file'] },
+        ['read_file'],
+      );
+      const repoLaunchRequest = await executeIssue2184Invocation(
+        { tool_whitelist: ['github.repo'] },
+        ['repo'],
+      );
+      const repoReadFileLaunchRequest = await executeIssue2184Invocation(
+        { tool_whitelist: ['github.repo.read_file'] },
+        ['repo.read_file', 'read_file'],
+      );
+
+      expect(readFileLaunchRequest).toBeDefined();
+      expect(readFileLaunchRequest?.toolConfig?.tools).toStrictEqual([]);
+      expect(repoLaunchRequest).toBeDefined();
+      expect(repoLaunchRequest?.toolConfig?.tools).toStrictEqual([]);
+      expect(repoReadFileLaunchRequest).toBeDefined();
+      expect(repoReadFileLaunchRequest?.toolConfig?.tools).toStrictEqual([]);
+    });
+
+    it('remains fail-closed with [] for unknown or malformed qualified names', async () => {
+      const unknownLaunchRequest = await executeIssue2184Invocation({
+        tool_whitelist: ['functions.does_not_exist'],
+      });
+      const malformedLaunchRequest = await executeIssue2184Invocation({
+        tool_whitelist: ['functions.'],
+      });
+
+      expect(unknownLaunchRequest).toBeDefined();
+      expect(unknownLaunchRequest).toHaveProperty('toolConfig');
+      expect(unknownLaunchRequest?.toolConfig?.tools).toStrictEqual([]);
+      expect(malformedLaunchRequest).toBeDefined();
+      expect(malformedLaunchRequest).toHaveProperty('toolConfig');
+      expect(malformedLaunchRequest?.toolConfig?.tools).toStrictEqual([]);
+    });
+
+    it('resolves multi-segment qualified names', async () => {
+      const launchRequest = await executeIssue2184Invocation({
+        tool_whitelist: ['api.v1.run_shell_command'],
+      });
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+        'run_shell_command',
+      ]);
+    });
+
+    it('honors qualified disabled entries before resolving through the registry', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: ['functions.run_shell_command'],
+        },
+        ['run_shell_command'],
+        { 'tools.disabled': ['functions.run_shell_command'] },
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest).toHaveProperty('toolConfig');
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+    });
+
+    it('honors versioned API entries in governance allowlists', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: ['functions.run_shell_command'],
+        },
+        ['run_shell_command'],
+        { 'tools.allowed': ['api.v1.run_shell_command'] },
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+        'run_shell_command',
+      ]);
+    });
+
+    it('resolves plain whitelist entries to dotted registry tool names', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: ['run_shell_command'],
+        },
+        ['functions.run_shell_command'],
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+        'functions.run_shell_command',
+      ]);
+    });
+
+    it('filters excluded tools after resolving their qualified names', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: [
+            'functions.run_shell_command',
+            'functions.task',
+            'functions.list_subagents',
+          ],
+        },
+        ['run_shell_command', 'task', 'list_subagents'],
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest).toHaveProperty('toolConfig');
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+        'run_shell_command',
+      ]);
+    });
+
+    it('preserves resolved whitelist tools when output_spec is provided', async () => {
+      const launchRequest = await executeIssue2184Invocation({
+        tool_whitelist: ['functions.run_shell_command'],
+        output_spec: { result: 'The output' },
+      });
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+        'run_shell_command',
+      ]);
+      // outputConfig must contain the outputs mapped from output_spec.
+      expect(launchRequest?.outputConfig).toStrictEqual({
+        outputs: { result: 'The output' },
+      });
+    });
+
+    it('preserves output_spec when qualified whitelist resolution leaves zero tools', async () => {
+      const launchRequest = await executeIssue2184Invocation({
+        tool_whitelist: ['functions.does_not_exist'],
+        output_spec: { result: 'The output' },
+      });
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+      expect(launchRequest?.outputConfig).toStrictEqual({
+        outputs: { result: 'The output' },
+      });
+    });
+
+    it('fails closed when multiple registry tools map to the same canonical name', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: ['read_file'],
+        },
+        ['api.v1.read_file', 'api.v2.read_file'],
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+    });
+  });
 });
