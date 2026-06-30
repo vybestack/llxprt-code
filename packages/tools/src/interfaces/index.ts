@@ -95,19 +95,6 @@ export type {
   CommandRootsResult,
 } from './IShellToolHost.js';
 export type {
-  ITaskToolHost,
-  LaunchedSubagent,
-  ISubagentScope,
-  ISubagentOutput,
-  TaskLaunchRequest,
-  TaskTimeoutConfig,
-  AsyncSettingsCheck,
-  AsyncSlotResult,
-  AsyncTaskRegistration,
-  CanLaunchResult,
-  IToolGovernance,
-} from './ITaskToolHost.js';
-export type {
   IPromptRegistryService,
   PromptRegistry,
   Prompt,

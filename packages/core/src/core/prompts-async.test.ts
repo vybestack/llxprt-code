@@ -41,9 +41,9 @@ import {
   ReadManyFilesTool,
   WriteFileTool,
   LSTool,
-  TaskTool,
   ListSubagentsTool,
 } from '@vybestack/llxprt-code-tools';
+import { TASK_TOOL_NAME } from '../config/toolRegistryFactory.js';
 import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -236,12 +236,13 @@ describe('prompts async integration', () => {
   });
 
   describe('subagent delegation block (issue #1019)', () => {
-    // Source tool ids from the canonical tool-class Name constants so these
+    // Source tool ids from the canonical tool-class Name constants (and
+    // core's TASK_TOOL_NAME for the agents-owned task tool) so these
     // regressions stay aligned if a tool's registered name ever changes.
     const subagentTools = [
       ReadFileTool.Name,
       ListSubagentsTool.Name,
-      TaskTool.Name,
+      TASK_TOOL_NAME,
     ];
 
     it('should contain Subagent Delegation block when includeSubagentDelegation is true and tools include both task and list_subagents', async () => {
@@ -260,7 +261,7 @@ describe('prompts async integration', () => {
     });
 
     it('should replace SUBAGENT_DELEGATION placeholder with empty when includeSubagentDelegation is false', async () => {
-      const tools = ['read_file', 'list_subagents', 'task'];
+      const tools = [ReadFileTool.Name, ListSubagentsTool.Name, TASK_TOOL_NAME];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,
@@ -277,7 +278,7 @@ describe('prompts async integration', () => {
     });
 
     it('should replace SUBAGENT_DELEGATION placeholder with empty when tools do not include ListSubagents', async () => {
-      const tools = ['read_file', 'task'];
+      const tools = [ReadFileTool.Name, TASK_TOOL_NAME];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,
@@ -305,7 +306,7 @@ describe('prompts async integration', () => {
     });
 
     it('should replace SUBAGENT_DELEGATION placeholder with empty when includeSubagentDelegation is undefined', async () => {
-      const tools = ['read_file', 'list_subagents', 'task'];
+      const tools = [ReadFileTool.Name, ListSubagentsTool.Name, TASK_TOOL_NAME];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,
@@ -318,7 +319,7 @@ describe('prompts async integration', () => {
     });
 
     it('should not contain placeholder markers like {{SUBAGENT_DELEGATION}} in final output', async () => {
-      const tools = ['read_file', 'list_subagents', 'task'];
+      const tools = [ReadFileTool.Name, ListSubagentsTool.Name, TASK_TOOL_NAME];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,
@@ -329,7 +330,7 @@ describe('prompts async integration', () => {
     });
 
     it('bakes async subagent guidance into the delegation block and leaves no raw token (issue #2109)', async () => {
-      const tools = ['read_file', 'list_subagents', 'task'];
+      const tools = [ReadFileTool.Name, ListSubagentsTool.Name, TASK_TOOL_NAME];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,
@@ -345,7 +346,7 @@ describe('prompts async integration', () => {
     });
 
     it('omits async guidance but keeps delegation when async is disabled (issue #2109)', async () => {
-      const tools = ['read_file', 'list_subagents', 'task'];
+      const tools = [ReadFileTool.Name, ListSubagentsTool.Name, TASK_TOOL_NAME];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,

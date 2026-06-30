@@ -464,7 +464,6 @@ export {
   type TodoToolCall,
   type TodoUpdateEvent,
 } from '@vybestack/llxprt-code-tools';
-export { TaskTool, type TaskToolParams } from '@vybestack/llxprt-code-tools';
 export * from './tools-adapters/index.js';
 export {
   ToolKeyStorage,

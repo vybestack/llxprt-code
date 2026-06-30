@@ -12,7 +12,7 @@
 /**
  * Subagent Tools Behavioral Tests
  *
- * Verifies observable behavior of Task/ListSubagents/CheckAsyncTasks
+ * Verifies observable behavior of ListSubagents/CheckAsyncTasks
  * through ISubagentService and IAsyncTaskService adapters. Primary
  * assertions are on ToolResult content, not method call counts.
  *
@@ -21,7 +21,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CheckAsyncTasksTool, ListSubagentsTool, TaskTool } from '../index.js';
+import { CheckAsyncTasksTool, ListSubagentsTool } from '../index.js';
 import type {
   ISubagentService,
   IAsyncTaskService,
@@ -89,36 +89,6 @@ function createFakeAsyncTaskService(
 }
 
 describe('Subagent Tools Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', () => {
-  describe('TaskTool executes through ISubagentService and returns ToolResult', () => {
-    it('executeSubagent returns result with correct content', async () => {
-      const agents: SubagentInfo[] = [
-        { name: 'typescript-expert', description: 'TS expert' },
-      ];
-      const service = createFakeSubagentService(agents);
-
-      const result = await executeToolForBehavioralAssertion(
-        new TaskTool(service),
-        { name: 'typescript-expert', prompt: 'Fix this bug' },
-      );
-
-      expect(result.error).toBeUndefined();
-      expect(result.llmContent).toContain('typescript-expert');
-      expect(result.llmContent).toContain('Fix this bug');
-    });
-
-    it('executeSubagent returns error for unknown agent', async () => {
-      const service = createFakeSubagentService([]);
-
-      const result = await executeToolForBehavioralAssertion(
-        new TaskTool(service),
-        { name: 'unknown-agent', prompt: 'Do something' },
-      );
-
-      expect(result.error?.message).toContain('Unknown subagent');
-      expect(result.llmContent).toContain('unknown-agent');
-    });
-  });
-
   describe('ListSubagentsTool lists available subagents', () => {
     it('listSubagents returns agent list in ToolResult', async () => {
       const agents: SubagentInfo[] = [
