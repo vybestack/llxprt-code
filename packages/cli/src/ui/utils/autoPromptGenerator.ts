@@ -9,14 +9,14 @@ import {
   createRuntimeStateFromConfig,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { AgentClient } from '@vybestack/llxprt-code-agents';
+import { createAgentClient } from '@vybestack/llxprt-code-agents';
 import type { SendMessageParameters } from '@google/genai';
 import { FunctionCallingConfigMode } from '@google/genai';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 
 const logger = new DebugLogger('llxprt:subagent:auto-prompt');
 
-export function createDetachedAgentClient(config: Config): AgentClient {
+export function createDetachedAgentClient(config: Config): AgentClientContract {
   const baseRuntimeId =
     typeof config.getSessionId === 'function'
       ? config.getSessionId()
@@ -24,10 +24,8 @@ export function createDetachedAgentClient(config: Config): AgentClient {
   const runtimeState = createRuntimeStateFromConfig(config, {
     runtimeId: `${baseRuntimeId ?? 'llxprt-session'}#subagent-auto#${Date.now().toString(36)}`,
   });
-  const client = new AgentClient(config, runtimeState);
-  if (typeof client.clearTools === 'function') {
-    client.clearTools();
-  }
+  const client = createAgentClient(config, runtimeState);
+  client.clearTools();
   return client;
 }
 

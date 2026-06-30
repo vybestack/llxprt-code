@@ -26,7 +26,7 @@ import {
   updateActiveProviderBaseUrl,
   resetCliProviderInfrastructure,
   getCliStatelessHardeningOverride,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   runWithRuntimeScope,
   type IsolatedRuntimeContextHandle,
@@ -385,7 +385,7 @@ describe('CLI runtime isolation', () => {
       resetCliProviderInfrastructure();
 
       const { getCliRuntimeContext } = await import(
-        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
+        '@vybestack/llxprt-code-providers/runtime.js'
       );
 
       // Try to get context with stateless mode enabled but no runtime registered
@@ -409,7 +409,7 @@ describe('CLI runtime isolation', () => {
 
     try {
       const { getCliRuntimeContext } = await import(
-        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
+        '@vybestack/llxprt-code-providers/runtime.js'
       );
 
       // Try to get context without any runtime registration
@@ -447,7 +447,7 @@ describe('CLI runtime isolation', () => {
       });
 
       const { ensureStatelessProviderReady } = await import(
-        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
+        '@vybestack/llxprt-code-providers/runtime.js'
       );
 
       // Should not throw - runtime properly registered
@@ -468,7 +468,7 @@ describe('CLI runtime isolation', () => {
       resetCliProviderInfrastructure();
 
       const { ensureStatelessProviderReady } = await import(
-        '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js'
+        '@vybestack/llxprt-code-providers/runtime.js'
       );
 
       // Try to ensure ready with no runtime registered - should throw

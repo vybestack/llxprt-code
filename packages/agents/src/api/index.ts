@@ -44,6 +44,25 @@ export { listProviders, listTools } from './discovery.js';
 export { mapLoopStream, mapStreamEvent } from './eventAdapter.js';
 export { toConfigParameters, AdapterError } from './agentConfig.adapter.js';
 export { getTokenLimitForConfiguredContext } from '../core/contextLimitResolver.js';
+// Curated public runtime-construction factories (#2204). Consumers construct
+// agent-client / tool-scheduler / task-registration / agentic-loop primitives
+// via these helpers instead of importing the internal concrete classes.
+export {
+  createAgentRuntimeFactoryBindings,
+  createAgentClient,
+  createToolScheduler,
+  createTaskRegistration,
+  createAgenticLoop,
+} from './runtimeFactories.js';
+export type {
+  AgentRuntimeFactoryBindings,
+  AgenticLoopRunner,
+  AgenticLoopEvent,
+  AgenticLoopMessage,
+  AgenticLoopOptions,
+  AgenticLoopApprovalHandler,
+  DisplayCallbacks,
+} from './runtimeFactories.js';
 export type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 /**

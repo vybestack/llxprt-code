@@ -15,7 +15,7 @@ import { coreEvents } from '@vybestack/llxprt-code-core';
 import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
-} from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import { resolveAlias } from '@vybestack/llxprt-code-settings';
 import { buildSetSchema } from './setCommandSchema.js';
 

@@ -12,7 +12,7 @@ import type {
 } from './schema/types.js';
 import type { CommandContext } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { ephemeralSettingHelp } from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
+import { ephemeralSettingHelp } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   getDirectSettingSpecs,
   resolveAlias,

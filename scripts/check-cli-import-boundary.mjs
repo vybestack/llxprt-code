@@ -86,8 +86,14 @@ const AGENTS_PACKAGE_ROOT = '@vybestack/llxprt-code-agents';
 // masking real boundary violations. Each key is a RUNTIME_PACKAGES entry;
 // the value is the list of public subpaths for that package.
 const PUBLIC_SUBPATHS_BY_PACKAGE = {
-  // providers public runtime barrel
-  '@vybestack/llxprt-code-providers': ['runtime.js'],
+  // providers public barrels / curated subpath entrypoints. Each is a declared
+  // package.json `exports` entry with its own barrel index.ts and a documented
+  // public API (#2204). They are NOT deep/internal imports.
+  '@vybestack/llxprt-code-providers': [
+    'runtime.js',
+    'auth.js',
+    'composition.js',
+  ],
 };
 
 /**
@@ -95,130 +101,35 @@ const PUBLIC_SUBPATHS_BY_PACKAGE = {
  * paths under packages/cli/src; values are arrays of permitted specifiers.
  *
  * QUARANTINE BOUNDARY (shrinks over time as the public Agent/runtime API
- * grows). Each entry is a genuine runtime-construction site that has no
- * public-API replacement yet. The intent is that this list only ever SHRINKS:
- * every future public-API promotion should remove the corresponding entry.
+ * grows). Each entry is a genuine runtime-construction/bootstrap site that
+ * has no public-API replacement yet. The intent is that this list only ever
+ * SHRINKS: every future public-API promotion should remove the corresponding
+ * entry.
  *
- * Tiers:
- *   - bootstrap/config/nonInteractive: genuine runtime assembly (the CLI's
- *     one legitimate role as a thin client that wires the runtime context).
- *   - zed-integration: a separate ACP bootstrap-style client.
- *   - ui/contexts/RuntimeContext: the React bridge that binds runtime helpers
- *     to the active scope behind useRuntimeApi(); promoted to a public barrel
- *     in a future subissue.
- *   - ui/commands, ui/components, ui/hooks, ui/layouts, utils: command/UI
- *     surfaces that reach runtime accessors (token stores, provider keys,
- *     runtime settings, scheduler/confirmation-bus types) not yet exposed on
- *     the public Agent facade. These are the prime burn-down targets.
+ * After #2204 burn-down, this list contains ONLY genuine bootstrap/config
+ * composition boundaries — the CLI's one legitimate role as a thin client
+ * that wires the runtime context. UI/commands/hooks/contexts/components/
+ * layouts/utils deep imports have been eliminated by routing through the
+ * public runtime.js / auth.js / composition.js barrels and the curated
+ * public Agent API.
+ *
+ * Remaining tiers:
+ *   - bootstrap/config/nonInteractive: genuine runtime assembly that wires
+ *     the core settings-runtime adapter (a core-internal composition seam
+ *     not yet promoted to a public core entrypoint).
  */
 const ALLOWLIST = {
-  // ── bootstrap / session bootstrap ──────────────────────────────────────
-  'packages/cli/src/cliBootstrap.tsx': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-  ],
-  'packages/cli/src/cliSessionBootstrap.ts': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-  ],
-  'packages/cli/src/cliAgentBootstrap.ts': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-  ],
-  // ── config bootstrap / runtime application ─────────────────────────────
-  'packages/cli/src/config/configBuilder.ts': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-  ],
-  'packages/cli/src/config/postConfigRuntime.ts': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js',
-    '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js',
-    '@vybestack/llxprt-code-providers/runtime/providerSwitch.js',
-    '@vybestack/llxprt-code-providers/runtime/cliEphemeralSettings.js',
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-  ],
+  // ── config bootstrap: core settings-runtime adapter ────────────────────
+  // These are genuine composition-boundary sites: the core-owned
+  // settingsRuntimeAdapter is the dependency-inversion seam that binds a
+  // SettingsService to a runtime context. It has no public core entrypoint
+  // yet (the core root does not re-export it), so these bootstrap files are
+  // the ONLY allowed deep importers.
   'packages/cli/src/config/profileBootstrap.ts': [
     '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js',
-    '@vybestack/llxprt-code-providers/composition.js',
-    '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js',
-    '@vybestack/llxprt-code-providers/auth.js',
-  ],
-  'packages/cli/src/config/profileRuntimeApplication.ts': [
-    '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js',
-  ],
-  'packages/cli/src/config/providerModelResolver.ts': [
-    '@vybestack/llxprt-code-providers/composition.js',
   ],
   'packages/cli/src/nonInteractiveCli.ts': [
     '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js',
-  ],
-  // ── zed (ACP) integration: a separate bootstrap-style client ───────────
-  'packages/cli/src/zed-integration/zedIntegration.ts': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-  ],
-  'packages/cli/src/zed-integration/zed-provider-auth.ts': [
-    '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js',
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-    '@vybestack/llxprt-code-providers/composition.js',
-  ],
-  // ── ui/contexts: React runtime bridge behind useRuntimeApi() ───────────
-  'packages/cli/src/ui/contexts/RuntimeContext.tsx': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-    '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js',
-  ],
-  // ── ui/commands: command surfaces reaching runtime accessors ───────────
-  'packages/cli/src/ui/commands/aboutCommand.ts': [
-    '@vybestack/llxprt-code-providers/composition.js',
-  ],
-  'packages/cli/src/ui/commands/authCommand.ts': [
-    '@vybestack/llxprt-code-providers/auth.js',
-  ],
-  'packages/cli/src/ui/commands/clearCommand.ts': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-  ],
-  'packages/cli/src/ui/commands/dumpcontextCommand.ts': [
-    '@vybestack/llxprt-code-core/services/history/IContent.js',
-  ],
-  'packages/cli/src/ui/commands/keyCommand.ts': [
-    '@vybestack/llxprt-code-providers/auth.js',
-  ],
-  'packages/cli/src/ui/commands/profileLoadBalancer.ts': [
-    '@vybestack/llxprt-code-providers/auth.js',
-  ],
-  'packages/cli/src/ui/commands/profileSchemas.ts': [
-    '@vybestack/llxprt-code-providers/auth.js',
-  ],
-  'packages/cli/src/ui/commands/providerCommand.ts': [
-    '@vybestack/llxprt-code-providers/composition.js',
-  ],
-  'packages/cli/src/ui/commands/setCommand.ts': [
-    '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js',
-  ],
-  'packages/cli/src/ui/commands/setCommandSchema.ts': [
-    '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js',
-  ],
-  'packages/cli/src/ui/commands/toolformatCommand.ts': [
-    '@vybestack/llxprt-code-providers/runtime/providerMutations.js',
-  ],
-  'packages/cli/src/ui/commands/types.ts': [
-    '@vybestack/llxprt-code-providers/auth.js',
-  ],
-  // ── ui/components & layouts ────────────────────────────────────────────
-  'packages/cli/src/ui/components/AuthDialog.tsx': [
-    '@vybestack/llxprt-code-providers/auth.js',
-  ],
-  'packages/cli/src/ui/layouts/DefaultAppLayoutHelpers.tsx': [
-    '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
-  ],
-  // ── ui/hooks: stream/agentic-loop internals ────────────────────────────
-  'packages/cli/src/ui/hooks/geminiStream/toolCompletionHandler.ts': [
-    '@vybestack/llxprt-code-core/scheduler/types.js',
-  ],
-  'packages/cli/src/ui/hooks/geminiStream/useAgenticLoop.ts': [
-    '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js',
-  ],
-  // ── utils: sandbox auth ────────────────────────────────────────────────
-  'packages/cli/src/utils/sandbox.ts': [
-    '@vybestack/llxprt-code-providers/auth.js',
-  ],
-  'packages/cli/src/utils/sandbox-containers.ts': [
-    '@vybestack/llxprt-code-providers/auth.js',
   ],
 };
 
@@ -287,7 +198,8 @@ const PRUNED_DIR_BASE_NAMES = new Set([
  * This allowlist names ONLY the symbols that are part of the curated public
  * Agent API (the ./api/index.js surface) plus the small set of genuinely
  * public value exports. Any named import from the bare root that is NOT here
- * requires a per-file entry in AGENT_INTERNAL_SYMBOL_ALLOWLIST below.
+ * is a boundary violation — there is no per-file internal-symbol escape hatch
+ * (#2204 burn-down removed AGENT_INTERNAL_SYMBOL_ALLOWLIST entirely).
  *
  * QUARANTINE BOUNDARY (shrinks as #1595 trims the root to the public API).
  */
@@ -301,6 +213,23 @@ const PUBLIC_AGENT_SYMBOLS = new Set([
   'mapStreamEvent',
   'toConfigParameters',
   'AdapterError',
+  // Curated public runtime-construction factories (#2204). Consumers
+  // construct agent-client / tool-scheduler / task-registration /
+  // agentic-loop primitives via these helpers instead of importing the
+  // internal concrete classes.
+  'createAgentRuntimeFactoryBindings',
+  'createAgentClient',
+  'createToolScheduler',
+  'createTaskRegistration',
+  'createAgenticLoop',
+  // Type-only public symbols re-exported via runtimeFactories (#2204).
+  'AgenticLoopRunner',
+  'AgenticLoopEvent',
+  'AgenticLoopMessage',
+  'AgenticLoopOptions',
+  'AgenticLoopApprovalHandler',
+  'DisplayCallbacks',
+  'AgentRuntimeFactoryBindings',
   // Curated public enum/value re-exports (api/index.ts)
   'PolicyDecision',
   'ApprovalMode',
@@ -351,41 +280,6 @@ const PUBLIC_AGENT_SYMBOLS = new Set([
   'buildToolResponses',
   'getTokenLimitForConfiguredContext',
 ]);
-
-/**
- * Per-file allowlist for INTERNAL/legacy agents symbols imported from the bare
- * root `@vybestack/llxprt-code-agents`. Each entry is a (file -> [symbols])
- * pair with a justification.
- *
- * QUARANTINE BOUNDARY THAT MUST SHRINK OVER TIME: every entry is a genuine
- * runtime-construction/legacy site with no public-API replacement yet. The
- * intent is that this list only ever SHRINKS as the public Agent/runtime API
- * grows. New entries require explicit justification.
- *
- * Tiers:
- *   - config/configBuilder.ts: the CLI's one legitimate Config-build site that
- *     still wires the legacy scheduler/client/task-registration factories.
- *   - ui/hooks/geminiStream/useAgenticLoop.ts, ui/hooks/useReactToolScheduler.ts,
- *     ui/utils/autoPromptGenerator.ts: stream/scheduler/client internals the
- *     public Agent facade has not yet absorbed.
- */
-const AGENT_INTERNAL_SYMBOL_ALLOWLIST = {
-  // Config-build runtime assembly (legacy factories; #1595 burn-down target).
-  'packages/cli/src/config/configBuilder.ts': [
-    'AgentClient',
-    'CoreToolScheduler',
-    'createTaskToolRegistration',
-  ],
-  // AgenticLoop stream drive (not yet on the public facade).
-  'packages/cli/src/ui/hooks/geminiStream/useAgenticLoop.ts': [
-    'AgenticLoop',
-    'AgenticLoopEvent',
-  ],
-  // Scheduler type consumed by the React scheduler bridge.
-  'packages/cli/src/ui/hooks/useReactToolScheduler.ts': ['CoreToolScheduler'],
-  // Legacy client construction in the auto-prompt generator.
-  'packages/cli/src/ui/utils/autoPromptGenerator.ts': ['AgentClient'],
-};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -490,16 +384,6 @@ function getLine(sourceFile, pos) {
 function isAllowed(relFile, specifier) {
   const allowed = ALLOWLIST[relFile];
   return Boolean(allowed && allowed.includes(specifier));
-}
-
-/**
- * Is `symbol` an allowlisted internal/legacy agents symbol for `relFile`?
- * Used by the bare-root symbol check so a justified per-file entry permits
- * importing that specific internal symbol from the public root.
- */
-function isInternalSymbolAllowed(relFile, symbol) {
-  const allowed = AGENT_INTERNAL_SYMBOL_ALLOWLIST[relFile];
-  return Boolean(allowed && allowed.includes(symbol));
 }
 
 /**
@@ -672,13 +556,12 @@ function analyzeFile(filePath) {
     }
     // Bare agents-root symbol check: the bare root re-exports internals, so a
     // named import of an INTERNAL symbol from the public root is still a
-    // boundary violation unless the (file, symbol) pair is allowlisted (#2204).
+    // boundary violation (#2204). There is no per-file escape hatch.
     if (
       specifier === AGENTS_PACKAGE_ROOT &&
       ts.isImportDeclaration(node) &&
       node.importClause
     ) {
-      const relFile = relative(REPO_ROOT, filePath).replace(/\\/g, '/');
       const symbols = importedSymbolsOf(node);
       for (const sym of symbols) {
         // A namespace import (`import * as ns`) of the agents root couples to
@@ -692,10 +575,7 @@ function analyzeFile(filePath) {
           });
           continue;
         }
-        if (
-          !PUBLIC_AGENT_SYMBOLS.has(sym) &&
-          !isInternalSymbolAllowed(relFile, sym)
-        ) {
+        if (!PUBLIC_AGENT_SYMBOLS.has(sym)) {
           violations.push({
             line: getLine(sourceFile, node.getStart()),
             importKind: 'agents-internal-symbol',
@@ -761,43 +641,6 @@ function collectAllSpecifiers(filePath) {
   }
   ts.forEachChild(sourceFile, visit);
   return specifiers;
-}
-
-/**
- * Collect all named import symbols from the bare agents root in a file. Used
- * by the self-pruning allowlist guard to verify that every allowlisted
- * AGENT_INTERNAL_SYMBOL_ALLOWLIST symbol is still actually imported.
- */
-function collectAgentsRootSymbols(filePath) {
-  let sourceText;
-  try {
-    sourceText = readFileSync(filePath, 'utf-8');
-  } catch {
-    return new Set();
-  }
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
-  const symbols = new Set();
-  function visit(node) {
-    if (
-      ts.isImportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier) &&
-      node.moduleSpecifier.text === AGENTS_PACKAGE_ROOT
-    ) {
-      for (const sym of importedSymbolsOf(node)) {
-        symbols.add(sym);
-      }
-    }
-    ts.forEachChild(node, visit);
-  }
-  ts.forEachChild(sourceFile, visit);
-  return symbols;
 }
 
 /**
@@ -931,7 +774,7 @@ function main() {
           );
         } else if (v.symbol !== undefined) {
           console.log(
-            `    line ${v.line}: ${v.specifier} imports internal symbol '${v.symbol}' (${v.importKind}) — the bare root re-exports internals; use a public Agent symbol or add a justified AGENT_INTERNAL_SYMBOL_ALLOWLIST entry`,
+            `    line ${v.line}: ${v.specifier} imports internal symbol '${v.symbol}' (${v.importKind}) — the bare root re-exports internals; use a public Agent symbol instead`,
           );
         } else {
           console.log(
@@ -1021,30 +864,6 @@ function main() {
       }
     }
 
-    for (const [allowFile, allowSymbols] of Object.entries(
-      AGENT_INTERNAL_SYMBOL_ALLOWLIST,
-    )) {
-      if (!scannedRelFiles.has(allowFile)) {
-        staleEntries++;
-        (staleByFile[allowFile] ??= []).push({
-          kind: 'missing-file',
-          detail: allowFile,
-        });
-        continue;
-      }
-      const absFile = join(REPO_ROOT, allowFile);
-      const actualSymbols = collectAgentsRootSymbols(absFile);
-      for (const sym of allowSymbols) {
-        if (!actualSymbols.has(sym)) {
-          staleEntries++;
-          (staleByFile[allowFile] ??= []).push({
-            kind: 'unused-symbol',
-            detail: sym,
-          });
-        }
-      }
-    }
-
     if (staleEntries > 0) {
       failed = true;
       console.log(`FAIL: ${staleEntries} stale allowlist entr(y/ies) found:\n`);
@@ -1058,10 +877,6 @@ function main() {
           } else if (e.kind === 'unused-specifier') {
             console.log(
               `    allowlisted specifier '${e.detail}' is no longer imported — remove the entry`,
-            );
-          } else {
-            console.log(
-              `    allowlisted symbol '${e.detail}' is no longer imported from the bare agents root — remove the entry`,
             );
           }
         }

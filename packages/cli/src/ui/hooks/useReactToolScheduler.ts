@@ -18,6 +18,7 @@ import {
   type ToolCall,
   type EditorType,
   type SubagentSchedulerFactory,
+  type ToolSchedulerContract,
   hasInteractiveSubagentScheduler,
   DEFAULT_AGENT_ID,
   DebugLogger,
@@ -25,7 +26,6 @@ import {
   type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
-import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
@@ -47,7 +47,7 @@ type SchedulerConfigWithExplicitMessageBus = Config & {
     dependencies?: {
       messageBus?: MessageBus;
     },
-  ): Promise<CoreToolScheduler>;
+  ): Promise<ToolSchedulerContract>;
 };
 
 const logger = DebugLogger.getLogger('llxprt:cli:react-tool-scheduler');
@@ -221,7 +221,7 @@ function markCallsAsDisplayCleared(
  * Processes pending schedule requests after scheduler initialization.
  */
 function processPendingRequests(
-  instance: CoreToolScheduler,
+  instance: ToolSchedulerContract,
   requests: PendingScheduleRequests,
 ): void {
   for (const { request, signal } of requests) {
@@ -333,7 +333,7 @@ async function initializeSchedulerInstance(
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
   mounted: React.MutableRefObject<boolean>,
-): Promise<CoreToolScheduler | null> {
+): Promise<ToolSchedulerContract | null> {
   try {
     const instance = await (
       config as SchedulerConfigWithExplicitMessageBus
@@ -439,7 +439,7 @@ function useSchedulerEffect(
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
   pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
-  setScheduler: (s: CoreToolScheduler | null) => void,
+  setScheduler: (s: ToolSchedulerContract | null) => void,
 ): void {
   useEffect(() => {
     const mounted = { current: true };
@@ -494,8 +494,10 @@ function useScheduler(
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
   pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
-): CoreToolScheduler | null {
-  const [scheduler, setScheduler] = useState<CoreToolScheduler | null>(null);
+): ToolSchedulerContract | null {
+  const [scheduler, setScheduler] = useState<ToolSchedulerContract | null>(
+    null,
+  );
   useSchedulerEffect(
     config,
     sessionId,
@@ -587,7 +589,7 @@ function useExternalSchedulerRegistration(
  * Hook that manages schedule function.
  */
 function useScheduleFn(
-  scheduler: CoreToolScheduler | null,
+  scheduler: ToolSchedulerContract | null,
   pendingScheduleRequests: React.MutableRefObject<PendingScheduleRequests>,
 ): ScheduleFn {
   return useCallback(
@@ -722,7 +724,7 @@ function useSchedulerRefs(
 }
 
 function useToolSchedulerReadiness(
-  scheduler: CoreToolScheduler | null,
+  scheduler: ToolSchedulerContract | null,
   externalSchedulerRegistered: boolean,
 ): boolean {
   return scheduler !== null && externalSchedulerRegistered;
@@ -734,7 +736,7 @@ function useToolSchedulerReadiness(
  */
 function useDerivedToolCallState(
   toolCallsByScheduler: Map<symbol, TrackedToolCall[]>,
-  scheduler: CoreToolScheduler | null,
+  scheduler: ToolSchedulerContract | null,
 ): { toolCalls: TrackedToolCall[]; cancelAllToolCalls: CancelAllFn } {
   const cancelAllToolCalls = useCallback(
     () => scheduler?.cancelAll(),

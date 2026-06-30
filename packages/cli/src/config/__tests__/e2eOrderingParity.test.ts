@@ -213,7 +213,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js', () => ({
   getEphemeralSetting: vi.fn(() => undefined),
 }));
 
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
+vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -227,12 +227,21 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
   return {
     registerAgentRuntimeFactories: vi.fn(),
     resetAgentRuntimeFactories: vi.fn(),
+    ephemeralSettingHelp: {},
+    parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
+      success: true,
+      value: rawValue,
+    })),
+    applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
     applyProfileSnapshot: vi.fn(
-      async (profile: { provider?: string; model?: string }) => ({
-        providerName: profile.provider ?? '',
-        modelName: profile.model ?? '',
-        warnings: [],
-      }),
+      async (profile: { provider?: string; model?: string }) => {
+        callLog.entries.push('applyProfileSnapshot');
+        return {
+          providerName: profile.provider ?? '',
+          modelName: profile.model ?? '',
+          warnings: [],
+        };
+      },
     ),
     getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
     setCliRuntimeContext: vi.fn(
@@ -241,6 +250,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
         cfg?: ServerConfig.Config,
         opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
       ) => {
+        callLog.entries.push('setCliRuntimeContext');
         runtimeSettingsState.context = {
           settingsService: svc,
           config: cfg ?? null,
@@ -249,12 +259,15 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
         };
       },
     ),
-    switchActiveProvider: vi.fn(async (providerName: string) => ({
-      changed: true,
-      previousProvider: null,
-      nextProvider: providerName,
-      infoMessages: [],
-    })),
+    switchActiveProvider: vi.fn(async (providerName: string) => {
+      callLog.entries.push(`switchActiveProvider:${providerName}`);
+      return {
+        changed: true,
+        previousProvider: null,
+        nextProvider: providerName,
+        infoMessages: [],
+      };
+    }),
     registerCliProviderInfrastructure: vi.fn(
       (mgr: ProviderManager, oauth: unknown) => {
         callLog.entries.push('registerCliProviderInfrastructure');

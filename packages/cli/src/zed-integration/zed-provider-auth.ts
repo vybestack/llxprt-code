@@ -15,13 +15,11 @@ import os from 'os';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
-import {
   clearActiveModelParam,
   getActiveModelParams,
   setActiveModelParam,
   switchActiveProvider,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 interface DebugLoggerLike {

@@ -37,11 +37,11 @@ vi.mock('./config/cliArgParser.js', () => ({
 }));
 
 vi.mock(
-  '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js',
+  '@vybestack/llxprt-code-providers/runtime.js',
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js')
+        typeof import('@vybestack/llxprt-code-providers/runtime.js')
       >();
     return {
       ...actual,

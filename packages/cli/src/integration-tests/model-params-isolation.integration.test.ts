@@ -27,7 +27,7 @@ import {
   buildRuntimeProfileSnapshot,
   applyProfileSnapshot,
   setActiveModel,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,

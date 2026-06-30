@@ -9,7 +9,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { clearCommand } from './clearCommand';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';
 // Mock the telemetry service
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
@@ -23,9 +23,15 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({
+vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
+  ephemeralSettingHelp: {},
+  parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
+    success: true,
+    value: rawValue,
+  })),
+  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
   getCliRuntimeServices: vi.fn(),
 }));
 
