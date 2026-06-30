@@ -23,9 +23,11 @@ npx @vybestack/llxprt-code
 
 LLxprt Code works with multiple AI providers. Pick the option that works for you:
 
-### Option A: Free Tier (No Credit Card Required)
+### Option A: Free & Low-Cost Tiers
 
-**Gemini (Google)** — Free tier with generous limits:
+> **Note:** Free OAuth tiers from Gemini and Qwen have changed over time (Google moved free consumer Gemini-CLI access toward [Antigravity](https://antigravity.google) in mid-2026, and Qwen's free OAuth tier availability has varied). If a free login no longer authorizes, use an API key instead. See [authentication](./cli/authentication.md) for current details.
+
+**Gemini (Google)** — Google account (OAuth) or API key:
 
 ```
 llxprt
@@ -34,13 +36,13 @@ llxprt
 /model gemini-2.5-flash
 ```
 
-**Qwen (Alibaba)** — Free tier for coding tasks:
+**Qwen (Alibaba)** — for coding tasks:
 
 ```
 llxprt
 /auth qwen enable
 /provider qwen
-/model qwen-3-coder
+/model qwen3-coder-plus
 ```
 
 ### Option B: Use Your Existing Subscription (OAuth)
@@ -53,7 +55,7 @@ If you already pay for Claude, OpenAI, or Qwen, use your subscription directly �
 llxprt
 /auth anthropic enable
 /provider anthropic
-/model claude-opus-4-6
+/model claude-opus-4-8
 ```
 
 **OpenAI ChatGPT Plus/Pro:**
@@ -62,7 +64,7 @@ llxprt
 llxprt
 /auth codex enable
 /provider codex
-/model gpt-5.3-codex
+/model gpt-5.5
 ```
 
 **Qwen:**
@@ -71,7 +73,7 @@ llxprt
 llxprt
 /auth qwen enable
 /provider qwen
-/model qwen-3-coder
+/model qwen3-coder-plus
 ```
 
 Each `/auth <provider> enable` command enables lazy OAuth — a browser opens automatically when you make your first request to that provider. Use `/auth <provider> login` to open the browser immediately.
@@ -87,7 +89,7 @@ llxprt
 /key save anthropic sk-ant-***your-key***
 /provider anthropic
 /key load anthropic
-/model claude-opus-4-6
+/model claude-opus-4-8
 ```
 
 **OpenAI:**
@@ -97,7 +99,7 @@ llxprt
 /key save openai sk-***your-key***
 /provider openai
 /key load openai
-/model gpt-5.2
+/model gpt-5.5
 ```
 
 **Open-weight models** — providers like Synthetic, Z.ai, Chutes, Kimi.com, and Deepseek.ai give you access to models like DeepSeek, Kimi, Minimax, GLM, and Qwen:
@@ -119,7 +121,7 @@ llxprt
 /key save zai zai-***your-key***
 /provider zai
 /key load zai
-/model hf:zai-org/GLM-4.7
+/model glm-5
 ```
 
 After saving a key once, you only need `/key load <name>` in future sessions.
@@ -212,7 +214,7 @@ Or set it as your default:
 1. **Be specific** — "Add error handling to the login function in src/auth.js" works better than "improve my code"
 2. **Provide context** — Mention relevant files, error messages, or constraints
 3. **Iterate** — Follow up with clarifications or ask for alternatives
-4. **Use the right model** — Larger models (claude-opus-4-6, gpt-5.3-codex) for complex tasks, faster models (gemini-flash, claude-haiku-4-5) for quick questions
+4. **Use the right model** — Larger models (claude-opus-4-8, gpt-5.5) for complex tasks, faster models (gemini-2.5-flash, claude-haiku-4-5) for quick questions
 5. **Think bigger for bigger projects** — This guide gets you started with quick tasks, but for larger projects you should have distinct requirements, planning, and execution phases. Check out the [Beyond Vibe Coding](https://www.youtube.com/@AndrewOliver/podcasts) YouTube series for how to approach real-world autonomous development workflows
 
 ## Security Tip: Sandboxing

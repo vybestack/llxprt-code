@@ -140,11 +140,11 @@ Use a load balancer profile for resilient automated tasks that need high availab
 ```bash
 # First, create individual model profiles
 /provider anthropic
-/model claude-sonnet-4-5
+/model claude-sonnet-4-6
 /profile save model claude-primary
 
 /provider openai
-/model gpt-5.1
+/model gpt-5.5
 /profile save model openai-backup
 
 # Create a failover load balancer
@@ -168,7 +168,7 @@ Combine OAuth buckets with subagents for high-throughput scenarios:
 
 # Create profile with all buckets
 /provider anthropic
-/model claude-sonnet-4-5
+/model claude-sonnet-4-6
 /profile save model claude-team team1@company.com team2@company.com team3@company.com
 
 # Create subagent with bucket failover
@@ -188,7 +188,7 @@ Use a less expensive model for routine tasks and reserve premium models for comp
 /profile save model gemini-fast
 
 /provider anthropic
-/model claude-opus-4-5
+/model claude-opus-4-8
 /profile save model claude-premium
 
 # Cheap subagent for routine tasks
@@ -213,7 +213,7 @@ This workflow uses multiple subagents with different profiles to create a tiered
 /profile save model fast-gemini
 
 /provider anthropic
-/model claude-sonnet-4-5
+/model claude-sonnet-4-6
 /profile save model claude-review
 
 # Step 2: Create specialized subagents
@@ -237,13 +237,13 @@ This approach uses the cheaper Gemini model for quick checks and Claude for nuan
 This workflow demonstrates handoff between subagents for research and implementation tasks:
 
 ```bash
-# Step 1: Create profiles (Gemini free tier for research, Claude for implementation)
+# Step 1: Create profiles (Gemini for research, Claude for implementation)
 /provider gemini
 /model gemini-2.5-flash
 /profile save model gemini-research
 
 /provider anthropic
-/model claude-sonnet-4-5
+/model claude-sonnet-4-6
 /profile save model claude-impl
 
 # Step 2: Create specialized subagents
@@ -260,7 +260,7 @@ This workflow demonstrates handoff between subagents for research and implementa
 2. Use `doc-analyst` to process specific documentation
 3. Feed research findings to `implementer` for actual code changes
 
-This leverages Gemini's free tier for high-volume research while using Claude's stronger reasoning for implementation.
+This leverages Gemini's large context and low cost for high-volume research while using Claude's stronger reasoning for implementation.
 
 ### Automated CI/CD Analysis Pipeline
 
@@ -301,7 +301,7 @@ When you update a profile, all subagents using that profile automatically inheri
 ```bash
 # Initial setup
 /provider anthropic
-/model claude-sonnet-4-5
+/model claude-sonnet-4-6
 /profile save model team-claude
 
 /subagent save reviewer team-claude manual "Review code."
@@ -310,10 +310,10 @@ When you update a profile, all subagents using that profile automatically inheri
 
 # Later: upgrade all subagents to a new model
 /provider anthropic
-/model claude-opus-4-5
+/model claude-opus-4-8
 /profile save model team-claude   # Overwrites existing profile
 
-# All three subagents now use claude-opus-4-5
+# All three subagents now use claude-opus-4-8
 ```
 
 This pattern is especially useful for:
@@ -335,7 +335,7 @@ Configure tool restrictions in your settings before saving a profile:
 ```bash
 # Create a read-only profile
 /provider anthropic
-/model claude-sonnet-4-5-20250929
+/model claude-sonnet-4-6
 # Configure coreTools in settings to restrict to read-only tools
 /profile save model read-only-claude
 

@@ -4,14 +4,14 @@ Ready-to-use configuration recipes for common LLxprt Code setups. Each recipe in
 
 ## Available Recipes
 
-### [Free Tier Setup](./free-tier-setup.md)
+### [Free / Low-Cost Tier Setup](./free-tier-setup.md)
 
-Get started with LLxprt Code without spending a dime using Gemini and Qwen OAuth.
+Get started with LLxprt Code at low cost using Gemini and Qwen (OAuth or API key).
 
-- Gemini OAuth setup (completely free)
-- Qwen OAuth setup (completely free)
+- Gemini setup (OAuth or API key)
+- Qwen setup (OAuth or API key)
 - Complete profile JSON examples
-- When to use which free provider
+- Note on changing free-tier availability (see the recipe)
 
 ### [Claude Pro Workflow](./claude-pro-workflow.md)
 

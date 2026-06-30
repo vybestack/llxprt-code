@@ -32,7 +32,7 @@ The most common profile type. Configures a single provider and model.
 | `version`           | number | yes      | Always `1`. Reserved for future format changes.                                                                                               |
 | `type`              | string | no       | `"standard"` or omitted. Omitting defaults to standard.                                                                                       |
 | `provider`          | string | yes      | Provider name — must match a registered provider or alias (e.g., `"kimi"`, `"chutes-ai"`, `"xAI"`, `"codex"`). This is what `/provider` sets. |
-| `model`             | string | yes      | Model identifier (e.g., `"kimi-for-coding"`, `"zai-org/GLM-5-TEE"`, `"grok-3"`, `"gpt-5.3-codex"`). This is what `/model` sets.               |
+| `model`             | string | yes      | Model identifier (e.g., `"kimi-for-coding"`, `"zai-org/GLM-5-TEE"`, `"grok-4"`, `"gpt-5.3-codex"`). This is what `/model` sets.               |
 | `modelParams`       | object | yes      | Parameters passed directly to the provider API. Usually `{}`. This is what `/set modelparam` populates.                                       |
 | `ephemeralSettings` | object | yes      | Session settings. This is what `/set` populates. See [Ephemeral Settings Reference](./ephemerals.md) for every key.                           |
 | `auth`              | object | no       | OAuth bucket configuration. See [Auth Configuration](#auth-configuration) below.                                                              |
@@ -45,7 +45,7 @@ These are set by the `/provider` and `/model` commands. The provider name must m
 ```json
 {
   "provider": "xAI",
-  "model": "grok-3"
+  "model": "grok-4"
 }
 ```
 

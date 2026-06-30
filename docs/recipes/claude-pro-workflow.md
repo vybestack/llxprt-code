@@ -13,10 +13,12 @@ This recipe guides you through setting up LLxprt Code with Claude Pro or Claude 
 
 | Feature        | Claude Pro/Max                       |
 | -------------- | ------------------------------------ |
-| Context Limit  | 200,000 tokens                       |
+| Context Limit  | 200,000 tokens (OAuth/subscription)  |
 | Authentication | OAuth (subscription-based)           |
 | Thinking Mode  | Available with budget_tokens control |
 | Best For       | Complex reasoning, code analysis     |
+
+> Larger context windows (up to 1M) are available on Anthropic's API for eligible plans/credits; the 200,000 figure reflects the practical subscription/OAuth default used here.
 
 ## Basic Claude OAuth Setup
 
@@ -29,7 +31,7 @@ This recipe guides you through setting up LLxprt Code with Claude Pro or Claude 
 ### Step 2: Set Your Model
 
 ```bash
-/model claude-sonnet-4-5-20250929
+/model claude-sonnet-4-6
 ```
 
 ### Step 3: Configure Context and Tokens
@@ -125,13 +127,13 @@ For production workflows, create profiles for each tier and combine them in a lo
 ```bash
 # Create primary profile with thinking
 /provider anthropic
-/model claude-sonnet-4-5-20250929
+/model claude-opus-4-8
 /set reasoning.enabled true
 /set reasoning.budget_tokens 8192
 /profile save model claude-primary
 
 # Create fallback profile (faster, cheaper)
-/model claude-haiku-4-5-20251001
+/model claude-haiku-4-5
 /set reasoning.enabled false
 /profile save model claude-fallback
 
@@ -197,7 +199,7 @@ llxprt --profile-load claude-thinking
 ### One-off with Inline Profile
 
 ```bash
-llxprt --profile '{"provider":"anthropic","model":"claude-sonnet-4-5-20250929","modelParams":{"thinking":{"type":"enabled","budget_tokens":8192}}}' -p "Analyze this code for security issues"
+llxprt --profile '{"provider":"anthropic","model":"claude-sonnet-4-6","modelParams":{"thinking":{"type":"enabled","budget_tokens":8192}}}' -p "Analyze this code for security issues"
 ```
 
 ## Troubleshooting
@@ -232,7 +234,7 @@ Ensure you're using a compatible model:
 /model
 
 # Switch to thinking-compatible model
-/model claude-sonnet-4-5-20250929
+/model claude-sonnet-4-6
 ```
 
 ### Context Limit Exceeded

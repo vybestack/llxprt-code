@@ -10,7 +10,7 @@ LLxprt Code needs credentials to talk to AI providers. How you authenticate depe
 | Provider gives you an API key                   | Keyring | `/key save <name> <key>`  |
 | CI / automation (no human to enter codes)       | Keyfile | `--keyfile /path/to/key`  |
 
-Some providers offer OAuth with free tiers (Gemini Code Assist, Qwen) or subscription pricing (Anthropic, OpenAI via Codex). Others only offer API keys. Both OAuth tokens and API keys are stored the same way — in your OS keyring.
+Four providers support OAuth: quota-based logins (Gemini Code Assist, Qwen) and subscription-based logins (Anthropic/Claude Pro, OpenAI via Codex/ChatGPT Plus/Pro). Others only offer API keys. Both OAuth tokens and API keys are stored the same way — in your OS keyring.
 
 ## OAuth
 
@@ -23,7 +23,9 @@ Four providers support OAuth login: **Gemini**, **Anthropic**, **Codex** (OpenAI
 /auth qwen enable
 ```
 
-Gemini uses the Gemini Code Assist login (free tier). Qwen's OAuth is also free. Anthropic and Codex use your existing subscription (Claude Pro, ChatGPT Plus/Pro, etc.) — you get subscription pricing rather than per-token API rates.
+Gemini uses the Gemini Code Assist login. Anthropic and Codex use your existing subscription (Claude Pro, ChatGPT Plus/Pro, etc.) — you get subscription pricing rather than per-token API rates.
+
+> **Note on Gemini/Qwen access (mid-2026):** Google moved free consumer "Login with Google" access for the standalone Gemini CLI toward [Antigravity](https://antigravity.google); `/auth gemini` continues to work for paid Gemini API keys and Gemini Code Assist Standard/Enterprise. Qwen OAuth tier availability has varied over time. If an OAuth login no longer grants access, fall back to an API key via `/key save` or `/keyfile`.
 
 Authentication happens lazily — the browser opens when you make your first request, not when you run the command. Once authenticated, tokens are stored in your OS keyring and refresh automatically.
 
@@ -140,8 +142,10 @@ When multiple auth methods are configured, LLxprt Code uses this priority (highe
 1. CLI flags (`--key`, `--keyfile`, `--key-name`)
 2. Profile settings (from `/profile save`)
 3. Keyring keys (from `/key save`)
-4. OAuth tokens (from `/auth enable`)
-5. Environment variables
+4. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
+5. OAuth tokens (from `/auth enable`)
+
+If you have an API key or env var set and OAuth enabled, the key wins. Remove the key (or unset the env var) to fall back to OAuth.
 
 ## Checking Auth Status
 

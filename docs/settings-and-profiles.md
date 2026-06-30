@@ -8,7 +8,7 @@ Profiles capture your full setup — provider, model, parameters, and ephemeral 
 
 ```
 /provider openai
-/model hf:moonshotai/Kimi-K2-Thinking
+/model hf:moonshotai/Kimi-K2.7-Code
 /baseurl https://api.synthetic.new/openai/v1
 /set reasoning.enabled true
 /profile save kimi-k2
@@ -48,7 +48,7 @@ Command-line flags always win over profile values. This is useful for one-off ov
 llxprt --profile-load kimi-k2 --key-name synthetic-alt
 
 # Load profile but override the model
-llxprt --profile-load kimi-k2 --model gpt-4.1
+llxprt --profile-load kimi-k2 --model gpt-5.5
 ```
 
 ## Ephemeral Settings
@@ -107,7 +107,7 @@ Model settings have one compatibility exception: the legacy `model` setting is a
 ```json
 {
   "model": {
-    "name": "gpt-4.1",
+    "name": "gpt-5.5",
     "compressionThreshold": 0.7
   }
 }
@@ -141,7 +141,7 @@ Merged runtime settings keep `model` as the active model string for existing cal
 
 ### Reasoning Settings
 
-These control extended thinking / chain-of-thought for models that support it (Kimi K2-Thinking, Claude with thinking, o3, etc.).
+These control extended thinking / chain-of-thought for models that support it (Kimi K2.7 Code, Claude with thinking, GPT-5.x reasoning effort, etc.).
 
 | Setting                       | Description                                                   | Default          |
 | ----------------------------- | ------------------------------------------------------------- | ---------------- |
@@ -170,7 +170,7 @@ These settings control how much information flows between you, the model, and th
 | `max-prompt-tokens`     | Hard ceiling on any single prompt sent to the API                    | `200000`      |
 | `compression-threshold` | Fraction of context-limit that triggers compression (0.0–1.0)        | model default |
 
-**How they interact:** The model's context window has a fixed size (e.g., 128K for Claude Sonnet, 256K for Kimi K2). `context-limit` caps how much of that window you actually use — set it lower than the model's max if you want to leave headroom. When the conversation history exceeds `compression-threshold × context-limit`, LLxprt compresses older turns to free space. `max-prompt-tokens` is a safety net that prevents any single API call from exceeding a hard limit.
+**How they interact:** The model's context window has a fixed size (e.g., 200K for Claude Opus, 256K for Kimi K2). `context-limit` caps how much of that window you actually use — set it lower than the model's max if you want to leave headroom. Note that the available window can differ by auth variant (API key vs OAuth/subscription). When the conversation history exceeds `compression-threshold × context-limit`, LLxprt compresses older turns to free space. `max-prompt-tokens` is a safety net that prevents any single API call from exceeding a hard limit.
 
 `maxOutputTokens` (set via `/set modelparam maxOutputTokens` or `max_tokens` depending on provider) controls how many tokens the model can generate in a single response. This interacts with context-limit because every token the model generates gets added to the history for the next turn. A model that generates very long responses fills up the context faster, triggering more frequent compressions.
 
@@ -185,7 +185,7 @@ These prevent a single tool call from flooding the context. This matters more th
 | `tool-output-item-size-limit` | Max bytes per file/item         | `524288` (512KB) |
 | `tool-output-truncate-mode`   | `warn`, `truncate`, or `sample` | `warn`           |
 
-**How they interact:** Every tool result goes into the conversation history. If `tool-output-max-tokens` is 50K and the model makes 3 tool calls in a row, that's potentially 150K tokens of tool output added to context — which on a 128K model means immediate compression (and loss of earlier context). Lowering these limits forces the model to be more surgical with its queries, which often produces better results anyway.
+**How they interact:** Every tool result goes into the conversation history. If `tool-output-max-tokens` is 50K and the model makes 3 tool calls in a row, that's potentially 150K tokens of tool output added to context — which on a 200K model means rapid compression (and loss of earlier context). Lowering these limits forces the model to be more surgical with its queries, which often produces better results anyway.
 
 `tool-output-truncate-mode` controls what happens when a tool exceeds its limits. `warn` drops the output entirely and tells the model the results were too large — the model gets nothing back, just a message suggesting it narrow its query. `truncate` cuts the output to fit and silently includes what fits. `sample` picks evenly-spaced lines from the output to give a representative cross-section. `warn` is the default because it forces the model to be more surgical, which usually produces better results than shoveling truncated output into context.
 
@@ -264,7 +264,7 @@ llxprt --profile-load kimi-k2 --set streaming=disabled
 
 Some provider aliases ship with tuned defaults for their models — you get reasonable settings just by using `/provider <name>` without configuring anything. These are a good starting point; you can override any of them with `/set`.
 
-**Anthropic** — sets `maxOutputTokens` to 40K globally. For Claude models specifically, enables reasoning with adaptive thinking (lets the model decide how much to think). For Claude Opus 4.6, sets `reasoning.effort` to `high`.
+**Anthropic** — sets `maxOutputTokens` to 40K globally and `context-limit` to 200K. For Claude models specifically, enables reasoning with adaptive thinking (lets the model decide how much to think). For Claude Opus models, sets `reasoning.effort` to `high`.
 
 **Codex** — sets `context-limit` to 262K, enables 24-hour prompt caching, sets `reasoning.effort` to `medium`, and enables reasoning summaries. Tuned for long coding sessions with OpenAI's Codex models.
 

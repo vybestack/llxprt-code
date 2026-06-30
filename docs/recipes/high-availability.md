@@ -11,12 +11,14 @@ This recipe guides you through setting up LLxprt Code with multiple providers fo
 
 ## Provider Overview
 
-| Provider | Context Limit | Cost Tier | Best For                    |
-| -------- | ------------- | --------- | --------------------------- |
-| Claude   | 200,000       | Premium   | Complex reasoning, analysis |
-| Codex    | 200,000       | Premium   | General tasks, fast         |
-| Gemini   | 1,048,576     | Free/Paid | Large context, free tier    |
-| Kimi     | 262,144       | Paid      | Deep reasoning, tool use    |
+| Provider | Context Limit       | Cost Tier | Best For                    |
+| -------- | ------------------- | --------- | --------------------------- |
+| Claude   | 200,000             | Premium   | Complex reasoning, analysis |
+| Codex    | 262,144             | Premium   | General tasks, fast         |
+| Gemini   | 1,048,576 (API key) | Free/Paid | Large context               |
+| Kimi     | 262,144             | Paid      | Deep reasoning, tool use    |
+
+> Context windows can differ by auth variant (API key vs OAuth/subscription); the figures above use the practical API-key defaults.
 
 ## Setting Up Multi-Provider Failover
 
@@ -27,22 +29,22 @@ First, set up and save profiles for each provider you want in your failover chai
 ```bash
 # Claude profile
 /provider anthropic
-/model claude-sonnet-4-5-20250929
+/model claude-opus-4-8
 /set context-limit 200000
 /keyfile ~/.anthropic_key
 /profile save model claude-primary
 
 # OpenAI profile (via Codex OAuth or API key)
 /provider openai
-/model gpt-5.2
+/model gpt-5.5
 /set context-limit 200000
 /keyfile ~/.openai_key
 /profile save model openai-backup
 
-# Gemini profile (free tier)
+# Gemini profile
 /auth gemini enable
 /provider gemini
-/model gemini-3-flash-preview
+/model gemini-2.5-flash
 /set context-limit 200000
 /profile save model gemini-fallback
 ```
@@ -94,26 +96,26 @@ Distributes requests evenly across providers:
 Prioritize free/cheap providers, falling back to premium only when needed:
 
 ```bash
-# Free tier first
+# Low-cost tier first
 /auth gemini enable
 /provider gemini
-/model gemini-3-flash-preview
+/model gemini-2.5-flash
 /profile save model free-gemini
 
-# Free Qwen backup
+# Qwen backup
 /auth qwen enable
 /provider qwen
-/model qwen3-coder-pro
+/model qwen3-coder-plus
 /profile save model free-qwen
 
 # Cheap paid fallback
 /provider anthropic
-/model claude-haiku-4-5-20251001
+/model claude-haiku-4-5
 /keyfile ~/.anthropic_key
 /profile save model cheap-claude
 
 # Premium last resort
-/model claude-sonnet-4-5-20250929
+/model claude-opus-4-8
 /profile save model premium-claude
 
 # Combine with failover
@@ -127,7 +129,7 @@ Use the best model for complex tasks:
 ```bash
 # Best reasoning with thinking
 /provider anthropic
-/model claude-sonnet-4-5-20250929
+/model claude-opus-4-8
 /set reasoning.enabled true
 /set reasoning.budget_tokens 8192
 /keyfile ~/.anthropic_key
@@ -135,13 +137,13 @@ Use the best model for complex tasks:
 
 # Strong Kimi K2 alternative
 /provider kimi
-/model kimi-k2-thinking
+/model kimi-for-coding
 /keyfile ~/.kimi_key
 /profile save model kimi-thinking
 
 # Fast capable backup
 /provider openai
-/model gpt-5.2
+/model gpt-5.5
 /keyfile ~/.openai_key
 /profile save model openai-fast
 
@@ -173,9 +175,15 @@ Use your existing subscriptions:
 ```bash
 /auth anthropic enable   # Claude Pro/Max
 /auth codex enable       # ChatGPT Plus/Pro
-/auth gemini enable      # Gemini (free)
-/auth qwen enable        # Qwen (free)
-/auth kimi enable        # Kimi subscription
+/auth gemini enable      # Gemini (Google account or API key)
+/auth qwen enable        # Qwen (tier availability varies — see authentication docs)
+```
+
+Kimi uses an API key (not OAuth) — set it with `/key` or `/keyfile`:
+
+```bash
+/provider kimi
+/keyfile ~/.kimi_key     # Kimi API key
 ```
 
 ### Option 3: Multi-Bucket OAuth Failover

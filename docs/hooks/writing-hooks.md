@@ -509,7 +509,7 @@ async function main() {
   const genai = new GoogleGenerativeAI(
     process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
   );
-  const model = genai.getGenerativeModel({ model: 'text-embedding-004' });
+  const model = genai.getGenerativeModel({ model: 'gemini-embedding-001' });
   const result = await model.embedContent(prompt);
 
   // Search memories
@@ -592,7 +592,7 @@ async function main() {
   const genai = new GoogleGenerativeAI(
     process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
   );
-  const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genai.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const result = await model.generateContent(
     `Extract 3-5 keywords describing needed tool capabilities from this request:\n\n${recentMessages}\n\nKeywords (comma-separated):`,
@@ -862,7 +862,7 @@ async function main() {
   const genai = new GoogleGenerativeAI(
     process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
   );
-  const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genai.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const prompt = `Extract important project learnings from this session.
 Focus on: decisions, conventions, gotchas, patterns.
@@ -884,7 +884,7 @@ JSON:`;
     });
     const collection = await client.getCollection({ name: 'project_memories' });
     const embedModel = genai.getGenerativeModel({
-      model: 'text-embedding-004',
+      model: 'gemini-embedding-001',
     });
 
     for (const memory of memories) {
@@ -989,8 +989,8 @@ Demonstrates every hook event with practical use cases in a cohesive workflow.
 
 ### Cost efficiency
 
-- Uses `gemini-2.0-flash` for intent extraction (fast, cheap)
-- Uses `text-embedding-004` for RAG (inexpensive)
+- Uses `gemini-2.5-flash` for intent extraction (fast, cheap)
+- Uses `gemini-embedding-001` for RAG (inexpensive)
 - Caches tool descriptions (one-time cost)
 - Minimal overhead per request (<500ms typically)
 
