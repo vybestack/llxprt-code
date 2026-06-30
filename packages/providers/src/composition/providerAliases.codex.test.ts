@@ -68,16 +68,28 @@ describe('Codex provider alias', () => {
     expect(codexAlias?.config.description?.toLowerCase()).toContain('codex');
   });
 
-  it('should include staticModels with gpt-5.5 first', () => {
+  it('should expose exactly the current Codex model set', () => {
     const aliases = loadProviderAliasEntries();
     const codexAlias = aliases.find((a) => a.alias === 'codex');
+    const modelIds = (codexAlias?.config.staticModels ?? []).map((m) => m.id);
 
-    expect(codexAlias?.config.staticModels).toBeDefined();
-    expect(Array.isArray(codexAlias?.config.staticModels)).toBe(true);
-    expect(codexAlias?.config.staticModels?.[0]?.id).toBe('gpt-5.5');
-    expect(
-      codexAlias?.config.staticModels?.some((m) => m.id === 'gpt-5.2-codex'),
-    ).toBe(true);
+    expect(modelIds).toStrictEqual([
+      'gpt-5.5',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+      'gpt-5.3-codex-spark',
+    ]);
+  });
+
+  it('should preserve the gpt-5.3-codex-spark 131072 context window', () => {
+    const aliases = loadProviderAliasEntries();
+    const codexAlias = aliases.find((a) => a.alias === 'codex');
+    const spark = codexAlias?.config.staticModels?.find(
+      (m) => m.id === 'gpt-5.3-codex-spark',
+    );
+
+    expect(spark).toBeDefined();
+    expect(spark?.contextWindow).toBe(131072);
   });
 
   it('should be marked as builtin source', () => {
