@@ -43,6 +43,7 @@ export { fromConfig } from './fromConfig.js';
 export { listProviders, listTools } from './discovery.js';
 export { mapLoopStream, mapStreamEvent } from './eventAdapter.js';
 export { toConfigParameters, AdapterError } from './agentConfig.adapter.js';
+export { getTokenLimitForConfiguredContext } from '../core/contextLimitResolver.js';
 export type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 /**

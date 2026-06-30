@@ -349,6 +349,7 @@ const PUBLIC_AGENT_SYMBOLS = new Set([
   'classifyCompletedTools',
   'splitPartsByRole',
   'buildToolResponses',
+  'getTokenLimitForConfiguredContext',
 ]);
 
 /**
