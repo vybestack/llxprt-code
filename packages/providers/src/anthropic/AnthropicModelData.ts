@@ -280,11 +280,7 @@ export function isOpus46Plus(modelId: string): boolean {
  * snapshot variants (e.g. claude-sonnet-5-YYYYMMDD).
  */
 export function isSonnet5(modelId: string): boolean {
-  const normalized = modelId.toLowerCase();
-  return (
-    normalized === 'claude-sonnet-5-latest' ||
-    normalized.includes('claude-sonnet-5')
-  );
+  return modelId.toLowerCase().includes('claude-sonnet-5');
 }
 
 /**
