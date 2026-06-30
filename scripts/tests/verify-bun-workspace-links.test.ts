@@ -16,6 +16,14 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { verifyBunWorkspaceLinks } from '../verify-bun-workspace-links.mjs';
 
+// The fixtures build real `node_modules/<name>` symlinks via symlinkSync. On
+// Windows, creating a directory symlink throws EPERM unless the process is
+// elevated or Developer Mode is on, so this suite is skipped there (matching
+// the sibling preinstall/postinstall harness suites). CI does not run
+// `test:scripts` on a Windows runner today, but this keeps local Windows dev
+// green regardless of privilege level.
+const isWindows = process.platform === 'win32';
+
 /**
  * How node_modules/<name> should be populated for a declared workspace:
  *  - 'link'    → a symlink back to the in-repo workspace directory (the only
@@ -123,7 +131,7 @@ afterEach(() => {
   }
 });
 
-describe('verifyBunWorkspaceLinks', () => {
+describe.skipIf(isWindows)('verifyBunWorkspaceLinks', () => {
   it('returns no failures when every declared workspace is locally linked', () => {
     const dir = buildFixture({
       specs: [

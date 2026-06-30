@@ -314,10 +314,12 @@ A dedicated CI job, `bun_install_smoke` in
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), guards the core S1
 acceptance criterion: that a clean checkout installs and links every workspace
 under Bun. It pins the toolchain via `.bun-version` (`bun-version-file`), runs
-`bun install`, then verifies with a small Node script that every declared
-workspace package resolves to its **in-repo** directory (using `realpathSync` to
-prove the `node_modules/<name>` entry is a link to the local workspace, not some
-other resolution).
+`bun install`, then verifies with a Node-compatible JavaScript verifier
+(`scripts/verify-bun-workspace-links.mjs` — the workflow invokes it with `bun`
+to avoid relying on a runner-provided Node) that every declared workspace
+package resolves to its **in-repo** directory (using `realpathSync` to prove the
+`node_modules/<name>` entry is a link to the local workspace, not some other
+resolution).
 
 > **Why the check uses `realpathSync`, not bare existence.** The root package
 > and `packages/cli` are **both** named `@vybestack/llxprt-code`. A bare

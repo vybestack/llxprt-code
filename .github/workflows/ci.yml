@@ -412,6 +412,12 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          # This job runs `bun install`, which executes the lifecycle scripts of
+          # trusted native dependencies. It performs no authenticated git
+          # operation after checkout, so the default credential persistence only
+          # widens the token's exposure to those install-time scripts. Drop it.
+          persist-credentials: false
 
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2

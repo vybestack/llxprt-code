@@ -128,6 +128,11 @@ function findRelativeDependencySpecifiers(source: string): string[] {
   const patterns = [
     /\brequire\(\s*['"](\.[^'"]+)['"]\s*\)/g, // require('./x')
     /\brequire\.resolve\(\s*['"](\.[^'"]+)['"]\s*\)/g, // require.resolve('./x')
+    // Side-effect-only static import: `import './x'` (no binding, no `from`).
+    // Without this, a lifecycle helper that pulls in a relative module purely
+    // for its side effects would escape the walker and the tarball check could
+    // false-pass on a missing entry.
+    /\bimport\s+['"](\.[^'"]+)['"]/g,
     // import ... from './x' — anchored to a leading `import` keyword so a bare
     // "from './x'" in prose/comments cannot produce a false specifier. The
     // `[^'";]*?` only spans the import clause, never crossing a quote or `;`.
@@ -246,5 +251,42 @@ describe('published package integrity (S1)', () => {
         'postinstall.cjs but is missing from the published tarball; it must be ' +
         'listed in package.json "files".',
     ).toBe(true);
+  });
+});
+
+describe('findRelativeDependencySpecifiers (tarball-walker regex coverage)', () => {
+  it('captures every supported static relative-reference form', () => {
+    // Each line below is a distinct syntactic form the published lifecycle
+    // helpers may legitimately use to pull in a sibling module. The walker must
+    // see all of them, otherwise a referenced-but-unpacked helper could slip
+    // past the tarball integrity check. The bare `import './side-effect.js'`
+    // case is the one this guard was extended to cover.
+    const source = [
+      `require('./a.cjs');`,
+      `require.resolve('./b.js');`,
+      `import './side-effect.js';`,
+      `import helper from './c.js';`,
+      `import { thing } from './d.mjs';`,
+      `await import('./e.js');`,
+    ].join('\n');
+
+    expect(findRelativeDependencySpecifiers(source).sort()).toStrictEqual(
+      [
+        './a.cjs',
+        './b.js',
+        './c.js',
+        './d.mjs',
+        './e.js',
+        './side-effect.js',
+      ].sort(),
+    );
+  });
+
+  it('ignores a bare "from" specifier that is not a real import statement', () => {
+    // Defensive: prose or a comment containing `from './x'` without a leading
+    // `import` keyword must NOT be mistaken for a dependency, so the walker
+    // cannot be tricked into chasing a non-existent specifier.
+    const source = `// copied from './not-a-real-import.js' for reference\n`;
+    expect(findRelativeDependencySpecifiers(source)).toStrictEqual([]);
   });
 });
