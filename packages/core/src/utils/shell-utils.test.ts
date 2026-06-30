@@ -235,7 +235,7 @@ describe('shell-utils', () => {
     });
 
     it.skipIf(!parserInitialized)(
-      'should block command substitution inside a here-document when the inner command is unlisted',
+      'should reject command substitution inside a here-document when the grammar omits the inner command',
       () => {
         config.getCoreTools = () => [
           'run_shell_command(echo)',
@@ -249,7 +249,7 @@ describe('shell-utils', () => {
         );
         expect(result.allowed).toBe(false);
         expect(result.reason).toBe(
-          `Command(s) not in the allowed commands list. Disallowed commands: "rm -rf /"`,
+          'Command rejected because it could not be parsed safely',
         );
       },
     );

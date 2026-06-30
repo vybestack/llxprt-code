@@ -156,8 +156,18 @@ export function registerPtyDataHandler(
 
   state.activePtyEntry.onDataDisposable = state.ptyProcess.onData(
     (data: string) => {
+      cancelWatchdog(state);
       const bufferData = Buffer.from(data, 'utf-8');
       handleOutput(bufferData);
     },
   );
+}
+
+/** Cancel the silent-hang watchdog on first PTY data/exit event. */
+export function cancelWatchdog(state: PtyExecState): void {
+  state.hasReceivedEvent = true;
+  if (state.watchdogTimer) {
+    clearTimeout(state.watchdogTimer);
+    state.watchdogTimer = null;
+  }
 }

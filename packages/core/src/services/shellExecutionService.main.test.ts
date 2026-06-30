@@ -53,6 +53,9 @@ vi.mock('os', () => ({
     },
   },
 }));
+vi.mock('../utils/runtime.js', () => ({
+  isWindows: () => mockPlatform() === 'win32',
+}));
 vi.mock('../utils/getPty.js', () => ({
   getPty: mockGetPty,
 }));

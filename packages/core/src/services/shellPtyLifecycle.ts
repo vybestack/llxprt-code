@@ -12,6 +12,7 @@ import type {
   ShellExecutionConfig,
   ShellExecutionResult,
 } from './shellExecutionTypes.js';
+import { PtySilentHangError } from './shellExecutionTypes.js';
 import { createExitGuard } from './shellExitGuard.js';
 import { makeInactivityTimer } from './shellOutputUtils.js';
 import { SIGKILL_TIMEOUT_MS, taskkillTree } from './shellProcessKill.js';
@@ -23,6 +24,7 @@ import {
 } from './shellPtyHelpers.js';
 import {
   buildPtyResult,
+  cancelWatchdog,
   ptyRenderFn,
   registerPtyDataHandler,
 } from './shellPtyExecution.js';
@@ -97,16 +99,25 @@ export function createPtyResultPromise(
     hasResolved: false,
     abortFinalizeTimeout: null,
     processingChain: Promise.resolve(),
+    watchdogTimer: null,
+    hasReceivedEvent: false,
   };
 
-  return new Promise<ShellExecutionResult>((resolve) => {
-    setupPtyEventHandlers(state, resolve, activePtys, lastActivePtyIdRef);
+  return new Promise<ShellExecutionResult>((resolve, reject) => {
+    setupPtyEventHandlers(
+      state,
+      resolve,
+      reject,
+      activePtys,
+      lastActivePtyIdRef,
+    );
   });
 }
 
 function setupPtyEventHandlers(
   state: PtyExecState,
   resolve: (value: ShellExecutionResult) => void,
+  reject: (reason: unknown) => void,
   activePtys: Map<number, ActivePty>,
   lastActivePtyIdRef: { value: number | null },
 ): void {
@@ -130,17 +141,99 @@ function setupPtyEventHandlers(
   );
 
   setupPtyInactivityHandler(state);
-  const abortHandler = setupPtyAbortHandler(
-    state,
-    resolveResult,
-    activePtys,
-    lastActivePtyIdRef,
-  );
+  const abortHandler = setupPtyAbortHandler(state, resolveResult);
 
   registerPtyDataHandler(state, render);
   registerPtyExitHandler(state, resolveResult, abortHandler);
 
+  setupPtyWatchdog(state, reject, abortHandler, activePtys, lastActivePtyIdRef);
+
   state.abortSignal.addEventListener('abort', abortHandler, { once: true });
+}
+
+/**
+ * Start a watchdog for the bun-pty silent-hang failure mode.
+ *
+ * `@lydell/node-pty` under Bun POSIX spawns successfully (returns a pid) but
+ * never delivers `onData`/`onExit` events. The watchdog arms a timer when the
+ * PTY is created; the first data or exit event cancels it. If it fires, the PTY
+ * is torn down and the result promise rejects with {@link PtySilentHangError}
+ * so the caller can degrade to `child_process`.
+ *
+ * Only active for the `bun-pty` backend; Node timing is unchanged.
+ */
+function setupPtyWatchdog(
+  state: PtyExecState,
+  reject: (reason: unknown) => void,
+  abortHandler: () => void,
+  activePtys: Map<number, ActivePty>,
+  lastActivePtyIdRef: { value: number | null },
+): void {
+  if (state.ptyInfo.name !== 'bun-pty') {
+    return;
+  }
+  const timeoutMs = state.shellExecutionConfig.ptyWatchdogTimeoutMs ?? 3000;
+  if (timeoutMs <= 0) {
+    return;
+  }
+  const timer = setTimeout(() => {
+    if (state.hasReceivedEvent || state.hasResolved) {
+      return;
+    }
+    state.watchdogTimer = null;
+    state.hasResolved = true;
+    state.exitedGuard.markExited();
+    killPtyProcessGroup(state);
+    teardownPtyState(state, activePtys, lastActivePtyIdRef);
+    state.abortSignal.removeEventListener('abort', abortHandler);
+    reject(
+      new PtySilentHangError(
+        `bun-pty spawned pid ${state.ptyProcess.pid} but emitted no data or exit within ${timeoutMs}ms; falling back to child_process`,
+        state.ptyInfo.name,
+      ),
+    );
+  }, timeoutMs);
+  timer.unref();
+  state.watchdogTimer = timer;
+}
+
+function killPtyProcessGroup(state: PtyExecState): void {
+  if (state.ptyProcess.pid === 0 || state.exitedGuard.isExited()) {
+    return;
+  }
+  const pid = state.ptyProcess.pid;
+  if (state.isWindows) {
+    taskkillTree(pid);
+  } else {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // Process group may already be dead; cleanup continues via teardown.
+    }
+  }
+}
+
+function teardownPtyState(
+  state: PtyExecState,
+  activePtys: Map<number, ActivePty>,
+  lastActivePtyIdRef: { value: number | null },
+): void {
+  if (state.abortFinalizeTimeout) {
+    clearTimeout(state.abortFinalizeTimeout);
+    state.abortFinalizeTimeout = null;
+  }
+  if (state.watchdogTimer) {
+    clearTimeout(state.watchdogTimer);
+    state.watchdogTimer = null;
+  }
+  cleanupActivePtyEntry(
+    state,
+    activePtys,
+    () => lastActivePtyIdRef.value,
+    (id) => {
+      lastActivePtyIdRef.value = id;
+    },
+  );
 }
 
 function makePtyResolveResult(
@@ -154,18 +247,7 @@ function makePtyResolveResult(
       return;
     }
     state.hasResolved = true;
-    if (state.abortFinalizeTimeout) {
-      clearTimeout(state.abortFinalizeTimeout);
-      state.abortFinalizeTimeout = null;
-    }
-    cleanupActivePtyEntry(
-      state,
-      activePtys,
-      () => lastActivePtyIdRef.value,
-      (id) => {
-        lastActivePtyIdRef.value = id;
-      },
-    );
+    teardownPtyState(state, activePtys, lastActivePtyIdRef);
     resolve(resultValue);
   };
 }
@@ -236,20 +318,17 @@ async function ptyInactivityAbortAction(state: PtyExecState): Promise<void> {
 function setupPtyAbortHandler(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
-  activePtys: Map<number, ActivePty>,
-  lastActivePtyIdRef: { value: number | null },
 ): () => void {
   return () => {
-    void ptyAbortAction(state, resolveResult, activePtys, lastActivePtyIdRef);
+    void ptyAbortAction(state, resolveResult);
   };
 }
 
 async function ptyAbortAction(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
-  activePtys: Map<number, ActivePty>,
-  lastActivePtyIdRef: { value: number | null },
 ): Promise<void> {
+  cancelWatchdog(state);
   // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
   if (state.ptyProcess.pid === 0 || state.exitedGuard.isExited()) {
     return;
@@ -257,14 +336,6 @@ async function ptyAbortAction(
   const pid = state.ptyProcess.pid;
   if (state.isWindows) {
     taskkillTree(pid);
-    cleanupActivePtyEntry(
-      state,
-      activePtys,
-      () => lastActivePtyIdRef.value,
-      (id) => {
-        lastActivePtyIdRef.value = id;
-      },
-    );
     resolveResult(buildPtyResult(state, 1, null, true));
     return;
   }
@@ -320,6 +391,7 @@ function registerPtyExitHandler(
 
   state.activePtyEntry.onExitDisposable = state.ptyProcess.onExit(
     ({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+      cancelWatchdog(state);
       state.exitedGuard.markExited();
       state.abortSignal.removeEventListener('abort', abortHandler);
 
