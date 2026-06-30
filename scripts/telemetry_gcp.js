@@ -102,11 +102,6 @@ async function main() {
 
   await startCollector(state, otelcolPath);
 
-  state.collectorProcess.on('error', (err) => {
-    console.error(`${state.collectorProcess.spawnargs[0]} process error:`, err);
-    process.exit(1);
-  });
-
   printGcpTelemetryReadyInfo(projectId);
 }
 
@@ -157,6 +152,10 @@ async function startCollector(state, otelcolPath) {
   state.collectorProcess = spawn(otelcolPath, ['--config', OTEL_CONFIG_FILE], {
     stdio: ['ignore', state.collectorLogFd, state.collectorLogFd],
     env: { ...process.env },
+  });
+  state.collectorProcess.on('error', (err) => {
+    console.error(`${state.collectorProcess.spawnargs[0]} process error:`, err);
+    process.exit(1);
   });
 
   console.log(

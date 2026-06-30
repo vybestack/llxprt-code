@@ -80,11 +80,10 @@ const newVersion = readJson(rootPackageJsonPath).version;
 // 4. Update the sandboxImageUri in the root package.json
 const rootPackageJson = readJson(rootPackageJsonPath);
 if (rootPackageJson.config?.sandboxImageUri) {
+  const uri = rootPackageJson.config.sandboxImageUri;
+  const colonIdx = uri.lastIndexOf(':');
   rootPackageJson.config.sandboxImageUri =
-    rootPackageJson.config.sandboxImageUri.replace(
-      /:[\s\S]*/,
-      `:${newVersion}`,
-    );
+    colonIdx >= 0 ? uri.slice(0, colonIdx) + ':' + newVersion : uri;
   console.log(`Updated sandboxImageUri in root to use version ${newVersion}`);
   writeJson(rootPackageJsonPath, rootPackageJson);
 }
@@ -93,8 +92,10 @@ if (rootPackageJson.config?.sandboxImageUri) {
 const cliPackageJsonPath = resolve(process.cwd(), 'packages/cli/package.json');
 const cliPackageJson = readJson(cliPackageJsonPath);
 if (cliPackageJson.config?.sandboxImageUri) {
+  const uri = cliPackageJson.config.sandboxImageUri;
+  const colonIdx = uri.lastIndexOf(':');
   cliPackageJson.config.sandboxImageUri =
-    cliPackageJson.config.sandboxImageUri.replace(/:[\s\S]*/, `:${newVersion}`);
+    colonIdx >= 0 ? uri.slice(0, colonIdx) + ':' + newVersion : uri;
   console.log(
     `Updated sandboxImageUri in cli package to use version ${newVersion}`,
   );

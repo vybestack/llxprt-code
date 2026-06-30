@@ -129,7 +129,6 @@ async function main() {
   await startJaeger(processes, logFds, jaegerPath);
   await startCollector(processes, logFds, otelcolPath);
 
-  registerProcessErrorHandlers(processes);
   printTelemetryReadyInfo();
 }
 
@@ -141,6 +140,7 @@ async function startJaeger(processes, logFds, jaegerPath) {
     ['--set=receivers.otlp.protocols.grpc.endpoint=localhost:14317'],
     { stdio: ['ignore', logFds.jaeger, logFds.jaeger] },
   );
+  attachProcessErrorHandler(processes.jaeger);
   console.log(`Waiting for Jaeger to start (PID: ${processes.jaeger.pid})...`);
 
   try {
@@ -165,6 +165,7 @@ async function startCollector(processes, logFds, otelcolPath) {
   processes.collector = spawn(otelcolPath, ['--config', OTEL_CONFIG_FILE], {
     stdio: ['ignore', logFds.collector, logFds.collector],
   });
+  attachProcessErrorHandler(processes.collector);
   console.log(
     `Waiting for OTEL collector to start (PID: ${processes.collector.pid})...`,
   );
@@ -213,15 +214,13 @@ function cleanupOldProcessesAndLogs() {
   }
 }
 
-function registerProcessErrorHandlers(processes) {
-  [processes.jaeger, processes.collector].forEach((proc) => {
-    if (proc) {
-      proc.on('error', (err) => {
-        console.error(`${proc.spawnargs[0]} process error:`, err);
-        process.exit(1);
-      });
-    }
-  });
+function attachProcessErrorHandler(proc) {
+  if (proc) {
+    proc.on('error', (err) => {
+      console.error(`${proc.spawnargs[0]} process error:`, err);
+      process.exit(1);
+    });
+  }
 }
 
 function printTelemetryReadyInfo() {
