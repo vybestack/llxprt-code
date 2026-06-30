@@ -163,21 +163,26 @@ describe('Issue #2282: scripts strict code-quality coverage', () => {
   );
 
   it(
-    'carves out structural complexity rules for the guard parser',
+    'applies full structural quality rules to the decomposed guard modules',
     () => {
-      const rules = effectiveRulesFor('scripts/check-eslint-guard.js');
-      // Structural/nesting/size rules are carved out for the documented
-      // ~5000-line hand-written state-machine parser.
-      expect(severity(rules['complexity'])).toBe(0);
-      expect(severity(rules['max-lines'])).toBe(0);
-      expect(severity(rules['max-lines-per-function'])).toBe(0);
-      expect(severity(rules['sonarjs/cognitive-complexity'])).toBe(0);
-      expect(severity(rules['sonarjs/nested-control-flow'])).toBe(0);
-      expect(severity(rules['sonarjs/expression-complexity'])).toBe(0);
-      // Non-structural quality rules still apply.
-      expect(severity(rules['sonarjs/no-collapsible-if'])).toBe(2);
-      expect(severity(rules['prefer-const'])).toBe(2);
-      expect(severity(rules['@typescript-eslint/no-unused-vars'])).toBe(2);
+      // check-eslint-guard.js was decomposed from a ~5000-line monolith into
+      // 13 modules under scripts/eslint-guard/. No structural carve-out
+      // remains — every module receives the full quality rule set.
+      const entryRules = effectiveRulesFor('scripts/check-eslint-guard.js');
+      expect(severity(entryRules['complexity'])).toBe(2);
+      expect(severity(entryRules['sonarjs/cognitive-complexity'])).toBe(2);
+      expect(severity(entryRules['sonarjs/nested-control-flow'])).toBe(2);
+
+      const moduleRules = effectiveRulesFor(
+        'scripts/eslint-guard/check-diff.mjs',
+      );
+      expect(severity(moduleRules['complexity'])).toBe(2);
+      expect(severity(moduleRules['sonarjs/nested-control-flow'])).toBe(2);
+      expect(severity(moduleRules['sonarjs/expression-complexity'])).toBe(2);
+      expect(severity(moduleRules['prefer-const'])).toBe(2);
+      expect(severity(moduleRules['@typescript-eslint/no-unused-vars'])).toBe(
+        2,
+      );
     },
     CONFIG_TIMEOUT,
   );

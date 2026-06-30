@@ -610,30 +610,6 @@ export default tseslint.config(
       'max-lines-per-function': 'off', // eslint-policy-allow-off: #2282 test parity
     },
   },
-  // Issue #2282: check-eslint-guard.js is a ~5000-line hand-written
-  // character-level state machine for git-diff / ESLint-config policy
-  // analysis. Its structural complexity is inherent to the parser (shared
-  // mutable position/state tracking across deeply nested character loops)
-  // and is documented throughout the file. Decomposing it into smaller
-  // modules is a separate, dedicated effort (mirroring the #1577/#1581
-  // decompositions) and is out of scope for extending quality coverage.
-  // The non-structural quality rules above still apply; only the structural
-  // nesting/complexity/size rules and the parser's own detection-regex
-  // patterns (which operate on trusted single-line input, not adversarial
-  // data, so ReDoS is not a practical concern) are carved out here.
-  {
-    files: ['scripts/check-eslint-guard.js'],
-    rules: {
-      complexity: 'off', // eslint-policy-allow-off: #2282 state-machine parser
-      'max-lines': 'off', // eslint-policy-allow-off: #2282 state-machine parser
-      'max-lines-per-function': 'off', // eslint-policy-allow-off: #2282 state-machine parser
-      'sonarjs/cognitive-complexity': 'off', // eslint-policy-allow-off: #2282 state-machine parser
-      'sonarjs/expression-complexity': 'off', // eslint-policy-allow-off: #2282 state-machine parser
-      'sonarjs/nested-control-flow': 'off', // eslint-policy-allow-off: #2282 state-machine parser
-      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2282 parser detection regexes on trusted single-line input
-      'sonarjs/too-many-break-or-continue-in-loop': 'off', // eslint-policy-allow-off: #2282 state-machine parser
-    },
-  },
   // Issue #2282: eslint-guard.test.js is the exhaustive test suite for the
   // ~5000-line guard parser above. It is intentionally comprehensive (one
   // test per detection branch) and is far larger than the 800-line file
