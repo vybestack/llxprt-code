@@ -62,6 +62,32 @@ function getLineNumber(content, index) {
   return content.slice(0, index).split('\n').length;
 }
 
+const SKIPPED_DIRS = new Set(['coverage', 'dist', 'node_modules']);
+
+/**
+ * Process a single directory entry and append matching files to results.
+ * Returns the list of TypeScript files found for this entry (may be empty).
+ */
+function collectEntryFiles(dir, entry) {
+  const fullPath = join(dir, entry);
+  let stats;
+  try {
+    stats = statSync(fullPath);
+  } catch {
+    return [];
+  }
+  if (stats.isDirectory()) {
+    if (SKIPPED_DIRS.has(entry)) {
+      return [];
+    }
+    return collectTypeScriptFiles(fullPath);
+  }
+  if (stats.isFile() && /\.(?:[cm]?tsx?|[cm]?jsx?)$/.test(entry)) {
+    return [fullPath];
+  }
+  return [];
+}
+
 /**
  * Recursively collect all .ts/.tsx files under a directory.
  *
@@ -77,25 +103,7 @@ function collectTypeScriptFiles(dir) {
     return results;
   }
   for (const entry of entries) {
-    const fullPath = join(dir, entry);
-    let stats;
-    try {
-      stats = statSync(fullPath);
-    } catch {
-      continue;
-    }
-    if (stats.isDirectory()) {
-      if (
-        entry === 'coverage' ||
-        entry === 'dist' ||
-        entry === 'node_modules'
-      ) {
-        continue;
-      }
-      results.push(...collectTypeScriptFiles(fullPath));
-    } else if (stats.isFile() && /\.(?:[cm]?tsx?|[cm]?jsx?)$/.test(entry)) {
-      results.push(fullPath);
-    }
+    results.push(...collectEntryFiles(dir, entry));
   }
   return results;
 }

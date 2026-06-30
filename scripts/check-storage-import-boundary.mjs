@@ -87,6 +87,231 @@ function walkDir(dir, excludePatterns) {
   return results;
 }
 
+function getLine(sourceFile, pos) {
+  return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
+}
+
+function isFromPackage(specifier, fromPackage, deepPaths) {
+  if (!specifier) return false;
+  if (specifier === fromPackage) return true;
+  if (specifier.startsWith(fromPackage + '/')) {
+    const subPath = specifier.slice(fromPackage.length + 1);
+    const bare = subPath.replace(/\.js$/, '');
+    if (deepPaths.length === 0) return true;
+    return deepPaths.some((dp) => bare === dp || bare.startsWith(dp + '/'));
+  }
+  return false;
+}
+
+function collectIdentifiers(node, set) {
+  if (ts.isIdentifier(node)) set.add(node.text);
+  ts.forEachChild(node, (child) => collectIdentifiers(child, set));
+}
+
+/**
+ * Collect all X.Y property-access identifiers where X matches namespaceVarName.
+ * Returns the set of Y identifiers accessed through the namespace.
+ */
+function collectNamespaceAccesses(sourceFile, namespaceVarName) {
+  const accessed = new Set();
+  function walk(node) {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === namespaceVarName &&
+      ts.isIdentifier(node.name)
+    ) {
+      accessed.add(node.name.text);
+    }
+    if (
+      ts.isQualifiedName(node) &&
+      ts.isIdentifier(node.left) &&
+      node.left.text === namespaceVarName &&
+      ts.isIdentifier(node.right)
+    ) {
+      accessed.add(node.right.text);
+    }
+    ts.forEachChild(node, walk);
+  }
+  ts.forEachChild(sourceFile, walk);
+  return accessed;
+}
+
+/**
+ * Context object threaded through the per-node-type handlers.
+ */
+function createContext(sourceFile, movedSymbols, fromPackage, deepPaths) {
+  return {
+    sourceFile,
+    movedSymbols,
+    fromPackage,
+    deepPaths,
+    violations: [],
+    getLine: (pos) => getLine(sourceFile, pos),
+    checkSymbol(name, importKind, specifier, line) {
+      if (movedSymbols.length > 0 && movedSymbols.includes(name)) {
+        this.violations.push({
+          symbol: name,
+          importKind,
+          moduleSpecifier: specifier,
+          line,
+        });
+      }
+    },
+  };
+}
+
+function isViMockCall(node) {
+  return (
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.text === 'mock' &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === 'vi'
+  );
+}
+
+function collectDynamicImportViolations(ctx, node, specifier, line) {
+  const parent = node.parent;
+  if (!parent) return;
+  const ids = new Set();
+  collectIdentifiers(parent, ids);
+  for (const sym of ctx.movedSymbols) {
+    if (ids.has(sym)) {
+      ctx.violations.push({
+        symbol: sym,
+        importKind: 'dynamic-import',
+        moduleSpecifier: specifier,
+        line,
+      });
+    }
+  }
+}
+
+function collectFactoryViolations(ctx, factory, specifier, line, importKind) {
+  const ids = new Set();
+  collectIdentifiers(factory, ids);
+  for (const sym of ctx.movedSymbols) {
+    if (ids.has(sym)) {
+      ctx.violations.push({
+        symbol: sym,
+        importKind,
+        moduleSpecifier: specifier,
+        line,
+      });
+    }
+  }
+}
+
+function handleNamespaceImport(ctx, nsName, specifier, line) {
+  if (ctx.movedSymbols.length === 0) return;
+  const accessed = collectNamespaceAccesses(ctx.sourceFile, nsName);
+  const usedMoved = [...accessed].filter((s) => ctx.movedSymbols.includes(s));
+  for (const sym of usedMoved) {
+    ctx.violations.push({
+      symbol: `${nsName}.${sym} (namespace)`,
+      importKind: 'namespace-import',
+      moduleSpecifier: specifier,
+      line,
+    });
+  }
+}
+
+function visitImportDeclaration(node, ctx) {
+  if (!ts.isImportDeclaration(node)) return;
+  const modSpec = node.moduleSpecifier;
+  if (!modSpec || !ts.isStringLiteral(modSpec)) return;
+  if (!isFromPackage(modSpec.text, ctx.fromPackage, ctx.deepPaths)) return;
+
+  const specifier = modSpec.text;
+  const line = ctx.getLine(node.getStart());
+  const clause = node.importClause;
+  if (!clause) return;
+
+  if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+    for (const el of clause.namedBindings.elements) {
+      const sym = el.propertyName ? el.propertyName.text : el.name.text;
+      ctx.checkSymbol(sym, 'static-import', specifier, line);
+    }
+  }
+  if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+    handleNamespaceImport(ctx, clause.namedBindings.name.text, specifier, line);
+  }
+  if (clause.name) {
+    ctx.checkSymbol(clause.name.text, 'static-import', specifier, line);
+  }
+}
+
+function visitImportEquals(node, ctx) {
+  if (!ts.isImportEqualsDeclaration(node)) return;
+  if (
+    !node.moduleReference ||
+    !ts.isExternalModuleReference(node.moduleReference)
+  )
+    return;
+  const expr = node.moduleReference.expression;
+  if (!expr || !ts.isStringLiteral(expr)) return;
+  if (!isFromPackage(expr.text, ctx.fromPackage, ctx.deepPaths)) return;
+  ctx.checkSymbol(
+    node.name.text,
+    'import-equals',
+    expr.text,
+    ctx.getLine(node.getStart()),
+  );
+}
+
+function visitDynamicImport(node, ctx) {
+  if (node.expression.kind !== ts.SyntaxKind.ImportKeyword) return;
+  if (node.arguments.length === 0 || !ts.isStringLiteral(node.arguments[0]))
+    return;
+  const specifier = node.arguments[0].text;
+  if (!isFromPackage(specifier, ctx.fromPackage, ctx.deepPaths)) return;
+  // LIMITATION: we only scan the immediate parent node for symbol
+  // identifiers. Moved symbols bound through intermediate variable
+  // assignments or deep destructuring across statements may not be
+  // detected. This is acceptable for a boundary guard where false
+  // negatives are tolerable but false positives are not.
+  collectDynamicImportViolations(
+    ctx,
+    node,
+    specifier,
+    ctx.getLine(node.getStart()),
+  );
+}
+
+function visitViMockCall(node, ctx) {
+  if (!isViMockCall(node)) return;
+  if (node.arguments.length < 1 || !ts.isStringLiteral(node.arguments[0]))
+    return;
+  const specifier = node.arguments[0].text;
+  if (!isFromPackage(specifier, ctx.fromPackage, ctx.deepPaths)) return;
+  const line = ctx.getLine(node.getStart());
+  if (node.arguments.length < 2) return;
+  collectFactoryViolations(ctx, node.arguments[1], specifier, line, 'vi.mock');
+}
+
+function visitCallExpression(node, ctx) {
+  if (!ts.isCallExpression(node)) return;
+  visitDynamicImport(node, ctx);
+  visitViMockCall(node, ctx);
+}
+
+function visitNode(node, ctx) {
+  visitImportDeclaration(node, ctx);
+  visitImportEquals(node, ctx);
+  visitCallExpression(node, ctx);
+  ts.forEachChild(node, (child) => visitNode(child, ctx));
+}
+
+function deduplicateViolations(violations) {
+  const seen = new Set();
+  return violations.filter((v) => {
+    const key = `${v.symbol}|${v.importKind}|${v.moduleSpecifier}|${v.line}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function analyzeFile(filePath, movedSymbols, fromPackage, deepPaths) {
   const sourceText = readFileSync(filePath, 'utf-8');
   const sourceFile = ts.createSourceFile(
@@ -97,222 +322,10 @@ function analyzeFile(filePath, movedSymbols, fromPackage, deepPaths) {
     ts.ScriptKind.TS,
   );
 
-  const violations = [];
+  const ctx = createContext(sourceFile, movedSymbols, fromPackage, deepPaths);
+  visitNode(sourceFile, ctx);
 
-  function getLine(pos) {
-    return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
-  }
-
-  function isFromPackage(specifier) {
-    if (!specifier) return false;
-    if (specifier === fromPackage) return true;
-    if (specifier.startsWith(fromPackage + '/')) {
-      // Check if deep path matches moved deep paths
-      const subPath = specifier.slice(fromPackage.length + 1);
-      // Strip .js extension for comparison
-      const bare = subPath.replace(/\.js$/, '');
-      if (deepPaths.length === 0) return true;
-      return deepPaths.some((dp) => bare === dp || bare.startsWith(dp + '/'));
-    }
-    return false;
-  }
-
-  function collectIdentifiers(node, set) {
-    if (ts.isIdentifier(node)) set.add(node.text);
-    ts.forEachChild(node, (child) => collectIdentifiers(child, set));
-  }
-
-  /**
-   * Collect all X.Y property-access identifiers where X matches namespaceVarName.
-   * Returns the set of Y identifiers accessed through the namespace.
-   */
-  function collectNamespaceAccesses(sourceFile, namespaceVarName) {
-    const accessed = new Set();
-    function walk(node) {
-      if (
-        ts.isPropertyAccessExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === namespaceVarName &&
-        ts.isIdentifier(node.name)
-      ) {
-        accessed.add(node.name.text);
-      }
-      // Also handle type references like X.SomeType in type positions
-      if (
-        ts.isQualifiedName(node) &&
-        ts.isIdentifier(node.left) &&
-        node.left.text === namespaceVarName &&
-        ts.isIdentifier(node.right)
-      ) {
-        accessed.add(node.right.text);
-      }
-      ts.forEachChild(node, walk);
-    }
-    ts.forEachChild(sourceFile, walk);
-    return accessed;
-  }
-
-  function checkSymbol(name, importKind, specifier, line) {
-    if (movedSymbols.length > 0 && movedSymbols.includes(name)) {
-      violations.push({
-        symbol: name,
-        importKind,
-        moduleSpecifier: specifier,
-        line,
-      });
-    }
-  }
-
-  function visit(node) {
-    // Static imports
-    if (ts.isImportDeclaration(node)) {
-      const modSpec = node.moduleSpecifier;
-      if (
-        modSpec &&
-        ts.isStringLiteral(modSpec) &&
-        isFromPackage(modSpec.text)
-      ) {
-        const specifier = modSpec.text;
-        const line = getLine(node.getStart());
-        const clause = node.importClause;
-        if (clause) {
-          if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
-            for (const el of clause.namedBindings.elements) {
-              const sym = el.propertyName ? el.propertyName.text : el.name.text;
-              checkSymbol(sym, 'static-import', specifier, line);
-            }
-          }
-          if (
-            clause.namedBindings &&
-            ts.isNamespaceImport(clause.namedBindings)
-          ) {
-            // Only flag namespace imports if the namespace is used to access moved symbols.
-            // If movedSymbols is empty (deep-path-only check), skip namespace detection.
-            const nsName = clause.namedBindings.name.text;
-            if (movedSymbols.length > 0) {
-              const accessed = collectNamespaceAccesses(sourceFile, nsName);
-              const usedMoved = [...accessed].filter((s) =>
-                movedSymbols.includes(s),
-              );
-              if (usedMoved.length > 0) {
-                for (const sym of usedMoved) {
-                  violations.push({
-                    symbol: `${nsName}.${sym} (namespace)`,
-                    importKind: 'namespace-import',
-                    moduleSpecifier: specifier,
-                    line,
-                  });
-                }
-              }
-            }
-          }
-          if (clause.name) {
-            checkSymbol(clause.name.text, 'static-import', specifier, line);
-          }
-        }
-      }
-    }
-
-    // Import-equals
-    if (ts.isImportEqualsDeclaration(node)) {
-      if (
-        node.moduleReference &&
-        ts.isExternalModuleReference(node.moduleReference)
-      ) {
-        const expr = node.moduleReference.expression;
-        if (expr && ts.isStringLiteral(expr) && isFromPackage(expr.text)) {
-          checkSymbol(
-            node.name.text,
-            'import-equals',
-            expr.text,
-            getLine(node.getStart()),
-          );
-        }
-      }
-    }
-
-    // Call expressions (dynamic import + vi.mock)
-    if (ts.isCallExpression(node)) {
-      // Dynamic import
-      if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-        if (
-          node.arguments.length > 0 &&
-          ts.isStringLiteral(node.arguments[0])
-        ) {
-          const specifier = node.arguments[0].text;
-          if (isFromPackage(specifier)) {
-            const line = getLine(node.getStart());
-            // LIMITATION: we only scan the immediate parent node for symbol
-            // identifiers. Moved symbols bound through intermediate variable
-            // assignments or deep destructuring across statements may not be
-            // detected. This is acceptable for a boundary guard where false
-            // negatives are tolerable but false positives are not.
-            const parent = node.parent;
-            if (parent) {
-              const ids = new Set();
-              collectIdentifiers(parent, ids);
-              for (const sym of movedSymbols) {
-                if (ids.has(sym)) {
-                  violations.push({
-                    symbol: sym,
-                    importKind: 'dynamic-import',
-                    moduleSpecifier: specifier,
-                    line,
-                  });
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // vi.mock
-      if (
-        ts.isPropertyAccessExpression(node.expression) &&
-        node.expression.name.text === 'mock' &&
-        ts.isIdentifier(node.expression.expression) &&
-        node.expression.expression.text === 'vi'
-      ) {
-        if (
-          node.arguments.length >= 1 &&
-          ts.isStringLiteral(node.arguments[0])
-        ) {
-          const specifier = node.arguments[0].text;
-          if (isFromPackage(specifier)) {
-            const line = getLine(node.getStart());
-            if (node.arguments.length >= 2) {
-              const factory = node.arguments[1];
-              const ids = new Set();
-              collectIdentifiers(factory, ids);
-              for (const sym of movedSymbols) {
-                if (ids.has(sym)) {
-                  violations.push({
-                    symbol: sym,
-                    importKind: 'vi.mock',
-                    moduleSpecifier: specifier,
-                    line,
-                  });
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-
-  // Deduplicate
-  const seen = new Set();
-  return violations.filter((v) => {
-    const key = `${v.symbol}|${v.importKind}|${v.moduleSpecifier}|${v.line}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return deduplicateViolations(ctx.violations);
 }
 
 function main() {

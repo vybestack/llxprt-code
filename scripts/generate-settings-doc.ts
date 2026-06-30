@@ -79,7 +79,7 @@ async function updateFile(
     document: doc,
     startMarker: START_MARKER,
     endMarker: END_MARKER,
-    newContent: newContent,
+    newContent,
     paddingBefore: '\n',
     paddingAfter: '\n',
   });
@@ -127,7 +127,9 @@ function collectEntries(
     topLevel?: string,
   ) => {
     for (const [key, definition] of Object.entries(current)) {
-      if (pathSegments.length === 0 && MANUAL_TOP_LEVEL.has(key)) {
+      const isManualTopLevel =
+        pathSegments.length === 0 && MANUAL_TOP_LEVEL.has(key);
+      if (isManualTopLevel || definition.ignoreInDocs) {
         continue;
       }
 
@@ -137,10 +139,6 @@ function collectEntries(
         definition.type === 'object' &&
         definition.properties &&
         Object.keys(definition.properties).length > 0;
-
-      if (definition.ignoreInDocs) {
-        continue;
-      }
 
       if (!hasChildren && (options.includeAll || definition.showInDialog)) {
         if (!sections.has(sectionKey)) {

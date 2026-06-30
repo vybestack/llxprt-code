@@ -41,9 +41,8 @@ function getWorkspacePackages(packagesDir) {
   }
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
     const pkgJsonPath = join(packagesDir, entry.name, 'package.json');
-    if (!existsSync(pkgJsonPath)) continue;
+    if (!entry.isDirectory() || !existsSync(pkgJsonPath)) continue;
     try {
       const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
       if (pkg.name) {

@@ -51,8 +51,9 @@ function normalizeCapturedAssistantText(text) {
     .split('\n')
     .map(normalizeCapturedLine)
     .join('\n')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n[ \t]+/g, '\n')
+    .split('\n')
+    .map((ln) => ln.trim())
+    .join('\n')
     .trim();
 }
 

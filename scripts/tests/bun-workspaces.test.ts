@@ -351,6 +351,23 @@ function collectDependencyNames(
 }
 
 /**
+ * Collects every dependency name declared across the standard sections of a
+ * list of workspace package manifests. Used to build the union of names
+ * declared anywhere in the monorepo without nesting loops at each call site.
+ */
+function collectWorkspaceDependencyNames(
+  packages: Iterable<PackageJson>,
+): Set<string> {
+  const names = new Set<string>();
+  for (const pkg of packages) {
+    for (const name of collectDependencyNames(pkg)) {
+      names.add(name);
+    }
+  }
+  return names;
+}
+
+/**
  * Collects the declared dependency *ranges* (the version specifier strings as
  * written in the manifest, e.g. "^4.1.12"), keyed by "section/name", across the
  * standard sections. Unlike collectDependencyNames this captures the specifier
@@ -370,6 +387,44 @@ function collectDependencyRanges(
     }
   }
   return ranges;
+}
+
+/**
+ * Reduces a node_modules lockfile path to the package's own name (final path
+ * segment, scope-aware), so nested copies like `tsx/node_modules/esbuild` and a
+ * top-level `node_modules/esbuild` both classify as `esbuild`. The root
+ * workspace entry (key "") has no node_modules segment and is excluded.
+ */
+function nameFromLockPath(lockPath: string): string | undefined {
+  const match = lockPath.match(/node_modules\/((?:@[^/]+\/)?[^/]+)$/);
+  return match?.[1];
+}
+
+/**
+ * Classifies a single package-lock entry: returns the package name when it is a
+ * third-party install-script dependency to classify, or undefined when it
+ * should be skipped (no install script, or a first-party workspace entry).
+ */
+function classifyInstallScriptEntry(
+  lockPath: string,
+  entry: PackageLockEntry,
+): string | undefined {
+  if (entry.hasInstallScript !== true) {
+    return undefined;
+  }
+  // First-party entries are our own code, not third-party deps to classify:
+  // the root workspace (key "") and workspace members (keyed by their real
+  // path like `packages/cli`) have no `node_modules/` segment, and their
+  // node_modules symlink aliases carry `link: true`. Their own pre/post
+  // install scripts ARE the manager-aware guard, covered by dedicated tests.
+  if (!lockPath.includes('node_modules/') || entry.link === true) {
+    return undefined;
+  }
+  const name = nameFromLockPath(lockPath);
+  // A third-party entry without a resolvable name would mean an unexpected
+  // lockfile shape; fail loudly rather than skipping it.
+  expect(name, `unparseable install-script path: ${lockPath}`).toBeDefined();
+  return name;
 }
 
 describe('Bun package-manager configuration (S1)', () => {
@@ -472,17 +527,11 @@ describe('Bun package-manager configuration (S1)', () => {
     const trusted = new Set(readRootPackage().trustedDependencies ?? []);
 
     const nativeDeclared = new Set<string>();
-    for (const pkg of readWorkspacePackages()) {
-      for (const section of DEPENDENCY_SECTIONS) {
-        const deps = pkg[section];
-        if (!deps) {
-          continue;
-        }
-        for (const name of Object.keys(deps)) {
-          if (isKnownNativeFamilyDep(name)) {
-            nativeDeclared.add(name);
-          }
-        }
+    for (const name of collectWorkspaceDependencyNames(
+      readWorkspacePackages(),
+    )) {
+      if (isKnownNativeFamilyDep(name)) {
+        nativeDeclared.add(name);
       }
     }
 
@@ -495,18 +544,9 @@ describe('Bun package-manager configuration (S1)', () => {
     const trusted = readRootPackage().trustedDependencies ?? [];
 
     // Compute the union of every dependency name declared anywhere.
-    const declaredNames = new Set<string>();
-    for (const pkg of readWorkspacePackages()) {
-      for (const section of DEPENDENCY_SECTIONS) {
-        const deps = pkg[section];
-        if (!deps) {
-          continue;
-        }
-        for (const name of Object.keys(deps)) {
-          declaredNames.add(name);
-        }
-      }
-    }
+    const declaredNames = collectWorkspaceDependencyNames(
+      readWorkspacePackages(),
+    );
 
     for (const name of trusted) {
       expect(declaredNames.has(name)).toBe(true);
@@ -525,18 +565,9 @@ describe('Bun package-manager configuration (S1)', () => {
     const root = readRootPackage();
     const trusted = new Set(root.trustedDependencies ?? []);
 
-    const declaredNames = new Set<string>();
-    for (const pkg of readWorkspacePackages()) {
-      for (const section of DEPENDENCY_SECTIONS) {
-        const deps = pkg[section];
-        if (!deps) {
-          continue;
-        }
-        for (const name of Object.keys(deps)) {
-          declaredNames.add(name);
-        }
-      }
-    }
+    const declaredNames = collectWorkspaceDependencyNames(
+      readWorkspacePackages(),
+    );
 
     for (const name of PREBUILT_NATIVE_UNTRUSTED) {
       expect(declaredNames.has(name)).toBe(true);
@@ -558,35 +589,9 @@ describe('Bun package-manager configuration (S1)', () => {
     const lock = readPackageLock();
     const packages = lock.packages ?? {};
 
-    // Reduce node_modules paths to the package's own name (final path segment,
-    // scope-aware), so nested copies like `tsx/node_modules/esbuild` and a
-    // top-level `node_modules/esbuild` both classify as `esbuild`. The root
-    // workspace entry (key "") has no node_modules segment and is excluded.
-    const nameFromLockPath = (lockPath: string): string | undefined => {
-      const match = lockPath.match(/node_modules\/((?:@[^/]+\/)?[^/]+)$/);
-      return match?.[1];
-    };
-
     const installScriptNames = new Set<string>();
     for (const [lockPath, entry] of Object.entries(packages)) {
-      if (entry?.hasInstallScript !== true) {
-        continue;
-      }
-      // First-party entries are our own code, not third-party deps to classify:
-      // the root workspace (key "") and workspace members (keyed by their real
-      // path like `packages/cli`) have no `node_modules/` segment, and their
-      // node_modules symlink aliases carry `link: true`. Their own pre/post
-      // install scripts ARE the manager-aware guard, covered by dedicated tests.
-      if (!lockPath.includes('node_modules/') || entry.link === true) {
-        continue;
-      }
-      const name = nameFromLockPath(lockPath);
-      // A third-party entry without a resolvable name would mean an unexpected
-      // lockfile shape; fail loudly rather than skipping it.
-      expect(
-        name,
-        `unparseable install-script path: ${lockPath}`,
-      ).toBeDefined();
+      const name = classifyInstallScriptEntry(lockPath, entry);
       if (name !== undefined) {
         installScriptNames.add(name);
       }

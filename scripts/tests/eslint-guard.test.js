@@ -42,6 +42,34 @@ function diffFor(file, addedLine) {
   ].join('\n');
 }
 
+// Shared diff builders reused by multiple describe blocks below. They construct
+// synthetic eslint.config.js diffs for the guard's detection tests.
+function configDiff(file, removedLine, addedLine) {
+  return [
+    'diff --git a/' + file + ' b/' + file,
+    'index 0000000..1111111 100644',
+    '--- a/' + file,
+    '+++ b/' + file,
+    '@@ -1,1 +1,1 @@',
+    '  rules: {',
+    '-' + removedLine,
+    '+' + addedLine,
+    '  },',
+  ].join(String.fromCharCode(10));
+}
+
+function rulesBlockOpenerDiff(addedLine) {
+  return [
+    'diff --git a/eslint.config.js b/eslint.config.js',
+    'index 0000000..1111111 100644',
+    '--- a/eslint.config.js',
+    '+++ b/eslint.config.js',
+    '@@ -1,0 +1,2 @@',
+    '  rules: {',
+    '+' + addedLine,
+  ].join(String.fromCharCode(10));
+}
+
 describe('check-eslint-guard', () => {
   it('rejects newly added inline ESLint disable directives', () => {
     const violations = checkDiff(
@@ -551,18 +579,6 @@ describe('check-eslint-guard', () => {
     // pre-update insideRuleEntry state so the keyed opener is evaluated as a
     // rule entry.
 
-    function rulesBlockOpenerDiff(addedLine) {
-      return [
-        'diff --git a/eslint.config.js b/eslint.config.js',
-        'index 0000000..1111111 100644',
-        '--- a/eslint.config.js',
-        '+++ b/eslint.config.js',
-        '@@ -1,0 +1,2 @@',
-        '  rules: {',
-        '+' + addedLine,
-      ].join(String.fromCharCode(10));
-    }
-
     it('rejects newly added keyed multiline opener with string off', () => {
       const violations = checkDiff(
         rulesBlockOpenerDiff("      'no-console': ['off',"),
@@ -997,20 +1013,6 @@ describe('check-eslint-guard', () => {
   });
 
   describe('ESLint config loosening (#2189)', () => {
-    function configDiff(file, removedLine, addedLine) {
-      return [
-        'diff --git a/' + file + ' b/' + file,
-        'index 0000000..1111111 100644',
-        '--- a/' + file,
-        '+++ b/' + file,
-        '@@ -1,1 +1,1 @@',
-        '  rules: {',
-        '-' + removedLine,
-        '+' + addedLine,
-        '  },',
-      ].join(String.fromCharCode(10));
-    }
-
     describe('severity downgrades', () => {
       it('catches string severity downgrade from error to warn', () => {
         const violations = checkDiff(
@@ -5888,32 +5890,6 @@ describe('check-eslint-guard', () => {
     // context attribution, and inline rules extraction. These end-to-end
     // checkDiff tests prove scoped rules are now handled consistently across
     // all detection paths.
-
-    function configDiff(file, removedLine, addedLine) {
-      return [
-        'diff --git a/' + file + ' b/' + file,
-        'index 0000000..1111111 100644',
-        '--- a/' + file,
-        '+++ b/' + file,
-        '@@ -1,1 +1,1 @@',
-        '  rules: {',
-        '-' + removedLine,
-        '+' + addedLine,
-        '  },',
-      ].join(String.fromCharCode(10));
-    }
-
-    function rulesBlockOpenerDiff(addedLine) {
-      return [
-        'diff --git a/eslint.config.js b/eslint.config.js',
-        'index 0000000..1111111 100644',
-        '--- a/eslint.config.js',
-        '+++ b/eslint.config.js',
-        '@@ -1,0 +1,2 @@',
-        '  rules: {',
-        '+' + addedLine,
-      ].join(String.fromCharCode(10));
-    }
 
     describe('severity downgrades for scoped rules', () => {
       it('catches string severity downgrade for @typescript-eslint/no-explicit-any', () => {

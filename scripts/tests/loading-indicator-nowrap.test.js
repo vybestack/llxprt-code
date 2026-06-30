@@ -27,8 +27,8 @@ const getRepoRoot = () => {
 };
 
 const extractArtifactsPath = (text) => {
-  const match = text.match(/^artifacts:\s+(?<path>.+)$/m);
-  return match?.groups?.path ?? null;
+  const match = text.match(/^artifacts:[ \t]+(\S[^\r\n]*)$/m);
+  return match?.[1] ?? null;
 };
 
 runTest('loading indicator does not wrap (tmux)', () => {

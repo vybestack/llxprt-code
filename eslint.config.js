@@ -496,6 +496,157 @@ export default tseslint.config(
       ],
     },
   },
+  // ============================================================================
+  // Issue #2282: Apply strict code-quality lint rules to scripts
+  // ============================================================================
+  // Build/dev scripts and their tests previously received only the base
+  // ESLint recommended layer. This block extends the same SonarJS
+  // maintainability, regex-correctness, and size/complexity guardrails that
+  // protect packages/*/src to the scripts tree, so scripts are held to the
+  // same code-quality bar.
+  //
+  // Deliberately NOT applied to scripts (documented rationale):
+  //  - no-console: scripts are build/dev tooling that legitimately produces
+  //    stdout/stderr output (unlike application source where logging goes
+  //    through a logger).
+  //  - Type-aware rules (@typescript-eslint/no-floating-promises,
+  //    no-misused-promises, strict-boolean-expressions, etc.): the scripts
+  //    tree has no tsconfig project, so type-aware analysis is unavailable.
+  //  - import/* rules: those are package-resolution policies specific to the
+  //    application packages and are not meaningful for standalone scripts.
+  //  - React rules: scripts contain no UI components.
+  {
+    files: ['scripts/**/*.{ts,tsx,js,mjs,cjs}'],
+    plugins: {
+      sonarjs,
+    },
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      // --- General code quality (parity with packages/*/src) ---
+      'arrow-body-style': ['error', 'as-needed'],
+      curly: ['error', 'multi-line'],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'no-cond-assign': 'error',
+      'no-debugger': 'error',
+      'no-duplicate-case': 'error',
+      'no-else-return': 'error',
+      'no-lonely-if': 'error',
+      'no-unsafe-finally': 'error',
+      'no-unneeded-ternary': 'error',
+      'no-var': 'error',
+      'object-shorthand': 'error',
+      'one-var': ['error', 'never'],
+      'prefer-arrow-callback': 'error',
+      'prefer-const': ['error', { destructuring: 'all' }],
+      radix: 'error',
+
+      // --- TypeScript quality (non-type-aware; works without a tsconfig) ---
+      '@typescript-eslint/array-type': ['error', { default: 'array-simple' }],
+      '@typescript-eslint/consistent-type-assertions': [
+        'error',
+        { assertionStyle: 'as' },
+      ],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-inferrable-types': [
+        'error',
+        { ignoreParameters: true, ignoreProperties: true },
+      ],
+      '@typescript-eslint/no-namespace': [
+        'error',
+        { allowDeclarations: true },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+
+      // --- Size/complexity limits (same thresholds as packages/*/src) ---
+      complexity: ['error', 25],
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+      'sonarjs/cognitive-complexity': ['error', 30],
+
+      // --- SonarJS maintainability ---
+      'sonarjs/expression-complexity': 'error',
+      'sonarjs/nested-control-flow': 'error',
+      'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-collapsible-if': 'error',
+      'sonarjs/no-duplicated-branches': 'error',
+      'sonarjs/no-identical-functions': 'error',
+      'sonarjs/no-inconsistent-returns': 'error',
+      'sonarjs/no-nested-conditional': 'error',
+      'sonarjs/too-many-break-or-continue-in-loop': 'error',
+      'sonarjs/todo-tag': 'error',
+
+      // --- SonarJS regex correctness ---
+      'no-control-regex': 'error',
+      'sonarjs/no-invalid-regexp': 'error',
+      'sonarjs/no-regex-spaces': 'error',
+      'sonarjs/slow-regex': 'error',
+      'sonarjs/stateful-regex': 'error',
+      'sonarjs/unicode-aware-regex': 'error',
+    },
+  },
+  // Issue #2282: Test files use large setup/case blocks. max-lines-per-function
+  // is turned off for scripts/tests to match the existing packages test-file
+  // policy (the vitest config block above sets the same off for packages).
+  {
+    files: ['scripts/tests/**/*.{ts,tsx,js,mjs,cjs}'],
+    rules: {
+      'max-lines-per-function': 'off', // eslint-policy-allow-off: #2282 test parity
+    },
+  },
+  // Issue #2282: check-eslint-guard.js is a ~5000-line hand-written
+  // character-level state machine for git-diff / ESLint-config policy
+  // analysis. Its structural complexity is inherent to the parser (shared
+  // mutable position/state tracking across deeply nested character loops)
+  // and is documented throughout the file. Decomposing it into smaller
+  // modules is a separate, dedicated effort (mirroring the #1577/#1581
+  // decompositions) and is out of scope for extending quality coverage.
+  // The non-structural quality rules above still apply; only the structural
+  // nesting/complexity/size rules and the parser's own detection-regex
+  // patterns (which operate on trusted single-line input, not adversarial
+  // data, so ReDoS is not a practical concern) are carved out here.
+  {
+    files: ['scripts/check-eslint-guard.js'],
+    rules: {
+      complexity: 'off', // eslint-policy-allow-off: #2282 state-machine parser
+      'max-lines': 'off', // eslint-policy-allow-off: #2282 state-machine parser
+      'max-lines-per-function': 'off', // eslint-policy-allow-off: #2282 state-machine parser
+      'sonarjs/cognitive-complexity': 'off', // eslint-policy-allow-off: #2282 state-machine parser
+      'sonarjs/expression-complexity': 'off', // eslint-policy-allow-off: #2282 state-machine parser
+      'sonarjs/nested-control-flow': 'off', // eslint-policy-allow-off: #2282 state-machine parser
+      'sonarjs/slow-regex': 'off', // eslint-policy-allow-off: #2282 parser detection regexes on trusted single-line input
+      'sonarjs/too-many-break-or-continue-in-loop': 'off', // eslint-policy-allow-off: #2282 state-machine parser
+    },
+  },
+  // Issue #2282: eslint-guard.test.js is the exhaustive test suite for the
+  // ~5000-line guard parser above. It is intentionally comprehensive (one
+  // test per detection branch) and is far larger than the 800-line file
+  // limit. Splitting it is coupled to the guard's own decomposition (tracked
+  // separately); until then max-lines is carved out so the new quality layer
+  // can apply without a forced rewrite of the fixture. All other quality
+  // rules still apply to this file.
+  {
+    files: ['scripts/tests/eslint-guard.test.js'],
+    rules: {
+      'max-lines': 'off', // eslint-policy-allow-off: #2282 exhaustive guard fixture
+    },
+  },
   // CLI extension commands produce user-facing stdout/stderr output
   {
     files: [

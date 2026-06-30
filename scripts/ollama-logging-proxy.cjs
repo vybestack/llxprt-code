@@ -18,7 +18,98 @@ const UPSTREAM_TIMEOUT_MS = Number(
 fs.closeSync(fs.openSync(OUT, 'a', 0o600));
 fs.chmodSync(OUT, 0o600);
 
+/**
+ * Format message content as string (if already string) or JSON.
+ */
+function formatMessageContent(content) {
+  return typeof content === 'string' ? content : JSON.stringify(content);
+}
+
+/**
+ * Log the system message and last user message from parsed.messages.
+ */
+function logMessages(OUT, id, messages) {
+  const sys = messages.find((m) => m.role === 'system');
+  if (sys) {
+    fs.appendFileSync(
+      OUT,
+      '---- REQUEST ' +
+        id +
+        ' SYSTEM MESSAGE ----\n' +
+        formatMessageContent(sys.content) +
+        '\n---- END SYSTEM ----\n',
+    );
+  }
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (lastUser) {
+    fs.appendFileSync(
+      OUT,
+      '---- REQUEST ' +
+        id +
+        ' LAST USER ----\n' +
+        formatMessageContent(lastUser.content) +
+        '\n',
+    );
+  }
+}
+
+/**
+ * Write a summary and detailed dump of the parsed request body to the log.
+ */
+function logRequestBody(OUT, id, parsed, url) {
+  const summary = {
+    id,
+    ts: new Date().toISOString(),
+    url,
+    model: parsed.model,
+    tool_choice: parsed.tool_choice,
+    toolCount: Array.isArray(parsed.tools) ? parsed.tools.length : 0,
+    toolNames: Array.isArray(parsed.tools)
+      ? parsed.tools.map((t) => t.function && t.function.name)
+      : [],
+    messageRoles: Array.isArray(parsed.messages)
+      ? parsed.messages.map((m) => m.role)
+      : [],
+  };
+  fs.appendFileSync(
+    OUT,
+    '==== REQUEST ' +
+      id +
+      ' SUMMARY ====\n' +
+      JSON.stringify(summary, null, 2) +
+      '\n',
+  );
+  // Dump the full system message + full tools array verbatim
+  if (Array.isArray(parsed.messages)) {
+    logMessages(OUT, id, parsed.messages);
+  }
+  if (Array.isArray(parsed.tools)) {
+    fs.appendFileSync(
+      OUT,
+      '---- REQUEST ' +
+        id +
+        ' TOOLS ARRAY ----\n' +
+        JSON.stringify(parsed.tools, null, 2) +
+        '\n---- END TOOLS ----\n',
+    );
+  }
+}
+
 let counter = 0;
+
+/**
+ * Handle proxy request errors by returning an appropriate status to the client.
+ */
+function handleProxyError(res, err, settledRef) {
+  if (settledRef.value) {
+    res.destroy();
+    return;
+  }
+  settledRef.value = true;
+  const isTimeout = err && err.message === 'upstream timeout';
+  res.writeHead(isTimeout ? 504 : 502);
+  res.end((isTimeout ? 'upstream timeout: ' : 'proxy error: ') + err.message);
+}
 
 const server = http.createServer((req, res) => {
   const chunks = [];
@@ -29,69 +120,7 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && body.length > 0) {
       try {
         const parsed = JSON.parse(body.toString('utf8'));
-        const summary = {
-          id,
-          ts: new Date().toISOString(),
-          url: req.url,
-          model: parsed.model,
-          tool_choice: parsed.tool_choice,
-          toolCount: Array.isArray(parsed.tools) ? parsed.tools.length : 0,
-          toolNames: Array.isArray(parsed.tools)
-            ? parsed.tools.map((t) => t.function && t.function.name)
-            : [],
-          messageRoles: Array.isArray(parsed.messages)
-            ? parsed.messages.map((m) => m.role)
-            : [],
-        };
-        fs.appendFileSync(
-          OUT,
-          '==== REQUEST ' +
-            id +
-            ' SUMMARY ====\n' +
-            JSON.stringify(summary, null, 2) +
-            '\n',
-        );
-        // Dump the full system message + full tools array verbatim
-        if (Array.isArray(parsed.messages)) {
-          const sys = parsed.messages.find((m) => m.role === 'system');
-          if (sys) {
-            fs.appendFileSync(
-              OUT,
-              '---- REQUEST ' +
-                id +
-                ' SYSTEM MESSAGE ----\n' +
-                (typeof sys.content === 'string'
-                  ? sys.content
-                  : JSON.stringify(sys.content)) +
-                '\n---- END SYSTEM ----\n',
-            );
-          }
-          const lastUser = [...parsed.messages]
-            .reverse()
-            .find((m) => m.role === 'user');
-          if (lastUser) {
-            fs.appendFileSync(
-              OUT,
-              '---- REQUEST ' +
-                id +
-                ' LAST USER ----\n' +
-                (typeof lastUser.content === 'string'
-                  ? lastUser.content
-                  : JSON.stringify(lastUser.content)) +
-                '\n',
-            );
-          }
-        }
-        if (Array.isArray(parsed.tools)) {
-          fs.appendFileSync(
-            OUT,
-            '---- REQUEST ' +
-              id +
-              ' TOOLS ARRAY ----\n' +
-              JSON.stringify(parsed.tools, null, 2) +
-              '\n---- END TOOLS ----\n',
-          );
-        }
+        logRequestBody(OUT, id, parsed, req.url);
       } catch {
         fs.appendFileSync(
           OUT,
@@ -104,7 +133,7 @@ const server = http.createServer((req, res) => {
       }
     }
 
-    let settled = false;
+    const settledRef = { value: false };
     const proxyReq = http.request(
       {
         hostname: '127.0.0.1',
@@ -114,7 +143,7 @@ const server = http.createServer((req, res) => {
         headers: req.headers,
       },
       (proxyRes) => {
-        settled = true;
+        settledRef.value = true;
         res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
         proxyRes.pipe(res);
       },
@@ -123,18 +152,7 @@ const server = http.createServer((req, res) => {
     proxyReq.setTimeout(UPSTREAM_TIMEOUT_MS, () => {
       proxyReq.destroy(new Error('upstream timeout'));
     });
-    proxyReq.on('error', (err) => {
-      if (settled) {
-        res.destroy();
-        return;
-      }
-      settled = true;
-      const isTimeout = err && err.message === 'upstream timeout';
-      res.writeHead(isTimeout ? 504 : 502);
-      res.end(
-        (isTimeout ? 'upstream timeout: ' : 'proxy error: ') + err.message,
-      );
-    });
+    proxyReq.on('error', (err) => handleProxyError(res, err, settledRef));
     proxyReq.end(body);
   });
 });

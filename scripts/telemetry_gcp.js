@@ -64,8 +64,7 @@ service:
 async function main() {
   console.log('Starting Local Telemetry Exporter for Google Cloud');
 
-  let collectorProcess;
-  let collectorLogFd;
+  const state = { collectorProcess: null, collectorLogFd: null };
 
   const originalSandboxSetting = manageTelemetrySettings(
     true,
@@ -73,11 +72,45 @@ async function main() {
     'gcp',
   );
   registerCleanup(
-    () => [collectorProcess].filter((p) => p), // Function to get processes
-    () => [collectorLogFd].filter((fd) => fd), // Function to get FDs
+    () => [state.collectorProcess].filter((p) => p),
+    () => [state.collectorLogFd].filter((fd) => fd),
     originalSandboxSetting,
   );
 
+  const projectId = requireProjectId();
+
+  if (!fileExists(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
+
+  const otelcolPath = await ensureBinary(
+    'otelcol-contrib',
+    'open-telemetry/opentelemetry-collector-releases',
+    (version, platform, arch, ext) =>
+      `otelcol-contrib_${version}_${platform}_${arch}.${ext}`,
+    'otelcol-contrib',
+    false, // isJaeger = false
+  ).catch((e) => {
+    console.error(`[ERROR] getting otelcol-contrib: ${e.message}`);
+    return null;
+  });
+  if (!otelcolPath) process.exit(1);
+
+  cleanupOldCollector();
+
+  if (!fileExists(OTEL_DIR)) fs.mkdirSync(OTEL_DIR, { recursive: true });
+  fs.writeFileSync(OTEL_CONFIG_FILE, getOtelConfigContent(projectId));
+  console.log(`Wrote OTEL collector config to ${OTEL_CONFIG_FILE}`);
+
+  await startCollector(state, otelcolPath);
+
+  state.collectorProcess.on('error', (err) => {
+    console.error(`${state.collectorProcess.spawnargs[0]} process error:`, err);
+    process.exit(1);
+  });
+
+  printGcpTelemetryReadyInfo(projectId);
+}
+
+function requireProjectId() {
   const projectId = process.env.OTLP_GOOGLE_CLOUD_PROJECT;
   if (!projectId) {
     console.error(
@@ -99,21 +132,10 @@ async function main() {
     '  - The account needs "Cloud Trace Agent", "Monitoring Metric Writer", and "Logs Writer" roles.',
   );
 
-  if (!fileExists(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
+  return projectId;
+}
 
-  const otelcolPath = await ensureBinary(
-    'otelcol-contrib',
-    'open-telemetry/opentelemetry-collector-releases',
-    (version, platform, arch, ext) =>
-      `otelcol-contrib_${version}_${platform}_${arch}.${ext}`,
-    'otelcol-contrib',
-    false, // isJaeger = false
-  ).catch((e) => {
-    console.error(`[ERROR] getting otelcol-contrib: ${e.message}`);
-    return null;
-  });
-  if (!otelcolPath) process.exit(1);
-
+function cleanupOldCollector() {
   console.log('Cleaning up old processes and logs...');
   try {
     execSync('pkill -f "otelcol-contrib"');
@@ -127,20 +149,18 @@ async function main() {
   } catch (e) {
     if (e.code !== 'ENOENT') console.error(e);
   }
+}
 
-  if (!fileExists(OTEL_DIR)) fs.mkdirSync(OTEL_DIR, { recursive: true });
-  fs.writeFileSync(OTEL_CONFIG_FILE, getOtelConfigContent(projectId));
-  console.log(`Wrote OTEL collector config to ${OTEL_CONFIG_FILE}`);
-
+async function startCollector(state, otelcolPath) {
   console.log(`Starting OTEL collector for GCP... Logs: ${OTEL_LOG_FILE}`);
-  collectorLogFd = fs.openSync(OTEL_LOG_FILE, 'a');
-  collectorProcess = spawn(otelcolPath, ['--config', OTEL_CONFIG_FILE], {
-    stdio: ['ignore', collectorLogFd, collectorLogFd],
+  state.collectorLogFd = fs.openSync(OTEL_LOG_FILE, 'a');
+  state.collectorProcess = spawn(otelcolPath, ['--config', OTEL_CONFIG_FILE], {
+    stdio: ['ignore', state.collectorLogFd, state.collectorLogFd],
     env: { ...process.env },
   });
 
   console.log(
-    `Waiting for OTEL collector to start (PID: ${collectorProcess.pid})...`,
+    `Waiting for OTEL collector to start (PID: ${state.collectorProcess.pid})...`,
   );
 
   try {
@@ -149,8 +169,8 @@ async function main() {
   } catch (err) {
     console.error(`[ERROR] OTEL collector failed to start on port 4317.`);
     console.error(err.message);
-    if (collectorProcess && collectorProcess.pid) {
-      process.kill(collectorProcess.pid, 'SIGKILL');
+    if (state.collectorProcess && state.collectorProcess.pid) {
+      process.kill(state.collectorProcess.pid, 'SIGKILL');
     }
     if (fileExists(OTEL_LOG_FILE)) {
       console.error('OTEL Collector Log Output:');
@@ -158,12 +178,9 @@ async function main() {
     }
     process.exit(1);
   }
+}
 
-  collectorProcess.on('error', (err) => {
-    console.error(`${collectorProcess.spawnargs[0]} process error:`, err);
-    process.exit(1);
-  });
-
+function printGcpTelemetryReadyInfo(projectId) {
   console.log(`\nLocal OTEL collector for GCP is running.`);
   console.log(
     '\nTo send telemetry, run the Gemini CLI in a separate terminal window.',

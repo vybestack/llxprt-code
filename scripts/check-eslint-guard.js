@@ -2052,7 +2052,7 @@ function extractInlineRulesEntries(line) {
   ) {
     return [];
   }
-  let start = openMatch.index + openMatch[0].length;
+  const start = openMatch.index + openMatch[0].length;
   // Walk to the matching close brace on the same line, respecting nested
   // braces/brackets and string literals so an inline `}` inside a value does
   // not terminate the scan early.
@@ -2593,13 +2593,14 @@ export function checkDiff(diff) {
             removedExpectingCeilingThreshold =
               removedCurrentCeilingRuleKey !== null;
           }
-        } else if (removedExpectingCeilingThreshold) {
+        } else if (
+          removedExpectingCeilingThreshold &&
+          isStandaloneNumericThresholdLine(content)
+        ) {
           // A standalone numeric threshold line was seen (buffered by
           // bufferRemovedConfig). Clear the expectation so a subsequent numeric
           // line (an option value) is not mistaken for a second threshold.
-          if (isStandaloneNumericThresholdLine(content)) {
-            removedExpectingCeilingThreshold = false;
-          }
+          removedExpectingCeilingThreshold = false;
         }
       }
       if (!removedInsideRuleEntry) {
@@ -2930,13 +2931,14 @@ export function checkDiff(diff) {
             // standalone numeric line is the threshold.
             expectingCeilingThreshold = currentCeilingRuleKey !== null;
           }
-        } else if (expectingCeilingThreshold) {
+        } else if (
+          expectingCeilingThreshold &&
+          isStandaloneNumericThresholdLine(content)
+        ) {
           // A standalone numeric threshold line was seen. Clear the expectation
           // so a subsequent numeric line (an option value) is not mistaken for
           // a second threshold.
-          if (isStandaloneNumericThresholdLine(content)) {
-            expectingCeilingThreshold = false;
-          }
+          expectingCeilingThreshold = false;
         }
       }
       if (!insideRuleEntry) {

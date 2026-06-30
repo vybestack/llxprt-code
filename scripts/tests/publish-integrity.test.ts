@@ -107,6 +107,64 @@ function getPackedPaths(): Set<string> {
 }
 
 /**
+ * Result of processing a single character in the comment-stripper.
+ */
+interface CharResult {
+  out: string;
+  nextI: number;
+  nextQuote: string | null;
+}
+
+/**
+ * Process a single character position in the comment-stripping lexer.
+ * Handles string literals, line comments, block comments, and normal code.
+ */
+function processChar(
+  source: string,
+  i: number,
+  n: number,
+  quote: string | null,
+  outSoFar: string,
+): CharResult {
+  const ch = source[i];
+  const next = source[i + 1];
+  if (quote !== null) {
+    let out = outSoFar + ch;
+    if (ch === '\\' && i + 1 < n) {
+      // Preserve the escaped character verbatim so an escaped quote does not
+      // prematurely close the literal.
+      out += next;
+      return { out, nextI: i + 2, nextQuote: quote };
+    }
+    const nextQuote = ch === quote ? null : quote;
+    return { out, nextI: i + 1, nextQuote };
+  }
+  if (ch === "'" || ch === '"' || ch === '`') {
+    return { out: outSoFar + ch, nextI: i + 1, nextQuote: ch };
+  }
+  if (ch === '/' && next === '/') {
+    // Line comment: drop everything up to (but keep) the newline so the
+    // surrounding line structure is preserved for the patterns.
+    let j = i + 2;
+    while (j < n && source[j] !== '\n') {
+      j += 1;
+    }
+    return { out: outSoFar, nextI: j, nextQuote: null };
+  }
+  if (ch === '/' && next === '*') {
+    // Block comment: drop through the closing delimiter, emitting a single
+    // space so adjacent tokens cannot be accidentally glued together.
+    let j = i + 2;
+    while (j < n && !(source[j] === '*' && source[j + 1] === '/')) {
+      j += 1;
+    }
+    j += 2;
+    return { out: outSoFar + ' ', nextI: j, nextQuote: null };
+  }
+  return { out: outSoFar + ch, nextI: i + 1, nextQuote: null };
+}
+
+/**
  * Removes JavaScript line (`//…`) and block comments from source while
  * preserving the contents of string and template literals. This is a
  * deliberately small delimiter-aware lexer — not a full parser — whose sole
@@ -122,51 +180,10 @@ function stripLineAndBlockComments(source: string): string {
   // Active string/template delimiter while inside a literal; null while in code.
   let quote: string | null = null;
   while (i < n) {
-    const ch = source[i];
-    const next = source[i + 1];
-    if (quote !== null) {
-      out += ch;
-      if (ch === '\\' && i + 1 < n) {
-        // Preserve the escaped character verbatim so an escaped quote does not
-        // prematurely close the literal.
-        out += next;
-        i += 2;
-        continue;
-      }
-      if (ch === quote) {
-        quote = null;
-      }
-      i += 1;
-      continue;
-    }
-    if (ch === "'" || ch === '"' || ch === '`') {
-      quote = ch;
-      out += ch;
-      i += 1;
-      continue;
-    }
-    if (ch === '/' && next === '/') {
-      // Line comment: drop everything up to (but keep) the newline so the
-      // surrounding line structure is preserved for the patterns.
-      i += 2;
-      while (i < n && source[i] !== '\n') {
-        i += 1;
-      }
-      continue;
-    }
-    if (ch === '/' && next === '*') {
-      // Block comment: drop through the closing delimiter, emitting a single
-      // space so adjacent tokens cannot be accidentally glued together.
-      i += 2;
-      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
-        i += 1;
-      }
-      i += 2;
-      out += ' ';
-      continue;
-    }
-    out += ch;
-    i += 1;
+    const result = processChar(source, i, n, quote, out);
+    out = result.out;
+    i = result.nextI;
+    quote = result.nextQuote;
   }
   return out;
 }
@@ -250,6 +267,59 @@ function resolveLocalModule(
   return undefined;
 }
 
+/**
+ * Checks the relative dependency specifiers required by a single entry script.
+ * Returns the set of missing-path diagnostics and the list of resolved local
+ * modules to follow transitively. Extracted from the BFS loop so the loop body
+ * stays free of multiple break/continue statements.
+ */
+function checkEntryDependencies(
+  current: string,
+  source: string,
+  packed: Set<string>,
+): { missing: string[]; follow: string[] } {
+  const missing: string[] = [];
+  const follow: string[] = [];
+  for (const specifier of findRelativeDependencySpecifiers(source)) {
+    const resolved = resolveLocalModule(current, specifier);
+    const diagnostic = dependencyDiagnostic(
+      current,
+      specifier,
+      resolved,
+      packed,
+    );
+    if (diagnostic !== null) {
+      missing.push(diagnostic);
+    } else if (resolved !== undefined) {
+      // Follow the dependency so we also catch helpers-requiring-helpers.
+      follow.push(resolved);
+    }
+  }
+  return { missing, follow };
+}
+
+/**
+ * Returns a diagnostic string when a relative dependency specifier is missing or
+ * not packed, or null when the resolved module ships and should be followed.
+ */
+function dependencyDiagnostic(
+  current: string,
+  specifier: string,
+  resolved: string | undefined,
+  packed: Set<string>,
+): string | null {
+  if (resolved === undefined) {
+    return `${current} requires "${specifier}" which resolves to no file on disk`;
+  }
+  if (!packed.has(resolved)) {
+    return (
+      `${current} requires "${specifier}" (-> ${resolved}) which is NOT ` +
+      'in the published tarball; add it to package.json "files".'
+    );
+  }
+  return null;
+}
+
 describe('published package integrity (S1)', () => {
   it('includes every local module the lifecycle scripts transitively require', () => {
     // The bug this guards against: a lifecycle script gains a
@@ -282,22 +352,13 @@ describe('published package integrity (S1)', () => {
       visited.add(current);
 
       const source = readFileSync(join(repoRoot, current), 'utf-8');
-      for (const specifier of findRelativeDependencySpecifiers(source)) {
-        const resolved = resolveLocalModule(current, specifier);
-        if (resolved === undefined) {
-          missing.push(
-            `${current} requires "${specifier}" which resolves to no file on disk`,
-          );
-          continue;
-        }
-        if (!packed.has(resolved)) {
-          missing.push(
-            `${current} requires "${specifier}" (-> ${resolved}) which is NOT ` +
-              'in the published tarball; add it to package.json "files".',
-          );
-          continue;
-        }
-        // Follow the dependency so we also catch helpers-requiring-helpers.
+      const { missing: entryMissing, follow } = checkEntryDependencies(
+        current,
+        source,
+        packed,
+      );
+      missing.push(...entryMissing);
+      for (const resolved of follow) {
         queue.push(resolved);
       }
     }
