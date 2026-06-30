@@ -36,7 +36,7 @@ import {
   createErrorResult,
   formatSuccessContent,
   formatSuccessDisplay,
-  getExplicitToolNameCandidates,
+  getToolNameCandidates,
   isExcludedToolName,
   isToolBlocked,
   normalizeSubagentStreamingText,
@@ -453,7 +453,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
         return false;
       }
 
-      const candidates = getExplicitToolNameCandidates(name);
+      const candidates = getToolNameCandidates(name);
       return (
         candidates.length > 0 &&
         !candidates.some((canonical) => excluded.has(canonical))
@@ -483,7 +483,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
     const allowedByCanonical = new Map<string, string>();
     for (const toolName of allowedRegistryTools) {
-      for (const canonical of getExplicitToolNameCandidates(toolName)) {
+      for (const canonical of getToolNameCandidates(toolName)) {
         if (canonical && !allowedByCanonical.has(canonical)) {
           allowedByCanonical.set(canonical, toolName);
         }
@@ -496,7 +496,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
           return undefined;
         }
 
-        const candidates = getExplicitToolNameCandidates(name);
+        const candidates = getToolNameCandidates(name);
         if (candidates.some((canonical) => excluded.has(canonical))) {
           return undefined;
         }

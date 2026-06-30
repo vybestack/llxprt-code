@@ -42,7 +42,7 @@ import {
   INVALID_TOOL_NAME,
 } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { getExplicitToolNameCandidates } from './toolGovernance.js';
+import { getToolNameCandidates } from './toolGovernance.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
@@ -78,7 +78,7 @@ const SUBAGENT_EXCLUDED_TOOLS: ReadonlySet<string> = new Set(
  * runtimes (task/list_subagents).
  */
 function isSubagentExcludedToolName(name: string): boolean {
-  return getExplicitToolNameCandidates(name).some((candidate) =>
+  return getToolNameCandidates(name).some((candidate) =>
     SUBAGENT_EXCLUDED_TOOLS.has(candidate),
   );
 }
@@ -107,14 +107,14 @@ function getDeclarationWhitelistName(decl: unknown): string | undefined {
     return undefined;
   }
 
-  return getExplicitToolNameCandidates(declName)[0];
+  return getToolNameCandidates(declName)[0];
 }
 
 function resolveAllowedToolEntryCanonical(
   name: string,
   allowedNames: ReadonlySet<string>,
 ): string | undefined {
-  const candidates = getExplicitToolNameCandidates(name);
+  const candidates = getToolNameCandidates(name);
   return candidates.find((candidate) => allowedNames.has(candidate));
 }
 
@@ -298,7 +298,7 @@ function applyToolWhitelistToEphemerals(
       ? new Set(
           toolRegistry
             .getEnabledTools()
-            .flatMap((tool) => getExplicitToolNameCandidates(tool.name)),
+            .flatMap((tool) => getToolNameCandidates(tool.name)),
         )
       : undefined;
   if (registryNames !== undefined && registryNames.size === 0) {
@@ -319,7 +319,7 @@ function applyToolWhitelistToEphemerals(
         }
         return resolved;
       }
-      const candidates = getExplicitToolNameCandidates(entry);
+      const candidates = getToolNameCandidates(entry);
       if (candidates.length === 0) {
         debugLogger.warn(`Tool "${entry}" has an invalid name and is skipped.`);
         return undefined;
@@ -352,7 +352,7 @@ function applyToolWhitelistToEphemerals(
     ? new Set(
         existingAllowedValue
           .filter((entry): entry is string => typeof entry === 'string')
-          .flatMap(getExplicitToolNameCandidates)
+          .flatMap(getToolNameCandidates)
           .filter(
             (entry) =>
               entry !== INVALID_TOOL_NAME &&
@@ -364,7 +364,7 @@ function applyToolWhitelistToEphemerals(
 
   const allowedSet = hasExistingAllowed
     ? normalizedWhitelist.filter((entry) =>
-        getExplicitToolNameCandidates(entry).some((candidate) =>
+        getToolNameCandidates(entry).some((candidate) =>
           existingAllowed.has(candidate),
         ),
       )
@@ -414,7 +414,7 @@ function resolveDeclarationEntry(
     return null;
   }
 
-  const candidates = getExplicitToolNameCandidates(entry);
+  const candidates = getToolNameCandidates(entry);
   if (candidates.length === 0) {
     debugLogger.warn(`Tool "${entry}" has an invalid name and is skipped.`);
     return null;

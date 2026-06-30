@@ -10,7 +10,6 @@ import {
   isToolBlocked,
   canonicalizeApiQualifiedToolName,
   canonicalizeToolName,
-  getExplicitToolNameCandidates,
   getToolNameCandidates,
   type ToolGovernanceConfig,
   type ToolGovernance,
@@ -523,11 +522,6 @@ describe('isToolBlocked', () => {
       expect(
         getToolNameCandidates('functions..run_shell_command'),
       ).toStrictEqual([]);
-      expect(getExplicitToolNameCandidates('')).toStrictEqual([]);
-      expect(getExplicitToolNameCandidates('functions.')).toStrictEqual([]);
-      expect(
-        getExplicitToolNameCandidates('functions..run_shell_command'),
-      ).toStrictEqual([]);
     });
 
     it('adds a short alias for two-segment known API prefixes', () => {
@@ -536,31 +530,17 @@ describe('isToolBlocked', () => {
       ).toStrictEqual(['functions.run_shell_command', 'run_shell_command']);
     });
 
-    it('adds a middle-tail candidate for three-segment known API prefixes', () => {
+    it('does not treat GitHub namespaces as API aliases', () => {
+      expect(getToolNameCandidates('github.read_file')).toStrictEqual([
+        'github.read_file',
+      ]);
       expect(getToolNameCandidates('github.repo.read_file')).toStrictEqual([
         'github.repo.read_file',
-        'repo.read_file',
       ]);
     });
 
     it('adds a final-segment alias for versioned api-prefixed strict candidates', () => {
       expect(getToolNameCandidates('api.v1.run_shell_command')).toStrictEqual([
-        'api.v1.run_shell_command',
-        'v1.run_shell_command',
-        'run_shell_command',
-      ]);
-    });
-
-    it('does not add a final-segment explicit alias for non-api namespaces', () => {
-      expect(
-        getExplicitToolNameCandidates('github.repo.read_file'),
-      ).toStrictEqual(['github.repo.read_file', 'repo.read_file']);
-    });
-
-    it('adds a final-segment explicit alias for versioned api namespace entries', () => {
-      expect(
-        getExplicitToolNameCandidates('api.v1.run_shell_command'),
-      ).toStrictEqual([
         'api.v1.run_shell_command',
         'v1.run_shell_command',
         'run_shell_command',
@@ -608,16 +588,25 @@ describe('buildToolGovernance + isToolBlocked integration', () => {
     expect(isToolBlocked('functions.other.v1', governance)).toBe(false);
   });
 
-  it('does not over-match three-segment API-qualified governance names by final segment', () => {
+  it('does not over-match GitHub namespace names to unqualified tools', () => {
     const governance: ToolGovernance = {
       allowed: new Set<string>(),
       allowedExplicit: false,
-      disabled: new Set(['read_file', 'v1']),
+      disabled: new Set(['read_file', 'repo', 'repo.read_file', 'v1']),
       excluded: new Set<string>(),
     };
 
+    expect(isToolBlocked('github.read_file', governance)).toBe(false);
+    expect(isToolBlocked('github.repo', governance)).toBe(false);
     expect(isToolBlocked('github.repo.read_file', governance)).toBe(false);
     expect(isToolBlocked('github.tool.v1', governance)).toBe(false);
+
+    const exactGovernance: ToolGovernance = {
+      ...governance,
+      disabled: new Set([...governance.disabled, 'github.repo.read_file']),
+    };
+
+    expect(isToolBlocked('github.repo.read_file', exactGovernance)).toBe(true);
   });
 
   it('checks API-qualified aliases against explicit allowed tools', () => {

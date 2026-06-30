@@ -580,6 +580,28 @@ describe('TaskTool', () => {
       ]);
     });
 
+    it('does not treat GitHub namespaces as API aliases for registry tools', async () => {
+      const readFileLaunchRequest = await executeIssue2184Invocation(
+        { tool_whitelist: ['github.read_file'] },
+        ['read_file'],
+      );
+      const repoLaunchRequest = await executeIssue2184Invocation(
+        { tool_whitelist: ['github.repo'] },
+        ['repo'],
+      );
+      const repoReadFileLaunchRequest = await executeIssue2184Invocation(
+        { tool_whitelist: ['github.repo.read_file'] },
+        ['repo.read_file', 'read_file'],
+      );
+
+      expect(readFileLaunchRequest).toBeDefined();
+      expect(readFileLaunchRequest?.toolConfig?.tools).toStrictEqual([]);
+      expect(repoLaunchRequest).toBeDefined();
+      expect(repoLaunchRequest?.toolConfig?.tools).toStrictEqual([]);
+      expect(repoReadFileLaunchRequest).toBeDefined();
+      expect(repoReadFileLaunchRequest?.toolConfig?.tools).toStrictEqual([]);
+    });
+
     it('remains fail-closed with [] for unknown or malformed qualified names', async () => {
       const unknownLaunchRequest = await executeIssue2184Invocation({
         tool_whitelist: ['functions.does_not_exist'],

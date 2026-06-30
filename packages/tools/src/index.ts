@@ -93,6 +93,14 @@ export {
 } from './formatters/toolNameUtils.js';
 
 export {
+  buildToolGovernance,
+  getToolNameCandidates,
+  isToolBlocked,
+  type ToolGovernance,
+  type ToolGovernanceConfig,
+} from './formatters/toolGovernanceUtils.js';
+
+export {
   normalizeToOpenAIToolId,
   normalizeToHistoryToolId,
   normalizeToAnthropicToolId,

@@ -10,7 +10,6 @@ import {
   isToolBlocked,
   canonicalizeApiQualifiedToolName,
   canonicalizeToolName,
-  getExplicitToolNameCandidates,
   getToolNameCandidates,
   type ToolGovernance,
 } from './coreSubagentServiceHelpers.js';
@@ -175,18 +174,28 @@ describe('coreSubagentServiceHelpers isToolBlocked', () => {
     expect(isToolBlocked('other.v1', governance)).toBe(false);
   });
 
-  it('does not over-match three-segment API-qualified governance names by final segment', () => {
+  it('does not over-match GitHub namespace names to unqualified tools', () => {
     const governance: ToolGovernance = {
       allowed: new Set<string>(),
       allowedExplicit: false,
-      disabled: new Set(['read_file', 'v1']),
+      disabled: new Set(['read_file', 'repo', 'repo.read_file', 'v1']),
       excluded: new Set(),
     };
 
+    expect(isToolBlocked('github.read_file', governance)).toBe(false);
+    expect(isToolBlocked('github.repo', governance)).toBe(false);
     expect(isToolBlocked('github.repo.read_file', governance)).toBe(false);
     expect(isToolBlocked('github.tool.v1', governance)).toBe(false);
     expect(isToolBlocked('read_file', governance)).toBe(true);
+    expect(isToolBlocked('repo', governance)).toBe(true);
+    expect(isToolBlocked('repo.read_file', governance)).toBe(true);
     expect(isToolBlocked('v1', governance)).toBe(true);
+
+    const exactGovernance: ToolGovernance = {
+      ...governance,
+      disabled: new Set([...governance.disabled, 'github.repo.read_file']),
+    };
+    expect(isToolBlocked('github.repo.read_file', exactGovernance)).toBe(true);
   });
 });
 
@@ -194,8 +203,7 @@ describe('coreSubagentServiceHelpers tool name candidate generation', () => {
   it('returns an empty array for blank or invalid input', () => {
     expect(getToolNameCandidates('')).toStrictEqual([]);
     expect(getToolNameCandidates('   ')).toStrictEqual([]);
-    expect(getExplicitToolNameCandidates('')).toStrictEqual([]);
-    expect(getExplicitToolNameCandidates('functions.')).toStrictEqual([]);
+    expect(getToolNameCandidates('functions.')).toStrictEqual([]);
   });
 
   it('returns only the canonical form for plain and unknown-prefix dotted names', () => {
@@ -210,31 +218,17 @@ describe('coreSubagentServiceHelpers tool name candidate generation', () => {
     ]);
   });
 
-  it('adds a middle-tail candidate for three-segment known API prefixes', () => {
+  it('does not treat GitHub namespaces as API aliases', () => {
+    expect(getToolNameCandidates('github.read_file')).toStrictEqual([
+      'github.read_file',
+    ]);
     expect(getToolNameCandidates('github.repo.read_file')).toStrictEqual([
       'github.repo.read_file',
-      'repo.read_file',
     ]);
   });
 
   it('adds a final-segment alias for versioned api-prefixed strict candidates', () => {
     expect(getToolNameCandidates('api.v1.run_shell_command')).toStrictEqual([
-      'api.v1.run_shell_command',
-      'v1.run_shell_command',
-      'run_shell_command',
-    ]);
-  });
-
-  it('does not add a final-segment explicit alias for non-api namespaces', () => {
-    expect(
-      getExplicitToolNameCandidates('github.repo.read_file'),
-    ).toStrictEqual(['github.repo.read_file', 'repo.read_file']);
-  });
-
-  it('adds a final-segment explicit alias for versioned api namespace entries', () => {
-    expect(
-      getExplicitToolNameCandidates('api.v1.run_shell_command'),
-    ).toStrictEqual([
       'api.v1.run_shell_command',
       'v1.run_shell_command',
       'run_shell_command',

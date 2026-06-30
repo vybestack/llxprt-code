@@ -9,7 +9,7 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
   buildToolGovernance,
-  getExplicitToolNameCandidates,
+  getToolNameCandidates,
   isToolBlocked,
 } from '../core/toolGovernance.js';
 import type { TaskToolParams } from './task.js';
@@ -50,7 +50,7 @@ export function isExcludedToolName(
   name: string,
   excluded: Set<string>,
 ): boolean {
-  const candidates = getExplicitToolNameCandidates(name);
+  const candidates = getToolNameCandidates(name);
   return (
     candidates.length === 0 ||
     candidates.some((canonical) => excluded.has(canonical))
@@ -86,7 +86,7 @@ export function buildGovernedToolWhitelist(
 
   const allowedByCanonical = new Map<string, string>();
   for (const toolName of allowedRegistryTools) {
-    for (const canonical of getExplicitToolNameCandidates(toolName)) {
+    for (const canonical of getToolNameCandidates(toolName)) {
       if (!allowedByCanonical.has(canonical)) {
         allowedByCanonical.set(canonical, toolName);
       }
@@ -98,7 +98,7 @@ export function buildGovernedToolWhitelist(
       return undefined;
     }
 
-    const candidates = getExplicitToolNameCandidates(name);
+    const candidates = getToolNameCandidates(name);
     if (candidates.some((canonical) => excluded.has(canonical))) {
       return undefined;
     }

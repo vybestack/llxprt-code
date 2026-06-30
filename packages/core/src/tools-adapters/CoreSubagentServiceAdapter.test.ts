@@ -250,6 +250,38 @@ describe('CoreSubagentServiceAdapter toolConfig preservation (Issue #2069)', () 
     ]);
   });
 
+  it('does not treat GitHub namespaces as API aliases for registry tools', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({}),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [
+          { name: 'repo' },
+          { name: 'read_file' },
+          { name: 'repo.read_file' },
+        ],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: [
+        'github.repo',
+        'github.read_file',
+        'github.repo.read_file',
+      ],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+  });
+
   it('drops unresolved API-qualified whitelist entries when registry validation is available', async () => {
     const { adapter, launch } = createAdapterWithLaunch({
       getEphemeralSettings: () => ({}),
