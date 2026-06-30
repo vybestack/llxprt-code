@@ -719,5 +719,17 @@ describe('TaskTool', () => {
         outputs: { result: 'The output' },
       });
     });
+
+    it('fails closed when multiple registry tools map to the same canonical name', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: ['read_file'],
+        },
+        ['api.v1.read_file', 'api.v2.read_file'],
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+    });
   });
 });

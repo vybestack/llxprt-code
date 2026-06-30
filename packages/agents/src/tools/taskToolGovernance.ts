@@ -57,11 +57,14 @@ export function buildGovernedToolWhitelist(
         !isSubagentExcludedToolName(name, excluded),
     );
 
-  const allowedByCanonical = new Map<string, string>();
+  const allowedByCanonical = new Map<string, string[]>();
   for (const toolName of allowedRegistryTools) {
     for (const canonical of getToolNameCandidates(toolName)) {
-      if (!allowedByCanonical.has(canonical)) {
-        allowedByCanonical.set(canonical, toolName);
+      const existing = allowedByCanonical.get(canonical);
+      if (existing === undefined) {
+        allowedByCanonical.set(canonical, [toolName]);
+      } else if (!existing.includes(toolName)) {
+        existing.push(toolName);
       }
     }
   }
@@ -80,8 +83,12 @@ export function buildGovernedToolWhitelist(
     }
 
     for (const canonical of candidates) {
-      const resolved = allowedByCanonical.get(canonical);
-      if (resolved && !isToolBlocked(resolved, governance)) {
+      const matches = allowedByCanonical.get(canonical);
+      if (matches === undefined || matches.length !== 1) {
+        continue;
+      }
+      const resolved = matches[0];
+      if (!isToolBlocked(resolved, governance)) {
         return resolved;
       }
     }
