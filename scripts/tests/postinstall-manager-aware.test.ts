@@ -21,6 +21,7 @@ import { tmpdir } from 'node:os';
 
 const repoRoot = resolve(__dirname, '..', '..');
 const realPostinstall = join(repoRoot, 'scripts', 'postinstall.cjs');
+const realDetectInstaller = join(repoRoot, 'scripts', 'detect-installer.cjs');
 
 const BUN_USER_AGENT = 'bun/1.3.14 npm/? node/v24.3.0 darwin arm64';
 const NPM_USER_AGENT = 'npm/11.6.2 node/v24.3.0 darwin arm64';
@@ -78,6 +79,10 @@ function makeFixture(): Fixture {
 
   mkdirSync(join(dir, 'scripts'));
   copyFileSync(realPostinstall, join(dir, 'scripts', 'postinstall.cjs'));
+  copyFileSync(
+    realDetectInstaller,
+    join(dir, 'scripts', 'detect-installer.cjs'),
+  );
 
   const lockfilePath = join(dir, 'package-lock.json');
   writeFileSync(lockfilePath, peerFlaggedLockfile());
@@ -93,9 +98,13 @@ function makeFixture(): Fixture {
   mkdirSync(binDir);
   const sentinel = join(dir, 'npm-invoked.sentinel');
   const npmStub = join(binDir, 'npm');
+  // The sentinel path is passed to the stub via the NPM_SENTINEL env var rather
+  // than interpolated into this shell-script text. Interpolating an OS-provided
+  // tmpdir path directly into the script would break (or be injectable) if that
+  // path ever contained shell-special characters such as spaces or quotes.
   writeFileSync(
     npmStub,
-    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${sentinel}"\nexit 0\n`,
+    '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$NPM_SENTINEL"\nexit 0\n',
   );
   chmodSync(npmStub, 0o755);
 
@@ -106,6 +115,8 @@ function makeFixture(): Fixture {
         ...process.env,
         npm_config_user_agent: userAgent,
         PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+        // The npm stub appends to this path to record that it was invoked.
+        NPM_SENTINEL: sentinel,
       };
       // Ensure the recursion guard is unset so the npm path reaches bootstrap.
       delete env.LLXPRT_POSTINSTALL_RUNNING;

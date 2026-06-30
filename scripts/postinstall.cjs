@@ -9,26 +9,9 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { detectInstaller } = require('./detect-installer.cjs');
 
 const lockfilePath = path.join(__dirname, '..', 'package-lock.json');
-
-/**
- * Detects which package manager invoked this lifecycle script.
- *
- * Lifecycle scripts run under `node`, so `process.versions.bun` is not set even
- * when Bun drives the install. The reliable signal is `npm_config_user_agent`,
- * which Bun sets to `bun/<version> ...` and npm sets to `npm/<version> ...`.
- *
- * @returns {'bun' | 'npm'} The detected installer ('npm' is the default for npm
- *   and any other/unknown manager so existing behavior is preserved).
- */
-function detectInstaller() {
-  const userAgent = process.env.npm_config_user_agent || '';
-  if (userAgent.startsWith('bun/')) {
-    return 'bun';
-  }
-  return 'npm';
-}
 
 function stripPeerFlagsFromLockfile() {
   if (!fs.existsSync(lockfilePath)) {
