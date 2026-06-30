@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8011,6 +8012,65 @@ describe('scanRootTypeScriptSuppressions (#2189 review finding)', () => {
     expect(offenders, 'Found TS suppressions: ' + offenders.join(', ')).toEqual(
       [],
     );
+  });
+
+  // Issue #2282: the root scan must respect git tracking so that local
+  // gitignored / untracked vendored content (e.g. research/) cannot produce
+  const NL = String.fromCharCode(10);
+
+  it('ignores TS suppressions in untracked files inside a git repo', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-git-untracked-'));
+    const git = (args) =>
+      execFileSync('git', args, { cwd: tmpDir, stdio: 'ignore' });
+    git(['-c', 'init.defaultBranch=main', 'init']);
+    mkdirSync(join(tmpDir, 'scripts'), { recursive: true });
+    writeFileSync(join(tmpDir, 'scripts', 'clean.js'), 'export const x = 1;');
+    git(['add', '-A']);
+    git([
+      '-c',
+      'user.email=t@t.com',
+      '-c',
+      'user.name=test',
+      'commit',
+      '-m',
+      'init',
+    ]);
+    writeFileSync(
+      join(tmpDir, 'scripts', 'dirty.js'),
+      ['// @ts-ignore vendored', 'export const y = x.bad;'].join(NL),
+    );
+
+    expect(scanRootTypeScriptSuppressions(tmpDir, '2189')).toEqual([]);
+  });
+
+  it('still flags TS suppressions in tracked files inside a git repo', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-git-tracked-'));
+    const git = (args) =>
+      execFileSync('git', args, { cwd: tmpDir, stdio: 'ignore' });
+    git(['-c', 'init.defaultBranch=main', 'init']);
+    mkdirSync(join(tmpDir, 'scripts'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'scripts', 'committed.js'),
+      [
+        'export const x = 1;',
+        '// @ts-ignore real committed suppression',
+        'export const y = x.bad;',
+      ].join(NL),
+    );
+    git(['add', '-A']);
+    git([
+      '-c',
+      'user.email=t@t.com',
+      '-c',
+      'user.name=test',
+      'commit',
+      '-m',
+      'init',
+    ]);
+
+    const violations = scanRootTypeScriptSuppressions(tmpDir, '2189');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].file).toBe('scripts/committed.js');
   });
 });
 

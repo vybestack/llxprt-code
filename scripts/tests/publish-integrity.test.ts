@@ -107,10 +107,11 @@ function getPackedPaths(): Set<string> {
 }
 
 /**
- * Result of processing a single character in the comment-stripper.
+ * One step of the comment-stripping lexer: the text emitted for this position
+ * plus the next scanner state.
  */
-interface CharResult {
-  out: string;
+interface CharStep {
+  emitted: string;
   nextI: number;
   nextQuote: string | null;
 }
@@ -118,29 +119,29 @@ interface CharResult {
 /**
  * Process a single character position in the comment-stripping lexer.
  * Handles string literals, line comments, block comments, and normal code.
+ * Returns only the text emitted at this step; the caller accumulates it, so
+ * the helper never needs to thread the full accumulated output through every
+ * iteration.
  */
 function processChar(
   source: string,
   i: number,
   n: number,
   quote: string | null,
-  outSoFar: string,
-): CharResult {
+): CharStep {
   const ch = source[i];
   const next = source[i + 1];
   if (quote !== null) {
-    let out = outSoFar + ch;
     if (ch === '\\' && i + 1 < n) {
       // Preserve the escaped character verbatim so an escaped quote does not
       // prematurely close the literal.
-      out += next;
-      return { out, nextI: i + 2, nextQuote: quote };
+      return { emitted: ch + next, nextI: i + 2, nextQuote: quote };
     }
     const nextQuote = ch === quote ? null : quote;
-    return { out, nextI: i + 1, nextQuote };
+    return { emitted: ch, nextI: i + 1, nextQuote };
   }
   if (ch === "'" || ch === '"' || ch === '`') {
-    return { out: outSoFar + ch, nextI: i + 1, nextQuote: ch };
+    return { emitted: ch, nextI: i + 1, nextQuote: ch };
   }
   if (ch === '/' && next === '/') {
     // Line comment: drop everything up to (but keep) the newline so the
@@ -149,7 +150,7 @@ function processChar(
     while (j < n && source[j] !== '\n') {
       j += 1;
     }
-    return { out: outSoFar, nextI: j, nextQuote: null };
+    return { emitted: '', nextI: j, nextQuote: null };
   }
   if (ch === '/' && next === '*') {
     // Block comment: drop through the closing delimiter, emitting a single
@@ -159,9 +160,9 @@ function processChar(
       j += 1;
     }
     j += 2;
-    return { out: outSoFar + ' ', nextI: j, nextQuote: null };
+    return { emitted: ' ', nextI: j, nextQuote: null };
   }
-  return { out: outSoFar + ch, nextI: i + 1, nextQuote: null };
+  return { emitted: ch, nextI: i + 1, nextQuote: null };
 }
 
 /**
@@ -180,10 +181,10 @@ function stripLineAndBlockComments(source: string): string {
   // Active string/template delimiter while inside a literal; null while in code.
   let quote: string | null = null;
   while (i < n) {
-    const result = processChar(source, i, n, quote, out);
-    out = result.out;
-    i = result.nextI;
-    quote = result.nextQuote;
+    const step = processChar(source, i, n, quote);
+    out += step.emitted;
+    i = step.nextI;
+    quote = step.nextQuote;
   }
   return out;
 }

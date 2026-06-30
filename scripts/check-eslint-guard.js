@@ -44,10 +44,11 @@ function parseArgs(argv) {
 
 const GIT_OUTPUT_BUFFER_BYTES = 64 * 1024 * 1024;
 
-function git(args) {
+function git(args, cwd) {
   return execFileSync('git', args, {
     encoding: 'utf8',
     maxBuffer: GIT_OUTPUT_BUFFER_BYTES,
+    ...(cwd ? { cwd } : {}),
   }).trim();
 }
 
@@ -4095,6 +4096,36 @@ export function listCheckedSourceFiles(rootDir) {
 }
 
 /**
+ * Lists checked source files under rootDir that are tracked by git, so the
+ * durable full-repo TS-suppression scan mirrors the diff-based coverage
+ * universe (which only ever sees tracked files). Runs `git ls-files` scoped to
+ * rootDir; when rootDir is not inside a git repository (e.g. a temporary test
+ * fixture created with mkdtempSync) git exits non-zero and this falls back to
+ * listCheckedSourceFiles, leaving behaviour unchanged outside a real checkout.
+ *
+ * Because `git ls-files` only reports files in the git index, gitignored and
+ * untracked content is excluded automatically. This prevents local-only
+ * vendored copies of upstream repositories (research/, .worktrees/, etc.) from
+ * producing false-positive suppression violations in dirty worktrees (#2282).
+ */
+function listGitTrackedCheckedSourceFiles(rootDir) {
+  let raw;
+  try {
+    raw = git(['ls-files'], rootDir);
+  } catch {
+    return listCheckedSourceFiles(rootDir);
+  }
+  const tracked = new Set(raw.split(String.fromCharCode(10)).filter(Boolean));
+  if (tracked.size === 0) {
+    return listCheckedSourceFiles(rootDir);
+  }
+  return listCheckedSourceFiles(rootDir).filter((file) => {
+    const rel = relative(rootDir, file).replace(/\\/g, '/');
+    return tracked.has(rel);
+  });
+}
+
+/**
  * Returns true when a checked source file is a production file (not a test
  * or test-helper file). Covers the same extensions as
  * shouldCheckTypeScriptSuppression (.js/.jsx/.ts/.tsx/.mjs/.cjs) and preserves
@@ -4238,8 +4269,10 @@ export function scanPackageTypeScriptSuppressions(packageDir, issueNumber) {
  * Coverage:
  *   - Same checked source extensions as shouldCheckTypeScriptSuppression
  *     (.js/.jsx/.ts/.tsx/.mjs/.cjs).
- *   - Excludes generated directories (node_modules, dist, coverage, .git) via
- *     listCheckedSourceFiles.
+ *   - Excludes generated directories (node_modules, dist, coverage, .git) and
+ *     gitignored/untracked content via listGitTrackedCheckedSourceFiles, so
+ *     local vendored repos (research/, .worktrees/) cannot produce false
+ *     positives (#2282).
  *   - Does NOT exempt the guard implementation/test fixture files:
  *     hasTypeScriptSuppressionInState skips string, template, and regex
  *     literals, so directive text used as fixture data cannot trigger a false
@@ -4258,7 +4291,9 @@ export function scanRootTypeScriptSuppressions(rootDir, issueNumber) {
   if (!existsSync(target)) {
     return [];
   }
-  const files = listCheckedSourceFiles(target);
+  // Only inspect git-tracked files so gitignored/untracked vendored content
+  // (research/, .worktrees/) cannot produce false positives (#2282).
+  const files = listGitTrackedCheckedSourceFiles(target);
   const violations = [];
   for (const file of files) {
     const relativePath = relative(target, file).replace(/\\/g, '/');

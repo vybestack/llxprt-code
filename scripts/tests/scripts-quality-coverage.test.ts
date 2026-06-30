@@ -87,9 +87,27 @@ describe('Issue #2282: scripts strict code-quality coverage', () => {
   it('turns off max-lines-per-function for scripts tests (parity with packages)', () => {
     const rules = effectiveRulesFor('scripts/tests/publish-integrity.test.ts');
     expect(severity(rules['max-lines-per-function'])).toBe(0);
-    // Non-size quality rules still apply to test files.
+    // Non-size quality rules still apply to test files, including the
+    // motivating rule from issue #2282's context (a review had suggested
+    // suppressing it because scripts were not covered by the quality layer).
+    expect(severity(rules['sonarjs/too-many-break-or-continue-in-loop'])).toBe(
+      2,
+    );
     expect(severity(rules['sonarjs/slow-regex'])).toBe(2);
     expect(severity(rules['sonarjs/no-collapsible-if'])).toBe(2);
+  });
+
+  it('does not apply type-aware rules (scripts have no tsconfig project)', () => {
+    const rules = effectiveRulesFor('scripts/start.js');
+    // Type-aware rules require a tsconfig project (projectService), which the
+    // scripts tree lacks. This is a documented, intentional limitation, not a
+    // suppression. These rules must not be promoted to error for scripts.
+    expect(severity(rules['@typescript-eslint/no-floating-promises'])).not.toBe(
+      2,
+    );
+    expect(
+      severity(rules['@typescript-eslint/strict-boolean-expressions']),
+    ).not.toBe(2);
   });
 
   it('carves out structural complexity rules for the guard parser', () => {
