@@ -88,6 +88,7 @@ export {
   isValidToolName as isValidFormatterToolName,
   findMatchingTool,
   canonicalizeToolName,
+  canonicalizeApiQualifiedToolName,
   INVALID_TOOL_NAME,
 } from './formatters/toolNameUtils.js';
 

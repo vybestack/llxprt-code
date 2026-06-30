@@ -188,6 +188,29 @@ describe('createEmojiFilter', () => {
 });
 
 describe('buildRuntimeFunctionDeclarations', () => {
+  type MockToolMetadata = NonNullable<
+    ReturnType<ToolRegistryView['getToolMetadata']>
+  >;
+
+  function createMockToolsView(
+    names: string[],
+    metadata: Record<string, MockToolMetadata> = {},
+  ): ToolRegistryView {
+    const nameSet = new Set(names);
+    return {
+      listToolNames: () => names,
+      getToolMetadata: (name: string) =>
+        metadata[name] ??
+        (nameSet.has(name)
+          ? {
+              name,
+              description: '',
+              parameterSchema: { type: 'OBJECT', properties: {} },
+            }
+          : undefined),
+    };
+  }
+
   it('should map all registry metadata to declarations', () => {
     const toolsView: ToolRegistryView = {
       listToolNames: () => ['tool_a', 'tool_b'],
@@ -278,6 +301,54 @@ describe('buildRuntimeFunctionDeclarations', () => {
     expect(decls.map((d) => d.name)).toStrictEqual(['read_file']);
   });
 
+  // Issue #2184: explicit runtime declaration inputs may use API-qualified
+  // names, but registry names remain canonicalized globally.
+  it('resolves API-qualified explicit toolConfig names to registry declarations', () => {
+    const toolsView = createMockToolsView(['run_shell_command', 'read_file']);
+    const decls = buildRuntimeFunctionDeclarations(toolsView, {
+      tools: ['functions.run_shell_command', 'api.v1.read_file'],
+    });
+
+    expect(decls.map((d) => d.name)).toStrictEqual([
+      'run_shell_command',
+      'read_file',
+    ]);
+  });
+
+  it('filters out API-qualified names that do not resolve to a registry tool', () => {
+    const toolsView = createMockToolsView(['run_shell_command']);
+    const decls = buildRuntimeFunctionDeclarations(toolsView, {
+      tools: ['functions.nonexistent_tool'],
+    });
+
+    expect(decls).toHaveLength(0);
+  });
+
+  it('resolves API-qualified explicit toolConfig names to dotted registry declarations', () => {
+    const toolsView = createMockToolsView(['tool.v1']);
+    const decls = buildRuntimeFunctionDeclarations(toolsView, {
+      tools: ['functions.tool.v1'],
+    });
+
+    expect(decls.map((d) => d.name)).toStrictEqual(['tool.v1']);
+  });
+
+  it('preserves dotted registry names in default runtime declarations', () => {
+    const toolsView = createMockToolsView(['tool.v1', 'run.cmd']);
+    const decls = buildRuntimeFunctionDeclarations(toolsView, undefined);
+
+    expect(decls.map((d) => d.name)).toStrictEqual(['tool.v1', 'run.cmd']);
+  });
+
+  it('resolves explicit dotted registry names without stripping them', () => {
+    const toolsView = createMockToolsView(['tool.v1', 'run.cmd']);
+    const decls = buildRuntimeFunctionDeclarations(toolsView, {
+      tools: ['tool.v1', 'run.cmd'],
+    });
+
+    expect(decls.map((d) => d.name)).toStrictEqual(['tool.v1', 'run.cmd']);
+  });
+
   // Issue #2069: excluded task/list_subagents must be excluded from default
   it('excludes task and list_subagents from runtime default tools', () => {
     const toolsView: ToolRegistryView = {
@@ -357,6 +428,38 @@ describe('buildRuntimeFunctionDeclarations', () => {
     expect(names).not.toContain('Task');
     expect(names).not.toContain('task');
     expect(names).toContain('read_file');
+  });
+
+  it('preserves explicit string declarations when the runtime view has no listed names', () => {
+    const toolsView = createMockToolsView([], {
+      custom_tool: {
+        name: 'custom_tool',
+        description: 'custom',
+        parameterSchema: { type: 'OBJECT' },
+      },
+    });
+
+    const decls = buildRuntimeFunctionDeclarations(toolsView, {
+      tools: ['custom_tool'],
+    });
+
+    expect(decls.map((decl) => decl.name)).toStrictEqual(['custom_tool']);
+  });
+
+  it('resolves API-qualified string declarations when the runtime view has no listed names', () => {
+    const toolsView = createMockToolsView([], {
+      custom_tool: {
+        name: 'custom_tool',
+        description: 'custom',
+        parameterSchema: { type: 'OBJECT' },
+      },
+    });
+
+    const decls = buildRuntimeFunctionDeclarations(toolsView, {
+      tools: ['functions.custom_tool'],
+    });
+
+    expect(decls.map((decl) => decl.name)).toStrictEqual(['custom_tool']);
   });
 
   // Issue #2069: non-string FunctionDeclaration with no name is preserved

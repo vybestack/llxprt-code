@@ -9,6 +9,7 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
   buildToolGovernance,
+  getExplicitToolNameCandidates,
   isToolBlocked,
 } from '../core/toolGovernance.js';
 import type { TaskToolParams } from './task.js';
@@ -49,8 +50,11 @@ export function isExcludedToolName(
   name: string,
   excluded: Set<string>,
 ): boolean {
-  const canonical = normalizeToolNameForPolicy(name);
-  return canonical.length > 0 && excluded.has(canonical);
+  const candidates = getExplicitToolNameCandidates(name);
+  return (
+    candidates.length === 0 ||
+    candidates.some((canonical) => excluded.has(canonical))
+  );
 }
 
 /**
@@ -82,23 +86,34 @@ export function buildGovernedToolWhitelist(
 
   const allowedByCanonical = new Map<string, string>();
   for (const toolName of allowedRegistryTools) {
-    const canonical = normalizeToolNameForPolicy(toolName);
-    if (canonical && !allowedByCanonical.has(canonical)) {
-      allowedByCanonical.set(canonical, toolName);
+    for (const canonical of getExplicitToolNameCandidates(toolName)) {
+      if (!allowedByCanonical.has(canonical)) {
+        allowedByCanonical.set(canonical, toolName);
+      }
     }
   }
 
   const filteredTools = candidateTools.map((name) => {
-    if (typeof name !== 'string' || isExcludedToolName(name, excluded)) {
+    if (typeof name !== 'string') {
       return undefined;
     }
 
-    const canonical = normalizeToolNameForPolicy(name);
-    if (!canonical || isToolBlocked(canonical, governance)) {
+    const candidates = getExplicitToolNameCandidates(name);
+    if (candidates.some((canonical) => excluded.has(canonical))) {
+      return undefined;
+    }
+    if (candidates.some((canonical) => governance.disabled.has(canonical))) {
       return undefined;
     }
 
-    return allowedByCanonical.get(canonical);
+    for (const canonical of candidates) {
+      const resolved = allowedByCanonical.get(canonical);
+      if (resolved && !isToolBlocked(resolved, governance)) {
+        return resolved;
+      }
+    }
+
+    return undefined;
   });
 
   const validTools = filteredTools.filter(
@@ -125,9 +140,9 @@ export function buildGovernedToolWhitelist(
 
 /**
  * Filters excluded tools (task/list_subagents) from a whitelist when no
- * registry is available to perform full governance validation. Non-excluded
- * entries pass through unchanged. Returns undefined if the result is empty
- * so the caller can apply fail-closed semantics for explicit whitelists.
+ * registry is available to perform full governance validation. Entries that
+ * cannot be canonicalized are also dropped. Returns undefined if the result is
+ * empty so the caller can apply fail-closed semantics for explicit whitelists.
  */
 export function filterExcludedFromWhitelist(
   candidateTools: string[] | undefined,
@@ -138,7 +153,8 @@ export function filterExcludedFromWhitelist(
 
   const excluded = buildExcludedToolNames();
   const filtered = candidateTools.filter(
-    (name) => typeof name === 'string' && !isExcludedToolName(name, excluded),
+    (name): name is string =>
+      typeof name === 'string' && !isExcludedToolName(name, excluded),
   );
 
   return filtered.length > 0 ? filtered : undefined;

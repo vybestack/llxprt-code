@@ -509,7 +509,10 @@ describe('TaskTool', () => {
       outputConfig?: unknown;
     };
 
-    function createIssue2184Harness(registryTools: string[]) {
+    function createIssue2184Harness(
+      registryTools: string[],
+      ephemerals: Record<string, unknown> = {},
+    ) {
       const dispose = vi.fn().mockResolvedValue(undefined);
       const scope = {
         output: {
@@ -533,7 +536,7 @@ describe('TaskTool', () => {
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const configWithRegistry = {
         getSessionId: () => 'session-2184',
-        getEphemeralSettings: () => ({}),
+        getEphemeralSettings: () => ephemerals,
         getExcludeTools: () => [],
         getToolRegistry: () => ({
           getEnabledTools: () => registryTools.map((name) => ({ name })),
@@ -549,8 +552,12 @@ describe('TaskTool', () => {
     async function executeIssue2184Invocation(
       params: Pick<TaskToolParams, 'tool_whitelist' | 'output_spec'>,
       registryTools = ['run_shell_command'],
+      ephemerals: Record<string, unknown> = {},
     ): Promise<LaunchRequest | undefined> {
-      const { launch, tool } = createIssue2184Harness(registryTools);
+      const { launch, tool } = createIssue2184Harness(
+        registryTools,
+        ephemerals,
+      );
       const invocation = tool.build({
         subagent_name: 'helper',
         goal_prompt: 'Do work',
@@ -597,6 +604,49 @@ describe('TaskTool', () => {
       expect(launchRequest).toBeDefined();
       expect(launchRequest?.toolConfig?.tools).toStrictEqual([
         'run_shell_command',
+      ]);
+    });
+
+    it('honors qualified disabled entries before resolving through the registry', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: ['functions.run_shell_command'],
+        },
+        ['run_shell_command'],
+        { 'tools.disabled': ['functions.run_shell_command'] },
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest).toHaveProperty('toolConfig');
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+    });
+
+    it('honors versioned API entries in governance allowlists', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: ['functions.run_shell_command'],
+        },
+        ['run_shell_command'],
+        { 'tools.allowed': ['api.v1.run_shell_command'] },
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+        'run_shell_command',
+      ]);
+    });
+
+    it('resolves plain whitelist entries to dotted registry tool names', async () => {
+      const launchRequest = await executeIssue2184Invocation(
+        {
+          tool_whitelist: ['run_shell_command'],
+        },
+        ['functions.run_shell_command'],
+      );
+
+      expect(launchRequest).toBeDefined();
+      expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+        'functions.run_shell_command',
       ]);
     });
 

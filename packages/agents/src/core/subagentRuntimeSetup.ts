@@ -42,6 +42,7 @@ import {
   INVALID_TOOL_NAME,
 } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { getExplicitToolNameCandidates } from './toolGovernance.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
@@ -77,8 +78,9 @@ const SUBAGENT_EXCLUDED_TOOLS: ReadonlySet<string> = new Set(
  * runtimes (task/list_subagents).
  */
 function isSubagentExcludedToolName(name: string): boolean {
-  const canonical = canonicalizeToolName(name);
-  return Boolean(canonical) && SUBAGENT_EXCLUDED_TOOLS.has(canonical);
+  return getExplicitToolNameCandidates(name).some((candidate) =>
+    SUBAGENT_EXCLUDED_TOOLS.has(candidate),
+  );
 }
 
 /**
@@ -93,6 +95,27 @@ function isSubagentExcludedDeclaration(decl: unknown): boolean {
 
   const declName = decl.name;
   return typeof declName === 'string' && isSubagentExcludedToolName(declName);
+}
+
+function getDeclarationWhitelistName(decl: unknown): string | undefined {
+  if (typeof decl !== 'object' || decl === null || !('name' in decl)) {
+    return undefined;
+  }
+
+  const declName = decl.name;
+  if (typeof declName !== 'string' || isSubagentExcludedToolName(declName)) {
+    return undefined;
+  }
+
+  return getExplicitToolNameCandidates(declName)[0];
+}
+
+function resolveAllowedToolEntryCanonical(
+  name: string,
+  allowedNames: ReadonlySet<string>,
+): string | undefined {
+  const candidates = getExplicitToolNameCandidates(name);
+  return candidates.find((candidate) => allowedNames.has(candidate));
 }
 
 /**
@@ -140,7 +163,7 @@ function filterToolEntry(
 
   if (
     allowedNames.size > 0 &&
-    !allowedNames.has(canonicalizeToolName(toolEntry))
+    !resolveAllowedToolEntryCanonical(toolEntry, allowedNames)
   ) {
     debugLogger.warn(
       `Tool "${toolEntry}" is not permitted by the runtime view and is skipped.`,
@@ -236,7 +259,7 @@ export function createToolExecutionConfig(
   const ephemerals = buildEphemeralSettings(settingsSnapshot);
 
   if (toolConfig && Array.isArray(toolConfig.tools)) {
-    applyToolWhitelistToEphemerals(ephemerals, toolConfig);
+    applyToolWhitelistToEphemerals(ephemerals, toolConfig, toolRegistry);
   }
 
   return {
@@ -260,20 +283,61 @@ export function createToolExecutionConfig(
   };
 }
 
+interface ToolRegistryWhitelistView {
+  getEnabledTools?: ToolRegistry['getEnabledTools'];
+}
+
 /** @internal — applies tool whitelist from toolConfig onto ephemeral settings */
 function applyToolWhitelistToEphemerals(
   ephemerals: Record<string, unknown>,
   toolConfig: ToolConfig,
+  toolRegistry: ToolRegistryWhitelistView,
 ): void {
-  const normalizedWhitelist = toolConfig.tools
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map(canonicalizeToolName)
-    .filter(
-      (entry) =>
-        entry !== INVALID_TOOL_NAME &&
-        entry.length > 0 &&
-        !SUBAGENT_EXCLUDED_TOOLS.has(entry),
+  const registryNames =
+    typeof toolRegistry.getEnabledTools === 'function'
+      ? new Set(
+          toolRegistry
+            .getEnabledTools()
+            .flatMap((tool) => getExplicitToolNameCandidates(tool.name)),
+        )
+      : undefined;
+  if (registryNames !== undefined && registryNames.size === 0) {
+    debugLogger.warn(
+      'Registry has no enabled tools; all whitelist entries will be dropped and tools.allowed will fail-closed to [].',
     );
+  }
+  const normalizedStringWhitelist = toolConfig.tools
+    .filter((entry): entry is string => typeof entry === 'string')
+    .filter((entry) => !isSubagentExcludedToolName(entry))
+    .map((entry) => {
+      if (registryNames !== undefined) {
+        const resolved = resolveAllowedToolEntryCanonical(entry, registryNames);
+        if (resolved === undefined) {
+          debugLogger.warn(
+            `Tool "${entry}" is not in the registry and is skipped.`,
+          );
+        }
+        return resolved;
+      }
+      const candidates = getExplicitToolNameCandidates(entry);
+      if (candidates.length === 0) {
+        debugLogger.warn(`Tool "${entry}" has an invalid name and is skipped.`);
+        return undefined;
+      }
+      return candidates[0];
+    })
+    .filter(
+      (entry): entry is string =>
+        entry !== undefined && entry !== INVALID_TOOL_NAME && entry.length > 0,
+    );
+  const declarationWhitelist = toolConfig.tools
+    .filter((entry) => typeof entry !== 'string')
+    .map(getDeclarationWhitelistName)
+    .filter((entry): entry is string => entry !== undefined);
+  const normalizedWhitelist = [
+    ...normalizedStringWhitelist,
+    ...declarationWhitelist,
+  ];
 
   // Explicit empty/fail-closed: preserve tools.allowed=[] so the scheduler
   // does not fall back to parent/default allowed tools.
@@ -285,19 +349,25 @@ function applyToolWhitelistToEphemerals(
   const existingAllowedValue = ephemerals['tools.allowed'];
   const hasExistingAllowed = Array.isArray(existingAllowedValue);
   const existingAllowed = hasExistingAllowed
-    ? existingAllowedValue
-        .filter((entry): entry is string => typeof entry === 'string')
-        .map(canonicalizeToolName)
-        .filter(
-          (entry) =>
-            entry !== INVALID_TOOL_NAME &&
-            entry.length > 0 &&
-            !SUBAGENT_EXCLUDED_TOOLS.has(entry),
-        )
-    : [];
+    ? new Set(
+        existingAllowedValue
+          .filter((entry): entry is string => typeof entry === 'string')
+          .flatMap(getExplicitToolNameCandidates)
+          .filter(
+            (entry) =>
+              entry !== INVALID_TOOL_NAME &&
+              entry.length > 0 &&
+              !isSubagentExcludedToolName(entry),
+          ),
+      )
+    : new Set<string>();
 
   const allowedSet = hasExistingAllowed
-    ? normalizedWhitelist.filter((entry) => existingAllowed.includes(entry))
+    ? normalizedWhitelist.filter((entry) =>
+        getExplicitToolNameCandidates(entry).some((candidate) =>
+          existingAllowed.has(candidate),
+        ),
+      )
     : normalizedWhitelist;
 
   ephemerals['tools.allowed'] = Array.from(new Set(allowedSet));
@@ -340,28 +410,52 @@ function resolveDeclarationEntry(
     return entry;
   }
 
-  const canonical = canonicalizeToolName(entry);
-  if (SUBAGENT_EXCLUDED_TOOLS.has(canonical)) {
+  if (isSubagentExcludedToolName(entry)) {
     return null;
   }
 
-  if (ctx.allowedNames.size > 0 && !ctx.allowedNames.has(canonical)) {
-    debugLogger.warn(
-      `Tool "${entry}" is not permitted by the runtime view and is skipped.`,
+  const candidates = getExplicitToolNameCandidates(entry);
+  if (candidates.length === 0) {
+    debugLogger.warn(`Tool "${entry}" has an invalid name and is skipped.`);
+    return null;
+  }
+
+  let resolvedName: string;
+  if (ctx.allowedNames.size > 0) {
+    const canonical = candidates.find((candidate) =>
+      ctx.allowedNames.has(candidate),
     );
-    return null;
-  }
-
-  const resolvedName = ctx.registryNameByCanonical.get(canonical) ?? entry;
-  const metadata = ctx.toolsView.getToolMetadata(resolvedName);
-  if (!metadata) {
-    debugLogger.warn(
-      `Tool "${entry}" is not available in the runtime view and is skipped.`,
+    if (!canonical) {
+      debugLogger.warn(
+        `Tool "${entry}" is not permitted by the runtime view and is skipped.`,
+      );
+      return null;
+    }
+    resolvedName = ctx.registryNameByCanonical.get(canonical) ?? canonical;
+  } else {
+    const registryCanonical = candidates.find((candidate) =>
+      ctx.registryNameByCanonical.has(candidate),
     );
-    return null;
+    resolvedName = registryCanonical
+      ? (ctx.registryNameByCanonical.get(registryCanonical) ??
+        registryCanonical)
+      : candidates[0];
+  }
+  const namesToTry = [
+    resolvedName,
+    ...candidates.filter((candidate) => candidate !== resolvedName),
+  ];
+  for (const name of Array.from(new Set(namesToTry))) {
+    const metadata = ctx.toolsView.getToolMetadata(name);
+    if (metadata) {
+      return convertMetadataToFunctionDeclaration(name, metadata);
+    }
   }
 
-  return convertMetadataToFunctionDeclaration(resolvedName, metadata);
+  debugLogger.warn(
+    `Tool "${entry}" is not available in the runtime view and is skipped.`,
+  );
+  return null;
 }
 
 export function buildRuntimeFunctionDeclarations(

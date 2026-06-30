@@ -36,6 +36,7 @@ import {
   createErrorResult,
   formatSuccessContent,
   formatSuccessDisplay,
+  getExplicitToolNameCandidates,
   isExcludedToolName,
   isToolBlocked,
   normalizeSubagentStreamingText,
@@ -447,9 +448,17 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     }
 
     const excluded = buildExcludedToolNames();
-    const filtered = candidateTools.filter(
-      (name) => typeof name === 'string' && !isExcludedToolName(name, excluded),
-    );
+    const filtered = candidateTools.filter((name) => {
+      if (typeof name !== 'string') {
+        return false;
+      }
+
+      const candidates = getExplicitToolNameCandidates(name);
+      return (
+        candidates.length > 0 &&
+        !candidates.some((canonical) => excluded.has(canonical))
+      );
+    });
 
     return filtered.length > 0 ? filtered : undefined;
   }
@@ -474,24 +483,37 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
 
     const allowedByCanonical = new Map<string, string>();
     for (const toolName of allowedRegistryTools) {
-      const canonical = canonicalizeToolName(toolName);
-      if (canonical && !allowedByCanonical.has(canonical)) {
-        allowedByCanonical.set(canonical, toolName);
+      for (const canonical of getExplicitToolNameCandidates(toolName)) {
+        if (canonical && !allowedByCanonical.has(canonical)) {
+          allowedByCanonical.set(canonical, toolName);
+        }
       }
     }
 
     const validTools = candidateTools
       .map((name) => {
-        if (!name || isExcludedToolName(name, excluded)) {
+        if (!name) {
           return undefined;
         }
 
-        const canonical = canonicalizeToolName(name);
-        if (!canonical || isToolBlocked(canonical, governance)) {
+        const candidates = getExplicitToolNameCandidates(name);
+        if (candidates.some((canonical) => excluded.has(canonical))) {
+          return undefined;
+        }
+        if (
+          candidates.some((canonical) => governance.disabled.has(canonical))
+        ) {
           return undefined;
         }
 
-        return allowedByCanonical.get(canonical);
+        for (const canonical of candidates) {
+          const resolved = allowedByCanonical.get(canonical);
+          if (resolved && !isToolBlocked(resolved, governance)) {
+            return resolved;
+          }
+        }
+
+        return undefined;
       })
       .filter(
         (name): name is string => typeof name === 'string' && name.length > 0,

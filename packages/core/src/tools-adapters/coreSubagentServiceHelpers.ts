@@ -5,6 +5,7 @@
  */
 
 import {
+  canonicalizeApiQualifiedToolName as canonicalizeToolsApiQualifiedToolName,
   canonicalizeToolName as canonicalizeToolsToolName,
   INVALID_TOOL_NAME,
   ToolErrorType,
@@ -45,6 +46,11 @@ export function canonicalizeToolName(rawName: string): string {
   return canonicalName === INVALID_TOOL_NAME ? '' : canonicalName;
 }
 
+export function canonicalizeApiQualifiedToolName(rawName: string): string {
+  const canonicalName = canonicalizeToolsApiQualifiedToolName(rawName);
+  return canonicalName === INVALID_TOOL_NAME ? '' : canonicalName;
+}
+
 export function buildToolGovernance(
   config: ToolGovernanceConfig,
 ): ToolGovernance {
@@ -72,28 +78,90 @@ export function buildToolGovernance(
       : [];
 
   return {
-    allowed: new Set(allowedRaw.map(canonicalizeToolName)),
+    allowed: buildGovernanceNameSet(allowedRaw),
     allowedExplicit,
-    disabled: new Set(disabledRaw.map(canonicalizeToolName)),
-    excluded: new Set(excludedRaw.map(canonicalizeToolName)),
+    disabled: buildGovernanceNameSet(disabledRaw),
+    excluded: buildGovernanceNameSet(excludedRaw),
   };
 }
+
+function buildGovernanceNameSet(rawNames: string[]): Set<string> {
+  return new Set(rawNames.flatMap(getExplicitToolNameCandidates));
+}
+
+const API_TOOL_NAMESPACE_PREFIXES = new Set([
+  'api',
+  'function',
+  'functions',
+  'github',
+]);
+
+interface ParsedToolName {
+  canonical: string;
+  segments: string[];
+  prefix: string;
+}
+
+function parseToolName(toolName: string): ParsedToolName | undefined {
+  const canonical = canonicalizeToolName(toolName);
+  if (canonical.length === 0) {
+    return undefined;
+  }
+
+  const segments = canonical.split('.');
+  const prefix = segments[0]?.toLowerCase() ?? '';
+  return { canonical, segments, prefix };
+}
+
+function appendCandidate(candidates: string[], name: string): void {
+  const canonical = canonicalizeToolName(name);
+  if (canonical.length > 0) {
+    candidates.push(canonical);
+  }
+}
+
+function buildToolNameCandidates(parsed: ParsedToolName): string[] {
+  const { canonical, segments, prefix } = parsed;
+  const candidates = [canonical];
+  const hasKnownApiPrefix = API_TOOL_NAMESPACE_PREFIXES.has(prefix);
+
+  if (segments.length > 1 && hasKnownApiPrefix) {
+    if (segments.length > 2) {
+      appendCandidate(candidates, segments.slice(1).join('.'));
+    }
+    if (segments.length === 2 || prefix === 'api') {
+      appendCandidate(candidates, segments[segments.length - 1] ?? '');
+    }
+  }
+
+  return candidates;
+}
+
+export function getToolNameCandidates(toolName: string): string[] {
+  const parsed = parseToolName(toolName);
+  return parsed ? Array.from(new Set(buildToolNameCandidates(parsed))) : [];
+}
+
+export const getExplicitToolNameCandidates = getToolNameCandidates;
 
 export function isToolBlocked(
   toolName: string,
   governance: ToolGovernance,
 ): boolean {
-  const canonical = canonicalizeToolName(toolName);
+  const candidates = getToolNameCandidates(toolName);
 
-  if (governance.excluded.has(canonical)) {
+  if (candidates.some((canonical) => governance.excluded.has(canonical))) {
     return true;
   }
 
-  if (governance.disabled.has(canonical)) {
+  if (candidates.some((canonical) => governance.disabled.has(canonical))) {
     return true;
   }
 
-  if (governance.allowedExplicit && !governance.allowed.has(canonical)) {
+  if (
+    governance.allowedExplicit &&
+    !candidates.some((canonical) => governance.allowed.has(canonical))
+  ) {
     return true;
   }
 

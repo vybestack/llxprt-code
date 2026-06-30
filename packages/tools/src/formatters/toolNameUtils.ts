@@ -72,8 +72,9 @@ export function normalizeToolName(rawName: string): string | null {
 }
 
 /**
- * Sentinel returned by {@link canonicalizeToolName} when the input name is
- * blank or whitespace-only.
+ * Sentinel returned by {@link canonicalizeToolName} and
+ * {@link canonicalizeApiQualifiedToolName} when the input name is blank,
+ * whitespace-only, or contains empty dotted segments.
  */
 export const INVALID_TOOL_NAME = '__invalid_tool_name__';
 
@@ -82,39 +83,54 @@ function hasMultipleWords(name: string): boolean {
   return /[A-Z]/.test(withoutFirst) || name.includes('_') || name.includes('-');
 }
 
+function hasEmptyDottedSegment(name: string): boolean {
+  return name.split('.').some((segment) => segment === '');
+}
+
+function validateToolNameInput(rawName: string): string | null {
+  const trimmed = rawName.trim();
+  if (!trimmed || hasEmptyDottedSegment(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+function stripToolSuffixFromLastSegment(name: string): string {
+  const segments = name.split('.');
+  const lastSegment = segments[segments.length - 1];
+  if (!lastSegment.endsWith('Tool') || lastSegment.length <= 4) {
+    return name;
+  }
+
+  const withoutTool = lastSegment.slice(0, -4);
+  if (!hasMultipleWords(withoutTool)) {
+    return name;
+  }
+
+  segments[segments.length - 1] = withoutTool;
+  return segments.join('.');
+}
+
 /**
- * Canonicalize a tool name to its normalized snake_case identifier.
+ * Canonicalize a tool name to its normalized identifier.
  *
- * Returns {@link INVALID_TOOL_NAME} for blank/whitespace-only input so callers
- * can treat unusable names deterministically.
+ * Dotted registry names are preserved (namespace prefixes are not stripped) for
+ * global governance/registry lookups. `Tool` suffix normalization applies only
+ * to the last dotted segment, so `functions.RunShellCommandTool` becomes
+ * `functions.run_shell_command`. Use {@link canonicalizeApiQualifiedToolName}
+ * when resolving public API-qualified whitelist inputs to registry names.
+ *
+ * Returns {@link INVALID_TOOL_NAME} for blank/whitespace-only input or names
+ * containing empty dotted segments so callers can treat unusable names
+ * deterministically.
  */
 export function canonicalizeToolName(rawName: string): string {
-  const trimmed = rawName.trim();
-  if (!trimmed) {
+  const trimmed = validateToolNameInput(rawName);
+  if (trimmed === null) {
     return INVALID_TOOL_NAME;
   }
 
-  // Issue #2184: strip API namespace prefixes (e.g. functions.run_shell_command)
-  // before suffix stripping and normalization. Unambiguous qualified names
-  // resolve to the registry tool name.
-  let afterNamespace = trimmed;
-  const segments = trimmed.split('.');
-  if (segments.length > 1) {
-    if (segments.some((segment) => segment.length === 0)) {
-      return INVALID_TOOL_NAME;
-    }
-
-    afterNamespace = segments[segments.length - 1];
-  }
-
-  let nameToProcess = afterNamespace;
-
-  if (afterNamespace.endsWith('Tool') && afterNamespace.length > 4) {
-    const withoutTool = afterNamespace.slice(0, -4);
-    if (hasMultipleWords(withoutTool)) {
-      nameToProcess = withoutTool;
-    }
-  }
+  const nameToProcess = stripToolSuffixFromLastSegment(trimmed);
 
   const normalized = normalizeToolName(nameToProcess);
   if (normalized !== null) {
@@ -122,6 +138,28 @@ export function canonicalizeToolName(rawName: string): string {
   }
 
   return toSnakeCase(nameToProcess).toLowerCase();
+}
+
+/**
+ * Canonicalize a public API-qualified tool name for explicit whitelist inputs.
+ *
+ * API clients may address tools through namespaces such as
+ * `functions.run_shell_command`. This helper resolves those aliases to the
+ * registry-facing tool name by taking only the final dotted segment and applying
+ * {@link canonicalizeToolName}. All namespace segments are discarded, not just
+ * known prefixes.
+ *
+ * This does not change the global tool canonicalization semantics used by
+ * schedulers and hooks.
+ */
+export function canonicalizeApiQualifiedToolName(rawName: string): string {
+  const trimmed = validateToolNameInput(rawName);
+  if (trimmed === null) {
+    return INVALID_TOOL_NAME;
+  }
+
+  const registryName = trimmed.split('.').pop()!;
+  return canonicalizeToolName(registryName);
 }
 
 /**
