@@ -104,7 +104,7 @@ export function tokenLimit(
     return prefixLimit;
   }
 
-  // Codex models default to 256K context (per CODEX_MODELS.ts). The spark
+  // Codex models default to 256K context (per composition/aliases/codex.config).
   // variant has a smaller 128K window and must be checked first since its ID
   // also contains the substring "codex". Non-suffixed codex model IDs
   // (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1) are only resolvable when the

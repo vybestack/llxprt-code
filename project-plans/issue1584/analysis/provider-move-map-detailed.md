@@ -297,7 +297,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 180 | `packages/core/src/providers/openai-responses/OpenAIResponsesProviderCore.ts` | `packages/providers/src/openai-responses/OpenAIResponsesProviderCore.ts` | Rule 4 | B |
 | 181 | `packages/core/src/providers/openai-responses/OpenAIResponsesInputBuilder.ts` | `packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts` | Rule 4 | B |
 | 182 | `packages/core/src/providers/openai-responses/OpenAIResponsesTypes.ts` | `packages/providers/src/openai-responses/OpenAIResponsesTypes.ts` | Rule 4 | B |
-| 183 | `packages/core/src/providers/openai-responses/CODEX_MODELS.ts` | `packages/providers/src/openai-responses/CODEX_MODELS.ts` | Rule 4 | B |
+| 183 | `packages/core/src/providers/openai-responses/CODEX_MODELS.ts` | `packages/providers/src/composition/aliases/codex.config` | Rule 4 (DELETION / CONSOLIDATION — #2272) | B |
 | 184 | `packages/core/src/providers/openai-responses/buildResponsesInputFromContent.ts` | `packages/providers/src/openai-responses/buildResponsesInputFromContent.ts` | Rule 4 | B |
 | 185 | `packages/core/src/providers/openai-responses/buildResponsesInputFromContent.mediaBlock.test.ts` | `packages/providers/src/openai-responses/buildResponsesInputFromContent.mediaBlock.test.ts` | Rule 4 | B |
 | 186 | `packages/core/src/providers/openai-responses/OpenAIResponsesProvider.headers.test.ts` | `packages/providers/src/openai-responses/OpenAIResponsesProvider.headers.test.ts` | Rule 4 | B |

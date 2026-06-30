@@ -27,7 +27,6 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IModel } from '../IModel.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
-import { CODEX_MODELS } from './CODEX_MODELS.js';
 import { BaseProvider, type BaseProviderConfig } from '../BaseProvider.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
@@ -153,13 +152,9 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
 
   override async getModels(): Promise<IModel[]> {
     const baseURL = this.getBaseURL() ?? 'https://api.openai.com/v1';
-    const isCodex = this.isCodexMode(baseURL);
     this.logger.debug(
-      () =>
-        `getModels() called: baseURL=${baseURL}, isCodexMode=${isCodex}, providerName=${this.name}`,
+      () => `getModels() called: baseURL=${baseURL}, providerName=${this.name}`,
     );
-
-    if (isCodex) return this.getCodexModels(baseURL);
 
     const apiKey = await this.getAuthToken();
     if (!apiKey) return this.buildFallbackModels();
@@ -203,24 +198,6 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     return /embedding|whisper|audio|tts|image|vision|dall[- ]?e|moderation/i.test(
       modelId,
     );
-  }
-
-  /**
-   * Get Codex models
-   *
-   * Note: The Codex /models endpoint is protected by Cloudflare bot detection
-   * which blocks automated requests (even with proper auth headers).
-   * The /responses endpoint works fine, but /models returns a Cloudflare challenge.
-   * Therefore, we use a hardcoded list based on codex-rs/core/tests/suite/list_models.rs
-   *
-   * @plan PLAN-20251214-ISSUE160.P06
-   */
-  private async getCodexModels(_baseURL: string): Promise<IModel[]> {
-    this.logger.debug(
-      () =>
-        'Codex mode: returning hardcoded models (API blocked by Cloudflare)',
-    );
-    return CODEX_MODELS;
   }
 
   override getCurrentModel(): string {

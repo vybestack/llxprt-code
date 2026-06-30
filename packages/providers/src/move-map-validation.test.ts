@@ -96,6 +96,16 @@ const RENAMED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/core/src/providers/anthropic/AnthropicProvider.thinking.test.ts',
     'packages/providers/src/anthropic/AnthropicProvider.thinking.config.test.ts',
   ],
+  // #2272: CODEX_MODELS.ts was DELETED — this is a deletion/consolidation,
+  // NOT a literal file move. Its hardcoded model list was a duplicate of
+  // composition/aliases/codex.config (staticModels), which is now the single
+  // source of truth for Codex models. The override maps the deleted source to
+  // the consolidation target so the move-map destination-exists assertion
+  // still resolves, even though no CODEX_MODELS.ts file exists anymore.
+  [
+    'packages/core/src/providers/openai-responses/CODEX_MODELS.ts',
+    'packages/providers/src/composition/aliases/codex.config',
+  ],
 ]);
 const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [

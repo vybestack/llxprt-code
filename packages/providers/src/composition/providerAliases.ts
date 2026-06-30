@@ -32,6 +32,7 @@ export type ProviderAliasSource = 'user' | 'builtin';
 export interface StaticModelEntry {
   id: string;
   name: string;
+  contextWindow?: number;
 }
 
 export interface ModelDefaultRule {

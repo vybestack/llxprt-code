@@ -15,19 +15,55 @@
  */
 
 /**
- * Tests for Codex model listing functionality
- * @plan PLAN-20251213-ISSUE160.P04
+ * Tests for OpenAIResponsesProvider model listing.
+ *
+ * Fully deterministic: globalThis.fetch is mocked so no real network is hit.
+ *
+ * @issue #2272 — The base provider no longer carries a hardcoded Codex model
+ * fallback. The Codex model list now lives solely in
+ * composition/aliases/codex.config (staticModels), which the alias factory
+ * monkeypatches onto the `/provider codex` alias. A raw OpenAIResponsesProvider
+ * constructed directly against the Codex backend URL therefore does NOT return
+ * the Codex list; it follows the standard dynamic /models flow (and the
+ * RESPONSES_API_MODELS fallback when unauthenticated / fetch fails).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
+import { RESPONSES_API_MODELS } from '../../openai/RESPONSES_API_MODELS.js';
 
-describe('OpenAIResponsesProvider - Codex Model Listing', () => {
+const STANDARD_BASE_URL = 'https://api.openai.com/v1';
+const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
+
+function mockOkResponse(data: unknown): Response {
+  return new Response(JSON.stringify(data), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function mockNonOkResponse(status: number): Response {
+  return new Response(JSON.stringify({}), { status });
+}
+
+describe('OpenAIResponsesProvider - Model Listing', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.stubEnv('OPENAI_API_KEY', '');
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    vi.unstubAllEnvs();
+  });
+
   describe('getDefaultModel', () => {
     it('should return gpt-5.5 as default model when in Codex mode', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
-        'https://chatgpt.com/backend-api/codex',
+        CODEX_BASE_URL,
       );
       const defaultModel = provider.getDefaultModel();
       expect(defaultModel).toBe('gpt-5.5');
@@ -36,7 +72,7 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
     it('should return o3-mini as default model when in standard OpenAI mode', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
-        'https://api.openai.com/v1',
+        STANDARD_BASE_URL,
       );
       const defaultModel = provider.getDefaultModel();
       expect(defaultModel).toBe('o3-mini');
@@ -49,135 +85,209 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
     });
   });
 
-  describe('getModels', () => {
-    it('should return hardcoded Codex models when in Codex mode', async () => {
+  describe('getModels - standard OpenAI dynamic flow', () => {
+    it('should return dynamically fetched chat models on /models success', async () => {
+      fetchSpy.mockResolvedValue(
+        mockOkResponse({
+          data: [
+            { id: 'gpt-4o' },
+            { id: 'o3-mini' },
+            { id: 'text-embedding-3-small' },
+            { id: 'whisper-1' },
+          ],
+        }),
+      );
+
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
-        'https://chatgpt.com/backend-api/codex',
+        STANDARD_BASE_URL,
       );
       const models = await provider.getModels();
-
-      // Verify all expected Codex models are present (based on codex-rs list_models.rs + #1308 update + #1433 gpt-5.3-codex-spark)
       const modelIds = models.map((m) => m.id);
-      expect(modelIds).toContain('gpt-5.5');
-      expect(modelIds).toContain('gpt-5.4');
-      expect(modelIds).toContain('gpt-5.3-codex');
-      expect(modelIds).toContain('gpt-5.3-codex-spark');
-      expect(modelIds).toContain('gpt-5.2-codex');
-      expect(modelIds).toContain('gpt-5.1-codex-max');
-      expect(modelIds).toContain('gpt-5.1-codex');
-      expect(modelIds).toContain('gpt-5.1-codex-mini');
-      expect(modelIds).toContain('gpt-5.2');
-      expect(modelIds).toContain('gpt-5.1');
 
-      // Verify gpt-5.5 is first (highest priority)
-      expect(models[0].id).toBe('gpt-5.5');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${STANDARD_BASE_URL}/models`,
+        expect.objectContaining({
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        }),
+      );
 
-      // Verify all models have correct provider and tool format
+      // Non-chat models (embedding, whisper) must be filtered out.
+      expect(modelIds).toStrictEqual(['gpt-4o', 'o3-mini']);
       for (const model of models) {
-        expect(model.provider).toBe('codex');
+        expect(model.provider).toBe('openai-responses');
         expect(model.supportedToolFormats).toStrictEqual(['openai']);
       }
     });
 
-    it('should return standard OpenAI models when not in Codex mode', async () => {
+    it('should fall back to RESPONSES_API_MODELS on non-OK response', async () => {
+      fetchSpy.mockResolvedValue(mockNonOkResponse(401));
+
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
-        'https://api.openai.com/v1',
+        STANDARD_BASE_URL,
       );
       const models = await provider.getModels();
-
-      // Verify we get standard models, not Codex models
       const modelIds = models.map((m) => m.id);
-      expect(modelIds).not.toContain('gpt-5.1-codex');
-      expect(modelIds).not.toContain('gpt-5.1-codex-mini');
 
-      // All models should have openai-responses as provider (not codex)
+      expect(modelIds).toStrictEqual([...RESPONSES_API_MODELS]);
+      for (const model of models) {
+        expect(model.provider).toBe('openai-responses');
+        expect(model.supportedToolFormats).toStrictEqual(['openai']);
+      }
+    });
+
+    it('should fall back to RESPONSES_API_MODELS when fetch throws', async () => {
+      fetchSpy.mockRejectedValue(new Error('network down'));
+
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        STANDARD_BASE_URL,
+      );
+      const models = await provider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toStrictEqual([...RESPONSES_API_MODELS]);
       for (const model of models) {
         expect(model.provider).toBe('openai-responses');
       }
     });
 
-    it('should include exactly the hardcoded Codex models in correct order', async () => {
+    it('should fall back to RESPONSES_API_MODELS when dynamic list is empty', async () => {
+      fetchSpy.mockResolvedValue(
+        mockOkResponse({
+          data: [{ id: 'text-embedding-3-small' }],
+        }),
+      );
+
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
-        'https://chatgpt.com/backend-api/codex',
+        STANDARD_BASE_URL,
       );
       const models = await provider.getModels();
+      const modelIds = models.map((m) => m.id);
 
-      // Expected models in priority order (with #1308 gpt-5.3-codex addition + #1433 gpt-5.3-codex-spark + #1684 gpt-5.4 + #2037 gpt-5.5)
-      const expectedModelIds = [
-        'gpt-5.5',
-        'gpt-5.4',
-        'gpt-5.3-codex',
-        'gpt-5.3-codex-spark',
-        'gpt-5.2-codex',
-        'gpt-5.1-codex-max',
-        'gpt-5.1-codex',
-        'gpt-5.1-codex-mini',
-        'gpt-5.2',
-        'gpt-5.1',
-      ];
+      // Fetch was called, returned OK, but all models were non-chat → fallback list used.
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(modelIds).toStrictEqual([...RESPONSES_API_MODELS]);
+    });
 
-      // Verify order and presence
-      expect(models.length).toBe(expectedModelIds.length);
-      for (let i = 0; i < expectedModelIds.length; i++) {
-        expect(models[i].id).toBe(expectedModelIds[i]);
+    it('should fall back to RESPONSES_API_MODELS when no API key is available', async () => {
+      const provider = new OpenAIResponsesProvider(
+        undefined,
+        STANDARD_BASE_URL,
+      );
+      const models = await provider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toStrictEqual([...RESPONSES_API_MODELS]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      for (const model of models) {
+        expect(model.provider).toBe('openai-responses');
       }
-    });
-
-    it('should set correct model names for Codex models', async () => {
-      const provider = new OpenAIResponsesProvider(
-        'test-api-key',
-        'https://chatgpt.com/backend-api/codex',
-      );
-      const models = await provider.getModels();
-
-      // Find specific models and verify their names (names match IDs in codex-rs)
-      const codexMax = models.find((m) => m.id === 'gpt-5.1-codex-max');
-      expect(codexMax).toBeDefined();
-      expect(codexMax?.name).toBe('gpt-5.1-codex-max');
-
-      const gpt52 = models.find((m) => m.id === 'gpt-5.2');
-      expect(gpt52).toBeDefined();
-      expect(gpt52?.name).toBe('gpt-5.2');
-
-      const gpt51 = models.find((m) => m.id === 'gpt-5.1');
-      expect(gpt51).toBeDefined();
-      expect(gpt51?.name).toBe('gpt-5.1');
-    });
-
-    it('should set contextWindow for gpt-5.3-codex-spark (128K)', async () => {
-      const provider = new OpenAIResponsesProvider(
-        'test-api-key',
-        'https://chatgpt.com/backend-api/codex',
-      );
-      const models = await provider.getModels();
-
-      // gpt-5.3-codex-spark has explicit 128K context window (smaller than default 256K)
-      const spark = models.find((m) => m.id === 'gpt-5.3-codex-spark');
-      expect(spark).toBeDefined();
-      expect(spark?.contextWindow).toBe(131072);
     });
   });
 
-  it('should use this.name for provider field so aliases work correctly', async () => {
-    const provider = new OpenAIResponsesProvider(
-      undefined,
-      'https://api.openai.com/v1',
-    );
+  describe('getModels - no hardcoded Codex fallback (@issue:2272)', () => {
+    const CODEX_ONLY_IDS = [
+      'gpt-5.1-codex',
+      'gpt-5.1-codex-mini',
+      'gpt-5.3-codex-spark',
+      'gpt-5.2-codex',
+    ];
 
-    Object.defineProperty(provider, 'name', {
-      value: 'my-alias',
-      writable: false,
-      enumerable: true,
-      configurable: true,
+    it('should follow the standard dynamic /models flow for a raw Codex-URL provider', async () => {
+      fetchSpy.mockResolvedValue(
+        mockOkResponse({
+          data: [{ id: 'gpt-4o' }, { id: 'o3-mini' }],
+        }),
+      );
+
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        CODEX_BASE_URL,
+      );
+      const models = await provider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      // It does fetch against the Codex backend like any standard provider.
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${CODEX_BASE_URL}/models`,
+        expect.objectContaining({ method: 'GET' }),
+      );
+
+      // The base provider must not synthesize the Codex-only models. Those are
+      // only available via the /provider codex alias (codex.config staticModels).
+      for (const codexId of CODEX_ONLY_IDS) {
+        expect(modelIds).not.toContain(codexId);
+      }
+      // A raw provider instance reports its own provider name, never "codex".
+      for (const model of models) {
+        expect(model.provider).not.toBe('codex');
+      }
     });
 
-    const models = await provider.getModels();
+    it('should fall back to RESPONSES_API_MODELS when fetch fails for a Codex-URL provider', async () => {
+      fetchSpy.mockRejectedValue(new Error('cloudflare blocked'));
 
-    for (const model of models) {
-      expect(model.provider).toBe('my-alias');
-    }
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        CODEX_BASE_URL,
+      );
+      const models = await provider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      // Fallback is the standard Responses API list — no hardcoded Codex list.
+      for (const codexId of CODEX_ONLY_IDS) {
+        expect(modelIds).not.toContain(codexId);
+      }
+      expect(modelIds).toContain('o3-mini');
+      expect(modelIds).toContain('gpt-4o');
+      for (const model of models) {
+        expect(model.provider).toBe('openai-responses');
+        expect(model.supportedToolFormats).toStrictEqual(['openai']);
+      }
+    });
+
+    it('should fall back to RESPONSES_API_MODELS (no fetch) when unauthenticated Codex-URL provider', async () => {
+      const provider = new OpenAIResponsesProvider(undefined, CODEX_BASE_URL);
+      const models = await provider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      for (const codexId of CODEX_ONLY_IDS) {
+        expect(modelIds).not.toContain(codexId);
+      }
+      expect(modelIds).toContain('o3-mini');
+      for (const model of models) {
+        expect(model.provider).toBe('openai-responses');
+        expect(model.supportedToolFormats).toStrictEqual(['openai']);
+      }
+    });
+  });
+
+  describe('getModels - alias name propagation', () => {
+    it('should use this.name for provider field so aliases work correctly', async () => {
+      const provider = new OpenAIResponsesProvider(
+        undefined,
+        STANDARD_BASE_URL,
+      );
+
+      Object.defineProperty(provider, 'name', {
+        value: 'my-alias',
+        writable: false,
+        enumerable: true,
+        configurable: true,
+      });
+
+      const models = await provider.getModels();
+
+      for (const model of models) {
+        expect(model.provider).toBe('my-alias');
+      }
+    });
   });
 });
