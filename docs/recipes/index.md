@@ -6,10 +6,10 @@ Ready-to-use configuration recipes for common LLxprt Code setups. Each recipe in
 
 ### [Free / Low-Cost Tier Setup](./free-tier-setup.md)
 
-Get started with LLxprt Code at low cost using Gemini and Qwen (OAuth or API key).
+Get started with LLxprt Code at low cost using Gemini and Qwen (API key).
 
 - Gemini setup (OAuth or API key)
-- Qwen setup (OAuth or API key)
+- Qwen setup (DashScope API key)
 - Complete profile JSON examples
 - Note on changing free-tier availability (see the recipe)
 

@@ -25,7 +25,6 @@ import {
 import { AuthenticationError } from './errors.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { type IProviderConfig } from '../types/IProviderConfig.js';
 
 /**
  * Helper function to extract URL string from various input types.
@@ -225,26 +224,23 @@ describe('OpenAIVercelProvider', () => {
   });
 
   describe('OAuth Support', () => {
-    it('supports Qwen OAuth when forced via config', () => {
+    it('does not support OAuth for Qwen endpoints (API-key-only via DashScope)', () => {
       const oauthManager = {
         getToken: vi.fn(async () => null),
         isAuthenticated: vi.fn(async () => false),
       };
 
-      const providerConfig = { forceQwenOAuth: true } as IProviderConfig & {
-        forceQwenOAuth: true;
-      };
       const provider = new OpenAIVercelProvider(
         undefined,
-        'https://api.example.com/v1',
-        providerConfig,
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        undefined,
         oauthManager,
       );
 
       const supportsOAuth = (
         provider as unknown as { supportsOAuth: () => boolean }
       ).supportsOAuth();
-      expect(supportsOAuth).toBe(true);
+      expect(supportsOAuth).toBe(false);
 
       const baseProviderConfig = (
         provider as unknown as {
@@ -254,27 +250,8 @@ describe('OpenAIVercelProvider', () => {
           };
         }
       ).baseProviderConfig;
-      expect(baseProviderConfig?.isOAuthEnabled).toBe(true);
-      expect(baseProviderConfig?.oauthProvider).toBe('qwen');
-    });
-
-    it('supports Qwen OAuth when the base URL is a Qwen endpoint', () => {
-      const oauthManager = {
-        getToken: vi.fn(async () => null),
-        isAuthenticated: vi.fn(async () => false),
-      };
-
-      const provider = new OpenAIVercelProvider(
-        undefined,
-        'https://portal.qwen.ai/v1',
-        undefined,
-        oauthManager,
-      );
-
-      const supportsOAuth = (
-        provider as unknown as { supportsOAuth: () => boolean }
-      ).supportsOAuth();
-      expect(supportsOAuth).toBe(true);
+      expect(baseProviderConfig?.isOAuthEnabled).toBe(false);
+      expect(baseProviderConfig?.oauthProvider).toBeUndefined();
     });
 
     it('does not treat schemeless non-Qwen URLs containing Qwen substrings as Qwen endpoints', () => {

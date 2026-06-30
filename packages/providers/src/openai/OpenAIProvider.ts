@@ -76,14 +76,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
-    oauthManager?: OAuthManager,
+    _oauthManager?: OAuthManager,
   ) {
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
-    const isQwenEndpoint = isQwenBaseURL(baseURL);
-    const forceQwenOAuth = Boolean(
-      (config as { forceQwenOAuth?: boolean } | undefined)?.forceQwenOAuth,
-    );
 
     super(
       {
@@ -91,9 +87,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         apiKey: normalizedApiKey,
         baseURL,
         envKeyNames: ['OPENAI_API_KEY'], // Support environment variable fallback
-        isOAuthEnabled: (isQwenEndpoint || forceQwenOAuth) && !!oauthManager,
-        oauthProvider: isQwenEndpoint || forceQwenOAuth ? 'qwen' : undefined,
-        oauthManager,
+        isOAuthEnabled: false,
       },
       config,
     );
@@ -147,29 +141,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   /**
    * Check if OAuth is supported for this provider
-   * Qwen endpoints support OAuth, standard OpenAI does not
    */
   protected supportsOAuth(): boolean {
-    const providerConfig = this.providerConfig as
-      | (IProviderConfig & {
-          forceQwenOAuth?: boolean;
-        })
-      | undefined;
-    if (providerConfig?.forceQwenOAuth === true) {
-      return true;
-    }
-    // CRITICAL FIX: Check provider name first for cases where base URL is changed by profiles
-    // This handles the cerebrasqwen3 profile case where base-url is changed to cerebras.ai
-    // but the provider name is still 'qwen' due to Object.defineProperty override
-    if (this.name === 'qwen') {
-      return true;
-    }
-
-    // Fallback to base URL check for direct instantiation
-    if (isQwenBaseURL(this.getBaseURL())) {
-      return true;
-    }
-
     // Standard OpenAI endpoints don't support OAuth
     return false;
   }
@@ -294,15 +267,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Override isAuthenticated for qwen provider to check OAuth directly
+   * Override isAuthenticated to check the direct API key first.
    */
   override async isAuthenticated(): Promise<boolean> {
-    const config = this.providerConfig as
-      | (IProviderConfig & {
-          forceQwenOAuth?: boolean;
-        })
-      | undefined;
-
     const directApiKey = this.baseProviderConfig.apiKey;
     if (typeof directApiKey === 'string' && directApiKey.trim() !== '') {
       return true;
@@ -325,25 +292,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
     }
 
-    if (this.name === 'qwen' && config?.forceQwenOAuth === true) {
-      try {
-        const token = await this.authResolver.resolveAuthentication({
-          settingsService: this.resolveSettingsService(),
-          includeOAuth: true,
-        });
-        return typeof token === 'string' && token.trim() !== '';
-      } catch (error) {
-        if (process.env.DEBUG) {
-          this.getLogger().debug(
-            () =>
-              `[openai] forced OAuth authentication failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        return false;
-      }
-    }
-
-    // For non-qwen providers, use the normal check
     return super.isAuthenticated();
   }
 

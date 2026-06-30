@@ -26,7 +26,6 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderToolset } from '../IProvider.js';
-import type { IProviderConfig } from '../types/IProviderConfig.js';
 
 // Mock the 'ai' module
 vi.mock('ai', () => ({
@@ -111,29 +110,19 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
       expect(mockGenerateText).toHaveBeenCalledOnce();
     });
 
-    it('uses Qwen OAuth token as the OpenAI-compatible apiKey', async () => {
+    it('uses DashScope API key for the OpenAI-compatible endpoint', async () => {
       delete process.env.OPENAI_API_KEY;
 
-      const oauthManager = {
-        getToken: vi.fn(async () => 'oauth-token'),
-        isAuthenticated: vi.fn(async () => true),
-        isOAuthEnabled: vi.fn(() => true),
-      };
-
-      const providerConfig = { forceQwenOAuth: true } as IProviderConfig & {
-        forceQwenOAuth: true;
-      };
+      // Qwen is now API-key-only via Alibaba Cloud DashScope
       provider = new OpenAIVercelProvider(
-        undefined,
-        'https://portal.qwen.ai/v1',
-        providerConfig,
-        oauthManager,
+        'dashscope-api-key',
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
       );
 
       const { generateText } = await import('ai');
       const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
       mockGenerateText.mockResolvedValue({
-        text: 'Hello from Qwen OAuth',
+        text: 'Hello from DashScope',
         toolCalls: [],
         finishReason: 'stop',
         usage: {
@@ -166,12 +155,10 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(oauthManager.getToken).toHaveBeenCalled();
-      expect(oauthManager.getToken.mock.calls[0]?.[0]).toBe('qwen');
       expect(mockCreateOpenAI).toHaveBeenCalledWith(
         expect.objectContaining({
-          apiKey: 'oauth-token',
-          baseURL: 'https://portal.qwen.ai/v1',
+          apiKey: 'dashscope-api-key',
+          baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         }),
       );
     });

@@ -190,21 +190,21 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
      * @scenario OAuth token as fallback
      * @given No --key flag, no env var
      * @when isAuthenticated() called
-     * @then Uses OAuth token from manager
+     * @then Returns false — OAuth is no longer supported for OpenAI/Qwen endpoints
      */
-    it('should use OAuth token when no other auth methods available', async () => {
-      // Given: Only OAuth available
+    it('should not authenticate via OAuth for standard OpenAI endpoints', async () => {
+      // Given: Only OAuth available (no API key)
       delete process.env.OPENAI_API_KEY;
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-789');
 
       // When: Creating provider without CLI key or env var (defaults to standard OpenAI endpoint)
       const provider = createProviderWithRuntime();
 
-      // Then: Should not be authenticated (OAuth not supported for standard OpenAI endpoints)
+      // Then: Should not be authenticated (OAuth not supported for any OpenAI endpoint)
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
 
-      // OAuth manager should not be called since provider doesn't support OAuth for this endpoint
+      // OAuth manager should not be called since provider doesn't support OAuth
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
@@ -235,40 +235,24 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   describe('OAuth Token Usage and Lazy Triggering', () => {
     /**
      * @requirement REQ-004.3
-     * @scenario Lazy OAuth triggering during API call
-     * @given OAuth enabled but not yet authenticated
-     * @when Making API request that requires authentication
-     * @then OAuth flow triggered lazily before API call
-     * @and Token retrieved for use as API key
+     * @scenario OAuth no longer triggered for Qwen endpoints
+     * @given Qwen/DashScope endpoint with OAuth manager
+     * @when isAuthenticated() called
+     * @then OAuth flow is NOT triggered (API-key-only)
      */
-    it('should trigger OAuth flow lazily when API call requires authentication', async () => {
-      // Given: OAuth enabled but not yet authenticated
+    it('should not trigger OAuth flow for Qwen/DashScope endpoints', async () => {
+      // Given: Qwen endpoint but OAuth is no longer supported
       const qwenBaseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-      const oauthToken = 'lazy-oauth-token-123';
 
-      // Mock OAuth manager to indicate OAuth is enabled
-      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
-        oauthToken,
-      );
-      (
-        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
-      ).mockResolvedValue(true);
-      const mockIsOAuthEnabled = vi.fn().mockResolvedValue(true);
-      (
-        mockOAuthManager as unknown as {
-          isOAuthEnabled: typeof mockIsOAuthEnabled;
-        }
-      ).isOAuthEnabled = mockIsOAuthEnabled;
-
-      // When: Creating provider and checking authentication (simulating API call prep)
+      // When: Creating provider and checking authentication
       const provider = createProviderWithRuntime({ baseUrl: qwenBaseUrl });
 
-      // Then: Should be authenticated through lazy OAuth triggering
+      // Then: Should NOT be authenticated (no API key, no OAuth)
       const isAuthenticated = await provider.isAuthenticated();
-      expect(isAuthenticated).toBe(true);
+      expect(isAuthenticated).toBe(false);
 
-      // OAuth manager should have been called to check auth status (not trigger)
-      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
+      // OAuth manager should not be called
+      expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
     });
 
     /**
@@ -300,32 +284,27 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
 
     /**
      * @requirement REQ-004.3
-     * @scenario OAuth token used as API key in SDK
-     * @given Valid OAuth token from lazy triggering
-     * @when Token passed to OpenAI SDK
-     * @then SDK receives OAuth token as apiKey parameter
+     * @scenario API key used for Qwen/DashScope endpoint
+     * @given Valid API key for DashScope endpoint
+     * @when isAuthenticated() called
+     * @then Provider is authenticated via API key
      */
-    it('should pass lazily-obtained OAuth token as API key to OpenAI SDK', async () => {
-      // Given: Valid OAuth token obtained through lazy triggering
-      const oauthToken = 'lazy-oauth-token-456';
-      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
-        oauthToken,
-      );
-      (
-        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
-      ).mockResolvedValue(true);
+    it('should authenticate Qwen/DashScope endpoint via API key', async () => {
+      // Given: Valid API key for DashScope endpoint
+      const apiKey = 'dashscope-api-key';
 
-      // When: Using OAuth token for Qwen endpoint
+      // When: Using API key for Qwen endpoint
       const provider = createProviderWithRuntime({
+        cliKey: apiKey,
         baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       });
 
-      // Then: Should be authenticated with OAuth token available for SDK usage
+      // Then: Should be authenticated with API key
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
 
-      // isAuthenticated check should not trigger OAuth flow
-      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
+      // OAuth manager should not be called
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
     /**
@@ -429,21 +408,14 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   describe('Provider Compatibility and BaseURL Validation', () => {
     /**
      * @requirement REQ-004.1
-     * @scenario Qwen endpoint detection and validation
+     * @scenario Qwen endpoint detection — API key only
      * @given OPENAI_BASE_URL set to Qwen endpoint
-     * @when Provider validates OAuth compatibility
-     * @then Detects Qwen endpoint and allows OAuth usage
+     * @when Provider validates authentication
+     * @then Detects Qwen endpoint but OAuth is not supported (API-key-only)
      */
-    it('should detect Qwen endpoints and validate OAuth usage', async () => {
-      // Given: Qwen base URL and OAuth token
+    it('should detect Qwen endpoints but not authenticate via OAuth', async () => {
+      // Given: Qwen base URL and OAuth token (but OAuth is disabled)
       const qwenBaseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-      const oauthToken = 'qwen-oauth-token-123';
-      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
-        oauthToken,
-      );
-      (
-        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
-      ).mockResolvedValue(true);
 
       // When: Creating provider with Qwen URL and OAuth
       const provider = new OpenAIProvider(
@@ -453,10 +425,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should validate as Qwen-compatible endpoint and be authenticated via OAuth
+      // Then: Should NOT be authenticated (OAuth no longer supported for Qwen)
       const isAuthenticated = await provider.isAuthenticated();
-      expect(isAuthenticated).toBe(true);
-      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
+      expect(isAuthenticated).toBe(false);
+      expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
     });
 
     /**
@@ -516,36 +488,28 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
 
     /**
      * @requirement REQ-004.1
-     * @scenario Qwen endpoint variants
-     * @given Different Qwen endpoint formats
-     * @when Validating OAuth compatibility
-     * @then Recognizes all valid Qwen endpoint patterns
+     * @scenario Qwen endpoint variants — API-key authentication
+     * @given Different Qwen endpoint formats with API keys
+     * @when Validating authentication
+     * @then All Qwen endpoint patterns authenticate via API key
      */
-    it('should recognize various Qwen endpoint formats', async () => {
+    it('should authenticate various Qwen endpoint formats via API key', async () => {
       const qwenEndpoints = [
         'https://dashscope.aliyuncs.com/compatible-mode/v1',
         'https://dashscope.aliyuncs.com/api/v1',
         'https://api.qwen.com/v1',
       ];
 
-      const oauthToken = 'qwen-oauth-token-123';
-      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
-        oauthToken,
-      );
-      (
-        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
-      ).mockResolvedValue(true);
-
       for (const endpoint of qwenEndpoints) {
-        // When: Creating provider with each Qwen endpoint variant
+        // When: Creating provider with each Qwen endpoint variant and API key
         const provider = new OpenAIProvider(
-          '',
+          'dashscope-api-key',
           endpoint,
           TEST_PROVIDER_CONFIG,
           mockOAuthManager,
         );
 
-        // Then: Should allow OAuth for all Qwen variants
+        // Then: Should authenticate via API key for all Qwen variants
         const isAuthenticated = await provider.isAuthenticated();
         expect(isAuthenticated).toBe(true);
       }
@@ -553,22 +517,17 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
 
     /**
      * @requirement REQ-004.1
-     * @scenario Qwen provider with name override and changed base URL
-     * @given Provider instance with name overridden to 'qwen' but base URL changed to cerebras
-     * @when Validating OAuth compatibility
-     * @then Should use name-based detection for OAuth support (fixes cerebrasqwen3 profile issue)
+     * @scenario Qwen provider with name override and API key
+     * @given Provider instance with name overridden to 'qwen' with API key
+     * @when Validating authentication
+     * @then Should authenticate via API key regardless of name
      */
-    it('should support OAuth for qwen provider even with non-qwen base URL', async () => {
-      // Given: Provider with non-qwen base URL (like cerebrasqwen3 profile)
-      const cerebrasBaseUrl = 'https://api.cerebras.ai/v1';
-      const oauthToken = 'qwen-oauth-token-123';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
-
-      // Create provider with cerebras base URL and forceQwenOAuth flag
+    it('should authenticate qwen-named provider via API key', async () => {
+      // Given: Provider with API key
       const provider = new OpenAIProvider(
-        '',
-        cerebrasBaseUrl,
-        { ...TEST_PROVIDER_CONFIG, forceQwenOAuth: true },
+        'dashscope-api-key',
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        TEST_PROVIDER_CONFIG,
         mockOAuthManager,
       );
 
@@ -580,16 +539,11 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
         configurable: true,
       });
 
-      // When: Checking OAuth support with name-based detection
-      // This simulates the cerebrasqwen3 profile scenario where base-url is changed
+      // When: Checking authentication
       const isAuthenticated = await provider.isAuthenticated();
 
-      // Then: Should support OAuth based on provider name, not base URL
+      // Then: Should authenticate via API key
       expect(isAuthenticated).toBe(true);
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
-        expect.anything(),
-      );
     });
 
     /**
@@ -618,35 +572,29 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   describe('Authentication Status', () => {
     /**
      * @requirement REQ-004.1
-     * @scenario Check authentication status
-     * @given OAuth token present
+     * @scenario Check authentication status — API key only
+     * @given API key present for Qwen endpoint
      * @when isAuthenticated() called
-     * @then Returns true
+     * @then Returns true (via API key, not OAuth)
      */
-    it('should return true when OAuth token is available', async () => {
-      // Given: Valid OAuth token, no other auth
+    it('should return true when API key is available for Qwen endpoint', async () => {
+      // Given: Valid API key for Qwen endpoint
       delete process.env.OPENAI_API_KEY;
-      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
-        'valid-token',
-      );
-      (
-        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
-      ).mockResolvedValue(true);
 
-      // When: Checking authentication status with Qwen endpoint
+      // When: Checking authentication status with Qwen endpoint and API key
       const provider = new OpenAIProvider(
-        '', // Empty CLI key
-        'https://dashscope.aliyuncs.com/compatible-mode/v1', // Qwen endpoint that supports OAuth
+        'dashscope-api-key',
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
         TEST_PROVIDER_CONFIG,
         mockOAuthManager,
       );
 
-      // Then: Should return true (OAuth token available)
+      // Then: Should return true (API key available)
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
 
-      // Verify OAuth manager was called for status check (not triggering)
-      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
+      // OAuth manager should not be called
+      expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
     });
 
     /**
@@ -700,12 +648,12 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should return false (no auth available, OAuth manager returned null)
+      // Then: Should return false (no auth available, OAuth not supported)
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
 
-      // Verify isAuthenticated was called instead of getToken (non-triggering check)
-      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
+      // OAuth manager should not be called (OAuth not supported)
+      expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
     });
   });
 

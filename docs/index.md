@@ -49,7 +49,7 @@ LLxprt Code plans, implements, tests, debugs, and iterates — across hours, not
 
 ### Your Subscriptions, Your Control
 
-Use your existing Claude, OpenAI, Google, or Qwen accounts via OAuth. Create profiles for different projects, teams, or workflows. Configure models, temperature, context limits, and more.
+Use your existing Claude, OpenAI, or Google accounts via OAuth. Create profiles for different projects, teams, or workflows. Configure models, temperature, context limits, and more.
 
 - [Profiles](./cli/profiles.md)
 - [OAuth Setup](./oauth-setup.md)

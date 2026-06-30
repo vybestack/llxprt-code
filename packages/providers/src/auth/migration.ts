@@ -69,12 +69,10 @@ LLXPRT OAuth Token Storage Migration
 Your OAuth tokens are now stored in standardized locations:
 - Anthropic: ~/.llxprt/oauth/anthropic.json
 - Gemini: ~/.llxprt/oauth/gemini.json  
-- Qwen: ~/.llxprt/oauth/qwen.json
 
 If you experience authentication issues, please re-login:
 - llxprt auth login anthropic
 - llxprt auth login gemini
-- llxprt auth login qwen
 
 Legacy Gemini tokens in ~/.llxprt/oauth_creds.json are no longer used.
 `);

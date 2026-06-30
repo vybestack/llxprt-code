@@ -54,7 +54,6 @@ import {
   getAllCodexUsageInfo,
   getAllGeminiUsageInfo,
   getHigherPriorityAuth,
-  isQwenCompatibleUrl,
 } from '../provider-usage-info.js';
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
@@ -732,33 +731,6 @@ describe('getHigherPriorityAuth', () => {
     expect(result).toBeNull();
   });
 
-  it('returns "OpenAI BaseURL Mismatch" for qwen when base URL is incompatible', async () => {
-    const settings = makeLoadedSettings({
-      providerBaseUrls: { openai: 'https://api.openai.com/v1' },
-    });
-
-    const result = await getHigherPriorityAuth('qwen', settings);
-    expect(result).toBe('OpenAI BaseURL Mismatch');
-  });
-
-  it('returns null for qwen when base URL is Qwen-compatible', async () => {
-    const settings = makeLoadedSettings({
-      providerBaseUrls: { openai: 'https://dashscope.aliyuncs.com/v1' },
-    });
-
-    const result = await getHigherPriorityAuth('qwen', settings);
-    expect(result).toBeNull();
-  });
-
-  it('returns null for qwen when no openai base URL is set', async () => {
-    const settings = makeLoadedSettings({
-      providerBaseUrls: {},
-    });
-
-    const result = await getHigherPriorityAuth('qwen', settings);
-    expect(result).toBeNull();
-  });
-
   it('does not check openai base URL mismatch for non-qwen providers', async () => {
     const settings = makeLoadedSettings({
       providerBaseUrls: { openai: 'https://api.openai.com/v1' },
@@ -786,64 +758,5 @@ describe('getHigherPriorityAuth', () => {
 
     const result = await getHigherPriorityAuth('anthropic', settings);
     expect(result).toBe('Keyfile');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// isQwenCompatibleUrl
-// ---------------------------------------------------------------------------
-
-describe('isQwenCompatibleUrl', () => {
-  it('returns true for empty string (default endpoint is compatible)', () => {
-    expect(isQwenCompatibleUrl('')).toBe(true);
-  });
-
-  it('returns true for dashscope.aliyuncs.com', () => {
-    expect(
-      isQwenCompatibleUrl('https://dashscope.aliyuncs.com/compatible-mode/v1'),
-    ).toBe(true);
-  });
-
-  it('returns true for qwen.com', () => {
-    expect(isQwenCompatibleUrl('https://api.qwen.com/v1')).toBe(true);
-  });
-
-  it('returns true for api.qwen.com', () => {
-    expect(isQwenCompatibleUrl('https://api.qwen.com')).toBe(true);
-  });
-
-  it('returns false for openai.com URL', () => {
-    expect(isQwenCompatibleUrl('https://api.openai.com/v1')).toBe(false);
-  });
-
-  it('returns false for azure openai URL', () => {
-    expect(isQwenCompatibleUrl('https://myresource.openai.azure.com')).toBe(
-      false,
-    );
-  });
-
-  it('returns false for custom non-qwen URL', () => {
-    expect(isQwenCompatibleUrl('https://proxy.example.com/v1')).toBe(false);
-  });
-
-  it('returns false for invalid URL format', () => {
-    expect(isQwenCompatibleUrl('not-a-valid-url')).toBe(false);
-  });
-
-  it('returns false for localhost URL', () => {
-    expect(isQwenCompatibleUrl('http://localhost:8080')).toBe(false);
-  });
-
-  it('handles subdomain of aliyuncs correctly', () => {
-    expect(isQwenCompatibleUrl('https://dashscope-intl.aliyuncs.com/v1')).toBe(
-      false,
-    );
-  });
-
-  it('rejects hostile hostname that contains a Qwen domain as substring', () => {
-    expect(isQwenCompatibleUrl('https://api.qwen.com.evil.test/v1')).toBe(
-      false,
-    );
-    expect(isQwenCompatibleUrl('https://notqwen.com/v1')).toBe(false);
   });
 });

@@ -25,7 +25,7 @@ LLxprt Code works with multiple AI providers. Pick the option that works for you
 
 ### Option A: Free & Low-Cost Tiers
 
-> **Note:** Free OAuth tiers from Gemini and Qwen have changed over time (Google moved free consumer Gemini-CLI access toward [Antigravity](https://antigravity.google) in mid-2026, and Qwen's free OAuth tier availability has varied). If a free login no longer authorizes, use an API key instead. See [authentication](./cli/authentication.md) for current details.
+> **Note:** The free Gemini OAuth tier changed in mid-2026 (Google moved free consumer Gemini-CLI access toward [Antigravity](https://antigravity.google)). If a free login no longer authorizes, use an API key instead. Qwen's free OAuth tier ended 2026-04-15 — use a DashScope API key instead. See [authentication](./cli/authentication.md) for current details.
 
 **Gemini (Google)** — Google account (OAuth) or API key:
 
@@ -36,18 +36,19 @@ llxprt
 /model gemini-2.5-flash
 ```
 
-**Qwen (Alibaba)** — for coding tasks:
+**Qwen (Alibaba)** — for coding tasks (API key via DashScope):
 
 ```
 llxprt
-/auth qwen enable
 /provider qwen
+/key save qwen your-dashscope-key
+/key load qwen
 /model qwen3-coder-plus
 ```
 
 ### Option B: Use Your Existing Subscription (OAuth)
 
-If you already pay for Claude, OpenAI, or Qwen, use your subscription directly — no separate API billing:
+If you already pay for Claude or OpenAI, use your subscription directly — no separate API billing:
 
 **Claude Pro/Max** ($20–200/month):
 
@@ -65,15 +66,6 @@ llxprt
 /auth codex enable
 /provider codex
 /model gpt-5.5
-```
-
-**Qwen:**
-
-```
-llxprt
-/auth qwen enable
-/provider qwen
-/model qwen3-coder-plus
 ```
 
 Each `/auth <provider> enable` command enables lazy OAuth — a browser opens automatically when you make your first request to that provider. Use `/auth <provider> login` to open the browser immediately.

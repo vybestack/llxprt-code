@@ -261,7 +261,6 @@ describe('CLI auth device flows use auth-package exports', () => {
     const authPkg = await import('@vybestack/llxprt-code-auth');
     expect(typeof authPkg.AnthropicDeviceFlow).toBe('function');
     expect(typeof authPkg.CodexDeviceFlow).toBe('function');
-    expect(typeof authPkg.QwenDeviceFlow).toBe('function');
   });
 
   it('auth package exports KeyringTokenStore constructor', async () => {

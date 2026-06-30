@@ -23,7 +23,7 @@ const mockOAuthManager = {
   peekStoredToken: peekStoredTokenMock,
   getSupportedProviders: vi
     .fn()
-    .mockReturnValue(['gemini', 'qwen', 'anthropic', 'codex']),
+    .mockReturnValue(['gemini', 'anthropic', 'codex']),
   getHigherPriorityAuth: vi.fn(),
   logout: vi.fn(),
 } as unknown as OAuthManager;
@@ -160,7 +160,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       });
     });
 
-    it('@given user enters /auth qwen disable @when provider specified with action @then disables OAuth for Qwen', async () => {
+    it('@given user enters /auth codex disable @when provider specified with action @then disables OAuth for Codex', async () => {
       // Given: OAuth currently enabled, disable will toggle it off
       const mockIsEnabled = vi.fn().mockReturnValue(true);
       const mockToggleOAuth = vi.fn().mockResolvedValue(false);
@@ -170,15 +170,15 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User enters /auth qwen disable
-      const result = await executor.execute(mockContext, 'qwen disable');
+      // When: User enters /auth codex disable
+      const result = await executor.execute(mockContext, 'codex disable');
 
       // Then: Should toggle OAuth enablement and return success
-      expect(mockToggleOAuth).toHaveBeenCalledWith('qwen');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth disabled for qwen',
+        content: 'OAuth disabled for codex',
       });
     });
 
@@ -237,10 +237,10 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
   describe('Provider validation', () => {
     it('@given unknown provider @when provider not supported @then returns error message', async () => {
-      // Given: getSupportedProviders returns gemini, qwen, anthropic, codex
+      // Given: getSupportedProviders returns gemini, anthropic, codex
       const mockGetSupported = vi
         .fn()
-        .mockReturnValue(['gemini', 'qwen', 'anthropic', 'codex']);
+        .mockReturnValue(['gemini', 'anthropic', 'codex']);
       (mockOAuthManager.getSupportedProviders as unknown) = mockGetSupported;
 
       // When: User enters unknown provider
@@ -251,7 +251,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Unknown provider: unknown-provider. Supported providers: gemini, qwen, anthropic, codex',
+          'Unknown provider: unknown-provider. Supported providers: gemini, anthropic, codex',
       });
     });
 
@@ -309,14 +309,14 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Disable OAuth
-      const result = await executor.execute(mockContext, 'qwen disable');
+      const result = await executor.execute(mockContext, 'codex disable');
 
       // Then: Should disable OAuth and show success message
-      expect(mockToggleOAuth).toHaveBeenCalledWith('qwen');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth disabled for qwen',
+        content: 'OAuth disabled for codex',
       });
     });
 
@@ -348,13 +348,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Try to disable already disabled OAuth
-      const result = await executor.execute(mockContext, 'qwen disable');
+      const result = await executor.execute(mockContext, 'codex disable');
 
       // Then: Should show already disabled message
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for qwen is already disabled',
+        content: 'OAuth for codex is already disabled',
       });
     });
   });
@@ -483,13 +483,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User attempts OAuth disable
-      const result = await executor.execute(mockContext, 'qwen disable');
+      const result = await executor.execute(mockContext, 'codex disable');
 
       // Then: Should return user-friendly error message
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Failed to disable OAuth for qwen: Cannot save configuration',
+        content: 'Failed to disable OAuth for codex: Cannot save configuration',
       });
     });
   });

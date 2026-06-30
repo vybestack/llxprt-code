@@ -186,23 +186,15 @@ Guidance:
 
 ### Qwen
 
-#### OAuth
-
-```bash
-/auth qwen enable
-/provider qwen
-/model qwen3-coder-plus
-```
-
 #### Using Alias with API Key
 
 ```bash
 /provider qwen
-/key your-qwen-key
+/key your-dashscope-key
 /model qwen3-coder-plus
 ```
 
-> **Tier note:** Qwen's free OAuth tier availability has changed over time. If OAuth login no longer grants free access, use a DashScope/Qwen **API key**. See [authentication](../cli/authentication.md) for current details.
+> **Qwen is now API-key-only.** Qwen's free OAuth tier ended 2026-04-15 and the OAuth provider has been removed. Use a DashScope API key (`DASHSCOPE_API_KEY`) or an OpenRouter API key. See [authentication](../cli/authentication.md) for details.
 
 #### Model geometry & recommended settings (Qwen)
 
@@ -543,14 +535,13 @@ Set directly with `/key` or load from file:
 
 ### OAuth
 
-**Four** providers support OAuth for authentication: Anthropic, Codex (ChatGPT), Gemini, and Qwen.
+**Three** providers support OAuth for authentication: Anthropic, Codex (ChatGPT), and Gemini.
 
 ```bash
 # Enable OAuth provider (lazy authentication - happens on first use)
 /auth anthropic enable
 /auth codex enable
 /auth gemini enable
-/auth qwen enable
 
 # Check OAuth status
 /auth

@@ -299,34 +299,5 @@ export async function getHigherPriorityAuth(
     return 'Environment Variable';
   }
 
-  if (providerName === 'qwen') {
-    const openaiBaseUrl = settings.getProviderBaseUrl('openai');
-    if (openaiBaseUrl && !isQwenCompatibleUrl(openaiBaseUrl)) {
-      return 'OpenAI BaseURL Mismatch';
-    }
-  }
-
   return null;
-}
-
-/**
- * Check if a URL is compatible with Qwen OAuth.
- * Returns true if the URL is a known Qwen/Aliyun domain or if no URL is provided.
- *
- * @param url - The base URL to check
- */
-export function isQwenCompatibleUrl(url: string): boolean {
-  if (!url) return true;
-
-  const qwenDomains = ['dashscope.aliyuncs.com', 'qwen.com'];
-
-  try {
-    const urlObj = new URL(url);
-    return qwenDomains.some(
-      (domain) =>
-        urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`),
-    );
-  } catch {
-    return false;
-  }
 }
