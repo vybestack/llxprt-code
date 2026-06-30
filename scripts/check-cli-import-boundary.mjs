@@ -306,23 +306,25 @@ function walkDir(dir) {
       if (err && err.code === 'ENOENT') return;
       throw err;
     }
-    for (const entry of entries) {
+    function processEntry(entry) {
       const full = join(d, entry.name);
       if (entry.isDirectory()) {
         // Prune entire test-infrastructure and non-source (node_modules,
         // dist, build, ...) subtrees by base-name for clarity and
         // performance, before recursing into them.
-        if (PRUNED_DIR_BASE_NAMES.has(entry.name)) continue;
-        if (shouldExclude(full)) continue;
+        if (PRUNED_DIR_BASE_NAMES.has(entry.name)) return;
+        if (shouldExclude(full)) return;
         walk(full);
-      } else if (shouldExclude(full)) {
-        continue;
       } else if (
+        !shouldExclude(full) &&
         entry.isFile() &&
         (extname(entry.name) === '.ts' || extname(entry.name) === '.tsx')
       ) {
         results.push(full);
       }
+    }
+    for (const entry of entries) {
+      processEntry(entry);
     }
   }
   walk(absDir);
@@ -440,12 +442,13 @@ function importedSymbolsOf(node) {
  * three call sites can never drift apart (#2204).
  */
 function isViMockCall(node) {
+  if (!ts.isCallExpression(node)) return false;
+  const expr = node.expression;
   return (
-    ts.isCallExpression(node) &&
-    ts.isPropertyAccessExpression(node.expression) &&
-    node.expression.name.text === 'mock' &&
-    ts.isIdentifier(node.expression.expression) &&
-    node.expression.expression.text === 'vi'
+    ts.isPropertyAccessExpression(expr) &&
+    expr.name.text === 'mock' &&
+    ts.isIdentifier(expr.expression) &&
+    expr.expression.text === 'vi'
   );
 }
 
@@ -734,11 +737,243 @@ function countLines(relPath) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-function main() {
-  let failed = false;
+function relRepo(filePath) {
+  return relative(REPO_ROOT, filePath).replace(/\\/g, '/');
+}
 
-  // ── 1. Deep-import boundary scan ───────────────────────────────────────
+/**
+ * Format a single deep-import violation for console output. Extracted from
+ * the scan phase to keep reporting concerns separate from collection logic.
+ */
+function formatViolationLine(v) {
+  if (v.importKind === 'vi.mock-non-literal') {
+    return (
+      `    line ${v.line}: vi.mock(<non-literal>) — vi.mock specifiers must` +
+      ' be static string literals so this guard can analyze them; a dynamic' +
+      ' specifier could hide a deep runtime import'
+    );
+  }
+  if (v.symbol !== undefined) {
+    return (
+      `    line ${v.line}: ${v.specifier} imports internal symbol` +
+      ` '${v.symbol}' (${v.importKind}) — the bare root re-exports` +
+      ' internals; use a public Agent symbol instead'
+    );
+  }
+  return (
+    `    line ${v.line}: ${v.specifier} (${v.importKind}) — use the public` +
+    ' package root or add a justified allowlist entry'
+  );
+}
+
+/**
+ * Phase 1: Deep-import boundary scan. Walks all production source files and
+ * reports any disallowed deep runtime imports. Returns the per-file violation
+ * map (reused by the thin-entry guard in phase 4) and whether any violations
+ * were found.
+ */
+function runDeepImportScan(files) {
   console.log('Checking CLI import boundary (packages/cli/src)...');
+  const violationsByFile = {};
+  let totalViolations = 0;
+  for (const filePath of files) {
+    const rel = relRepo(filePath);
+    const viols = analyzeFile(filePath);
+    if (viols.length > 0) {
+      violationsByFile[rel] = viols;
+      totalViolations += viols.length;
+    }
+  }
+  if (totalViolations > 0) {
+    console.log(`FAIL: ${totalViolations} disallowed import(s):\n`);
+    for (const [file, viols] of Object.entries(violationsByFile)) {
+      console.log(`  ${file}:`);
+      for (const v of viols) {
+        console.log(formatViolationLine(v));
+      }
+    }
+    console.log('');
+  } else {
+    console.log('PASS: no disallowed deep runtime imports in CLI source.\n');
+  }
+  return { failed: totalViolations > 0, violationsByFile };
+}
+
+/**
+ * Phase 2: getConfig() escape-hatch scan. Flags any call to `getConfig(`
+ * in CLI production source — the Config must be reached via the public Agent
+ * surface, not an opaque getConfig back-door.
+ */
+function runGetConfigScan(files) {
+  console.log('Checking for getConfig() escape-hatch usage...');
+  let getConfigHits = 0;
+  const getConfigByFile = {};
+  for (const filePath of files) {
+    const rel = relRepo(filePath);
+    const hits = scanGetConfigEscapeHatch(filePath);
+    if (hits.length > 0) {
+      getConfigByFile[rel] = hits;
+      getConfigHits += hits.length;
+    }
+  }
+  if (getConfigHits > 0) {
+    console.log(
+      `FAIL: ${getConfigHits} getConfig() escape-hatch usage(s) found:\n`,
+    );
+    for (const [file, hits] of Object.entries(getConfigByFile)) {
+      console.log(`  ${file}:`);
+      for (const h of hits) {
+        console.log(
+          `    line ${h.line}: getConfig() escape-hatch — reach Config via` +
+            ' the public Agent surface instead (if this is a legitimate local' +
+            ' helper, rename it to a more specific name; do NOT add an' +
+            ' allowlist)',
+        );
+      }
+    }
+    console.log('');
+    return true;
+  }
+  console.log('PASS: no getConfig() escape-hatch usage in CLI source.\n');
+  return false;
+}
+
+/**
+ * Phase 3: Self-pruning allowlist guard. Every allowlisted file MUST exist in
+ * the scanned production source, and every allowlisted specifier/symbol MUST
+ * still be imported. This prevents stale allowlist entries from accumulating
+ * after a refactor removes the import.
+ */
+function runAllowlistFreshness(scannedRelFiles) {
+  console.log('Checking allowlist freshness (self-pruning guard)...');
+  // Only run the freshness check against the real production source tree.
+  // Synthetic test fixtures (CLI_BOUNDARY_ROOT set) do not contain the full
+  // set of allowlisted files, so checking freshness there would report every
+  // absent entry as stale (false noise).
+  if (process.env.CLI_BOUNDARY_ROOT) {
+    console.log('SKIP: allowlist freshness (synthetic fixture tree).\n');
+    return false;
+  }
+  let staleEntries = 0;
+  const staleByFile = {};
+  for (const [allowFile, allowSpecs] of Object.entries(ALLOWLIST)) {
+    collectStaleEntries(allowFile, allowSpecs, scannedRelFiles, staleByFile);
+    staleEntries += (staleByFile[allowFile] ?? []).length;
+  }
+  if (staleEntries === 0) {
+    console.log('PASS: allowlist is fresh (no stale entries).\n');
+    return false;
+  }
+  console.log(`FAIL: ${staleEntries} stale allowlist entr(y/ies) found:\n`);
+  for (const [file, entries] of Object.entries(staleByFile)) {
+    console.log(`  ${file}:`);
+    for (const e of entries) {
+      console.log(formatStaleEntry(e));
+    }
+  }
+  console.log('');
+  return true;
+}
+
+function collectStaleEntries(
+  allowFile,
+  allowSpecs,
+  scannedRelFiles,
+  staleByFile,
+) {
+  if (!scannedRelFiles.has(allowFile)) {
+    staleByFile[allowFile] = [{ kind: 'missing-file', detail: allowFile }];
+    return;
+  }
+  const absFile = join(REPO_ROOT, allowFile);
+  const actualSpecs = collectAllSpecifiers(absFile);
+  const stale = [];
+  for (const spec of allowSpecs) {
+    if (!actualSpecs.has(spec)) {
+      stale.push({ kind: 'unused-specifier', detail: spec });
+    }
+  }
+  if (stale.length > 0) {
+    staleByFile[allowFile] = stale;
+  }
+}
+
+function formatStaleEntry(e) {
+  if (e.kind === 'missing-file') {
+    return '    allowlisted file no longer exists in production source — remove the entry';
+  }
+  return `    allowlisted specifier '${e.detail}' is no longer imported — remove the entry`;
+}
+
+/**
+ * Phase 4: Thin-entry guard. Asserts packages/cli/index.ts stays under the
+ * thin-entry line threshold and that cli.tsx does not directly import
+ * runtime-construction deep paths.
+ */
+function runThinEntryGuard(violationsByFile) {
+  console.log('Checking thin-entry structure...');
+  // These guards only apply when the real entrypoint files exist (they are
+  // absent in synthetic fixture trees used by the script's own tests). The
+  // thin CLI_INDEX check and the CLI_ENTRY deep-import check are INDEPENDENT:
+  // if packages/cli/index.ts is deleted but packages/cli/src/cli.tsx still
+  // exists, the dedicated cli.tsx orchestrator-specific deep-import guard
+  // (and its PASS/FAIL message) must still run. Nesting it inside the
+  // CLI_INDEX existence check would silently skip the cli.tsx guard in that
+  // scenario (#2204).
+  let failed = checkThinIndex();
+  failed = checkCliEntryDeepImports(violationsByFile) || failed;
+  return failed;
+}
+
+function checkThinIndex() {
+  if (!existsSync(CLI_INDEX)) {
+    console.log(`SKIP: thin CLI_INDEX guard (${CLI_INDEX} absent).`);
+    return false;
+  }
+  const indexLines = countLines(CLI_INDEX);
+  if (indexLines > THIN_ENTRY_MAX_LINES) {
+    console.log(
+      `FAIL: ${CLI_INDEX} is ${indexLines} lines (threshold ${THIN_ENTRY_MAX_LINES}). ` +
+        'The real entrypoint must stay thin: shebang + top-level error handling + main() invocation only.',
+    );
+    return true;
+  }
+  console.log(
+    `PASS: ${CLI_INDEX} is ${indexLines} lines (<= ${THIN_ENTRY_MAX_LINES}).`,
+  );
+  return false;
+}
+
+function checkCliEntryDeepImports(violationsByFile) {
+  // Reuse the analysis from phase 1 (CLI_ENTRY is under CLI_SRC_DIR and was
+  // already scanned) instead of re-analyzing the file.
+  if (!existsSync(CLI_ENTRY)) {
+    if (existsSync(CLI_INDEX)) {
+      console.log(`SKIP: CLI_ENTRY deep-import guard (${CLI_ENTRY} absent).`);
+    } else {
+      console.log('SKIP: thin-entry guard (entrypoint files absent).');
+    }
+    return false;
+  }
+  const entryRel = relRepo(CLI_ENTRY);
+  const entryViolations = violationsByFile[entryRel] ?? [];
+  if (entryViolations.length > 0) {
+    console.log(
+      `\nFAIL: ${entryRel} directly imports runtime-construction deep paths:`,
+    );
+    for (const v of entryViolations) {
+      console.log(`    line ${v.line}: ${v.specifier} (${v.importKind})`);
+    }
+    return true;
+  }
+  console.log(
+    `PASS: ${CLI_ENTRY} does not directly import runtime-construction deep paths.`,
+  );
+  return false;
+}
+
+function main() {
+  // ── 1. Deep-import boundary scan ───────────────────────────────────────
   const files = walkDir(CLI_SRC_DIR);
   if (files.length === 0) {
     // An empty file list means the scan directory was not found or is empty
@@ -751,196 +986,18 @@ function main() {
     process.exit(1);
   }
   console.log(`Scanning ${files.length} production source files...\n`);
-
-  const violationsByFile = {};
-  let totalViolations = 0;
-  for (const filePath of files) {
-    const rel = relative(REPO_ROOT, filePath).replace(/\\/g, '/');
-    const viols = analyzeFile(filePath);
-    if (viols.length > 0) {
-      violationsByFile[rel] = viols;
-      totalViolations += viols.length;
-    }
-  }
-  if (totalViolations > 0) {
-    failed = true;
-    console.log(`FAIL: ${totalViolations} disallowed import(s):\n`);
-    for (const [file, viols] of Object.entries(violationsByFile)) {
-      console.log(`  ${file}:`);
-      for (const v of viols) {
-        if (v.importKind === 'vi.mock-non-literal') {
-          console.log(
-            `    line ${v.line}: vi.mock(<non-literal>) — vi.mock specifiers must be static string literals so this guard can analyze them; a dynamic specifier could hide a deep runtime import`,
-          );
-        } else if (v.symbol !== undefined) {
-          console.log(
-            `    line ${v.line}: ${v.specifier} imports internal symbol '${v.symbol}' (${v.importKind}) — the bare root re-exports internals; use a public Agent symbol instead`,
-          );
-        } else {
-          console.log(
-            `    line ${v.line}: ${v.specifier} (${v.importKind}) — use the public package root or add a justified allowlist entry`,
-          );
-        }
-      }
-    }
-    console.log('');
-  } else {
-    console.log('PASS: no disallowed deep runtime imports in CLI source.\n');
-  }
+  const scanResult = runDeepImportScan(files);
+  let failed = scanResult.failed;
 
   // ── 2. getConfig escape-hatch scan ─────────────────────────────────────
-  console.log('Checking for getConfig() escape-hatch usage...');
-  let getConfigHits = 0;
-  const getConfigByFile = {};
-  for (const filePath of files) {
-    const rel = relative(REPO_ROOT, filePath).replace(/\\/g, '/');
-    const hits = scanGetConfigEscapeHatch(filePath);
-    if (hits.length > 0) {
-      getConfigByFile[rel] = hits;
-      getConfigHits += hits.length;
-    }
-  }
-  if (getConfigHits > 0) {
-    failed = true;
-    console.log(
-      `FAIL: ${getConfigHits} getConfig() escape-hatch usage(s) found:\n`,
-    );
-    for (const [file, hits] of Object.entries(getConfigByFile)) {
-      console.log(`  ${file}:`);
-      for (const h of hits) {
-        console.log(
-          `    line ${h.line}: getConfig() escape-hatch — reach Config via the public Agent surface instead (if this is a legitimate local helper, rename it to a more specific name; do NOT add an allowlist)`,
-        );
-      }
-    }
-    console.log('');
-  } else {
-    console.log('PASS: no getConfig() escape-hatch usage in CLI source.\n');
-  }
+  failed = runGetConfigScan(files) || failed;
 
   // ── 3. Self-pruning allowlist guard ────────────────────────────────────
-  //
-  // Every allowlisted file MUST exist in the scanned production source, and
-  // every allowlisted specifier/symbol MUST still be imported by that file.
-  // This prevents stale allowlist entries from accumulating after a refactor
-  // removes the import (a stale entry is a false sense of safety: it looks
-  // justified but guards nothing). This guard runs only when allowlisted
-  // files actually exist in the scan (i.e., against the real repo, not
-  // synthetic fixture trees used by the script's own tests).
-  console.log('Checking allowlist freshness (self-pruning guard)...');
-  const scannedRelFiles = new Set(
-    files.map((f) => relative(REPO_ROOT, f).replace(/\\/g, '/')),
-  );
-  // Only run the freshness check against the real production source tree.
-  // Synthetic test fixtures (CLI_BOUNDARY_ROOT set) do not contain the full
-  // set of allowlisted files, so checking freshness there would report every
-  // absent entry as stale (false noise).
-  const isProductionRepo = !process.env.CLI_BOUNDARY_ROOT;
-  let staleEntries = 0;
-  const staleByFile = {};
-
-  if (!isProductionRepo) {
-    console.log('SKIP: allowlist freshness (synthetic fixture tree).\n');
-  } else {
-    for (const [allowFile, allowSpecs] of Object.entries(ALLOWLIST)) {
-      if (!scannedRelFiles.has(allowFile)) {
-        staleEntries++;
-        (staleByFile[allowFile] ??= []).push({
-          kind: 'missing-file',
-          detail: allowFile,
-        });
-        continue;
-      }
-      const absFile = join(REPO_ROOT, allowFile);
-      const actualSpecs = collectAllSpecifiers(absFile);
-      for (const spec of allowSpecs) {
-        if (!actualSpecs.has(spec)) {
-          staleEntries++;
-          (staleByFile[allowFile] ??= []).push({
-            kind: 'unused-specifier',
-            detail: spec,
-          });
-        }
-      }
-    }
-
-    if (staleEntries > 0) {
-      failed = true;
-      console.log(`FAIL: ${staleEntries} stale allowlist entr(y/ies) found:\n`);
-      for (const [file, entries] of Object.entries(staleByFile)) {
-        console.log(`  ${file}:`);
-        for (const e of entries) {
-          if (e.kind === 'missing-file') {
-            console.log(
-              `    allowlisted file no longer exists in production source — remove the entry`,
-            );
-          } else if (e.kind === 'unused-specifier') {
-            console.log(
-              `    allowlisted specifier '${e.detail}' is no longer imported — remove the entry`,
-            );
-          }
-        }
-      }
-      console.log('');
-    } else {
-      console.log('PASS: allowlist is fresh (no stale entries).\n');
-    }
-  }
+  const scannedRelFiles = new Set(files.map(relRepo));
+  failed = runAllowlistFreshness(scannedRelFiles) || failed;
 
   // ── 4. Thin-entry guard ────────────────────────────────────────────────
-  console.log('Checking thin-entry structure...');
-  // These guards only apply when the real entrypoint files exist (they are
-  // absent in synthetic fixture trees used by the script's own tests). The
-  // thin CLI_INDEX check and the CLI_ENTRY deep-import check are INDEPENDENT:
-  // if packages/cli/index.ts is deleted but packages/cli/src/cli.tsx still
-  // exists, the dedicated cli.tsx orchestrator-specific deep-import guard
-  // (and its PASS/FAIL message) must still run. Nesting it inside the
-  // CLI_INDEX existence check would silently skip the cli.tsx guard in that
-  // scenario (#2204).
-  const indexExists = existsSync(CLI_INDEX);
-  if (indexExists) {
-    const indexLines = countLines(CLI_INDEX);
-    if (indexLines > THIN_ENTRY_MAX_LINES) {
-      failed = true;
-      console.log(
-        `FAIL: ${CLI_INDEX} is ${indexLines} lines (threshold ${THIN_ENTRY_MAX_LINES}). ` +
-          'The real entrypoint must stay thin: shebang + top-level error handling + main() invocation only.',
-      );
-    } else {
-      console.log(
-        `PASS: ${CLI_INDEX} is ${indexLines} lines (<= ${THIN_ENTRY_MAX_LINES}).`,
-      );
-    }
-  } else {
-    console.log(`SKIP: thin CLI_INDEX guard (${CLI_INDEX} absent).`);
-  }
-
-  // Verify main() in cli.tsx does not directly import runtime-construction
-  // deep paths (the orchestrator must delegate to bootstrap modules).
-  // Reuse the analysis from step 1 (CLI_ENTRY is under CLI_SRC_DIR and was
-  // already scanned) instead of re-analyzing the file. This check runs
-  // independently of the CLI_INDEX existence check above.
-  if (existsSync(CLI_ENTRY)) {
-    const entryRel = relative(REPO_ROOT, CLI_ENTRY).replace(/\\/g, '/');
-    const entryViolations = violationsByFile[entryRel] ?? [];
-    if (entryViolations.length > 0) {
-      failed = true;
-      console.log(
-        `\nFAIL: ${entryRel} directly imports runtime-construction deep paths:`,
-      );
-      for (const v of entryViolations) {
-        console.log(`    line ${v.line}: ${v.specifier} (${v.importKind})`);
-      }
-    } else {
-      console.log(
-        `PASS: ${CLI_ENTRY} does not directly import runtime-construction deep paths.`,
-      );
-    }
-  } else if (indexExists) {
-    console.log(`SKIP: CLI_ENTRY deep-import guard (${CLI_ENTRY} absent).`);
-  } else {
-    console.log('SKIP: thin-entry guard (entrypoint files absent).');
-  }
+  failed = runThinEntryGuard(scanResult.violationsByFile) || failed;
 
   if (failed) {
     console.log('\nCLI import boundary check FAILED.');
