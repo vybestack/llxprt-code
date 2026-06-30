@@ -30,7 +30,7 @@ Get started immediately with powerful LLM options:
 /provider codex
 /model gpt-5.5
 
-# Kimi subscription (K2 Thinking with reasoning)
+# Kimi subscription (K2.7 Code, thinking always on)
 /provider kimi
 /key **************
 /model kimi-for-coding
@@ -43,7 +43,7 @@ Get started immediately with powerful LLM options:
 - **Load Balancer Profiles**: Balance requests across providers or accounts with automatic failover
 - **Free & Low-Cost Tiers**: Start with a Google account (Gemini) or a Qwen account — see [authentication](./docs/cli/authentication.md) for current tier availability
 - **Provider Flexibility**: Switch between any Anthropic, Gemini, OpenAI, Kimi, or OpenAI-compatible provider
-- **Top Open Models**: Works seamlessly with GLM 5.2, Kimi K2.6, MiniMax M3, and Qwen 3 Coder Next
+- **Top Open Models**: Works seamlessly with GLM 5.2, Kimi K2.7 Code, MiniMax M3, and Qwen 3 Coder Next
 - **Local Models**: Run models locally with LM Studio, llama.cpp for complete privacy
 - **Privacy First**: No telemetry by default, local processing available
 - **Subagent Flexibility**: Create agents with different models, providers, or settings
@@ -116,7 +116,7 @@ llxprt
 - **Multi-Account Failover** - Configure multiple OAuth buckets that failover automatically on rate limits
 - **Load Balancer Profiles** - Balance across providers/accounts with roundrobin or failover policies
 - **Extensive Provider Support** - Anthropic, Gemini, OpenAI, Kimi, and any OpenAI-compatible provider [**Provider Guide →**](./docs/providers/quick-reference.md)
-- **Top Open Models** - GLM 5.2, Kimi K2.6, MiniMax M3, Qwen 3 Coder Next
+- **Top Open Models** - GLM 5.2, Kimi K2.7 Code, MiniMax M3, Qwen 3 Coder Next
 - **Local Model Support** - LM Studio, llama.cpp, Ollama for complete privacy
 - **Profile System** - Save provider configurations and model settings
 - **Advanced Subagents** - Isolated AI assistants with different models/providers
@@ -149,29 +149,29 @@ llxprt "Generate unit tests for payment module" > tests/payment.test.js
 
 ## Top Open Weight Models
 
-LLxprt Code works seamlessly with the best open-weight models:
+LLxprt Code works seamlessly with the best open-weight models. The specs below are illustrative vendor capabilities, not necessarily the built-in provider defaults — see the [Provider Quick Reference](./docs/providers/quick-reference.md) for the model IDs and context limits LLxprt ships with.
 
-### Kimi K2.6
+### Kimi K2.7 Code
 
-- **Context Window**: 262,144 tokens
+- **Context Window**: 262,144 tokens (256K)
 - **Architecture**: Trillion-parameter MoE (32B active)
-- **Strengths**: Deep reasoning, multi-step tool orchestration, 200-300 sequential tool calls
-- **Special**: Native thinking/reasoning mode with tool interleaving
+- **Strengths**: Long-horizon agentic coding, multi-step tool orchestration, ~30% fewer reasoning tokens than K2.6
+- **Special**: Thinking mode is always on (no non-thinking mode; in Kimi Code, disabling thinking falls back to K2.6)
 
 ```bash
 /provider kimi
 /model kimi-for-coding
 # Or via Synthetic/Chutes:
 /provider synthetic
-/model hf:moonshotai/Kimi-K2.6
+/model hf:moonshotai/Kimi-K2.7-Code
 ```
 
 ### GLM 5.2
 
 - **Context Window**: 1M tokens (API key)
-- **Max Output**: 128K tokens
+- **Max Output**: 131,072 tokens
 - **Architecture**: Mixture-of-Experts with 744B total parameters (40B active)
-- **Strengths**: Coding, multi-step planning, tool integration
+- **Strengths**: Long-horizon coding, multi-step planning, flexible thinking effort (High/Max)
 
 ### MiniMax M3
 

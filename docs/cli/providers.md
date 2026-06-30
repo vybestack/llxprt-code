@@ -25,8 +25,8 @@ LLxprt Code ships with aliases for these providers — just use `/provider <name
 | Fireworks                     | `fireworks`     | fireworks/minimax-m3       | API key          |
 | Makora                        | `makora`        | nvidia/Kimi-K2.6-NVFP4     | API key          |
 | Ollama Cloud                  | `ollama-cloud`  | kimi-k2.6                  | API key          |
-| LM Studio                     | `lm-studio`     | —                          | None (local)     |
-| llama.cpp                     | `llama-cpp`     | —                          | None (local)     |
+| LM Studio                     | `lm-studio`     | gemma-3b-it                | None (local)     |
+| llama.cpp                     | `llama-cpp`     | local-model                | None (local)     |
 
 ## Switching Providers
 

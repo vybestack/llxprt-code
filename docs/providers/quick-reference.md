@@ -158,7 +158,7 @@ Note: OAuth is lazy — authentication happens when you first use the provider.
 
 #### Model geometry & recommended settings (Gemini)
 
-Common models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
+Common models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` (stable). Preview models `gemini-3-pro-preview` and `gemini-3-flash-preview` are also selectable.
 
 Guidance:
 
@@ -305,12 +305,12 @@ Kimi K2 is also available through third-party providers:
 # Via Synthetic
 /provider synthetic
 /keyfile ~/.synthetic_key
-/model hf:moonshotai/Kimi-K2.6
+/model hf:moonshotai/Kimi-K2.7-Code
 
 # Via Chutes
 /provider chutes-ai
 /keyfile ~/.chutes_key
-/model moonshotai/Kimi-K2.6
+/model moonshotai/Kimi-K2.7-Code
 ```
 
 ### Synthetic (Hugging Face Models)
@@ -323,7 +323,7 @@ Kimi K2 is also available through third-party providers:
 
 #### Model geometry & recommended settings (Synthetic)
 
-Popular models: `hf:zai-org/GLM-4.7`, `hf:moonshotai/Kimi-K2.6`
+Popular models: `hf:zai-org/GLM-4.7`, `hf:moonshotai/Kimi-K2.7-Code`
 
 Guidance:
 

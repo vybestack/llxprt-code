@@ -16,7 +16,7 @@ This recipe guides you through setting up LLxprt Code with low-cost AI providers
 | Provider | Context Limit       | Auth                                      |
 | -------- | ------------------- | ----------------------------------------- |
 | Gemini   | 1,048,576 (API key) | Google account (OAuth) or Gemini API key  |
-| Qwen     | 262,144             | Qwen account (OAuth) or DashScope API key |
+| Qwen     | 200,000             | Qwen account (OAuth) or DashScope API key |
 
 > Context windows can differ between API-key and OAuth/subscription access; the figures above reflect API-key access.
 
@@ -101,7 +101,7 @@ If the Qwen login no longer authorizes a free tier (see the note above), set a D
 ### Step 3: Configure Context Limit
 
 ```bash
-/set context-limit 262144
+/set context-limit 200000
 /set modelparam max_tokens 4096
 ```
 
@@ -135,7 +135,7 @@ Save this to `~/.llxprt/profiles/qwen-free.json`:
     "max_tokens": 4096
   },
   "ephemeralSettings": {
-    "context-limit": 262144
+    "context-limit": 200000
   }
 }
 ```
@@ -181,7 +181,7 @@ Save this to `~/.llxprt/profiles/free-tier-lb.json`:
   "provider": "lb",
   "model": "gemini-2.5-flash",
   "ephemeralSettings": {
-    "context-limit": 262144,
+    "context-limit": 200000,
     "lb": {
       "type": "failover",
       "buckets": [
@@ -207,7 +207,7 @@ Save this to `~/.llxprt/profiles/free-tier-lb.json`:
 }
 ```
 
-**Note:** When using failover, set `context-limit` to the smaller of the two providers (262,144) to ensure compatibility.
+**Note:** When using failover, set `context-limit` to the smaller of the two providers (200,000) to ensure compatibility.
 
 ## Troubleshooting
 

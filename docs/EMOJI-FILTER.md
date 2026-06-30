@@ -129,7 +129,7 @@ For streamed model responses, emoji filtering is applied at the **display layer*
     "anthropic": {
       "enabled": true,
       "apiKey": "your-key",
-      "model": "claude-3-opus-20240229"
+      "model": "claude-opus-4-8"
     }
   },
   "ui": {

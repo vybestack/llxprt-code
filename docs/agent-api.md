@@ -193,7 +193,7 @@ Production callers (and the CLI migration path) can disable any combination:
 ```ts
 const agent = await createAgent({
   provider: 'openai',
-  model: 'gpt-4',
+  model: 'gpt-5.5',
   interactive: false,
   approvalMode: ApprovalMode.DEFAULT,
   harness: {

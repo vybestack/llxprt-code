@@ -8,7 +8,7 @@ Profiles capture your full setup — provider, model, parameters, and ephemeral 
 
 ```
 /provider openai
-/model hf:moonshotai/Kimi-K2.6
+/model hf:moonshotai/Kimi-K2.7-Code
 /baseurl https://api.synthetic.new/openai/v1
 /set reasoning.enabled true
 /profile save kimi-k2
@@ -48,7 +48,7 @@ Command-line flags always win over profile values. This is useful for one-off ov
 llxprt --profile-load kimi-k2 --key-name synthetic-alt
 
 # Load profile but override the model
-llxprt --profile-load kimi-k2 --model gpt-4.1
+llxprt --profile-load kimi-k2 --model gpt-5.5
 ```
 
 ## Ephemeral Settings
@@ -107,7 +107,7 @@ Model settings have one compatibility exception: the legacy `model` setting is a
 ```json
 {
   "model": {
-    "name": "gpt-4.1",
+    "name": "gpt-5.5",
     "compressionThreshold": 0.7
   }
 }
@@ -141,7 +141,7 @@ Merged runtime settings keep `model` as the active model string for existing cal
 
 ### Reasoning Settings
 
-These control extended thinking / chain-of-thought for models that support it (Kimi K2-Thinking, Claude with thinking, o3, etc.).
+These control extended thinking / chain-of-thought for models that support it (Kimi K2.7 Code, Claude with thinking, GPT-5.x reasoning effort, etc.).
 
 | Setting                       | Description                                                   | Default          |
 | ----------------------------- | ------------------------------------------------------------- | ---------------- |

@@ -136,7 +136,7 @@ Example log entry:
   "namespace": "llxprt:openai:provider",
   "level": "debug",
   "message": "Sending request to OpenAI API",
-  "args": ["gpt-4"],
+  "args": ["gpt-5.5"],
   "runId": "12345",
   "pid": 12345
 }
