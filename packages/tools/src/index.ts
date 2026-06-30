@@ -268,7 +268,6 @@ export {
   OUTPUT_UPDATE_INTERVAL_MS,
   type ShellToolParams,
 } from './tools/shell.js';
-export { TaskTool, type TaskToolParams } from './tools/task.js';
 export {
   DISCOVERED_TOOL_PREFIX,
   ToolRegistry,

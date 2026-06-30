@@ -10,6 +10,7 @@ import {
   CoreEvent,
   type UserFeedbackPayload,
   type ModelProfileInfoPayload,
+  type LoadBalancerSelectionPayload,
 } from './events.js';
 
 describe('CoreEventEmitter', () => {
@@ -243,6 +244,72 @@ describe('CoreEventEmitter', () => {
       events.emitModelProfileChanged({
         model: 'm2',
         displayLabel: 'm2',
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('LoadBalancerSelectionChanged event', () => {
+    it('emits the load-balancer profile, sub-profile, and model', () => {
+      const listener = vi.fn();
+      events.on(CoreEvent.LoadBalancerSelectionChanged, listener);
+
+      const payload: LoadBalancerSelectionPayload = {
+        profileName: 'glm',
+        subProfileName: 'zai',
+        model: 'glm-4-zai',
+      };
+
+      events.emitLoadBalancerSelectionChanged(payload);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(payload);
+    });
+
+    it('does NOT emit ModelChanged (selection is not a model switch)', () => {
+      const modelChangedListener = vi.fn();
+      events.on(CoreEvent.ModelChanged, modelChangedListener);
+
+      events.emitLoadBalancerSelectionChanged({
+        profileName: 'glm',
+        subProfileName: 'zai',
+        model: 'glm-4-zai',
+      });
+
+      expect(modelChangedListener).not.toHaveBeenCalled();
+    });
+
+    it('allows null sub-profile/model for the pre-selection state', () => {
+      const listener = vi.fn();
+      events.on(CoreEvent.LoadBalancerSelectionChanged, listener);
+
+      events.emitLoadBalancerSelectionChanged({
+        profileName: 'glm',
+        subProfileName: null,
+        model: null,
+      });
+
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ subProfileName: null, model: null }),
+      );
+    });
+
+    it('stops receiving LoadBalancerSelectionChanged after off()', () => {
+      const listener = vi.fn();
+      events.on(CoreEvent.LoadBalancerSelectionChanged, listener);
+
+      events.emitLoadBalancerSelectionChanged({
+        profileName: 'glm',
+        subProfileName: 'zai',
+        model: 'glm-4-zai',
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      events.off(CoreEvent.LoadBalancerSelectionChanged, listener);
+      events.emitLoadBalancerSelectionChanged({
+        profileName: 'glm',
+        subProfileName: 'makoraglm51',
+        model: 'glm-5-mak',
       });
       expect(listener).toHaveBeenCalledTimes(1);
     });

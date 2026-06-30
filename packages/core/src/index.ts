@@ -464,7 +464,6 @@ export {
   type TodoToolCall,
   type TodoUpdateEvent,
 } from '@vybestack/llxprt-code-tools';
-export { TaskTool, type TaskToolParams } from '@vybestack/llxprt-code-tools';
 export * from './tools-adapters/index.js';
 export {
   ToolKeyStorage,
@@ -607,6 +606,7 @@ export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.j
 export type {
   RuntimeProvider,
   RuntimeProviderManager,
+  RuntimeSessionTokenUsage,
   RuntimeModel,
   RuntimeTokenizer,
   RuntimeTokenizerFactory,

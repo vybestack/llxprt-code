@@ -24,7 +24,6 @@ import {
   type ToolCallRequestInfo,
   parseAndFormatApiError,
   type ThinkingBlock,
-  tokenLimit,
   type ThoughtSummary,
   type ServerGeminiContentEvent,
 } from '@vybestack/llxprt-code-core';
@@ -48,6 +47,24 @@ import {
   getErrorFallbackModel,
 } from '../../../utils/apiErrorFormatting.js';
 import {
+  resolveContentPrefixIdentity,
+  createCliModelIdentityRuntime,
+} from '../../utils/modelIdentity.js';
+
+/**
+ * Shared content-prefix identity resolver. Reads fresh runtime state at call
+ * time (no dependencies on component state/props), so a single stable reference
+ * can be reused by both ContentEventDeps and StreamEventDeps without risk of
+ * staleness (issue #2263).
+ */
+function defaultGetContentPrefixIdentity(): string | null {
+  try {
+    return resolveContentPrefixIdentity(createCliModelIdentityRuntime());
+  } catch {
+    return null;
+  }
+}
+import {
   processContentEvent,
   type ContentEventDeps,
 } from './contentEventProcessor.js';
@@ -56,6 +73,7 @@ import {
   prepareQueryForGemini as prepareQueryImpl,
   type PrepareQueryDeps,
 } from './queryPreparer.js';
+import { getTokenLimitForConfiguredContext } from './contextLimit.js';
 interface StreamEventHandlersResult {
   handleContentEvent: (
     eventValue: ServerGeminiContentEvent['value'],
@@ -105,23 +123,6 @@ interface StreamEventHandlersResult {
     queryToSend: PartListUnion | null;
     shouldProceed: boolean;
   }>;
-}
-
-function getConfiguredContextLimit(config: Config): number | undefined {
-  const rawContextLimit = config.getEphemeralSetting('context-limit');
-  return typeof rawContextLimit === 'number' &&
-    Number.isFinite(rawContextLimit) &&
-    rawContextLimit > 0
-    ? rawContextLimit
-    : undefined;
-}
-
-export function getTokenLimitForConfiguredContext(config: Config): number {
-  const contextLimit = getConfiguredContextLimit(config);
-  const model = config.getModel();
-  return contextLimit === undefined
-    ? tokenLimit(model)
-    : tokenLimit(model, contextLimit);
 }
 
 interface StreamEventHandlerDeps {
@@ -477,7 +478,6 @@ function usePrepareQueryForGemini(deps: StreamEventHandlerDeps) {
 function useContentEventDeps(deps: StreamEventHandlerDeps): ContentEventDeps {
   return useMemo(
     () => ({
-      config: deps.config,
       addItem: deps.addItem,
       sanitizeContent: deps.sanitizeContent,
       flushPendingHistoryItem: deps.flushPendingHistoryItem,
@@ -485,9 +485,9 @@ function useContentEventDeps(deps: StreamEventHandlerDeps): ContentEventDeps {
       thinkingBlocksRef: deps.thinkingBlocksRef,
       turnCancelledRef: deps.turnCancelledRef,
       setPendingHistoryItem: deps.setPendingHistoryItem,
+      getContentPrefixIdentity: defaultGetContentPrefixIdentity,
     }),
     [
-      deps.config,
       deps.addItem,
       deps.sanitizeContent,
       deps.flushPendingHistoryItem,
@@ -571,7 +571,6 @@ function useProcessStreamEvent(
       const result = dispatchStreamEvent(
         event,
         {
-          config: deps.config,
           addItem: deps.addItem,
           sanitizeContent: deps.sanitizeContent,
           flushPendingHistoryItem: deps.flushPendingHistoryItem,
@@ -584,6 +583,7 @@ function useProcessStreamEvent(
           setPendingHistoryItem: deps.setPendingHistoryItem,
           setLastGeminiActivityTime: deps.setLastGeminiActivityTime,
           setThought: deps.setThought,
+          getContentPrefixIdentity: defaultGetContentPrefixIdentity,
           ...handlers,
           scheduleToolCalls: deps.scheduleToolCalls,
         },

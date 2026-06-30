@@ -64,7 +64,6 @@ export default tseslint.config(
       'packages/ui/**',
       'packages/lsp/**',
       'evals/**',
-      'packages/test-utils/**',
     ],
   },
   {

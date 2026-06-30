@@ -16,6 +16,7 @@ import { HistoryService } from '../services/history/HistoryService.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeContextFactoryOptions,
+  AgentRuntimeProviderAdapter,
 } from './AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import type { RuntimeSettingsState } from './providerRuntimeContext.js';
@@ -99,6 +100,25 @@ function createGetLiveSetting(
 }
 
 /**
+ * Resolve a positive finite context limit from the active provider, if any.
+ * Returns undefined when the provider is unavailable or does not report a
+ * usable limit, so callers can fall back to the model-name lookup.
+ */
+function resolveProviderContextLimit(
+  provider: AgentRuntimeProviderAdapter,
+): number | undefined {
+  try {
+    const limit = provider.getActiveProvider().getContextLimit?.();
+    if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
+      return limit;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Build compression-related ephemeral accessors.
  */
 function buildCompressionEphemerals(
@@ -128,7 +148,16 @@ function buildCompressionEphemerals(
         liveLimit > 0
           ? liveLimit
           : undefined;
-      return tokenLimit(options.state.model, liveOverride);
+      if (liveOverride !== undefined) {
+        return liveOverride;
+      }
+      const providerContextLimit = resolveProviderContextLimit(
+        options.provider,
+      );
+      if (providerContextLimit !== undefined) {
+        return providerContextLimit;
+      }
+      return tokenLimit(options.state.model, undefined);
     },
     preserveThreshold: (): number =>
       options.settings.preserveThreshold ??

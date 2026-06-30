@@ -58,8 +58,13 @@ export interface RuntimeProvider {
   getToolFormat?(): string;
   isPaidMode?(): boolean;
   getModelParams?(): Record<string, unknown> | undefined;
+  getContextLimit?(): number | undefined;
   clearAuthCache?(): void;
   clearAuth?(): void;
+
+  setCompressionCallback?(
+    callback: ((contents: IContent[]) => Promise<IContent[]>) | null,
+  ): void;
 
   getServerTools(): string[];
   invokeServerTool(

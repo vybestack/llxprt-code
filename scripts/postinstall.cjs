@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { detectInstaller } = require('./detect-installer.cjs');
 
 const lockfilePath = path.join(__dirname, '..', 'package-lock.json');
 
@@ -46,6 +47,15 @@ function stripPeerFlagsFromLockfile() {
       error.message,
     );
   }
+}
+
+// Under Bun this script is a deliberate no-op: Bun does not consume
+// package-lock.json (so the peer-flag sanitization is irrelevant and must not
+// mutate it), and the GitHub-source bundle bootstrap below shells out to npm,
+// which would defeat a `bun install`. S1 only adopts Bun as the package
+// manager; the bundle/build path stays on npm until a later subissue.
+if (detectInstaller() === 'bun') {
+  process.exit(0);
 }
 
 stripPeerFlagsFromLockfile();

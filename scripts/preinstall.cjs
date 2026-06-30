@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { detectInstaller } = require('./detect-installer.cjs');
 
 /**
  * Resolves the @vybestack directory for cleanup.
@@ -61,6 +62,13 @@ function resolveVybestackDir() {
  * and can be left behind if the install fails or is interrupted.
  */
 function cleanupTempDirectories() {
+  // This cleanup targets temp directories left by npm's atomic-rename staging
+  // during global installs. Bun does not create them, so under Bun this is a
+  // deliberate no-op.
+  if (detectInstaller() === 'bun') {
+    return;
+  }
+
   // Only run cleanup for global installs
   if (process.env.npm_config_global !== 'true') {
     return;

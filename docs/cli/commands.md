@@ -13,7 +13,7 @@ Slash commands control the CLI itself — configuration, navigation, session man
 | Command                | Description                              |
 | ---------------------- | ---------------------------------------- |
 | `/provider [name]`     | Switch provider (e.g., `/provider kimi`) |
-| `/model [name]`        | Switch model (e.g., `/model grok-3`)     |
+| `/model [name]`        | Switch model (e.g., `/model grok-4`)     |
 | `/baseurl [url]`       | Set the API base URL                     |
 | `/toolformat [format]` | Set the tool format for the provider     |
 

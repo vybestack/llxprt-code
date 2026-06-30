@@ -44,6 +44,7 @@ export {
 } from './core/chatSession.js';
 export * from './core/ChatSessionFactory.js';
 export { CoreToolScheduler } from './core/coreToolScheduler.js';
+export { getTokenLimitForConfiguredContext } from './core/contextLimitResolver.js';
 export { executeToolCall } from './core/nonInteractiveToolExecutor.js';
 export { SubagentOrchestrator } from './core/subagentOrchestrator.js';
 export { TaskTool } from './tools/task.js';

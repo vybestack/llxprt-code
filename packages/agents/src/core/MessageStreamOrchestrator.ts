@@ -25,7 +25,7 @@ import {
   estimateRequestTokensStructured,
   extractPromptText,
 } from './clientHelpers.js';
-import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
@@ -103,25 +103,6 @@ function normalizeTodoSnapshotEntry(todo: Todo): Todo {
 
 export const MAX_TURNS = 100;
 const MAX_RETRIES = 3;
-
-function getConfiguredContextLimit(config: Config): number | undefined {
-  const rawContextLimit = config.getEphemeralSetting('context-limit');
-  return typeof rawContextLimit === 'number' &&
-    Number.isFinite(rawContextLimit) &&
-    rawContextLimit > 0
-    ? rawContextLimit
-    : undefined;
-}
-
-function getTokenLimitForConfiguredContext(
-  model: string,
-  config: Config,
-): number {
-  const contextLimit = getConfiguredContextLimit(config);
-  return contextLimit === undefined
-    ? tokenLimit(model)
-    : tokenLimit(model, contextLimit);
-}
 
 export class MessageStreamOrchestrator {
   #lastModelIdentity: string | null = null;

@@ -287,6 +287,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => {
     })),
     listAvailableModels: vi.fn(async () => []),
     getActiveModelName: vi.fn(() => null),
+    getActiveProfileName: vi.fn(() => null),
     getActiveModelParams: vi.fn(() => ({})),
     getEphemeralSettings: vi.fn(() => ({})),
     getEphemeralSetting: vi.fn(() => undefined),

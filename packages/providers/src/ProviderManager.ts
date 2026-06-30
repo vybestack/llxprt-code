@@ -25,6 +25,7 @@ import {
   getActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { MissingProviderRuntimeError } from './errors.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
@@ -81,6 +82,7 @@ export class ProviderManager implements IProviderManager {
   private providers: Map<string, IProvider>;
   private serverToolsProvider: IProvider | null;
   private config?: Config;
+  private injectedTokenizerFactory?: RuntimeTokenizerFactory;
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P05
    * @requirement REQ-SP-001
@@ -207,7 +209,18 @@ export class ProviderManager implements IProviderManager {
    * @requirement REQ-SP4-004
    */
   setRuntimeContext(runtime: ProviderRuntimeContext): void {
+    const currentActiveProvider = this.getActiveProviderName();
     this.runtime = runtime;
+    this.settingsService = asSettingsService(runtime.settingsService);
+    this.config = runtime.config ?? this.config;
+    if (
+      currentActiveProvider &&
+      this.providers.has(currentActiveProvider) &&
+      isBlankValue(this.settingsService.get('activeProvider'))
+    ) {
+      this.settingsService.set('activeProvider', currentActiveProvider);
+    }
+    this.updateProviderWrapping();
   }
 
   /**
@@ -609,6 +622,26 @@ export class ProviderManager implements IProviderManager {
    */
   getProviderByName(name: string): IProvider | undefined {
     return this.providers.get(name);
+  }
+
+  setTokenizerFactory(factory: RuntimeTokenizerFactory | undefined): void {
+    this.injectedTokenizerFactory = factory;
+  }
+
+  getTokenizerFactory(): RuntimeTokenizerFactory | undefined {
+    if (this.injectedTokenizerFactory) {
+      return this.injectedTokenizerFactory;
+    }
+
+    try {
+      return this.config?.getTokenizerFactory();
+    } catch (error) {
+      logger.warn(
+        () =>
+          `Runtime tokenizer factory unavailable from config: ${String(error)}`,
+      );
+      return undefined;
+    }
   }
 
   getActiveProviderName(): string {

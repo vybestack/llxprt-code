@@ -391,6 +391,53 @@ jobs:
           echo 'All linters finished!'
 
   #
+  # Bun: Workspace install smoke
+  #
+  # Verifies the S1 acceptance criterion that `bun install` succeeds from a
+  # clean checkout and wires up every workspace package. Uses a plain
+  # `bun install` rather than `--frozen-lockfile`: Bun re-normalizes this
+  # monorepo's lockfile on every pass (see dev-docs/bun.md), so a frozen check
+  # would be perpetually red despite a valid, deterministically generated
+  # lockfile. Pinning via .bun-version keeps the toolchain reproducible.
+  bun_install_smoke:
+    name: 'Bun Install Smoke'
+    runs-on: 'ubuntu-latest'
+    # A monorepo smoke install completes in well under a minute; cap the job so a
+    # hung `bun install` (registry stall or workspace-resolution deadlock) fails
+    # fast instead of occupying a runner up to the 6-hour GitHub Actions default.
+    timeout-minutes: 15
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          # This job runs `bun install`, which executes the lifecycle scripts of
+          # trusted native dependencies. It performs no authenticated git
+          # operation after checkout, so the default credential persistence only
+          # widens the token's exposure to those install-time scripts. Drop it.
+          persist-credentials: false
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Install workspaces with Bun'
+        run: |-
+          bun install
+
+      - name: 'Verify Bun linked every declared local workspace package'
+        # Runs the committed verifier (also runnable locally via
+        # `bun install && node scripts/verify-bun-workspace-links.mjs`) so the
+        # link-check logic lives in one tested place instead of an inline
+        # heredoc. Executed with `bun` — already set up for this job — to avoid
+        # relying on an implicitly-provided Node on the runner.
+        run: |-
+          bun scripts/verify-bun-workspace-links.mjs
+
+  #
   # Test: Node (Linux and macOS - always run)
   #
   test:

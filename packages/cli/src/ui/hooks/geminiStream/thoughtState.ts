@@ -6,7 +6,6 @@
 
 import type React from 'react';
 import {
-  type Config,
   type ThinkingBlock,
   type ThoughtSummary,
 } from '@vybestack/llxprt-code-core';
@@ -15,7 +14,6 @@ import {
   type HistoryItemGeminiContent,
   type HistoryItemWithoutId,
 } from '../../types.js';
-import { getCurrentProfileName } from './streamUtils.js';
 
 export function applyThoughtToState(
   thoughtSummary: ThoughtSummary,
@@ -24,7 +22,7 @@ export function applyThoughtToState(
     blocked: boolean;
     feedback?: string;
   },
-  config: Config,
+  getContentPrefixIdentity: () => string | null,
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
   setLastGeminiActivityTime: (t: number) => void,
   setThought: (t: ThoughtSummary | null) => void,
@@ -45,7 +43,8 @@ export function applyThoughtToState(
   );
   if (thinkingBlock) {
     thinkingBlocksRef.current.push(thinkingBlock);
-    const liveProfileName = getCurrentProfileName(config);
+    const rawIdentity = getContentPrefixIdentity();
+    const liveProfileName = rawIdentity === '' ? null : rawIdentity;
     setPendingHistoryItem((item) => {
       const existingProfileName = (
         item as HistoryItemGemini | HistoryItemGeminiContent | undefined

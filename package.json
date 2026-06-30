@@ -23,7 +23,24 @@
     "packages/test-utils",
     "packages/vscode-ide-companion"
   ],
-  "private": "true",
+  "trustedDependencies": [
+    "@ast-grep/lang-c",
+    "@ast-grep/lang-cpp",
+    "@ast-grep/lang-csharp",
+    "@ast-grep/lang-go",
+    "@ast-grep/lang-java",
+    "@ast-grep/lang-json",
+    "@ast-grep/lang-kotlin",
+    "@ast-grep/lang-php",
+    "@ast-grep/lang-python",
+    "@ast-grep/lang-ruby",
+    "@ast-grep/lang-rust",
+    "@ast-grep/lang-scala",
+    "@ast-grep/lang-swift",
+    "@lvce-editor/ripgrep",
+    "tree-sitter-bash"
+  ],
+  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vybestack/llxprt-code.git"
@@ -113,7 +130,8 @@
     "ws@>=8.0.0 <9": "8.21.0",
     "uuid@>=9.0.0 <12": "11.1.1",
     "js-yaml@>=4.0.0 <5": "4.2.0",
-    "brace-expansion@>=5.0.0 <6": "5.0.6"
+    "brace-expansion@>=5.0.0 <6": "5.0.6",
+    "typescript": "5.8.3"
   },
   "bin": {
     "llxprt": "bundle/llxprt.js"
@@ -122,11 +140,13 @@
     "bundle/",
     "scripts/preinstall.cjs",
     "scripts/postinstall.cjs",
+    "scripts/detect-installer.cjs",
     "README.md",
     "LICENSE"
   ],
   "devDependencies": {
     "@fast-check/vitest": "^0.2.2",
+    "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@types/debug": "^4.1.12",
     "@types/marked": "^5.0.2",
@@ -134,6 +154,7 @@
     "@types/minimatch": "^5.1.2",
     "@types/mock-fs": "^4.13.4",
     "@types/node": "^24.0.13",
+    "@types/semver": "^7.7.0",
     "@types/shell-quote": "^1.7.5",
     "@types/turndown": "^5.0.6",
     "@vitest/coverage-v8": "^3.2.6",
@@ -156,6 +177,7 @@
     "globals": "^16.0.0",
     "ink": "npm:@jrichman/ink@6.4.8",
     "json": "^11.0.0",
+    "jsonc-parser": "^3.3.1",
     "lodash": "^4.18.0",
     "memfs": "^4.17.2",
     "mock-fs": "^5.5.0",
@@ -174,7 +196,6 @@
     "@hono/node-server": "^1.19.13",
     "@lvce-editor/ripgrep": "^1.6.0",
     "@testing-library/dom": "^10.4.1",
-    "@vybestack/llxprt-code": "^0.8.0",
     "ai": "^5.0.104",
     "ajv-formats": "^3.0.1",
     "execa": "^9.6.0",

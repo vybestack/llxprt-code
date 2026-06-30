@@ -57,7 +57,7 @@ Each dump file contains the complete HTTP request and response:
       "User-Agent": "llxprt-code"
     },
     "body": {
-      "model": "gpt-4",
+      "model": "gpt-5.5",
       "messages": [...],
       "tools": [...],
       "stream": false,

@@ -47,7 +47,7 @@ PLAN-20251018-STATELESSPROVIDER2 finalises the stateless provider architecture b
 
    await switchActiveProvider('anthropic');
    await updateActiveProviderApiKey(process.env.ANTHROPIC_KEY ?? '');
-   await setActiveModel('claude-3-5-sonnet');
+   await setActiveModel('claude-sonnet-4-6');
    ```
 
    These helpers update the runtime registry, refresh auth, and emit scope metadata in one place.

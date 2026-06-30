@@ -26,6 +26,14 @@ interface UseModelRuntimeSyncParams {
   setCurrentModelLabel?: (label: string) => void;
   getActiveModelName: () => string | undefined;
   getActiveProviderName?: () => string | undefined;
+  /**
+   * Resolves the profile-qualified footer identity from live runtime state
+   * (issue #2193). When provided this is the single source of truth for the
+   * footer label, producing `profileName:modelName` for standard profiles and
+   * `lb:<lb>:<sub>:<model>` for load-balancer profiles. When omitted the hook
+   * falls back to deriving a `provider:model` composite label.
+   */
+  resolveModelDisplayLabel?: () => string;
   contextLimit?: number;
   setContextLimit: (limit: number | undefined) => void;
 }
@@ -38,6 +46,7 @@ export function useModelRuntimeSync({
   setCurrentModelLabel,
   getActiveModelName,
   getActiveProviderName,
+  resolveModelDisplayLabel,
   contextLimit,
   setContextLimit,
 }: UseModelRuntimeSyncParams): void {
@@ -49,6 +58,9 @@ export function useModelRuntimeSync({
 
   const currentModelLabelRef = useRef(currentModelLabel);
   currentModelLabelRef.current = currentModelLabel;
+
+  const resolveModelDisplayLabelRef = useRef(resolveModelDisplayLabel);
+  resolveModelDisplayLabelRef.current = resolveModelDisplayLabel;
 
   useEffect(() => {
     const syncModelAndContextLimit = (
@@ -66,30 +78,16 @@ export function useModelRuntimeSync({
       }
 
       if (setCurrentModelLabel) {
-        const effectiveLabel = computeEffectiveModelLabel(
+        syncModelLabel({
+          isInitial,
           payload,
           config,
           getActiveModelName,
           getActiveProviderName,
-        );
-        // On the initial sync (no event), only seed the label when the consumer
-        // has not provided one yet, preserving a prior profile-aware label.
-        // On event-triggered syncs (ModelChanged/SettingsChanged/ModelProfileChanged),
-        // always update when the computed label differs so stale profile labels
-        // are refreshed when the underlying model/provider changes.
-        const shouldUpdateLabel =
-          !isInitial ||
-          !currentModelLabelRef.current ||
-          currentModelLabelRef.current === '';
-        if (
-          shouldUpdateLabel &&
-          effectiveLabel !== currentModelLabelRef.current
-        ) {
-          debugLogger.debug(
-            `[Model Update] Updating footer label from ${currentModelLabelRef.current} to ${effectiveLabel}`,
-          );
-          setCurrentModelLabel(effectiveLabel);
-        }
+          resolveModelDisplayLabel: resolveModelDisplayLabelRef.current,
+          currentLabel: currentModelLabelRef.current,
+          setCurrentModelLabel,
+        });
       }
 
       const currentContextLimit = config.getEphemeralSetting(
@@ -102,20 +100,7 @@ export function useModelRuntimeSync({
 
     syncModelAndContextLimit(undefined, true);
 
-    const handleModelChanged = () => syncModelAndContextLimit();
-    const handleModelProfileChanged = (payload: ModelProfileInfoPayload) =>
-      syncModelAndContextLimit(payload);
-    const handleSettingsChanged = () => syncModelAndContextLimit();
-
-    coreEvents.on(CoreEvent.ModelChanged, handleModelChanged);
-    coreEvents.on(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
-    coreEvents.on(CoreEvent.SettingsChanged, handleSettingsChanged);
-
-    return () => {
-      coreEvents.off(CoreEvent.ModelChanged, handleModelChanged);
-      coreEvents.off(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
-      coreEvents.off(CoreEvent.SettingsChanged, handleSettingsChanged);
-    };
+    return subscribeToModelRuntimeEvents(syncModelAndContextLimit);
   }, [
     config,
     getActiveModelName,
@@ -124,6 +109,109 @@ export function useModelRuntimeSync({
     setCurrentModelLabel,
     setContextLimit,
   ]);
+}
+
+/**
+ * Subscribes the footer sync routine to the runtime events that should refresh
+ * the model identity, returning a cleanup function that detaches every
+ * listener. ModelChanged/SettingsChanged are bare resync triggers;
+ * ModelProfileChanged carries a payload; LoadBalancerSelectionChanged is a
+ * dedicated UI-refresh trigger fired when a load-balancer rotates sub-profiles
+ * (issue #2193).
+ */
+function subscribeToModelRuntimeEvents(
+  syncModelAndContextLimit: (payload?: ModelProfileInfoPayload) => void,
+): () => void {
+  const handleModelChanged = () => syncModelAndContextLimit();
+  const handleModelProfileChanged = (payload: ModelProfileInfoPayload) =>
+    syncModelAndContextLimit(payload);
+  const handleSettingsChanged = () => syncModelAndContextLimit();
+  const handleLoadBalancerSelectionChanged = () => syncModelAndContextLimit();
+
+  coreEvents.on(CoreEvent.ModelChanged, handleModelChanged);
+  coreEvents.on(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
+  coreEvents.on(CoreEvent.SettingsChanged, handleSettingsChanged);
+  coreEvents.on(
+    CoreEvent.LoadBalancerSelectionChanged,
+    handleLoadBalancerSelectionChanged,
+  );
+
+  return () => {
+    coreEvents.off(CoreEvent.ModelChanged, handleModelChanged);
+    coreEvents.off(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
+    coreEvents.off(CoreEvent.SettingsChanged, handleSettingsChanged);
+    coreEvents.off(
+      CoreEvent.LoadBalancerSelectionChanged,
+      handleLoadBalancerSelectionChanged,
+    );
+  };
+}
+
+interface SyncModelLabelParams {
+  isInitial: boolean;
+  payload: ModelProfileInfoPayload | undefined;
+  config: Config;
+  getActiveModelName: () => string | undefined;
+  getActiveProviderName?: () => string | undefined;
+  resolveModelDisplayLabel?: () => string;
+  currentLabel: string | undefined;
+  setCurrentModelLabel: (label: string) => void;
+}
+
+/**
+ * Resolves and applies the profile-aware footer label.
+ *
+ * On the initial sync (no event), only seeds the label when the consumer has
+ * not provided one yet, preserving a prior profile-aware label. On
+ * event-triggered syncs (ModelChanged/SettingsChanged/ModelProfileChanged),
+ * always updates when the computed label differs so stale profile labels are
+ * refreshed when the underlying model/provider changes.
+ */
+function syncModelLabel(params: SyncModelLabelParams): void {
+  const {
+    isInitial,
+    payload,
+    config,
+    getActiveModelName,
+    getActiveProviderName,
+    resolveModelDisplayLabel,
+    currentLabel,
+    setCurrentModelLabel,
+  } = params;
+
+  const fallbackLabel = () =>
+    computeEffectiveModelLabel(
+      payload,
+      config,
+      getActiveModelName,
+      getActiveProviderName,
+    );
+
+  let effectiveLabel: string;
+  if (resolveModelDisplayLabel) {
+    try {
+      effectiveLabel = resolveModelDisplayLabel();
+    } catch (error) {
+      // The consumer resolver reaches into runtime accessors that can throw
+      // during init/teardown; never let that crash the footer — fall back to
+      // the payload/provider-derived label instead.
+      debugLogger.debug(
+        () =>
+          `[Model Update] resolveModelDisplayLabel threw; using fallback label: ${error}`,
+      );
+      effectiveLabel = fallbackLabel();
+    }
+  } else {
+    effectiveLabel = fallbackLabel();
+  }
+
+  const shouldUpdateLabel = !isInitial || !currentLabel;
+  if (shouldUpdateLabel && effectiveLabel !== currentLabel) {
+    debugLogger.debug(
+      `[Model Update] Updating footer label from ${currentLabel} to ${effectiveLabel}`,
+    );
+    setCurrentModelLabel(effectiveLabel);
+  }
 }
 
 function computeEffectiveModel(

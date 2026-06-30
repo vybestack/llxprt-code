@@ -25,6 +25,7 @@ import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { ProviderManager } from '../ProviderManager.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import type { OAuthManager } from '../auth/index.js';
+import type { IModel } from '../IModel.js';
 import { type ProviderAliasEntry } from './providerAliases.js';
 
 /**
@@ -125,6 +126,30 @@ export function bindProviderAliasIdentity(
   });
 }
 
+function mapStaticModels(entry: ProviderAliasEntry): IModel[] {
+  return (entry.config.staticModels ?? []).map((model) => ({
+    id: model.id,
+    name: model.name,
+    provider: entry.alias,
+    supportedToolFormats: ['openai'],
+    ...(model.contextWindow !== undefined
+      ? { contextWindow: model.contextWindow }
+      : {}),
+  }));
+}
+
+function overrideStaticModels(
+  provider: { getModels: () => Promise<IModel[]> },
+  entry: ProviderAliasEntry,
+): void {
+  if (!entry.config.staticModels || entry.config.staticModels.length === 0) {
+    return;
+  }
+
+  const staticModels = mapStaticModels(entry);
+  provider.getModels = async () => staticModels;
+}
+
 export function createOpenAIAliasProvider(
   entry: ProviderAliasEntry,
   openaiApiKey: string | undefined,
@@ -172,18 +197,7 @@ export function createOpenAIAliasProvider(
   );
 
   overrideAliasDefaultModel(provider, entry);
-
-  // Override getModels() to return static models if configured
-  // This avoids API calls for providers that don't have a /models endpoint
-  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
-    const staticModels = entry.config.staticModels.map((m) => ({
-      id: m.id,
-      name: m.name,
-      provider: entry.alias,
-      supportedToolFormats: ['openai'] as string[],
-    }));
-    provider.getModels = async () => staticModels;
-  }
+  overrideStaticModels(provider, entry);
 
   bindOpenAIAliasIdentity(provider, entry.alias);
 
@@ -245,17 +259,7 @@ export function createOpenAIResponsesAliasProvider(
   });
 
   overrideAliasDefaultModel(provider, entry);
-
-  // Override getModels() to return static models if configured
-  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
-    const staticModels = entry.config.staticModels.map((m) => ({
-      id: m.id,
-      name: m.name,
-      provider: entry.alias,
-      supportedToolFormats: ['openai'] as string[],
-    }));
-    provider.getModels = async () => staticModels;
-  }
+  overrideStaticModels(provider, entry);
 
   return provider;
 }
@@ -307,17 +311,7 @@ export function createOpenAIVercelAliasProvider(
   );
 
   overrideAliasDefaultModel(provider, entry);
-
-  // Override getModels() to return static models if configured
-  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
-    const staticModels = entry.config.staticModels.map((m) => ({
-      id: m.id,
-      name: m.name,
-      provider: entry.alias,
-      supportedToolFormats: ['openai'] as string[],
-    }));
-    provider.getModels = async () => staticModels;
-  }
+  overrideStaticModels(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
 

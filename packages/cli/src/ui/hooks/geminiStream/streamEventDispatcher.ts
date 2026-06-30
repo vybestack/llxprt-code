@@ -19,7 +19,6 @@ import {
   type ServerGeminiFinishedEvent,
   type ServerGeminiErrorEvent as ErrorEvent,
   type ToolCallRequestInfo,
-  type Config,
   type ThoughtSummary,
   type ThinkingBlock,
   type ModelInfo,
@@ -32,7 +31,6 @@ import { applyThoughtToState } from './thoughtState.js';
 import { firstNonEmptyString } from '../../../utils/coalesce.js';
 
 export interface StreamEventDeps {
-  config: Config;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   sanitizeContent: (text: string) => {
     text: string;
@@ -56,6 +54,11 @@ export interface StreamEventDeps {
   >;
   setLastGeminiActivityTime: React.Dispatch<React.SetStateAction<number>>;
   setThought: React.Dispatch<React.SetStateAction<ThoughtSummary | null>>;
+  /**
+   * Resolves the content-prefix identity (profileName:modelName) for the
+   * current session. Returns null when no profile is active (issue #2263).
+   */
+  getContentPrefixIdentity: () => string | null;
   handleContentEvent: (
     eventValue: ContentEvent['value'],
     currentBuffer: string,
@@ -393,7 +396,7 @@ function handleContentLikeStreamEvent(
       applyThoughtToState(
         event.value,
         deps.sanitizeContent,
-        deps.config,
+        deps.getContentPrefixIdentity,
         deps.thinkingBlocksRef,
         deps.setLastGeminiActivityTime,
         deps.setThought,
