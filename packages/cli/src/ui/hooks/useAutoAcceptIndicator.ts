@@ -5,32 +5,32 @@
  */
 
 import { useState, useEffect } from 'react';
-import { ApprovalMode, type Config } from '@vybestack/llxprt-code-core';
+import { ApprovalMode, type Agent } from '@vybestack/llxprt-code-agents';
 import { useKeypress } from './useKeypress.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 
 export interface UseAutoAcceptIndicatorArgs {
-  config: Config;
+  agent: Agent;
   addItem?: (item: HistoryItemWithoutId, timestamp: number) => void;
   onApprovalModeChange?: (mode: ApprovalMode) => void;
   isActive?: boolean;
 }
 
 export function useAutoAcceptIndicator({
-  config,
+  agent,
   addItem,
   onApprovalModeChange,
   isActive = true,
 }: UseAutoAcceptIndicatorArgs): ApprovalMode {
-  const currentConfigValue = config.getApprovalMode();
+  const currentMode = agent.getApprovalMode();
   const [showAutoAcceptIndicator, setShowAutoAcceptIndicator] =
-    useState(currentConfigValue);
+    useState(currentMode);
 
   useEffect(() => {
-    setShowAutoAcceptIndicator(currentConfigValue);
-  }, [currentConfigValue]);
+    setShowAutoAcceptIndicator(currentMode);
+  }, [currentMode]);
 
   useKeypress(
     (key) => {
@@ -38,19 +38,19 @@ export function useAutoAcceptIndicator({
 
       if (keyMatchers[Command.TOGGLE_YOLO](key)) {
         nextApprovalMode =
-          config.getApprovalMode() === ApprovalMode.YOLO
+          agent.getApprovalMode() === ApprovalMode.YOLO
             ? ApprovalMode.DEFAULT
             : ApprovalMode.YOLO;
       } else if (keyMatchers[Command.TOGGLE_AUTO_EDIT](key)) {
         nextApprovalMode =
-          config.getApprovalMode() === ApprovalMode.AUTO_EDIT
+          agent.getApprovalMode() === ApprovalMode.AUTO_EDIT
             ? ApprovalMode.DEFAULT
             : ApprovalMode.AUTO_EDIT;
       }
 
       if (nextApprovalMode !== undefined) {
         try {
-          config.setApprovalMode(nextApprovalMode);
+          agent.setApprovalMode(nextApprovalMode);
           // Update local state immediately for responsiveness
           setShowAutoAcceptIndicator(nextApprovalMode);
           // Notify callback if provided

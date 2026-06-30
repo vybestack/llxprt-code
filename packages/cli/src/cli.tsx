@@ -8,6 +8,13 @@
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-15
+ *
+ * Thin CLI orchestrator (issue #2204). main() is an ordered sequence of
+ * delegated calls: bootstrap → config → provider activation → sandbox hop →
+ * session dispatch. The interactive-UI render, non-interactive session driving,
+ * and dispatch helpers live in ./cliSessionDispatch.tsx. This file no longer
+ * co-architects runtime construction — it consumes the public Agent/runtime
+ * surface via the bootstrap modules.
  */
 
 const wantWarningSuppression =
@@ -40,73 +47,25 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
   });
 }
 
-import React, { type ErrorInfo } from 'react';
-import { render } from 'ink';
-import { AppWrapper } from './ui/App.js';
-import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
 import { parseArguments } from './config/cliArgParser.js';
-import { basename } from 'node:path';
-import { type LoadedSettings, loadSettings } from './config/settings.js';
+import { loadSettings } from './config/settings.js';
 import {
-  type Config,
-  JsonFormatter,
-  OutputFormat,
-  parseAndFormatApiError,
-  type SessionRecordingService,
-  type RecordingIntegration,
-  type IContent,
-  type LockHandle,
-  coreEvents,
-  CoreEvent,
-  type OutputPayload,
-  type ConsoleLogPayload,
   patchStdio,
-  writeToStderr,
-  writeToStdout,
   ExitCodes,
-  triggerSessionStartHook,
-  triggerSessionEndHook,
-  SessionStartSource,
-  SessionEndReason,
-  type MessageBus,
   debugLogger,
-  shutdownTelemetry,
-  isTelemetrySdkInitialized,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { getStartupWarnings } from './utils/startupWarnings.js';
-import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
-import { runNonInteractive } from './nonInteractiveCli.js';
 import { runStartupMigration } from './config/pathMigration.js';
 import {
   cleanupCheckpoints,
-  registerCleanup,
-  registerSyncCleanup,
   runExitCleanup,
+  registerSyncCleanup,
 } from './utils/cleanup.js';
-import { getCliVersion } from './utils/version.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
-import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
-import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
-import { restoreTerminalProtocolsSync } from './ui/utils/terminalProtocolCleanup.js';
-import {
-  DISABLE_BRACKETED_PASTE,
-  DISABLE_FOCUS_TRACKING,
-  SHOW_CURSOR,
-} from './ui/utils/terminalSequences.js';
-import { checkForUpdates } from './ui/utils/updateCheck.js';
-import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
-import { appEvents, AppEvent } from './utils/events.js';
-import { computeTerminalTitle } from './utils/windowTitle.js';
-import { StreamingState } from './ui/types.js';
-import { SettingsContext } from './ui/contexts/SettingsContext.js';
-import { inkRenderOptions } from './ui/inkRenderOptions.js';
-import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
+import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
-import { appendFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
 import {
   activateConfiguredProvider,
   configureEarlyDebugLogging,
@@ -124,196 +83,29 @@ import {
   rejectPromptInteractiveWithPipedStdin,
   throwIfSettingsErrors,
 } from './cliBootstrap.js';
-import type { CliProviderManager } from './cliBootstrap.js';
 import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
 } from './cliSessionBootstrap.js';
-import type { SessionRecordingSetup } from './cliSessionBootstrap.js';
-import { createForegroundAgent } from './cliAgentBootstrap.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import {
+  dispatchInteractiveOrNonInteractive,
+  formatNonInteractiveError,
+  initializeOutputListenersAndFlush,
+  installNonInteractiveSigintHandler,
+  setupUnhandledRejectionHandler,
+  startInteractiveUI,
+} from './cliSessionDispatch.js';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
-
-export function formatNonInteractiveError(error: unknown): string {
-  const formatted = parseAndFormatApiError(error);
-  if (formatted && !formatted.includes('[object Object]')) {
-    return formatted;
-  }
-
-  if (error instanceof Error) {
-    return error.stack ?? error.message;
-  }
-
-  if (error !== null && typeof error === 'object') {
-    try {
-      return JSON.stringify(error, null, 2);
-    } catch {
-      return String(error);
-    }
-  }
-
-  return String(error);
-}
-
-export function installNonInteractiveSigintHandler(): () => void {
-  let exited = false;
-  const handler = () => {
-    if (exited) {
-      return;
-    }
-    exited = true;
-    process.stderr.write('\nCancelled.\n');
-    process.exit(130);
-  };
-  process.on('SIGINT', handler);
-  return () => {
-    process.off('SIGINT', handler);
-  };
-}
-
-export function setupUnhandledRejectionHandler() {
-  let unhandledRejectionOccurred = false;
-  process.on('unhandledRejection', (reason, _promise) => {
-    appendInteractiveUiDebug(`unhandled-rejection ${String(reason)}`);
-    const errorMessage = `=========================================
-This is an unexpected error. Please file a bug report using the /bug tool.
-CRITICAL: Unhandled Promise Rejection!
-=========================================
-Reason: ${reason}${
-      reason instanceof Error && reason.stack
-        ? `
-Stack trace:
-${reason.stack}`
-        : ''
-    }`;
-    appEvents.emit(AppEvent.LogError, errorMessage);
-    if (!unhandledRejectionOccurred) {
-      unhandledRejectionOccurred = true;
-      appEvents.emit(AppEvent.OpenDebugConsole);
-    }
-  });
-}
-
-function appendInteractiveUiDebug(message: string): void {
-  const artifactDir = process.env.LLXPRT_TMUX_ARTIFACT_DIR;
-  if (!artifactDir) return;
-  try {
-    appendFileSync(join(artifactDir, 'cli-debug.log'), `${message}\n`);
-  } catch {
-    // Ignore diagnostics failures; they should not affect CLI startup.
-  }
-}
-
-function handleError(error: Error, errorInfo: ErrorInfo) {
-  appendInteractiveUiDebug(
-    `error-boundary ${error.message}\n${error.stack ?? ''}\n${errorInfo.componentStack}`,
-  );
-  // Log to console for debugging
-  debugLogger.error('Application Error:', error);
-  debugLogger.error('Component Stack:', errorInfo.componentStack);
-
-  // Special handling for maximum update depth errors
-  if (error.message.includes('Maximum update depth exceeded')) {
-    debugLogger.error('\nCRITICAL: RENDER LOOP DETECTED!');
-    debugLogger.error('This is likely caused by:');
-    debugLogger.error('- State updates during render');
-    debugLogger.error('- Incorrect useEffect dependencies');
-    debugLogger.error('- Non-memoized props causing re-renders');
-    debugLogger.error('\nCheck recent changes to React components and hooks.');
-  }
-}
-
-/**
- * @plan:PLAN-20260211-SESSIONRECORDING.P26
- * @pseudocode recording-integration.md lines 115-132
- */
-export async function startInteractiveUI(
-  // `config` remains a temporary migration bridge alongside the Agent until the
-  // remaining UI Config consumers are migrated (see #1595).
-  config: Config,
-  agent: Agent,
-  settings: LoadedSettings,
-  startupWarnings: string[],
-  workspaceRoot: string,
-  runtimeMessageBus?: MessageBus,
-  recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
-  initialRecordingService?: SessionRecordingService,
-  initialLockHandle?: LockHandle | null,
-) {
-  const version = await getCliVersion();
-
-  appendInteractiveUiDebug(
-    `startInteractiveUI version=${version} stdoutTTY=${String(process.stdout.isTTY)} columns=${String(process.stdout.columns)} rows=${String(process.stdout.rows)} builtinOnly=${String(process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY)} suppressStatic=${String(process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER)}`,
-  );
-  setWindowTitle(basename(workspaceRoot), settings);
-
-  const renderOptions = inkRenderOptions(config, settings);
-  appendInteractiveUiDebug(
-    `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
-  );
-  const mouseEventsEnabled = isMouseEventsEnabled(renderOptions, settings);
-  if (mouseEventsEnabled) {
-    enableMouseEvents();
-    // Use process.on('exit') instead of registerCleanup because registerCleanup
-    // includes instance.waitUntilExit() which would deadlock on quit.
-    // The 'exit' event fires synchronously during process.exit(). (fixes #959)
-    process.on('exit', () => {
-      disableMouseEvents();
-      if (process.stdout.isTTY) {
-        writeToStdout(
-          DISABLE_BRACKETED_PASTE + DISABLE_FOCUS_TRACKING + SHOW_CURSOR,
-        );
-      }
-    });
-  }
-
-  process.on('exit', restoreTerminalProtocolsSync);
-  registerSyncCleanup(restoreTerminalProtocolsSync);
-
-  const instance = render(
-    <React.StrictMode>
-      <ErrorBoundary onError={handleError}>
-        <SettingsContext.Provider value={settings}>
-          <AppWrapper
-            config={config}
-            agent={agent}
-            settings={settings}
-            runtimeMessageBus={runtimeMessageBus}
-            startupWarnings={startupWarnings}
-            version={version}
-            terminalBackgroundColor={config.getTerminalBackground()}
-            recordingIntegration={recordingIntegration}
-            resumedHistory={resumedHistory}
-            initialRecordingService={initialRecordingService}
-            initialLockHandle={initialLockHandle}
-          />
-        </SettingsContext.Provider>
-      </ErrorBoundary>
-    </React.StrictMode>,
-    renderOptions,
-  );
-  appendInteractiveUiDebug('render returned');
-
-  checkForUpdates(settings)
-    .then((info) => {
-      handleAutoUpdate(info, settings, config.getProjectRoot());
-    })
-    .catch((err) => {
-      // Silently ignore update check errors.
-      if (config.getDebugMode()) {
-        debugLogger.error('Update check failed:', err);
-      }
-    });
-
-  registerCleanup(async () => {
-    await instance.waitUntilExit();
-    instance.clear();
-    instance.unmount();
-  });
-}
+export {
+  dispatchInteractiveOrNonInteractive,
+  formatNonInteractiveError,
+  installNonInteractiveSigintHandler,
+  setupUnhandledRejectionHandler,
+  startInteractiveUI,
+  initializeOutputListenersAndFlush,
+};
 
 /**
  * Patch stdio, register flush-on-exit, install the unhandled-rejection handler,
@@ -327,6 +119,9 @@ function setupProcessLifecycle(): () => void {
     cleanupStdio();
   });
 
+  // Install the process-wide unhandled-rejection handler. It is a
+  // process-lifetime singleton — never disposed in production because the
+  // process exits shortly after. The disposer is ignored here intentionally.
   setupUnhandledRejectionHandler();
 
   // Migrate legacy ~/.llxprt/ to platform-standard path (if needed),
@@ -345,216 +140,6 @@ function setupProcessLifecycle(): () => void {
     mkdirSync(llxprtDir, { recursive: true });
   }
   return cleanupStdio;
-}
-
-interface NonInteractiveSessionOptions {
-  config: Config;
-  settings: LoadedSettings;
-  input: string;
-  prompt_id: string;
-  sessionMessageBus: MessageBus;
-}
-
-interface PipedOrPromptSessionOptions {
-  config: Config;
-  settings: LoadedSettings;
-  sessionMessageBus: MessageBus;
-  initialInput: string | undefined;
-  hasPipedInput: boolean;
-  readStdinData: () => Promise<string>;
-}
-
-interface SessionDispatchOptions {
-  config: Config;
-  settings: LoadedSettings;
-  workspaceRoot: string;
-  sessionMessageBus: MessageBus;
-  providerManager: CliProviderManager;
-  recording: SessionRecordingSetup;
-  hasPipedInput: boolean;
-  readStdinData: () => Promise<string>;
-}
-
-/**
- * Collect startup warnings, then dispatch to either the interactive UI or the
- * piped/prompt non-interactive session depending on the configured mode.
- */
-async function dispatchInteractiveOrNonInteractive({
-  config,
-  settings,
-  workspaceRoot,
-  sessionMessageBus,
-  providerManager,
-  recording,
-  hasPipedInput,
-  readStdinData,
-}: SessionDispatchOptions): Promise<void> {
-  const input = config.getQuestion();
-  const startupWarnings = [
-    ...(await getStartupWarnings()),
-    ...(await getUserStartupWarnings(settings.merged)),
-  ];
-
-  // Check if a provider is already active on startup
-  providerManager.getActiveProvider();
-
-  // Render UI, passing necessary config values. Check that there is no command line question.
-  if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-    // Create the single interactive Agent at the composition root. `fromConfig`
-    // fires the SessionStart hook internally via the same core hook, so the
-    // interactive branch no longer fires it explicitly (the non-interactive
-    // branch keeps its own explicit call since it builds no Agent).
-    const agent = await createForegroundAgent({ config, sessionMessageBus });
-
-    await startInteractiveUI(
-      config,
-      agent,
-      settings,
-      startupWarnings,
-      workspaceRoot,
-      sessionMessageBus,
-      recording.recordingIntegration,
-      recording.resumedHistory ?? undefined,
-      recording.recordingService,
-      recording.resumedLockHandle,
-    );
-    return;
-  }
-
-  await runPipedOrPromptSession({
-    config,
-    settings,
-    sessionMessageBus,
-    initialInput: input,
-    hasPipedInput,
-    readStdinData,
-  });
-}
-
-/**
- * Resolve the final non-interactive input (merging piped stdin with any prompt),
- * run the non-interactive session, shut down telemetry, and exit the process.
- */
-async function runPipedOrPromptSession({
-  config,
-  settings,
-  sessionMessageBus,
-  initialInput,
-  hasPipedInput,
-  readStdinData,
-}: PipedOrPromptSessionOptions): Promise<never> {
-  let input = initialInput;
-  // If not a TTY, read from stdin
-  // This is for cases where the user pipes input directly into the command
-  if (hasPipedInput) {
-    const stdinData = await readStdinData();
-    if (stdinData) {
-      const existingInput = input ? `${input}` : '';
-      input = `${stdinData}
-
-${existingInput}`;
-    }
-  }
-  if (!input) {
-    writeToStderr(
-      `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.
-`,
-    );
-    process.exit(1);
-  }
-
-  const prompt_id = Math.random().toString(16).slice(2);
-
-  const nonInteractiveExitCode = await runNonInteractiveSession({
-    config,
-    settings,
-    input,
-    prompt_id,
-    sessionMessageBus,
-  });
-
-  if (isTelemetrySdkInitialized()) {
-    await shutdownTelemetry(config);
-  }
-
-  // Call cleanup before process.exit, which causes cleanup to not run
-  await runExitCleanup();
-  process.exit(nonInteractiveExitCode);
-}
-
-/**
- * Drive a single non-interactive run: validate auth, fire session hooks,
- * inject any SessionStart context, run the prompt, and report the exit code.
- */
-async function runNonInteractiveSession({
-  config,
-  settings,
-  input,
-  prompt_id,
-  sessionMessageBus,
-}: NonInteractiveSessionOptions): Promise<number> {
-  const removeSigintHandler = installNonInteractiveSigintHandler();
-  let nonInteractiveExitCode = 0;
-  try {
-    const nonInteractiveConfig = await validateNonInteractiveAuth(
-      settings.merged.useExternalAuth,
-      config,
-      settings,
-    );
-
-    initializeOutputListenersAndFlush();
-
-    // Fire SessionStart hook for non-interactive mode and inject context
-    const sessionStartOutput = await triggerSessionStartHook(
-      nonInteractiveConfig,
-      SessionStartSource.Startup,
-    );
-    let finalInput = input;
-    if (sessionStartOutput) {
-      if (sessionStartOutput.systemMessage) {
-        writeToStderr(`${sessionStartOutput.systemMessage}
-`);
-      }
-      const additionalContext = sessionStartOutput.getAdditionalContext();
-      if (additionalContext) {
-        finalInput = `${additionalContext}
-
-${finalInput}`;
-      }
-    }
-
-    await runNonInteractive({
-      config: nonInteractiveConfig,
-      settings,
-      input: finalInput,
-      prompt_id,
-      runtimeMessageBus: sessionMessageBus,
-      deferTelemetryShutdown: true,
-    });
-
-    // Fire SessionEnd hook on successful completion
-    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Exit);
-  } catch (error) {
-    nonInteractiveExitCode = 1;
-    // Fire SessionEnd hook on error. validateNonInteractiveAuth calls
-    // process.exit on auth failure, so if we reach this catch the config
-    // has already been validated/mutated in place and is safe to use.
-    await triggerSessionEndHook(config, SessionEndReason.Other);
-
-    if (config.getOutputFormat() === OutputFormat.JSON) {
-      const formatter = new JsonFormatter();
-      const normalizedError =
-        error instanceof Error ? error : new Error(String(error));
-      writeToStderr(`${formatter.formatError(normalizedError, 1)}
-`);
-    } else {
-      const printableError = formatNonInteractiveError(error);
-      debugLogger.error(`Non-interactive run failed: ${printableError}`);
-    }
-  } finally {
-    removeSigintHandler();
-  }
-  return nonInteractiveExitCode;
 }
 
 export async function main() {
@@ -654,51 +239,8 @@ export async function main() {
     settings,
     workspaceRoot,
     sessionMessageBus,
-    providerManager,
     recording,
     hasPipedInput,
     readStdinData: readStdinOnce,
   });
-}
-
-function setWindowTitle(title: string, settings: LoadedSettings) {
-  if (settings.merged.ui.hideWindowTitle !== true) {
-    // Initial state before React loop starts
-    const windowTitle = computeTerminalTitle({
-      streamingState: StreamingState.Idle,
-      isConfirming: false,
-      folderName: title,
-      showThoughts: settings.merged.ui.showStatusInTitle === true,
-      useDynamicTitle: settings.merged.ui.dynamicWindowTitle ?? true,
-    });
-    writeToStdout(`\x1b]0;${windowTitle}\x07`);
-
-    process.on('exit', () => {
-      writeToStdout(`\x1b]0;\x07`);
-    });
-  }
-}
-
-export function initializeOutputListenersAndFlush() {
-  // If there are no listeners for output, make sure we flush so output is not
-  // lost.
-  if (coreEvents.listenerCount(CoreEvent.Output) === 0) {
-    // In non-interactive mode, ensure we drain any buffered output or logs to stderr
-    coreEvents.on(CoreEvent.Output, (payload: OutputPayload) => {
-      if (payload.isStderr) {
-        writeToStderr(payload.chunk, payload.encoding);
-      } else {
-        writeToStdout(payload.chunk, payload.encoding);
-      }
-    });
-
-    coreEvents.on(CoreEvent.ConsoleLog, (payload: ConsoleLogPayload) => {
-      if (payload.type === 'error' || payload.type === 'warn') {
-        writeToStderr(payload.content);
-      } else {
-        writeToStdout(payload.content);
-      }
-    });
-  }
-  coreEvents.drainBacklogs();
 }

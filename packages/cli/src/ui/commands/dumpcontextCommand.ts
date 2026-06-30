@@ -23,7 +23,7 @@ import {
   buildProviderDumpBody,
   dumpRequestContext,
 } from '@vybestack/llxprt-code-providers';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 

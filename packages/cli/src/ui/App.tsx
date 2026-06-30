@@ -75,7 +75,7 @@ export const AppWrapper = (props: AppProps) => {
   );
 
   return (
-    <KeypressProvider config={props.config}>
+    <KeypressProvider>
       <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
         <ScrollProvider>
           <SessionStatsProvider>

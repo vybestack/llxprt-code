@@ -32,10 +32,12 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { type PartListUnion } from '@google/genai';
 import {
-  AgenticLoop,
+  createAgenticLoop,
+  type AgenticLoopApprovalHandler,
   type AgenticLoopEvent,
-  type ApprovalHandler,
+  type AgenticLoopRunner,
 } from '@vybestack/llxprt-code-agents';
+import { MessageBus } from '@vybestack/llxprt-code-core';
 import type {
   AgentClientContract,
   AnsiOutput,
@@ -47,7 +49,6 @@ import type {
   ToolCall,
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import {
@@ -84,7 +85,7 @@ export interface UseAgenticLoopArgs {
   /** Whether the loop's scheduler runs in interactive mode. */
   interactiveMode?: boolean;
   /** Optional approval handler for ASK_USER policy resolution. */
-  approvalHandler?: ApprovalHandler;
+  approvalHandler?: AgenticLoopApprovalHandler;
   /** Adds a history item (used for tool-completion display). */
   addItem: UseHistoryManagerReturn['addItem'];
   /**
@@ -132,8 +133,8 @@ export interface UseAgenticLoopReturn {
   ) => Promise<void>;
   /** The display callbacks forwarded into the loop's scheduler. */
   displayCallbacks: DisplayCallbacks;
-  /** The underlying AgenticLoop instance (for advanced callers). */
-  loop: AgenticLoop;
+  /** The underlying AgenticLoop runner (for advanced callers). */
+  loop: AgenticLoopRunner;
 }
 
 /**
@@ -194,7 +195,7 @@ function handleToolsComplete(
  * the signal aborts. Returns a promise that settles when iteration completes.
  */
 function iterateLoop(
-  loop: AgenticLoop,
+  loop: AgenticLoopRunner,
   message: PartListUnion,
   signal: AbortSignal,
   promptId: string,
@@ -251,7 +252,7 @@ export function useAgenticLoop(args: UseAgenticLoopArgs): UseAgenticLoopReturn {
   // recreate the loop yet the loop always calls current display callbacks.
   const loop = useMemo(
     () =>
-      new AgenticLoop({
+      createAgenticLoop({
         agentClient: args.agentClient,
         config: args.config,
         messageBus: args.messageBus ?? new MessageBus(),

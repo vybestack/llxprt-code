@@ -53,7 +53,6 @@ const TestHarness = ({
 
 const providerA: ProviderStub = { name: 'provider-a' };
 const providerB: ProviderStub = { name: 'provider-b' };
-const mockConfig = {} as never;
 
 function populateStats(
   contextRef: MutableRefObject<
@@ -86,7 +85,7 @@ describe('OpenAIProviderContext', () => {
     > = { current: undefined };
 
     const { rerender } = render(
-      <OpenAIProviderContextProvider config={mockConfig}>
+      <OpenAIProviderContextProvider>
         <TestHarness contextRef={contextRef} />
       </OpenAIProviderContextProvider>,
     );
@@ -99,7 +98,7 @@ describe('OpenAIProviderContext', () => {
     );
 
     rerender(
-      <OpenAIProviderContextProvider config={mockConfig}>
+      <OpenAIProviderContextProvider>
         <TestHarness contextRef={contextRef} />
       </OpenAIProviderContextProvider>,
     );
@@ -117,7 +116,7 @@ describe('OpenAIProviderContext', () => {
     > = { current: undefined };
 
     const { rerender } = render(
-      <OpenAIProviderContextProvider config={mockConfig}>
+      <OpenAIProviderContextProvider>
         <TestHarness contextRef={contextRef} />
       </OpenAIProviderContextProvider>,
     );
@@ -129,7 +128,7 @@ describe('OpenAIProviderContext', () => {
     );
 
     rerender(
-      <OpenAIProviderContextProvider config={mockConfig}>
+      <OpenAIProviderContextProvider>
         <TestHarness contextRef={contextRef} />
       </OpenAIProviderContextProvider>,
     );
@@ -143,7 +142,7 @@ describe('OpenAIProviderContext', () => {
     > = { current: undefined };
 
     const { rerender } = render(
-      <OpenAIProviderContextProvider config={mockConfig}>
+      <OpenAIProviderContextProvider>
         <TestHarness contextRef={contextRef} />
       </OpenAIProviderContextProvider>,
     );
@@ -153,7 +152,7 @@ describe('OpenAIProviderContext', () => {
     vi.mocked(useOpenAIProviderInfo).mockReturnValue(makeProviderInfo(null));
 
     rerender(
-      <OpenAIProviderContextProvider config={mockConfig}>
+      <OpenAIProviderContextProvider>
         <TestHarness contextRef={contextRef} />
       </OpenAIProviderContextProvider>,
     );

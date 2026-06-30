@@ -20,7 +20,6 @@ import {
   useMemo,
   useRef,
 } from 'react';
-import type { Config } from '@vybestack/llxprt-code-core';
 import type {
   ProviderMessage as Message,
   ConversationCache,
@@ -52,10 +51,9 @@ const OpenAIProviderContext = createContext<
 >(undefined);
 
 export const OpenAIProviderContextProvider: React.FC<{
-  config: Config;
   children: React.ReactNode;
-}> = ({ config, children }) => {
-  const providerInfo = useOpenAIProviderInfo(config);
+}> = ({ children }) => {
+  const providerInfo = useOpenAIProviderInfo();
 
   const [remoteTokenStats, setRemoteTokenStats] = useState<RemoteTokenStats>({
     promptTokenCount: 0,

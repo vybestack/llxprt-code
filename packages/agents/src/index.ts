@@ -16,12 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type {
-  TaskToolArgs,
-  TaskToolRegistration,
-} from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
-import { TaskTool } from './tools/task.js';
+import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import { createTaskRegistration } from './api/runtimeFactories.js';
 
 export * from './internals.js';
 export * from './api/index.js';
@@ -29,7 +25,10 @@ export * from './api/index.js';
 // Explicit named re-exports take precedence over ambiguous `export *` merges,
 // preserving the existing low-level top-level definitions (non-breaking).
 // ApprovalHandler: low-level (agenticLoop) vs api (config-types callback)
-export type { ApprovalHandler } from './core/agenticLoop/types.js';
+export type {
+  AgenticLoopMessage,
+  ApprovalHandler,
+} from './core/agenticLoop/types.js';
 // CompressionResult: low-level (core compression types) vs api (agent.ts)
 export type { CompressionResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 
@@ -41,15 +40,5 @@ export type { CompressionResult } from '@vybestack/llxprt-code-core/core/compres
  * to import the concrete agents-owned TaskTool class.
  */
 export function createTaskToolRegistration(): TaskToolRegistration {
-  return {
-    toolClass: TaskTool,
-    className: 'TaskTool',
-    staticName: TaskTool.Name,
-    buildArgs(config: unknown, taskToolArgs: TaskToolArgs): unknown[] {
-      return [config, taskToolArgs];
-    },
-    create(config: unknown, taskToolArgs: TaskToolArgs) {
-      return new TaskTool(config as Config, taskToolArgs);
-    },
-  };
+  return createTaskRegistration();
 }

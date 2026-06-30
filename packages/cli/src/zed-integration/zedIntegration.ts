@@ -36,7 +36,7 @@ import {
   getActiveProfileName,
   loadProfileByName,
   setCliRuntimeContext,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { parseZedAuthMethodId, buildAvailableModes } from './zed-helpers.js';

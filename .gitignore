@@ -52,6 +52,7 @@ bundle
 junit.xml
 junit.*.xml
 packages/*/coverage/
+coverage/
 
 # NPM package tarballs
 *.tgz

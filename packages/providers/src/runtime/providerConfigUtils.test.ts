@@ -20,9 +20,14 @@ const {
 vi.mock('@vybestack/llxprt-code-core', () => ({
   sanitizeForByteString: sanitizeForByteStringMock,
   needsSanitization: needsSanitizationMock,
+  DebugLogger: class {
+    warn = vi.fn();
+    debug = vi.fn();
+    error = vi.fn();
+  },
 }));
 
-vi.mock('./runtimeSettings.js', () => ({
+vi.mock('./providerMutations.js', () => ({
   updateActiveProviderApiKey: updateActiveProviderApiKeyMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
 }));

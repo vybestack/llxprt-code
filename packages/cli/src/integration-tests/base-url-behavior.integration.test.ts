@@ -31,7 +31,7 @@ import {
   switchActiveProvider,
   registerCliProviderInfrastructure,
   resetCliProviderInfrastructure,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import { setProviderBaseUrl } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 
 /**

@@ -44,6 +44,15 @@ export {
 } from './runtimeContextFactory.js';
 export type { AgentRuntimeFactoryBindings } from './runtimeContextFactory.js';
 
+// Runtime async-scope helpers (re-exported so consumers reach them via the
+// public runtime.js barrel instead of the deep runtimeContextFactory path).
+export {
+  enterRuntimeScope,
+  runWithRuntimeScope,
+  getCurrentRuntimeScope,
+} from './runtimeContextFactory.js';
+export type { RuntimeScopeValue } from './runtimeContextFactory.js';
+
 export {
   getLoadBalancerStats,
   getLoadBalancerLastSelected,
@@ -120,6 +129,36 @@ export {
   applyCliArgumentOverrides,
   resolveNamedKey,
 } from './settingsResolver.js';
+
+// Ephemeral-setting helpers (re-exported so command surfaces reach them via
+// the public runtime.js barrel instead of the deep ephemeralSettings path).
+export {
+  ephemeralSettingHelp,
+  parseEphemeralSettingValue,
+  isValidEphemeralSetting,
+} from './ephemeralSettings.js';
+export type {
+  EphemeralSettingKey,
+  EphemeralParseResult,
+  EphemeralParseSuccess,
+  EphemeralParseFailure,
+} from './ephemeralSettings.js';
+
+// CLI ephemeral-setting application (re-exported so the config bootstrap
+// reaches it via the public runtime.js barrel).
+export { applyCliSetArguments } from './cliEphemeralSettings.js';
+export type {
+  EphemeralSettingTarget,
+  CliSetResult,
+} from './cliEphemeralSettings.js';
+
+// Provider config utilities (re-exported so the zed/ACP integration and other
+// bootstrap clients reach them via the public runtime.js barrel).
+export {
+  setProviderApiKey,
+  setProviderBaseUrl,
+} from './providerConfigUtils.js';
+export type { ProviderConfigResult } from './providerConfigUtils.js';
 
 export {
   PROFILE_EPHEMERAL_KEYS,

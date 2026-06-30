@@ -49,11 +49,9 @@ import {
   getLoadBalancerStats,
   getLoadBalancerLastSelected,
   getAllLoadBalancerStats,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';
-import {
   enterRuntimeScope,
   runWithRuntimeScope,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
+} from '@vybestack/llxprt-code-providers/runtime.js';
 
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P15
