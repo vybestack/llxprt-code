@@ -40,8 +40,4 @@ export interface PtyExecState {
   hasResolved: boolean;
   abortFinalizeTimeout: NodeJS.Timeout | null;
   processingChain: Promise<void>;
-  /** Watchdog timer for the bun-pty silent-hang guard; null for non-Bun backends. */
-  watchdogTimer: NodeJS.Timeout | null;
-  /** Whether any data or exit event has arrived, used by the watchdog. */
-  hasReceivedEvent: boolean;
 }

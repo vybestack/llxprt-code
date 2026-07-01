@@ -15,7 +15,6 @@ import type {
   ShellExecutionConfig,
   ShellOutputEvent,
 } from './shellExecutionTypes.js';
-import { PtySilentHangError } from './shellExecutionTypes.js';
 import { ensurePromptvarsDisabled } from './shellOutputUtils.js';
 import { SIGKILL_TIMEOUT_MS } from './shellProcessKill.js';
 import {
@@ -176,23 +175,9 @@ export class ShellExecutionService {
         this.lastActivePtyIdRef,
       );
 
-      const result = ptyResult.catch((error: unknown) => {
-        if (error instanceof PtySilentHangError) {
-          const fallback = this.childProcessFallback(
-            commandToExecute,
-            cwd,
-            onOutputEvent,
-            abortSignal,
-            shellExecutionConfig,
-          );
-          return fallback.result;
-        }
-        throw error;
-      });
-
       return {
         pid: ptyProcess.pid,
-        result,
+        result: ptyResult,
       };
     } catch (e) {
       return errorHandle(e as Error);

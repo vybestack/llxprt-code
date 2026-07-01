@@ -54,48 +54,25 @@ function fail(name, error) {
   console.error(`[FAIL] ${name}: ${formatError(error)}`);
 }
 
-async function waitForExit(proc, timeoutMs) {
+function createExitPromise(timeoutMs) {
   let timeout;
-  try {
-    return await Promise.race([
-      proc.exited,
-      new Promise((_, reject) => {
-        timeout = setTimeout(
-          () =>
-            reject(new Error('timeout waiting for Bun.Terminal process exit')),
-          timeoutMs,
-        );
-      }),
-    ]);
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-function createOutputWaiter(getOutput, expected, timeoutMs) {
-  let timeout;
-  let resolveWait;
+  let resolveExit;
   const promise = new Promise((resolve) => {
-    resolveWait = resolve;
-    timeout = setTimeout(() => resolve(false), timeoutMs);
+    resolveExit = resolve;
+    timeout = setTimeout(() => resolve(null), timeoutMs);
   }).finally(() => {
     if (timeout) {
       clearTimeout(timeout);
     }
   });
-
   return {
-    notify() {
-      if (resolveWait === null) {
+    resolve(exitInfo) {
+      if (resolveExit === null) {
         return;
       }
-      if (getOutput().includes(expected)) {
-        const resolve = resolveWait;
-        resolveWait = null;
-        resolve(true);
-      }
+      const fn = resolveExit;
+      resolveExit = null;
+      fn(exitInfo);
     },
     promise,
   };
@@ -169,83 +146,58 @@ async function checkBunPty() {
   if (!isPosix) {
     return;
   }
-  let proc;
-  let exitedCleanly = false;
+  let pty;
   try {
-    const decoder = new TextDecoder();
-    let output = '';
-    const outputWaiter = createOutputWaiter(
-      () => output,
-      'bun-pty-smoke-ok',
-      2000,
+    const { createBunPty } = await import(
+      '../packages/core/src/utils/bunPtyAdapter.ts'
     );
 
-    const shellPath = '/bin/sh';
-    proc = globalThis.Bun.spawn([shellPath, '-c', 'echo bun-pty-smoke-ok'], {
-      terminal: {
-        cols: 80,
-        rows: 24,
-        name: 'xterm-256color',
-        data(_terminal, bytes) {
-          output += decoder.decode(bytes, { stream: true });
-          outputWaiter.notify();
-        },
-      },
+    let output = '';
+    const exitPromise = createExitPromise(5000);
+
+    pty = createBunPty('/bin/sh', ['-c', 'echo bun-pty-smoke-ok'], {
+      cols: 80,
+      rows: 24,
+      name: 'xterm-256color',
     });
 
-    if (typeof proc.pid !== 'number' || proc.pid <= 0) {
-      throw new Error(`invalid pid: ${proc.pid}`);
+    if (typeof pty.pid !== 'number' || pty.pid <= 0) {
+      throw new Error(`invalid pid: ${pty.pid}`);
     }
 
-    const [exitResult, sawOutputBeforeExit] = await Promise.all([
-      waitForExit(proc, 5000).catch((error) => error),
-      outputWaiter.promise,
-    ]);
-    // Terminal data callbacks can lag process exit; flush the streaming decoder
-    // and re-check output before declaring a missing-output failure.
-    output += decoder.decode();
-    const sawOutput =
-      sawOutputBeforeExit || output.includes('bun-pty-smoke-ok');
+    pty.onData((data) => {
+      output += data;
+    });
 
-    if (!sawOutput) {
+    pty.onExit((exitInfo) => {
+      exitPromise.resolve(exitInfo);
+    });
+
+    const exitInfo = await exitPromise.promise;
+
+    if (!exitInfo) {
+      throw new Error('timeout waiting for PTY exit');
+    }
+
+    if (exitInfo.exitCode !== 0) {
+      throw new Error(`expected exit code 0, got ${exitInfo.exitCode}`);
+    }
+
+    if (!output.includes('bun-pty-smoke-ok')) {
       throw new Error(
         `expected output to contain "bun-pty-smoke-ok", got: ${JSON.stringify(output)}`,
       );
     }
 
-    if (exitResult instanceof Error) {
-      throw exitResult;
-    }
-
-    if (exitResult !== 0) {
-      throw new Error(`expected exit code 0, got ${exitResult}`);
-    }
-
-    exitedCleanly = true;
     pass('Bun.Terminal PTY adapter: spawn, stream data, real exit code');
   } catch (e) {
     fail('Bun.Terminal PTY adapter', e);
   } finally {
-    if (proc) {
+    if (pty) {
       try {
-        proc.terminal?.close();
+        pty.destroy();
       } catch {
-        // Terminal may already be closed.
-      }
-      if (!exitedCleanly) {
-        try {
-          proc.kill();
-        } catch {
-          // Process may already have exited.
-        }
-        await waitForExit(proc, 1000).catch(async () => {
-          try {
-            proc.kill('SIGKILL');
-          } catch {
-            // Process may already have exited.
-          }
-          await waitForExit(proc, 1000).catch(() => {});
-        });
+        // PTY may already have exited.
       }
     }
   }
