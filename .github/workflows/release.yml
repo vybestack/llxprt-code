@@ -608,16 +608,25 @@ jobs:
             TARGET_REF="${{ github.sha }}"
           fi
 
+          # Ship the source-containing CLI npm tarball as the release asset
+          # instead of the esbuild bundle (retired by S4). The tarball is
+          # packed in the "Prepare sandbox package tarballs" step above.
+          CLI_TARBALL="packages/cli/dist/vybestack-llxprt-code-${{ steps.version.outputs.RELEASE_VERSION }}.tgz"
+          if [[ ! -f "$CLI_TARBALL" ]]; then
+            echo "CLI tarball not found at $CLI_TARBALL; cannot create release" >&2
+            exit 1
+          fi
+
           if [[ -n "${VSIX_PATH}" && -f "${VSIX_PATH}" ]]; then
             gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
-              bundle/llxprt.js \
+              "$CLI_TARBALL" \
               "${VSIX_PATH}" \
               --target "$TARGET_REF" \
               --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
               --notes-file release-notes.md
           else
             gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
-              bundle/llxprt.js \
+              "$CLI_TARBALL" \
               --target "$TARGET_REF" \
               --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
               --notes-file release-notes.md
