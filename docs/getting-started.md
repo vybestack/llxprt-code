@@ -4,8 +4,10 @@ This guide walks you through your first session — from installation to your fi
 
 ## Prerequisites
 
-- **Node.js 20+** installed on your system
+- **Node.js 20+** installed on your system (not required for Homebrew)
 - A terminal/command line
+
+> **Note:** LLxprt Code runs on the [Bun](https://bun.sh) runtime under the covers. Node.js remains the compatibility target for invocation — the npm/npx/Homebrew install commands below work unchanged. The published package bundles Bun as a dependency, so most users never need to install Bun separately.
 
 ## Install LLxprt Code
 
@@ -18,6 +20,26 @@ Or run without installing:
 ```bash
 npx @vybestack/llxprt-code
 ```
+
+### Bun Runtime and Install Fallback
+
+LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, an internal launcher resolves Bun and re-execs the CLI under it. The launcher executes the TypeScript (`.ts`) entry point directly — the CLI's run path does not require a pre-compiled `dist/` artifact.
+
+**Bun resolution order (production launcher):**
+
+1. `node_modules/.bin/bun` (the bundled Bun, climbing ancestor directories)
+2. `node_modules/bun/bin/bun.exe` (direct dependency fallback)
+3. `bun` found on `PATH` (via `which`/`where`)
+
+If no Bun runtime is found, the launcher prints an error with instructions:
+
+> Bun runtime was not found. Install it with "npm install" (it is bundled as the "bun" dependency) or install Bun directly from https://bun.sh and ensure it is on your PATH.
+
+To resolve this:
+
+- **npm users:** Re-run `npm install @vybestack/llxprt-code` (or `npm install -g @vybestack/llxprt-code`) to restore the bundled Bun dependency.
+- **Homebrew users:** Run `brew upgrade llxprt-code` to get the latest formula, or `brew reinstall llxprt-code` to restore a broken installation.
+- **All users:** Install Bun directly from [https://bun.sh](https://bun.sh) and ensure it is on your `PATH`.
 
 ## Choose Your Path
 
