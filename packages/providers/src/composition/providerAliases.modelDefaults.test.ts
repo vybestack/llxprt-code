@@ -535,6 +535,17 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['reasoning.enabled']).toBe(true);
   });
 
+  it('claude-sonnet-5 matches the broad Claude rule (adaptive thinking) @issue:2289', () => {
+    const entry = getAnthropicEntry();
+    const defaults = computeMatchedDefaults(
+      'claude-sonnet-5',
+      entry.config.modelDefaults!,
+    );
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+  });
+
   it('non-Claude model like gpt-4o does NOT match any rule', () => {
     const entry = getAnthropicEntry();
     const defaults = computeMatchedDefaults(

@@ -105,8 +105,16 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
+      // Pin a non-adaptive model: the provider default is Opus 4.8 (adaptive),
+      // but this test asserts the manual 'enabled' thinking mode persists.
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-4-5-20250929',
+            },
+          },
+        }),
       );
       await generator.next();
 

@@ -51,6 +51,11 @@ const EXACT_LIMITS: Record<string, TokenCount> = {
   'claude-opus-4-latest': 200_000,
   'claude-sonnet-4-6': 200_000,
   'claude-sonnet-4-latest': 400_000,
+  // Claude Sonnet 5 defaults to the Claude Code / subscription 200K context
+  // window. The advertised 1M window is API-only and plan-gated; override via
+  // /set or a profile (context-limit).
+  'claude-sonnet-5': 200_000,
+  'claude-sonnet-5-latest': 200_000,
   'claude-3-7-opus-20250115': 300_000,
   'claude-3-7-sonnet-20250115': 300_000,
   'claude-3-opus-20240229': 200_000,
@@ -125,6 +130,14 @@ export function tokenLimit(
   // Check OpenAI 128K models
   if (matchesAnyPrefix(modelWithoutPrefix, OPENAI_128K_PREFIXES)) {
     return 128_000;
+  }
+
+  // Claude Sonnet 5 dated snapshot variants (e.g. claude-sonnet-5-YYYYMMDD)
+  // are not individually exact-keyed above; resolve them to the same
+  // subscription-safe 200K default as the bare alias and -latest. Mirrors
+  // getContextWindowForModel in the anthropic package.
+  if (modelWithoutPrefix.toLowerCase().includes('claude-sonnet-5')) {
+    return 200_000;
   }
 
   return DEFAULT_TOKEN_LIMIT;
