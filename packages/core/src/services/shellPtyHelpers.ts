@@ -19,6 +19,8 @@ const shellDebug = new DebugLogger('llxprt:shell:render');
 export interface ActivePty {
   ptyProcess: IPty;
   headlessTerminal: Terminal;
+  /** Whether `process.kill(-pid)` is valid for this backend. */
+  supportsProcessGroupKill: boolean;
   onDataDisposable?: { dispose(): void };
   onExitDisposable?: { dispose(): void };
   onScrollDisposable?: { dispose(): void };

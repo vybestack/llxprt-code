@@ -22,6 +22,9 @@
  */
 
 import type { IPty, IDisposable } from '@lydell/node-pty';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const logger = new DebugLogger('llxprt:shell:bunPtyAdapter');
 
 /**
  * Minimal ambient declaration for the Bun globals this adapter touches.
@@ -67,6 +70,13 @@ interface BunGlobal {
 type DataListener = (data: string) => void;
 type ExitListener = (e: { exitCode: number; signal?: number }) => void;
 
+/**
+ * Grace period after sending a signal to the subprocess before synthesizing
+ * an exit event. `subprocess.exited` almost always resolves faster than this
+ * (it is a microtask), so the natural exit code wins and the fallback never
+ * fires. The timer exists to guarantee that `onExit` is *eventually* called
+ * even if `subprocess.exited` hangs (Bun runtime edge cases).
+ */
 const KILL_FALLBACK_TIMEOUT_MS = 200;
 const SIGNAL_EXIT_CODES: Readonly<Record<string, number>> = {
   SIGHUP: 129,
@@ -159,8 +169,11 @@ function dispatchExit(
   for (const cb of exitListeners) {
     try {
       cb(state.pendingExit);
-    } catch {
-      // Continue notifying remaining listeners; exit delivery must not hang.
+    } catch (err) {
+      logger.warn(
+        'Exit listener threw; continuing to notify remaining listeners.',
+        err,
+      );
     }
   }
   exitListeners.clear();
@@ -201,8 +214,11 @@ function spawnBunTerminal(
         for (const cb of dataListeners) {
           try {
             cb(text);
-          } catch {
-            // Continue notifying remaining listeners; data delivery must not hang.
+          } catch (err) {
+            logger.warn(
+              'Data listener threw; continuing to notify remaining listeners.',
+              err,
+            );
           }
         }
       },
@@ -229,8 +245,8 @@ function normalizeEnvironment(
 function closeTerminalHandle(state: BunPtyState): void {
   try {
     state.terminalHandle?.close();
-  } catch {
-    // Terminal may already be closed.
+  } catch (err) {
+    logger.debug('Terminal handle close failed (may already be closed).', err);
   }
   state.terminalHandle = null;
 }
@@ -284,8 +300,11 @@ function emitDecoderTail(
   for (const listener of dataListeners) {
     try {
       listener(tail);
-    } catch {
-      // Continue notifying remaining listeners; tail delivery must not hang.
+    } catch (err) {
+      logger.warn(
+        'Decoder tail listener threw; continuing to notify remaining listeners.',
+        err,
+      );
     }
   }
 }
@@ -316,8 +335,8 @@ function subscribeToExit(
   if (state.pendingExit) {
     try {
       listener(state.pendingExit);
-    } catch {
-      // Listener threw during immediate replay.
+    } catch (err) {
+      logger.warn('Exit listener threw during immediate replay.', err);
     }
     return {
       dispose(): void {},
@@ -352,8 +371,8 @@ function resizeTerminal(
       return;
     }
     state.terminalHandle.resize(columns, rowDim);
-  } catch {
-    // Terminal may have been closed; resize is best-effort.
+  } catch (err) {
+    logger.debug('Terminal resize failed (terminal may be closed).', err);
   }
 }
 
@@ -363,16 +382,19 @@ function writeToTerminal(state: BunPtyState, data: string): void {
       return;
     }
     state.terminalHandle.write(data);
-  } catch {
-    // Terminal may have been closed; write is best-effort.
+  } catch (err) {
+    logger.debug('Terminal write failed (terminal may be closed).', err);
   }
 }
 
 function killSubprocess(subprocess: BunSubprocess, signal: string): void {
   try {
     subprocess.kill(signal);
-  } catch {
-    // Process may already be terminated; cleanup is best-effort.
+  } catch (err) {
+    logger.debug(
+      'Subprocess kill failed (process may already be terminated).',
+      err,
+    );
   }
 }
 
@@ -525,7 +547,11 @@ export function createBunPty(
         emitDecoderTail(decoder, dataListeners, state);
         dataListeners.clear();
         dispatchExit(exitListeners, state, normalizeExitCode(rawExitCode));
-      } catch {
+      } catch (err) {
+        logger.error(
+          'Unexpected error during exit dispatch; falling back to generic failure.',
+          err,
+        );
         dispatchExit(exitListeners, state, 1);
       }
     })
@@ -538,7 +564,11 @@ export function createBunPty(
           state,
           isExitErrorWithCode(error) ? normalizeExitCode(error.exitCode) : 1,
         );
-      } catch {
+      } catch (err) {
+        logger.error(
+          'Unexpected error during exit rejection dispatch; falling back to generic failure.',
+          err,
+        );
         dispatchExit(exitListeners, state, 1);
       }
     });

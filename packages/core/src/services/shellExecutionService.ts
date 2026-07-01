@@ -134,54 +134,50 @@ export class ShellExecutionService {
     shellExecutionConfig: ShellExecutionConfig,
     ptyInfo: NonNullable<PtyImplementation>,
   ): ShellExecutionHandle {
-    try {
-      const isWindows = os.platform() === 'win32';
-      const cols = shellExecutionConfig.terminalWidth ?? 80;
-      const rows = shellExecutionConfig.terminalHeight ?? 30;
-      const { executable, argsPrefix, shell } = getShellConfiguration();
-      const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
-      const args = [...argsPrefix, guardedCommand];
+    const isWindows = os.platform() === 'win32';
+    const cols = shellExecutionConfig.terminalWidth ?? 80;
+    const rows = shellExecutionConfig.terminalHeight ?? 30;
+    const { executable, argsPrefix, shell } = getShellConfiguration();
+    const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
+    const args = [...argsPrefix, guardedCommand];
 
-      const envVars = this.sanitizeEnvironment(
-        {
-          ...process.env,
-          LLXPRT_CODE: '1',
-          TERM: 'xterm-256color',
-          PAGER: shellExecutionConfig.pager ?? 'cat',
-        },
-        shellExecutionConfig.isSandboxOrCI === true,
-      );
-      delete envVars.BASH_ENV;
+    const envVars = this.sanitizeEnvironment(
+      {
+        ...process.env,
+        LLXPRT_CODE: '1',
+        TERM: 'xterm-256color',
+        PAGER: shellExecutionConfig.pager ?? 'cat',
+      },
+      shellExecutionConfig.isSandboxOrCI === true,
+    );
+    delete envVars.BASH_ENV;
 
-      const ptyProcess = ptyInfo.module.spawn(executable, args, {
-        cwd,
-        name: 'xterm-256color',
-        cols,
-        rows,
-        env: envVars,
-        handleFlowControl: true,
-      });
+    const ptyProcess = ptyInfo.module.spawn(executable, args, {
+      cwd,
+      name: 'xterm-256color',
+      cols,
+      rows,
+      env: envVars,
+      handleFlowControl: true,
+    });
 
-      const ptyResult = createPtyResultPromise(
-        ptyProcess,
-        isWindows,
-        cols,
-        rows,
-        onOutputEvent,
-        abortSignal,
-        shellExecutionConfig,
-        ptyInfo,
-        this.activePtys,
-        this.lastActivePtyIdRef,
-      );
+    const ptyResult = createPtyResultPromise(
+      ptyProcess,
+      isWindows,
+      cols,
+      rows,
+      onOutputEvent,
+      abortSignal,
+      shellExecutionConfig,
+      ptyInfo,
+      this.activePtys,
+      this.lastActivePtyIdRef,
+    );
 
-      return {
-        pid: ptyProcess.pid,
-        result: ptyResult,
-      };
-    } catch (e) {
-      return errorHandle(e as Error);
-    }
+    return {
+      pid: ptyProcess.pid,
+      result: ptyResult,
+    };
   }
 
   /** Writes a string to the pseudo-terminal (PTY) of a running process. */
@@ -249,10 +245,12 @@ export class ShellExecutionService {
       return;
     }
 
-    try {
-      process.kill(-pid, 'SIGTERM');
-    } catch {
-      // Process may already be terminated.
+    if (activePty.supportsProcessGroupKill) {
+      try {
+        process.kill(-pid, 'SIGTERM');
+      } catch {
+        // Process may already be terminated.
+      }
     }
 
     try {
@@ -265,10 +263,12 @@ export class ShellExecutionService {
       if (!this.activePtys.has(pid)) {
         return;
       }
-      try {
-        process.kill(-pid, 'SIGKILL');
-      } catch {
-        // Process may already be terminated.
+      if (activePty.supportsProcessGroupKill) {
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch {
+          // Process may already be terminated.
+        }
       }
       try {
         activePty.ptyProcess.kill('SIGKILL');

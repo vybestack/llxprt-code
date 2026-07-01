@@ -49,9 +49,6 @@ import { debugLogger } from './debugLogger.js';
 
 export const SHELL_TOOL_NAMES = ['run_shell_command', 'ShellTool'];
 
-// Re-export for existing shell-utils consumers; new runtime checks should import
-// from runtime.ts directly.
-export { isWindows };
 /**
  * An identifier for the shell type.
  */

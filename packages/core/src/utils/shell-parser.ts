@@ -22,7 +22,7 @@ import type {
   Node,
   Query as QueryType,
 } from 'web-tree-sitter';
-import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { isBunRuntime } from './runtime.js';
@@ -143,7 +143,7 @@ async function resolveBashWasmBytes(): Promise<Uint8Array> {
     }
   }
   const wasmPath = require.resolve('tree-sitter-bash/tree-sitter-bash.wasm');
-  return readFile(wasmPath);
+  return new Uint8Array(readFileSync(wasmPath));
 }
 
 // Type definitions for tree-sitter query results

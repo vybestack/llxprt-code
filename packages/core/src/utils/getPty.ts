@@ -30,13 +30,6 @@ export type PtyImplementation = {
   name: PtyExecutionMethod;
 } | null;
 
-export interface PtyProcess {
-  readonly pid: number;
-  onData(callback: (data: string) => void): void;
-  onExit(callback: (e: { exitCode: number; signal?: number }) => void): void;
-  kill(signal?: string): void;
-}
-
 /**
  * Resolve the PTY implementation for the current runtime.
  *

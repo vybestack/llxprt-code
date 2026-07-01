@@ -70,6 +70,7 @@ export function createPtyResultPromise(
   const activePtyEntry: ActivePty = {
     ptyProcess,
     headlessTerminal,
+    supportsProcessGroupKill: ptyInfo.name !== 'bun-pty',
   };
   activePtys.set(ptyProcess.pid, activePtyEntry);
   lastActivePtyIdRef.value = ptyProcess.pid;
@@ -83,6 +84,7 @@ export function createPtyResultPromise(
     onOutputEvent,
     shellExecutionConfig,
     ptyInfo,
+    supportsProcessGroupKill: ptyInfo.name !== 'bun-pty',
     inactivityAbortController,
     resetInactivityTimer,
     exitedGuard,
@@ -229,13 +231,21 @@ async function ptyInactivityAbortAction(
     finalizeInactivityKill(state, resolveResult);
     return;
   }
-  try {
-    process.kill(-pid, 'SIGTERM');
-    await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-    if (!state.exitedGuard.isExited()) {
-      process.kill(-pid, 'SIGKILL');
+  if (state.supportsProcessGroupKill) {
+    try {
+      process.kill(-pid, 'SIGTERM');
+      await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+      if (!state.exitedGuard.isExited()) {
+        process.kill(-pid, 'SIGKILL');
+      }
+    } catch {
+      if (!state.exitedGuard.isExited()) {
+        state.ptyProcess.kill('SIGKILL');
+      }
     }
-  } catch {
+  } else {
+    state.ptyProcess.kill('SIGTERM');
+    await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
     if (!state.exitedGuard.isExited()) {
       state.ptyProcess.kill('SIGKILL');
     }
@@ -279,10 +289,12 @@ async function ptyAbortAction(
     return;
   }
 
-  try {
-    process.kill(-pid, 'SIGTERM');
-  } catch {
-    // Process may already be terminated.
+  if (state.supportsProcessGroupKill) {
+    try {
+      process.kill(-pid, 'SIGTERM');
+    } catch {
+      // Process group may already be terminated.
+    }
   }
   try {
     state.ptyProcess.kill('SIGTERM');
@@ -295,10 +307,12 @@ async function ptyAbortAction(
     return;
   }
 
-  try {
-    process.kill(-pid, 'SIGKILL');
-  } catch {
-    // Process may already be terminated.
+  if (state.supportsProcessGroupKill) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // Process group may already be terminated.
+    }
   }
   try {
     state.ptyProcess.kill('SIGKILL');
