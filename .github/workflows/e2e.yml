@@ -144,7 +144,7 @@ jobs:
           - 'sandbox:none'
           - 'sandbox:docker'
         node-version:
-          - '20.x'
+          - '24.x'
         exclude:
           # On push to main, only run sandbox:none (skip docker)
           - sandbox: ${{ github.event_name == 'push' && 'sandbox:docker' || 'NEVER_MATCH' }}
@@ -164,7 +164,7 @@ jobs:
           ref: '${{ github.event.inputs.branch_ref || github.ref }}'
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '${{ matrix.node-version }}'
 
@@ -266,10 +266,10 @@ jobs:
         with:
           ref: '${{ github.event.inputs.branch_ref || github.ref }}'
 
-      - name: 'Set up Node.js 20.x'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
+      - name: 'Set up Node.js 24.x'
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
-          node-version: '20.x'
+          node-version: '24.x'
 
       - name: 'Install dependencies'
         run: 'npm ci'

@@ -58,7 +58,7 @@ interface RunResult {
   stderr: string;
   npmInvoked: boolean;
   lockfile: string;
-  bundleExists: boolean;
+  legacyBundleExists: boolean;
 }
 
 interface Fixture {
@@ -212,7 +212,7 @@ exit 0
       return {
         ...spawnPostinstall(dir, userAgent, binDir, sentinel),
         lockfile: '',
-        bundleExists: false,
+        legacyBundleExists: false,
       };
     },
   };
@@ -230,7 +230,7 @@ afterEach(() => {
 /**
  * Builds an isolated fixture that reproduces a clean GitHub-source checkout:
  * the real postinstall script, a peer-flagged lockfile, source `packages/`, and
- * NO prebuilt bundle. `npm` is shadowed on PATH by a stub that records its
+ * NO prebuilt build output. `npm` is shadowed on PATH by a stub that records its
  * invocation into a sentinel file, so tests can assert whether the npm
  * bootstrap ran without performing a real (networked) install.
  */
@@ -252,7 +252,7 @@ function makeFixture(): Fixture {
     `${JSON.stringify({ name: 'fixture-root', version: '0.0.0' }, null, 2)}\n`,
   );
 
-  // Source files present + no bundle => the GitHub-source build trigger.
+  // Source files present + no build output => the GitHub-source build trigger.
   mkdirSync(join(dir, 'packages', 'dummy'), { recursive: true });
 
   const binDir = join(dir, 'bin');
@@ -275,7 +275,7 @@ function makeFixture(): Fixture {
       return {
         ...spawnPostinstall(dir, userAgent, binDir, sentinel),
         lockfile: readFileSync(lockfilePath, 'utf8'),
-        bundleExists: existsSync(join(dir, 'bundle', 'llxprt.js')),
+        legacyBundleExists: existsSync(join(dir, 'bundle', 'llxprt.js')),
       };
     },
   };
@@ -286,7 +286,7 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.npmInvoked).toBe(false);
-    expect(result.bundleExists).toBe(false);
+    expect(result.legacyBundleExists).toBe(false);
   });
 
   it('leaves package-lock.json untouched when Bun drives the install', () => {
@@ -299,15 +299,15 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
     expect(result.lockfile).toContain('"peer": true');
   });
 
-  it('runs the npm bootstrap when npm drives a bundle-less checkout', () => {
+  it('runs the npm bootstrap when npm drives a build-less checkout', () => {
     const result = makeFixture().run(NPM_USER_AGENT);
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.npmInvoked).toBe(true);
-    // The stub npm cannot produce a real bundle, so it must stay absent.
-    // Asserting this keeps the test's expectations explicit and prevents a
-    // silent regression if someone later expects the bundle to exist here.
-    expect(result.bundleExists).toBe(false);
+    // The retired bundle artifact must stay absent. Asserting this keeps the
+    // test's expectations explicit and prevents a silent regression if
+    // someone later expects the bundle to exist here.
+    expect(result.legacyBundleExists).toBe(false);
   });
 
   it('strips unsupported peer flags from package-lock.json under npm', () => {

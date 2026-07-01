@@ -203,7 +203,7 @@ function stripPeerFlagsFromLockfile() {
 
 // Under Bun, only the npm-specific actions below are skipped: Bun does not
 // consume package-lock.json (so the peer-flag sanitization is irrelevant and
-// must not mutate it), and the GitHub-source bundle bootstrap shells out to
+// must not mutate it), and the GitHub-source build bootstrap shells out to
 // npm, which would defeat a `bun install`. However, Bun's hoisted linker
 // materializes static copies (not symlinks) of local workspace packages inside
 // each workspace's own node_modules when a version conflict forces a nested

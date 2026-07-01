@@ -188,9 +188,7 @@ jobs:
   # resolve workspace `dist/` correctly (see dev-docs/bun.md). Lint/typecheck/
   # format/build run under Node via `npm run …` (the workspace-fanout scripts
   # `npm run typecheck --workspaces` / `npm run test --workspaces` recurse under
-  # `bun run`, so execution stays on npm; only the install moved to Bun). The
-  # bundle step builds via `bun scripts/bun-build.config.mjs` (#2241/S4), which
-  # is why Bun is on PATH.
+  # `bun run`, so execution stays on npm; only the install moved to Bun.
   lint_javascript:
     name: 'Lint (Javascript)'
     runs-on: 'ubuntu-latest'
@@ -204,7 +202,7 @@ jobs:
           fetch-depth: 0
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4.4.0
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -490,7 +488,7 @@ jobs:
           persist-credentials: false
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4.4.0
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -538,7 +536,7 @@ jobs:
           persist-credentials: false
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4.4.0
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -611,7 +609,7 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '${{ matrix.node-version }}'
 

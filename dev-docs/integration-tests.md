@@ -10,10 +10,10 @@ These tests are located in the `integration-tests` directory and are run using a
 
 ## Building the tests
 
-Prior to running any integration tests, you need to create a release bundle that you want to actually test:
+Prior to running any integration tests, build the CLI entry that the tests execute:
 
 ```bash
-npm run bundle
+npm run build
 ```
 
 You must re-run this command after making any changes to the CLI source code, but not after making changes to tests.
