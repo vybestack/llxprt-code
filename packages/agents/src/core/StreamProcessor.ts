@@ -52,7 +52,7 @@ import {
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
-  buildRequestContents,
+  buildRequestContentsResult,
   selectRequestTools,
   prepareRequestPayload,
   buildRuntimeContext,
@@ -236,7 +236,8 @@ export class StreamProcessor {
     userContent: Content | Content[],
     provider: IProvider,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    const requestContents = this._buildRequestContents(userContent);
+    const { contents: requestContents, pending: pendingUserIContents } =
+      this._buildRequestContents(userContent);
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     const requestTools = this._selectRequestTools(params);
@@ -250,15 +251,26 @@ export class StreamProcessor {
       this._prepareRequestPayload(requestContents, tools, params);
 
     try {
+      const originalContents = requestPayload.contents;
       const finalContents = await this._fireBeforeModelHook(
         configForHooks,
-        requestPayload.contents,
+        originalContents,
         tools as ProviderToolset | undefined,
         toolSelection.allowedFunctionNames,
       );
+      // Reference equality detects when _fireBeforeModelHook produces a new
+      // array (formal hook modifications via llm_request_modifier). In-place
+      // mutation by hooks that return the same reference is an edge case
+      // deferred to #2306 (differential analysis).
+      const hookModifiedContents = finalContents !== originalContents;
       requestPayload.contents =
         await this.compressionHandler.enforceProviderContents(
-          finalContents,
+          {
+            contents: finalContents,
+            pendingContents: hookModifiedContents
+              ? undefined
+              : pendingUserIContents,
+          },
           promptId,
           provider,
         );
@@ -568,8 +580,11 @@ export class StreamProcessor {
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
   }
 
-  private _buildRequestContents(userContent: Content | Content[]): IContent[] {
-    return buildRequestContents(
+  private _buildRequestContents(userContent: Content | Content[]): {
+    contents: IContent[];
+    pending: IContent[];
+  } {
+    return buildRequestContentsResult(
       userContent,
       this.conversationManager,
       this.historyService,
