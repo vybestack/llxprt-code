@@ -174,9 +174,6 @@ jobs:
       - name: 'Build project'
         run: 'npm run build'
 
-      - name: 'Build CLI bundle'
-        run: 'npm run bundle'
-
       - name: 'Set up Docker'
         if: "matrix.sandbox == 'sandbox:docker'"
         uses: 'docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435' # ratchet:docker/setup-buildx-action@v3
@@ -279,9 +276,6 @@ jobs:
 
       - name: 'Build project'
         run: 'npm run build'
-
-      - name: 'Build CLI bundle'
-        run: 'npm run bundle'
 
       - name: 'Fix rollup optional dependencies on macOS'
         if: "runner.os == 'macOS'"

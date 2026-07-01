@@ -69,3 +69,26 @@ export function buildProviderContent(
   // We need a clean copy that can be serialized
   return deepCloneWithoutCircularRefs(ordered);
 }
+
+/**
+ * Bundles provider-ready contents with the raw pending (new, unsent) IContent
+ * items so downstream enforcement does not have to reverse-engineer the
+ * pending boundary from the contents array.
+ */
+export interface ProviderContentEnvelope {
+  /**
+   * Provider-ready contents: the result of buildProviderContent(curated, pendingContents).
+   * This is what gets sent to the provider if no compression is needed.
+   */
+  contents: IContent[];
+
+  /**
+   * The raw pending (new, unsent) IContent items, or undefined when the
+   * pending boundary is unknown (e.g., a BeforeModel hook modified contents).
+   *
+   * When undefined, compression is NOT available — enforce() will return
+   * contents as-is if under the hard limit, or throw a clear error if
+   * compression is required. Hook-path resolution is tracked in #2306.
+   */
+  pendingContents: IContent[] | undefined;
+}

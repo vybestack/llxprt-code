@@ -24,8 +24,6 @@ import type {
 } from 'web-tree-sitter';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
 const require = createRequire(import.meta.url);
@@ -119,29 +117,17 @@ function resolveTreeSitterLanguage(
  *
  * The grammar is read from disk so the parser works under every runtime that
  * loads this module (raw Bun, plain Node, and vitest) without depending on a
- * build-time plugin. Two locations are tried in order:
- *
- * 1. The package graph: `require.resolve('tree-sitter-bash/tree-sitter-bash.wasm')`
- *    resolves the grammar from `node_modules`. This covers source, dev, and
- *    npm-installed package layouts.
- * 2. The bundle directory: the self-contained distributable bundle ships the
- *    grammar next to its entry (see `scripts/copy_bundle_assets.js`). When this
- *    module is bundled, `import.meta.url` resolves to the bundle file, so the
- *    grammar is a sibling file in the same directory.
+ * build-time plugin. It is resolved from the package graph via
+ * `require.resolve('tree-sitter-bash/tree-sitter-bash.wasm')`, which covers
+ * source, dev, and npm-installed package layouts.
  *
  * esbuild's `?binary` import suffix was the previous mechanism; it has been
  * retired along with the esbuild bundling step, leaving these portable
  * filesystem paths.
  */
 async function resolveBashWasmBytes(): Promise<Uint8Array> {
-  try {
-    const wasmPath = require.resolve('tree-sitter-bash/tree-sitter-bash.wasm');
-    return new Uint8Array(readFileSync(wasmPath));
-  } catch {
-    // Bundle fallback: the grammar ships alongside the bundle entry.
-    const here = dirname(fileURLToPath(import.meta.url));
-    return new Uint8Array(readFileSync(join(here, 'tree-sitter-bash.wasm')));
-  }
+  const wasmPath = require.resolve('tree-sitter-bash/tree-sitter-bash.wasm');
+  return new Uint8Array(readFileSync(wasmPath));
 }
 
 // Type definitions for tree-sitter query results

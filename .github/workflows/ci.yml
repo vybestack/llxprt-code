@@ -289,9 +289,6 @@ jobs:
           npx prettier --check integration-tests
           git diff --exit-code
 
-      - name: Create bundle
-        run: npm run bundle
-
       - name: 'Run type check'
         run: |-
           npm run typecheck
@@ -415,8 +412,8 @@ jobs:
       - 'lint_javascript'
       - 'lint_shell'
       - 'lint_yaml'
-      # Gates the expensive test matrix behind a cheap npm build+bundle+smoke
-      # so a broken build fails fast on ubuntu instead of on every matrix leg.
+      # Gates the expensive test matrix behind a cheap npm build+smoke so a
+      # broken build fails fast on ubuntu instead of on every matrix leg.
       - 'node_consumer_smoke'
     runs-on: 'ubuntu-latest'
     steps:
@@ -515,9 +512,10 @@ jobs:
   # Node consumer smoke (issue 2243, S6)
   #
   # Guards published-package Node compatibility on a pure npm/Node path (no
-  # Bun), representing an external Node consumer: install, build, bundle, then
-  # run the produced bundle under `node`. Wired into the `lint` aggregator so
-  # the expensive test matrix waits for this fast build+smoke check first.
+  # bun install), representing an external Node consumer: install, build, then
+  # run the compiled CLI entry under `node` (Node -> launcher -> Bun). Wired
+  # into the `lint` aggregator so the expensive test matrix waits for this fast
+  # build+smoke check first.
   node_consumer_smoke:
     name: 'Node Consumer Smoke'
     runs-on: 'ubuntu-latest'
@@ -525,12 +523,11 @@ jobs:
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
-    # Guards published-package Node compatibility: build + bundle the CLI, then
-    # run the produced bundle/llxprt.js under plain `node`. Note the bundle now
-    # builds via `bun scripts/bun-build.config.mjs` (#2241/S4 retired esbuild),
-    # so this job sets up Bun for the *build* while still validating the *Node
-    # runtime* path. It does not use bun install (it uses npm ci) so it also
-    # guards npm-install integrity of the published toolchain.
+    # This job runs npm ci (executing third-party install scripts) and only
+    # needs to read the repo, so scope permissions to contents:read and drop
+    # credential persistence (matches bun_native_modules_smoke hardening). It
+    # still validates the published Node entry path by running the compiled CLI
+    # entry with node after build.
     permissions:
       contents: 'read'
     steps:
@@ -545,12 +542,6 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-
-      # Required only for the bundle step (`bun scripts/bun-build.config.mjs`).
-      - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
 
       - name: 'Install dependencies'
         run: |-
@@ -571,12 +562,8 @@ jobs:
         run: |-
           npm run build
 
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
-
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
 
   #
   # Test: Node (Linux and macOS - always run)
@@ -655,10 +642,6 @@ jobs:
         run: |-
           npm run build
 
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
-
       - name: 'Limit Vitest forks on Windows'
         if: runner.os == 'Windows'
         run: |
@@ -693,8 +676,8 @@ jobs:
           CI: true
         run: npm run test:scripts
 
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'

@@ -5,13 +5,13 @@
  */
 
 /**
- * Bun-based bundling for the CLI and a2a-server distributable artifacts.
+ * Bun-based bundling for the a2a-server distributable artifact.
  * Replaces the retired `esbuild.config.js`.
  *
- * The run path no longer requires a bundle — Bun executes the TypeScript
- * source directly via the S3 launcher. This script produces the self-contained
- * `bundle/llxprt.js` and `packages/a2a-server/dist/a2a-server.mjs` release
- * artifacts (the actual release packaging is finalized in S7).
+ * The CLI run path no longer requires a bundle — Bun executes the TypeScript
+ * source directly via the S3 launcher, and the published bin is the compiled
+ * `packages/cli/dist/index.js` entry. This script produces only the
+ * self-contained `packages/a2a-server/dist/a2a-server.mjs` artifact.
  */
 
 import { readFileSync } from 'node:fs';
@@ -60,25 +60,6 @@ const EXTERNALS = [
   'chokidar',
 ];
 
-/**
- * Stub plugin for the `is-in-ci` package. The original npm package detects CI
- * environments, which causes ink to suppress its UI rendering. We always return
- * false so the interactive CLI UI renders even under CI runners. See #1563.
- */
-const isInCiStubPlugin = {
-  name: 'is-in-ci-stub',
-  setup(build) {
-    build.onResolve({ filter: /^is-in-ci$/ }, () => ({
-      path: 'is-in-ci',
-      namespace: 'is-in-ci-stub',
-    }));
-    build.onLoad({ filter: /.*/, namespace: 'is-in-ci-stub' }, () => ({
-      contents: 'export default false;',
-      loader: 'js',
-    }));
-  },
-};
-
 const SHARED_CONFIG = {
   bundle: true,
   target: 'node',
@@ -95,16 +76,6 @@ const SHARED_CONFIG = {
   },
 };
 
-// CLI bundle: packages/cli/index.ts -> bundle/llxprt.js
-const cliConfig = {
-  ...SHARED_CONFIG,
-  entrypoints: ['packages/cli/index.ts'],
-  outdir: 'bundle',
-  naming: 'llxprt.js',
-  plugins: [isInCiStubPlugin],
-  banner: `import * as nodeModule from 'node:module'; const require = nodeModule.createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
-};
-
 // a2a-server bundle: packages/a2a-server/src/http/server.ts -> dist/a2a-server.mjs
 const a2aServerConfig = {
   ...SHARED_CONFIG,
@@ -118,52 +89,27 @@ const a2aServerConfig = {
 
 const { build } = await import('bun');
 
-// Execute both builds. Both outputs are required by downstream bundle/release
-// workflows, so either failure must fail the command.
-const results = await Promise.allSettled([
-  build(cliConfig),
-  build(a2aServerConfig),
-]);
-const [cliResult, a2aResult] = results;
+// Execute the a2a-server build. Its output is required by downstream
+// release/packaging workflows, so a failure must fail the command.
+const a2aResult = await build(a2aServerConfig).catch((error) => error);
 
 // Bun.build() resolves (does not reject) with a result whose `success` flag
 // can be false when the build produced diagnostics (unresolved imports, etc.).
 // A rejected promise is also possible for hard failures. Both must be treated
-// as failures: a fulfilled `success: false` CLI build is fatal so stale
-// artifacts are never shipped downstream.
-// `reportLogs` is only invoked for fulfilled-but-unsuccessful results; the
-// rejected paths log `result.reason` inline at their call sites.
-function reportLogs(label, result) {
-  const detail = (result.value?.logs ?? []).map((l) => l.message).join('; ');
-  console.warn(label + ' build logs: ' + (detail || '(none)'));
-}
-
-const cliOk =
-  cliResult.status === 'fulfilled' && cliResult.value.success !== false;
-if (!cliOk) {
-  if (cliResult.status === 'rejected') {
-    console.error('llxprt.js build failed:', cliResult.reason);
-  } else {
-    console.error('llxprt.js build completed with errors.');
-    reportLogs('llxprt.js', cliResult);
-  }
-  process.exit(1);
-}
-
-const a2aOk =
-  a2aResult.status === 'fulfilled' && a2aResult.value.success !== false;
+// as failures so stale artifacts are never shipped downstream.
+const a2aOk = !(a2aResult instanceof Error) && a2aResult.success !== false;
 if (!a2aOk) {
-  if (a2aResult.status === 'rejected') {
-    console.error('a2a-server build failed:', a2aResult.reason);
+  if (a2aResult instanceof Error) {
+    console.error('a2a-server build failed:', a2aResult);
   } else {
     console.error('a2a-server build completed with errors.');
-    reportLogs('a2a-server', a2aResult);
+    const detail = (a2aResult.logs ?? []).map((l) => l.message).join('; ');
+    console.warn('a2a-server build logs: ' + (detail || '(none)'));
   }
   process.exit(1);
 }
 
 console.log(
   'bun build complete:',
-  cliResult.value.outputs.map((o) => `${o.path}=${o.size}`),
-  a2aResult.value.outputs.map((o) => `${o.path}=${o.size}`),
+  a2aResult.outputs.map((o) => `${o.path}=${o.size}`),
 );

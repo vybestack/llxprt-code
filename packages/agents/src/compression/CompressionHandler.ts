@@ -9,6 +9,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import type { GenerateContentConfig } from '@google/genai';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -416,6 +417,7 @@ export class CompressionHandler {
     provider: IProvider | undefined,
     promptId: string,
     enforcer: ProviderContentEnforcer,
+    pendingContents: IContent[] | undefined,
   ): void {
     if (!provider) {
       return;
@@ -424,9 +426,15 @@ export class CompressionHandler {
       return;
     }
 
-    const callback = async (contents: IContent[]): Promise<IContent[]> => {
+    const callback = async (_contents: IContent[]): Promise<IContent[]> => {
+      if (pendingContents === undefined) {
+        throw new Error(
+          'Compression callback invoked but pending-content boundary is unknown ' +
+            '(BeforeModel hook modified contents). Tracked in #2306.',
+        );
+      }
       try {
-        return await enforcer.compressAndRecompose(contents, promptId);
+        return await enforcer.compressAndRecompose(pendingContents, promptId);
       } catch (error) {
         this.logger.warn(
           () => '[CompressionHandler] Compression callback failed',
@@ -535,14 +543,19 @@ export class CompressionHandler {
    * to detach the callback before rethrowing the original enforcement error.
    */
   async enforceProviderContents(
-    contents: IContent[],
+    envelope: ProviderContentEnvelope,
     promptId: string,
     provider?: IProvider,
   ): Promise<IContent[]> {
     const enforcer = this.createProviderContentEnforcer();
     try {
-      this.attachCompressionCallback(provider, promptId, enforcer);
-      return await enforcer.enforce(contents, promptId, provider);
+      this.attachCompressionCallback(
+        provider,
+        promptId,
+        enforcer,
+        envelope.pendingContents,
+      );
+      return await enforcer.enforce(envelope, promptId, provider);
     } catch (error) {
       this.clearProviderCompressionCallback(provider);
       throw error;

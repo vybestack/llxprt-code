@@ -101,7 +101,13 @@ ${existingInput}`
 
 async function shutdownTelemetryAndCleanup(config: Config): Promise<void> {
   if (isTelemetrySdkInitialized()) {
-    await shutdownTelemetry(config);
+    // Telemetry shutdown must never prevent exit cleanup from running.
+    try {
+      await shutdownTelemetry(config);
+    } catch (error) {
+      writeToStderr(`Telemetry shutdown failed: ${error}
+`);
+    }
   }
 
   // Call cleanup before process.exit, which causes cleanup to not run.

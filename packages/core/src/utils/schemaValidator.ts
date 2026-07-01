@@ -31,10 +31,10 @@ const AjvClass: AjvConstructor =
  * `dist/refs/json-schema-draft-07.json`.
  *
  * This is inlined (rather than resolved via `createRequire` or a JSON
- * import) so that it survives esbuild bundling into `bundle/llxprt.js`
- * unchanged — dynamic `require()` calls are not statically analyzable
- * by the bundler, which caused runtime `MODULE_NOT_FOUND` failures in
- * the shipped bundle.
+ * import) so that the meta-schema is available at module scope without a
+ * runtime file lookup — it predates the move to Bun-run TypeScript source
+ * and is retained because it is still the most reliable way to ensure the
+ * schema is loaded before Ajv validation runs.
  *
  * We register it on the Ajv2020 instance so tool parameter schemas that
  * still declare `"$schema": "http://json-schema.org/draft-07/schema#"`

@@ -72,7 +72,6 @@
     "build:all": "npm run build && npm run build:sandbox && npm run build:vscode",
     "build:packages": "npm run build --workspaces",
     "build:sandbox": "node scripts/build_sandbox.js --skip-npm-install-build",
-    "bundle": "npm run generate && bun scripts/bun-build.config.mjs && node scripts/chmod_executable.js bundle/llxprt.js && node scripts/copy_bundle_assets.js",
     "test": "npm run test --workspaces --if-present",
     "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts",
     "test:scripts": "vitest run --config ./scripts/tests/vitest.config.ts",
@@ -136,10 +135,9 @@
     "typescript": "5.8.3"
   },
   "bin": {
-    "llxprt": "bundle/llxprt.js"
+    "llxprt": "packages/cli/dist/index.js"
   },
   "files": [
-    "bundle/",
     "scripts/preinstall.cjs",
     "scripts/postinstall.cjs",
     "scripts/detect-installer.cjs",
