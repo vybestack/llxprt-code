@@ -104,9 +104,9 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 
 ### Bun Runtime and Install Fallback
 
-LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, an internal launcher (see `packages/cli/src/launcher/bun-launcher.ts`) resolves Bun and re-execs the CLI under it, allowing the TypeScript source (`.ts`) to run directly without a separate compilation or bundling step.
+LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, an internal launcher (see `packages/cli/src/launcher/bun-launcher.ts`) resolves Bun and re-execs the CLI under it. The launcher executes the TypeScript (`.ts`) entry point directly — the CLI's run path does not require a pre-compiled `dist/` artifact. (TypeScript is still compiled to `dist/` for type-checking via `tsc --noEmit` and for the published npm package; the Bun launcher reads the `.ts` source at runtime.) The self-contained `bundle/llxprt.js` release artifact is produced by `scripts/bun-build.config.mjs` (which replaced the retired `esbuild.config.js`).
 
-**Bun resolution order:**
+**Bun resolution order (production launcher):**
 
 1. `node_modules/.bin/bun` (the bundled Bun, climbing ancestor directories)
 2. `node_modules/bun/bin/bun.exe` (direct dependency fallback)
@@ -119,11 +119,10 @@ If no Bun runtime is found, the launcher prints an error with instructions:
 To resolve this:
 
 - **npm users:** Re-run `npm install @vybestack/llxprt-code` (or `npm install -g @vybestack/llxprt-code`) to restore the bundled Bun dependency.
+- **Homebrew users:** Run `brew upgrade llxprt-code` to get the latest formula, or `brew reinstall llxprt-code` to restore a broken installation.
 - **All users:** Install Bun directly from [https://bun.sh](https://bun.sh) and ensure it is on your `PATH`.
 
-> **Note:** The exact wording and trigger of the fallback message should be reconciled with the shipped launcher implementation. The behavior described above reflects the current launcher in `packages/cli/src/launcher/bun-launcher.ts`.
-
-**Windows pty caveat:** On Windows, the `node-pty` module has a known terminal resize race condition. Under Bun, the runtime handles this generically; if you encounter terminal sizing issues on Windows, ensure you are using a recent Bun version and a compatible terminal emulator.
+**Windows pty caveat:** On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level. On POSIX systems under Bun, a dedicated `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is used instead of `node-pty` to work around a Bun hang. Windows uses `@lydell/node-pty` (with `node-pty` as fallback), not the Bun adapter. If you encounter terminal sizing issues on Windows, ensure you are using a recent Bun version and a compatible terminal emulator.
 
 **First session example:**
 

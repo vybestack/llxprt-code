@@ -6,7 +6,7 @@ This monorepo contains two main packages: `@vybestack/llxprt-code` and `@vybesta
 
 This is the main package for the LLxprt Code. It is responsible for the user interface, command parsing, and all other user-facing functionality.
 
-LLxprt Code runs on the [Bun](https://bun.sh) runtime. TypeScript source (`.ts`) is shipped directly — the Bun runtime executes it natively, so there is no separate compilation step that produces a `dist/` artifact for the CLI runtime, and no esbuild bundling step. This means that whether a user installs the package with `npm install -g @vybestack/llxprt-code` or runs it directly with `npx @vybestack/llxprt-code`, they are using the shipped `.ts` source executed by Bun. Type checking uses `tsc --noEmit` (no JavaScript output is produced).
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's run path uses the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`) to execute the TypeScript (`.ts`) entry point directly — no pre-compiled `dist/` artifact is required for the CLI to run. Type checking uses `tsc --noEmit` (no JavaScript output is produced). However, the published npm package still ships `dist/` (produced by `tsc` during the build) for Node.js compatibility, and the self-contained `bundle/llxprt.js` release artifact is produced by `scripts/bun-build.config.mjs` (which replaced the retired `esbuild.config.js`). The esbuild bundling step has been retired; bundling is now done by Bun.
 
 ## `@vybestack/llxprt-code-core`
 
@@ -181,9 +181,11 @@ Stage 1: Pre-Release Sanity Checks and Versioning
 
 Stage 2: Building the Source Code
 
-- What happens: The TypeScript source code (`.ts`) is shipped directly. The Bun runtime executes it natively, so there is no compilation step that produces a `dist/` artifact for the CLI runtime. `tsc --noEmit` is used solely for type-checking — no JavaScript output is produced.
-- File movement: No `dist/` compilation occurs for the CLI run path. Type-checking runs via `tsc --noEmit`.
-- Why: Shipping `.ts` directly and running it under Bun removes the esbuild bundling and `dist/` compilation steps, simplifying the build pipeline.
+- What happens: The TypeScript source code (`.ts`) is compiled into JavaScript by `tsc`. The CLI's run path uses the Bun launcher to execute the `.ts` entry point directly, but the published npm package still ships `dist/` for Node.js compatibility. Type checking uses `tsc --noEmit` (no JavaScript output is produced).
+- File movement:
+  - packages/core/src/\*_/_.ts -> compiled to -> packages/core/dist/
+  - packages/cli/src/\*_/_.ts -> compiled to -> packages/cli/dist/
+- Why: The TypeScript code is compiled into JavaScript for the published npm package (`dist/`) and for type-checking. The core package is built first as the cli package depends on it. The CLI run path uses the Bun launcher to execute `.ts` directly, but `dist/` is still produced and shipped for Node.js compatibility.
 
 Stage 3: Assembling the Final Publishable Package
 
@@ -199,11 +201,10 @@ This is the most critical stage where files are moved and transformed into their
         bundled directly into the final package.
       - Ensuring the bin, main, and files fields point to the correct locations within the final package structure.
 
-2.  The `.ts` Source is Shipped Directly:
-    - What happens: The TypeScript source files (`.ts`) are shipped as-is — there is no esbuild bundling step and no compiled `bundle/llxprt.js` artifact produced from compiled `dist/` output. The Bun runtime executes the `.ts` source natively at runtime.
-    - File movement: packages/cli/src/_.ts + packages/core/src/_.ts -> (shipped directly, no bundling) -> `bundle`/
-    - Why: Shipping `.ts` directly and running under Bun removes the need for esbuild bundling. This simplifies the package
-      by removing the need for the core package to be a separate dependency on NPM, as its code is now included directly.
+2.  The JavaScript Bundle is Created:
+    - What happens: The built JavaScript from both packages/core/dist and packages/cli/dist are bundled into a single, executable JavaScript file by Bun (via `scripts/bun-build.config.mjs`, which replaced the retired `esbuild.config.js`).
+    - File movement: packages/cli/dist/index.js + packages/core/dist/index.js -> (bundled by Bun) -> `bundle`/llxprt.js
+    - Why: This creates a single, optimized file that contains all the necessary application code. It simplifies the package by removing the need for the core package to be a separate dependency on NPM, as its code is now included directly.
 
 3.  Static and Supporting Files are Copied:
     - What happens: Essential files that are not part of the source code but are required for the package to work correctly
@@ -237,14 +238,14 @@ graph TD
     end
 
     subgraph "Process"
-        D(Build)
-        E(Transform)
-        F(Assemble)
-        G(Publish)
+        D["Build (tsc → dist/, Bun → bundle/llxprt.js)"]
+        E["Transform package.json"]
+        F["Assemble bundle/"]
+        G["Publish"]
     end
 
     subgraph "Artifacts"
-        H["Shipped .ts Source"]
+        H["bundle/llxprt.js (Bun bundle)"]
         I["Final package.json"]
         J["bundle/"]
     end
