@@ -265,7 +265,17 @@ describe('P01 construction inversion contracts', () => {
         isRegistered: true,
       }),
     );
+    expect(taskRecord?.args).toStrictEqual([
+      'config-arg',
+      expect.objectContaining({ messageBus }),
+    ]);
     expect(registeredTools).toContainEqual(expect.any(RegisteredTaskTool));
+    const registeredTaskTool = registeredTools.find(
+      (tool): tool is RegisteredTaskTool => tool instanceof RegisteredTaskTool,
+    );
+    expect(registeredTaskTool?.createdWith[1]).toStrictEqual(
+      expect.objectContaining({ messageBus }),
+    );
   });
 
   it('records disabled TaskTool diagnostic when registration is missing', async () => {
