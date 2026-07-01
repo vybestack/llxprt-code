@@ -27,6 +27,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
+import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 
@@ -128,50 +129,40 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
 
   it('PROP-A for any valid non-empty sessionId R, fromConfig({ config, sessionId: R }) yields agent.getRuntimeId() === R @requirement:REQ-005.1 @scenario:property-runtime-id @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:agent.getRuntimeId() === R for every generated R', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 40 })
-          .filter((id) => id.trim() !== ''),
-        async (runtimeId) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
-          let agent: Agent | undefined;
-          try {
-            agent = await fromConfig({
-              config: built.config,
-              sessionId: runtimeId,
-            });
-            return asWithRuntimeId(agent).getRuntimeId() === runtimeId;
-          } finally {
-            await agent?.dispose();
-            await built.cleanup();
-          }
-        },
-      ),
+      fc.asyncProperty(nonBlankStringArbitrary, async (runtimeId) => {
+        const built = await buildCliStyleConfig('plain-text.jsonl');
+        let agent: Agent | undefined;
+        try {
+          agent = await fromConfig({
+            config: built.config,
+            sessionId: runtimeId,
+          });
+          return asWithRuntimeId(agent).getRuntimeId() === runtimeId;
+        } finally {
+          await agent?.dispose();
+          await built.cleanup();
+        }
+      }),
     );
   }, 30000);
 
   it('PROP-B for any valid non-empty sessionId R, the no-2nd-manager identity holds: captureProviderManager(agent) === the Config manager @requirement:REQ-001 @scenario:property-no-double-manager @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:captureProviderManager(agent) === the Config manager for every generated R', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 40 })
-          .filter((id) => id.trim() !== ''),
-        async (runtimeId) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
-          let agent: Agent | undefined;
-          try {
-            agent = await fromConfig({
-              config: built.config,
-              sessionId: runtimeId,
-            });
-            const callerManager = built.config.getProviderManager();
-            return captureProviderManager(agent) === callerManager;
-          } finally {
-            await agent?.dispose();
-            await built.cleanup();
-          }
-        },
-      ),
+      fc.asyncProperty(nonBlankStringArbitrary, async (runtimeId) => {
+        const built = await buildCliStyleConfig('plain-text.jsonl');
+        let agent: Agent | undefined;
+        try {
+          agent = await fromConfig({
+            config: built.config,
+            sessionId: runtimeId,
+          });
+          const callerManager = built.config.getProviderManager();
+          return captureProviderManager(agent) === callerManager;
+        } finally {
+          await agent?.dispose();
+          await built.cleanup();
+        }
+      }),
     );
   }, 30000);
 });

@@ -205,6 +205,14 @@ function updateMetadataEntry(
 export function ensureRuntimeState(
   context: IProviderRuntimeContext,
 ): RuntimeScopedState {
+  if (
+    typeof context.runtimeId !== 'string' ||
+    context.runtimeId.trim() === ''
+  ) {
+    throw new Error(
+      'Active provider runtime context must include a non-empty runtimeId',
+    );
+  }
   const { runtimeId } = context;
   let state = runtimeScopedStates.get(runtimeId);
   if (!state) {

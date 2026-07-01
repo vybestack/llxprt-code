@@ -14,7 +14,9 @@ import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { ProviderManager } from '../ProviderManager.js';
+import { getProviderManager } from '../composition/index.js';
 import type { OAuthManager } from '../auth/index.js';
+import { runtimeRegistry } from './runtimeRegistry.js';
 import {
   activateIsolatedRuntimeContext,
   configureCliStatelessHardening,
@@ -22,6 +24,7 @@ import {
   getCliOAuthManager,
   getDefaultCliRuntimeId,
   registerCliProviderInfrastructure,
+  resetCliProviderInfrastructure,
   resetCliRuntimeRegistryForTesting,
   resetRuntimeScopeForTesting,
   runWithRuntimeScope,
@@ -128,6 +131,25 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
     expect(getDefaultCliRuntimeId()).not.toBe(handle.runtimeId);
 
     expect(getCliOAuthManager()).toBe(cliOAuthManager);
+  });
+
+  it('activating an isolated runtime does not overwrite the provider singleton', async () => {
+    const handle = createTrackedIsolatedRuntimeContext({
+      runtimeId: 'isolated-no-singleton-overwrite',
+      workspaceDir: process.cwd(),
+      model: 'isolated-model',
+    });
+
+    await runWithRuntimeScope(
+      { runtimeId: handle.runtimeId, metadata: {} },
+      async () => {
+        await activateIsolatedRuntimeContext(handle, {
+          runtimeId: handle.runtimeId,
+        });
+      },
+    );
+
+    expect(getProviderManager()).toBe(cliProviderManager);
   });
 
   it('getCliOAuthManager outside the isolated ALS scope resolves the CLI manager', async () => {
@@ -312,6 +334,34 @@ describe('runtime id validation (issue #2300)', () => {
     });
 
     it('accepts a valid runtimeId and sets the pointer', () => {
+      describe('resetCliProviderInfrastructure rejects invalid runtimeId', () => {
+        it('rejects reset with an explicit empty runtimeId without clearing active infrastructure', () => {
+          const settings = new SettingsService();
+          const config = createRuntimeConfigStub(settings, {
+            setProviderManager: vi.fn(),
+          });
+          const manager = {
+            setConfig: vi.fn(),
+          } as unknown as RuntimeProviderManager;
+          const oauth = {} as unknown as OAuthManager;
+          const bus = {} as unknown as MessageBus;
+          const runtimeId = 'active-reset-validation-runtime';
+
+          setCliRuntimeContext(settings, config, { runtimeId });
+          registerCliProviderInfrastructure(manager, oauth, {
+            messageBus: bus,
+            runtimeId,
+          });
+
+          expect(() => resetCliProviderInfrastructure('')).toThrow(
+            /Invalid runtimeId/,
+          );
+          const entry = runtimeRegistry.get(runtimeId);
+          expect(entry?.providerManager).toBe(manager);
+          expect(entry?.oauthManager).toBe(oauth);
+        });
+      });
+
       setDefaultCliRuntimeId('valid-default');
       expect(getDefaultCliRuntimeId()).toBe('valid-default');
     });

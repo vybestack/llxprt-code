@@ -68,7 +68,7 @@ describe('runtime/provider OAuth MessageBus seam integration', () => {
 
     registerCliProviderInfrastructure(providerManager as never, oauthManager, {
       messageBus: sessionMessageBus,
-      runtimeId: 'runtime-oauth-messagebus',
+      runtimeId: runtimeHandle.runtimeId,
     });
 
     expect(

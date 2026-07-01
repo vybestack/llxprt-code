@@ -79,6 +79,22 @@ describe('auth runtime scope gaps', () => {
     }
   });
 
+  it('rejects missing or blank runtime ids before creating scoped state @plan:PLAN-20260630-ISSUE2300 @requirement:REQ-SP2-004', () => {
+    const settingsService = createStubSettingsService();
+
+    for (const runtimeId of [undefined, '', '   ']) {
+      const context = {
+        settingsService,
+        runtimeId,
+        metadata: {},
+      } as unknown as IProviderRuntimeContext;
+
+      expect(() => ensureRuntimeState(context)).toThrow(/non-empty runtimeId/);
+    }
+
+    expect(runtimeScopedStates.size).toBe(0);
+  });
+
   it('isolates cached token per runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P18 @requirement:REQ-SP2-004 @pseudocode auth-runtime-scope.md lines 1-3', async () => {
     const settingsService = createStubSettingsService();
     const runtimeContext = createTestRuntimeContext(

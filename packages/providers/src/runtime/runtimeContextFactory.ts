@@ -160,6 +160,7 @@ interface RuntimeActivationBindings {
       messageBus: MessageBus;
       runtimeId: string;
       metadata?: Record<string, unknown>;
+      registerAsGlobalSingleton?: boolean;
     },
   ) => void | Promise<void>;
   linkProviderManager: (
@@ -416,6 +417,7 @@ function buildActivateClosure(
           messageBus: sessionMessageBus,
           runtimeId: state.currentRuntimeId,
           metadata: state.currentMetadata,
+          registerAsGlobalSingleton: false,
         }),
       );
       await Promise.resolve(

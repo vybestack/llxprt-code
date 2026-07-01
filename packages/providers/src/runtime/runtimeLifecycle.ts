@@ -97,6 +97,7 @@ export function registerCliProviderInfrastructure(
     messageBus: MessageBus;
     runtimeId: string;
     metadata?: Record<string, unknown>;
+    registerAsGlobalSingleton?: boolean;
   },
 ): void {
   validateRuntimeId(options.runtimeId);
@@ -106,7 +107,9 @@ export function registerCliProviderInfrastructure(
     oauthManager,
     metadata,
   });
-  registerProviderManagerSingleton(manager as never, oauthManager);
+  if (options.registerAsGlobalSingleton !== false) {
+    registerProviderManagerSingleton(manager as never, oauthManager);
+  }
 
   logger.debug(
     () =>
@@ -138,8 +141,11 @@ export function isMissingRuntimeError(error: unknown): boolean {
 }
 
 export function resetCliProviderInfrastructure(runtimeId?: string): void {
+  if (runtimeId !== undefined) {
+    validateRuntimeId(runtimeId);
+  }
   let targetRuntimeId = runtimeId;
-  if (!targetRuntimeId) {
+  if (targetRuntimeId === undefined) {
     try {
       targetRuntimeId = resolveActiveRuntimeIdentity().runtimeId;
     } catch (error) {
