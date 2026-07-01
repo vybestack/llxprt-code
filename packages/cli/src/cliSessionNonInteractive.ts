@@ -220,6 +220,8 @@ function reportNonInteractiveError(config: Config, error: unknown): void {
     reportJsonError(error);
   } else {
     const printableError = formatNonInteractiveError(error);
+    writeToStderr(`${printableError}
+`);
     debugLogger.error(`Non-interactive run failed: ${printableError}`);
   }
 }

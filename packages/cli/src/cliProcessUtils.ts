@@ -124,25 +124,34 @@ export function appendInteractiveUiDebug(message: string): void {
   }
 }
 
+let outputForwardingInstalled = false;
+let consoleLogForwardingInstalled = false;
+
+function forwardOutput(payload: OutputPayload): void {
+  if (payload.isStderr) {
+    writeToStderr(payload.chunk, payload.encoding);
+  } else {
+    writeToStdout(payload.chunk, payload.encoding);
+  }
+}
+
+function forwardConsoleLog(payload: ConsoleLogPayload): void {
+  if (payload.type === 'error' || payload.type === 'warn') {
+    writeToStderr(payload.content);
+  } else {
+    writeToStdout(payload.content);
+  }
+}
+
 export function initializeOutputListenersAndFlush() {
-  if (coreEvents.listenerCount(CoreEvent.Output) === 0) {
-    coreEvents.on(CoreEvent.Output, (payload: OutputPayload) => {
-      if (payload.isStderr) {
-        writeToStderr(payload.chunk, payload.encoding);
-      } else {
-        writeToStdout(payload.chunk, payload.encoding);
-      }
-    });
+  if (!outputForwardingInstalled) {
+    outputForwardingInstalled = true;
+    coreEvents.on(CoreEvent.Output, forwardOutput);
   }
 
-  if (coreEvents.listenerCount(CoreEvent.ConsoleLog) === 0) {
-    coreEvents.on(CoreEvent.ConsoleLog, (payload: ConsoleLogPayload) => {
-      if (payload.type === 'error' || payload.type === 'warn') {
-        writeToStderr(payload.content);
-      } else {
-        writeToStdout(payload.content);
-      }
-    });
+  if (!consoleLogForwardingInstalled) {
+    consoleLogForwardingInstalled = true;
+    coreEvents.on(CoreEvent.ConsoleLog, forwardConsoleLog);
   }
 
   coreEvents.drainBacklogs();
