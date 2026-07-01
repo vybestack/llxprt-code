@@ -22,18 +22,25 @@
  */
 export type ApprovalMode = 'auto' | 'yolo' | 'default';
 
-export interface IToolHostFileService {
-  shouldGitIgnoreFile(filePath: string): boolean;
-  shouldLlxprtIgnoreFile(filePath: string): boolean;
-  filterFiles(
-    paths: string[],
-    opts: { respectGitIgnore: boolean; respectLlxprtIgnore: boolean },
-  ): string[];
-}
-
 export interface IToolHostFileFilteringOptions {
   respectGitIgnore: boolean;
   respectLlxprtIgnore: boolean;
+}
+
+export type IToolHostFileFilteringOverrides =
+  Partial<IToolHostFileFilteringOptions>;
+
+export interface IToolHostFileService {
+  shouldGitIgnoreFile(filePath: string): boolean;
+  shouldLlxprtIgnoreFile(filePath: string): boolean;
+  shouldIgnoreFile(
+    filePath: string,
+    opts?: IToolHostFileFilteringOverrides,
+  ): boolean;
+  filterFiles(
+    paths: string[],
+    opts?: IToolHostFileFilteringOverrides,
+  ): string[];
 }
 
 export interface IToolHostFileSystemService {

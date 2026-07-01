@@ -20,6 +20,14 @@ const shouldUseForkPool = isWindows || isMacCi;
 const toolsPackagePrefix = '@vybestack/llxprt-code-tools/';
 const toolsEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
 const toolsSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
+const storageEntry = fileURLToPath(
+  new URL('../storage/src/index.ts', import.meta.url),
+);
+const storageSrcDir = fileURLToPath(
+  new URL('../storage/src/', import.meta.url),
+);
+
+const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 
 function resolveTsSource(baseDir: string, specifier: string): string {
   const direct = baseDir + specifier;
@@ -43,6 +51,15 @@ const workspaceAliasPlugin = {
       return resolveTsSource(
         toolsSrcDir,
         source.slice(toolsPackagePrefix.length),
+      );
+    }
+    if (source === '@vybestack/llxprt-code-storage') {
+      return storageEntry;
+    }
+    if (source.startsWith(storagePackagePrefix)) {
+      return resolveTsSource(
+        storageSrcDir,
+        source.slice(storagePackagePrefix.length),
       );
     }
     return null;
@@ -73,7 +90,10 @@ export default defineConfig({
     silent: true,
     server: {
       deps: {
-        inline: ['@vybestack/llxprt-code-tools'],
+        inline: [
+          '@vybestack/llxprt-code-tools',
+          '@vybestack/llxprt-code-storage',
+        ],
       },
     },
     pool: shouldUseForkPool ? 'forks' : undefined,

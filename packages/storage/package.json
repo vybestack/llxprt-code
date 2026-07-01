@@ -27,6 +27,10 @@
       "types": "./dist/src/services/fileDiscoveryService.d.ts",
       "import": "./dist/src/services/fileDiscoveryService.js"
     },
+    "./utils/gitIgnoreParser.js": {
+      "types": "./dist/src/utils/gitIgnoreParser.d.ts",
+      "import": "./dist/src/utils/gitIgnoreParser.js"
+    },
     "./storage/secure-store.js": {
       "types": "./dist/src/secure-store/secure-store.d.ts",
       "import": "./dist/src/secure-store/secure-store.js"
