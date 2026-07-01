@@ -105,7 +105,8 @@ async function shutdownTelemetryAndCleanup(config: Config): Promise<void> {
     try {
       await shutdownTelemetry(config);
     } catch (error) {
-      console.error('Telemetry shutdown failed:', error);
+      writeToStderr(`Telemetry shutdown failed: ${error}
+`);
     }
   }
 
