@@ -61,7 +61,6 @@ import {
   runExitCleanup,
   registerSyncCleanup,
 } from './utils/cleanup.js';
-import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { existsSync, mkdirSync } from 'fs';
@@ -100,7 +99,6 @@ import { startInteractiveUI } from './session/interactiveUI.js';
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
 export {
-  dispatchInteractiveOrNonInteractive,
   formatNonInteractiveError,
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
@@ -193,8 +191,6 @@ export async function main() {
   if (config.getListExtensions()) {
     process.exit(0);
   }
-
-  setMaxSizedBoxDebugging(config.getDebugMode());
 
   await initializeConfigWithSpinner(config, sessionMessageBus);
   await connectIdeClientIfEnabled(config);

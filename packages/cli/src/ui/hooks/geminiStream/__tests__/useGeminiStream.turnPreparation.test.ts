@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { Config, ThinkingBlock } from '@vybestack/llxprt-code-core';
-import { prepareTurnForQuery } from '../useGeminiStream.js';
+import { prepareTurnForQuery } from '../turnPreparation.js';
 
 const existingThinkingBlock: ThinkingBlock = {
   type: 'thinking',

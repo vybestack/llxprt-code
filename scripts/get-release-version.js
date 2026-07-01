@@ -59,7 +59,7 @@ export function getReleaseVersion() {
     // Auto-increment patch version for automated releases
     const currentVersion = getPackageVersion();
     const versionParts = currentVersion.split('.');
-    versionParts[2] = (parseInt(versionParts[2]) + 1).toString();
+    versionParts[2] = (parseInt(versionParts[2], 10) + 1).toString();
     const nextVersion = versionParts.join('.');
     console.error(
       `Auto-incrementing version from ${currentVersion} to ${nextVersion}`,

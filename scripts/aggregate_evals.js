@@ -38,24 +38,48 @@ function findReports(dir) {
   try {
     const entries = readdirSync(dir);
     for (const entry of entries) {
-      const fullPath = join(dir, entry);
-      try {
-        const stat = statSync(fullPath);
-        if (stat.isDirectory()) {
-          reports.push(...findReports(fullPath));
-        } else if (entry === 'report.json') {
-          reports.push(fullPath);
-        }
-      } catch (err) {
-        // Skip entries that can't be read
-        console.error(`Warning: Could not read ${fullPath}: ${err.message}`);
-      }
+      findReportsEntry(join(dir, entry), entry, reports);
     }
   } catch (err) {
     // Directory doesn't exist or can't be read
     console.error(`Warning: Could not read directory ${dir}: ${err.message}`);
   }
   return reports;
+}
+
+function findReportsEntry(fullPath, entry, reports) {
+  try {
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      reports.push(...findReports(fullPath));
+    } else if (entry === 'report.json') {
+      reports.push(fullPath);
+    }
+  } catch (err) {
+    // Skip entries that can't be read
+    console.error(`Warning: Could not read ${fullPath}: ${err.message}`);
+  }
+}
+
+/**
+ * Record a single assertion result into the stats map.
+ */
+function recordAssertion(stats, assertion) {
+  const testName = assertion.title || assertion.fullName || 'unknown';
+  const status = assertion.status || 'unknown';
+
+  if (!stats.has(testName)) {
+    stats.set(testName, { pass: 0, fail: 0, total: 0 });
+  }
+
+  const testStats = stats.get(testName);
+  testStats.total++;
+
+  if (status === 'passed') {
+    testStats.pass++;
+  } else if (status === 'failed') {
+    testStats.fail++;
+  }
 }
 
 /**
@@ -85,27 +109,63 @@ function getStats(reportPath) {
       }
 
       for (const assertion of testResult.assertionResults) {
-        const testName = assertion.title || assertion.fullName || 'unknown';
-        const status = assertion.status || 'unknown';
-
-        if (!stats.has(testName)) {
-          stats.set(testName, { pass: 0, fail: 0, total: 0 });
-        }
-
-        const testStats = stats.get(testName);
-        testStats.total++;
-
-        if (status === 'passed') {
-          testStats.pass++;
-        } else if (status === 'failed') {
-          testStats.fail++;
-        }
+        recordAssertion(stats, assertion);
       }
     }
   } catch (err) {
     console.error(`Warning: Could not parse ${reportPath}: ${err.message}`);
   }
   return stats;
+}
+
+/**
+ * Download and process artifacts for a single historical run.
+ */
+function processHistoricalRun(historical, tempDir, run) {
+  const runId = String(run.databaseId);
+  const runDir = join(tempDir, runId);
+
+  // Download artifacts for this run
+  const downloadResult = spawnSync(
+    'gh',
+    ['run', 'download', runId, '-D', runDir],
+    { encoding: 'utf-8' },
+  );
+
+  if (downloadResult.status !== 0) {
+    console.error(
+      `Warning: Could not download artifacts for run ${runId}: ${downloadResult.stderr}`,
+    );
+    return;
+  }
+
+  // Find and parse all report.json files in this run's artifacts
+  const reports = findReports(runDir);
+  const runStats = new Map();
+
+  for (const reportPath of reports) {
+    const reportStats = getStats(reportPath);
+    aggregateStats(runStats, reportStats);
+  }
+
+  if (runStats.size > 0) {
+    historical.set(runId, runStats);
+  }
+}
+
+/**
+ * Merge a set of report stats into the aggregated stats map.
+ */
+function aggregateStats(target, source) {
+  for (const [testName, stats] of source) {
+    if (!target.has(testName)) {
+      target.set(testName, { pass: 0, fail: 0, total: 0 });
+    }
+    const aggregated = target.get(testName);
+    aggregated.pass += stats.pass;
+    aggregated.fail += stats.fail;
+    aggregated.total += stats.total;
+  }
 }
 
 /**
@@ -154,43 +214,7 @@ function fetchHistoricalData() {
 
     try {
       for (const run of runs) {
-        const runId = String(run.databaseId);
-        const runDir = join(tempDir, runId);
-
-        // Download artifacts for this run
-        const downloadResult = spawnSync(
-          'gh',
-          ['run', 'download', runId, '-D', runDir],
-          { encoding: 'utf-8' },
-        );
-
-        if (downloadResult.status !== 0) {
-          console.error(
-            `Warning: Could not download artifacts for run ${runId}: ${downloadResult.stderr}`,
-          );
-          continue;
-        }
-
-        // Find and parse all report.json files in this run's artifacts
-        const reports = findReports(runDir);
-        const runStats = new Map();
-
-        for (const reportPath of reports) {
-          const reportStats = getStats(reportPath);
-          for (const [testName, stats] of reportStats) {
-            if (!runStats.has(testName)) {
-              runStats.set(testName, { pass: 0, fail: 0, total: 0 });
-            }
-            const aggregated = runStats.get(testName);
-            aggregated.pass += stats.pass;
-            aggregated.fail += stats.fail;
-            aggregated.total += stats.total;
-          }
-        }
-
-        if (runStats.size > 0) {
-          historical.set(runId, runStats);
-        }
+        processHistoricalRun(historical, tempDir, run);
       }
     } finally {
       // Clean up temp directory
@@ -207,6 +231,27 @@ function fetchHistoricalData() {
   }
 
   return historical;
+}
+
+/**
+ * Append historical pass-rate cells to a markdown table row.
+ */
+function appendHistoricalPassRates(
+  row,
+  historicalRuns,
+  historicalStats,
+  testName,
+) {
+  for (const runId of historicalRuns) {
+    const runStats = historicalStats.get(runId);
+    const testStats = runStats?.get(testName);
+    if (testStats && testStats.total > 0) {
+      const passRate = ((testStats.pass / testStats.total) * 100).toFixed(0);
+      row.push(`${passRate}%`);
+    } else {
+      row.push('—');
+    }
+  }
 }
 
 /**
@@ -268,18 +313,7 @@ function generateMarkdown(currentStats, historicalStats) {
 
     // Historical pass rates
     if (historicalRuns.length > 0) {
-      for (const runId of historicalRuns) {
-        const runStats = historicalStats.get(runId);
-        const testStats = runStats?.get(testName);
-        if (testStats && testStats.total > 0) {
-          const passRate = ((testStats.pass / testStats.total) * 100).toFixed(
-            0,
-          );
-          row.push(`${passRate}%`);
-        } else {
-          row.push('—');
-        }
-      }
+      appendHistoricalPassRates(row, historicalRuns, historicalStats, testName);
     }
 
     // Current run pass rate
@@ -323,15 +357,7 @@ function main() {
   const currentStats = new Map();
   for (const reportPath of reports) {
     const reportStats = getStats(reportPath);
-    for (const [testName, stats] of reportStats) {
-      if (!currentStats.has(testName)) {
-        currentStats.set(testName, { pass: 0, fail: 0, total: 0 });
-      }
-      const aggregated = currentStats.get(testName);
-      aggregated.pass += stats.pass;
-      aggregated.fail += stats.fail;
-      aggregated.total += stats.total;
-    }
+    aggregateStats(currentStats, reportStats);
   }
 
   // Fetch historical data

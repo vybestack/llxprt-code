@@ -45,8 +45,8 @@ function getArtifactDir(testName: string): string {
  * Extract the artifacts path from harness stdout/stderr output.
  */
 function extractArtifactsPath(text: string): string | null {
-  const match = text.match(/^artifacts:\s+(?<path>.+)$/m);
-  return match?.groups?.path ?? null;
+  const match = text.match(/^artifacts:[ \t]+(\S[^\r\n]*)$/m);
+  return match?.[1] ?? null;
 }
 
 interface HarnessResult {

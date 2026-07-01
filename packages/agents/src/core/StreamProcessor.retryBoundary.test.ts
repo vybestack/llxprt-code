@@ -106,8 +106,8 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
     const mockCompressionHandler = {
       enforceProviderContents: vi
         .fn()
-        .mockImplementation((contents: IContent[]) =>
-          Promise.resolve(contents),
+        .mockImplementation((envelope: { contents: IContent[] }) =>
+          Promise.resolve(envelope.contents),
         ),
       clearProviderCompressionCallback: vi.fn(),
       lastPromptTokenCount: 0,

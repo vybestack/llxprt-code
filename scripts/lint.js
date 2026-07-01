@@ -214,6 +214,7 @@ export function runSensitiveKeywordLinter() {
       } catch (_fallbackError) {
         console.error('Could not get changed files against HEAD~1 either.');
         process.exit(1);
+        return [];
       }
     }
   }
@@ -227,28 +228,16 @@ export function runSensitiveKeywordLinter() {
     }
     const content = readFileSync(file, 'utf-8');
     const lines = content.split('\n');
-    SENSITIVE_PATTERN.lastIndex = 0; // Reset regex state before each file
-    let match;
-    while ((match = SENSITIVE_PATTERN.exec(content)) !== null) {
-      const keyword = match[0];
-      if (!ALLOWED_KEYWORDS.has(keyword)) {
-        violationsFound = true;
-        const matchIndex = match.index;
-        let lineNum = 0;
-        let charCount = 0;
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (charCount + line.length + 1 > matchIndex) {
-            lineNum = i + 1;
-            const colNum = matchIndex - charCount + 1;
-            console.log(
-              `::warning file=${file},line=${lineNum},col=${colNum}::Found sensitive keyword "${keyword}". Please make sure this change is appropriate to submit.`,
-            );
-            break;
-          }
-          charCount += line.length + 1; // +1 for the newline
-        }
-      }
+    if (
+      scanContentForSensitiveKeywords(
+        content,
+        lines,
+        file,
+        SENSITIVE_PATTERN,
+        ALLOWED_KEYWORDS,
+      )
+    ) {
+      violationsFound = true;
     }
   }
 
@@ -257,11 +246,89 @@ export function runSensitiveKeywordLinter() {
   }
 }
 
+/**
+ * Scan file content for sensitive keywords. Returns true if any violations
+ * were found. Uses SENSITIVE_PATTERN and ALLOWED_KEYWORDS from the caller's
+ * closure scope.
+ */
+function scanContentForSensitiveKeywords(
+  content,
+  lines,
+  file,
+  sensitivePattern,
+  allowedKeywords,
+) {
+  sensitivePattern.lastIndex = 0; // Reset regex state before each file
+  let foundViolation = false;
+  let match;
+  while ((match = sensitivePattern.exec(content)) !== null) {
+    const keyword = match[0];
+    if (allowedKeywords.has(keyword)) {
+      continue;
+    }
+    foundViolation = true;
+    reportSensitiveKeywordViolation(lines, match.index, keyword, file);
+  }
+  return foundViolation;
+}
+
+/**
+ * Report a single sensitive keyword violation at the given character offset.
+ */
+function reportSensitiveKeywordViolation(lines, matchIndex, keyword, file) {
+  const { lineNum, colNum } = findMatchPosition(lines, matchIndex);
+  if (lineNum === 0) return;
+  console.log(
+    `::warning file=${file},line=${lineNum},col=${colNum}::Found sensitive keyword "${keyword}". Please make sure this change is appropriate to submit.`,
+  );
+}
+
+/**
+ * Find the 1-based line number and column for a character offset within a
+ * newline-split array of lines.
+ */
+function findMatchPosition(lines, matchIndex) {
+  let charCount = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (charCount + line.length + 1 > matchIndex) {
+      return { lineNum: i + 1, colNum: matchIndex - charCount + 1 };
+    }
+    charCount += line.length + 1; // +1 for the newline
+  }
+  return { lineNum: 0, colNum: 0 };
+}
+
 function stripJSONComments(json) {
   return json.replace(
     /\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g,
     (m, g) => (g ? '' : m),
   );
+}
+
+/**
+ * Validate the tsconfig `exclude` field. Returns true if there were errors.
+ */
+function validateExcludeConfig(file, exclude) {
+  if (!Array.isArray(exclude)) {
+    console.error(
+      `Error: ${file} "exclude" must be an array. Found: ${JSON.stringify(
+        exclude,
+      )}`,
+    );
+    return true;
+  }
+  const allowedExclude = new Set(['node_modules', 'dist']);
+  const invalidExcludes = exclude.filter((item) => !allowedExclude.has(item));
+  if (invalidExcludes.length > 0) {
+    console.error(
+      `Error: ${file} "exclude" contains invalid items: ${JSON.stringify(
+        invalidExcludes,
+      )}. Only "node_modules" and "dist" are allowed.`,
+    );
+    return true;
+  }
+  return false;
 }
 
 export function runTSConfigLinter() {
@@ -295,29 +362,8 @@ export function runTSConfigLinter() {
       const config = JSON.parse(stripJSONComments(content));
 
       // Check if exclude exists and matches exactly
-      if (config.exclude) {
-        if (!Array.isArray(config.exclude)) {
-          console.error(
-            `Error: ${file} "exclude" must be an array. Found: ${JSON.stringify(
-              config.exclude,
-            )}`,
-          );
-          hasError = true;
-        } else {
-          const allowedExclude = new Set(['node_modules', 'dist']);
-          const invalidExcludes = config.exclude.filter(
-            (item) => !allowedExclude.has(item),
-          );
-
-          if (invalidExcludes.length > 0) {
-            console.error(
-              `Error: ${file} "exclude" contains invalid items: ${JSON.stringify(
-                invalidExcludes,
-              )}. Only "node_modules" and "dist" are allowed.`,
-            );
-            hasError = true;
-          }
-        }
+      if (config.exclude && validateExcludeConfig(file, config.exclude)) {
+        hasError = true;
       }
     } catch (error) {
       console.error(`Error parsing ${tsconfigPath}: ${error.message}`);

@@ -214,6 +214,149 @@ describe('CoreSubagentServiceAdapter toolConfig preservation (Issue #2069)', () 
     expect(launchRequest).not.toHaveProperty('toolConfig');
   });
 
+  it('resolves API-qualified explicit whitelist entries through the registry (Issue #2184)', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({}),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [
+          { name: 'run_shell_command' },
+          { name: 'read_file' },
+          { name: 'tool.v1' },
+        ],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: [
+        'functions.run_shell_command',
+        'api.v1.read_file',
+        'functions.tool.v1',
+      ],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual([
+      'run_shell_command',
+      'read_file',
+      'tool.v1',
+    ]);
+  });
+
+  it('does not treat GitHub namespaces as API aliases for registry tools', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({}),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [
+          { name: 'repo' },
+          { name: 'read_file' },
+          { name: 'repo.read_file' },
+        ],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: [
+        'github.repo',
+        'github.read_file',
+        'github.repo.read_file',
+      ],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+  });
+
+  it('drops unresolved API-qualified whitelist entries when registry validation is available', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({}),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [{ name: 'read_file' }],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['functions.read_file', 'functions.nonexistent_tool'],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual(['read_file']);
+  });
+
+  it('honors qualified disabled entries before resolving registry aliases', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({
+        'tools.disabled': ['functions.read_file'],
+      }),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [{ name: 'read_file' }],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['functions.read_file'],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest).toHaveProperty('toolConfig');
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual([]);
+  });
+
+  it('honors versioned API entries in config allowlists', async () => {
+    const { adapter, launch } = createAdapterWithLaunch({
+      getEphemeralSettings: () => ({
+        'tools.allowed': ['api.v1.read_file'],
+      }),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [{ name: 'read_file' }],
+      }),
+    } as Partial<Config>);
+
+    await adapter.executeSubagent({
+      name: 'helper',
+      prompt: 'Do work',
+      toolWhitelist: ['functions.read_file'],
+      hasExplicitToolWhitelist: true,
+    });
+
+    const launchRequest = launch.mock.calls[0]?.[0] as
+      | { toolConfig?: { tools?: string[] } }
+      | undefined;
+    expect(launchRequest).toBeDefined();
+    expect(launchRequest?.toolConfig?.tools).toStrictEqual(['read_file']);
+  });
+
   it('filters task/list_subagents from explicit whitelist when registry is unavailable (Issue #2069)', async () => {
     // No getToolRegistry on config — simulates registry unavailable
     const { adapter, launch } = createAdapterWithLaunch({});

@@ -52,7 +52,7 @@ vi.mock('../../../contexts/SessionContext.js', () => ({
   }),
 }));
 
-vi.mock('../useGeminiStream.js', () => ({
+vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
 }));
 

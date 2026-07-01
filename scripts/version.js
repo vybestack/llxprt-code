@@ -31,12 +31,10 @@ if (!versionArg) {
   process.exit(1);
 }
 
-// Check if it's a specific version number (X.Y.Z format) or a version type
-const isSpecificVersion = /^\d+\.\d+\.\d+/.test(versionArg);
-const versionCommand = isSpecificVersion ? versionArg : versionArg;
-
 // 2. Bump the version in the root and all workspace package.json files.
-run(`npm version ${versionCommand} --no-git-tag-version --allow-same-version`);
+// versionArg is passed through directly whether it is a specific version
+// number or a semantic keyword (patch/minor/major/prerelease).
+const versionCommand = versionArg;
 
 // 3. Get all workspaces and filter out the one we don't want to version.
 // Define the actual workspaces in our monorepo (not external dependencies)
@@ -82,8 +80,10 @@ const newVersion = readJson(rootPackageJsonPath).version;
 // 4. Update the sandboxImageUri in the root package.json
 const rootPackageJson = readJson(rootPackageJsonPath);
 if (rootPackageJson.config?.sandboxImageUri) {
+  const uri = rootPackageJson.config.sandboxImageUri;
+  const colonIdx = uri.lastIndexOf(':');
   rootPackageJson.config.sandboxImageUri =
-    rootPackageJson.config.sandboxImageUri.replace(/:.*$/, `:${newVersion}`);
+    colonIdx >= 0 ? uri.slice(0, colonIdx) + ':' + newVersion : uri;
   console.log(`Updated sandboxImageUri in root to use version ${newVersion}`);
   writeJson(rootPackageJsonPath, rootPackageJson);
 }
@@ -92,8 +92,10 @@ if (rootPackageJson.config?.sandboxImageUri) {
 const cliPackageJsonPath = resolve(process.cwd(), 'packages/cli/package.json');
 const cliPackageJson = readJson(cliPackageJsonPath);
 if (cliPackageJson.config?.sandboxImageUri) {
+  const uri = cliPackageJson.config.sandboxImageUri;
+  const colonIdx = uri.lastIndexOf(':');
   cliPackageJson.config.sandboxImageUri =
-    cliPackageJson.config.sandboxImageUri.replace(/:.*$/, `:${newVersion}`);
+    colonIdx >= 0 ? uri.slice(0, colonIdx) + ':' + newVersion : uri;
   console.log(
     `Updated sandboxImageUri in cli package to use version ${newVersion}`,
   );

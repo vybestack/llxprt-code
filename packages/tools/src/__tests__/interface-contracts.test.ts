@@ -68,6 +68,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
+        shouldIgnoreFile: () => false,
         filterFiles: (paths) => paths,
       }),
       getFileFilteringOptions: () => ({

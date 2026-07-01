@@ -29,6 +29,7 @@ function getMtime(filePath) {
     }
     console.error(`Error getting stats for ${filePath}:`, err);
     process.exit(1); // Exit on unexpected errors getting stats
+    return undefined; // Unreachable, but satisfies consistent-return
   }
 }
 

@@ -49,13 +49,16 @@ export interface PreparedRequest {
 }
 
 /**
- * Build the request contents (curated IContent[]) from user input.
+ * Build the request contents (curated IContent[]) and pending IContent[]
+ * from user input. Returns both the provider-ready contents and the raw
+ * pending items so downstream enforcement can thread the pending boundary
+ * explicitly (issue #2304).
  */
-export function buildRequestContents(
+export function buildRequestContentsResult(
   userContent: Content | Content[],
   conversationManager: ConversationManager,
   historyService: HistoryService,
-): IContent[] {
+): { contents: IContent[]; pending: IContent[] } {
   const matcher = conversationManager.makePositionMatcher();
   if (Array.isArray(userContent)) {
     const userIContents = userContent.map((content) => {
@@ -63,7 +66,10 @@ export function buildRequestContents(
       const idGen = historyService.getIdGeneratorCallback(turnKey);
       return ContentConverters.toIContent(content, idGen, matcher, turnKey);
     });
-    return historyService.getCuratedForProvider(userIContents);
+    return {
+      contents: historyService.getCuratedForProvider(userIContents),
+      pending: userIContents,
+    };
   }
   const turnKey = historyService.generateTurnKey();
   const idGen = historyService.getIdGeneratorCallback(turnKey);
@@ -73,7 +79,10 @@ export function buildRequestContents(
     matcher,
     turnKey,
   );
-  return historyService.getCuratedForProvider([userIContent]);
+  return {
+    contents: historyService.getCuratedForProvider([userIContent]),
+    pending: [userIContent],
+  };
 }
 
 /**

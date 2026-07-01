@@ -88,6 +88,7 @@ function generateFormula(version, sha256) {
   license "Apache-2.0"
 
   depends_on "node"
+  depends_on "bun"
 
   def install
     system "npm", "install", *std_npm_args
@@ -122,18 +123,9 @@ function runCommand(command, options = {}) {
 }
 
 /**
- * Main function to update the Homebrew formula
+ * Resolves and validates the version string from CLI arg or package.json.
  */
-async function main() {
-  // Parse arguments and environment variables
-  const versionArg = process.argv[2];
-  const dryRun = process.env.DRY_RUN === 'true';
-  const token = process.env.HOMEBREW_TAP_TOKEN;
-
-  console.log('Starting Homebrew formula update...');
-  console.log(`Dry run: ${dryRun}`);
-
-  // Determine version
+function resolveVersion(versionArg) {
   let version = versionArg;
   if (!version) {
     const packageJsonPath = resolve(process.cwd(), 'package.json');
@@ -141,32 +133,28 @@ async function main() {
     version = packageJson.version;
     console.log(`Using version from package.json: ${version}`);
   } else {
-    // Remove 'v' prefix if present
     version = version.replace(/^v/, '');
     console.log(`Using version from argument: ${version}`);
   }
 
-  // Validate version format
   if (!/^\d+\.\d+\.\d+/.test(version)) {
     throw new Error(
       `Invalid version format: ${version}. Expected format: X.Y.Z`,
     );
   }
 
-  // Skip pre-release versions
   if (version.includes('-')) {
     console.log(`Skipping Homebrew update for pre-release version: ${version}`);
-    return;
+    return null;
   }
 
-  // Check for GitHub token (skip in dry-run mode)
-  if (!dryRun && !token) {
-    throw new Error(
-      'HOMEBREW_TAP_TOKEN environment variable is required for publishing',
-    );
-  }
+  return version;
+}
 
-  // Download the npm tarball
+/**
+ * Downloads the npm tarball and returns the SHA256 checksum and formula content.
+ */
+async function downloadAndGenerateFormula(version) {
   const tarballUrl = `https://registry.npmjs.org/@vybestack/llxprt-code/-/llxprt-code-${version}.tgz`;
   const tmpDir = tmpdir();
   const tarballPath = join(tmpDir, `llxprt-code-${version}.tgz`);
@@ -179,34 +167,29 @@ async function main() {
     throw new Error(`Failed to download tarball: ${error.message}`);
   }
 
-  // Calculate SHA256
   console.log('Calculating SHA256 checksum...');
   const sha256 = calculateSHA256(tarballPath);
   console.log(`SHA256: ${sha256}`);
 
-  // Generate formula
   const formulaContent = generateFormula(version, sha256);
   console.log('Generated formula:');
   console.log(formulaContent);
 
-  // Clean up tarball
   rmSync(tarballPath, { force: true });
+  return formulaContent;
+}
 
-  if (dryRun) {
-    console.log('Dry run mode - skipping git operations');
-    return;
-  }
-
-  // Clone or update the tap repository
+/**
+ * Clones the tap repository and configures git. Returns the tap directory path.
+ */
+function setupTapRepo(token) {
+  const tmpDir = tmpdir();
   const tapDir = join(tmpDir, 'homebrew-tap');
   const tapRepoBase = 'https://github.com/vybestack/homebrew-tap.git';
 
   console.log('Setting up tap repository...');
   try {
-    // Remove existing directory if present
     rmSync(tapDir, { recursive: true, force: true });
-
-    // Clone without token, then set authenticated remote (avoids leaking token in logs)
     runCommand(`git clone ${tapRepoBase} ${tapDir}`, { stdio: 'ignore' });
     if (token) {
       const tapRepoAuth = `https://${token}@github.com/vybestack/homebrew-tap.git`;
@@ -220,7 +203,6 @@ async function main() {
     throw new Error(`Failed to clone tap repository: ${error.message}`);
   }
 
-  // Configure git
   runCommand('git config user.name "github-actions[bot]"', {
     cwd: tapDir,
     stdio: 'ignore',
@@ -230,28 +212,30 @@ async function main() {
     { cwd: tapDir, stdio: 'ignore' },
   );
 
-  // Create Formula directory if it doesn't exist
+  return tapDir;
+}
+
+/**
+ * Writes the formula file, commits, and pushes changes.
+ */
+function commitAndPush(tapDir, formulaContent, version) {
   const formulaDir = join(tapDir, 'Formula');
   mkdirSync(formulaDir, { recursive: true });
 
-  // Write the formula file
   const formulaPath = join(formulaDir, 'llxprt-code.rb');
   writeFileSync(formulaPath, formulaContent);
   console.log(`Updated formula at ${formulaPath}`);
 
-  // Commit and push changes
   try {
     runCommand('git add Formula/llxprt-code.rb', {
       cwd: tapDir,
       stdio: 'ignore',
     });
 
-    // Check if there are changes to commit
     try {
       runCommand('git diff --cached --quiet', { cwd: tapDir, stdio: 'ignore' });
       console.log('No changes to commit - formula already up to date');
     } catch {
-      // There are changes, proceed with commit
       runCommand(`git commit -m "Update llxprt-code to ${version}"`, {
         cwd: tapDir,
         stdio: 'ignore',
@@ -264,9 +248,39 @@ async function main() {
   } catch (error) {
     throw new Error(`Failed to commit/push changes: ${error.message}`);
   } finally {
-    // Clean up tap directory
     rmSync(tapDir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Main function to update the Homebrew formula
+ */
+async function main() {
+  const versionArg = process.argv[2];
+  const dryRun = process.env.DRY_RUN === 'true';
+  const token = process.env.HOMEBREW_TAP_TOKEN;
+
+  console.log('Starting Homebrew formula update...');
+  console.log(`Dry run: ${dryRun}`);
+
+  const version = resolveVersion(versionArg);
+  if (version === null) return;
+
+  if (!dryRun && !token) {
+    throw new Error(
+      'HOMEBREW_TAP_TOKEN environment variable is required for publishing',
+    );
+  }
+
+  const formulaContent = await downloadAndGenerateFormula(version);
+
+  if (dryRun) {
+    console.log('Dry run mode - skipping git operations');
+    return;
+  }
+
+  const tapDir = setupTapRepo(token);
+  commitAndPush(tapDir, formulaContent, version);
 
   console.log(
     `Successfully updated Homebrew formula for llxprt-code ${version}`,

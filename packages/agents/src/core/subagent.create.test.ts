@@ -24,11 +24,7 @@ import {
   createContentGenerator,
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type {
-  Content,
-  FunctionDeclaration,
-  GenerateContentConfig,
-} from '@google/genai';
+import type { Content, GenerateContentConfig } from '@google/genai';
 import { Type } from '@google/genai';
 const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
   const mockReadTodos = vi.fn().mockResolvedValue([]);
@@ -360,7 +356,7 @@ describe('subagent.ts', () => {
         { systemPrompt: 'Runtime only' },
         defaultModelConfig,
         defaultRunConfig,
-        { tools: ['stateless.tool'] },
+        undefined,
         undefined,
         overrides,
       );
@@ -377,12 +373,9 @@ describe('subagent.ts', () => {
         getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
           {
             name: 'stateless.tool',
-            description: 'CONFIG description',
-            parameters: {
-              type: Type.OBJECT,
-              properties: {},
-            },
-          } as FunctionDeclaration,
+            description: 'Foreground registry description',
+            parameters: { type: Type.OBJECT, properties: {} },
+          },
         ]),
       });
 
@@ -412,7 +405,7 @@ describe('subagent.ts', () => {
         { systemPrompt: 'Use runtime tools' },
         defaultModelConfig,
         defaultRunConfig,
-        { tools: ['stateless.tool'] },
+        undefined,
         undefined,
         createRuntimeOverrides({ runtimeBundle }).overrides,
       );

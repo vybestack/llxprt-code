@@ -68,10 +68,7 @@ service:
       exporters: [debug]
 `;
 
-async function main() {
-  // 1. Ensure binaries are available, downloading if necessary.
-  // Binaries are stored in the project's .gemini/otel/bin directory
-  // to avoid modifying the user's system.
+async function ensureTelemetryBinaries() {
   if (!fileExists(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
 
   const otelcolPath = await ensureBinary(
@@ -100,7 +97,96 @@ async function main() {
   });
   if (!jaegerPath) process.exit(1);
 
+  return { otelcolPath, jaegerPath };
+}
+
+async function main() {
+  // 1. Ensure binaries are available, downloading if necessary.
+  const { otelcolPath, jaegerPath } = await ensureTelemetryBinaries();
+
   // 2. Kill any existing processes to ensure a clean start.
+  cleanupOldProcessesAndLogs();
+
+  const processes = { jaeger: null, collector: null };
+  const logFds = { jaeger: null, collector: null };
+
+  const originalSandboxSetting = manageTelemetrySettings(
+    true,
+    'http://localhost:4317',
+    'local',
+  );
+
+  registerCleanup(
+    () => [processes.jaeger, processes.collector],
+    () => [logFds.jaeger, logFds.collector],
+    originalSandboxSetting,
+  );
+
+  if (!fileExists(OTEL_DIR)) fs.mkdirSync(OTEL_DIR, { recursive: true });
+  fs.writeFileSync(OTEL_CONFIG_FILE, OTEL_CONFIG_CONTENT);
+  console.log('Wrote OTEL collector config.');
+
+  await startJaeger(processes, logFds, jaegerPath);
+  await startCollector(processes, logFds, otelcolPath);
+
+  printTelemetryReadyInfo();
+}
+
+async function startJaeger(processes, logFds, jaegerPath) {
+  console.log(`Starting Jaeger service... Logs: ${JAEGER_LOG_FILE}`);
+  logFds.jaeger = fs.openSync(JAEGER_LOG_FILE, 'a');
+  processes.jaeger = spawn(
+    jaegerPath,
+    ['--set=receivers.otlp.protocols.grpc.endpoint=localhost:14317'],
+    { stdio: ['ignore', logFds.jaeger, logFds.jaeger] },
+  );
+  attachProcessErrorHandler(processes.jaeger);
+  console.log(`Waiting for Jaeger to start (PID: ${processes.jaeger.pid})...`);
+
+  try {
+    await waitForPort(JAEGER_PORT);
+    console.log(`[OK] Jaeger started successfully.`);
+  } catch (_) {
+    console.error(`[ERROR] Jaeger failed to start on port ${JAEGER_PORT}.`);
+    if (processes.jaeger && processes.jaeger.pid) {
+      process.kill(processes.jaeger.pid, 'SIGKILL');
+    }
+    if (fileExists(JAEGER_LOG_FILE)) {
+      console.error('Jaeger Log Output:');
+      console.error(fs.readFileSync(JAEGER_LOG_FILE, 'utf-8'));
+    }
+    process.exit(1);
+  }
+}
+
+async function startCollector(processes, logFds, otelcolPath) {
+  console.log(`Starting OTEL collector... Logs: ${OTEL_LOG_FILE}`);
+  logFds.collector = fs.openSync(OTEL_LOG_FILE, 'a');
+  processes.collector = spawn(otelcolPath, ['--config', OTEL_CONFIG_FILE], {
+    stdio: ['ignore', logFds.collector, logFds.collector],
+  });
+  attachProcessErrorHandler(processes.collector);
+  console.log(
+    `Waiting for OTEL collector to start (PID: ${processes.collector.pid})...`,
+  );
+
+  try {
+    await waitForPort(4317);
+    console.log(`[OK] OTEL collector started successfully.`);
+  } catch (_) {
+    console.error(`[ERROR] OTEL collector failed to start on port 4317.`);
+    if (processes.collector && processes.collector.pid) {
+      process.kill(processes.collector.pid, 'SIGKILL');
+    }
+    if (fileExists(OTEL_LOG_FILE)) {
+      console.error('OTEL Collector Log Output:');
+      console.error(fs.readFileSync(OTEL_LOG_FILE, 'utf-8'));
+    }
+    process.exit(1);
+  }
+}
+
+function cleanupOldProcessesAndLogs() {
   console.log('Cleaning up old processes and logs...');
   try {
     execSync('pkill -f "otelcol-contrib"');
@@ -126,85 +212,18 @@ async function main() {
   } catch (e) {
     if (e.code !== 'ENOENT') console.error(e);
   }
+}
 
-  let jaegerProcess, collectorProcess;
-  let jaegerLogFd, collectorLogFd;
-
-  const originalSandboxSetting = manageTelemetrySettings(
-    true,
-    'http://localhost:4317',
-    'local',
-  );
-
-  registerCleanup(
-    () => [jaegerProcess, collectorProcess],
-    () => [jaegerLogFd, collectorLogFd],
-    originalSandboxSetting,
-  );
-
-  if (!fileExists(OTEL_DIR)) fs.mkdirSync(OTEL_DIR, { recursive: true });
-  fs.writeFileSync(OTEL_CONFIG_FILE, OTEL_CONFIG_CONTENT);
-  console.log('Wrote OTEL collector config.');
-
-  // Start Jaeger
-  console.log(`Starting Jaeger service... Logs: ${JAEGER_LOG_FILE}`);
-  jaegerLogFd = fs.openSync(JAEGER_LOG_FILE, 'a');
-  jaegerProcess = spawn(
-    jaegerPath,
-    ['--set=receivers.otlp.protocols.grpc.endpoint=localhost:14317'],
-    { stdio: ['ignore', jaegerLogFd, jaegerLogFd] },
-  );
-  console.log(`Waiting for Jaeger to start (PID: ${jaegerProcess.pid})...`);
-
-  try {
-    await waitForPort(JAEGER_PORT);
-    console.log(`[OK] Jaeger started successfully.`);
-  } catch (_) {
-    console.error(`[ERROR] Jaeger failed to start on port ${JAEGER_PORT}.`);
-    if (jaegerProcess && jaegerProcess.pid) {
-      process.kill(jaegerProcess.pid, 'SIGKILL');
-    }
-    if (fileExists(JAEGER_LOG_FILE)) {
-      console.error('Jaeger Log Output:');
-      console.error(fs.readFileSync(JAEGER_LOG_FILE, 'utf-8'));
-    }
-    process.exit(1);
+function attachProcessErrorHandler(proc) {
+  if (proc) {
+    proc.on('error', (err) => {
+      console.error(`${proc.spawnargs[0]} process error:`, err);
+      process.exit(1);
+    });
   }
+}
 
-  // Start the primary OTEL collector
-  console.log(`Starting OTEL collector... Logs: ${OTEL_LOG_FILE}`);
-  collectorLogFd = fs.openSync(OTEL_LOG_FILE, 'a');
-  collectorProcess = spawn(otelcolPath, ['--config', OTEL_CONFIG_FILE], {
-    stdio: ['ignore', collectorLogFd, collectorLogFd],
-  });
-  console.log(
-    `Waiting for OTEL collector to start (PID: ${collectorProcess.pid})...`,
-  );
-
-  try {
-    await waitForPort(4317);
-    console.log(`[OK] OTEL collector started successfully.`);
-  } catch (_) {
-    console.error(`[ERROR] OTEL collector failed to start on port 4317.`);
-    if (collectorProcess && collectorProcess.pid) {
-      process.kill(collectorProcess.pid, 'SIGKILL');
-    }
-    if (fileExists(OTEL_LOG_FILE)) {
-      console.error('OTEL Collector Log Output:');
-      console.error(fs.readFileSync(OTEL_LOG_FILE, 'utf-8'));
-    }
-    process.exit(1);
-  }
-
-  [jaegerProcess, collectorProcess].forEach((proc) => {
-    if (proc) {
-      proc.on('error', (err) => {
-        console.error(`${proc.spawnargs[0]} process error:`, err);
-        process.exit(1);
-      });
-    }
-  });
-
+function printTelemetryReadyInfo() {
   console.log(`
 Local telemetry environment is running.`);
   console.log(

@@ -92,6 +92,7 @@ function _createFakeFileHost(targetDir: string): IToolHost {
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
+      shouldIgnoreFile: () => false,
       filterFiles: (paths) => paths,
     }),
     getFileFilteringOptions: () => ({

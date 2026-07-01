@@ -455,7 +455,7 @@ export class MessageStreamOrchestrator {
         hadToolCallsThisTurn = true;
       if (
         event.type === GeminiEventType.ToolCallResponse &&
-        todoContinuationService.isTodoPauseResponse(event.value)
+        todoContinuationService.isSuccessfulTodoPauseResponse(event.value)
       )
         todoPauseSeen = true;
       if (event.type === GeminiEventType.Thought) hadThinking = true;
@@ -519,6 +519,15 @@ export class MessageStreamOrchestrator {
     retryCount: number,
     ctx: StreamContext,
   ): AsyncGenerator<ServerGeminiStreamEvent, PostTurnResult> {
+    if (iter.todoPauseSeen) {
+      return yield* this._evaluateTodoContinuation(
+        iter,
+        baseRequest,
+        retryCount,
+        ctx,
+      );
+    }
+
     if (iter.hadToolCallsThisTurn) {
       return yield* this._finishWithToolCalls(iter.deferredEvents, ctx);
     }

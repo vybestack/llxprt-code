@@ -59,24 +59,39 @@ if (!geminiSandbox) {
 }
 
 if (!geminiSandbox) {
-  let currentDir = process.cwd();
-  while (true) {
-    const geminiEnv = join(currentDir, '.llxprt', '.env');
-    const regularEnv = join(currentDir, '.env');
-    if (existsSync(geminiEnv)) {
-      dotenv.config({ path: geminiEnv, quiet: true });
-      break;
-    } else if (existsSync(regularEnv)) {
-      dotenv.config({ path: regularEnv, quiet: true });
-      break;
-    }
-    const parentDir = dirname(currentDir);
-    if (parentDir === currentDir) {
-      break;
-    }
-    currentDir = parentDir;
-  }
+  loadEnvFromDirTree();
   geminiSandbox = process.env.LLXPRT_SANDBOX;
+}
+
+function loadEnvFromDirTree() {
+  let currentDir = process.cwd();
+  let keepGoing = true;
+  while (keepGoing) {
+    if (tryLoadEnvInDir(currentDir)) {
+      keepGoing = false;
+    } else {
+      const parentDir = dirname(currentDir);
+      if (parentDir === currentDir) {
+        keepGoing = false;
+      } else {
+        currentDir = parentDir;
+      }
+    }
+  }
+}
+
+function tryLoadEnvInDir(currentDir) {
+  const geminiEnv = join(currentDir, '.llxprt', '.env');
+  const regularEnv = join(currentDir, '.env');
+  if (existsSync(geminiEnv)) {
+    dotenv.config({ path: geminiEnv, quiet: true });
+    return true;
+  }
+  if (existsSync(regularEnv)) {
+    dotenv.config({ path: regularEnv, quiet: true });
+    return true;
+  }
+  return false;
 }
 
 geminiSandbox = normalizeSandboxSetting(geminiSandbox);
@@ -120,16 +135,17 @@ if (['1', 'true'].includes(geminiSandbox)) {
     );
     process.exit(1);
   }
-} else {
-  if (os.platform() === 'darwin' && process.env.SEATBELT_PROFILE !== 'none') {
-    if (commandExists('sandbox-exec')) {
-      command = 'sandbox-exec';
-    } else {
-      process.exit(1);
-    }
+} else if (
+  os.platform() === 'darwin' &&
+  process.env.SEATBELT_PROFILE !== 'none'
+) {
+  if (commandExists('sandbox-exec')) {
+    command = 'sandbox-exec';
   } else {
     process.exit(1);
   }
+} else {
+  process.exit(1);
 }
 
 if (!argv.q) {

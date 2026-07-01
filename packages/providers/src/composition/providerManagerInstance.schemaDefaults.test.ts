@@ -56,6 +56,7 @@ function mockProviderModules(openaiCtor: unknown): void {
   }));
   vi.doMock('./oauth-provider-registration.js', () => ({
     ensureOAuthProviderRegistered: vi.fn(),
+    registerStandardOAuthProviders: vi.fn(),
     isOAuthProviderRegistered: vi.fn(),
     resetRegisteredProviders: vi.fn(),
   }));

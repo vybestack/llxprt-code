@@ -482,9 +482,7 @@ describe('check-cli-import-boundary', () => {
   it('fails when packages/cli/src contains no TypeScript files (empty scan guard)', () => {
     // An empty fixture root has no packages/cli/src at all — walkDir returns 0
     // files, and the guard must fail loudly rather than silently passing.
-    const { code, stdout } = withCliFixture(({ root }) => {
-      return runScript(root, 1);
-    });
+    const { code, stdout } = withCliFixture(({ root }) => runScript(root, 1));
     expect(code).toBe(1);
     expect(stdout).toContain('no TypeScript source files found');
   });

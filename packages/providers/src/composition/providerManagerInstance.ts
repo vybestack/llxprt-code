@@ -35,7 +35,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
 import type { OAuthManagerRuntimeMessageBusDeps } from '../auth/index.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
+import { registerStandardOAuthProviders } from './oauth-provider-registration.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
@@ -371,24 +371,7 @@ function registerOAuthProviders(
   tokenStore: ReturnType<typeof createTokenStore>,
   addItem: ProviderManagerFactoryOptions['addItem'],
 ): void {
-  void ensureOAuthProviderRegistered(
-    'gemini',
-    oauthManager,
-    tokenStore,
-    addItem,
-  );
-  void ensureOAuthProviderRegistered(
-    'anthropic',
-    oauthManager,
-    tokenStore,
-    addItem,
-  );
-  void ensureOAuthProviderRegistered(
-    'codex',
-    oauthManager,
-    tokenStore,
-    addItem,
-  );
+  registerStandardOAuthProviders(oauthManager, tokenStore, addItem);
 }
 
 /** Resolves OpenAI-specific settings from user settings and ephemeral overrides. */

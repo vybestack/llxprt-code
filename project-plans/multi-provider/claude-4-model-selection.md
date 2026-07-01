@@ -57,7 +57,7 @@ provider.setModel('claude-opus-4-latest'); // Use latest Opus 4
 
 ```typescript
 const provider = new AnthropicProvider(apiKey);
-const latestSonnet = provider.getLatestClaude4Model('sonnet');
+const latestSonnet = provider.getLatestClaudeModel('sonnet');
 provider.setModel(latestSonnet);
 ```
 

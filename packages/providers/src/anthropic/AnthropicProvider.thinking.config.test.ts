@@ -72,7 +72,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
     it('should use default budget_tokens of 10000 when not specified', async () => {
       // Use global settings (not provider-specific) for reasoning
       settingsService.set('reasoning.enabled', true);
-      // Don't set budgetTokens - should default to 10000
+      // Don't set budgetTokens - should default to 10000.
+      // Pin a non-adaptive model: the provider default is Opus 4.8 (adaptive),
+      // but this test validates the manual-mode budget default of 10000.
 
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'response' }],
@@ -87,7 +89,13 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-4-5-20250929',
+            },
+          },
+        }),
       );
       await generator.next();
 
@@ -473,6 +481,72 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(request.thinking).toBeDefined();
       expect(request.thinking?.type).toBe('enabled');
       expect(request.thinking?.budget_tokens).toBe(10000);
+    });
+
+    it('should use adaptive thinking for Sonnet 5 when no explicit budgetTokens @issue:2289', async () => {
+      settingsService.set('reasoning.enabled', true);
+      // Don't set budgetTokens
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-5',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('adaptive');
+      expect(request.thinking?.budget_tokens).toBeUndefined();
+    });
+
+    it('should map xhigh effort to max for Sonnet 5 @issue:2289', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.effort', 'xhigh');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-5',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.output_config?.effort).toBe('max');
     });
   });
 

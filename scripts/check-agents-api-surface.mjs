@@ -83,7 +83,7 @@ process.on('SIGTERM', () => {
   process.exit(143);
 });
 
-function buildDeclarations() {
+function createTempTsConfig() {
   const tempConfig = {
     extends: SOURCE_TSCONFIG,
     compilerOptions: {
@@ -101,29 +101,21 @@ function buildDeclarations() {
       // @types/node. Explicitly point typeRoots at the repo's node_modules
       // so `types: ['node']` resolves correctly.
       typeRoots: [join(REPO_ROOT, 'node_modules', '@types')],
-      // The source tsconfig.json sets baseUrl to the agents package dir so its
-      // `paths` mappings resolve relative to packages/agents. Overriding
+      // The source tsconfig.json sets baseUrl to the agents package dir so
+      // its paths mappings resolve relative to packages/agents. Overriding
       // rootDir to REPO_ROOT shifts the root but does NOT re-anchor baseUrl,
-      // which would make TypeScript fall back to the temp tsconfig's directory
-      // and break the relative path mappings. Explicitly set baseUrl to the
-      // agents package dir to preserve the source resolution semantics.
+      // which would make TypeScript fall back to the temp tsconfig's
+      // directory and break the relative path mappings.
       baseUrl: AGENTS_PACKAGE_DIR,
     },
     include: [
       join(AGENTS_PACKAGE_DIR, 'index.ts'),
       `${AGENTS_PACKAGE_DIR}/src/**/*.ts`,
-      // The core WASM module import (tree-sitter-bash.wasm) needs an ambient
-      // type declaration to compile; mirror the source tsconfig include.
       `${REPO_ROOT}/packages/core/src/types/wasm.d.ts`,
     ],
     exclude: [
       `${REPO_ROOT}/node_modules`,
-      // Use forward-slash template literals for glob patterns; path.join()
-      // emits backslashes on Windows, which TypeScript glob matching does not
-      // reliably interpret for wildcard paths.
       `${REPO_ROOT}/**/dist/**`,
-      // Exclude all test files across the monorepo so type errors in test
-      // infrastructure do not block the surface build.
       `${AGENTS_PACKAGE_DIR}/**/*.test.ts`,
       `${AGENTS_PACKAGE_DIR}/**/*.spec.ts`,
       `${AGENTS_PACKAGE_DIR}/src/api/__tests__/fixtures/**`,
@@ -133,76 +125,66 @@ function buildDeclarations() {
   };
   const tempConfigPath = join(tempDir, 'tsconfig.api-surface.json');
   writeFileSync(tempConfigPath, JSON.stringify(tempConfig, null, 2));
+  return tempConfigPath;
+}
 
-  let tscExitCode = 0;
-  try {
-    execFileSync(
-      process.platform === 'win32' ? 'npx.cmd' : 'npx',
-      ['tsc', '-p', tempConfigPath],
-      {
-        stdio: 'pipe',
-        cwd: REPO_ROOT,
-        encoding: 'utf8',
-        maxBuffer: 10 * 1024 * 1024,
-      },
-    );
-  } catch (err) {
-    if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-      if (err.stdout) console.log(err.stdout);
-      if (err.stderr) console.error(err.stderr);
-      throw new Error(
-        'tsc exceeded the maxBuffer limit (ERR_CHILD_PROCESS_STDIO_MAXBUFFER). ' +
-          'This indicates runaway output (e.g. a very large number of compile errors), ' +
-          'not a normal build failure.',
-      );
-    }
-    if (err.code === 'ENOENT') {
-      if (err.stderr) console.error(err.stderr);
-      throw new Error(
-        `Failed to spawn tsc (ENOENT): '${process.platform === 'win32' ? 'npx.cmd' : 'npx'}' not found. ` +
-          'Ensure Node.js/npx is installed and on PATH.',
-      );
-    }
-    if (err.signal) {
-      throw new Error(
-        `tsc process terminated by signal ${err.signal}; declaration build did not complete.`,
-      );
-    }
-    tscExitCode = err.status !== undefined ? err.status : 1;
+function describeTscSpawnError(err) {
+  if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
     if (err.stdout) console.log(err.stdout);
     if (err.stderr) console.error(err.stderr);
-    // Preserve the original system-level spawn error context (e.g. EACCES,
-    // EAGAIN, EPERM) when tsc failed to spawn or was killed by the OS rather
-    // than exiting normally. These errors carry err.code/errno/syscall/path
-    // but no err.status, so without this branch they would surface as a
-    // generic "tsc exited with code 1" that hides the true root cause.
-    if (err.code && err.status === undefined) {
-      throw new Error(
-        `tsc spawn failed with system error code '${err.code}'` +
-          (err.errno ? ` (errno ${err.errno})` : '') +
-          (err.syscall ? ` syscall '${err.syscall}'` : '') +
-          (err.path ? ` on '${err.path}'` : '') +
-          `: ${err.message}`,
-      );
-    }
+    return 'tsc exceeded the maxBuffer limit (ERR_CHILD_PROCESS_STDIO_MAXBUFFER). ' +
+      'This indicates runaway output, not a normal build failure.';
   }
+  if (err.code === 'ENOENT') {
+    if (err.stderr) console.error(err.stderr);
+    const npxName = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+    return `Failed to spawn tsc (ENOENT): '${npxName}' not found. ` +
+      'Ensure Node.js/npx is installed and on PATH.';
+  }
+  if (err.signal) {
+    return `tsc process terminated by signal ${err.signal}; declaration build did not complete.`;
+  }
+  if (err.code && err.status === undefined) {
+    return `tsc spawn failed with system error code '${err.code}'` +
+      (err.errno ? ` (errno ${err.errno})` : '') +
+      (err.syscall ? ` syscall '${err.syscall}'` : '') +
+      (err.path ? ` on '${err.path}'` : '') +
+      `: ${err.message}`;
+  }
+  return null;
+}
 
-  // Treat nonzero tsc exit as a hard failure. With noEmitOnError: true, a
-  // nonzero exit means declarations were not emitted at all; tolerating it
-  // would let malformed source (including test-fixture JSON that is no longer
-  // compiled) silently slip through and produce a stale or empty surface.
-  if (tscExitCode !== 0) {
+function runTscBuild(tempConfigPath) {
+  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  try {
+    execFileSync(npxCmd, ['tsc', '-p', tempConfigPath], {
+      stdio: 'pipe',
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  } catch (err) {
+    const spawnErrorMsg = describeTscSpawnError(err);
+    if (spawnErrorMsg) throw new Error(spawnErrorMsg);
+
+    const exitCode = err.status !== undefined ? err.status : 1;
+    if (err.stdout) console.log(err.stdout);
+    if (err.stderr) console.error(err.stderr);
     throw new Error(
-      `tsc exited with code ${tscExitCode} — declaration build failed; ` +
+      `tsc exited with code ${exitCode} — declaration build failed; ` +
         'cannot determine API surface.',
     );
   }
+}
 
-  // B1a nested declaration path (rootDir = repo root shifts output layout).
+function buildDeclarations() {
+  const tempConfigPath = createTempTsConfig();
+  runTscBuild(tempConfigPath);
+
   const rootDeclPath = join(tempDir, 'packages', 'agents', 'index.d.ts');
   if (!existsSync(rootDeclPath)) {
     throw new Error(
-      `agents index.d.ts not emitted at ${rootDeclPath} (tsc exit ${tscExitCode}). ` +
+      `agents index.d.ts not emitted at ${rootDeclPath}. ` +
         'Declaration emission failed — the temp build did not produce the root barrel declaration.',
     );
   }

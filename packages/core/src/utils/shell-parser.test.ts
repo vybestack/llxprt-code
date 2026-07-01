@@ -32,12 +32,11 @@ let parserInitialized = await initializeParser();
 /**
  * Tree-sitter parser tests.
  *
- * NOTE: In test environments (vitest), tree-sitter WASM loading may fail
- * because the WASM binary import requires esbuild's wasm-binary plugin.
- * These tests verify the API contracts and fallback behavior.
- *
- * The actual tree-sitter parsing is tested via integration tests and
- * manual verification with the bundled CLI.
+ * The parser initializes by loading the bash WASM grammar via
+ * web-tree-sitter@0.25.x's top-level `Language.load()`, reading the grammar
+ * bytes from disk via `require.resolve` so initialization is identical under
+ * vitest (Node) and Bun. Either way, a successful initialization should make
+ * the parser available so these tests exercise real parsing behavior.
  */
 describe('shell-parser', () => {
   beforeAll(async () => {
@@ -51,6 +50,17 @@ describe('shell-parser', () => {
   });
 
   describe('initializeParser', () => {
+    it.skipIf(!parserInitialized)(
+      'should successfully initialize the parser under the current runtime',
+      async () => {
+        resetParser();
+        const result = await initializeParser();
+        expect(result).toBe(true);
+        expect(isParserAvailable()).toBe(true);
+        expect(getInitializationError()).toBeNull();
+      },
+    );
+
     it('should attempt initialization and return consistent result', async () => {
       const result = await initializeParser();
       // Result should match whether parser is available
@@ -63,13 +73,45 @@ describe('shell-parser', () => {
       expect(result1).toBe(result2);
     });
 
-    it('should set initialization error if failed', async () => {
-      // In test env, we expect it to fail with a WASM loading error
-      // This test validates the error getter works
-      const error = getInitializationError();
-      // Error should be set XOR parser initialized - they're mutually exclusive
-      const hasError = error !== null;
-      expect(hasError).toBe(!parserInitialized);
+    it.skipIf(!parserInitialized)(
+      'should have no initialization error when parser is available',
+      async () => {
+        await initializeParser();
+        const error = getInitializationError();
+        // After successful initialization there should be no error
+        expect(error).toBeNull();
+      },
+    );
+
+    it('should record initialization errors when tree-sitter exports are missing', async () => {
+      vi.resetModules();
+      vi.doMock('web-tree-sitter', () => ({
+        Parser: class MockParser {
+          static init(): Promise<void> {
+            return Promise.resolve();
+          }
+
+          setLanguage(): void {}
+        },
+        default: undefined,
+        Language: undefined,
+      }));
+
+      try {
+        const parserModule = await import('./shell-parser.js');
+        parserModule.resetParser();
+
+        const result = await parserModule.initializeParser();
+
+        expect(result).toBe(false);
+        expect(parserModule.isParserAvailable()).toBe(false);
+        expect(parserModule.getInitializationError()?.message).toContain(
+          'Language export not found',
+        );
+      } finally {
+        vi.doUnmock('web-tree-sitter');
+        vi.resetModules();
+      }
     });
   });
 
@@ -101,6 +143,15 @@ describe('shell-parser', () => {
   });
 
   describe('timeout handling', () => {
+    const TIMEOUT_COMMAND =
+      'a=$(b); c=$(d); e=$(f); g=$(h); i=$(j); k=$(l); ls -la';
+
+    function setupTimeoutMock(): void {
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValue(Number.MAX_SAFE_INTEGER);
+    }
+
     afterEach(() => {
       vi.restoreAllMocks();
     });
@@ -113,16 +164,13 @@ describe('shell-parser', () => {
         const errorSpy = vi
           .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
-        const nowSpy = vi.spyOn(performance, 'now');
-        // First call sets the deadline, subsequent calls simulate time passing past it
-        nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);
+        setupTimeoutMock();
 
-        const command = 'ls -la';
-        const result = parseShellCommand(command);
+        const result = parseShellCommand(TIMEOUT_COMMAND);
         expect(result).toBeNull();
         expect(errorSpy).toHaveBeenCalledWith(
           'Bash command parsing timed out for command:',
-          command,
+          TIMEOUT_COMMAND,
         );
       },
     );
@@ -133,11 +181,9 @@ describe('shell-parser', () => {
         await initializeParser();
 
         vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
-        const nowSpy = vi.spyOn(performance, 'now');
-        nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);
+        setupTimeoutMock();
 
-        const command = 'ls -la';
-        const result = parseCommandDetails(command);
+        const result = parseCommandDetails(TIMEOUT_COMMAND);
         // When parseShellCommand times out, parseCommandDetails returns hasError: true
         expect(result).toStrictEqual({ details: [], hasError: true });
       },
@@ -366,20 +412,6 @@ describe('shell-parser', () => {
     );
   });
 
-  describe('resetParser', () => {
-    it('should reset parser state', async () => {
-      resetParser();
-      expect(isParserAvailable()).toBe(false);
-
-      // Re-initialize - result depends on environment
-      const reinitialized = await initializeParser();
-      expect(isParserAvailable()).toBe(reinitialized);
-
-      // Restore parserInitialized for potential other tests
-      parserInitialized = reinitialized;
-    });
-  });
-
   describe('collectCommandDetails', () => {
     beforeAll(async () => {
       await initializeParser();
@@ -448,5 +480,14 @@ describe('shell-parser', () => {
         expect(details.map((d) => d.name)).toContain('echo');
       },
     );
+  });
+  describe('resetParser', () => {
+    it.skipIf(!parserInitialized)('should reset parser state', async () => {
+      resetParser();
+      expect(isParserAvailable()).toBe(false);
+
+      const reinitialized = await initializeParser();
+      expect(isParserAvailable()).toBe(reinitialized);
+    });
   });
 });

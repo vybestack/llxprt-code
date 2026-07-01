@@ -69,10 +69,10 @@ describe('handleAtCommand (filtering)', () => {
         processedQuery: [{ text: query }],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        'Path node_modules/package.json is ignored by both git and llxprt and will be skipped.',
+        'Path node_modules/package.json is git-ignored and will be skipped.',
       );
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        'Ignored 1 files:\nIgnored by both: node_modules/package.json',
+        'Ignored 1 files:\nGit-ignored: node_modules/package.json',
       );
     });
 
@@ -139,10 +139,10 @@ describe('handleAtCommand (filtering)', () => {
         ],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Path ${relativePath2} is ignored by both git and llxprt and will be skipped.`,
+        `Path ${relativePath2} is git-ignored and will be skipped.`,
       );
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Ignored 1 files:\nIgnored by both: ${relativePath2}`,
+        `Ignored 1 files:\nGit-ignored: ${relativePath2}`,
       );
     });
 
@@ -166,10 +166,10 @@ describe('handleAtCommand (filtering)', () => {
         processedQuery: [{ text: query }],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        'Path .git/config is ignored by both git and llxprt and will be skipped.',
+        'Path .git/config is git-ignored and will be skipped.',
       );
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        'Ignored 1 files:\nIgnored by both: .git/config',
+        'Ignored 1 files:\nGit-ignored: .git/config',
       );
     });
   });

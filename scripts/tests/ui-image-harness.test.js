@@ -12,13 +12,13 @@ const forceHarness =
   process.env.LLXPRT_FORCE_IMAGE_HARNESS === '1' ||
   process.env.LLXPRT_FORCE_IMAGE_HARNESS === 'true';
 const skipVar = process.env.LLXPRT_SKIP_IMAGE_HARNESS;
-const shouldSkipHarness =
-  !forceHarness &&
-  (!fs.existsSync(harnessPath) ||
-    process.env.CI === 'true' ||
-    skipVar === '1' ||
-    skipVar === 'true' ||
-    (process.platform === 'linux' && process.env.CI === 'true'));
+const harnessMissing = !fs.existsSync(harnessPath);
+const skipRequested = skipVar === '1' || skipVar === 'true';
+const isLinuxCI = process.platform === 'linux' && process.env.CI === 'true';
+const isCI = process.env.CI === 'true';
+const shouldSkipUnlessForced =
+  harnessMissing || isCI || skipRequested || isLinuxCI;
+const shouldSkipHarness = !forceHarness && shouldSkipUnlessForced;
 
 if (shouldSkipHarness) {
   console.warn(

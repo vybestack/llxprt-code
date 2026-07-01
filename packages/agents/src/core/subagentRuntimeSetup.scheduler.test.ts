@@ -126,6 +126,26 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
     expect(config.getEphemeralSettings()['tools.allowed']).toStrictEqual([]);
   });
 
+  it('intersects API-qualified snapshot allowlist entries with canonical whitelist entries', () => {
+    const fixture = makeSchedulerFixture('sess-fc');
+    const toolRegistry = {
+      ...fixture.toolRegistry,
+      getEnabledTools: () => [{ name: 'read_file' }],
+    };
+    const config = createToolExecutionConfig(
+      fixture.runtimeBundle,
+      toolRegistry,
+      fixture.foregroundConfig,
+      undefined,
+      { tools: { allowed: ['functions.read_file'] } },
+      { tools: ['functions.read_file'] },
+    );
+
+    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
+      'read_file',
+    ]);
+  });
+
   it('does not set tools.allowed when toolConfig is undefined', () => {
     const fixture = makeSchedulerFixture('sess-fc');
     const config = createToolExecutionConfig(
@@ -436,6 +456,23 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     expect(allowed).toStrictEqual([]);
   });
 
+  it('applyToolWhitelistToEphemerals preserves fail-closed empty enabled registry', () => {
+    const fixture = makeSchedulerFixture('sess-2069');
+    const toolRegistry = {
+      ...fixture.toolRegistry,
+      getEnabledTools: () => [],
+    };
+    const config = createToolExecutionConfig(
+      fixture.runtimeBundle,
+      toolRegistry,
+      fixture.foregroundConfig,
+      undefined,
+      undefined,
+      { tools: ['read_file'] },
+    );
+    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+  });
+
   it('applyToolWhitelistToEphemerals removes canonical variants (TaskTool, listSubagents)', () => {
     const fixture = makeSchedulerFixture('sess-2069');
     const toolConfig = {
@@ -454,5 +491,83 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     expect(allowed).toContain('read_file');
     expect(allowed).not.toContain('task');
     expect(allowed).not.toContain('list_subagents');
+  });
+
+  it('applyToolWhitelistToEphemerals resolves API-qualified entries against dotted registry names', () => {
+    const fixture = makeSchedulerFixture('sess-2184');
+    const toolRegistry = {
+      ...fixture.toolRegistry,
+      getEnabledTools: () => [{ name: 'tool.v1' }],
+    };
+    const config = createToolExecutionConfig(
+      fixture.runtimeBundle,
+      toolRegistry,
+      fixture.foregroundConfig,
+      undefined,
+      undefined,
+      { tools: ['functions.tool.v1'] },
+    );
+
+    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
+      'tool.v1',
+    ]);
+  });
+
+  it('applyToolWhitelistToEphemerals includes non-string declaration names in tools.allowed', () => {
+    const fixture = makeSchedulerFixture('sess-2184');
+    const customDeclaration = {
+      name: 'custom_tool',
+      description: 'custom',
+    };
+    const config = createToolExecutionConfig(
+      fixture.runtimeBundle,
+      fixture.toolRegistry,
+      fixture.foregroundConfig,
+      undefined,
+      undefined,
+      { tools: [customDeclaration] },
+    );
+
+    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
+      'custom_tool',
+    ]);
+  });
+
+  it('applyToolWhitelistToEphemerals skips non-string declaration names absent from enabled registry', () => {
+    const fixture = makeSchedulerFixture('sess-2184');
+    const toolRegistry = {
+      ...fixture.toolRegistry,
+      getEnabledTools: () => [{ name: 'read_file' }],
+    };
+    const config = createToolExecutionConfig(
+      fixture.runtimeBundle,
+      toolRegistry,
+      fixture.foregroundConfig,
+      undefined,
+      undefined,
+      {
+        tools: [
+          { name: 'read_file', description: 'read' },
+          { name: 'custom_tool', description: 'custom' },
+        ],
+      },
+    );
+
+    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
+      'read_file',
+    ]);
+  });
+  it('applyToolWhitelistToEphemerals fail-closes when only excluded non-string declarations remain', () => {
+    const fixture = makeSchedulerFixture('sess-2184');
+    const config = createToolExecutionConfig(
+      fixture.runtimeBundle,
+      fixture.toolRegistry,
+      fixture.foregroundConfig,
+      undefined,
+      undefined,
+      { tools: [{ name: 'functions.task', description: 'nested' }] },
+    );
+
+    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
   });
 });

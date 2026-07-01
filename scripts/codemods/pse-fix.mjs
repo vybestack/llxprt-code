@@ -33,6 +33,41 @@ for (const line of lines) {
   byFile.get(file).push({ line: Number(ln), col: Number(col) });
 }
 
+/**
+ * Attempt to rewrite a single `toEqual` callee to `toStrictEqual`.
+ * Returns 'rewrote', 'skipped', or 'none' (not at an toEqual node).
+ */
+function processLocation(sf, line, col) {
+  const full = sf.getFullText();
+  const starts = computeLineStarts(full);
+  const base = starts[line - 1];
+  if (base == null) return 'skipped';
+  const offset = base + col - 1;
+  const node = sf.getDescendantAtPos(offset);
+  if (!node) return 'skipped';
+  let pae = node;
+  while (pae && pae.getKind() !== SyntaxKind.PropertyAccessExpression) {
+    pae = pae.getParent();
+  }
+  if (!pae) return 'skipped';
+  const nameNode = pae.getNameNode();
+  const name = nameNode.getText();
+  if (name !== 'toEqual') return 'skipped';
+  nameNode.replaceWithText('toStrictEqual');
+  return 'rewrote';
+}
+
+/**
+ * Compute the character offset of the start of each line.
+ */
+function computeLineStarts(text) {
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) starts.push(i + 1);
+  }
+  return starts;
+}
+
 const project = new Project({
   useInMemoryFileSystem: false,
   skipAddingFilesFromTsConfig: true,
@@ -47,38 +82,12 @@ for (const [filePath, locs] of byFile) {
   locs.sort((a, b) => b.line - a.line || b.col - a.col);
 
   for (const { line, col } of locs) {
-    const full = sf.getFullText();
-    const starts = [0];
-    for (let i = 0; i < full.length; i++) {
-      if (full.charCodeAt(i) === 10) starts.push(i + 1);
-    }
-    const base = starts[line - 1];
-    if (base == null) {
+    const result = processLocation(sf, line, col);
+    if (result === 'rewrote') {
+      rewrites++;
+    } else if (result === 'skipped') {
       skipped++;
-      continue;
     }
-    const offset = base + col - 1;
-    const node = sf.getDescendantAtPos(offset);
-    if (!node) {
-      skipped++;
-      continue;
-    }
-    let pae = node;
-    while (pae && pae.getKind() !== SyntaxKind.PropertyAccessExpression) {
-      pae = pae.getParent();
-    }
-    if (!pae) {
-      skipped++;
-      continue;
-    }
-    const nameNode = pae.getNameNode();
-    const name = nameNode.getText();
-    if (name !== 'toEqual') {
-      skipped++;
-      continue;
-    }
-    nameNode.replaceWithText('toStrictEqual');
-    rewrites++;
   }
   sf.saveSync();
 }

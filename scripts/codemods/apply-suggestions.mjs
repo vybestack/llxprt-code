@@ -30,41 +30,62 @@ const eslint = new ESLint({
 });
 
 const ITERATION_CAP = 300;
+
+/**
+ * Applies one suggestion-fix iteration for `ruleId` in `file`.
+ * Returns true if a suggestion was applied (caller should continue iterating),
+ * or false if there are no more suggestions to apply.
+ */
+async function applyOneSuggestionIteration(eslint, file, ruleId, iteration) {
+  const results = await eslint.lintFiles([file]);
+  const r = results[0];
+  const msgs = (r.messages || []).filter(
+    (m) => m.ruleId === ruleId && m.suggestions?.length,
+  );
+  if (msgs.length === 0) {
+    return false;
+  }
+  if (iteration === ITERATION_CAP) {
+    console.warn(
+      `[${file}] WARNING: hit ${ITERATION_CAP}-iteration cap with ${msgs.length} ${ruleId} messages still pending; file may be only partially transformed. Re-run the codemod on this file alone to continue.`,
+    );
+    return false;
+  }
+  // Apply only the single suggestion with the highest start offset in
+  // this pass. Two ESLint suggestions from this rule on chained
+  // expressions (a || b || c) frequently overlap via shared tokens, and
+  // any attempt to apply more than one per pass — even with overlap
+  // skipping on original ranges — has produced corrupted output in
+  // practice. Re-linting after each single application yields a fresh
+  // set of non-conflicting suggestions.
+  msgs.sort(
+    (a, b) => b.suggestions[0].fix.range[0] - a.suggestions[0].fix.range[0],
+  );
+  const m = msgs[0];
+  const { range, text: replacement } = m.suggestions[0].fix;
+  const [start, end] = range;
+  const src = readFileSync(file, 'utf8');
+  const next = src.slice(0, start) + replacement + src.slice(end);
+  writeFileSync(file, next);
+  if (iteration % 10 === 1 || msgs.length <= 1) {
+    console.log(`[${file}] iter ${iteration}, applied 1/${msgs.length}`);
+  }
+  return true;
+}
+
 let total = 0;
 for (const file of files) {
   let iterations = 0;
-  while (iterations++ < ITERATION_CAP) {
-    const results = await eslint.lintFiles([file]);
-    const r = results[0];
-    const msgs = (r.messages || []).filter(
-      (m) => m.ruleId === ruleId && m.suggestions?.length,
+  let applied = true;
+  while (applied && iterations++ < ITERATION_CAP) {
+    applied = await applyOneSuggestionIteration(
+      eslint,
+      file,
+      ruleId,
+      iterations,
     );
-    if (msgs.length === 0) break;
-    if (iterations === ITERATION_CAP) {
-      console.warn(
-        `[${file}] WARNING: hit ${ITERATION_CAP}-iteration cap with ${msgs.length} ${ruleId} messages still pending; file may be only partially transformed. Re-run the codemod on this file alone to continue.`,
-      );
-      break;
-    }
-    // Apply only the single suggestion with the highest start offset in
-    // this pass. Two ESLint suggestions from this rule on chained
-    // expressions (a || b || c) frequently overlap via shared tokens, and
-    // any attempt to apply more than one per pass — even with overlap
-    // skipping on original ranges — has produced corrupted output in
-    // practice. Re-linting after each single application yields a fresh
-    // set of non-conflicting suggestions.
-    msgs.sort(
-      (a, b) => b.suggestions[0].fix.range[0] - a.suggestions[0].fix.range[0],
-    );
-    const m = msgs[0];
-    const { range, text: replacement } = m.suggestions[0].fix;
-    const [start, end] = range;
-    const src = readFileSync(file, 'utf8');
-    const next = src.slice(0, start) + replacement + src.slice(end);
-    writeFileSync(file, next);
-    total += 1;
-    if (iterations % 10 === 1 || msgs.length <= 1) {
-      console.log(`[${file}] iter ${iterations}, applied 1/${msgs.length}`);
+    if (applied) {
+      total += 1;
     }
   }
 }

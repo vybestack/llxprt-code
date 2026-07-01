@@ -8,13 +8,13 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
+  buildSubagentExcludedToolNames,
   buildToolGovernance,
+  getToolNameCandidates,
+  isSubagentExcludedToolName,
   isToolBlocked,
 } from '../core/toolGovernance.js';
 import type { TaskToolParams } from './task.js';
-
-const normalizeToolNameForPolicy = (name: string): string =>
-  canonicalizeToolName(name);
 
 /**
  * Internal normalized parameters derived from the public `TaskToolParams`.
@@ -28,29 +28,6 @@ export interface TaskToolInvocationParams {
   context: Record<string, unknown>;
   maxTurns?: number;
   async: boolean;
-}
-
-/**
- * The set of tool names always excluded from subagent tool whitelists
- * (canonicalized).
- */
-export function buildExcludedToolNames(): Set<string> {
-  return new Set(
-    ['task', 'list_subagents']
-      .map((name) => normalizeToolNameForPolicy(name))
-      .filter((name) => name.length > 0),
-  );
-}
-
-/**
- * Returns true when the canonical form of `name` is in the excluded set.
- */
-export function isExcludedToolName(
-  name: string,
-  excluded: Set<string>,
-): boolean {
-  const canonical = normalizeToolNameForPolicy(name);
-  return canonical.length > 0 && excluded.has(canonical);
 }
 
 /**
@@ -68,7 +45,7 @@ export function buildGovernedToolWhitelist(
     return undefined;
   }
 
-  const excluded = buildExcludedToolNames();
+  const excluded = buildSubagentExcludedToolNames();
   const governance = buildToolGovernance(config);
   const allowedRegistryTools = registry
     .getEnabledTools()
@@ -77,28 +54,46 @@ export function buildGovernedToolWhitelist(
       (name): name is string =>
         typeof name === 'string' &&
         name.length > 0 &&
-        !isExcludedToolName(name, excluded),
+        !isSubagentExcludedToolName(name, excluded),
     );
 
-  const allowedByCanonical = new Map<string, string>();
+  const allowedByCanonical = new Map<string, string[]>();
   for (const toolName of allowedRegistryTools) {
-    const canonical = normalizeToolNameForPolicy(toolName);
-    if (canonical && !allowedByCanonical.has(canonical)) {
-      allowedByCanonical.set(canonical, toolName);
+    for (const canonical of getToolNameCandidates(toolName)) {
+      const existing = allowedByCanonical.get(canonical);
+      if (existing === undefined) {
+        allowedByCanonical.set(canonical, [toolName]);
+      } else if (!existing.includes(toolName)) {
+        existing.push(toolName);
+      }
     }
   }
 
   const filteredTools = candidateTools.map((name) => {
-    if (typeof name !== 'string' || isExcludedToolName(name, excluded)) {
+    if (typeof name !== 'string') {
       return undefined;
     }
 
-    const canonical = normalizeToolNameForPolicy(name);
-    if (!canonical || isToolBlocked(canonical, governance)) {
+    const candidates = getToolNameCandidates(name);
+    if (isSubagentExcludedToolName(name, excluded)) {
+      return undefined;
+    }
+    if (candidates.some((canonical) => governance.disabled.has(canonical))) {
       return undefined;
     }
 
-    return allowedByCanonical.get(canonical);
+    for (const canonical of candidates) {
+      const matches = allowedByCanonical.get(canonical);
+      if (matches === undefined || matches.length !== 1) {
+        continue;
+      }
+      const resolved = matches[0];
+      if (!isToolBlocked(resolved, governance)) {
+        return resolved;
+      }
+    }
+
+    return undefined;
   });
 
   const validTools = filteredTools.filter(
@@ -112,7 +107,7 @@ export function buildGovernedToolWhitelist(
   const uniqueByCanonical = new Set<string>();
   const deduped: string[] = [];
   for (const tool of validTools) {
-    const canonical = normalizeToolNameForPolicy(tool);
+    const canonical = canonicalizeToolName(tool);
     if (!canonical || uniqueByCanonical.has(canonical)) {
       continue;
     }
@@ -125,9 +120,9 @@ export function buildGovernedToolWhitelist(
 
 /**
  * Filters excluded tools (task/list_subagents) from a whitelist when no
- * registry is available to perform full governance validation. Non-excluded
- * entries pass through unchanged. Returns undefined if the result is empty
- * so the caller can apply fail-closed semantics for explicit whitelists.
+ * registry is available to perform full governance validation. Entries that
+ * cannot be canonicalized are also dropped. Returns undefined if the result is
+ * empty so the caller can apply fail-closed semantics for explicit whitelists.
  */
 export function filterExcludedFromWhitelist(
   candidateTools: string[] | undefined,
@@ -136,9 +131,10 @@ export function filterExcludedFromWhitelist(
     return undefined;
   }
 
-  const excluded = buildExcludedToolNames();
+  const excluded = buildSubagentExcludedToolNames();
   const filtered = candidateTools.filter(
-    (name) => typeof name === 'string' && !isExcludedToolName(name, excluded),
+    (name): name is string =>
+      typeof name === 'string' && !isSubagentExcludedToolName(name, excluded),
   );
 
   return filtered.length > 0 ? filtered : undefined;

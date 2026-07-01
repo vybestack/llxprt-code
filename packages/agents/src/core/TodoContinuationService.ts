@@ -368,6 +368,22 @@ export class TodoContinuationService {
     });
   }
 
+  /**
+   * Authoritative pause signal: a pause-tool response is only treated as a
+   * successful pause when the tool completed without an error or errorType.
+   * Invalid input (schema/validation failure, empty/overlong reason, or a
+   * reason rejected by filtering) surfaces as an error and must NOT break the
+   * continuation loop.
+   */
+  isSuccessfulTodoPauseResponse(
+    response: ToolCallResponseInfo | undefined,
+  ): boolean {
+    if (response === undefined || !this.isTodoPauseResponse(response)) {
+      return false;
+    }
+    return response.error === undefined && response.errorType === undefined;
+  }
+
   classifyPostTurnAction(context: PostTurnContext): PostTurnAction {
     const {
       hadToolCalls,

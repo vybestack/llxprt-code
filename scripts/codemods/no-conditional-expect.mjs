@@ -103,6 +103,92 @@ function shapeOkForInversion(testNode) {
   return false;
 }
 
+/**
+ * Attempt to rewrite a single IfStatement into a narrowing-throw form.
+ * Returns true if a rewrite was applied, false if the statement does not
+ * match the target pattern.
+ */
+function rewriteIfStatement(sf, ifStmt) {
+  if (ifStmt.wasForgotten()) return false;
+
+  const elseStmt = ifStmt.getElseStatement();
+  if (elseStmt) return false;
+
+  const thenStmt = ifStmt.getThenStatement();
+  if (!thenStmt || thenStmt.getKind() !== SyntaxKind.Block) return false;
+
+  if (!containsExpectCall(thenStmt)) return false;
+
+  const testNode = ifStmt.getExpression();
+  if (!shapeOkForInversion(testNode)) return false;
+
+  // Only rewrite when the IfStatement is a direct child of a Block (i.e.
+  // at statement level inside a test body). Avoid nested-if rewrites for now.
+  const parent = ifStmt.getParent();
+  if (!parent || parent.getKind() !== SyntaxKind.Block) return false;
+
+  const inverted = invertTest(testNode);
+
+  // Body text without the outer braces.
+  const blockText = thenStmt.getText();
+  // Strip first line `{` and last line `}` conservatively:
+  //   block starts with `{` and ends with `}`; we slice.
+  // We avoid regex quantifiers adjacent to quantifiers (super-linear
+  // backtracking) by splitting on newlines and trimming the first/last
+  // non-empty lines.
+  const blockLines = blockText.split('\n');
+  // Remove leading `{` from the first line.
+  if (blockLines.length > 0) {
+    blockLines[0] = blockLines[0].replace(/^\{/, '');
+  }
+  // Remove trailing `}` from the last line.
+  const lastIdx = blockLines.length - 1;
+  if (lastIdx >= 0) {
+    blockLines[lastIdx] = blockLines[lastIdx].replace(/\}$/, '');
+  }
+  // Drop now-empty leading/trailing lines left by brace removal.
+  while (blockLines.length > 0 && blockLines[0].trim() === '') {
+    blockLines.shift();
+  }
+  while (
+    blockLines.length > 0 &&
+    blockLines[blockLines.length - 1].trim() === ''
+  ) {
+    blockLines.pop();
+  }
+  const innerText = blockLines.join('\n');
+
+  // Figure out the indentation of the IfStatement itself so our replacement
+  // keeps alignment.
+  const ifStart = ifStmt.getStart();
+  const sourceText = sf.getFullText();
+  // find start of line
+  let lineStart = ifStart;
+  while (lineStart > 0 && sourceText[lineStart - 1] !== '\n') lineStart--;
+  const indent = sourceText.slice(lineStart, ifStart);
+
+  // Build replacement: narrowing throw + hoisted body (already indented one
+  // level deeper than `indent`, so dedent by the block's own leading spaces
+  // relative to indent + 2 spaces). We detect the extra indentation:
+  // every non-empty line inside the block begins with (indent + "  ").
+  const dedentPrefix = indent + '  ';
+  const dedented = innerText
+    .split('\n')
+    .map((line) => (line.startsWith(dedentPrefix) ? line.slice(2) : line))
+    .join('\n');
+
+  // Preserve block scope by wrapping hoisted body in braces
+  const replacement =
+    `if (${inverted}) throw new Error('unreachable: narrowing failed');\n` +
+    indent +
+    `{\n` +
+    dedented +
+    `\n${indent}}`;
+
+  ifStmt.replaceWithText(replacement);
+  return true;
+}
+
 let totalRewrites = 0;
 
 for (const file of argv) {
@@ -114,64 +200,9 @@ for (const file of argv) {
 
   // Process in reverse order (later in source first) to keep text offsets stable.
   for (let i = ifs.length - 1; i >= 0; i--) {
-    const ifStmt = ifs[i];
-    if (ifStmt.wasForgotten()) continue;
-
-    const elseStmt = ifStmt.getElseStatement();
-    if (elseStmt) continue;
-
-    const thenStmt = ifStmt.getThenStatement();
-    if (!thenStmt || thenStmt.getKind() !== SyntaxKind.Block) continue;
-
-    if (!containsExpectCall(thenStmt)) continue;
-
-    const testNode = ifStmt.getExpression();
-    if (!shapeOkForInversion(testNode)) continue;
-
-    // Only rewrite when the IfStatement is a direct child of a Block (i.e.
-    // at statement level inside a test body). Avoid nested-if rewrites for now.
-    const parent = ifStmt.getParent();
-    if (!parent || parent.getKind() !== SyntaxKind.Block) continue;
-
-    const inverted = invertTest(testNode);
-
-    // Body text without the outer braces.
-    const blockText = thenStmt.getText();
-    // Strip first line `{` and last line `}` conservatively:
-    //   block starts with `{` and ends with `}`; we slice.
-    const innerText = blockText
-      .replace(/^\{\s*\n?/, '')
-      .replace(/\n?\s*\}$/, '');
-
-    // Figure out the indentation of the IfStatement itself so our replacement
-    // keeps alignment.
-    const ifStart = ifStmt.getStart();
-    const sourceText = sf.getFullText();
-    // find start of line
-    let lineStart = ifStart;
-    while (lineStart > 0 && sourceText[lineStart - 1] !== '\n') lineStart--;
-    const indent = sourceText.slice(lineStart, ifStart);
-
-    // Build replacement: narrowing throw + hoisted body (already indented one
-    // level deeper than `indent`, so dedent by the block's own leading spaces
-    // relative to indent + 2 spaces). We detect the extra indentation:
-    // every non-empty line inside the block begins with (indent + "  ").
-    const dedentPrefix = indent + '  ';
-    const dedented = innerText
-      .split('\n')
-      .map((line) => (line.startsWith(dedentPrefix) ? line.slice(2) : line))
-      .join('\n');
-
-    // Preserve block scope by wrapping hoisted body in braces
-    const replacement =
-      `if (${inverted}) throw new Error('unreachable: narrowing failed');\n` +
-      indent +
-      `{\n` +
-      dedented +
-      `\n${indent}}`;
-
-    ifStmt.replaceWithText(replacement);
-    fileRewrites++;
+    if (rewriteIfStatement(sf, ifs[i])) {
+      fileRewrites++;
+    }
   }
 
   if (fileRewrites > 0) {

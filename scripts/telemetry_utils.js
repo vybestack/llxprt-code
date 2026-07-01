@@ -159,6 +159,84 @@ export function waitForPort(port, timeout = 10000) {
   });
 }
 
+function findReleaseAsset(
+  isJaeger,
+  repo,
+  platform,
+  arch,
+  ext,
+  assetNameCallback,
+) {
+  if (isJaeger) {
+    return findJaegerReleaseAsset(repo, platform, arch);
+  }
+  return findLatestReleaseAsset(repo, platform, arch, ext, assetNameCallback);
+}
+
+function findJaegerReleaseAsset(repo, platform, arch) {
+  console.log(`Finding latest Jaeger v2+ asset...`);
+  const releases = getJson(`https://api.github.com/repos/${repo}/releases`);
+  const sortedReleases = releases
+    .filter((r) => !r.prerelease && r.tag_name.startsWith('v'))
+    .sort(compareSemverTags);
+
+  for (const r of sortedReleases) {
+    const expectedSuffix =
+      platform === 'windows'
+        ? `-${platform}-${arch}.zip`
+        : `-${platform}-${arch}.tar.gz`;
+    const foundAsset = r.assets.find(
+      (a) => a.name.startsWith('jaeger-2.') && a.name.endsWith(expectedSuffix),
+    );
+
+    if (foundAsset) {
+      console.log(
+        `Found ${foundAsset.name} in release ${r.tag_name}, downloading...`,
+      );
+      return { release: r, asset: foundAsset };
+    }
+  }
+  throw new Error(
+    `Could not find a suitable Jaeger v2 asset for platform ${platform}/${arch}.`,
+  );
+}
+
+function findLatestReleaseAsset(repo, platform, arch, ext, assetNameCallback) {
+  const release = getJson(
+    `https://api.github.com/repos/${repo}/releases/latest`,
+  );
+  const version = release.tag_name.startsWith('v')
+    ? release.tag_name.substring(1)
+    : release.tag_name;
+  const assetName = assetNameCallback(version, platform, arch, ext);
+  const asset = release.assets.find((a) => a.name === assetName);
+  if (!asset) {
+    throw new Error(
+      `Could not find a suitable asset for ${repo} (version ${version}) on platform ${platform}/${arch}. Searched for: ${assetName}`,
+    );
+  }
+  return { release, asset };
+}
+
+function compareSemverTags(a, b) {
+  const aVersion = a.tag_name.substring(1).split('.').map(Number);
+  const bVersion = b.tag_name.substring(1).split('.').map(Number);
+  for (let i = 0; i < Math.max(aVersion.length, bVersion.length); i++) {
+    if ((aVersion[i] || 0) > (bVersion[i] || 0)) return -1;
+    if ((aVersion[i] || 0) < (bVersion[i] || 0)) return 1;
+  }
+  return 0;
+}
+
+function extractArchive(archivePath, tmpDir, assetName) {
+  const actualExt = assetName.endsWith('.zip') ? 'zip' : 'tar.gz';
+  if (actualExt === 'zip') {
+    execSync(`unzip -o "${archivePath}" -d "${tmpDir}"`, { stdio: 'pipe' });
+  } else {
+    execSync(`tar -xzf "${archivePath}" -C "${tmpDir}"`, { stdio: 'pipe' });
+  }
+}
+
 export async function ensureBinary(
   executableName,
   repo,
@@ -185,61 +263,14 @@ export async function ensureBinary(
     return null;
   }
 
-  let release;
-  let asset;
-
-  if (isJaeger) {
-    console.log(`Finding latest Jaeger v2+ asset...`);
-    const releases = getJson(`https://api.github.com/repos/${repo}/releases`);
-    const sortedReleases = releases
-      .filter((r) => !r.prerelease && r.tag_name.startsWith('v'))
-      .sort((a, b) => {
-        const aVersion = a.tag_name.substring(1).split('.').map(Number);
-        const bVersion = b.tag_name.substring(1).split('.').map(Number);
-        for (let i = 0; i < Math.max(aVersion.length, bVersion.length); i++) {
-          if ((aVersion[i] || 0) > (bVersion[i] || 0)) return -1;
-          if ((aVersion[i] || 0) < (bVersion[i] || 0)) return 1;
-        }
-        return 0;
-      });
-
-    for (const r of sortedReleases) {
-      const expectedSuffix =
-        platform === 'windows'
-          ? `-${platform}-${arch}.zip`
-          : `-${platform}-${arch}.tar.gz`;
-      const foundAsset = r.assets.find(
-        (a) =>
-          a.name.startsWith('jaeger-2.') && a.name.endsWith(expectedSuffix),
-      );
-
-      if (foundAsset) {
-        release = r;
-        asset = foundAsset;
-        console.log(
-          `Found ${asset.name} in release ${r.tag_name}, downloading...`,
-        );
-        break;
-      }
-    }
-    if (!asset) {
-      throw new Error(
-        `Could not find a suitable Jaeger v2 asset for platform ${platform}/${arch}.`,
-      );
-    }
-  } else {
-    release = getJson(`https://api.github.com/repos/${repo}/releases/latest`);
-    const version = release.tag_name.startsWith('v')
-      ? release.tag_name.substring(1)
-      : release.tag_name;
-    const assetName = assetNameCallback(version, platform, arch, ext);
-    asset = release.assets.find((a) => a.name === assetName);
-    if (!asset) {
-      throw new Error(
-        `Could not find a suitable asset for ${repo} (version ${version}) on platform ${platform}/${arch}. Searched for: ${assetName}`,
-      );
-    }
-  }
+  const { asset } = findReleaseAsset(
+    isJaeger,
+    repo,
+    platform,
+    arch,
+    ext,
+    assetNameCallback,
+  );
 
   const downloadUrl = asset.browser_download_url;
   const tmpDir = fs.mkdtempSync(
@@ -252,13 +283,7 @@ export async function ensureBinary(
     downloadFile(downloadUrl, archivePath);
     console.log(`Extracting ${asset.name}...`);
 
-    const actualExt = asset.name.endsWith('.zip') ? 'zip' : 'tar.gz';
-
-    if (actualExt === 'zip') {
-      execSync(`unzip -o "${archivePath}" -d "${tmpDir}"`, { stdio: 'pipe' });
-    } else {
-      execSync(`tar -xzf "${archivePath}" -C "${tmpDir}"`, { stdio: 'pipe' });
-    }
+    extractArchive(archivePath, tmpDir, asset.name);
 
     const nameToFind = binaryNameInArchive || executableName;
     const foundBinaryPath = findFile(tmpDir, (file) => {
