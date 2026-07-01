@@ -576,16 +576,21 @@ jobs:
   #
   # Test: Node (Linux and macOS - always run)
   #
-  # Runs on the Bun flow for S6 (#2243): installed with `bun install` and
-  # launched with `bun run`, while keeping vitest as the test runner (the root
-  # `test` script still fans out to each workspace's `vitest run`); bun:test is
-  # not introduced. Bun is also required because the bundle step builds via
-  # `bun scripts/bun-build.config.mjs` (#2241/S4 retired esbuild), and the LSP
+  # Stays on npm (not Bun) for S6 (#2243): confirmed on CI (run 28529894703)
+  # that `bun install` + `bun run build` fails on the Linux runner because the
+  # vscode-ide-companion esbuild build cannot resolve workspace packages
+  # (@vybestack/llxprt-code-tools, -policy, -storage) under Bun's hoisted
+  # node_modules. Like the lint blocker, it does not reproduce on macOS or under
+  # npm -- a Bun-hoisting x Linux interaction. Revisit once Bun's hoisted linker
+  # materializes a node_modules topology esbuild can resolve on Linux.
+  #
+  # setup-bun is still installed here (pinned via .bun-version) because the LSP
   # service client resolves `bun` through `which` and disables the LSP/MCP
-  # service when bun is absent from PATH (which would fail the
-  # config-lsp-integration and e2e-lsp tests). Pinned via .bun-version per
-  # dev-docs/bun.md, replacing the floating 'latest' that previously triggered a
-  # Zizmor cache-poisoning warning.
+  # service when bun is absent from PATH (failing config-lsp-integration and
+  # e2e-lsp tests), and because the bundle step builds via
+  # `bun scripts/bun-build.config.mjs` (#2241/S4). Pinning to .bun-version
+  # reconciles the CI toolchain with dev-docs/bun.md and replaces the floating
+  # 'latest' that previously triggered a Zizmor cache-poisoning warning.
   test:
     name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'
@@ -617,31 +622,34 @@ jobs:
         uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
         with:
           node-version: '${{ matrix.node-version }}'
+          cache: 'npm'
 
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
-      - name: 'Cache Bun dependencies'
-        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-test-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-test-
-
       - name: 'Install dependencies for testing'
         run: |-
-          bun install
+          npm ci
       - name: 'Build project'
         run: |-
-          bun run build
+          npm run build
 
       - name: 'Create bundle'
         run: |-
-          bun run bundle
+          npm run bundle
+
+      - name: 'Fix rollup platform dependency'
+        run: |-
+          # Explicitly install the platform-specific rollup package
+          # This is a workaround for https://github.com/npm/cli/issues/4828
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          fi
+        shell: 'bash'
 
       - name: 'Limit Vitest forks on Windows'
         if: runner.os == 'Windows'
@@ -669,13 +677,13 @@ jobs:
           VITEST_TEST_TIMEOUT: 15000
           # Force SecureStore to use encrypted-file fallback instead of keyring (R15.2)
           LLXPRT_SECURE_STORE_FORCE_FALLBACK: ${{ matrix.secure-store-mode == 'fallback' && 'true' || '' }}
-        run: 'bun run test'
+        run: 'npm run test'
 
       - name: 'Run script harness tests (macOS)'
         if: matrix.os == 'macos-latest'
         env:
           CI: true
-        run: bun run test:scripts
+        run: npm run test:scripts
 
       - name: 'Smoke test bundle'
         run: 'node ./bundle/llxprt.js --version'
