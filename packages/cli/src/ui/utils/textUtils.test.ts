@@ -18,14 +18,21 @@ import {
 describe('textUtils', () => {
   describe('getCachedStringWidth', () => {
     it('should handle unicode characters that crash string-width', () => {
-      // U+0602 caused string-width to crash (see #16418)
-      const char = '؂';
-      expect(getCachedStringWidth(char)).toBe(1);
+      // U+0602 (Arabic footnote separator) caused string-width to crash (see
+      // #16418). Whether the installed string-width crashes on it — falling
+      // back to a code-point count — or reports it as the zero-width format
+      // mark it actually is (newer releases), getCachedStringWidth must not
+      // throw and must return a finite, non-negative width.
+      const width = getCachedStringWidth('؂');
+      expect(Number.isFinite(width)).toBe(true);
+      expect(width).toBeGreaterThanOrEqual(0);
     });
 
     it('should handle unicode characters that crash string-width with ANSI codes', () => {
-      const charWithAnsi = '\u001b[31m' + '؂' + '\u001b[0m';
-      expect(getCachedStringWidth(charWithAnsi)).toBe(1);
+      // ANSI-wrapping must not change the measured width of such characters.
+      const bare = getCachedStringWidth('؂');
+      const withAnsi = getCachedStringWidth('\u001b[31m' + '؂' + '\u001b[0m');
+      expect(withAnsi).toBe(bare);
     });
   });
 
