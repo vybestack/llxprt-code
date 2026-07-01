@@ -20,6 +20,7 @@ export type {
   ApprovalMode,
   IToolHost,
   IToolHostFileFilteringOptions,
+  IToolHostFileFilteringOverrides,
   IToolHostFileService,
   IToolHostFileSystemService,
   IToolHostGitStatsService,
