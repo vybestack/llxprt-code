@@ -35,7 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Use official install script and put bun on PATH for both root and node users.
 ENV BUN_INSTALL=/usr/local/bun
 ENV PATH=$PATH:/usr/local/bun/bin
-RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.5" && \
+# Pin Bun from the repo-level .bun-version so release, CI, and the image never drift.
+COPY .bun-version /tmp/.bun-version
+RUN curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat /tmp/.bun-version)" && \
   ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun && \
   bun --version
 
