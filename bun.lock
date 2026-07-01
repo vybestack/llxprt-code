@@ -38,8 +38,6 @@
         "concurrently": "^9.2.3",
         "cross-env": "^7.0.3",
         "depcheck": "^1.4.7",
-        "esbuild": "^0.25.0",
-        "esbuild-plugin-wasm": "^1.1.0",
         "eslint": "9.29.0",
         "eslint-config-prettier": "10.1.5",
         "eslint-plugin-eslint-comments": "^3.2.0",
@@ -1930,8 +1928,6 @@
 
     "esbuild": ["esbuild@0.25.12", "", { "optionalDependencies": { "@esbuild/aix-ppc64": "0.25.12", "@esbuild/android-arm": "0.25.12", "@esbuild/android-arm64": "0.25.12", "@esbuild/android-x64": "0.25.12", "@esbuild/darwin-arm64": "0.25.12", "@esbuild/darwin-x64": "0.25.12", "@esbuild/freebsd-arm64": "0.25.12", "@esbuild/freebsd-x64": "0.25.12", "@esbuild/linux-arm": "0.25.12", "@esbuild/linux-arm64": "0.25.12", "@esbuild/linux-ia32": "0.25.12", "@esbuild/linux-loong64": "0.25.12", "@esbuild/linux-mips64el": "0.25.12", "@esbuild/linux-ppc64": "0.25.12", "@esbuild/linux-riscv64": "0.25.12", "@esbuild/linux-s390x": "0.25.12", "@esbuild/linux-x64": "0.25.12", "@esbuild/netbsd-arm64": "0.25.12", "@esbuild/netbsd-x64": "0.25.12", "@esbuild/openbsd-arm64": "0.25.12", "@esbuild/openbsd-x64": "0.25.12", "@esbuild/openharmony-arm64": "0.25.12", "@esbuild/sunos-x64": "0.25.12", "@esbuild/win32-arm64": "0.25.12", "@esbuild/win32-ia32": "0.25.12", "@esbuild/win32-x64": "0.25.12" }, "bin": "bin/esbuild" }, "sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg=="],
 
-    "esbuild-plugin-wasm": ["esbuild-plugin-wasm@1.1.0", "", {}, "sha512-0bQ6+1tUbySSnxzn5jnXHMDvYnT0cN/Wd4Syk8g/sqAIJUg7buTIi22svS3Qz6ssx895NT+TgLPb33xi1OkZig=="],
-
     "escalade": ["escalade@3.2.0", "", {}, "sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA=="],
 
     "escape-goat": ["escape-goat@4.0.0", "", {}, "sha512-2Sd4ShcWxbx6OY1IHyla/CVNwvg7XwZVoXZHcSu9w9SReNP1EzzD5T8NWKIR38fIqEns9kDWKUQTXXAmlDrdPg=="],
@@ -3384,6 +3380,8 @@
 
     "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage" }, "devDependencies": { "@lydell/node-pty": "1.1.0", "strip-ansi": "^7.1.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-tools": ["@vybestack/llxprt-code-tools@file:packages/tools", { "dependencies": { "@ast-grep/lang-c": "^0.0.5", "@ast-grep/lang-cpp": "^0.0.5", "@ast-grep/lang-go": "^0.0.5", "@ast-grep/lang-java": "^0.0.6", "@ast-grep/lang-json": "^0.0.6", "@ast-grep/lang-python": "^0.0.5", "@ast-grep/lang-ruby": "^0.0.6", "@ast-grep/lang-rust": "^0.0.6", "@ast-grep/napi": "^0.40.5", "@google/genai": "1.30.0", "@lvce-editor/ripgrep": "^1.6.0", "ajv": "^8.17.1", "cheerio": "^1.1.2", "diff": "^8.0.3", "fast-glob": "^3.3.3", "glob": "^12.0.0", "html-to-text": "^9.0.5", "mime-types": "^2.1.35", "node-fetch": "^3.3.2", "shell-quote": "^1.8.4", "turndown": "^7.2.2", "zod": "^3.25.76", "zod-to-json-schema": "^3.25.1" }, "devDependencies": { "@types/mime-types": "^3.0.1", "@types/node": "^24.2.1", "@vybestack/llxprt-code-test-utils": "file:../test-utils", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
     "@vybestack/llxprt-code-agents/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
     "@vybestack/llxprt-code-auth/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
@@ -3402,6 +3400,8 @@
 
     "@vybestack/llxprt-code-core/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage" }, "devDependencies": { "@lydell/node-pty": "1.1.0", "strip-ansi": "^7.1.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
+    "@vybestack/llxprt-code-core/@vybestack/llxprt-code-tools": ["@vybestack/llxprt-code-tools@file:packages/tools", { "dependencies": { "@ast-grep/lang-c": "^0.0.5", "@ast-grep/lang-cpp": "^0.0.5", "@ast-grep/lang-go": "^0.0.5", "@ast-grep/lang-java": "^0.0.6", "@ast-grep/lang-json": "^0.0.6", "@ast-grep/lang-python": "^0.0.5", "@ast-grep/lang-ruby": "^0.0.6", "@ast-grep/lang-rust": "^0.0.6", "@ast-grep/napi": "^0.40.5", "@google/genai": "1.30.0", "@lvce-editor/ripgrep": "^1.6.0", "ajv": "^8.17.1", "cheerio": "^1.1.2", "diff": "^8.0.3", "fast-glob": "^3.3.3", "glob": "^12.0.0", "html-to-text": "^9.0.5", "mime-types": "^2.1.35", "node-fetch": "^3.3.2", "shell-quote": "^1.8.4", "turndown": "^7.2.2", "zod": "^3.25.76", "zod-to-json-schema": "^3.25.1" }, "devDependencies": { "@types/mime-types": "^3.0.1", "@types/node": "^24.2.1", "@vybestack/llxprt-code-test-utils": "file:../test-utils", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
     "@vybestack/llxprt-code-core/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
     "@vybestack/llxprt-code-core/mime-types": ["mime-types@2.1.35", "", { "dependencies": { "mime-db": "1.52.0" } }, "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw=="],
@@ -3414,6 +3414,8 @@
 
     "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", { "dependencies": { "env-paths": "^4.0.0", "ignore": "^7.0.0" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" }, "optionalDependencies": { "@napi-rs/keyring": "^1.2.0" } }],
 
+    "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-tools": ["@vybestack/llxprt-code-tools@file:packages/tools", { "dependencies": { "@ast-grep/lang-c": "^0.0.5", "@ast-grep/lang-cpp": "^0.0.5", "@ast-grep/lang-go": "^0.0.5", "@ast-grep/lang-java": "^0.0.6", "@ast-grep/lang-json": "^0.0.6", "@ast-grep/lang-python": "^0.0.5", "@ast-grep/lang-ruby": "^0.0.6", "@ast-grep/lang-rust": "^0.0.6", "@ast-grep/napi": "^0.40.5", "@google/genai": "1.30.0", "@lvce-editor/ripgrep": "^1.6.0", "ajv": "^8.17.1", "cheerio": "^1.1.2", "diff": "^8.0.3", "fast-glob": "^3.3.3", "glob": "^12.0.0", "html-to-text": "^9.0.5", "mime-types": "^2.1.35", "node-fetch": "^3.3.2", "shell-quote": "^1.8.4", "turndown": "^7.2.2", "zod": "^3.25.76", "zod-to-json-schema": "^3.25.1" }, "devDependencies": { "@types/mime-types": "^3.0.1", "@types/node": "^24.2.1", "@vybestack/llxprt-code-test-utils": "file:../test-utils", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
     "@vybestack/llxprt-code-mcp/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
     "@vybestack/llxprt-code-policy/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
@@ -3425,6 +3427,8 @@
     "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", { "dependencies": { "env-paths": "^4.0.0", "ignore": "^7.0.0" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" }, "optionalDependencies": { "@napi-rs/keyring": "^1.2.0" } }],
 
     "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage" }, "devDependencies": { "@lydell/node-pty": "1.1.0", "strip-ansi": "^7.1.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-tools": ["@vybestack/llxprt-code-tools@file:packages/tools", { "dependencies": { "@ast-grep/lang-c": "^0.0.5", "@ast-grep/lang-cpp": "^0.0.5", "@ast-grep/lang-go": "^0.0.5", "@ast-grep/lang-java": "^0.0.6", "@ast-grep/lang-json": "^0.0.6", "@ast-grep/lang-python": "^0.0.5", "@ast-grep/lang-ruby": "^0.0.6", "@ast-grep/lang-rust": "^0.0.6", "@ast-grep/napi": "^0.40.5", "@google/genai": "1.30.0", "@lvce-editor/ripgrep": "^1.6.0", "ajv": "^8.17.1", "cheerio": "^1.1.2", "diff": "^8.0.3", "fast-glob": "^3.3.3", "glob": "^12.0.0", "html-to-text": "^9.0.5", "mime-types": "^2.1.35", "node-fetch": "^3.3.2", "shell-quote": "^1.8.4", "turndown": "^7.2.2", "zod": "^3.25.76", "zod-to-json-schema": "^3.25.1" }, "devDependencies": { "@types/mime-types": "^3.0.1", "@types/node": "^24.2.1", "@vybestack/llxprt-code-test-utils": "file:../test-utils", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
     "@vybestack/llxprt-code-providers/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
@@ -3820,6 +3824,10 @@
 
     "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
 
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-tools/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", {}],
+
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-tools/mime-types": ["mime-types@2.1.35", "", { "dependencies": { "mime-db": "1.52.0" } }, "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw=="],
+
     "@vybestack/llxprt-code-agents/fast-check/pure-rand": ["pure-rand@8.4.0", "", {}, "sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A=="],
 
     "@vybestack/llxprt-code-auth/fast-check/pure-rand": ["pure-rand@8.4.0", "", {}, "sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A=="],
@@ -3830,6 +3838,8 @@
 
     "@vybestack/llxprt-code-core/@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
 
+    "@vybestack/llxprt-code-core/@vybestack/llxprt-code-tools/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", {}],
+
     "@vybestack/llxprt-code-core/fast-check/pure-rand": ["pure-rand@8.4.0", "", {}, "sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A=="],
 
     "@vybestack/llxprt-code-core/mime-types/mime-db": ["mime-db@1.52.0", "", {}, "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg=="],
@@ -3838,6 +3848,10 @@
 
     "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-settings/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
 
+    "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-tools/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", {}],
+
+    "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-tools/mime-types": ["mime-types@2.1.35", "", { "dependencies": { "mime-db": "1.52.0" } }, "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw=="],
+
     "@vybestack/llxprt-code-mcp/fast-check/pure-rand": ["pure-rand@8.4.0", "", {}, "sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A=="],
 
     "@vybestack/llxprt-code-policy/fast-check/pure-rand": ["pure-rand@8.4.0", "", {}, "sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A=="],
@@ -3845,6 +3859,10 @@
     "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-settings/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
 
     "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
+
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-tools/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", {}],
+
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-tools/mime-types": ["mime-types@2.1.35", "", { "dependencies": { "mime-db": "1.52.0" } }, "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw=="],
 
     "@vybestack/llxprt-code-providers/fast-check/pure-rand": ["pure-rand@8.4.0", "", {}, "sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A=="],
 
@@ -4179,6 +4197,12 @@
     "@vscode/vsce/chalk/ansi-styles/color-convert": ["color-convert@2.0.1", "", { "dependencies": { "color-name": "~1.1.4" } }, "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ=="],
 
     "@vscode/vsce/minimatch/brace-expansion/balanced-match": ["balanced-match@4.0.4", "", {}, "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA=="],
+
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-tools/mime-types/mime-db": ["mime-db@1.52.0", "", {}, "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg=="],
+
+    "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-tools/mime-types/mime-db": ["mime-db@1.52.0", "", {}, "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg=="],
+
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-tools/mime-types/mime-db": ["mime-db@1.52.0", "", {}, "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg=="],
 
     "@vybestack/llxprt-code/@vybestack/llxprt-code-auth/fast-check/pure-rand": ["pure-rand@8.4.0", "", {}, "sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A=="],
 

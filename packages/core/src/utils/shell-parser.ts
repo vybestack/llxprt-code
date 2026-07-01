@@ -24,8 +24,9 @@ import type {
 } from 'web-tree-sitter';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { isBunRuntime } from './runtime.js';
 
 const require = createRequire(import.meta.url);
 const debugLogger = new DebugLogger('llxprt:shell-parser');
@@ -116,34 +117,31 @@ function resolveTreeSitterLanguage(
 /**
  * Resolve the bash grammar WASM bytes.
  *
- * Three execution contexts must be served:
- * - **esbuild bundle (Node CLI)**: the `?binary` suffix triggers the wasm-binary
- *   plugin which embeds the `.wasm` as a `Uint8Array` at build time.
- * - **Raw Bun (POSIX)**: bypasses esbuild entirely, so `?binary` cannot resolve.
- *   The grammar file is read directly via `fs`.
- * - **vitest / direct Node**: the `?binary` plugin is also absent; fall back to
- *   the same `fs` read.
+ * The grammar is read from disk so the parser works under every runtime that
+ * loads this module (raw Bun, plain Node, and vitest) without depending on a
+ * build-time plugin. Two locations are tried in order:
  *
- * The `fs`-read fallback is strictly more portable, so `?binary` is attempted
- * first (preserving the embedded-bytes optimization for the production bundle)
- * and `fs` is used whenever that import is unavailable.
+ * 1. The package graph: `require.resolve('tree-sitter-bash/tree-sitter-bash.wasm')`
+ *    resolves the grammar from `node_modules`. This covers source, dev, and
+ *    npm-installed package layouts.
+ * 2. The bundle directory: the self-contained distributable bundle ships the
+ *    grammar next to its entry (see `scripts/copy_bundle_assets.js`). When this
+ *    module is bundled, `import.meta.url` resolves to the bundle file, so the
+ *    grammar is a sibling file in the same directory.
+ *
+ * esbuild's `?binary` import suffix was the previous mechanism; it has been
+ * retired along with the esbuild bundling step, leaving these portable
+ * filesystem paths.
  */
 async function resolveBashWasmBytes(): Promise<Uint8Array> {
-  if (!isBunRuntime()) {
-    try {
-      const wasmModule = (await import(
-        'tree-sitter-bash/tree-sitter-bash.wasm?binary'
-      )) as { default: Uint8Array };
-      return wasmModule.default;
-    } catch (error) {
-      debugLogger.log(
-        'tree-sitter-bash ?binary import failed; falling back to filesystem WASM load',
-        error,
-      );
-    }
+  try {
+    const wasmPath = require.resolve('tree-sitter-bash/tree-sitter-bash.wasm');
+    return new Uint8Array(readFileSync(wasmPath));
+  } catch {
+    // Bundle fallback: the grammar ships alongside the bundle entry.
+    const here = dirname(fileURLToPath(import.meta.url));
+    return new Uint8Array(readFileSync(join(here, 'tree-sitter-bash.wasm')));
   }
-  const wasmPath = require.resolve('tree-sitter-bash/tree-sitter-bash.wasm');
-  return new Uint8Array(readFileSync(wasmPath));
 }
 
 // Type definitions for tree-sitter query results

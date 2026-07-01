@@ -33,10 +33,10 @@ let parserInitialized = await initializeParser();
  * Tree-sitter parser tests.
  *
  * The parser initializes by loading the bash WASM grammar via
- * web-tree-sitter@0.25.x's top-level `Language.load()`. Under vitest (Node)
- * the `?binary` esbuild-plugin path provides the embedded bytes; under Bun the
- * fs-read path provides them. Either way, a successful initialization should
- * make the parser available so these tests exercise real parsing behavior.
+ * web-tree-sitter@0.25.x's top-level `Language.load()`, reading the grammar
+ * bytes from disk via `require.resolve` so initialization is identical under
+ * vitest (Node) and Bun. Either way, a successful initialization should make
+ * the parser available so these tests exercise real parsing behavior.
  */
 describe('shell-parser', () => {
   beforeAll(async () => {
