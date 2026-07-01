@@ -9,9 +9,11 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -65,6 +67,138 @@ interface Fixture {
 }
 
 const fixtures: string[] = [];
+
+/**
+ * Builds a fixture that reproduces Bun's hoisted-linker output for workspace
+ * cross-dependencies: a real (non-symlink) static copy of one workspace
+ * package nested inside another workspace's node_modules. Used to assert that
+ * postinstall, under Bun, replaces that static copy with a symlink to the real
+ * workspace directory.
+ */
+function makeSymlinkFixture(): Fixture {
+  const dir = mkdtempSync(join(tmpdir(), 'postinstall-symlink-'));
+  fixtures.push(dir);
+
+  mkdirSync(join(dir, 'scripts'));
+  copyFileSync(realPostinstall, join(dir, 'scripts', 'postinstall.cjs'));
+  copyFileSync(
+    realDetectInstaller,
+    join(dir, 'scripts', 'detect-installer.cjs'),
+  );
+
+  // Root declares both packages as workspaces.
+  writeFileSync(
+    join(dir, 'package.json'),
+    `${JSON.stringify(
+      {
+        name: 'fixture-root',
+        version: '0.0.0',
+        workspaces: ['packages/*'],
+      },
+      null,
+      2,
+    )}
+`,
+  );
+
+  // The "real" workspace `foo`, with a marker file proving identity.
+  mkdirSync(join(dir, 'packages', 'foo'), { recursive: true });
+  writeFileSync(
+    join(dir, 'packages', 'foo', 'package.json'),
+    `${JSON.stringify({ name: '@vybestack/foo', version: '1.0.0' }, null, 2)}
+`,
+  );
+  writeFileSync(join(dir, 'packages', 'foo', 'REAL'), '');
+
+  // A consumer workspace `bar`.
+  mkdirSync(join(dir, 'packages', 'bar'), { recursive: true });
+  writeFileSync(
+    join(dir, 'packages', 'bar', 'package.json'),
+    `${JSON.stringify(
+      {
+        name: '@vybestack/bar',
+        version: '1.0.0',
+        dependencies: { '@vybestack/foo': 'file:../foo' },
+      },
+      null,
+      2,
+    )}
+`,
+  );
+
+  // Bun's hoisted linker would materialize this as a STATIC COPY (real dir),
+  // not a symlink. Seed that copy with a STALE marker so the test can prove it
+  // was replaced (the marker vanishes) rather than left in place.
+  const copyDir = join(
+    dir,
+    'packages',
+    'bar',
+    'node_modules',
+    '@vybestack',
+    'foo',
+  );
+  mkdirSync(copyDir, { recursive: true });
+  writeFileSync(join(copyDir, 'STALE'), '');
+
+  // Shadow `npm` with a no-op stub (as makeFixture does) so the npm bootstrap
+  // path does not perform a real networked install when this fixture is used to
+  // assert npm-path behavior.
+  const binDir = join(dir, 'bin');
+  mkdirSync(binDir);
+  const sentinel = join(dir, 'npm-invoked.sentinel');
+  const npmStub = join(binDir, 'npm');
+  writeFileSync(
+    npmStub,
+    // String.raw keeps printf's literal `\n` (so printf emits a trailing
+    // newline) instead of letting JS interpret it as a line break inside the
+    // stub source.
+    String.raw`#!/bin/sh
+printf '%s\n' "$*" >> "$NPM_SENTINEL"
+exit 0
+`,
+  );
+  chmodSync(npmStub, 0o755);
+
+  return {
+    dir,
+    run(userAgent: string): RunResult {
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        npm_config_user_agent: userAgent,
+        PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+        NPM_SENTINEL: sentinel,
+      };
+      delete env.LLXPRT_POSTINSTALL_RUNNING;
+
+      const result = spawnSync(
+        process.execPath,
+        [join(dir, 'scripts', 'postinstall.cjs')],
+        { encoding: 'utf8', env },
+      );
+
+      return {
+        status: result.status,
+        stderr:
+          (result.error
+            ? `spawn failed: ${result.error.message}
+`
+            : '') + (result.stderr ?? ''),
+        npmInvoked: existsSync(sentinel),
+        lockfile: '',
+        bundleExists: false,
+      };
+    },
+  };
+}
+
+afterEach(() => {
+  while (fixtures.length > 0) {
+    const dir = fixtures.pop();
+    if (dir) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
 
 /**
  * Builds an isolated fixture that reproduces a clean GitHub-source checkout:
@@ -142,16 +276,6 @@ function makeFixture(): Fixture {
     },
   };
 }
-
-afterEach(() => {
-  while (fixtures.length > 0) {
-    const dir = fixtures.pop();
-    if (dir) {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }
-});
-
 describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
   it('does not invoke the npm bootstrap when Bun drives the install', () => {
     const result = makeFixture().run(BUN_USER_AGENT);
@@ -195,5 +319,79 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
     expect(
       parsed.packages?.['node_modules/example-peer']?.peer,
     ).toBeUndefined();
+  });
+});
+
+describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
+  it('replaces a static workspace copy with a symlink under Bun', () => {
+    const fixture = makeSymlinkFixture();
+    const copyPath = join(
+      fixture.dir,
+      'packages',
+      'bar',
+      'node_modules',
+      '@vybestack',
+      'foo',
+    );
+
+    // Sanity: the fixture seeded a real directory (the static copy), not a link.
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(false);
+
+    const result = fixture.run(BUN_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    // The static copy was replaced with a symlink...
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(true);
+    // ...pointing at the real workspace directory.
+    expect(realpathSync(copyPath)).toBe(
+      realpathSync(join(fixture.dir, 'packages', 'foo')),
+    );
+    // The stale copy's marker is gone, and the real workspace's marker is now
+    // reachable through the link.
+    expect(existsSync(join(copyPath, 'STALE'))).toBe(false);
+    expect(existsSync(join(copyPath, 'REAL'))).toBe(true);
+  });
+
+  it('is idempotent: re-running under Bun leaves the symlink intact', () => {
+    const fixture = makeSymlinkFixture();
+
+    fixture.run(BUN_USER_AGENT);
+    const copyPath = join(
+      fixture.dir,
+      'packages',
+      'bar',
+      'node_modules',
+      '@vybestack',
+      'foo',
+    );
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(true);
+
+    // A second run must not error and must leave the symlink in place.
+    const result = fixture.run(BUN_USER_AGENT);
+    expect(result.status, result.stderr).toBe(0);
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(copyPath, 'REAL'))).toBe(true);
+  });
+
+  it('does not symlink workspace copies under npm', () => {
+    const fixture = makeSymlinkFixture();
+    const copyPath = join(
+      fixture.dir,
+      'packages',
+      'bar',
+      'node_modules',
+      '@vybestack',
+      'foo',
+    );
+
+    // Under npm, postinstall takes the bootstrap path (here a stubbed npm) and
+    // never invokes the Bun-only symlinker, so the static copy must remain a
+    // real directory with its stale marker untouched.
+    const result = fixture.run(NPM_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.npmInvoked).toBe(true);
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(false);
+    expect(existsSync(join(copyPath, 'STALE'))).toBe(true);
   });
 });
