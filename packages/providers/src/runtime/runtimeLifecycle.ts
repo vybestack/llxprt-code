@@ -49,9 +49,11 @@ import {
 } from './runtimeContextFactory.js';
 import {
   upsertRuntimeEntry,
-  resolveActiveRuntimeIdentity,
   runtimeRegistry,
+  resolveActiveRuntimeIdentity,
+  setDefaultCliRuntimeId,
 } from './runtimeRegistry.js';
+import { validateRuntimeId } from './runtimeIdValidation.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
@@ -83,25 +85,33 @@ export async function activateIsolatedRuntimeContext(
 }
 
 /**
- * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
- * @requirement REQ-D01-002
- * @requirement REQ-D01-003
- * @pseudocode lines 122-133
+ * @plan PLAN-20260630-ISSUE2300
+ * Register CLI provider infrastructure (ProviderManager + OAuthManager) on an
+ * EXPLICIT runtimeId. The runtimeId is required so identity is never inferred
+ * from ambient AsyncLocalStorage state or the registry Map.
  */
 export function registerCliProviderInfrastructure(
   manager: RuntimeProviderManager,
   oauthManager: OAuthManager,
-  _options: {
+  options: {
     messageBus: MessageBus;
+    runtimeId: string;
+    metadata?: Record<string, unknown>;
   },
 ): void {
-  const { runtimeId, metadata } = resolveActiveRuntimeIdentity();
+  validateRuntimeId(options.runtimeId);
+  const { messageBus, runtimeId, metadata } = options;
   const entry = upsertRuntimeEntry(runtimeId, {
     providerManager: manager,
     oauthManager,
     metadata,
   });
   registerProviderManagerSingleton(manager as never, oauthManager);
+
+  logger.debug(
+    () =>
+      `[cli-runtime] registerCliProviderInfrastructure runtimeId=${runtimeId}, messageBus=${messageBus.constructor.name}, registeredRuntimeCount=${runtimeRegistry.size}`,
+  );
 
   const config = entry.config ?? null;
   if (config) {
@@ -116,18 +126,24 @@ export function registerCliProviderInfrastructure(
   }
 }
 
+export function isMissingRuntimeError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return (
+    error.name === 'MissingProviderRuntimeError' ||
+    /No active runtime/i.test(error.message) ||
+    /MissingProviderRuntimeError/.test(error.message)
+  );
+}
+
 export function resetCliProviderInfrastructure(runtimeId?: string): void {
   let targetRuntimeId = runtimeId;
   if (!targetRuntimeId) {
     try {
       targetRuntimeId = resolveActiveRuntimeIdentity().runtimeId;
     } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.name === 'MissingProviderRuntimeError' ||
-          /No active provider runtime context/i.test(error.message) ||
-          /MissingProviderRuntimeError/.test(error.message))
-      ) {
+      if (isMissingRuntimeError(error)) {
         return;
       }
       throw error;
@@ -144,19 +160,29 @@ export function resetCliProviderInfrastructure(runtimeId?: string): void {
 }
 
 /**
- * Register or update the active CLI runtime context.
+ * @plan PLAN-20260630-ISSUE2300
+ * Register or update the active CLI runtime context. `runtimeId` is REQUIRED
+ * — callers must supply an explicit, deterministic runtime identity so that
+ * resolution never falls back to process-derived or ambient state. When
+ * `setAsDefault` is `true` (the default), it also sets the default CLI
+ * runtime pointer so identity resolution is deterministic even outside an
+ * AsyncLocalStorage scope.
+ *
+ * Isolated runtime activation MUST pass `setAsDefault: false` so it never
+ * overwrites or clears the CLI default pointer (issue #2300).
  */
 export function setCliRuntimeContext(
   settingsService: SettingsService,
-  config?: Config,
+  config: Config | undefined,
   options: {
+    runtimeId: string;
     metadata?: Record<string, unknown>;
-    runtimeId?: string;
     profileManager?: ProfileManager;
-  } = {},
+    setAsDefault?: boolean;
+  },
 ): void {
-  const runtimeId =
-    options.runtimeId ?? `cli-runtime-${process.pid.toString(16)}`;
+  const { runtimeId } = options;
+  validateRuntimeId(runtimeId);
   const metadata = { source: 'cli-runtime', ...(options.metadata ?? {}) };
   enterRuntimeScope({ runtimeId, metadata });
   const nextContext = createSettingsProviderRuntimeContext({
@@ -180,6 +206,14 @@ export function setCliRuntimeContext(
     metadata,
     profileManager: options.profileManager,
   });
+
+  // Set the default CLI runtime pointer so consumers outside an ALS scope
+  // (e.g. the UI bridge) resolve THIS runtime deterministically.
+  // Isolated runtimes opt out via setAsDefault: false so they never mutate
+  // the CLI default pointer.
+  if (options.setAsDefault !== false) {
+    setDefaultCliRuntimeId(runtimeId);
+  }
 
   // Register the OAuth runtime accessors so the providers-owned auth cluster
   // can read runtime state without importing from the CLI package directly.

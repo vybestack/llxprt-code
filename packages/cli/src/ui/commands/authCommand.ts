@@ -23,7 +23,7 @@ import {
 import { registerStandardOAuthProviders } from '@vybestack/llxprt-code-providers/composition.js';
 import { LoadedSettingsOAuthAdapter } from '../../auth/oauth-settings-adapter.js';
 import { DebugLogger, MessageBus } from '@vybestack/llxprt-code-core';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { getRuntimeApi, getRuntimeBridge } from '../contexts/RuntimeContext.js';
 import {
   type CommandArgumentSchema,
   type CompleterFn,
@@ -673,7 +673,8 @@ export const authCommand: SlashCommand = {
   autoExecute: true,
   schema: authCommandSchema,
   action: async (context, args) => {
-    const runtime = getRuntimeApi();
+    const bridge = getRuntimeBridge();
+    const runtime = bridge.api;
     // Ensure provider manager is initialized (throws if bootstrap skipped registration)
     const providerManager = runtime.getCliProviderManager();
 
@@ -706,6 +707,7 @@ export const authCommand: SlashCommand = {
 
       runtime.registerCliProviderInfrastructure(providerManager, oauthManager, {
         messageBus: runtimeMessageBus,
+        runtimeId: bridge.runtimeId,
       });
     }
 

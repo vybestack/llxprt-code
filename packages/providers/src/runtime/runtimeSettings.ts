@@ -50,6 +50,7 @@ export {
   enterRuntimeScope,
   runWithRuntimeScope,
   getCurrentRuntimeScope,
+  resetRuntimeScopeForTesting,
 } from './runtimeContextFactory.js';
 export type { RuntimeScopeValue } from './runtimeContextFactory.js';
 
@@ -67,7 +68,14 @@ export {
 } from './statelessHardening.js';
 export type { StatelessHardeningPreference } from './statelessHardening.js';
 
-export { resetCliRuntimeRegistryForTesting } from './runtimeRegistry.js';
+export {
+  disposeCliRuntime,
+  resetCliRuntimeRegistryForTesting,
+  getDefaultCliRuntimeId,
+  setDefaultCliRuntimeId,
+  resetDefaultCliRuntimeIdForTesting,
+} from './runtimeRegistry.js';
+export { validateRuntimeId } from './runtimeIdValidation.js';
 
 export {
   getCliRuntimeContext,

@@ -147,14 +147,29 @@ function createBridge(
 
 let latestBridge: RuntimeContextBridge | null = null;
 
+type CliRuntimeContext = ReturnType<typeof getCliRuntimeContext>;
+
+function resolveRuntimeId(runtime: CliRuntimeContext): string {
+  if (
+    typeof runtime.runtimeId === 'string' &&
+    runtime.runtimeId.trim() !== ''
+  ) {
+    return runtime.runtimeId;
+  }
+  // getCliRuntimeContext() guarantees a valid non-empty runtimeId on success;
+  // this guard exists only to fail fast if that invariant is broken.
+  throw new Error(
+    'Runtime context has no valid runtimeId. Ensure setCliRuntimeContext() was called with an explicit runtimeId before the UI bridge is constructed.',
+  );
+}
+
 export const RuntimeContextProvider: React.FC<PropsWithChildren<unknown>> = ({
   children,
 }) => {
   const runtime = getCliRuntimeContext();
-  const runtimeId =
-    typeof runtime.runtimeId === 'string' && runtime.runtimeId.trim() !== ''
-      ? runtime.runtimeId
-      : 'legacy-singleton';
+  // Invariant: CLI bootstrap calls setCliRuntimeContext() with an explicit
+  // runtimeId before the UI bridge mounts; violating that contract is fatal.
+  const runtimeId = resolveRuntimeId(runtime);
 
   const bridge = useMemo(() => {
     const normalizedMetadata = runtime.metadata ?? {};
@@ -196,10 +211,7 @@ export function getRuntimeBridge(): RuntimeContextBridge {
   }
 
   const runtime = getCliRuntimeContext();
-  const runtimeId =
-    typeof runtime.runtimeId === 'string' && runtime.runtimeId.trim() !== ''
-      ? runtime.runtimeId
-      : 'legacy-singleton';
+  const runtimeId = resolveRuntimeId(runtime);
   const metadata = runtime.metadata ?? {};
   const bridge = createBridge(runtimeId, metadata);
   bridge.enterScope();

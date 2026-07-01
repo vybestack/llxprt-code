@@ -117,7 +117,6 @@ export interface RuntimeScopedState {
 }
 
 export const runtimeScopedStates = new Map<string, RuntimeScopedState>();
-let legacyRuntimeScopeWarningEmitted = false;
 
 function maskToken(token: string): string {
   if (!token) {
@@ -205,9 +204,8 @@ function updateMetadataEntry(
 
 export function ensureRuntimeState(
   context: IProviderRuntimeContext,
-  logger?: IDebugLogger,
 ): RuntimeScopedState {
-  const runtimeId = context.runtimeId ?? 'legacy-singleton';
+  const { runtimeId } = context;
   let state = runtimeScopedStates.get(runtimeId);
   if (!state) {
     const metadata: RuntimeAuthScopeMetadataRecord = {
@@ -232,18 +230,6 @@ export function ensureRuntimeState(
 
   context.metadata ??= {};
   context.metadata.runtimeAuthScope = state.metadata;
-
-  if (
-    runtimeId === 'legacy-singleton' &&
-    !legacyRuntimeScopeWarningEmitted &&
-    process.env.DEBUG &&
-    logger
-  ) {
-    logger.warn(
-      'AuthPrecedenceResolver invoked without runtimeId; using legacy singleton auth cache.',
-    );
-    legacyRuntimeScopeWarningEmitted = true;
-  }
 
   return state;
 }

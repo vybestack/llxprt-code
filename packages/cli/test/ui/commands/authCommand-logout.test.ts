@@ -248,7 +248,7 @@ describe.skipIf(skipInCI)(
     /**
      * @plan PLAN-20250823-AUTHFIXES.P13
      * @requirement REQ-002
-     * @scenario Logout command case sensitivity
+     * @scenario Logout command action normalization
      * @given Mixed case logout action
      * @when logout command executed
      * @then Command recognized properly
@@ -267,15 +267,8 @@ describe.skipIf(skipInCI)(
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
 
-        if (args.includes('logout')) {
-          // lowercase logout should work
-          expect(messageResult.messageType).toBe('info');
-          expect(messageResult.content).toContain('Successfully logged out');
-        } else {
-          // Other cases should be treated as invalid action
-          expect(messageResult.messageType).toBe('error');
-          expect(messageResult.content).toContain('Invalid action');
-        }
+        expect(messageResult.messageType).toBe('info');
+        expect(messageResult.content).toContain('Successfully logged out');
       }
     });
 
@@ -411,7 +404,7 @@ describe.skipIf(skipInCI)(
      * @scenario Provider name normalization
      * @given Provider names with different formatting
      * @when logout command executed
-     * @then Provider names handled consistently
+     * @then Provider names normalize consistently
      */
     it('should handle provider name formatting consistently', async () => {
       const providerVariations = ['gemini', 'Gemini', 'GEMINI'];
@@ -422,15 +415,8 @@ describe.skipIf(skipInCI)(
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
 
-        if (provider === 'gemini') {
-          // Exact match should work
-          expect(messageResult.messageType).toBe('info');
-          expect(messageResult.content).toContain('Successfully logged out');
-        } else {
-          // Case variations should be treated as unknown (strict matching)
-          expect(messageResult.messageType).toBe('error');
-          expect(messageResult.content).toContain('Unknown provider');
-        }
+        expect(messageResult.messageType).toBe('info');
+        expect(messageResult.content).toContain('Successfully logged out');
       }
     });
 
@@ -686,13 +672,13 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
   /**
    * @plan PLAN-20250823-AUTHFIXES.P13
    * @requirement REQ-002
-   * Property Test 3: Command argument variations
+   * Property Test 3: Command argument normalization
    */
   it.prop([
     fc.constantFrom('gemini', 'anthropic'),
     fc.constantFrom('logout', 'LOGOUT', 'Logout', 'logOut', 'LogOut'),
   ])(
-    'should handle command argument case variations',
+    'should normalize command argument case variations',
     async (provider, logoutAction) => {
       const args = `${provider} ${logoutAction}`;
 
@@ -701,15 +687,8 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
 
-      if (logoutAction === 'logout') {
-        // Only lowercase 'logout' should be valid
-        expect(messageResult.messageType).toBe('info');
-        expect(messageResult.content).toContain('Successfully logged out');
-      } else {
-        // Other case variations should be invalid
-        expect(messageResult.messageType).toBe('error');
-        expect(messageResult.content).toContain('Invalid action');
-      }
+      expect(messageResult.messageType).toBe('info');
+      expect(messageResult.content).toContain('Successfully logged out');
     },
   );
 

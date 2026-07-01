@@ -421,29 +421,31 @@ export class AuthStatusService {
   }
 
   /**
-   * Flush all known runtime auth scopes. Always executes regardless of
-   * prior cleanup failures (G4/E pattern).
+   * Flush the explicitly resolved runtime auth scope. Issue #2300 intentionally
+   * removes legacy broad-scope flushing; callers without a runtimeId cannot
+   * safely infer which runtime owns the provider credentials.
    */
   private flushKnownRuntimeScopes(
     providerName: string,
     runtimeContext: { runtimeId?: string } | undefined,
   ): void {
-    const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];
-    if (
-      runtimeContext &&
-      typeof runtimeContext.runtimeId === 'string' &&
-      !knownRuntimeIds.includes(runtimeContext.runtimeId)
-    ) {
-      knownRuntimeIds.push(runtimeContext.runtimeId);
+    if (!runtimeContext?.runtimeId) {
+      logger.debug(
+        `No runtimeId available while clearing ${providerName}; skipping runtime auth scope flush.`,
+      );
+      return;
     }
 
-    for (const runtimeId of knownRuntimeIds) {
-      try {
-        flushRuntimeAuthScope(runtimeId);
-        logger.debug(`Flushed runtime auth scope: ${runtimeId}`);
-      } catch (flushError) {
-        logger.debug(`Skipped flush for runtime ${runtimeId}:`, flushError);
-      }
+    try {
+      flushRuntimeAuthScope(runtimeContext.runtimeId);
+      logger.debug(
+        `Flushed runtime auth scope ${runtimeContext.runtimeId} for ${providerName}`,
+      );
+    } catch (flushError) {
+      logger.debug(
+        `Skipped flush for runtime ${runtimeContext.runtimeId} while clearing ${providerName}:`,
+        flushError,
+      );
     }
   }
 }

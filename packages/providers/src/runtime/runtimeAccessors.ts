@@ -294,7 +294,12 @@ export function ensureStatelessProviderReady(): void {
 
 export function getCliOAuthManager(): OAuthManager | null {
   const { runtimeId } = resolveActiveRuntimeIdentity();
-  return runtimeRegistry.get(runtimeId)?.oauthManager ?? null;
+  const oauthManager = runtimeRegistry.get(runtimeId)?.oauthManager ?? null;
+  logger.debug(
+    () =>
+      `[getCliOAuthManager] resolved runtimeId=${runtimeId}, registeredRuntimeCount=${runtimeRegistry.size}, hasOAuthManager=${!!oauthManager}`,
+  );
+  return oauthManager;
 }
 
 const RESERVED_PROVIDER_SETTING_KEYS = new Set(getProviderConfigKeys());

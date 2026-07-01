@@ -305,6 +305,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       mockOAuthManager,
       {
         messageBus: runtimeMessageBus,
+        runtimeId: 'test-runtime',
       },
     );
 

@@ -103,9 +103,11 @@ describe('CLI model parameter command integration', () => {
       } as unknown as OAuthManager,
       {
         messageBus: runtimeMessageBus,
+        runtimeId: 'modelparams-test',
       },
     );
     setCliRuntimeContext(settingsService, config, {
+      runtimeId: 'modelparams-test',
       metadata: { source: 'modelParams.integration.test.ts' },
     });
 

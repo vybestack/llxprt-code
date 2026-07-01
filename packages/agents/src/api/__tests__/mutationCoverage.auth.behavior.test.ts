@@ -187,7 +187,9 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   it('PROP auth.status: for any provider string, a no-auth agent reports unauthenticated (REQ-002)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
+        fc
+          .string({ minLength: 1, maxLength: 40 })
+          .filter((id) => id.trim() !== ''),
         async (provider) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {

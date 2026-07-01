@@ -129,7 +129,9 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   it('PROP-A for any valid non-empty sessionId R, fromConfig({ config, sessionId: R }) yields agent.getRuntimeId() === R @requirement:REQ-005.1 @scenario:property-runtime-id @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:agent.getRuntimeId() === R for every generated R', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
+        fc
+          .string({ minLength: 1, maxLength: 40 })
+          .filter((id) => id.trim() !== ''),
         async (runtimeId) => {
           const built = await buildCliStyleConfig('plain-text.jsonl');
           let agent: Agent | undefined;
@@ -151,7 +153,9 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   it('PROP-B for any valid non-empty sessionId R, the no-2nd-manager identity holds: captureProviderManager(agent) === the Config manager @requirement:REQ-001 @scenario:property-no-double-manager @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:captureProviderManager(agent) === the Config manager for every generated R', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
+        fc
+          .string({ minLength: 1, maxLength: 40 })
+          .filter((id) => id.trim() !== ''),
         async (runtimeId) => {
           const built = await buildCliStyleConfig('plain-text.jsonl');
           let agent: Agent | undefined;

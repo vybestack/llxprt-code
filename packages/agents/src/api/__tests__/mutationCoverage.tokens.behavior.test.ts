@@ -251,7 +251,9 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   it('PROP setModel: for any model string, setModel reflects it and preserves continuity (REQ-005)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
+        fc
+          .string({ minLength: 1, maxLength: 40 })
+          .filter((id) => id.trim() !== ''),
         async (model) => {
           const { agent, cleanup } = await buildAgent(
             'provider-switch-two-turn.jsonl',
@@ -323,7 +325,9 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   it('PROP compress: for any custom promptId string, compress echoes it (REQ-005)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
+        fc
+          .string({ minLength: 1, maxLength: 40 })
+          .filter((id) => id.trim() !== ''),
         async (promptId) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {

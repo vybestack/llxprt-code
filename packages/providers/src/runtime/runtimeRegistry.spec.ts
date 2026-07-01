@@ -7,12 +7,14 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   runtimeRegistry,
-  LEGACY_RUNTIME_ID,
   resolveActiveRuntimeIdentity,
   upsertRuntimeEntry,
   requireRuntimeEntry,
   disposeCliRuntime,
   resetCliRuntimeRegistryForTesting,
+  setDefaultCliRuntimeId,
+  getDefaultCliRuntimeId,
+  clearDefaultCliRuntimeId,
 } from './runtimeRegistry.js';
 import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 
@@ -20,7 +22,7 @@ import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
  * Test suite for runtime registry lifecycle
  *
  * Tests behavioral contracts for:
- * - Baseline state after reset
+ * - Baseline state after reset (strict: no legacy-singleton fallback)
  * - Entry creation and retrieval
  * - Entry update with metadata merge
  * - Entry update partial fields
@@ -37,10 +39,8 @@ describe('runtimeRegistry', () => {
   });
 
   describe('baseline state', () => {
-    it('should return legacy-singleton after reset', () => {
-      const identity = resolveActiveRuntimeIdentity();
-      expect(identity.runtimeId).toBe(LEGACY_RUNTIME_ID);
-      expect(identity.metadata).toStrictEqual({});
+    it('should throw when no runtime is registered after reset (strict resolution)', () => {
+      expect(() => resolveActiveRuntimeIdentity()).toThrow(/No active runtime/);
     });
 
     it('should have empty registry after reset', () => {
@@ -187,17 +187,43 @@ describe('runtimeRegistry', () => {
   });
 
   describe('resolveActiveRuntimeIdentity', () => {
-    it('should return LEGACY_RUNTIME_ID when no scope or context', () => {
-      const identity = resolveActiveRuntimeIdentity();
-      expect(identity.runtimeId).toBe(LEGACY_RUNTIME_ID);
+    it('should throw when no scope, context, or default CLI runtime exists', () => {
+      expect(() => resolveActiveRuntimeIdentity()).toThrow(/No active runtime/);
     });
 
-    it('should return the first registered runtimeId when no scope or provider context exists', () => {
-      const registeredId = 'registered-runtime-1';
+    it('should return the default CLI runtime when set and registered', () => {
+      const registeredId = 'default-cli-runtime-1';
       upsertRuntimeEntry(registeredId, {});
+      setDefaultCliRuntimeId(registeredId);
 
       const identity = resolveActiveRuntimeIdentity();
       expect(identity.runtimeId).toBe(registeredId);
+    });
+
+    it('should throw when default CLI runtime is set but not registered', () => {
+      setDefaultCliRuntimeId('not-registered');
+      expect(() => resolveActiveRuntimeIdentity()).toThrow(/No active runtime/);
+    });
+
+    it('should throw when runtimes are registered but no default is set', () => {
+      upsertRuntimeEntry('registered-but-not-default', {});
+      expect(() => resolveActiveRuntimeIdentity()).toThrow(/No active runtime/);
+    });
+  });
+
+  describe('default CLI runtime pointer', () => {
+    it('should expose the default CLI runtime pointer', () => {
+      setDefaultCliRuntimeId('ptr-a');
+      expect(getDefaultCliRuntimeId()).toBe('ptr-a');
+    });
+
+    it('clearDefaultCliRuntimeId clears only matching pointer', () => {
+      setDefaultCliRuntimeId('ptr-b');
+      clearDefaultCliRuntimeId('different');
+      expect(getDefaultCliRuntimeId()).toBe('ptr-b');
+
+      clearDefaultCliRuntimeId('ptr-b');
+      expect(getDefaultCliRuntimeId()).toBeUndefined();
     });
   });
 });

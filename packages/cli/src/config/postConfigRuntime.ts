@@ -228,7 +228,11 @@ async function setupRuntimeContext(
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
       runtimeState.oauthManager,
-      { messageBus: runtimeState.runtimeMessageBus },
+      {
+        messageBus: runtimeState.runtimeMessageBus,
+        runtimeId: bootstrapRuntimeId,
+        metadata: baseBootstrapMetadata,
+      },
     );
   }
 

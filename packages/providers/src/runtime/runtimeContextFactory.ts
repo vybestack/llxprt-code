@@ -38,6 +38,7 @@ import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
+import { validateRuntimeId } from './runtimeIdValidation.js';
 import { createFileOAuthSettingsProvider } from '../auth/file-oauth-settings.js';
 import { registerStandardOAuthProviders } from '../composition/oauth-provider-registration.js';
 
@@ -120,7 +121,7 @@ export interface RuntimeScopeValue {
   metadata: Record<string, unknown>;
 }
 
-const runtimeScope = new AsyncLocalStorage<RuntimeScopeValue>();
+let runtimeScope = new AsyncLocalStorage<RuntimeScopeValue>();
 
 export function enterRuntimeScope(scope: RuntimeScopeValue): void {
   runtimeScope.enterWith(scope);
@@ -136,6 +137,10 @@ export function runWithRuntimeScope<T>(
 export function getCurrentRuntimeScope(): RuntimeScopeValue | undefined {
   return runtimeScope.getStore();
 }
+export function resetRuntimeScopeForTesting(): void {
+  runtimeScope.disable();
+  runtimeScope = new AsyncLocalStorage<RuntimeScopeValue>();
+}
 
 interface RuntimeActivationBindings {
   resetInfrastructure: () => void | Promise<void>;
@@ -145,12 +150,17 @@ interface RuntimeActivationBindings {
     options: {
       metadata?: Record<string, unknown>;
       runtimeId: string;
+      setAsDefault?: boolean;
     },
   ) => void | Promise<void>;
   registerInfrastructure: (
     manager: RuntimeProviderManager,
     oauthManager: OAuthManager,
-    options: { messageBus: MessageBus },
+    options: {
+      messageBus: MessageBus;
+      runtimeId: string;
+      metadata?: Record<string, unknown>;
+    },
   ) => void | Promise<void>;
   linkProviderManager: (
     config: Config,
@@ -357,6 +367,7 @@ function buildActivateClosure(
     const bindings = activationBindings;
 
     state.currentRuntimeId = activationOptions?.runtimeId ?? runtimeId;
+    validateRuntimeId(state.currentRuntimeId);
     state.currentMetadata = {
       ...baseMetadata,
       ...(activationOptions?.metadata ?? {}),
@@ -383,6 +394,9 @@ function buildActivateClosure(
         bindings.setRuntimeContext(resolvedSettingsService, config, {
           runtimeId: state.currentRuntimeId,
           metadata: state.currentMetadata,
+          // Isolated runtimes MUST NOT mutate the CLI default pointer (issue
+          // #2300); only the CLI composition boundary sets the default.
+          setAsDefault: false,
         }),
       );
 
@@ -400,6 +414,8 @@ function buildActivateClosure(
       await Promise.resolve(
         bindings.registerInfrastructure(providerManager, oauthManager, {
           messageBus: sessionMessageBus,
+          runtimeId: state.currentRuntimeId,
+          metadata: state.currentMetadata,
         }),
       );
       await Promise.resolve(
@@ -484,6 +500,7 @@ export function createIsolatedRuntimeContext(
   const runtimeId =
     options.runtimeId ??
     `cli-isolated-${Date.now().toString(16)}-${(runtimeCounter += 1).toString(16)}`;
+  validateRuntimeId(runtimeId);
 
   const baseMetadata = {
     source: 'cli-isolated-runtime-factory',

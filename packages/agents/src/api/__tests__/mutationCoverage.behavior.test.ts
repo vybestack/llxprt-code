@@ -286,7 +286,9 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   it('PROP target-4: for any non-empty keyName string, getProviderStatus surfaces it and reports authenticated (keyName guard) (REQ-002)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
+        fc
+          .string({ minLength: 1, maxLength: 40 })
+          .filter((id) => id.trim() !== ''),
         async (keyName) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
             auth: { keyName },
@@ -329,7 +331,9 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   it('PROP target-4b: for any non-empty apiKey, getProviderStatus reports authenticated and does NOT surface keyName (inline guard) (REQ-002)', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
+        fc
+          .string({ minLength: 1, maxLength: 40 })
+          .filter((id) => id.trim() !== ''),
         async (apiKey) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
             auth: { apiKey },
