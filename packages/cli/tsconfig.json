@@ -67,6 +67,9 @@
     "../ide-integration/src/**/*.test.ts",
     "../ide-integration/src/**/*.spec.ts",
 
+    "src/launcher/*.test.ts",
+    "src/launcher/*.spec.ts",
+
     // TODO(5691): Fix type errors and remove excludes.
     "src/config/config.integration.test.ts",
     "src/config/config.test.ts",

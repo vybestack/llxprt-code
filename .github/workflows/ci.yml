@@ -521,7 +521,7 @@ jobs:
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
-          bun-version: 'latest'
+          bun-version-file: '.bun-version'
 
       - name: 'Install dependencies for testing'
         run: |-
