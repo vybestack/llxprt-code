@@ -489,6 +489,51 @@ function buildBunPtyAdapter(
 }
 
 /**
+ * Wire subprocess.exited to the exit-listener fan-out. Converts both success
+ * and rejection into a normalized exit code, catching handler errors so exit
+ * delivery can never hang.
+ */
+function wireExitHandler(
+  subprocess: BunSubprocess,
+  exitListeners: Set<ExitListener>,
+  dataListeners: Set<DataListener>,
+  decoder: TextDecoder,
+  state: BunPtyState,
+): void {
+  void subprocess.exited
+    .then((rawExitCode: number | null) => {
+      try {
+        emitDecoderTail(decoder, dataListeners, state);
+        dataListeners.clear();
+        dispatchExit(exitListeners, state, normalizeExitCode(rawExitCode));
+      } catch (err) {
+        logger.error(
+          'Unexpected error during exit dispatch; falling back to generic failure.',
+          err,
+        );
+        dispatchExit(exitListeners, state, 1);
+      }
+    })
+    .catch((error: unknown) => {
+      try {
+        emitDecoderTail(decoder, dataListeners, state);
+        dataListeners.clear();
+        dispatchExit(
+          exitListeners,
+          state,
+          isExitErrorWithCode(error) ? normalizeExitCode(error.exitCode) : 1,
+        );
+      } catch (err) {
+        logger.error(
+          'Unexpected error during exit rejection dispatch; falling back to generic failure.',
+          err,
+        );
+        dispatchExit(exitListeners, state, 1);
+      }
+    });
+}
+
+/**
  * Create a Bun.Terminal-backed {@link IPty}.
  *
  * The returned object satisfies the subset of `IPty` that downstream consumers
@@ -540,38 +585,7 @@ export function createBunPty(
     state,
   );
 
-  // Await the real exit code and fan it out to onExit listeners.
-  void subprocess.exited
-    .then((rawExitCode: number | null) => {
-      try {
-        emitDecoderTail(decoder, dataListeners, state);
-        dataListeners.clear();
-        dispatchExit(exitListeners, state, normalizeExitCode(rawExitCode));
-      } catch (err) {
-        logger.error(
-          'Unexpected error during exit dispatch; falling back to generic failure.',
-          err,
-        );
-        dispatchExit(exitListeners, state, 1);
-      }
-    })
-    .catch((error: unknown) => {
-      try {
-        emitDecoderTail(decoder, dataListeners, state);
-        dataListeners.clear();
-        dispatchExit(
-          exitListeners,
-          state,
-          isExitErrorWithCode(error) ? normalizeExitCode(error.exitCode) : 1,
-        );
-      } catch (err) {
-        logger.error(
-          'Unexpected error during exit rejection dispatch; falling back to generic failure.',
-          err,
-        );
-        dispatchExit(exitListeners, state, 1);
-      }
-    });
+  wireExitHandler(subprocess, exitListeners, dataListeners, decoder, state);
 
   return buildBunPtyAdapter(
     subprocess,
