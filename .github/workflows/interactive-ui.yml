@@ -101,6 +101,14 @@ jobs:
           head -n 5 /tmp/llxprt-cli-help.txt
 
       - name: 'Run interactive UI tests'
+        # CI is set to 'true' on purpose. The CLI used to be shipped as an
+        # esbuild/bun bundle whose build plugin stubbed `is-in-ci` to false so
+        # ink used its full interactive render path under CI. The bundle is now
+        # retired and the CLI runs from source/dist, so the real `is-in-ci`
+        # resolves (transitively via ink) and returns true here. This job is the
+        # validation that the unbundled runtime still renders correctly under
+        # CI; keeping it green is the replacement for the removed build-time
+        # stub. End users on developer machines resolve is-in-ci=false naturally.
         env:
           CI: 'true'
           NO_COLOR: 'true'

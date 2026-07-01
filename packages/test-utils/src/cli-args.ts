@@ -83,7 +83,7 @@ export function buildExtraArgs(
  * relaunches into Bun via the launcher) otherwise.
  */
 export function getCommandAndArgs(
-  bundlePath: string,
+  entryPath: string,
   extraInitialArgs: string[] = [],
 ): { command: string; initialArgs: string[] } {
   const isNpmReleaseTest =
@@ -91,7 +91,7 @@ export function getCommandAndArgs(
   const command = isNpmReleaseTest ? 'llxprt' : 'node';
   const initialArgs = isNpmReleaseTest
     ? extraInitialArgs
-    : [bundlePath, ...extraInitialArgs];
+    : [entryPath, ...extraInitialArgs];
   return { command, initialArgs };
 }
 
