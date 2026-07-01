@@ -74,12 +74,9 @@ function shouldIgnorePath(
   fileFilteringOptions: FileFilteringOptions,
 ): boolean {
   if (!fileService) return false;
-  return !!(
-    (fileFilteringOptions.respectGitIgnore &&
-      fileService.shouldGitIgnoreFile(filePath)) ||
-    (fileFilteringOptions.respectLlxprtIgnore &&
-      fileService.shouldLlxprtIgnoreFile(filePath))
-  );
+  // Delegate to the unified decision path so that .llxprtignore negations
+  // can un-ignore gitignored files when both flags are true.
+  return fileService.shouldIgnoreFile(filePath, fileFilteringOptions);
 }
 
 async function readDirectoryEntries(

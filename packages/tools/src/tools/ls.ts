@@ -229,16 +229,9 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
     const fullPath = path.join(dirPath, file);
     const relativePath = path.relative(this.host.getTargetDir(), fullPath);
 
-    if (
-      fileFilteringOptions.respectGitIgnore &&
-      fileDiscovery.shouldGitIgnoreFile(relativePath)
-    ) {
-      return { entry: null, ignored: true };
-    }
-    if (
-      fileFilteringOptions.respectLlxprtIgnore &&
-      fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
-    ) {
+    // Delegate to the unified decision path so that .llxprtignore negations
+    // can un-ignore gitignored files when both flags are true.
+    if (fileDiscovery.shouldIgnoreFile(relativePath, fileFilteringOptions)) {
       return { entry: null, ignored: true };
     }
 
@@ -343,6 +336,7 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
                 type: 'boolean',
               },
             },
+            additionalProperties: false,
           },
         },
         required: [],

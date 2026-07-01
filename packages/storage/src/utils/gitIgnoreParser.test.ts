@@ -240,6 +240,13 @@ src/*.tmp
       // From a/d/.gitignore: f/g becomes /a/d/f/g
       expect(parser.isIgnored('a/d/f/g')).toBe(true);
     });
+
+    it('should expand negated directory patterns from nested gitignore files', async () => {
+      await createTestFile('q/r/.gitignore', 'build/\n!build/');
+      await createTestFile('q/r/build/file.txt', 'content');
+
+      expect(parser.isIgnored('q/r/build/file.txt')).toBe(false);
+    });
   });
 
   describe('precedence rules', () => {
@@ -329,6 +336,28 @@ src/*.tmp
       expect(parser.isIgnored('temp/file.js')).toBe(true); // Ignored by extraPatterns
     });
 
+    it('should report extraPattern match state with ordered precedence', () => {
+      parser = new GitIgnoreParser(
+        projectRoot,
+        ['!tmp/example.txt', 'tmp/example.txt'],
+        { loadGitSources: false },
+      );
+
+      expect(parser.getIgnoreState('tmp/example.txt')).toBe('ignored');
+      expect(parser.getIgnoreState('tmp/other.txt')).toBe('neutral');
+    });
+
+    it('should report extraPattern unignored state when negation wins', () => {
+      parser = new GitIgnoreParser(
+        projectRoot,
+        ['tmp/example.txt', '!tmp/example.txt'],
+        { loadGitSources: false },
+      );
+
+      expect(parser.getIgnoreState('tmp/example.txt')).toBe('unignored');
+      expect(parser.getIgnoreState('tmp/other.txt')).toBe('neutral');
+    });
+
     it('should handle extraPatterns that unignore directories', async () => {
       await createTestFile('.gitignore', '/foo/\n/a/*/c/');
 
@@ -340,15 +369,14 @@ src/*.tmp
       expect(parser.isIgnored('a/b/c/file.txt')).toBe(false);
     });
 
-    it('should handle extraPatterns that unignore directories with nested gitignore', async () => {
+    it('should not let extraPatterns change nested gitignore discovery', async () => {
       await createTestFile('.gitignore', '/foo/');
       await createTestFile('foo/bar/.gitignore', 'file.txt');
 
       const extraPatterns = ['!foo/'];
       parser = new GitIgnoreParser(projectRoot, extraPatterns);
-      // Need to load patterns for isIgnored to work
 
-      expect(parser.isIgnored('foo/bar/file.txt')).toBe(true);
+      expect(parser.isIgnored('foo/bar/file.txt')).toBe(false);
       expect(parser.isIgnored('foo/bar/file2.txt')).toBe(false);
     });
   });

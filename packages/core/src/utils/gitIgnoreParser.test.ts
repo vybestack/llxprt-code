@@ -340,7 +340,7 @@ src/*.tmp
       expect(parser.isIgnored('a/b/c/file.txt')).toBe(false);
     });
 
-    it('should handle extraPatterns that unignore directories with nested gitignore', async () => {
+    it('should not let extraPatterns change nested gitignore discovery', async () => {
       await createTestFile('.gitignore', '/foo/');
       await createTestFile('foo/bar/.gitignore', 'file.txt');
 
@@ -348,7 +348,7 @@ src/*.tmp
       parser = new GitIgnoreParser(projectRoot, extraPatterns);
       // Need to load patterns for isIgnored to work
 
-      expect(parser.isIgnored('foo/bar/file.txt')).toBe(true);
+      expect(parser.isIgnored('foo/bar/file.txt')).toBe(false);
       expect(parser.isIgnored('foo/bar/file2.txt')).toBe(false);
     });
   });
