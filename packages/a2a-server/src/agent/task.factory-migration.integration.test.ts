@@ -44,6 +44,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { createAgentClient } from '@vybestack/llxprt-code-agents';
 import { createToolScheduler } from '@vybestack/llxprt-code-agents';
+import { tmpdir } from 'node:os';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
   StreamEventType,
@@ -76,8 +77,8 @@ const SESSION_ID = 'factory-migration-task-session';
 function createRealConfig(): Config {
   const params: ConfigParameters = {
     sessionId: SESSION_ID,
-    targetDir: '/tmp/factory-migration-test',
-    cwd: '/tmp/factory-migration-test',
+    targetDir: tmpdir(),
+    cwd: tmpdir(),
     debugMode: false,
     model: 'gemini-2.0-flash',
     embeddingModel: 'text-embedding-004',

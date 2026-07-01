@@ -23,6 +23,18 @@ import { installNonInteractiveSigintHandler } from './signalHandlers.js';
 import { reportNonInteractiveError } from './errorReporting.js';
 import { startInteractiveUI } from './interactiveUI.js';
 
+/**
+ * Report a non-interactive error while swallowing secondary failures so they
+ * do not mask the original error or alter the exit code.
+ */
+function safeReportNonInteractiveError(config: Config, error: unknown): void {
+  try {
+    reportNonInteractiveError(config, error);
+  } catch (reportError) {
+    debugLogger.error('Failed to report non-interactive error:', reportError);
+  }
+}
+
 export interface NonInteractiveSessionOptions {
   config: Config;
   settings: LoadedSettings;
@@ -161,11 +173,7 @@ ${existingInput}`
       `Non-interactive session setup failed (prompt_id=${prompt_id}):`,
       error,
     );
-    try {
-      reportNonInteractiveError(config, error);
-    } catch (reportError) {
-      debugLogger.error('Failed to report non-interactive error:', reportError);
-    }
+    safeReportNonInteractiveError(config, error);
   } finally {
     if (isTelemetrySdkInitialized()) {
       await shutdownTelemetry(config);
@@ -213,11 +221,7 @@ async function runNonInteractiveSession({
     await triggerSessionEndHook(config, SessionEndReason.Other);
     // Wrap only the reporting call so a secondary reporting failure does not
     // mask the original error or alter the exit code.
-    try {
-      reportNonInteractiveError(config, error);
-    } catch (reportError) {
-      debugLogger.error('Failed to report non-interactive error:', reportError);
-    }
+    safeReportNonInteractiveError(config, error);
     return 1;
   }
 
@@ -274,11 +278,7 @@ ${finalInput}`;
 
     // Wrap only the reporting call so a secondary reporting failure does not
     // mask the original error or alter the exit code.
-    try {
-      reportNonInteractiveError(nonInteractiveConfig, error);
-    } catch (reportError) {
-      debugLogger.error('Failed to report non-interactive error:', reportError);
-    }
+    safeReportNonInteractiveError(nonInteractiveConfig, error);
   } finally {
     removeSigintHandler();
   }
