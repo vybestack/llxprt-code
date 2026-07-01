@@ -97,16 +97,13 @@ const a2aResult = await build(a2aServerConfig).catch((error) => error);
 // can be false when the build produced diagnostics (unresolved imports, etc.).
 // A rejected promise is also possible for hard failures. Both must be treated
 // as failures so stale artifacts are never shipped downstream.
-const a2aOk =
-  !(a2aResult instanceof Error) && a2aResult.success !== false;
+const a2aOk = !(a2aResult instanceof Error) && a2aResult.success !== false;
 if (!a2aOk) {
   if (a2aResult instanceof Error) {
     console.error('a2a-server build failed:', a2aResult);
   } else {
     console.error('a2a-server build completed with errors.');
-    const detail = (a2aResult.logs ?? [])
-      .map((l) => l.message)
-      .join('; ');
+    const detail = (a2aResult.logs ?? []).map((l) => l.message).join('; ');
     console.warn('a2a-server build logs: ' + (detail || '(none)'));
   }
   process.exit(1);
