@@ -90,9 +90,15 @@ function isStaticWorkspaceCopy(nameToDir, fullName, target) {
  */
 function replaceWithSymlink(target, rel) {
   const backup = `${target}.postinstall-bak`;
+  // Clear any stale backup left by a previously interrupted run, otherwise
+  // renameSync onto a non-empty directory fails with ENOTEMPTY and leaves the
+  // static copy orphaned (no symlink at `target`).
+  fs.rmSync(backup, { recursive: true, force: true });
   fs.renameSync(target, backup);
   try {
-    fs.symlinkSync(rel, target);
+    // 'dir' is required on Windows, where the link type is not inferred from
+    // the target and would otherwise default to a (broken) file symlink.
+    fs.symlinkSync(rel, target, 'dir');
     fs.rmSync(backup, { recursive: true, force: true });
   } catch (e) {
     fs.rmSync(target, { recursive: true, force: true });
