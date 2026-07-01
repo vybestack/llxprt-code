@@ -6,7 +6,6 @@
 
 import { Type } from '@google/genai';
 import { BaseTool, type ToolResult, Kind } from './tools.js';
-import { SchemaValidator } from '../utils/schemaValidator.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
 import type { IToolHost } from '../interfaces/IToolHost.js';
 import { EmojiFilter, isEmojiFilterMode } from '../utils/EmojiFilter.js';
@@ -34,7 +33,9 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
         'dependencies are blocking completion, or unexpected errors occur that require human intervention. ' +
         'DO NOT use this tool for normal task completion (use todo_write to update status instead), ' +
         'requesting clarification (continue with your best understanding), or minor issues that can be worked around. ' +
-        'The reason should clearly explain what specific issue is preventing progress.',
+        'The reason is limited to 500 characters and should clearly explain what specific issue is preventing progress. ' +
+        'Stream any longer user-facing explanation as normal response text before or after calling this tool; ' +
+        'do not place text longer than 500 characters in the reason argument.',
       Kind.Think,
       {
         type: Type.OBJECT,
@@ -42,7 +43,8 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
           reason: {
             type: Type.STRING,
             description:
-              'Explanation of why the task needs to be paused (e.g., missing file, configuration error, blocked dependency)',
+              'Concise explanation of why the task needs to be paused (e.g., missing file, configuration error, blocked dependency). ' +
+              'Limited to a maximum of 500 characters; any longer user-facing explanation must be streamed as normal response text separately, not placed in this argument.',
             minLength: 1,
             maxLength: 500,
           },
@@ -61,19 +63,6 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
   override validateToolParams(
     params: unknown,
   ): (string & { message: string }) | null {
-    // First validate against schema
-    const schemaError = SchemaValidator.validate(
-      this.schema.parameters,
-      params,
-    );
-    if (schemaError) {
-      const errorString = new String(schemaError) as string & {
-        message: string;
-      };
-      errorString.message = schemaError;
-      return errorString;
-    }
-
     // Type guard to ensure params has the expected structure
     if (params == null || typeof params !== 'object') {
       const errorString = new String('params must be an object') as string & {
