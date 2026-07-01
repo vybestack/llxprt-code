@@ -132,24 +132,30 @@ function describeTscSpawnError(err) {
   if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
     if (err.stdout) console.log(err.stdout);
     if (err.stderr) console.error(err.stderr);
-    return 'tsc exceeded the maxBuffer limit (ERR_CHILD_PROCESS_STDIO_MAXBUFFER). ' +
-      'This indicates runaway output, not a normal build failure.';
+    return (
+      'tsc exceeded the maxBuffer limit (ERR_CHILD_PROCESS_STDIO_MAXBUFFER). ' +
+      'This indicates runaway output, not a normal build failure.'
+    );
   }
   if (err.code === 'ENOENT') {
     if (err.stderr) console.error(err.stderr);
     const npxName = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-    return `Failed to spawn tsc (ENOENT): '${npxName}' not found. ` +
-      'Ensure Node.js/npx is installed and on PATH.';
+    return (
+      `Failed to spawn tsc (ENOENT): '${npxName}' not found. ` +
+      'Ensure Node.js/npx is installed and on PATH.'
+    );
   }
   if (err.signal) {
     return `tsc process terminated by signal ${err.signal}; declaration build did not complete.`;
   }
   if (err.code && err.status === undefined) {
-    return `tsc spawn failed with system error code '${err.code}'` +
+    return (
+      `tsc spawn failed with system error code '${err.code}'` +
       (err.errno ? ` (errno ${err.errno})` : '') +
       (err.syscall ? ` syscall '${err.syscall}'` : '') +
       (err.path ? ` on '${err.path}'` : '') +
-      `: ${err.message}`;
+      `: ${err.message}`
+    );
   }
   return null;
 }
