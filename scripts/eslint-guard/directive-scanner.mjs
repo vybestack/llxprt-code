@@ -392,7 +392,7 @@ function tryExecutableScan(line, i, ch, next, pattern, state, inExecutable) {
       result: scanStateBlockComment(line, i, pattern, state),
     };
   }
-  if (!state.inTemplate && ch === '/' && canStartRegex(line, i)) {
+  if (ch === '/' && canStartRegex(line, i)) {
     return {
       handled: true,
       result: { terminal: null, state, advance: skipRegex(line, i) },
@@ -428,7 +428,7 @@ function scanTemplateStructure(line, i, ch, next, state, trackBraces) {
     return scanOutsideTemplateChar(ch, state);
   }
   if (state.exprDepth === 0) {
-    return scanTemplateTextChar(ch, next, state);
+    return scanTemplateTextChar(line, i, ch, next, state);
   }
   return scanTemplateExprChar(line, i, ch, next, state, trackBraces);
 }
@@ -444,12 +444,12 @@ function scanOutsideTemplateChar(ch, state) {
   return { terminal: null, state, advance: null };
 }
 
-function scanTemplateTextChar(ch, next, state) {
+function scanTemplateTextChar(line, i, ch, next, state) {
   if (ch === '$' && next === '{') {
     return {
       terminal: null,
       state: { ...state, exprDepth: state.exprDepth + 1 },
-      advance: null,
+      advance: i + 2,
     };
   }
   if (ch === '`') {
@@ -474,7 +474,7 @@ function scanTemplateExprChar(line, i, ch, next, state, trackBraces) {
     return {
       terminal: null,
       state: { ...state, exprDepth: state.exprDepth + 1 },
-      advance: null,
+      advance: i + 2,
     };
   }
   if (ch === '{' && trackBraces) {

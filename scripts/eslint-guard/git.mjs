@@ -21,8 +21,14 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--base') {
+      if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) {
+        throw new Error('--base requires a value');
+      }
       args.base = argv[++i];
     } else if (arg === '--head') {
+      if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) {
+        throw new Error('--head requires a value');
+      }
       args.head = argv[++i];
     } else if (arg === '--help' || arg === '-h') {
       console.log(

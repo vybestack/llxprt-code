@@ -12,8 +12,11 @@ import {
 import { isStandaloneOffRuleValue } from './rule-config.mjs';
 
 /**
- * Strips trailing // comments from a line, respecting string literals so that
- * // inside quotes is not mistaken for a comment start.
+ * Strips trailing line comments and block comments from a line, respecting
+ * string literals so that comment markers inside quotes are not mistaken for
+ * real comments. Without block-comment stripping, a module path that only
+ * appears inside a block comment could seed ctx.moduleObjectDepth and produce
+ * bogus bypass detections on later top-level rules or ignores lines.
  */
 function stripInlineComment(line) {
   let quote = null;
@@ -22,6 +25,9 @@ function stripInlineComment(line) {
     const char = line[i];
     const next = line[i + 1];
     if (quote === null && char === '/' && next === '/') {
+      return line.slice(0, i);
+    }
+    if (quote === null && char === '/' && next === '*') {
       return line.slice(0, i);
     }
     const step = scanCommentStripChar(char, quote, escaped);

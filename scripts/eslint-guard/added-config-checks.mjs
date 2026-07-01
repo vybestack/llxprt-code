@@ -44,7 +44,7 @@ function thresholdIncreaseMessage(ruleKey, oldVal, newVal, context) {
 
 export function checkInlineRulesEntries(state, content, currentLine, detected) {
   const addedInlineEntries =
-    state.arbitraryObjectDepth === null
+    state.arbitraryObjectDepth === null && state.nonRuleContainerDepth === null
       ? extractInlineRulesEntries(content)
       : [];
   if (addedInlineEntries.length === 0) {
@@ -207,18 +207,49 @@ export function checkCrossFormKeyedRemoved(
       content,
       currentLine,
     );
-    removed.consumed = true;
+    markMatchingRemovedKeyedConsumed(state, addedRuleState.ruleKey);
   }
   return detected;
 }
 
+/**
+ * Finds and aggregates removed rule state for the same rule key as the added
+ * entry. For multiline ceiling rules, severity and threshold are buffered as
+ * separate entries; without aggregation, comparing against only the first
+ * (severity-only) entry would falsely report a threshold addition.
+ */
 function findMatchingRemovedKeyed(state, addedRuleState) {
+  let matched = null;
   for (const removed of state.pendingRemovedRuleState) {
-    if (!shouldSkipRemovedEntry(removed, addedRuleState)) {
-      return removed;
+    if (shouldSkipRemovedEntry(removed, addedRuleState)) {
+      continue;
+    }
+    if (matched === null) {
+      matched = { ...removed, consumed: removed.consumed };
+    } else {
+      // Merge severity/threshold from separate multiline entries.
+      if (matched.severity === null && removed.severity !== null) {
+        matched.severity = removed.severity;
+      }
+      if (matched.threshold === null && removed.threshold !== null) {
+        matched.threshold = removed.threshold;
+        matched.thresholdForm = removed.thresholdForm;
+      }
     }
   }
-  return null;
+  return matched;
+}
+
+/**
+ * Marks all removed entries with the same rule key as consumed so a subsequent
+ * added entry for a different rule does not re-match them.
+ */
+function markMatchingRemovedKeyedConsumed(state, ruleKey) {
+  for (const removed of state.pendingRemovedRuleState) {
+    if (removed.ruleKey === ruleKey && !removed.consumed) {
+      removed.consumed = true;
+    }
+  }
 }
 
 function shouldSkipKeyedRemoved(addedRuleState, flags) {

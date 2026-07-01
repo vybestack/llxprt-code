@@ -389,7 +389,10 @@ function bufferMultilineNumericThreshold(state, content, currentLine) {
 }
 
 function bufferInlineRules(state, content, currentLine) {
-  if (state.removedArbitraryObjectDepth !== null) {
+  if (
+    state.removedArbitraryObjectDepth !== null ||
+    state.removedNonRuleContainerDepth !== null
+  ) {
     return;
   }
   for (const entry of extractInlineRulesEntries(content)) {

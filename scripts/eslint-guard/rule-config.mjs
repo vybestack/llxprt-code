@@ -57,7 +57,7 @@ export function extractThresholdValue(line, ruleKey) {
   if (!CEILING_RULES.has(ruleKey)) {
     return null;
   }
-  const maxMatch = /max[ \t]*:[ \t]*(\d+)/.exec(line);
+  const maxMatch = /['"]?max['"]?[ \t]*:[ \t]*(\d+)/.exec(line);
   if (maxMatch !== null) {
     return { value: Number(maxMatch[1]), form: 'max' };
   }
