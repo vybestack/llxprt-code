@@ -70,17 +70,20 @@ if (process.env.LLXPRT_POSTINSTALL_RUNNING === 'true') {
 }
 
 // The published CLI package ships a built `dist/`; GitHub-source installs of
-// the repository root do not. Detect an already-built CLI entry so we skip the
-// (expensive) build for normal npm installs.
-const cliEntryPath = path.join(
-  __dirname,
-  '..',
-  'packages',
-  'cli',
-  'dist',
-  'index.js',
+// the repository root do not. Detect an already-built CLI so we skip the
+// (expensive) build for normal npm installs. The entry alone is not enough:
+// npm force-includes the `bin` target in a packed install, so `dist/index.js`
+// can exist without the sibling modules it imports. Require both the entry and
+// a key imported module (the launcher) before treating the build as complete.
+const cliDistDir = path.join(__dirname, '..', 'packages', 'cli', 'dist');
+const cliEntryPath = path.join(cliDistDir, 'index.js');
+const cliLauncherPath = path.join(
+  cliDistDir,
+  'src',
+  'launcher',
+  'bun-launcher.js',
 );
-const hasBuild = fs.existsSync(cliEntryPath);
+const hasBuild = fs.existsSync(cliEntryPath) && fs.existsSync(cliLauncherPath);
 
 // Early exit if the CLI is already built - handles published npm packages and
 // rebuilds. Exit silently to not clutter npm install output.
