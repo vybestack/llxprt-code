@@ -182,11 +182,12 @@ jobs:
   #
   # Lint: Javascript
   #
-  # Stays on npm (not Bun) for S6 (#2243): the type-aware ESLint config
-  # (`projectService` in eslint.config.js) deterministically degrades under
-  # Bun's hoisted node_modules on the CI runner (Linux + Node 20), emitting
-  # hundreds of spurious `any` errors that do not reproduce locally or under
-  # npm. Revisit once the Bun hoisting/type-resolution interaction is resolved.
+  # Runs on the Bun flow for S6 (#2243): dependencies are installed with
+  # `bun install` and scripts are launched with `bun run`/`bunx`. Node is still
+  # set up because several scripts invoke `node` explicitly (notably the
+  # eslint-guard) and the type-aware ESLint engine (tsserver via projectService
+  # in eslint.config.js) runs under Node; Bun is the installer/launcher here.
+  # See dev-docs/bun.md for the dual-lockfile and hoisting rationale.
   lint_javascript:
     name: 'Lint (Javascript)'
     runs-on: 'ubuntu-latest'
@@ -203,40 +204,36 @@ jobs:
         uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4.4.0
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
 
-      # `npm run bundle` builds via `bun scripts/bun-build.config.mjs` since
-      # esbuild was retired (#2241/S4), so Bun must be on PATH for the bundle
-      # step below. Lint/typecheck/format still execute under Node via npm run.
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
+      - name: 'Cache Bun dependencies'
+        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-lint-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-lint-
+
       - name: 'Run lockfile check'
         run: |-
-          npm run check:lockfile
+          bun run check:lockfile
 
       - name: 'Install dependencies'
         run: |-
-          npm ci
-
-      - name: Fix rollup platform dependency
-        run: |
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            npm install @rollup/rollup-linux-x64-gnu --no-save || true
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            npm install @rollup/rollup-win32-x64-msvc --no-save || true
-          fi
-        shell: bash
+          bun install
 
       - name: 'Run formatter check'
         run: |-
-          npm run format
-          # Check for changes, excluding project-plans directory
-          git diff --exit-code -- . ':!project-plans/'
+          bun run format
+          # Check for changes, excluding project-plans and the generated
+          # bun.lock (Bun may re-normalize it during install; it is not
+          # prettier-formatted source).
+          git diff --exit-code -- . ':!project-plans/' ':!bun.lock'
 
       - name: 'Run ESLint policy guard'
         env:
@@ -247,41 +244,41 @@ jobs:
               || 'origin/main' }}
           ESLINT_GUARD_HEAD: ${{ github.sha }}
         run: |-
-          npm run lint:eslint-guard
+          bun run lint:eslint-guard
 
       - name: 'Run CLI import-boundary guard'
         run: |-
-          npm run lint:cli-boundary
+          bun run lint:cli-boundary
 
       - name: 'Run linter'
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
         run: |-
-          npm run lint:ci
+          bun run lint:ci
 
       - name: 'Run LSP package linter'
         run: |-
-          cd packages/lsp && npx eslint .
+          cd packages/lsp && bunx eslint .
 
       - name: 'Run linter on integration tests'
         run: |-
-          npx eslint integration-tests
+          bunx eslint integration-tests
 
       - name: 'Run formatter on integration tests'
         run: |-
-          npx prettier --check integration-tests
+          bunx prettier --check integration-tests
           git diff --exit-code
 
       - name: 'Build project'
         run: |-
-          npm run build
+          bun run build
 
       - name: Create bundle
-        run: npm run bundle
+        run: bun run bundle
 
       - name: 'Run type check'
         run: |-
-          npm run typecheck
+          bun run typecheck
 
       - name: 'Run sensitive keyword linter'
         run: 'node scripts/lint.js --sensitive-keywords'
@@ -568,21 +565,16 @@ jobs:
   #
   # Test: Node (Linux and macOS - always run)
   #
-  # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
-  # deterministically materializes incomplete copies of third-party packages
-  # (e.g. uuid, yargs, ajv) whose package.json entry points at files that the
-  # copy is missing, breaking esbuild's bundle resolution and vitest's import
-  # resolution. The workspace-shadow subset is dedupe-able, but version-conflict
-  # copies (e.g. ajv@8.18.0 vs root 8.20.0) cannot be safely removed. Revisit
-  # once Bun's hoisted linker materializes complete packages.
-  #
-  # setup-bun is still installed here (pinned via .bun-version) because the LSP
-  # service client (ide-integration/src/lsp/lsp-service-client.ts) resolves `bun`
-  # through `which` and disables the LSP/MCP service when bun is absent from
-  # PATH, which fails the config-lsp-integration and e2e-lsp tests. Pinning to
-  # .bun-version reconciles the CI toolchain with dev-docs/bun.md and replaces
-  # the floating 'latest' that previously triggered a Zizmor cache-poisoning
-  # warning.
+  # Runs on the Bun flow for S6 (#2243): installed with `bun install` and
+  # launched with `bun run`, while keeping vitest as the test runner (the root
+  # `test` script still fans out to each workspace's `vitest run`); bun:test is
+  # not introduced. Bun is also required because the bundle step builds via
+  # `bun scripts/bun-build.config.mjs` (#2241/S4 retired esbuild), and the LSP
+  # service client resolves `bun` through `which` and disables the LSP/MCP
+  # service when bun is absent from PATH (which would fail the
+  # config-lsp-integration and e2e-lsp tests). Pinned via .bun-version per
+  # dev-docs/bun.md, replacing the floating 'latest' that previously triggered a
+  # Zizmor cache-poisoning warning.
   test:
     name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'
@@ -614,34 +606,31 @@ jobs:
         uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
         with:
           node-version: '${{ matrix.node-version }}'
-          cache: 'npm'
 
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
+      - name: 'Cache Bun dependencies'
+        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-test-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-test-
+
       - name: 'Install dependencies for testing'
         run: |-
-          npm ci
+          bun install
       - name: 'Build project'
         run: |-
-          npm run build
+          bun run build
 
       - name: 'Create bundle'
         run: |-
-          npm run bundle
-
-      - name: 'Fix rollup platform dependency'
-        run: |-
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            npm install @rollup/rollup-linux-x64-gnu --no-save || true
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            npm install @rollup/rollup-win32-x64-msvc --no-save || true
-          fi
-        shell: 'bash'
+          bun run bundle
 
       - name: 'Limit Vitest forks on Windows'
         if: runner.os == 'Windows'
@@ -669,13 +658,13 @@ jobs:
           VITEST_TEST_TIMEOUT: 15000
           # Force SecureStore to use encrypted-file fallback instead of keyring (R15.2)
           LLXPRT_SECURE_STORE_FORCE_FALLBACK: ${{ matrix.secure-store-mode == 'fallback' && 'true' || '' }}
-        run: 'npm run test'
+        run: 'bun run test'
 
       - name: 'Run script harness tests (macOS)'
         if: matrix.os == 'macos-latest'
         env:
           CI: true
-        run: npm run test:scripts
+        run: bun run test:scripts
 
       - name: 'Smoke test bundle'
         run: 'node ./bundle/llxprt.js --version'
