@@ -477,7 +477,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['./scripts/**/*.js', './scripts/**/*.mjs', 'esbuild.config.js'],
+    files: ['./scripts/**/*.js', './scripts/**/*.mjs'],
     languageOptions: {
       globals: {
         ...globals.node,
