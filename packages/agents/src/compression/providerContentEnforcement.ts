@@ -149,10 +149,10 @@ export class ProviderContentEnforcer {
     contents: IContent[],
     promptId: string,
   ): Promise<IContent[]> {
-    const extraction = this.extractPendingContents(contents);
-    if (!extraction.safeToRecompose) {
+    if (contents.length === 0) {
       return contents;
     }
+    const extraction = this.extractPendingContents(contents);
     return this.runCompressionAndRecompose(
       promptId,
       extraction.pendingContents,
@@ -171,12 +171,7 @@ export class ProviderContentEnforcer {
     if (initialProjected <= limits.marginAdjustedLimit) {
       return contents;
     }
-    this.throwUnsafeExtractionOverflow(
-      limits.limit,
-      initialProjected,
-      limits.marginAdjustedLimit,
-      limits.completionBudget,
-    );
+    return undefined;
   }
 
   private async returnSafeContents(
@@ -252,9 +247,16 @@ export class ProviderContentEnforcer {
 
     this.deps.logger.warn(
       () =>
-        '[CompressionHandler] Could not extract pending contents via prefix match or recomposition; preserving provider contents unchanged',
+        '[CompressionHandler] Could not extract pending contents via prefix match or recomposition; falling back to curated-length delta heuristic',
     );
-    return { pendingContents: [], safeToRecompose: false };
+    const targetStart = Math.min(
+      this.deps.historyService.getCuratedForProvider().length,
+      contents.length,
+    );
+    return {
+      pendingContents: contents.slice(targetStart),
+      safeToRecompose: false,
+    };
   }
 
   private extractPendingContentsByRecomposition(
@@ -288,21 +290,6 @@ export class ProviderContentEnforcer {
       prefix = index + 1;
     }
     return prefix;
-  }
-
-  private throwUnsafeExtractionOverflow(
-    limit: number,
-    projected: number,
-    marginAdjustedLimit: number,
-    completionBudget: number,
-  ): never {
-    throw this.buildContextOverflowError(
-      limit,
-      projected,
-      projected,
-      marginAdjustedLimit,
-      completionBudget,
-    );
   }
 
   private contentsEqual(left: IContent[], right: IContent[]): boolean {
