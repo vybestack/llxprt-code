@@ -35,6 +35,7 @@ import type {
   Agent,
   AgentTaskInfo,
   AuthProviderDetail,
+  CompressionResult,
   HookInfo,
   McpDetailStatus,
   PolicyRuleView,
@@ -145,3 +146,22 @@ const _mcpDetailShapeAnchor: Pick<
   requiresAuth: false,
 };
 void _mcpDetailShapeAnchor;
+
+// --- CompressionResult root type identity anchor (P05 backwards compat) ---
+// The root barrel (@vybestack/llxprt-code-agents) MUST export the CORE
+// CompressionResult (from @vybestack/llxprt-code-core/core/compression/types.js)
+// for backwards compatibility with main — NOT the API agent.ts shape. This
+// compile-only anchor proves the root CompressionResult has the CORE fields
+// `newHistory` and `metadata`. If the explicit re-export in index.ts is
+// removed (causing root CompressionResult to fall back to the agent.ts shape
+// which has `status`/`originalTokenCount`/etc.), this anchor fails typecheck
+// because those fields do not exist on the core type.
+type _RootCompressionResultShape = CompressionResult;
+const _compressionResultNewHistoryAnchor: (
+  x: _RootCompressionResultShape,
+) => readonly unknown[] = (x) => x.newHistory;
+void _compressionResultNewHistoryAnchor;
+const _compressionResultMetadataAnchor: (
+  x: _RootCompressionResultShape,
+) => unknown = (x) => x.metadata;
+void _compressionResultMetadataAnchor;

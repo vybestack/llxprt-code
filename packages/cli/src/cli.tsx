@@ -12,7 +12,7 @@
  * Thin CLI orchestrator (issue #2204). main() is an ordered sequence of
  * delegated calls: bootstrap → config → provider activation → sandbox hop →
  * session dispatch. The interactive-UI render, non-interactive session driving,
- * and dispatch helpers live in ./cliSessionDispatch.tsx. This file no longer
+ * and dispatch helpers live in the ./session/ modules. This file no longer
  * co-architects runtime construction — it consumes the public Agent/runtime
  * surface via the bootstrap modules.
  */
@@ -87,14 +87,15 @@ import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
 } from './cliSessionBootstrap.js';
+import { dispatchInteractiveOrNonInteractive } from './session/nonInteractiveSession.js';
+import { formatNonInteractiveError } from './session/errorReporting.js';
+import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
 import {
-  dispatchInteractiveOrNonInteractive,
-  formatNonInteractiveError,
-  initializeOutputListenersAndFlush,
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
-  startInteractiveUI,
-} from './cliSessionDispatch.js';
+  __resetUnhandledRejectionStateForTesting,
+} from './session/signalHandlers.js';
+import { startInteractiveUI } from './session/interactiveUI.js';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -103,6 +104,7 @@ export {
   formatNonInteractiveError,
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
+  __resetUnhandledRejectionStateForTesting,
   startInteractiveUI,
   initializeOutputListenersAndFlush,
 };

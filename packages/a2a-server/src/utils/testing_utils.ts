@@ -18,9 +18,9 @@ import type {
   ToolCallRequestInfo,
   ToolCall,
   CompletedToolCall,
+  ToolSchedulerContract,
+  SchedulerCallbacks,
 } from '@vybestack/llxprt-code-core';
-import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
-import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core';
 
 import { expect, vi } from 'vitest';
 
@@ -224,7 +224,7 @@ function createSchedulerFactory(mockConfig: MutableMockConfig) {
           getPreferredEditor: callbacks.getPreferredEditor,
           config: mockConfig,
           toolRegistry: mockConfig.getToolRegistry(),
-        } as unknown as CoreToolScheduler;
+        } as unknown as ToolSchedulerContract;
       },
     );
 }

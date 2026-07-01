@@ -38,9 +38,9 @@ import {
   type ToolCallRequestInfo,
   type ToolRegistry,
   type ToolResult,
+  type ToolSchedulerContract,
   type WaitingToolCall,
 } from '@vybestack/llxprt-code-core';
-import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 
 const buildRequest = (
@@ -278,7 +278,7 @@ const mockMessageBus = {
 type SchedulerCallbacks = SchedulerCallbacksCore & { config?: Config };
 
 type MockScheduler = Pick<
-  CoreToolScheduler,
+  ToolSchedulerContract,
   'schedule' | 'cancelAll' | 'dispose' | 'setCallbacks'
 > & {
   toolCalls: ToolCall[];
@@ -367,7 +367,7 @@ const buildMockScheduler = (
         scheduler.toolCalls = activeCalls;
         currentCallbacks.onToolCallsUpdate?.(scheduler.toolCalls);
       }
-    }) as unknown as CoreToolScheduler['schedule'],
+    }) as unknown as ToolSchedulerContract['schedule'],
     cancelAll: vi.fn(),
     dispose: vi.fn(),
     setCallbacks: vi.fn((nextCallbacks) => {

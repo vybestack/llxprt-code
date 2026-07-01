@@ -26,9 +26,7 @@ import {
   SubagentManager,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
-import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import {
   clearSettingsProviderRuntimeContext,
   createSettingsProviderRuntimeContext,
@@ -52,11 +50,7 @@ const DEFAULT_DEBUG_MODE = false;
  * dependency cycle. Instead, the composition root (the CLI) registers the
  * concrete factories at bootstrap via `registerAgentRuntimeFactories`.
  */
-export interface AgentRuntimeFactoryBindings {
-  agentClientFactory: AgentClientFactory;
-  toolSchedulerFactory: ToolSchedulerFactory;
-  taskToolRegistration: () => TaskToolRegistration;
-}
+export type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 
 let agentRuntimeFactoryBindings: AgentRuntimeFactoryBindings | null = null;
 

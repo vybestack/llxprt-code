@@ -1,5 +1,6 @@
 /**
  * @requirement:REQ-006
+ * @plan:PLAN-20260629-ISSUE2285.P05
  *
  * RUNTIME non-breaking export guard for the AgentClientContract promotion.
  *
@@ -38,11 +39,10 @@ describe('REQ-006: agents public export surface is non-breaking', () => {
   it('Test B: internals.js value exports (AgentClient, PostTurnAction) remain intact', () => {
     // REQ-004.1: the concrete AgentClient class stays on the internals subpath.
     expect(typeof internals.AgentClient).toBe('function');
-    // IDENTITY check: the root's AgentClient must be the SAME binding that lives
-    // on ./internals.js (the package root reaches it via `export * from
-    // './internals.js'`), NOT a separate value newly added to the curated api
-    // barrel. This proves the class stays sourced from internals (REQ-004.1).
-    expect(root.AgentClient).toBe(internals.AgentClient);
+    // P05: the root no longer re-exports internals, so root.AgentClient is
+    // undefined (deny). The class is sourced exclusively from the internals
+    // subpath now.
+    expect(root.AgentClient).toBeUndefined();
     // PostTurnAction is a value (enum/const) re-exported from internals.
     expect(
       Object.prototype.hasOwnProperty.call(internals, 'PostTurnAction'),

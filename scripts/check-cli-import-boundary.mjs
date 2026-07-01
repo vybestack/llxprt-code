@@ -71,11 +71,6 @@ const RUNTIME_PACKAGES = [
   '@vybestack/llxprt-code-mcp',
 ];
 
-// The agents bare root re-exports the internals barrel (./internals.js), so a
-// bare import of an INTERNAL symbol from this root is a boundary violation
-// (#2204). This constant names that root for the imported-symbol check.
-const AGENTS_PACKAGE_ROOT = '@vybestack/llxprt-code-agents';
-
 // Public subpaths that are NOT deep/internal — they are documented public
 // entrypoints and always allowed (do not require an allowlist entry).
 //
@@ -185,102 +180,6 @@ const PRUNED_DIR_BASE_NAMES = new Set([
   ...NON_SOURCE_DIR_BASE_NAMES,
 ]);
 
-/**
- * Public symbols of the agents package.
- *
- * The bare root `@vybestack/llxprt-code-agents` re-exports BOTH the curated
- * public Agent API (./api/index.js) AND the low-level internals barrel
- * (./internals.js) for non-breaking compatibility. Importing an INTERNAL
- * symbol from the bare root is a boundary violation even though the specifier
- * itself is the public root: it couples the CLI to runtime construction it
- * must not own (#2204).
- *
- * This allowlist names ONLY the symbols that are part of the curated public
- * Agent API (the ./api/index.js surface) plus the small set of genuinely
- * public value exports. Any named import from the bare root that is NOT here
- * is a boundary violation — there is no per-file internal-symbol escape hatch
- * (#2204 burn-down removed AGENT_INTERNAL_SYMBOL_ALLOWLIST entirely).
- *
- * QUARANTINE BOUNDARY (shrinks as #1595 trims the root to the public API).
- */
-const PUBLIC_AGENT_SYMBOLS = new Set([
-  // Public factory functions
-  'createAgent',
-  'fromConfig',
-  'listProviders',
-  'listTools',
-  'mapLoopStream',
-  'mapStreamEvent',
-  'toConfigParameters',
-  'AdapterError',
-  // Curated public runtime-construction factories (#2204). Consumers
-  // construct agent-client / tool-scheduler / task-registration /
-  // agentic-loop primitives via these helpers instead of importing the
-  // internal concrete classes.
-  'createAgentRuntimeFactoryBindings',
-  'createAgentClient',
-  'createToolScheduler',
-  'createTaskRegistration',
-  'createAgenticLoop',
-  // Type-only public symbols re-exported via runtimeFactories (#2204).
-  'AgenticLoopRunner',
-  'AgenticLoopEvent',
-  'AgenticLoopMessage',
-  'AgenticLoopOptions',
-  'AgenticLoopApprovalHandler',
-  'DisplayCallbacks',
-  'AgentRuntimeFactoryBindings',
-  // Curated public enum/value re-exports (api/index.ts)
-  'PolicyDecision',
-  'ApprovalMode',
-  // Public type symbols (only matter for value imports, but listed for clarity
-  // so reviewers can see the full public surface that is always allowed).
-  'Agent',
-  'AgentEvent',
-  'AgentInput',
-  'AgentMessage',
-  'AgentHistoryItem',
-  'AgentToolCall',
-  'AgentToolResult',
-  'AgentConfig',
-  'FromConfigOptions',
-  'ToolConfirmation',
-  'ToolDecision',
-  'ToolUpdate',
-  'DoneReason',
-  'AgentError',
-  'AgentErrorCode',
-  'SessionStats',
-  'ProviderStatus',
-  'TurnOptions',
-  'HookInfo',
-  'AgentTaskInfo',
-  'AuthStatus',
-  'Unsubscribe',
-  'McpDiscoveryMode',
-  'ApprovalHandler',
-  'OAuthPromptHandler',
-  'AgentHooks',
-  'AgentModelParams',
-  'AgentSchedulerHandle',
-  'AgentSchedulerFactory',
-  'AgentSchedulerFactoryOptions',
-  'StructuredError',
-  'StreamEvent',
-  'StreamEventType',
-  'JsonStreamEventType',
-  'InvalidStreamError',
-  'ChatSession',
-  'ChatSessionFactory',
-  'ModelInfo',
-  'ChatCompressionInfo',
-  // engine helpers re-exported on the public api surface (api/index.ts maps)
-  'classifyCompletedTools',
-  'splitPartsByRole',
-  'buildToolResponses',
-  'getTokenLimitForConfiguredContext',
-]);
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function walkDir(dir) {
@@ -384,50 +283,6 @@ function getLine(sourceFile, pos) {
 function isAllowed(relFile, specifier) {
   const allowed = ALLOWLIST[relFile];
   return Boolean(allowed && allowed.includes(specifier));
-}
-
-/**
- * Extract the named import symbols from a static ImportDeclaration node.
- * Returns an array of local-occurrence symbol names (resolving `as` aliases to
- * the original exported name). Returns an empty array for namespace imports
- * (`import * as ns`) since those do not name a specific symbol — a namespace
- * import of the agents root is flagged separately as a whole-root coupling.
- *
- * Only static `import { X } from '...'` / `import type { X }` forms carry
- * named symbols; dynamic import() and vi.mock return [].
- */
-function importedSymbolsOf(node) {
-  if (!node || !ts.isImportDeclaration(node)) return [];
-  const clause = node.importClause;
-  if (!clause) return [];
-  const names = [];
-  // default import. The agents root has NO default export (verified: no
-  // `export default` exists in packages/agents/src), so `import X from
-  // '@vybestack/llxprt-code-agents'` cannot resolve at runtime. The symbol
-  // 'default' is intentionally NOT in PUBLIC_AGENT_SYMBOLS, so any default
-  // import from the bare root is flagged as a boundary violation — this is
-  // correct and intentional. If a default export is ever added to the agents
-  // root, add 'default' to PUBLIC_AGENT_SYMBOLS here.
-  if (clause.name) {
-    names.push('default');
-  }
-  const bindings = clause.namedBindings;
-  if (!bindings) return names;
-  if (ts.isNamespaceImport(bindings)) {
-    // `import * as ns` — whole-module coupling; cannot name a symbol. Caller
-    // treats a namespace import of the agents root as a violation on its own.
-    names.push('*');
-    return names;
-  }
-  if (ts.isNamedImports(bindings)) {
-    for (const el of bindings.elements) {
-      // propertyName is the ORIGINAL exported name (`X` in `X as Y`);
-      // fall back to the local name.name when there is no alias.
-      const original = el.propertyName ?? el.name;
-      names.push(original.text);
-    }
-  }
-  return names;
 }
 
 /**
@@ -554,37 +409,6 @@ function analyzeFile(filePath) {
         });
       }
     }
-    // Bare agents-root symbol check: the bare root re-exports internals, so a
-    // named import of an INTERNAL symbol from the public root is still a
-    // boundary violation (#2204). There is no per-file escape hatch.
-    if (
-      specifier === AGENTS_PACKAGE_ROOT &&
-      ts.isImportDeclaration(node) &&
-      node.importClause
-    ) {
-      const symbols = importedSymbolsOf(node);
-      for (const sym of symbols) {
-        // A namespace import (`import * as ns`) of the agents root couples to
-        // the whole (internals-leaking) surface — flag it.
-        if (sym === '*') {
-          violations.push({
-            line: getLine(sourceFile, node.getStart()),
-            importKind: 'agents-namespace-import',
-            specifier,
-            symbol: sym,
-          });
-          continue;
-        }
-        if (!PUBLIC_AGENT_SYMBOLS.has(sym)) {
-          violations.push({
-            line: getLine(sourceFile, node.getStart()),
-            importKind: 'agents-internal-symbol',
-            specifier,
-            symbol: sym,
-          });
-        }
-      }
-    }
     // Non-literal vi.mock detection: a vi.mock call whose first argument is
     // not a string literal cannot be statically analyzed by this guard and
     // could hide a deep runtime import. Flag it so it cannot silently bypass
@@ -604,7 +428,7 @@ function analyzeFile(filePath) {
   // Deduplicate
   const seen = new Set();
   return violations.filter((v) => {
-    const key = `${v.line}|${v.importKind}|${v.specifier}|${v.symbol ?? ''}`;
+    const key = `${v.line}|${v.importKind}|${v.specifier}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -771,10 +595,6 @@ function main() {
         if (v.importKind === 'vi.mock-non-literal') {
           console.log(
             `    line ${v.line}: vi.mock(<non-literal>) — vi.mock specifiers must be static string literals so this guard can analyze them; a dynamic specifier could hide a deep runtime import`,
-          );
-        } else if (v.symbol !== undefined) {
-          console.log(
-            `    line ${v.line}: ${v.specifier} imports internal symbol '${v.symbol}' (${v.importKind}) — the bare root re-exports internals; use a public Agent symbol instead`,
           );
         } else {
           console.log(
