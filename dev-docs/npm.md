@@ -6,13 +6,15 @@ This monorepo contains two main packages: `@vybestack/llxprt-code` and `@vybesta
 
 This is the main package for the LLxprt Code. It is responsible for the user interface, command parsing, and all other user-facing functionality.
 
-When this package is published, it is bundled into a single executable file. This bundle includes all of the package's dependencies, including `@vybestack/llxprt-code-core`. This means that whether a user installs the package with `npm install -g @vybestack/llxprt-code` or runs it directly with `npx @vybestack/llxprt-code`, they are using this single, self-contained executable.
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. TypeScript source (`.ts`) is shipped directly — the Bun runtime executes it natively, so there is no separate compilation step that produces a `dist/` artifact for the CLI runtime, and no esbuild bundling step. This means that whether a user installs the package with `npm install -g @vybestack/llxprt-code` or runs it directly with `npx @vybestack/llxprt-code`, they are using the shipped `.ts` source executed by Bun. Type checking uses `tsc --noEmit` (no JavaScript output is produced).
 
 ## `@vybestack/llxprt-code-core`
 
 This package contains the core logic for interacting with the Gemini API. It is responsible for making API requests, handling authentication, and managing the local cache.
 
 This package is not bundled. When it is published, it is published as a standard Node.js package with its own dependencies. This allows it to be used as a standalone package in other projects, if needed. All transpiled js code in the `dist` folder is included in the package.
+
+Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 
 # Release Process
 
@@ -172,19 +174,16 @@ Here are the key stages:
 Stage 1: Pre-Release Sanity Checks and Versioning
 
 - What happens: Before any files are moved, the process ensures the project is in a good state. This involves running tests,
-  linting, and type-checking (npm run preflight). The version number in the root package.json and packages/cli/package.json
+  linting, and type-checking (bun run preflight). The version number in the root package.json and packages/cli/package.json
   is updated to the new release version.
 - Why: This guarantees that only high-quality, working code is released. Versioning is the first step to signify a new
   release.
 
 Stage 2: Building the Source Code
 
-- What happens: The TypeScript source code in packages/core/src and packages/cli/src is compiled into JavaScript.
-- File movement:
-  - packages/core/src/\*_/_.ts -> compiled to -> packages/core/dist/
-  - packages/cli/src/\*_/_.ts -> compiled to -> packages/cli/dist/
-- Why: The TypeScript code written during development needs to be converted into plain JavaScript that can be run by
-  Node.js. The core package is built first as the cli package depends on it.
+- What happens: The TypeScript source code (`.ts`) is shipped directly. The Bun runtime executes it natively, so there is no compilation step that produces a `dist/` artifact for the CLI runtime. `tsc --noEmit` is used solely for type-checking — no JavaScript output is produced.
+- File movement: No `dist/` compilation occurs for the CLI run path. Type-checking runs via `tsc --noEmit`.
+- Why: Shipping `.ts` directly and running it under Bun removes the esbuild bundling and `dist/` compilation steps, simplifying the build pipeline.
 
 Stage 3: Assembling the Final Publishable Package
 
@@ -197,15 +196,13 @@ This is the most critical stage where files are moved and transformed into their
     - Why: The final package.json must be different from the one used in development. Key changes include:
       - Removing devDependencies.
       - Removing workspace-specific "dependencies": { "@gemini-cli/core": "workspace:\*" } and ensuring the core code is
-        bundled directly into the final JavaScript file.
+        bundled directly into the final package.
       - Ensuring the bin, main, and files fields point to the correct locations within the final package structure.
 
-2.  The JavaScript Bundle is Created:
-    - What happens: The built JavaScript from both packages/core/dist and packages/cli/dist are bundled into a single,
-      executable JavaScript file.
-    - File movement: packages/cli/dist/index.js + packages/core/dist/index.js -> (bundled by esbuild) -> `bundle`/gemini.js (or a
-      similar name).
-    - Why: This creates a single, optimized file that contains all the necessary application code. It simplifies the package
+2.  The `.ts` Source is Shipped Directly:
+    - What happens: The TypeScript source files (`.ts`) are shipped as-is — there is no esbuild bundling step and no compiled `bundle/llxprt.js` artifact produced from compiled `dist/` output. The Bun runtime executes the `.ts` source natively at runtime.
+    - File movement: packages/cli/src/_.ts + packages/core/src/_.ts -> (shipped directly, no bundling) -> `bundle`/
+    - Why: Shipping `.ts` directly and running under Bun removes the need for esbuild bundling. This simplifies the package
       by removing the need for the core package to be a separate dependency on NPM, as its code is now included directly.
 
 3.  Static and Supporting Files are Copied:
@@ -227,6 +224,8 @@ Stage 4: Publishing to NPM
   to the NPM registry. This prevents any source code, test files, or development configurations from being accidentally
   published, resulting in a clean and minimal package for users.
 
+Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
+
 Summary of File Flow
 
 ```mermaid
@@ -245,7 +244,7 @@ graph TD
     end
 
     subgraph "Artifacts"
-        H["Bundled JS"]
+        H["Shipped .ts Source"]
         I["Final package.json"]
         J["bundle/"]
     end
@@ -284,6 +283,6 @@ This tells NPM that any folder inside the `packages` directory is a separate pac
 
 ### Benefits of Workspaces
 
-- **Simplified Dependency Management**: Running `npm install` from the root of the project will install all dependencies for all packages in the workspace and link them together. This means you don't need to run `npm install` in each package's directory.
-- **Automatic Linking**: Packages within the workspace can depend on each other. When you run `npm install`, NPM will automatically create symlinks between the packages. This means that when you make changes to one package, the changes are immediately available to other packages that depend on it.
-- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `npm run build --workspace @vybestack/llxprt-code`.
+- **Simplified Dependency Management**: Running `bun install` from the root of the project will install all dependencies for all packages in the workspace and link them together. This means you don't need to run `bun install` in each package's directory.
+- **Automatic Linking**: Packages within the workspace can depend on each other. When you run `bun install`, Bun will automatically create symlinks between the packages. This means that when you make changes to one package, the changes are immediately available to other packages that depend on it.
+- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `bun run build --workspace @vybestack/llxprt-code`.

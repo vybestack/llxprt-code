@@ -81,6 +81,9 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 ## Quick Start
 
 1. **Prerequisites:** Node.js 20+ installed (not required for Homebrew)
+
+   > **Note:** LLxprt Code runs on the [Bun](https://bun.sh) runtime under the covers. Node.js remains the compatibility target for invocation — the npm/npx/Homebrew install commands below work unchanged. The published package bundles Bun as a dependency, so most users never need to install Bun separately. See the [Bun fallback](#bun-runtime-and-install-fallback) section if Bun is missing.
+
 2. **Install:**
 
    ```bash
@@ -98,6 +101,29 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 3. **Run:** `llxprt`
 4. **Choose provider:** Use `/provider` to select your preferred LLM service
 5. **Start coding:** Ask questions, generate code, or analyze projects
+
+### Bun Runtime and Install Fallback
+
+LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, an internal launcher (see `packages/cli/src/launcher/bun-launcher.ts`) resolves Bun and re-execs the CLI under it, allowing the TypeScript source (`.ts`) to run directly without a separate compilation or bundling step.
+
+**Bun resolution order:**
+
+1. `node_modules/.bin/bun` (the bundled Bun, climbing ancestor directories)
+2. `node_modules/bun/bin/bun.exe` (direct dependency fallback)
+3. `bun` found on `PATH` (via `which`/`where`)
+
+If no Bun runtime is found, the launcher prints an error with instructions:
+
+> Bun runtime was not found. Install it with "npm install" (it is bundled as the "bun" dependency) or install Bun directly from https://bun.sh and ensure it is on your PATH.
+
+To resolve this:
+
+- **npm users:** Re-run `npm install @vybestack/llxprt-code` (or `npm install -g @vybestack/llxprt-code`) to restore the bundled Bun dependency.
+- **All users:** Install Bun directly from [https://bun.sh](https://bun.sh) and ensure it is on your `PATH`.
+
+> **Note:** The exact wording and trigger of the fallback message should be reconciled with the shipped launcher implementation. The behavior described above reflects the current launcher in `packages/cli/src/launcher/bun-launcher.ts`.
+
+**Windows pty caveat:** On Windows, the `node-pty` module has a known terminal resize race condition. Under Bun, the runtime handles this generically; if you encounter terminal sizing issues on Windows, ensure you are using a recent Bun version and a compatible terminal emulator.
 
 **First session example:**
 

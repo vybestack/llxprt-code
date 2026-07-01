@@ -80,7 +80,7 @@ Contributors to the project will want to run the CLI directly from the source co
   This method provides hot-reloading and is useful for active development.
   ```bash
   # From the root of the repository
-  npm run start
+  bun run start
   ```
 - **Production-like mode (Linked package):**
   This method simulates a global installation by linking your local package. It's useful for testing a local build in a production workflow.
@@ -119,11 +119,13 @@ These packages are used when performing the standard installation and when runni
 
 **Build and packaging processes**
 
-There are two distinct build processes used, depending on the distribution channel:
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. TypeScript source (`.ts`) is shipped directly — the Bun runtime executes it natively, so there is no `tsc` compilation step that produces a published `dist/` directory, and no esbuild bundling step. This applies to both distribution channels:
 
-- **NPM publication:** For publishing to the NPM registry, the TypeScript source code in `@vybestack/llxprt-code-core` and `@vybestack/llxprt-code` is transpiled into standard JavaScript using the TypeScript Compiler (`tsc`). The resulting `dist/` directory is what gets published in the NPM package. This is a standard approach for TypeScript libraries.
+- **NPM publication:** The `.ts` source files are shipped as-is in the published NPM package. The Bun runtime executes them directly at runtime. `tsc --noEmit` is used solely for type-checking during development — no JavaScript output is produced.
 
-- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, a different process is triggered by the `prepare` script in `package.json`. This script uses `esbuild` to bundle the entire application and its dependencies into a single, self-contained JavaScript file. This bundle is created on-the-fly on the user's machine and is not checked into the repository.
+- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, the `.ts` source is executed directly by Bun. There is no esbuild bundling step and no on-the-fly bundle created on the user's machine.
+
+Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 
 **Docker sandbox image**
 
@@ -137,6 +139,6 @@ docker run --rm -it ghcr.io/vybestack/llxprt-code/sandbox:0.7.0
 
 The release process is automated through GitHub Actions. The release workflow performs the following actions:
 
-1.  Build the NPM packages using `tsc`.
+1.  Build the NPM packages (`.ts` source shipped directly, no `dist/` compilation or esbuild bundling).
 2.  Publish the NPM packages to the artifact registry.
 3.  Create GitHub releases with bundled assets.

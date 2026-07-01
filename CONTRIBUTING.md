@@ -19,13 +19,13 @@ This project values respectful and constructive collaboration. We expect all con
 Run the presubmit check from the repository root before opening a pull request:
 
 ```bash
-npm run presubmit
+bun run presubmit
 ```
 
 This formats the repository and then runs linting, the build, type checking, and tests. (The build runs before type checking and tests because packages type-check and test against each other's built output.) If your PR is large or you run into problems that are hard to reproduce locally, you may also want to run the heavier CI-style preflight check:
 
 ```bash
-npm run preflight
+bun run preflight
 ```
 
 `preflight` performs a clean install and already includes formatting, CI linting, build, type checking, and CI tests, so you do not need to run those separately unless you are re-checking a specific failure after making fixes.
@@ -70,7 +70,7 @@ If you'd like to get early feedback on your work, please use GitHub's **Draft Pu
 
 #### 4. Ensure All Checks Pass
 
-Before submitting your PR, ensure that the contributor readiness checks pass by running `npm run presubmit`. This command formats the repository and then runs linting, the build, type checking, and tests.
+Before submitting your PR, ensure that the contributor readiness checks pass by running `bun run presubmit`. This command formats the repository and then runs linting, the build, type checking, and tests.
 
 #### 5. Update Documentation
 
@@ -99,9 +99,7 @@ This section guides contributors on how to build, modify, and understand the dev
 
 **Prerequisites:**
 
-1.  **Node.js**:
-    - **Development:** Please use Node.js `~20.19.0`. This specific version is required due to an upstream development dependency issue. You can use a tool like [nvm](https://github.com/nvm-sh/nvm) to manage Node.js versions.
-    - **Production:** For running the CLI in a production environment, any version of Node.js `>=20` is acceptable.
+1.  **Bun**: Install [Bun](https://bun.sh) (version pinned in [`.bun-version`](../.bun-version), currently `1.3.14`). Bun is the package manager and runtime for development. Node.js `>=20` remains the compatibility target for invocation — the npm/npx/Homebrew install flows still work — but the development workflow uses Bun directly. See [dev-docs/bun.md](./dev-docs/bun.md) for details on the dual-lockfile policy and Bun-specific configuration.
 2.  **Git**
 
 ### Build Process
@@ -116,16 +114,16 @@ cd llxprt-code
 To install dependencies defined in `package.json` as well as root dependencies:
 
 ```bash
-npm install
+bun install
 ```
 
 To build the entire project (all packages):
 
 ```bash
-npm run build
+bun run build
 ```
 
-This command typically compiles TypeScript to JavaScript, bundles assets, and prepares the packages for execution. Refer to `scripts/build.js` and `package.json` scripts for more details on what happens during the build.
+TypeScript source (`.ts`) is shipped directly — the Bun runtime executes it natively, so there is no separate compilation step that produces a `dist/` artifact for the CLI runtime. Type checking uses `tsc --noEmit` (no JavaScript output is produced). Refer to `scripts/build.js` and `package.json` scripts for more details on what happens during the build.
 
 ### Enabling Sandboxing
 
@@ -134,43 +132,57 @@ This command typically compiles TypeScript to JavaScript, bundles assets, and pr
 To build both the `gemini` CLI utility and the sandbox container, run `build:all` from the root directory:
 
 ```bash
-npm run build:all
+bun run build:all
 ```
 
-To skip building the sandbox container, you can use `npm run build` instead.
+To skip building the sandbox container, you can use `bun run build` instead.
 
 ### Running
 
 To start LLxprt Code from the source code (after building), run the following command from the root directory:
 
 ```bash
-npm start
+bun run start
 ```
+
+Alternatively, the dev launcher (`scripts/start.js`) handles Bun resolution and relaunch:
+
+```bash
+node scripts/start.js
+```
+
+The dev launcher (`scripts/start.js`) resolves Bun using the same logic as the production launcher in `packages/cli/src/launcher/bun-launcher.ts` (climbing ancestor directories for `node_modules/.bin/bun`, falling back to `node_modules/bun/bin/bun.exe`, then `PATH`). If Bun is absent, the launcher prints guidance to install Bun and exits. See the [Bun Runtime and Install Fallback](../README.md#bun-runtime-and-install-fallback) section in the README.
 
 If you'd like to run the source build outside of the llxprt-code folder you can utilize `npm link path/to/llxprt-code/packages/cli` (see: [docs](https://docs.npmjs.com/cli/v9/commands/npm-link)) or `alias llxprt="node path/to/llxprt-code/packages/cli"` to run with `llxprt`
 
 ### Running Tests
 
-This project contains two types of tests: unit tests and integration tests.
+This project contains two types of tests: unit tests and integration tests. Testing uses [vitest](https://vitest.dev), which is retained as the test runner (invoked via Bun).
 
 #### Unit Tests
 
 To execute the unit test suite for the project:
 
 ```bash
-npm run test
+bun run test
 ```
 
-This will run tests located in the `packages/core` and `packages/cli` directories. Ensure tests pass before submitting any changes. For the standard pre-PR check, run `npm run presubmit`.
+This will run tests located in the `packages/core` and `packages/cli` directories. Ensure tests pass before submitting any changes. For the standard pre-PR check, run `bun run presubmit`.
+
+Type checking uses `tsc --noEmit`:
+
+```bash
+bun run typecheck
+```
 
 #### Integration Tests
 
-The integration tests are designed to validate the end-to-end functionality of LLxprt Code. They are not run as part of the default `npm run test` command.
+The integration tests are designed to validate the end-to-end functionality of LLxprt Code. They are not run as part of the default `bun run test` command.
 
 To run the integration tests, use the following command:
 
 ```bash
-npm run test:e2e
+bun run test:e2e
 ```
 
 For more detailed information on the integration testing framework, please see the [Integration Tests documentation](./docs/integration-tests.md).
@@ -180,7 +192,7 @@ For more detailed information on the integration testing framework, please see t
 To ensure code quality and formatting consistency before a PR, run the presubmit check:
 
 ```bash
-npm run presubmit
+bun run presubmit
 ```
 
 This command runs formatting, linting, the build, type checking, and tests.
@@ -188,7 +200,7 @@ This command runs formatting, linting, the build, type checking, and tests.
 For a larger PR or a difficult-to-reproduce failure, run the heavier preflight check:
 
 ```bash
-npm run preflight
+bun run preflight
 ```
 
 This command runs a clean install and then formatting, CI linting, build, type checking, and CI tests as defined in the project's `package.json`.
@@ -200,8 +212,8 @@ After cloning, you can create a git pre-push hook to check your branch before pu
 ```bash
 echo "
 # Run contributor readiness checks before pushing
-if ! npm run presubmit; then
-  echo "npm presubmit failed. Push aborted."
+if ! bun run presubmit; then
+  echo "bun presubmit failed. Push aborted."
   exit 1
 fi
 " > .git/hooks/pre-push && chmod +x .git/hooks/pre-push
@@ -212,7 +224,7 @@ fi
 To separately format the code in this project by running the following command from the root directory:
 
 ```bash
-npm run format
+bun run format
 ```
 
 This command uses Prettier to format the code according to the project's style guidelines.
@@ -222,7 +234,7 @@ This command uses Prettier to format the code according to the project's style g
 To separately lint the code in this project, run the following command from the root directory:
 
 ```bash
-npm run lint
+bun run lint
 ```
 
 ### Coding Conventions
@@ -253,9 +265,9 @@ For more detailed architecture, see `docs/architecture.md`.
 0.  Run the CLI to interactively debug in VS Code with `F5`
 1.  Start the CLI in debug mode from the root directory:
     ```bash
-    npm run debug
+    bun run debug
     ```
-    This command runs `node --inspect-brk dist/llxprt.js` within the `packages/cli` directory, pausing execution until a debugger attaches. You can then open `chrome://inspect` in your Chrome browser to connect to the debugger.
+    This launches the CLI under Bun (via the dev launcher `scripts/start.js`) with the inspector, pausing execution until a debugger attaches. You can then open `chrome://inspect` in your Chrome browser to connect to the debugger.
 2.  In VS Code, use the "Attach" launch configuration (found in `.vscode/launch.json`).
 
 Alternatively, you can use the "Launch Program" configuration in VS Code if you prefer to launch the currently open file directly, but 'F5' is generally recommended.
@@ -268,6 +280,8 @@ DEBUG=1 llxprt
 
 **Note:** If you have `DEBUG=true` in a project's `.env` file, it won't affect llxprt-code due to automatic exclusion. Use `.llxprt/.env` files for llxprt-code specific debug settings.
 
+**Note:** Debugging is done against the shipped `.ts` source files under Bun — there is no compiled `dist/llxprt.js` artifact. The dev launcher resolves Bun and executes the TypeScript entry point directly.
+
 ### React DevTools
 
 To debug the CLI's React-based UI, you can use React DevTools. Ink, the library used for the CLI's interface, is compatible with React DevTools version 4.x.
@@ -275,7 +289,7 @@ To debug the CLI's React-based UI, you can use React DevTools. Ink, the library 
 1.  **Start LLxprt Code in development mode:**
 
     ```bash
-    DEV=true npm start
+    DEV=true bun run start
     ```
 
 2.  **Install and run React DevTools version 4.28.5 (or the latest compatible 4.x version):**
@@ -304,7 +318,7 @@ On macOS, `llxprt-code` uses Seatbelt (`sandbox-exec`) under a `permissive-open`
 
 ### Container-based Sandboxing (All Platforms)
 
-For stronger container-based sandboxing on macOS or other platforms, you can set `LLXPRT_SANDBOX=true|docker|podman|<command>` in your environment or `.env` file. The specified command (or if `true` then either `docker` or `podman`) must be installed on the host machine. Once enabled, `npm run build:all` will build a minimal container ("sandbox") image and `npm start` will launch inside a fresh instance of that container. The first build can take 20-30s (mostly due to downloading of the base image) but after that both build and start overhead should be minimal. Default builds (`npm run build`) will not rebuild the sandbox.
+For stronger container-based sandboxing on macOS or other platforms, you can set `LLXPRT_SANDBOX=true|docker|podman|<command>` in your environment or `.env` file. The specified command (or if `true` then either `docker` or `podman`) must be installed on the host machine. Once enabled, `bun run build:all` will build a minimal container ("sandbox") image and `bun run start` will launch inside a fresh instance of that container. The first build can take 20-30s (mostly due to downloading of the base image) but after that both build and start overhead should be minimal. Default builds (`bun run build`) will not rebuild the sandbox.
 
 Container-based sandboxing mounts the project directory (and system temp directory) with read-write access and is started/stopped/removed automatically as you start/stop LLxprt Code. Files created within the sandbox should be automatically mapped to your user/group on host machine. You can easily specify additional mounts, ports, or environment variables by setting `SANDBOX_{MOUNTS,PORTS,ENV}` as needed. You can also fully customize the sandbox for your projects by creating the files `.llxprt/sandbox.Dockerfile` and/or `.llxprt/sandbox.bashrc` under your project settings directory (`.llxprt`) and running `llxprt` with `BUILD_SANDBOX=1` to trigger building of your custom sandbox.
 
@@ -317,9 +331,9 @@ All sandboxing methods, including macOS Seatbelt using `*-proxied` profiles, sup
 We publish an artifact for each commit to our internal registry. But if you need to manually cut a local build, then run the following commands:
 
 ```
-npm run clean
-npm install
-npm run auth
-npm run prerelease:dev
-npm publish --workspaces
+bun run clean
+bun install
+bun run auth
+bun run prerelease:dev
+bun publish --workspaces
 ```

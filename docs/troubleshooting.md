@@ -206,11 +206,11 @@ Another process is using that port. Stop it or configure a different port in you
 
 **`Command not found`**
 
-LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `node packages/cli/dist/index.js`.
+LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `node scripts/start.js` (the dev launcher) or run `bun install` then `bun run start`.
 
 **`MODULE_NOT_FOUND`**
 
-Run `npm install` then `npm run build`.
+Run `bun install` to restore dependencies. LLxprt Code ships TypeScript (`.ts`) source directly under the Bun runtime — there is no compiled `dist/` artifact to build.
 
 **`Operation not permitted`**
 
@@ -263,7 +263,7 @@ LLXPRT_DEBUG='*' llxprt --sandbox "your prompt"
 
 **How do I update LLxprt Code?**
 
-`npm install -g @vybestack/llxprt-code@latest` (global install) or pull and `npm run build` (from source).
+`npm install -g @vybestack/llxprt-code@latest` (global install) or pull the latest source and run `bun install` then `bun run start` (from source).
 
 **Where are config files stored?**
 
@@ -272,6 +272,37 @@ LLXPRT_DEBUG='*' llxprt --sandbox "your prompt"
 **Why don't I see cached token counts in /stats?**
 
 Cache metrics only appear when the provider supports and reports them. OAuth users may not see cache stats if the backend doesn't support cached content creation.
+
+## Building from Source
+
+LLxprt Code ships TypeScript (`.ts`) source directly — there is no separate compilation step that produces a `dist/` artifact for the CLI runtime. The Bun runtime executes the `.ts` source natively.
+
+To build from source:
+
+```bash
+git clone https://github.com/vybestack/llxprt-code.git
+cd llxprt-code
+bun install
+bun run start
+```
+
+For development, use the dev launcher:
+
+```bash
+node scripts/start.js
+```
+
+Type checking uses `tsc --noEmit` (no JavaScript output is produced):
+
+```bash
+npm run typecheck
+```
+
+## Platform Caveats
+
+### Windows pty Behavior
+
+On Windows, the `node-pty` module has a known terminal resize race condition. Under the Bun runtime, the `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) handles terminal lifecycle. If you encounter terminal sizing or resize issues on Windows, ensure you are using a recent Bun version and a compatible terminal emulator. The runtime generically handles the resize race; no manual workaround is typically needed.
 
 ## See Also
 
