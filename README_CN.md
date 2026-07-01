@@ -62,7 +62,7 @@ LLxprt Code是一个专为希望在终端内获得强大LLM功能的开发者设
 
 ## 快速开始
 
-1. **先决条件：** 安装Node.js 20+
+1. **先决条件：** 安装Node.js 24+
 2. **安装：**
    ```bash
    npm install -g @vybestack/llxprt-code

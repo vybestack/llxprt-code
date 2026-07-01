@@ -127,10 +127,10 @@ describe('Package Metadata Tests @plan:PLAN-20260608-ISSUE1585.P07', () => {
   });
 
   describe('engines and files', () => {
-    it('requires node >= 20', () => {
+    it('requires node >= 24', () => {
       const pkg = loadPackageJson();
       expect(pkg.engines).toBeDefined();
-      expect(pkg.engines.node).toBe('>=20');
+      expect(pkg.engines.node).toBe('>=24');
     });
 
     it('includes dist in files array', () => {

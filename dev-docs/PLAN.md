@@ -248,7 +248,7 @@ repository.spec.ts
 
 ## Technical Environment
 - **Type**: CLI Tool | Web Service | IDE Extension | Library
-- **Runtime**: Node.js 20.x | Browser | Electron
+- **Runtime**: Node.js 24.x | Browser | Electron
 - **Dependencies**: List with exact versions
 
 ## Integration Points (MANDATORY SECTION)
