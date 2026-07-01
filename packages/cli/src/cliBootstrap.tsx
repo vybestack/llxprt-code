@@ -4,9 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
-import { render, Box, Text } from 'ink';
-import Spinner from 'ink-spinner';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { parseBootstrapArgs } from './config/profileBootstrap.js';
@@ -44,7 +41,6 @@ import {
   ConfigurationManager,
 } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { theme } from './ui/colors.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { ExtensionStorage } from './config/extension.js';
 import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
@@ -82,42 +78,6 @@ export function validateDnsResolutionOrder(
   );
   return defaultValue;
 }
-
-export const InitializingComponent = ({
-  initialTotal,
-}: {
-  initialTotal: number;
-}) => {
-  const [total, setTotal] = useState(initialTotal);
-  const [connected, setConnected] = useState(0);
-
-  useEffect(() => {
-    const onStart = ({ count }: { count: number }) => setTotal(count);
-    const onChange = () => {
-      setConnected((val) => val + 1);
-    };
-
-    appEvents.on(AppEvent.McpServersDiscoveryStart, onStart);
-    appEvents.on(AppEvent.McpServerConnected, onChange);
-    appEvents.on(AppEvent.McpServerError, onChange);
-
-    return () => {
-      appEvents.off(AppEvent.McpServersDiscoveryStart, onStart);
-      appEvents.off(AppEvent.McpServerConnected, onChange);
-      appEvents.off(AppEvent.McpServerError, onChange);
-    };
-  }, []);
-
-  const message = `Connecting to MCP servers... (${connected}/${total})`;
-
-  return (
-    <Box>
-      <Text color={theme.text.primary}>
-        <Spinner /> {message}
-      </Text>
-    </Box>
-  );
-};
 
 export function configureEarlyDebugLogging(): void {
   // Handle debug mode as early as possible so that early logs are captured.
@@ -598,6 +558,69 @@ export async function ensureStdinOrPromptProvided(
  * Initialize Config, showing an MCP initialization spinner when interactive and
  * MCP servers are configured. Registers dynamic tool settings afterwards.
  */
+async function renderInitializingSpinner(initialTotal: number): Promise<
+  | {
+      clear(): void;
+      unmount(): void;
+    }
+  | undefined
+> {
+  try {
+    const [reactModule, inkModule, spinnerModule, colorsModule] =
+      await Promise.all([
+        import('react'),
+        import('ink'),
+        import('ink-spinner'),
+        import('./ui/colors.js'),
+      ]);
+    const React = reactModule.default;
+    const { Box, Text, render } = inkModule;
+    const Spinner = spinnerModule.default;
+    const { theme } = colorsModule;
+
+    const InitializingComponent = () => {
+      const [total, setTotal] = React.useState(initialTotal);
+      const [connected, setConnected] = React.useState(0);
+
+      React.useEffect(() => {
+        const onStart = ({ count }: { count: number }) => setTotal(count);
+        const onChange = () => {
+          setConnected((val) => val + 1);
+        };
+
+        appEvents.on(AppEvent.McpServersDiscoveryStart, onStart);
+        appEvents.on(AppEvent.McpServerConnected, onChange);
+        appEvents.on(AppEvent.McpServerError, onChange);
+
+        return () => {
+          appEvents.off(AppEvent.McpServersDiscoveryStart, onStart);
+          appEvents.off(AppEvent.McpServerConnected, onChange);
+          appEvents.off(AppEvent.McpServerError, onChange);
+        };
+      }, []);
+
+      const message = `Connecting to MCP servers... (${connected}/${total})`;
+
+      return React.createElement(
+        Box,
+        null,
+        React.createElement(
+          Text,
+          { color: theme.text.primary },
+          React.createElement(Spinner),
+          ' ',
+          message,
+        ),
+      );
+    };
+
+    return render(React.createElement(InitializingComponent));
+  } catch (error) {
+    debugLogger.warn('MCP initialization spinner unavailable', error);
+    return undefined;
+  }
+}
+
 export async function initializeConfigWithSpinner(
   config: Config,
   sessionMessageBus: MessageBus,
@@ -610,23 +633,25 @@ export async function initializeConfigWithSpinner(
     config.isInteractive() &&
     mcpServersCount > 0;
   const spinnerInstance = showSpinner
-    ? render(<InitializingComponent initialTotal={mcpServersCount} />)
+    ? await renderInitializingSpinner(mcpServersCount)
     : undefined;
 
-  await (
-    config as typeof config & {
-      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
+  try {
+    await (
+      config as typeof config & {
+        initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
+      }
+    ).initialize({ messageBus: sessionMessageBus });
+  } finally {
+    if (spinnerInstance) {
+      // Small UX detail to show the completion message for a bit before unmounting.
+      await new Promise((f) => setTimeout(f, 100));
+      spinnerInstance.clear();
+      spinnerInstance.unmount();
     }
-  ).initialize({ messageBus: sessionMessageBus });
+  }
 
   registerDynamicToolSettings(config);
-
-  if (spinnerInstance) {
-    // Small UX detail to show the completion message for a bit before unmounting.
-    await new Promise((f) => setTimeout(f, 100));
-    spinnerInstance.clear();
-    spinnerInstance.unmount();
-  }
 }
 
 /**

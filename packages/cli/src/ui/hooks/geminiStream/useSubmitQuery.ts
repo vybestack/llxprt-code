@@ -33,7 +33,7 @@ import {
 import { isSlashCommand } from '../../utils/commandUtils.js';
 import { useSessionStats } from '../../contexts/SessionContext.js';
 import { handleSubmissionError } from './streamUtils.js';
-import { prepareTurnForQuery } from './useGeminiStream.js';
+import { prepareTurnForQuery } from './turnPreparation.js';
 import { useStreamEventHandlers } from './useStreamEventHandlers.js';
 import type { QueuedSubmission } from './types.js';
 

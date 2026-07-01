@@ -45,10 +45,8 @@ import { resolveCompressionProvider } from './CompressionProfileResolver.js';
 import type { CompressionProfileResolverContext } from './CompressionProfileResolver.js';
 
 // Re-exports — consumers import from './chatSession.js'
-export {
-  StreamEventType,
-  StreamEvent,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+export { StreamEventType } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+export type { StreamEvent } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 export {
   InvalidStreamError,
   EmptyStreamError,

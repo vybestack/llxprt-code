@@ -129,6 +129,21 @@ describe('ProxySocketClient', () => {
     expect(handshake.op).toBe('handshake');
   });
 
+  it('unrefs the socket after connect so idle proxy clients do not keep Bun alive', async () => {
+    server = createAutoReplyServer(socketPath);
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    const unrefSpy = vi.spyOn(net.Socket.prototype, 'unref');
+    try {
+      client = new ProxySocketClient(socketPath);
+      await client.ensureConnected();
+
+      expect(unrefSpy).toHaveBeenCalled();
+    } finally {
+      unrefSpy.mockRestore();
+    }
+  });
+
   /**
    * @requirement R6.2
    * @scenario Handshake rejects when server responds with version mismatch

@@ -48,11 +48,13 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
 }
 
 import { parseArguments } from './config/cliArgParser.js';
-import { loadSettings } from './config/settings.js';
+import { loadSettings, type LoadedSettings } from './config/settings.js';
 import {
   patchStdio,
   ExitCodes,
   debugLogger,
+  type Config,
+  type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { runStartupMigration } from './config/pathMigration.js';
@@ -61,7 +63,6 @@ import {
   runExitCleanup,
   registerSyncCleanup,
 } from './utils/cleanup.js';
-import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { existsSync, mkdirSync } from 'fs';
@@ -86,26 +87,32 @@ import {
 import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
+  type SessionRecordingSetup,
 } from './cliSessionBootstrap.js';
 import {
-  dispatchInteractiveOrNonInteractive,
   formatNonInteractiveError,
   initializeOutputListenersAndFlush,
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
-  startInteractiveUI,
-} from './cliSessionDispatch.js';
+} from './cliProcessUtils.js';
+import type { startInteractiveUI as startInteractiveUIImpl } from './cliSessionDispatch.js';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
 export {
-  dispatchInteractiveOrNonInteractive,
   formatNonInteractiveError,
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
-  startInteractiveUI,
   initializeOutputListenersAndFlush,
 };
+export async function startInteractiveUI(
+  ...args: Parameters<typeof startInteractiveUIImpl>
+): ReturnType<typeof startInteractiveUIImpl> {
+  const { startInteractiveUI: implementation } = await import(
+    './cliSessionDispatch.js'
+  );
+  return implementation(...args);
+}
 
 /**
  * Patch stdio, register flush-on-exit, install the unhandled-rejection handler,
@@ -140,6 +147,51 @@ function setupProcessLifecycle(): () => void {
     mkdirSync(llxprtDir, { recursive: true });
   }
   return cleanupStdio;
+}
+interface SessionDispatchOptions {
+  readonly config: Config;
+  readonly settings: LoadedSettings;
+  readonly workspaceRoot: string;
+  readonly sessionMessageBus: MessageBus;
+  readonly recording: SessionRecordingSetup;
+  readonly hasPipedInput: boolean;
+  readonly readStdinData: () => Promise<string>;
+}
+
+async function dispatchConfiguredSession({
+  config,
+  settings,
+  workspaceRoot,
+  sessionMessageBus,
+  recording,
+  hasPipedInput,
+  readStdinData,
+}: SessionDispatchOptions): Promise<void> {
+  if (typeof config.isInteractive === 'function' && config.isInteractive()) {
+    const { dispatchInteractiveSession } = await import(
+      './cliSessionDispatch.js'
+    );
+    await dispatchInteractiveSession({
+      config,
+      settings,
+      workspaceRoot,
+      sessionMessageBus,
+      recording,
+    });
+    return;
+  }
+
+  const { runPipedOrPromptSession } = await import(
+    './cliSessionNonInteractive.js'
+  );
+  await runPipedOrPromptSession({
+    config,
+    settings,
+    sessionMessageBus,
+    initialInput: config.getQuestion(),
+    hasPipedInput,
+    readStdinData,
+  });
 }
 
 export async function main() {
@@ -192,8 +244,6 @@ export async function main() {
     process.exit(0);
   }
 
-  setMaxSizedBoxDebugging(config.getDebugMode());
-
   await initializeConfigWithSpinner(config, sessionMessageBus);
   await connectIdeClientIfEnabled(config);
 
@@ -234,7 +284,7 @@ export async function main() {
     return;
   }
 
-  await dispatchInteractiveOrNonInteractive({
+  await dispatchConfiguredSession({
     config,
     settings,
     workspaceRoot,
