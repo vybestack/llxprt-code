@@ -57,6 +57,16 @@ function mockProviderModules(opts: {
   }));
 }
 
+function createRegisterStandardOAuthProvidersMock(
+  ensureMock: ReturnType<typeof vi.fn>,
+): (oauthManager: unknown, tokenStore?: unknown, addItem?: unknown) => void {
+  return (oauthManager, tokenStore, addItem) => {
+    for (const provider of ['gemini', 'anthropic', 'codex'] as const) {
+      ensureMock(provider, oauthManager, tokenStore, addItem);
+    }
+  };
+}
+
 describe('Anthropic OAuth registration with environment key', () => {
   let ensureOAuthProviderRegisteredMock: ReturnType<typeof vi.fn>;
   let anthropicCtor: ReturnType<typeof vi.fn>;
@@ -88,6 +98,9 @@ describe('Anthropic OAuth registration with environment key', () => {
 
     vi.doMock('./oauth-provider-registration.js', () => ({
       ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
+      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      ),
       isOAuthProviderRegistered: vi.fn(),
       resetRegisteredProviders: vi.fn(),
     }));
@@ -136,6 +149,9 @@ describe('Anthropic OAuth registration with environment key', () => {
 
     vi.doMock('./oauth-provider-registration.js', () => ({
       ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
+      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      ),
       isOAuthProviderRegistered: vi.fn(),
       resetRegisteredProviders: vi.fn(),
     }));
@@ -191,6 +207,9 @@ describe('Anthropic OAuth registration with environment key', () => {
   it('threads OAuth manager only into OAuth-capable alias providers', async () => {
     vi.doMock('./oauth-provider-registration.js', () => ({
       ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
+      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      ),
       isOAuthProviderRegistered: vi.fn(),
       resetRegisteredProviders: vi.fn(),
     }));

@@ -89,6 +89,22 @@ export function ensureOAuthProviderRegistered(
 }
 
 /**
+ * Register all three standard OAuth providers (gemini, anthropic, codex) on an
+ * OAuthManager instance. This is the canonical way to ensure a manager has the
+ * full provider set available, regardless of which creation path produced it.
+ * Delegates to ensureOAuthProviderRegistered for dedup and tokenStore handling.
+ */
+export function registerStandardOAuthProviders(
+  oauthManager: OAuthRegistrationManager,
+  tokenStore?: TokenStore,
+  addItem?: AddItemCallback,
+): void {
+  ensureOAuthProviderRegistered('gemini', oauthManager, tokenStore, addItem);
+  ensureOAuthProviderRegistered('anthropic', oauthManager, tokenStore, addItem);
+  ensureOAuthProviderRegistered('codex', oauthManager, tokenStore, addItem);
+}
+
+/**
  * Check if an OAuth provider has been registered
  */
 export function isOAuthProviderRegistered(

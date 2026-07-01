@@ -494,6 +494,66 @@ describe('AuthCommandExecutor OAuth Support', () => {
     });
   });
 
+  describe('Case normalization', () => {
+    it('@given user enters /auth Codex enable @when provider has uppercase @then enables OAuth for codex', async () => {
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
+      const mockToggleOAuth = vi.fn().mockResolvedValue(true);
+      const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+      (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
+      (mockOAuthManager.getHigherPriorityAuth as unknown) =
+        mockGetHigherPriority;
+
+      const result = await executor.execute(mockContext, 'Codex enable');
+
+      expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'OAuth enabled for codex',
+      });
+    });
+
+    it('@given user enters /auth GEMINI @when provider is all-caps @then shows status for gemini', async () => {
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
+      const mockIsAuthenticated = vi.fn().mockResolvedValue(false);
+      const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+      (mockOAuthManager.isAuthenticated as unknown) = mockIsAuthenticated;
+      (mockOAuthManager.getHigherPriorityAuth as unknown) =
+        mockGetHigherPriority;
+
+      const result = await executor.execute(mockContext, 'GEMINI');
+
+      expect(mockIsEnabled).toHaveBeenCalledWith('gemini');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('gemini');
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'OAuth for gemini: DISABLED',
+      });
+    });
+
+    it('@given user enters /auth Gemini ENABLE @when both provider and action are mixed case @then enables OAuth for gemini', async () => {
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
+      const mockToggleOAuth = vi.fn().mockResolvedValue(true);
+      const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+      (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
+      (mockOAuthManager.getHigherPriorityAuth as unknown) =
+        mockGetHigherPriority;
+
+      const result = await executor.execute(mockContext, 'Gemini ENABLE');
+
+      expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'OAuth enabled for gemini',
+      });
+    });
+  });
+
   describe('Command interface compliance', () => {
     it('@given auth command @when checking properties @then has correct OAuth description', async () => {
       // Import the actual command to test its properties
