@@ -19,6 +19,7 @@
 ### Changed
 
 - The Anthropic provider's default model is now **Claude Opus 4.8** (`claude-opus-4-8`), aligning `getDefaultModel()` with the `anthropic` alias config (`anthropic.config` already declared `claude-opus-4-8` as its `defaultModel`) (#2289).
+- `AnthropicProvider.getLatestClaude4Model()` was renamed to `getLatestClaudeModel()` so the helper tracks the newest release of each tier (e.g. Sonnet 5) rather than a single generation. The old name is retained as a deprecated alias delegating to the new method and will be removed in a future release (#2289).
 
 ### Migration
 

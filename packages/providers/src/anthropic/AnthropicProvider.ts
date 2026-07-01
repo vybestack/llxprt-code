@@ -337,6 +337,16 @@ export class AnthropicProvider extends BaseProvider {
     return getLatestClaudeModelFn(tier);
   }
 
+  /**
+   * @deprecated Use {@link getLatestClaudeModel} instead. The old name was
+   * tied to the "Claude 4" generation; the helper now tracks the newest
+   * release of each tier (e.g. Sonnet 5). Kept as a thin alias for backward
+   * compatibility and will be removed in a future release.
+   */
+  getLatestClaude4Model(tier: 'opus' | 'sonnet' | 'haiku' = 'sonnet'): string {
+    return this.getLatestClaudeModel(tier);
+  }
+
   private getMaxTokensForModel(modelId: string): number {
     return getMaxTokensForModelFn(modelId);
   }
