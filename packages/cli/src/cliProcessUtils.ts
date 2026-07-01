@@ -64,7 +64,10 @@ export function installNonInteractiveSigintHandler(
 }
 
 function writeUnhandledRejectionToStderr(errorMessage: string): void {
-  if (appEvents.listenerCount(AppEvent.LogError) === 0) {
+  if (
+    typeof appEvents.listenerCount !== 'function' ||
+    appEvents.listenerCount(AppEvent.LogError) === 0
+  ) {
     writeToStderr(`${errorMessage}\n`);
   }
 }
