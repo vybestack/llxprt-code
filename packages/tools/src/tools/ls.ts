@@ -336,6 +336,7 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
                 type: 'boolean',
               },
             },
+            additionalProperties: false,
           },
         },
         required: [],

@@ -63,7 +63,7 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
     cleanup();
   });
 
-  it('excludes .llxprtignore matches by default', async () => {
+  it('both flags true filters both gitignored and llxprtignored files', async () => {
     const tool = new ReadManyFilesTool(
       createRealHost(tempDir, {
         respectGitIgnore: true,
@@ -71,15 +71,36 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
       }),
     );
 
-    const result = await tool.execute({ paths: ['**/*.txt'] });
+    const result = await tool.execute({ paths: ['**/*.txt', '**/*.log'] });
     const content = stringifyLlmContent(result);
 
     expect(result.error).toBeUndefined();
     expect(content).toContain('visible content');
     expect(content).not.toContain('secret content');
+    expect(content).not.toContain('log content');
   });
 
-  it('does not pre-filter .llxprtignore matches when respect_llxprt_ignore is false', async () => {
+  it('respect_git_ignore false keeps gitignored files but still filters llxprtignored files', async () => {
+    const tool = new ReadManyFilesTool(
+      createRealHost(tempDir, {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
+    );
+
+    const result = await tool.execute({
+      paths: ['**/*.txt', '**/*.log'],
+      file_filtering_options: { respect_git_ignore: false },
+    });
+    const content = stringifyLlmContent(result);
+
+    expect(result.error).toBeUndefined();
+    expect(content).toContain('visible content');
+    expect(content).not.toContain('secret content');
+    expect(content).toContain('log content');
+  });
+
+  it('respect_llxprt_ignore false keeps llxprtignored files but still filters gitignored files', async () => {
     const tool = new ReadManyFilesTool(
       createRealHost(tempDir, {
         respectGitIgnore: true,
@@ -97,6 +118,29 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
     expect(content).toContain('visible content');
     expect(content).toContain('secret content');
     expect(content).not.toContain('log content');
+  });
+
+  it('both flags false keeps gitignored and llxprtignored files', async () => {
+    const tool = new ReadManyFilesTool(
+      createRealHost(tempDir, {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
+    );
+
+    const result = await tool.execute({
+      paths: ['**/*.txt', '**/*.log'],
+      file_filtering_options: {
+        respect_git_ignore: false,
+        respect_llxprt_ignore: false,
+      },
+    });
+    const content = stringifyLlmContent(result);
+
+    expect(result.error).toBeUndefined();
+    expect(content).toContain('visible content');
+    expect(content).toContain('secret content');
+    expect(content).toContain('log content');
   });
 
   it('allows .llxprtignore negation to un-ignore a gitignored file', async () => {

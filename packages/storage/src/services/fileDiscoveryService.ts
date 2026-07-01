@@ -58,7 +58,7 @@ export class FileDiscoveryService {
   }
 
   /**
-   * Filters a list of file paths based on git ignore rules
+   * Filters a list of file paths based on the requested ignore sources.
    */
   filterFiles(
     filePaths: string[],
@@ -73,8 +73,8 @@ export class FileDiscoveryService {
   }
 
   /**
-   * Filters a list of file paths based on git ignore rules and returns a report
-   * with counts of ignored files.
+   * Filters a list of file paths based on the requested ignore sources and
+   * returns a report with counts of ignored files.
    */
   filterFilesWithReport(
     filePaths: string[],
