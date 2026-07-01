@@ -271,7 +271,9 @@ function waitForChildExit(
   return new Promise<number>((resolve, reject) => {
     let settled = false;
     const forwardSignal = (signal: NodeJS.Signals): void => {
-      if (!child.killed) {
+      // child.killed only means a signal was sent, not that the child exited;
+      // gate on the launcher's settled state so signals forward until exit.
+      if (!settled) {
         child.kill(signal);
       }
     };
