@@ -268,9 +268,6 @@ jobs:
         run: |-
           npm run build
 
-      - name: Create bundle
-        run: npm run bundle
-
       - name: 'Run type check'
         run: |-
           npm run typecheck
@@ -541,12 +538,8 @@ jobs:
         run: |-
           npm run build
 
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
-
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
 
   #
   # Test: Node (Linux and macOS - always run)
@@ -603,10 +596,6 @@ jobs:
         run: |-
           npm run build
 
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
-
       - name: 'Fix rollup platform dependency'
         run: |-
           # Explicitly install the platform-specific rollup package
@@ -652,8 +641,8 @@ jobs:
           CI: true
         run: npm run test:scripts
 
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'

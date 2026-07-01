@@ -79,7 +79,8 @@ export function buildExtraArgs(
 
 /**
  * Compute the command and its base args, choosing the installed `llxprt`
- * binary for npm release tests and `node bundle/llxprt.js` otherwise.
+ * binary for npm release tests and `node <entryPath>` (the dist entry, which
+ * relaunches into Bun via the launcher) otherwise.
  */
 export function getCommandAndArgs(
   bundlePath: string,

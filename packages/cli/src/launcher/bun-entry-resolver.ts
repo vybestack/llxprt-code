@@ -18,8 +18,6 @@ const CLI_PACKAGE_DIR = 'cli';
 const PACKAGES_DIR = 'packages';
 const SOURCE_ENTRY = 'index.ts';
 const DIST_ENTRY = 'index.js';
-const BUNDLE_DIR = 'bundle';
-const BUNDLE_ENTRY = 'llxprt.js';
 const DIST_LAUNCHER_LAYOUT = ['dist', 'src', 'launcher'];
 
 async function isReadablePath(
@@ -95,48 +93,6 @@ async function resolveDistEntry(
   return null;
 }
 
-function resolveDistProjectRoot(moduleDir: string): string | null {
-  if (!hasDistLauncherLayout(moduleDir)) {
-    return null;
-  }
-  return ascend(moduleDir, DIST_LAUNCHER_LAYOUT.length);
-}
-
-function isCliPackageDir(dir: string): boolean {
-  return (
-    basename(dir) === CLI_PACKAGE_DIR && basename(dirname(dir)) === PACKAGES_DIR
-  );
-}
-
-function bundleSearchRoots(moduleDir: string): string[] {
-  const roots: string[] = [];
-  const distProjectRoot = resolveDistProjectRoot(moduleDir);
-  for (const dir of ancestorDirs(moduleDir)) {
-    roots.push(dir);
-    if (dir === distProjectRoot && !isCliPackageDir(dir)) {
-      return roots;
-    }
-    if (basename(dir) === PACKAGES_DIR) {
-      roots.push(dirname(dir));
-      return roots;
-    }
-  }
-  return roots;
-}
-
-async function resolveBundleEntry(
-  moduleDir: string,
-  pathChecker: PathChecker,
-): Promise<string | null> {
-  for (const dir of bundleSearchRoots(moduleDir)) {
-    const candidate = join(dir, BUNDLE_DIR, BUNDLE_ENTRY);
-    if (await isReadablePath(candidate, pathChecker)) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
 export async function resolveBunEntry(
   options: ResolveBunEntryOptions = {},
 ): Promise<string | null> {
@@ -154,7 +110,7 @@ export async function resolveBunEntry(
     return distEntry;
   }
 
-  return resolveBundleEntry(moduleDir, pathChecker);
+  return null;
 }
 
 /**

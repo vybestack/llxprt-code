@@ -89,9 +89,6 @@ jobs:
       - name: 'Build project'
         run: 'npm run build'
 
-      - name: 'Create bundle'
-        run: 'npm run bundle'
-
       - name: 'Validate interactive UI runtime'
         env:
           NODE_OPTIONS: ''

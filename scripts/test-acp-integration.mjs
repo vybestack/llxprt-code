@@ -9,7 +9,7 @@ import { spawn } from 'child_process';
 const args = process.argv.slice(2);
 const profileName = args[0] || process.env.LLXPRT_PROFILE;
 
-const llxprtArgs = ['bundle/llxprt.js', '--experimental-acp'];
+const llxprtArgs = ['packages/cli/dist/index.js', '--experimental-acp'];
 if (profileName && !process.env.LLXPRT_PROFILE) {
   llxprtArgs.splice(1, 0, '--profile-load', profileName);
 }
