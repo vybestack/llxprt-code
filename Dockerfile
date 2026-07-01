@@ -35,9 +35,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Use official install script and put bun on PATH for both root and node users.
 ENV BUN_INSTALL=/usr/local/bun
 ENV PATH=$PATH:/usr/local/bun/bin
+# Switch to bash with pipefail so a failed curl in the `curl | bash` install
+# fails the build instead of silently succeeding (hadolint DL4006).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Pin Bun from the repo-level .bun-version so release, CI, and the image never drift.
 COPY .bun-version /tmp/.bun-version
-RUN curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat /tmp/.bun-version)" && \
+RUN BUN_VERSION="$(tr -d '[:space:]' < /tmp/.bun-version)" && \
+  curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" && \
   ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun && \
   bun --version
 
