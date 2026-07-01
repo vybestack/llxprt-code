@@ -205,6 +205,14 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      # `npm run bundle` builds via `bun scripts/bun-build.config.mjs` since
+      # esbuild was retired (#2241/S4), so Bun must be on PATH for the bundle
+      # step below. Lint/typecheck/format still execute under Node via npm run.
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
       - name: 'Run lockfile check'
         run: |-
           npm run check:lockfile
@@ -504,9 +512,12 @@ jobs:
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
-    # This job runs npm ci (executing third-party install scripts) and only
-    # needs to read the repo, so scope permissions to contents:read and drop
-    # credential persistence (matches bun_native_modules_smoke hardening).
+    # Guards published-package Node compatibility: build + bundle the CLI, then
+    # run the produced bundle/llxprt.js under plain `node`. Note the bundle now
+    # builds via `bun scripts/bun-build.config.mjs` (#2241/S4 retired esbuild),
+    # so this job sets up Bun for the *build* while still validating the *Node
+    # runtime* path. It does not use bun install (it uses npm ci) so it also
+    # guards npm-install integrity of the published toolchain.
     permissions:
       contents: 'read'
     steps:
@@ -521,6 +532,12 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
+
+      # Required only for the bundle step (`bun scripts/bun-build.config.mjs`).
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
 
       - name: 'Install dependencies'
         run: |-
