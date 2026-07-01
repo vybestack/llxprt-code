@@ -52,7 +52,7 @@ import {
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
-  buildRequestContents,
+  buildRequestContentsResult,
   selectRequestTools,
   prepareRequestPayload,
   buildRuntimeContext,
@@ -236,7 +236,8 @@ export class StreamProcessor {
     userContent: Content | Content[],
     provider: IProvider,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    const requestContents = this._buildRequestContents(userContent);
+    const { contents: requestContents, pending: pendingUserIContents } =
+      this._buildRequestContents(userContent);
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     const requestTools = this._selectRequestTools(params);
@@ -250,15 +251,24 @@ export class StreamProcessor {
       this._prepareRequestPayload(requestContents, tools, params);
 
     try {
+      const originalContents = requestPayload.contents;
+      const hooksWereActive = this._areBeforeModelHooksActive(configForHooks);
       const finalContents = await this._fireBeforeModelHook(
         configForHooks,
-        requestPayload.contents,
+        originalContents,
         tools as ProviderToolset | undefined,
         toolSelection.allowedFunctionNames,
       );
+      const hookModifiedContents =
+        hooksWereActive || finalContents !== originalContents;
       requestPayload.contents =
         await this.compressionHandler.enforceProviderContents(
-          finalContents,
+          {
+            contents: finalContents,
+            pendingContents: hookModifiedContents
+              ? undefined
+              : pendingUserIContents,
+          },
           promptId,
           provider,
         );
@@ -289,6 +299,28 @@ export class StreamProcessor {
       this.compressionHandler.clearProviderCompressionCallback(provider);
       throw error;
     }
+  }
+
+  /**
+   * Detect whether BeforeModel hooks are enabled and a hook system is available.
+   * When hooks are active, the pending-content boundary may be altered by
+   * in-place mutation even if the hook returns no formal modifications, so the
+   * caller conservatively marks the boundary as unknown (deferred to #2306).
+   */
+  private _areBeforeModelHooksActive(
+    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
+  ): boolean {
+    if (
+      configForHooks === undefined ||
+      typeof configForHooks.getEnableHooks !== 'function'
+    ) {
+      return false;
+    }
+    return (
+      configForHooks.getEnableHooks() === true &&
+      typeof configForHooks.getHookSystem === 'function' &&
+      configForHooks.getHookSystem() !== undefined
+    );
   }
 
   /**
@@ -568,8 +600,11 @@ export class StreamProcessor {
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
   }
 
-  private _buildRequestContents(userContent: Content | Content[]): IContent[] {
-    return buildRequestContents(
+  private _buildRequestContents(userContent: Content | Content[]): {
+    contents: IContent[];
+    pending: IContent[];
+  } {
+    return buildRequestContentsResult(
       userContent,
       this.conversationManager,
       this.historyService,

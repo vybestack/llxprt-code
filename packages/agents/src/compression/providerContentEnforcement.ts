@@ -5,7 +5,7 @@
  */
 
 import type { GenerateContentConfig } from '@google/genai';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -14,13 +14,11 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getCompletionBudget } from './compressionBudgeting.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import { isDeepStrictEqual } from 'node:util';
+import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 
 const TOKEN_SAFETY_MARGIN = 1000;
 const INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD = 0.05;
 const COMPLETION_BUDGET_WARNING_RATIO = 0.8;
-const MAX_RECOMPOSITION_SCAN = 64;
-const RECOMPOSITION_SCAN_SIZE_LIMIT = MAX_RECOMPOSITION_SCAN * 4;
 type CompletionSettingsService = { get: (key: string) => unknown };
 
 export interface ProviderContentEnforcementDeps {
@@ -50,61 +48,53 @@ interface ContextLimits {
   compressionThreshold: number;
 }
 
-interface PendingExtractionResult {
-  pendingContents: IContent[];
-  safeToRecompose: boolean;
-}
-
 export class ProviderContentEnforcer {
-  private readonly baselineProviderHistory: IContent[];
-
-  constructor(private readonly deps: ProviderContentEnforcementDeps) {
-    this.baselineProviderHistory = deps.historyService.getCuratedForProvider();
-  }
+  constructor(private readonly deps: ProviderContentEnforcementDeps) {}
 
   async enforce(
-    contents: IContent[],
+    envelope: ProviderContentEnvelope,
     promptId: string,
     provider?: IProvider,
   ): Promise<IContent[]> {
     await this.deps.historyService.waitForTokenUpdates();
+    const model = this.resolveModel(provider);
     const {
       completionBudget,
       limit,
       marginAdjustedLimit,
       compressionThreshold,
-    } = this.computeContextLimits(provider);
+    } = this.computeContextLimits(provider, model);
     const initialProjected = await this.estimateProviderProjection(
-      contents,
+      envelope.contents,
       completionBudget,
+      model,
     );
-    const extraction = this.extractPendingContents(contents);
+
     if (initialProjected <= compressionThreshold) {
-      return this.returnSafeContents(contents, extraction, initialProjected, {
-        completionBudget,
-        limit,
-        marginAdjustedLimit,
-        compressionThreshold,
-      });
+      return envelope.contents;
     }
-    const unsafeContents = this.returnUnsafeExtractionContentsIfSafe(
-      contents,
-      extraction,
-      initialProjected,
-      { completionBudget, limit, marginAdjustedLimit, compressionThreshold },
-    );
-    if (unsafeContents !== undefined) {
-      return unsafeContents;
+
+    if (envelope.pendingContents === undefined) {
+      if (initialProjected <= marginAdjustedLimit) {
+        return envelope.contents;
+      }
+      throw new Error(
+        'Context overflow requires compression, but the pending-content boundary is unknown ' +
+          '(contents were modified by a BeforeModel hook). This is tracked in #2306. ' +
+          `Projected ${initialProjected} exceeds safety-adjusted limit ${marginAdjustedLimit}.`,
+      );
     }
+
     await this.deps.ensureDensityOptimized();
     await this.deps.historyService.waitForTokenUpdates();
 
     const optimizedContents = this.recomposeProviderContents(
-      extraction.pendingContents,
+      envelope.pendingContents,
     );
     const postOptProjected = await this.estimateProviderProjection(
       optimizedContents,
       completionBudget,
+      model,
     );
     if (postOptProjected <= compressionThreshold) {
       return optimizedContents;
@@ -112,11 +102,12 @@ export class ProviderContentEnforcer {
 
     const compressedContents = await this.runCompressionAndRecompose(
       promptId,
-      extraction.pendingContents,
+      envelope.pendingContents,
     );
     let recomputed = await this.estimateProviderProjection(
       compressedContents,
       completionBudget,
+      model,
     );
     if (recomputed <= marginAdjustedLimit) {
       return compressedContents;
@@ -126,11 +117,12 @@ export class ProviderContentEnforcer {
       promptId,
       postOptProjected,
       recomputed,
-      extraction.pendingContents,
+      envelope.pendingContents,
     );
     recomputed = await this.estimateProviderProjection(
       fallbackContents,
       completionBudget,
+      model,
     );
     if (recomputed <= marginAdjustedLimit) {
       return fallbackContents;
@@ -146,59 +138,23 @@ export class ProviderContentEnforcer {
   }
 
   async compressAndRecompose(
-    contents: IContent[],
+    pendingContents: IContent[],
     promptId: string,
   ): Promise<IContent[]> {
-    if (contents.length === 0) {
-      return contents;
+    if (pendingContents.length === 0) {
+      return [];
     }
-    const extraction = this.extractPendingContents(contents);
-    return this.runCompressionAndRecompose(
-      promptId,
-      extraction.pendingContents,
-    );
+    return this.runCompressionAndRecompose(promptId, pendingContents);
   }
 
-  private returnUnsafeExtractionContentsIfSafe(
-    contents: IContent[],
-    extraction: PendingExtractionResult,
-    initialProjected: number,
-    limits: ContextLimits,
-  ): IContent[] | undefined {
-    if (extraction.safeToRecompose) {
-      return undefined;
+  private resolveModel(provider?: IProvider): string {
+    if (provider?.getDefaultModel) {
+      const providerModel = provider.getDefaultModel();
+      if (providerModel) {
+        return providerModel;
+      }
     }
-    if (initialProjected <= limits.marginAdjustedLimit) {
-      return contents;
-    }
-    return undefined;
-  }
-
-  private async returnSafeContents(
-    contents: IContent[],
-    extraction: PendingExtractionResult,
-    initialProjected: number,
-    limits: ContextLimits,
-  ): Promise<IContent[]> {
-    const unsafeContents = this.returnUnsafeExtractionContentsIfSafe(
-      contents,
-      extraction,
-      initialProjected,
-      limits,
-    );
-    if (unsafeContents !== undefined) {
-      return unsafeContents;
-    }
-    const recomposedContents = this.recomposeProviderContents(
-      extraction.pendingContents,
-    );
-    const recomposedProjected = await this.estimateProviderProjection(
-      recomposedContents,
-      limits.completionBudget,
-    );
-    return recomposedProjected <= limits.marginAdjustedLimit
-      ? recomposedContents
-      : contents;
+    return this.deps.runtimeContext.state.model;
   }
 
   private async runCompressionAndRecompose(
@@ -219,83 +175,6 @@ export class ProviderContentEnforcer {
     return this.recomposeProviderContents(pendingContents);
   }
 
-  private extractPendingContents(
-    contents: IContent[],
-  ): PendingExtractionResult {
-    const prefixLength = this.findHistoryPrefixLength(
-      contents,
-      this.baselineProviderHistory,
-    );
-    if (
-      this.baselineProviderHistory.length === 0 ||
-      prefixLength === this.baselineProviderHistory.length
-    ) {
-      return {
-        pendingContents: contents.slice(prefixLength),
-        safeToRecompose: true,
-      };
-    }
-
-    const recomposedPending =
-      this.extractPendingContentsByRecomposition(contents);
-    if (recomposedPending !== undefined) {
-      return {
-        pendingContents: recomposedPending,
-        safeToRecompose: true,
-      };
-    }
-
-    this.deps.logger.warn(
-      () =>
-        '[CompressionHandler] Could not extract pending contents via prefix match or recomposition; falling back to curated-length delta heuristic',
-    );
-    const targetStart = Math.min(
-      this.deps.historyService.getCuratedForProvider().length,
-      contents.length,
-    );
-    return {
-      pendingContents: contents.slice(targetStart),
-      safeToRecompose: false,
-    };
-  }
-
-  private extractPendingContentsByRecomposition(
-    contents: IContent[],
-  ): IContent[] | undefined {
-    if (contents.length > RECOMPOSITION_SCAN_SIZE_LIMIT) {
-      return undefined;
-    }
-    const targetStart = this.deps.historyService.getCurated().length;
-    const minStart = Math.max(0, contents.length - MAX_RECOMPOSITION_SCAN);
-    if (targetStart < minStart || targetStart > contents.length) {
-      return undefined;
-    }
-    const candidatePending = contents.slice(targetStart);
-    const recomposed = this.recomposeProviderContents(candidatePending);
-    return this.contentsEqual(recomposed, contents)
-      ? candidatePending
-      : undefined;
-  }
-
-  private findHistoryPrefixLength(
-    contents: IContent[],
-    providerHistory: IContent[],
-  ): number {
-    const maxPrefix = Math.min(contents.length, providerHistory.length);
-    let prefix = 0;
-    for (let index = 0; index < maxPrefix; index++) {
-      if (!isDeepStrictEqual(contents[index], providerHistory[index])) {
-        break;
-      }
-      prefix = index + 1;
-    }
-    return prefix;
-  }
-
-  private contentsEqual(left: IContent[], right: IContent[]): boolean {
-    return isDeepStrictEqual(left, right);
-  }
-
   private recomposeProviderContents(pendingContents: IContent[]): IContent[] {
     return buildProviderContent(
       this.deps.historyService.getCurated(),
@@ -307,12 +186,10 @@ export class ProviderContentEnforcer {
   private async estimateProviderProjection(
     contents: IContent[],
     completionBudget: number,
+    model: string,
   ): Promise<number> {
     const requestTokens =
-      await this.deps.historyService.estimateTokensForContents(
-        contents,
-        this.deps.runtimeContext.state.model,
-      );
+      await this.deps.historyService.estimateTokensForContents(contents, model);
     return requestTokens + completionBudget;
   }
 
@@ -468,21 +345,21 @@ export class ProviderContentEnforcer {
     );
   }
 
-  private computeContextLimits(provider?: IProvider): ContextLimits {
+  private computeContextLimits(
+    provider: IProvider | undefined,
+    model: string,
+  ): ContextLimits {
     const completionBudget = Math.max(
       0,
       getCompletionBudget(
         this.deps.generationConfig,
-        this.deps.runtimeContext.state.model,
+        model,
         provider,
         this.deps.providerRuntimeNullable?.settingsService,
       ),
     );
     const userContextLimit = this.deps.runtimeContext.ephemerals.contextLimit();
-    const limit = tokenLimit(
-      this.deps.runtimeContext.state.model,
-      userContextLimit,
-    );
+    const limit = tokenLimit(model, userContextLimit);
     const marginAdjustedLimit = this.computeMarginAdjustedLimit(limit);
     return {
       completionBudget,
