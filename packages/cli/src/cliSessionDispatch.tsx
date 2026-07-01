@@ -31,35 +31,21 @@ import React, { type ErrorInfo } from 'react';
 import { render } from 'ink';
 import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
+import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { basename } from 'node:path';
 import { type LoadedSettings } from './config/settings.js';
 import {
   type Config,
-  parseAndFormatApiError,
   type SessionRecordingService,
   type RecordingIntegration,
   type IContent,
   type LockHandle,
   type MessageBus,
   debugLogger,
-  isTelemetrySdkInitialized,
-  shutdownTelemetry,
-  writeToStderr,
   writeToStdout,
-  OutputFormat,
-  JsonFormatter,
-  coreEvents,
-  CoreEvent,
-  type OutputPayload,
-  type ConsoleLogPayload,
-  triggerSessionStartHook,
-  triggerSessionEndHook,
-  SessionStartSource,
-  SessionEndReason,
 } from '@vybestack/llxprt-code-core';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
-import { runNonInteractive } from './nonInteractiveCli.js';
 import { getCliVersion } from './utils/version.js';
 import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
 import { restoreTerminalProtocolsSync } from './ui/utils/terminalProtocolCleanup.js';
@@ -70,107 +56,16 @@ import {
 } from './ui/utils/terminalSequences.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
-import { appEvents, AppEvent } from './utils/events.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
 import { computeTerminalTitle } from './utils/windowTitle.js';
 import { StreamingState } from './ui/types.js';
-import { appendFileSync } from 'fs';
-import { join } from 'path';
 import type { SessionRecordingSetup } from './cliSessionBootstrap.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
+import { appendInteractiveUiDebug } from './cliProcessUtils.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { validateNonInteractiveAuth } from './validateNonInteractiveAuth.js';
-import {
-  registerCleanup,
-  registerSyncCleanup,
-  runExitCleanup,
-} from './utils/cleanup.js';
-
-export function formatNonInteractiveError(error: unknown): string {
-  const formatted = parseAndFormatApiError(error);
-  if (formatted && !formatted.includes('[object Object]')) {
-    return formatted;
-  }
-
-  if (error instanceof Error) {
-    return error.stack ?? error.message;
-  }
-
-  if (error !== null && typeof error === 'object') {
-    try {
-      return JSON.stringify(error, null, 2);
-    } catch {
-      return String(error);
-    }
-  }
-
-  return String(error);
-}
-
-export function installNonInteractiveSigintHandler(): () => void {
-  let exited = false;
-  const handler = () => {
-    if (exited) {
-      return;
-    }
-    exited = true;
-    process.stderr.write('\nCancelled.\n');
-    process.exit(130);
-  };
-  process.on('SIGINT', handler);
-  return () => {
-    process.off('SIGINT', handler);
-  };
-}
-
-/**
- * Installs a process-wide `unhandledRejection` listener that logs the error
- * and opens the debug console on the first rejection.
- *
- * Returns a disposer that removes the installed listener. The listener is a
- * process-lifetime singleton: `setupProcessLifecycle` installs it once per CLI
- * process and never disposes it (the process exits shortly after). The
- * disposer exists primarily so tests can avoid leaking listeners across cases
- * (each test invocation installs and tears down its own listener).
- */
-export function setupUnhandledRejectionHandler(): () => void {
-  let unhandledRejectionOccurred = false;
-  const handler = (reason: unknown) => {
-    appendInteractiveUiDebug(`unhandled-rejection ${String(reason)}`);
-    const errorMessage = `=========================================
-This is an unexpected error. Please file a bug report using the /bug tool.
-CRITICAL: Unhandled Promise Rejection!
-=========================================
-Reason: ${reason}${
-      reason instanceof Error && reason.stack
-        ? `
-Stack trace:
-${reason.stack}`
-        : ''
-    }`;
-    appEvents.emit(AppEvent.LogError, errorMessage);
-    if (!unhandledRejectionOccurred) {
-      unhandledRejectionOccurred = true;
-      appEvents.emit(AppEvent.OpenDebugConsole);
-    }
-  };
-  process.on('unhandledRejection', handler);
-  return () => {
-    process.off('unhandledRejection', handler);
-  };
-}
-
-function appendInteractiveUiDebug(message: string): void {
-  const artifactDir = process.env.LLXPRT_TMUX_ARTIFACT_DIR;
-  if (!artifactDir) return;
-  try {
-    appendFileSync(join(artifactDir, 'cli-debug.log'), `${message}\n`);
-  } catch {
-    // Ignore diagnostics failures; they should not affect CLI startup.
-  }
-}
+import { registerCleanup, registerSyncCleanup } from './utils/cleanup.js';
 
 function handleError(error: Error, errorInfo: ErrorInfo) {
   appendInteractiveUiDebug(
@@ -243,30 +138,6 @@ export function setWindowTitle(title: string, settings: LoadedSettings) {
   }
 }
 
-export function initializeOutputListenersAndFlush() {
-  // If there are no listeners for output, make sure we flush so output is not
-  // lost.
-  if (coreEvents.listenerCount(CoreEvent.Output) === 0) {
-    // In non-interactive mode, ensure we drain any buffered output or logs to stderr
-    coreEvents.on(CoreEvent.Output, (payload: OutputPayload) => {
-      if (payload.isStderr) {
-        writeToStderr(payload.chunk, payload.encoding);
-      } else {
-        writeToStdout(payload.chunk, payload.encoding);
-      }
-    });
-
-    coreEvents.on(CoreEvent.ConsoleLog, (payload: ConsoleLogPayload) => {
-      if (payload.type === 'error' || payload.type === 'warn') {
-        writeToStderr(payload.content);
-      } else {
-        writeToStdout(payload.content);
-      }
-    });
-  }
-  coreEvents.drainBacklogs();
-}
-
 /**
  * @plan:PLAN-20260211-SESSIONRECORDING.P26
  * @pseudocode recording-integration.md lines 115-132
@@ -290,6 +161,7 @@ export async function startInteractiveUI(
   appendInteractiveUiDebug(
     `startInteractiveUI version=${version} stdoutTTY=${String(process.stdout.isTTY)} columns=${String(process.stdout.columns)} rows=${String(process.stdout.rows)} builtinOnly=${String(process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY)} suppressStatic=${String(process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER)}`,
   );
+  setMaxSizedBoxDebugging(config.getDebugMode());
   setWindowTitle(basename(workspaceRoot), settings);
 
   const renderOptions = inkRenderOptions(config, settings);
@@ -370,241 +242,46 @@ export async function startInteractiveUI(
   });
 }
 
-export interface NonInteractiveSessionOptions {
-  config: Config;
-  settings: LoadedSettings;
-  input: string;
-  prompt_id: string;
-  sessionMessageBus: MessageBus;
-}
-
-export interface PipedOrPromptSessionOptions {
-  config: Config;
-  settings: LoadedSettings;
-  sessionMessageBus: MessageBus;
-  initialInput: string | undefined;
-  hasPipedInput: boolean;
-  readStdinData: () => Promise<string>;
-}
-
 export interface SessionDispatchOptions {
   config: Config;
   settings: LoadedSettings;
   workspaceRoot: string;
   sessionMessageBus: MessageBus;
   recording: SessionRecordingSetup;
-  hasPipedInput: boolean;
-  readStdinData: () => Promise<string>;
 }
 
 /**
- * Collect startup warnings, then dispatch to either the interactive UI or the
- * piped/prompt non-interactive session depending on the configured mode.
+ * Collect startup warnings and render the interactive UI. Non-interactive
+ * routing happens in cli.tsx to keep this UI-heavy module off the bundled JSON
+ * path.
  */
-export async function dispatchInteractiveOrNonInteractive({
+export async function dispatchInteractiveSession({
   config,
   settings,
   workspaceRoot,
   sessionMessageBus,
   recording,
-  hasPipedInput,
-  readStdinData,
 }: SessionDispatchOptions): Promise<void> {
-  const input = config.getQuestion();
   const startupWarnings = [
     ...(await getStartupWarnings()),
     ...(await getUserStartupWarnings(settings.merged)),
   ];
 
-  // Render UI, passing necessary config values. Check that there is no command line question.
-  if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-    // Create the single interactive Agent at the composition root. `fromConfig`
-    // fires the SessionStart hook internally via the same core hook, so the
-    // interactive branch no longer fires it explicitly (the non-interactive
-    // branch keeps its own explicit call since it builds no Agent).
-    const agent = await createForegroundAgent({ config, sessionMessageBus });
+  // Create the single interactive Agent at the composition root. `fromConfig`
+  // fires the SessionStart hook internally via the same core hook, so the
+  // interactive branch no longer fires it explicitly.
+  const agent = await createForegroundAgent({ config, sessionMessageBus });
 
-    await startInteractiveUI(
-      config,
-      agent,
-      settings,
-      startupWarnings,
-      workspaceRoot,
-      sessionMessageBus,
-      recording.recordingIntegration,
-      recording.resumedHistory ?? undefined,
-      recording.recordingService,
-      recording.resumedLockHandle,
-    );
-    return;
-  }
-
-  await runPipedOrPromptSession({
+  await startInteractiveUI(
     config,
+    agent,
     settings,
+    startupWarnings,
+    workspaceRoot,
     sessionMessageBus,
-    initialInput: input,
-    hasPipedInput,
-    readStdinData,
-  });
-}
-
-/**
- * Resolve the final non-interactive input (merging piped stdin with any prompt),
- * run the non-interactive session, shut down telemetry, and exit the process.
- */
-async function runPipedOrPromptSession({
-  config,
-  settings,
-  sessionMessageBus,
-  initialInput,
-  hasPipedInput,
-  readStdinData,
-}: PipedOrPromptSessionOptions): Promise<never> {
-  let input = initialInput;
-  // If not a TTY, read from stdin
-  // This is for cases where the user pipes input directly into the command
-  if (hasPipedInput) {
-    const stdinData = await readStdinData();
-    if (stdinData) {
-      const existingInput = input ?? '';
-      // Preserve the stdin+prompt separator only when a prompt exists;
-      // otherwise stdin data alone is the input (no trailing newlines).
-      input = existingInput
-        ? `${stdinData}
-
-${existingInput}`
-        : stdinData;
-    }
-  }
-  if (!input) {
-    writeToStderr(
-      `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.
-`,
-    );
-    process.exit(1);
-  }
-
-  const prompt_id = Math.random().toString(16).slice(2);
-
-  const nonInteractiveExitCode = await runNonInteractiveSession({
-    config,
-    settings,
-    input,
-    prompt_id,
-    sessionMessageBus,
-  });
-
-  if (isTelemetrySdkInitialized()) {
-    await shutdownTelemetry(config);
-  }
-
-  // Call cleanup before process.exit, which causes cleanup to not run
-  await runExitCleanup();
-  process.exit(nonInteractiveExitCode);
-}
-
-/**
- * Drive a single non-interactive run: validate auth, fire session hooks,
- * inject any SessionStart context, run the prompt, and report the exit code.
- */
-async function runNonInteractiveSession({
-  config,
-  settings,
-  input,
-  prompt_id,
-  sessionMessageBus,
-}: NonInteractiveSessionOptions): Promise<number> {
-  // Validate auth BEFORE installing the SIGINT handler: on auth failure
-  // validateNonInteractiveAuth calls process.exit, which bypasses the finally
-  // below (where the disposer would run). By validating first, the SIGINT
-  // handler is only on the process during the run phase that needs it, so an
-  // auth-failure process.exit cannot leak it.
-  let nonInteractiveConfig: Config | undefined;
-  try {
-    nonInteractiveConfig = await validateNonInteractiveAuth(
-      settings.merged.useExternalAuth,
-      config,
-      settings,
-    );
-  } catch (error) {
-    // validateNonInteractiveAuth reports its own auth errors (and calls
-    // process.exit), but defensively handle the case where it rejects so the
-    // SessionEnd hook and error reporting still run.
-    await triggerSessionEndHook(config, SessionEndReason.Other);
-    reportNonInteractiveError(config, error);
-    return 1;
-  }
-
-  const removeSigintHandler = installNonInteractiveSigintHandler();
-  let nonInteractiveExitCode = 0;
-  try {
-    initializeOutputListenersAndFlush();
-
-    // Fire SessionStart hook for non-interactive mode and inject context
-    const sessionStartOutput = await triggerSessionStartHook(
-      nonInteractiveConfig,
-      SessionStartSource.Startup,
-    );
-    let finalInput = input;
-    if (sessionStartOutput) {
-      if (sessionStartOutput.systemMessage) {
-        writeToStderr(`${sessionStartOutput.systemMessage}
-`);
-      }
-      const additionalContext = sessionStartOutput.getAdditionalContext();
-      if (additionalContext) {
-        finalInput = `${additionalContext}
-
-${finalInput}`;
-      }
-    }
-
-    await runNonInteractive({
-      config: nonInteractiveConfig,
-      settings,
-      input: finalInput,
-      prompt_id,
-      runtimeMessageBus: sessionMessageBus,
-      deferTelemetryShutdown: true,
-    });
-
-    // Fire SessionEnd hook on successful completion
-    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Exit);
-  } catch (error) {
-    nonInteractiveExitCode = 1;
-    // Use the SAME config that SessionStart and the run itself use
-    // (nonInteractiveConfig) so the SessionEnd hook sees the same runtime
-    // context. The auth-validation try/catch above returns 1 on failure, so
-    // reaching this point means validateNonInteractiveAuth succeeded and
-    // nonInteractiveConfig is assigned — no base-config fallback is needed.
-    // triggerSessionEndHook catches hook failures internally (documented
-    // non-blocking contract in lifecycleHookTriggers.ts), so no wrapper is
-    // needed here — it will never reject or mask the original error.
-    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Other);
-
-    reportNonInteractiveError(nonInteractiveConfig, error);
-  } finally {
-    removeSigintHandler();
-  }
-  return nonInteractiveExitCode;
-}
-
-/**
- * Format and report a non-interactive error to the appropriate output stream
- * (JSON formatter when JSON output is configured, otherwise the debug logger).
- * Extracted so both the auth-validation catch and the run-phase catch share a
- * single error-reporting path.
- */
-function reportNonInteractiveError(config: Config, error: unknown): void {
-  if (config.getOutputFormat() === OutputFormat.JSON) {
-    const formatter = new JsonFormatter();
-    const normalizedError =
-      error instanceof Error ? error : new Error(String(error));
-    writeToStderr(`${formatter.formatError(normalizedError, 1)}
-`);
-  } else {
-    const printableError = formatNonInteractiveError(error);
-    debugLogger.error(`Non-interactive run failed: ${printableError}`);
-  }
+    recording.recordingIntegration,
+    recording.resumedHistory ?? undefined,
+    recording.recordingService,
+    recording.resumedLockHandle,
+  );
 }

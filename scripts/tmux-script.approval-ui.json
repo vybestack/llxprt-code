@@ -47,7 +47,7 @@
     {
       "type": "waitFor",
       "scope": "scrollback",
-      "contains": "Approval UI test complete.",
+      "contains": "Skill **pr-creator** activated.",
       "timeoutMs": 30000
     },
     { "type": "capture", "label": "after-approval", "scope": "screen" },

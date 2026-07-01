@@ -8,9 +8,8 @@
 
 // Note: Using --no-deprecation in shebang to suppress deprecation warnings from dependencies
 
-import { main } from './src/cli.js';
 import { FatalError, writeToStderr } from '@vybestack/llxprt-code-core';
-import { runExitCleanup } from './src/utils/cleanup.js';
+import { runBunLauncherIfNeeded } from './src/launcher/bun-launcher.js';
 
 // --- Global Entry Point ---
 
@@ -37,25 +36,76 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-// Use writeToStderr instead of console.error so that fatal errors are always
-// visible even after patchStdio() has redirected process.stderr.write to the
-// internal event bus (which may not have listeners yet).  Fixes #1667 where
-// config validation errors were silently swallowed.
-main().catch(async (error) => {
-  await runExitCleanup();
-  if (error instanceof FatalError) {
-    let errorMessage = error.message;
-    if (!process.env['NO_COLOR']) {
-      errorMessage = `\x1b[31m${errorMessage}\x1b[0m`;
-    }
-    writeToStderr(`${errorMessage}\n`);
-    process.exit(error.exitCode);
+function writeFatalError(error: FatalError): void {
+  let errorMessage = error.message;
+  if (!process.env['NO_COLOR']) {
+    errorMessage = `\x1b[31m${errorMessage}\x1b[0m`;
   }
+  writeToStderr(`${errorMessage}\n`);
+}
+
+function writeUnexpectedCriticalError(error: unknown): void {
   writeToStderr('An unexpected critical error occurred:\n');
   if (error instanceof Error) {
     writeToStderr(`${error.stack}\n`);
   } else {
     writeToStderr(`${String(error)}\n`);
   }
-  process.exit(1);
-});
+}
+
+async function safeRunExitCleanup(): Promise<void> {
+  try {
+    const { runExitCleanup } = await import('./src/utils/cleanup.js');
+    await runExitCleanup();
+  } catch {
+    // Best-effort: cleanup must not mask the original error.
+  }
+}
+
+function writeCriticalErrorAndGetExitCode(error: unknown): number {
+  try {
+    if (error instanceof FatalError) {
+      writeFatalError(error);
+      return error.exitCode;
+    }
+    writeUnexpectedCriticalError(error);
+  } catch {
+    return 1;
+  }
+  return 1;
+}
+
+// Use writeToStderr instead of console.error so that fatal errors are always
+// visible even after patchStdio() has redirected process.stderr.write to the
+// internal event bus (which may not have listeners yet).  Fixes #1667 where
+// config validation errors were silently swallowed.
+//
+// --- Bun launcher bootstrap ---
+// Re-exec under Bun when not already running under it. This must happen before
+// importing the (heavy) CLI so that Bun runs the TypeScript entry directly.
+// Dynamic import keeps main() out of the module graph until the launcher decides
+// whether to relaunch. The imported CLI module must remain side-effect-free at
+// module scope; if import fails here, main() never started and there are no CLI
+// runtime resources for safeRunExitCleanup() to release.
+runBunLauncherIfNeeded()
+  .then(async () => {
+    const { main } = await import('./src/cli.js');
+    try {
+      await main();
+    } catch (error) {
+      const exitCode = writeCriticalErrorAndGetExitCode(error);
+      await safeRunExitCleanup();
+      process.exit(exitCode);
+    }
+  })
+  .catch(async (error: unknown) => {
+    // This covers launcher failures and bootstrap import failures before main()
+    // starts. Cleanup is best-effort and harmless if nothing was registered.
+    let exitCode = 1;
+    try {
+      exitCode = writeCriticalErrorAndGetExitCode(error);
+      await safeRunExitCleanup();
+    } finally {
+      process.exit(exitCode);
+    }
+  });

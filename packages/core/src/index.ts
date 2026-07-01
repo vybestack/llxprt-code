@@ -16,7 +16,7 @@ export { PolicyEngine } from './policy/policy-engine.js';
 export {
   PolicyDecision,
   ApprovalMode,
-  PolicyRule,
+  type PolicyRule,
   type PolicyEngineConfig,
   type PolicySettings,
 } from './policy/types.js';
@@ -56,9 +56,9 @@ export * from './services/git-stats-service.js';
 // Export async task management types and services
 export {
   AsyncTaskManager,
-  AsyncTaskInfo,
-  AsyncTaskStatus,
-  RegisterTaskInput,
+  type AsyncTaskInfo,
+  type AsyncTaskStatus,
+  type RegisterTaskInput,
 } from './services/asyncTaskManager.js';
 export { AsyncTaskReminderService } from './services/asyncTaskReminderService.js';
 export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
