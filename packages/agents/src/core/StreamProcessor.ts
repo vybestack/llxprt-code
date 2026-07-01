@@ -252,15 +252,17 @@ export class StreamProcessor {
 
     try {
       const originalContents = requestPayload.contents;
-      const hooksWereActive = this._areBeforeModelHooksActive(configForHooks);
       const finalContents = await this._fireBeforeModelHook(
         configForHooks,
         originalContents,
         tools as ProviderToolset | undefined,
         toolSelection.allowedFunctionNames,
       );
-      const hookModifiedContents =
-        hooksWereActive || finalContents !== originalContents;
+      // Reference equality detects when _fireBeforeModelHook produces a new
+      // array (formal hook modifications via llm_request_modifier). In-place
+      // mutation by hooks that return the same reference is an edge case
+      // deferred to #2306 (differential analysis).
+      const hookModifiedContents = finalContents !== originalContents;
       requestPayload.contents =
         await this.compressionHandler.enforceProviderContents(
           {
@@ -299,28 +301,6 @@ export class StreamProcessor {
       this.compressionHandler.clearProviderCompressionCallback(provider);
       throw error;
     }
-  }
-
-  /**
-   * Detect whether BeforeModel hooks are enabled and a hook system is available.
-   * When hooks are active, the pending-content boundary may be altered by
-   * in-place mutation even if the hook returns no formal modifications, so the
-   * caller conservatively marks the boundary as unknown (deferred to #2306).
-   */
-  private _areBeforeModelHooksActive(
-    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
-  ): boolean {
-    if (
-      configForHooks === undefined ||
-      typeof configForHooks.getEnableHooks !== 'function'
-    ) {
-      return false;
-    }
-    return (
-      configForHooks.getEnableHooks() === true &&
-      typeof configForHooks.getHookSystem === 'function' &&
-      configForHooks.getHookSystem() !== undefined
-    );
   }
 
   /**
