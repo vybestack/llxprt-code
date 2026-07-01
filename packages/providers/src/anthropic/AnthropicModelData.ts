@@ -111,6 +111,16 @@ export const OAUTH_MODELS: Array<Omit<IModel, 'provider'>> = [
     maxOutputTokens: 32000,
   },
   {
+    id: 'claude-sonnet-5',
+    name: 'Claude Sonnet 5',
+    supportedToolFormats: ['anthropic'],
+    // Defaults reflect the Claude Code / subscription (auth) 200K context
+    // window. The API-only 1M window is plan-gated; raise it via /set or a
+    // profile (context-limit). Max output is the full 128K ceiling.
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
+  },
+  {
     id: 'claude-sonnet-4-6',
     name: 'Claude Sonnet 4.6',
     supportedToolFormats: ['anthropic'],
@@ -201,6 +211,13 @@ export const DEFAULT_MODELS: Array<Omit<IModel, 'provider'>> = [
     maxOutputTokens: 32000,
   },
   {
+    id: 'claude-sonnet-5',
+    name: 'Claude Sonnet 5',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
+  },
+  {
     id: 'claude-sonnet-4-6',
     name: 'Claude Sonnet 4.6',
     supportedToolFormats: ['anthropic'],
@@ -224,24 +241,24 @@ export const DEFAULT_MODELS: Array<Omit<IModel, 'provider'>> = [
 ];
 
 /**
- * Helper method to get the latest Claude 4 model ID for a given tier.
+ * Helper method to get the latest Claude model ID for a given tier.
  * This can be used when you want to ensure you're using the latest model.
  * @param tier - The model tier: 'opus', 'sonnet', or 'haiku'
  * @returns The latest model ID for that tier
  */
-export function getLatestClaude4Model(
+export function getLatestClaudeModel(
   tier: 'opus' | 'sonnet' | 'haiku' = 'sonnet',
 ): string {
   switch (tier) {
     case 'opus':
       return 'claude-opus-4-latest';
     case 'sonnet':
-      return 'claude-sonnet-4-latest';
+      return 'claude-sonnet-5-latest';
     case 'haiku':
       // Haiku 4 not yet available, but future-proofed
       return 'claude-haiku-4-latest';
     default:
-      return 'claude-sonnet-4-latest';
+      return 'claude-sonnet-5-latest';
   }
 }
 
@@ -255,6 +272,23 @@ export function isOpus46Plus(modelId: string): boolean {
     modelId.includes('claude-opus-4-7') ||
     modelId.includes('claude-opus-4-8')
   );
+}
+
+/**
+ * Whether the model is Claude Sonnet 5 (supports adaptive thinking via the
+ * effort parameter, 128K max output). Matches the bare alias and dated
+ * snapshot variants (e.g. claude-sonnet-5-YYYYMMDD).
+ */
+export function isSonnet5(modelId: string): boolean {
+  return modelId.toLowerCase().includes('claude-sonnet-5');
+}
+
+/**
+ * Whether the model supports adaptive thinking (the Anthropic `effort`
+ * parameter). Currently Opus 4.6+ and Sonnet 5.
+ */
+export function supportsAdaptiveThinking(modelId: string): boolean {
+  return isOpus46Plus(modelId) || isSonnet5(modelId);
 }
 
 /**
@@ -272,6 +306,11 @@ export function getMaxTokensForModel(modelId: string): number {
     modelId.includes('claude-sonnet-4')
   ) {
     return 64000;
+  }
+  // Claude Sonnet 5 supports up to 128K max output (also matches the -latest
+  // alias and dated snapshot IDs like claude-sonnet-5-YYYYMMDD).
+  if (isSonnet5(modelId)) {
+    return 128000;
   }
 
   const normalizedModelId = stripTrailingDateSegment(modelId.toLowerCase());
@@ -303,6 +342,13 @@ export function getContextWindowForModel(modelId: string): number {
   // Other Claude 4 opus models have larger context windows
   if (modelId.includes('claude-opus-4')) {
     return 500000;
+  }
+  // Claude Sonnet 5 defaults to the Claude Code / subscription 200K context
+  // window. The advertised 1M window is API-only and plan-gated; raise it
+  // via /set or a profile (context-limit). Matches the -latest alias and
+  // dated snapshots too.
+  if (isSonnet5(modelId)) {
+    return 200000;
   }
   if (modelId.includes('claude-sonnet-4')) {
     return 400000;
