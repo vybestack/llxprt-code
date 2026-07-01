@@ -87,6 +87,14 @@ describe('tokenLimit', () => {
       expect(tokenLimit('claude-sonnet-5')).toBe(200_000);
     });
 
+    it('should return 200K limit for the claude-sonnet-5-latest alias', () => {
+      expect(tokenLimit('claude-sonnet-5-latest')).toBe(200_000);
+    });
+
+    it('should return 200K limit for a claude-sonnet-5 dated snapshot', () => {
+      expect(tokenLimit('claude-sonnet-5-20260630')).toBe(200_000);
+    });
+
     it('honors a user-supplied context limit override (e.g. /set or profile)', () => {
       expect(tokenLimit('claude-opus-4-8', 1_000_000)).toBe(1_000_000);
     });

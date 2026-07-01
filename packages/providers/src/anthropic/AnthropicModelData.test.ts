@@ -139,9 +139,14 @@ describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
   });
 
   describe('getMaxTokensForModel', () => {
-    it('returns 128000 for claude-sonnet-5 and dated variants', () => {
+    it('returns 128000 for claude-sonnet-5, the -latest alias, and dated variants', () => {
       expect(getMaxTokensForModel('claude-sonnet-5')).toBe(128000);
+      expect(getMaxTokensForModel('claude-sonnet-5-latest')).toBe(128000);
       expect(getMaxTokensForModel('claude-sonnet-5-20260630')).toBe(128000);
+    });
+
+    it('is case-insensitive (routes through isSonnet5)', () => {
+      expect(getMaxTokensForModel('Claude-Sonnet-5')).toBe(128000);
     });
 
     it('still returns 64000 for claude-sonnet-4 models', () => {
@@ -151,9 +156,14 @@ describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
   });
 
   describe('getContextWindowForModel', () => {
-    it('returns 200000 (auth default) for claude-sonnet-5 and dated variants', () => {
+    it('returns 200000 (auth default) for claude-sonnet-5, the -latest alias, and dated variants', () => {
       expect(getContextWindowForModel('claude-sonnet-5')).toBe(200000);
+      expect(getContextWindowForModel('claude-sonnet-5-latest')).toBe(200000);
       expect(getContextWindowForModel('claude-sonnet-5-20260630')).toBe(200000);
+    });
+
+    it('is case-insensitive (routes through isSonnet5)', () => {
+      expect(getContextWindowForModel('Claude-Sonnet-5')).toBe(200000);
     });
 
     it('still returns 400000 for claude-sonnet-4 models', () => {

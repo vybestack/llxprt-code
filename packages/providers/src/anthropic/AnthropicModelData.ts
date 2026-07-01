@@ -307,9 +307,9 @@ export function getMaxTokensForModel(modelId: string): number {
   ) {
     return 64000;
   }
-  // Claude Sonnet 5 supports up to 128K max output (also matches dated
-  // snapshot IDs like claude-sonnet-5-YYYYMMDD).
-  if (modelId.includes('claude-sonnet-5')) {
+  // Claude Sonnet 5 supports up to 128K max output (also matches the -latest
+  // alias and dated snapshot IDs like claude-sonnet-5-YYYYMMDD).
+  if (isSonnet5(modelId)) {
     return 128000;
   }
 
@@ -345,8 +345,9 @@ export function getContextWindowForModel(modelId: string): number {
   }
   // Claude Sonnet 5 defaults to the Claude Code / subscription 200K context
   // window. The advertised 1M window is API-only and plan-gated; raise it
-  // via /set or a profile (context-limit). Matches dated snapshots too.
-  if (modelId.includes('claude-sonnet-5')) {
+  // via /set or a profile (context-limit). Matches the -latest alias and
+  // dated snapshots too.
+  if (isSonnet5(modelId)) {
     return 200000;
   }
   if (modelId.includes('claude-sonnet-4')) {
