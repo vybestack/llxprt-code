@@ -69,101 +69,61 @@ async function benchmarkAPI(
   };
 }
 
-async function runBenchmark() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error('Please set OPENAI_API_KEY environment variable');
-    process.exit(1);
-  }
-
-  async function withRuntime<T>(
-    metadata: ProviderRuntimeContext['metadata'],
-    task: (runtime: ProviderRuntimeContext) => Promise<T>,
-  ): Promise<T> {
-    const previous = peekActiveProviderRuntimeContext();
-    const runtime = createProviderRuntimeContext({ metadata });
-    setActiveProviderRuntimeContext(runtime);
-    try {
-      return await task(runtime);
-    } finally {
-      clearActiveProviderRuntimeContext();
-      if (previous) {
-        setActiveProviderRuntimeContext(previous);
-      }
+async function withRuntime<T>(
+  metadata: ProviderRuntimeContext['metadata'],
+  task: (runtime: ProviderRuntimeContext) => Promise<T>,
+): Promise<T> {
+  const previous = peekActiveProviderRuntimeContext();
+  const runtime = createProviderRuntimeContext({ metadata });
+  setActiveProviderRuntimeContext(runtime);
+  try {
+    return await task(runtime);
+  } finally {
+    clearActiveProviderRuntimeContext();
+    if (previous) {
+      setActiveProviderRuntimeContext(previous);
     }
   }
+}
 
-  const testMessages: IMessage[] = [
-    {
-      role: 'user',
-      content:
-        'Write a detailed explanation of how async generators work in JavaScript, including examples and best practices. Make it at least 500 words.',
-    },
-  ];
+function formatImprovementLabel(
+  value: string,
+  positive: string,
+  negative: string,
+): string {
+  return parseFloat(value) > 0 ? positive : negative;
+}
 
-  console.log('OpenAI Responses API vs Chat Completions API Benchmark\n');
-  console.log('Testing with prompt:', testMessages[0].content);
-  console.log('\n' + '='.repeat(80) + '\n');
-
-  const results: BenchmarkResult[] = [];
-
-  // Test Responses API with gpt-4o
-  console.log('Testing Responses API with gpt-4o...');
-  await withRuntime({ scenario: 'responses-gpt-4o' }, async (runtime) => {
+async function runSingleTest(
+  apiKey: string,
+  testMessages: IMessage[],
+  results: BenchmarkResult[],
+  scenario: string,
+  model: string,
+  apiType: 'responses' | 'legacy',
+  label: string,
+  cleanup?: () => void,
+): Promise<void> {
+  await withRuntime({ scenario }, async (runtime) => {
     const provider = new OpenAIProvider(apiKey);
     runtime.settingsService.set('activeProvider', 'openai');
-    runtime.settingsService.set('model', 'gpt-4o');
+    runtime.settingsService.set('model', model);
 
     try {
-      const result = await benchmarkAPI(provider, testMessages, 'responses');
+      const result = await benchmarkAPI(provider, testMessages, apiType);
       results.push(result);
-      console.log('✓ Responses API test completed\n');
+      console.log(`[OK] ${label} test completed\n`);
     } catch (error) {
-      console.error('✗ Responses API test failed:', error);
-    }
-  });
-
-  // Test Legacy API with gpt-4o (force disable responses)
-  console.log(
-    'Testing Legacy API with gpt-4o (OPENAI_RESPONSES_DISABLE=true)...',
-  );
-  process.env.OPENAI_RESPONSES_DISABLE = 'true';
-  await withRuntime({ scenario: 'legacy-gpt-4o' }, async (runtime) => {
-    const provider = new OpenAIProvider(apiKey);
-    runtime.settingsService.set('activeProvider', 'openai');
-    runtime.settingsService.set('model', 'gpt-4o');
-
-    try {
-      const result = await benchmarkAPI(provider, testMessages, 'legacy');
-      results.push(result);
-      console.log('✓ Legacy API test completed\n');
-    } catch (error) {
-      console.error('✗ Legacy API test failed:', error);
+      console.error(` ${label} test failed:`, error);
     } finally {
-      delete process.env.OPENAI_RESPONSES_DISABLE;
+      if (cleanup) cleanup();
     }
   });
+}
 
-  // Test with gpt-3.5-turbo (always uses legacy)
-  console.log('Testing Legacy API with gpt-3.5-turbo...');
-  await withRuntime({ scenario: 'legacy-gpt-35-turbo' }, async (runtime) => {
-    const provider = new OpenAIProvider(apiKey);
-    runtime.settingsService.set('activeProvider', 'openai');
-    runtime.settingsService.set('model', 'gpt-3.5-turbo');
-
-    try {
-      const result = await benchmarkAPI(provider, testMessages, 'legacy');
-      results.push(result);
-      console.log('✓ gpt-3.5-turbo test completed\n');
-    } catch (error) {
-      console.error('✗ gpt-3.5-turbo test failed:', error);
-    }
-  });
-
-  // Display results
+function displayResultsTable(results: BenchmarkResult[]): void {
   console.log('\n' + '='.repeat(80) + '\n');
   console.log('BENCHMARK RESULTS:\n');
-
   console.log(
     '| API Type  | Model         | First Token (ms) | Total Time (ms) | Tokens | Tokens/sec |',
   );
@@ -184,8 +144,9 @@ async function runBenchmark() {
   }
 
   console.log('\n' + '='.repeat(80) + '\n');
+}
 
-  // Compare Responses vs Legacy for gpt-4o
+function displayComparison(results: BenchmarkResult[]): void {
   const responsesGpt4o = results.find(
     (r) => r.apiType === 'responses' && r.model === 'gpt-4o',
   );
@@ -193,35 +154,99 @@ async function runBenchmark() {
     (r) => r.apiType === 'legacy' && r.model === 'gpt-4o',
   );
 
-  if (responsesGpt4o && legacyGpt4o) {
-    console.log('COMPARISON (gpt-4o Responses vs Legacy):\n');
+  if (!(responsesGpt4o && legacyGpt4o)) return;
 
-    const firstTokenImprovement = (
-      ((legacyGpt4o.timeToFirstToken - responsesGpt4o.timeToFirstToken) /
-        legacyGpt4o.timeToFirstToken) *
-      100
-    ).toFixed(1);
-    const totalTimeImprovement = (
-      ((legacyGpt4o.totalTime - responsesGpt4o.totalTime) /
-        legacyGpt4o.totalTime) *
-      100
-    ).toFixed(1);
-    const throughputImprovement = (
-      ((responsesGpt4o.tokensPerSecond - legacyGpt4o.tokensPerSecond) /
-        legacyGpt4o.tokensPerSecond) *
-      100
-    ).toFixed(1);
+  console.log('COMPARISON (gpt-4o Responses vs Legacy):\n');
 
-    console.log(
-      `Time to First Token: ${firstTokenImprovement}% ${parseFloat(firstTokenImprovement) > 0 ? 'faster' : 'slower'}`,
-    );
-    console.log(
-      `Total Time: ${totalTimeImprovement}% ${parseFloat(totalTimeImprovement) > 0 ? 'faster' : 'slower'}`,
-    );
-    console.log(
-      `Throughput: ${throughputImprovement}% ${parseFloat(throughputImprovement) > 0 ? 'higher' : 'lower'}`,
-    );
+  const firstTokenImprovement = (
+    ((legacyGpt4o.timeToFirstToken - responsesGpt4o.timeToFirstToken) /
+      legacyGpt4o.timeToFirstToken) *
+    100
+  ).toFixed(1);
+  const totalTimeImprovement = (
+    ((legacyGpt4o.totalTime - responsesGpt4o.totalTime) /
+      legacyGpt4o.totalTime) *
+    100
+  ).toFixed(1);
+  const throughputImprovement = (
+    ((responsesGpt4o.tokensPerSecond - legacyGpt4o.tokensPerSecond) /
+      legacyGpt4o.tokensPerSecond) *
+    100
+  ).toFixed(1);
+
+  console.log(
+    `Time to First Token: ${firstTokenImprovement}% ${formatImprovementLabel(firstTokenImprovement, 'faster', 'slower')}`,
+  );
+  console.log(
+    `Total Time: ${totalTimeImprovement}% ${formatImprovementLabel(totalTimeImprovement, 'faster', 'slower')}`,
+  );
+  console.log(
+    `Throughput: ${throughputImprovement}% ${formatImprovementLabel(throughputImprovement, 'higher', 'lower')}`,
+  );
+}
+
+async function runBenchmark() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error('Please set OPENAI_API_KEY environment variable');
+    process.exit(1);
   }
+
+  const testMessages: IMessage[] = [
+    {
+      role: 'user',
+      content:
+        'Write a detailed explanation of how async generators work in JavaScript, including examples and best practices. Make it at least 500 words.',
+    },
+  ];
+
+  console.log('OpenAI Responses API vs Chat Completions API Benchmark\n');
+  console.log('Testing with prompt:', testMessages[0].content);
+  console.log('\n' + '='.repeat(80) + '\n');
+
+  const results: BenchmarkResult[] = [];
+
+  console.log('Testing Responses API with gpt-4o...');
+  await runSingleTest(
+    apiKey,
+    testMessages,
+    results,
+    'responses-gpt-4o',
+    'gpt-4o',
+    'responses',
+    'Responses API',
+  );
+
+  console.log(
+    'Testing Legacy API with gpt-4o (OPENAI_RESPONSES_DISABLE=true)...',
+  );
+  process.env.OPENAI_RESPONSES_DISABLE = 'true';
+  await runSingleTest(
+    apiKey,
+    testMessages,
+    results,
+    'legacy-gpt-4o',
+    'gpt-4o',
+    'legacy',
+    'Legacy API',
+    () => {
+      delete process.env.OPENAI_RESPONSES_DISABLE;
+    },
+  );
+
+  console.log('Testing Legacy API with gpt-3.5-turbo...');
+  await runSingleTest(
+    apiKey,
+    testMessages,
+    results,
+    'legacy-gpt-35-turbo',
+    'gpt-3.5-turbo',
+    'legacy',
+    'gpt-3.5-turbo',
+  );
+
+  displayResultsTable(results);
+  displayComparison(results);
 
   console.log(
     '\nNote: Results may vary based on network conditions, server load, and prompt complexity.',

@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -40,6 +41,34 @@ function diffFor(file, addedLine) {
     '@@ -1,0 +1,1 @@',
     '+' + addedLine,
   ].join('\n');
+}
+
+// Shared diff builders reused by multiple describe blocks below. They construct
+// synthetic eslint.config.js diffs for the guard's detection tests.
+function configDiff(file, removedLine, addedLine) {
+  return [
+    'diff --git a/' + file + ' b/' + file,
+    'index 0000000..1111111 100644',
+    '--- a/' + file,
+    '+++ b/' + file,
+    '@@ -1,1 +1,1 @@',
+    '  rules: {',
+    '-' + removedLine,
+    '+' + addedLine,
+    '  },',
+  ].join(String.fromCharCode(10));
+}
+
+function rulesBlockOpenerDiff(addedLine) {
+  return [
+    'diff --git a/eslint.config.js b/eslint.config.js',
+    'index 0000000..1111111 100644',
+    '--- a/eslint.config.js',
+    '+++ b/eslint.config.js',
+    '@@ -1,0 +1,2 @@',
+    '  rules: {',
+    '+' + addedLine,
+  ].join(String.fromCharCode(10));
 }
 
 describe('check-eslint-guard', () => {
@@ -551,18 +580,6 @@ describe('check-eslint-guard', () => {
     // pre-update insideRuleEntry state so the keyed opener is evaluated as a
     // rule entry.
 
-    function rulesBlockOpenerDiff(addedLine) {
-      return [
-        'diff --git a/eslint.config.js b/eslint.config.js',
-        'index 0000000..1111111 100644',
-        '--- a/eslint.config.js',
-        '+++ b/eslint.config.js',
-        '@@ -1,0 +1,2 @@',
-        '  rules: {',
-        '+' + addedLine,
-      ].join(String.fromCharCode(10));
-    }
-
     it('rejects newly added keyed multiline opener with string off', () => {
       const violations = checkDiff(
         rulesBlockOpenerDiff("      'no-console': ['off',"),
@@ -997,20 +1014,6 @@ describe('check-eslint-guard', () => {
   });
 
   describe('ESLint config loosening (#2189)', () => {
-    function configDiff(file, removedLine, addedLine) {
-      return [
-        'diff --git a/' + file + ' b/' + file,
-        'index 0000000..1111111 100644',
-        '--- a/' + file,
-        '+++ b/' + file,
-        '@@ -1,1 +1,1 @@',
-        '  rules: {',
-        '-' + removedLine,
-        '+' + addedLine,
-        '  },',
-      ].join(String.fromCharCode(10));
-    }
-
     describe('severity downgrades', () => {
       it('catches string severity downgrade from error to warn', () => {
         const violations = checkDiff(
@@ -5889,32 +5892,6 @@ describe('check-eslint-guard', () => {
     // checkDiff tests prove scoped rules are now handled consistently across
     // all detection paths.
 
-    function configDiff(file, removedLine, addedLine) {
-      return [
-        'diff --git a/' + file + ' b/' + file,
-        'index 0000000..1111111 100644',
-        '--- a/' + file,
-        '+++ b/' + file,
-        '@@ -1,1 +1,1 @@',
-        '  rules: {',
-        '-' + removedLine,
-        '+' + addedLine,
-        '  },',
-      ].join(String.fromCharCode(10));
-    }
-
-    function rulesBlockOpenerDiff(addedLine) {
-      return [
-        'diff --git a/eslint.config.js b/eslint.config.js',
-        'index 0000000..1111111 100644',
-        '--- a/eslint.config.js',
-        '+++ b/eslint.config.js',
-        '@@ -1,0 +1,2 @@',
-        '  rules: {',
-        '+' + addedLine,
-      ].join(String.fromCharCode(10));
-    }
-
     describe('severity downgrades for scoped rules', () => {
       it('catches string severity downgrade for @typescript-eslint/no-explicit-any', () => {
         const violations = checkDiff(
@@ -8035,6 +8012,65 @@ describe('scanRootTypeScriptSuppressions (#2189 review finding)', () => {
     expect(offenders, 'Found TS suppressions: ' + offenders.join(', ')).toEqual(
       [],
     );
+  });
+
+  // Issue #2282: the root scan must respect git tracking so that local
+  // gitignored / untracked vendored content (e.g. research/) cannot produce
+  const NL = String.fromCharCode(10);
+
+  it('ignores TS suppressions in untracked files inside a git repo', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-git-untracked-'));
+    const git = (args) =>
+      execFileSync('git', args, { cwd: tmpDir, stdio: 'ignore' });
+    git(['-c', 'init.defaultBranch=main', 'init']);
+    mkdirSync(join(tmpDir, 'scripts'), { recursive: true });
+    writeFileSync(join(tmpDir, 'scripts', 'clean.js'), 'export const x = 1;');
+    git(['add', '-A']);
+    git([
+      '-c',
+      'user.email=t@t.com',
+      '-c',
+      'user.name=test',
+      'commit',
+      '-m',
+      'init',
+    ]);
+    writeFileSync(
+      join(tmpDir, 'scripts', 'dirty.js'),
+      ['// @ts-ignore vendored', 'export const y = x.bad;'].join(NL),
+    );
+
+    expect(scanRootTypeScriptSuppressions(tmpDir, '2189')).toEqual([]);
+  });
+
+  it('still flags TS suppressions in tracked files inside a git repo', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-git-tracked-'));
+    const git = (args) =>
+      execFileSync('git', args, { cwd: tmpDir, stdio: 'ignore' });
+    git(['-c', 'init.defaultBranch=main', 'init']);
+    mkdirSync(join(tmpDir, 'scripts'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'scripts', 'committed.js'),
+      [
+        'export const x = 1;',
+        '// @ts-ignore real committed suppression',
+        'export const y = x.bad;',
+      ].join(NL),
+    );
+    git(['add', '-A']);
+    git([
+      '-c',
+      'user.email=t@t.com',
+      '-c',
+      'user.name=test',
+      'commit',
+      '-m',
+      'init',
+    ]);
+
+    const violations = scanRootTypeScriptSuppressions(tmpDir, '2189');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].file).toBe('scripts/committed.js');
   });
 });
 

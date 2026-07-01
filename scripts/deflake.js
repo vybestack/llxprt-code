@@ -50,6 +50,21 @@ function runCommand(command, args = []) {
   });
 }
 
+async function runSingleIteration(command, args) {
+  try {
+    const exitCode = await runCommand(command, args);
+    if (exitCode === 0) {
+      console.log('[OK] Run PASS');
+      return false;
+    }
+    console.log(`[ERROR] Run FAIL (Exit Code: ${exitCode})`);
+    return true;
+  } catch (error) {
+    console.error('[ERROR] Run FAIL (Execution Error)', error);
+    return true;
+  }
+}
+
 async function main() {
   const argv = await yargs(hideBin(process.argv))
     .option('command', {
@@ -88,20 +103,8 @@ async function main() {
 
     for (let i = 1; i <= NUM_RUNS; i++) {
       console.log(`\n[RUN ${i}/${NUM_RUNS}]`);
-
-      try {
-        const exitCode = await runCommand(COMMAND, ARGS);
-
-        if (exitCode === 0) {
-          console.log('[OK] Run PASS');
-        } else {
-          console.log(`[ERROR] Run FAIL (Exit Code: ${exitCode})`);
-          failures++;
-        }
-      } catch (error) {
-        console.error('[ERROR] Run FAIL (Execution Error)', error);
-        failures++;
-      }
+      const failed = await runSingleIteration(COMMAND, ARGS);
+      if (failed) failures++;
     }
   } finally {
     try {

@@ -74,15 +74,12 @@ export function rewriteDeps(deps, workspaceInfo, npmReleasePackageSet) {
 
   let changed = false;
   for (const [depName, version] of Object.entries(deps)) {
-    if (
-      typeof version !== 'string' ||
-      !version.startsWith('file:') ||
-      !npmReleasePackageSet.has(depName)
-    ) {
-      continue;
-    }
-
-    const dependencyWorkspace = workspaceInfo.get(depName);
+    const dependencyWorkspace = shouldRewriteDep(
+      version,
+      depName,
+      npmReleasePackageSet,
+      workspaceInfo,
+    );
     if (!dependencyWorkspace) {
       continue;
     }
@@ -92,6 +89,74 @@ export function rewriteDeps(deps, workspaceInfo, npmReleasePackageSet) {
   }
 
   return changed;
+}
+
+function shouldRewriteDep(
+  version,
+  depName,
+  npmReleasePackageSet,
+  workspaceInfo,
+) {
+  if (
+    typeof version !== 'string' ||
+    !version.startsWith('file:') ||
+    !npmReleasePackageSet.has(depName)
+  ) {
+    return null;
+  }
+  return workspaceInfo.get(depName) || null;
+}
+
+const DEP_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+];
+
+function processWorkspaceForBinding(
+  workspacePath,
+  workspaceInfo,
+  npmReleasePackageSet,
+  packagesByPath,
+  options,
+) {
+  const pkgJsonPath = join(ROOT, workspacePath, 'package.json');
+  if (!existsSync(pkgJsonPath)) {
+    return { changed: false };
+  }
+
+  const pkg = readJson(pkgJsonPath);
+  if (!npmReleasePackageSet.has(pkg.name)) {
+    return { changed: false };
+  }
+
+  let changed = false;
+  for (const depField of DEP_FIELDS) {
+    changed =
+      rewriteDeps(pkg[depField], workspaceInfo, npmReleasePackageSet) ||
+      changed;
+  }
+
+  if (!changed) {
+    return { changed: false };
+  }
+
+  packagesByPath.set(workspacePath, pkg);
+  console.log(`  Rewrote workspace deps in ${pkg.name}`);
+
+  if (options.dryRun) {
+    return { changed: true };
+  }
+
+  if (options.backup) {
+    const backupPath = pkgJsonPath + BACKUP_SUFFIX;
+    if (!existsSync(backupPath)) {
+      writeFileSync(backupPath, readFileSync(pkgJsonPath));
+    }
+  }
+  writeJson(pkgJsonPath, pkg);
+  return { changed: true };
 }
 
 export function verifyNoFileDeps(
@@ -108,30 +173,8 @@ export function verifyNoFileDeps(
     }
 
     const pkg = packagesByPath?.get(workspacePath) ?? readJson(pkgJsonPath);
-    if (!npmReleasePackageSet.has(pkg.name)) {
-      continue;
-    }
-
-    for (const depField of [
-      'dependencies',
-      'devDependencies',
-      'peerDependencies',
-      'optionalDependencies',
-    ]) {
-      const deps = pkg[depField];
-      if (!deps) {
-        continue;
-      }
-
-      for (const [depName, version] of Object.entries(deps)) {
-        if (
-          typeof version === 'string' &&
-          version.startsWith('file:') &&
-          npmReleasePackageSet.has(depName)
-        ) {
-          violations.push(`${pkg.name} ${depField}.${depName}=${version}`);
-        }
-      }
+    if (npmReleasePackageSet.has(pkg.name)) {
+      collectFileDepViolations(pkg, npmReleasePackageSet, violations);
     }
   }
 
@@ -139,6 +182,24 @@ export function verifyNoFileDeps(
     throw new Error(
       `Publishable packages still contain workspace file: dependencies:\n${violations.join('\n')}`,
     );
+  }
+}
+
+function collectFileDepViolations(pkg, npmReleasePackageSet, violations) {
+  for (const depField of DEP_FIELDS) {
+    const deps = pkg[depField];
+    if (!deps) {
+      continue;
+    }
+    for (const [depName, version] of Object.entries(deps)) {
+      if (
+        typeof version === 'string' &&
+        version.startsWith('file:') &&
+        npmReleasePackageSet.has(depName)
+      ) {
+        violations.push(`${pkg.name} ${depField}.${depName}=${version}`);
+      }
+    }
   }
 }
 
@@ -153,47 +214,16 @@ export function bindReleaseDeps({ dryRun = false, backup = false } = {}) {
   console.log('NPM release packages:', npmReleasePackages.join(', '));
 
   for (const workspacePath of workspacePaths) {
-    const pkgJsonPath = join(ROOT, workspacePath, 'package.json');
-    if (!existsSync(pkgJsonPath)) {
-      continue;
+    const result = processWorkspaceForBinding(
+      workspacePath,
+      workspaceInfo,
+      npmReleasePackageSet,
+      packagesByPath,
+      { dryRun, backup },
+    );
+    if (result.changed) {
+      totalChanges++;
     }
-
-    const pkg = readJson(pkgJsonPath);
-    if (!npmReleasePackageSet.has(pkg.name)) {
-      continue;
-    }
-
-    let changed = false;
-    for (const depField of [
-      'dependencies',
-      'devDependencies',
-      'peerDependencies',
-      'optionalDependencies',
-    ]) {
-      changed =
-        rewriteDeps(pkg[depField], workspaceInfo, npmReleasePackageSet) ||
-        changed;
-    }
-
-    if (!changed) {
-      continue;
-    }
-
-    totalChanges++;
-    packagesByPath.set(workspacePath, pkg);
-    console.log(`  Rewrote workspace deps in ${pkg.name}`);
-
-    if (dryRun) {
-      continue;
-    }
-
-    if (backup) {
-      const backupPath = pkgJsonPath + BACKUP_SUFFIX;
-      if (!existsSync(backupPath)) {
-        writeFileSync(backupPath, readFileSync(pkgJsonPath));
-      }
-    }
-    writeJson(pkgJsonPath, pkg);
   }
 
   if (!dryRun && totalChanges > 0) {

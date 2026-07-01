@@ -37,15 +37,18 @@ for (const workspace of rootPackageJson.workspaces) {
   }
 
   for (const pkg of packageDirs) {
-    const pkgDir = join(workspaceDir, pkg);
-    try {
-      if (statSync(pkgDir).isDirectory()) {
-        rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
-      }
-    } catch (e) {
-      if (e.code !== 'ENOENT') {
-        throw e;
-      }
+    cleanPackageDistDir(join(workspaceDir, pkg));
+  }
+}
+
+function cleanPackageDistDir(pkgDir) {
+  try {
+    if (statSync(pkgDir).isDirectory()) {
+      rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      throw e;
     }
   }
 }

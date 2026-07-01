@@ -31,11 +31,83 @@ const project = new Project({
   compilerOptions: { allowJs: true, jsx: 4 /* Preserve */ },
 });
 
-let totalRewrites = 0;
-let totalFiles = 0;
+/**
+ * Process a single ImportTypeNode: extract the module path + type name and
+ * register the needed import. Returns true if the node was rewritten.
+ */
+function processImportTypeNode(node, needed) {
+  // argument is a LiteralTypeNode containing a StringLiteral
+  const argument = node.getArgument();
+  if (!argument) return false;
+  const stringLit = argument.asKindOrThrow(SyntaxKind.LiteralType).getLiteral();
+  if (!Node.isStringLiteral(stringLit)) return false;
+  const modulePath = stringLit.getLiteralText();
 
-for (const absPath of files) {
-  const resolved = path.resolve(absPath);
+  // qualifier is the `.Foo` part (EntityName). We only handle simple
+  // single-identifier qualifiers like `.Foo`. We skip nested (e.g. `.A.B`).
+  const qualifier = node.getQualifier();
+  const isTypeofImport = node.compilerNode.isTypeOf === true;
+  const hasTypeArguments = node.getTypeArguments().length > 0;
+
+  // Skip generic variants (`import('x').Foo<T>`) — still work, but rarer.
+  if (hasTypeArguments) return false;
+
+  // Skip `typeof import(...)` forms — those commonly index into the module
+  // object (e.g. `(typeof import('pkg'))['Foo']`) and need different handling.
+  if (isTypeofImport) return false;
+
+  if (!qualifier) return false;
+  if (!Node.isIdentifier(qualifier)) return false;
+  const typeName = qualifier.getText();
+
+  // Register need.
+  if (!needed.has(modulePath)) needed.set(modulePath, new Set());
+  needed.get(modulePath).add(typeName);
+
+  // Replace node text with just the type name.
+  node.replaceWithText(typeName);
+  return true;
+}
+
+/**
+ * Add or merge import declarations for each needed module/type pair.
+ */
+function addMergedImports(sf, needed) {
+  for (const [modulePath, typeNames] of needed) {
+    mergeImportForModule(sf, modulePath, typeNames);
+  }
+}
+
+/**
+ * Merge a single module's type imports into the source file.
+ */
+function mergeImportForModule(sf, modulePath, typeNames) {
+  const existing = sf
+    .getImportDeclarations()
+    .find((d) => d.getModuleSpecifierValue() === modulePath);
+
+  if (!existing) {
+    sf.addImportDeclaration({
+      moduleSpecifier: modulePath,
+      isTypeOnly: true,
+      namedImports: [...typeNames].map((name) => ({ name })),
+    });
+    return;
+  }
+
+  // Existing import found — extend with missing type names.
+  const already = new Set(existing.getNamedImports().map((ni) => ni.getName()));
+  const missing = [...typeNames].filter((n) => !already.has(n));
+  for (const name of missing) {
+    existing.addNamedImport({ name, isTypeOnly: !existing.isTypeOnly() });
+  }
+}
+
+/**
+ * Process a single source file: rewrite ImportTypeNodes and merge imports.
+ * Returns the number of rewrites applied (0 if nothing to do).
+ */
+function processSourceFile(project, resolved) {
   const sf = project.addSourceFileAtPath(resolved);
 
   /**
@@ -43,83 +115,35 @@ for (const absPath of files) {
    * modulePath string → set of types to add as `import type`.
    */
   const needed = new Map();
-  /**
-   * Map<modulePath, Map<alias, modulePath>>
-   * For `(typeof import('mod'))['X']` style we keep it in-place unless it's
-   * a plain `import('mod').X`; TS does not let us easily refactor those.
-   */
 
   // Walk all ImportTypeNodes.
   const importTypes = sf.getDescendantsOfKind(SyntaxKind.ImportType);
-  if (importTypes.length === 0) continue;
+  if (importTypes.length === 0) return 0;
 
   let rewritesInFile = 0;
 
   for (const node of importTypes) {
-    // argument is a LiteralTypeNode containing a StringLiteral
-    const argument = node.getArgument();
-    if (!argument) continue;
-    const stringLit = argument
-      .asKindOrThrow(SyntaxKind.LiteralType)
-      .getLiteral();
-    if (!Node.isStringLiteral(stringLit)) continue;
-    const modulePath = stringLit.getLiteralText();
-
-    // qualifier is the `.Foo` part (EntityName). We only handle simple
-    // single-identifier qualifiers like `.Foo`. We skip nested (e.g. `.A.B`).
-    const qualifier = node.getQualifier();
-    const isTypeofImport = node.compilerNode.isTypeOf === true;
-    const hasTypeArguments = node.getTypeArguments().length > 0;
-
-    // Skip generic variants (`import('x').Foo<T>`) — still work, but rarer.
-    if (hasTypeArguments) continue;
-
-    // Skip `typeof import(...)` forms — those commonly index into the module
-    // object (e.g. `(typeof import('pkg'))['Foo']`) and need different handling.
-    if (isTypeofImport) continue;
-
-    if (!qualifier) continue;
-    if (!Node.isIdentifier(qualifier)) continue;
-    const typeName = qualifier.getText();
-
-    // Register need.
-    if (!needed.has(modulePath)) needed.set(modulePath, new Set());
-    needed.get(modulePath).add(typeName);
-
-    // Replace node text with just the type name.
-    node.replaceWithText(typeName);
-    rewritesInFile++;
+    if (processImportTypeNode(node, needed)) {
+      rewritesInFile++;
+    }
   }
 
-  if (rewritesInFile === 0) continue;
+  if (rewritesInFile === 0) return 0;
 
   // Now add/merge imports.
-  for (const [modulePath, typeNames] of needed) {
-    const existing = sf
-      .getImportDeclarations()
-      .find((d) => d.getModuleSpecifierValue() === modulePath);
-
-    if (!existing) {
-      sf.addImportDeclaration({
-        moduleSpecifier: modulePath,
-        isTypeOnly: true,
-        namedImports: [...typeNames].map((name) => ({ name })),
-      });
-      continue;
-    }
-
-    // Existing import found — extend with missing type names.
-    const already = new Set(
-      existing.getNamedImports().map((ni) => ni.getName()),
-    );
-    const missing = [...typeNames].filter((n) => !already.has(n));
-    if (missing.length === 0) continue;
-    for (const name of missing) {
-      existing.addNamedImport({ name, isTypeOnly: !existing.isTypeOnly() });
-    }
-  }
+  addMergedImports(sf, needed);
 
   sf.saveSync();
+  return rewritesInFile;
+}
+
+let totalRewrites = 0;
+let totalFiles = 0;
+
+for (const absPath of files) {
+  const resolved = path.resolve(absPath);
+  const rewritesInFile = processSourceFile(project, resolved);
+  if (rewritesInFile === 0) continue;
   totalRewrites += rewritesInFile;
   totalFiles++;
   console.log(

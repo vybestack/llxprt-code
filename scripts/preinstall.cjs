@@ -61,6 +61,23 @@ function resolveVybestackDir() {
  * These temp directories are created by npm during atomic rename operations
  * and can be left behind if the install fails or is interrupted.
  */
+/**
+ * Attempt to remove a leftover temp directory. Returns 1 on success, 0 on
+ * failure (best-effort cleanup).
+ */
+function removeTempEntry(vybestackDir, entry) {
+  const tempPath = path.join(vybestackDir, entry);
+  try {
+    fs.rmSync(tempPath, { recursive: true, force: true });
+    console.log(`Cleaned up leftover temp directory: ${entry}`);
+    return 1;
+  } catch (rmError) {
+    // Ignore errors - best effort cleanup
+    console.warn(`Warning: Could not remove ${entry}: ${rmError.message}`);
+    return 0;
+  }
+}
+
 function cleanupTempDirectories() {
   // This cleanup targets temp directories left by npm's atomic-rename staging
   // during global installs. Bun does not create them, so under Bun this is a
@@ -85,19 +102,10 @@ function cleanupTempDirectories() {
 
     for (const entry of entries) {
       // Match temp directories like .llxprt-code-ofqtIqCy
-      if (entry.startsWith('.llxprt-code-')) {
-        const tempPath = path.join(vybestackDir, entry);
-        try {
-          fs.rmSync(tempPath, { recursive: true, force: true });
-          console.log(`Cleaned up leftover temp directory: ${entry}`);
-          cleanedCount++;
-        } catch (rmError) {
-          // Ignore errors - best effort cleanup
-          console.warn(
-            `Warning: Could not remove ${entry}: ${rmError.message}`,
-          );
-        }
+      if (!entry.startsWith('.llxprt-code-')) {
+        continue;
       }
+      cleanedCount += removeTempEntry(vybestackDir, entry);
     }
 
     if (cleanedCount > 0) {
