@@ -386,7 +386,9 @@ export class AgenticLoop {
 
     this.recordCompletedToolCalls(completed);
     yield { kind: 'tools_complete', completed };
-    return this.buildNextMessage(completed);
+    // Bun 1.3.14 does not unwrap a promised async-generator return value through yield*.
+    const nextMessage = await this.buildNextMessage(completed);
+    return nextMessage;
   }
 
   private recordCompletedToolCalls(completed: CompletedToolCall[]): void {

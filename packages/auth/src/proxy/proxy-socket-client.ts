@@ -150,6 +150,7 @@ export class ProxySocketClient {
       this.socket!.once('connect', resolve);
       this.socket!.once('error', reject);
     });
+    this.socket.unref();
   }
 
   private async handshake(): Promise<void> {

@@ -88,6 +88,7 @@ function generateFormula(version, sha256) {
   license "Apache-2.0"
 
   depends_on "node"
+  depends_on "bun"
 
   def install
     system "npm", "install", *std_npm_args
