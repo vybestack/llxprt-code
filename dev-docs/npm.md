@@ -6,13 +6,15 @@ This monorepo contains two main packages: `@vybestack/llxprt-code` and `@vybesta
 
 This is the main package for the LLxprt Code. It is responsible for the user interface, command parsing, and all other user-facing functionality.
 
-When this package is published, it is bundled into a single executable file. This bundle includes all of the package's dependencies, including `@vybestack/llxprt-code-core`. This means that whether a user installs the package with `npm install -g @vybestack/llxprt-code` or runs it directly with `npx @vybestack/llxprt-code`, they are using this single, self-contained executable.
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's run path uses the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`) to execute the TypeScript (`.ts`) entry point directly — no pre-compiled `dist/` artifact is required for the CLI to run. Type checking uses `tsc --noEmit` (no JavaScript output is produced). However, the published npm package still ships `dist/` (produced by `tsc` during the build) for Node.js compatibility, and the self-contained `bundle/llxprt.js` release artifact is produced by `scripts/bun-build.config.mjs` (which replaced the retired `esbuild.config.js`). The esbuild bundling step has been retired; bundling is now done by Bun.
 
 ## `@vybestack/llxprt-code-core`
 
 This package contains the core logic for interacting with the Gemini API. It is responsible for making API requests, handling authentication, and managing the local cache.
 
 This package is not bundled. When it is published, it is published as a standard Node.js package with its own dependencies. This allows it to be used as a standalone package in other projects, if needed. All transpiled js code in the `dist` folder is included in the package.
+
+Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 
 # Release Process
 
@@ -172,19 +174,18 @@ Here are the key stages:
 Stage 1: Pre-Release Sanity Checks and Versioning
 
 - What happens: Before any files are moved, the process ensures the project is in a good state. This involves running tests,
-  linting, and type-checking (npm run preflight). The version number in the root package.json and packages/cli/package.json
+  linting, and type-checking (bun run preflight). The version number in the root package.json and packages/cli/package.json
   is updated to the new release version.
 - Why: This guarantees that only high-quality, working code is released. Versioning is the first step to signify a new
   release.
 
 Stage 2: Building the Source Code
 
-- What happens: The TypeScript source code in packages/core/src and packages/cli/src is compiled into JavaScript.
+- What happens: The TypeScript source code (`.ts`) is compiled into JavaScript by `tsc`. The CLI's run path uses the Bun launcher to execute the `.ts` entry point directly, but the published npm package still ships `dist/` for Node.js compatibility. Type checking uses `tsc --noEmit` (no JavaScript output is produced).
 - File movement:
   - packages/core/src/\*_/_.ts -> compiled to -> packages/core/dist/
   - packages/cli/src/\*_/_.ts -> compiled to -> packages/cli/dist/
-- Why: The TypeScript code written during development needs to be converted into plain JavaScript that can be run by
-  Node.js. The core package is built first as the cli package depends on it.
+- Why: The TypeScript code is compiled into JavaScript for the published npm package (`dist/`) and for type-checking. The core package is built first as the cli package depends on it. The CLI run path uses the Bun launcher to execute `.ts` directly, but `dist/` is still produced and shipped for Node.js compatibility.
 
 Stage 3: Assembling the Final Publishable Package
 
@@ -197,16 +198,13 @@ This is the most critical stage where files are moved and transformed into their
     - Why: The final package.json must be different from the one used in development. Key changes include:
       - Removing devDependencies.
       - Removing workspace-specific "dependencies": { "@gemini-cli/core": "workspace:\*" } and ensuring the core code is
-        bundled directly into the final JavaScript file.
+        bundled directly into the final package.
       - Ensuring the bin, main, and files fields point to the correct locations within the final package structure.
 
 2.  The JavaScript Bundle is Created:
-    - What happens: The built JavaScript from both packages/core/dist and packages/cli/dist are bundled into a single,
-      executable JavaScript file.
-    - File movement: packages/cli/dist/index.js + packages/core/dist/index.js -> (bundled by esbuild) -> `bundle`/gemini.js (or a
-      similar name).
-    - Why: This creates a single, optimized file that contains all the necessary application code. It simplifies the package
-      by removing the need for the core package to be a separate dependency on NPM, as its code is now included directly.
+    - What happens: The built JavaScript from both packages/core/dist and packages/cli/dist are bundled into a single, executable JavaScript file by Bun (via `scripts/bun-build.config.mjs`, which replaced the retired `esbuild.config.js`).
+    - File movement: packages/cli/dist/index.js + packages/core/dist/index.js -> (bundled by Bun) -> `bundle`/llxprt.js
+    - Why: This creates a single, optimized file that contains all the necessary application code. It simplifies the package by removing the need for the core package to be a separate dependency on NPM, as its code is now included directly.
 
 3.  Static and Supporting Files are Copied:
     - What happens: Essential files that are not part of the source code but are required for the package to work correctly
@@ -227,6 +225,8 @@ Stage 4: Publishing to NPM
   to the NPM registry. This prevents any source code, test files, or development configurations from being accidentally
   published, resulting in a clean and minimal package for users.
 
+Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
+
 Summary of File Flow
 
 ```mermaid
@@ -238,14 +238,14 @@ graph TD
     end
 
     subgraph "Process"
-        D(Build)
-        E(Transform)
-        F(Assemble)
-        G(Publish)
+        D["Build (tsc → dist/, Bun → bundle/llxprt.js)"]
+        E["Transform package.json"]
+        F["Assemble bundle/"]
+        G["Publish"]
     end
 
     subgraph "Artifacts"
-        H["Bundled JS"]
+        H["bundle/llxprt.js (Bun bundle)"]
         I["Final package.json"]
         J["bundle/"]
     end
@@ -284,6 +284,6 @@ This tells NPM that any folder inside the `packages` directory is a separate pac
 
 ### Benefits of Workspaces
 
-- **Simplified Dependency Management**: Running `npm install` from the root of the project will install all dependencies for all packages in the workspace and link them together. This means you don't need to run `npm install` in each package's directory.
-- **Automatic Linking**: Packages within the workspace can depend on each other. When you run `npm install`, NPM will automatically create symlinks between the packages. This means that when you make changes to one package, the changes are immediately available to other packages that depend on it.
-- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `npm run build --workspace @vybestack/llxprt-code`.
+- **Simplified Dependency Management**: Running `bun install` from the root of the project will install all dependencies for all packages in the workspace and link them together. This means you don't need to run `bun install` in each package's directory.
+- **Automatic Linking**: Packages within the workspace can depend on each other. When you run `bun install`, Bun will automatically create symlinks between the packages. This means that when you make changes to one package, the changes are immediately available to other packages that depend on it.
+- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `bun run build --workspace @vybestack/llxprt-code`.
