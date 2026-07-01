@@ -69,6 +69,53 @@ interface Fixture {
 const fixtures: string[] = [];
 
 /**
+ * Spawns the fixture's postinstall under the given user agent (npm_config_user_agent),
+ * with `npm` shadowed by `binDir`'s stub recording into `sentinel`. Shared by both
+ * fixture builders so the spawn/collect logic lives in one place.
+ */
+function spawnPostinstall(
+  dir: string,
+  userAgent: string,
+  binDir: string,
+  sentinel: string,
+): { status: number | null; stderr: string; npmInvoked: boolean } {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    npm_config_user_agent: userAgent,
+    PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+    NPM_SENTINEL: sentinel,
+  };
+  // Ensure the recursion guard is unset so the npm path reaches bootstrap.
+  delete env.LLXPRT_POSTINSTALL_RUNNING;
+
+  const result = spawnSync(
+    process.execPath,
+    [join(dir, 'scripts', 'postinstall.cjs')],
+    { encoding: 'utf8', env },
+  );
+
+  return {
+    status: result.status,
+    // Surface a spawn failure (result.error, e.g. ENOENT) in the message: on
+    // such a failure status is null and stderr is empty, which would otherwise
+    // assert as an opaque "expected null to be 0".
+    stderr:
+      (result.error
+        ? `spawn failed: ${result.error.message}
+`
+        : '') + (result.stderr ?? ''),
+    npmInvoked: existsSync(sentinel),
+  };
+}
+
+/**
+ * Path to the nested static workspace copy a symlink fixture seeds under
+ * `bar/node_modules/@vybestack/foo`. Centralized so the layout is defined once.
+ */
+const staticCopyPath = (dir: string) =>
+  join(dir, 'packages', 'bar', 'node_modules', '@vybestack', 'foo');
+
+/**
  * Builds a fixture that reproduces Bun's hoisted-linker output for workspace
  * cross-dependencies: a real (non-symlink) static copy of one workspace
  * package nested inside another workspace's node_modules. Used to assert that
@@ -162,28 +209,8 @@ exit 0
   return {
     dir,
     run(userAgent: string): RunResult {
-      const env: NodeJS.ProcessEnv = {
-        ...process.env,
-        npm_config_user_agent: userAgent,
-        PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
-        NPM_SENTINEL: sentinel,
-      };
-      delete env.LLXPRT_POSTINSTALL_RUNNING;
-
-      const result = spawnSync(
-        process.execPath,
-        [join(dir, 'scripts', 'postinstall.cjs')],
-        { encoding: 'utf8', env },
-      );
-
       return {
-        status: result.status,
-        stderr:
-          (result.error
-            ? `spawn failed: ${result.error.message}
-`
-            : '') + (result.stderr ?? ''),
-        npmInvoked: existsSync(sentinel),
+        ...spawnPostinstall(dir, userAgent, binDir, sentinel),
         lockfile: '',
         bundleExists: false,
       };
@@ -245,31 +272,8 @@ function makeFixture(): Fixture {
   return {
     dir,
     run(userAgent: string): RunResult {
-      const env: NodeJS.ProcessEnv = {
-        ...process.env,
-        npm_config_user_agent: userAgent,
-        PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
-        // The npm stub appends to this path to record that it was invoked.
-        NPM_SENTINEL: sentinel,
-      };
-      // Ensure the recursion guard is unset so the npm path reaches bootstrap.
-      delete env.LLXPRT_POSTINSTALL_RUNNING;
-
-      const result = spawnSync(
-        process.execPath,
-        [join(dir, 'scripts', 'postinstall.cjs')],
-        { encoding: 'utf8', env },
-      );
-
       return {
-        status: result.status,
-        // Surface a spawn failure (result.error, e.g. ENOENT) in the message: on
-        // such a failure status is null and stderr is empty, which would
-        // otherwise assert as an opaque "expected null to be 0".
-        stderr:
-          (result.error ? `spawn failed: ${result.error.message}\n` : '') +
-          (result.stderr ?? ''),
-        npmInvoked: existsSync(sentinel),
+        ...spawnPostinstall(dir, userAgent, binDir, sentinel),
         lockfile: readFileSync(lockfilePath, 'utf8'),
         bundleExists: existsSync(join(dir, 'bundle', 'llxprt.js')),
       };
@@ -325,14 +329,7 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
 describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
   it('replaces a static workspace copy with a symlink under Bun', () => {
     const fixture = makeSymlinkFixture();
-    const copyPath = join(
-      fixture.dir,
-      'packages',
-      'bar',
-      'node_modules',
-      '@vybestack',
-      'foo',
-    );
+    const copyPath = staticCopyPath(fixture.dir);
 
     // Sanity: the fixture seeded a real directory (the static copy), not a link.
     expect(lstatSync(copyPath).isSymbolicLink()).toBe(false);
@@ -356,14 +353,7 @@ describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
     const fixture = makeSymlinkFixture();
 
     fixture.run(BUN_USER_AGENT);
-    const copyPath = join(
-      fixture.dir,
-      'packages',
-      'bar',
-      'node_modules',
-      '@vybestack',
-      'foo',
-    );
+    const copyPath = staticCopyPath(fixture.dir);
     expect(lstatSync(copyPath).isSymbolicLink()).toBe(true);
 
     // A second run must not error and must leave the symlink in place.
@@ -375,14 +365,7 @@ describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
 
   it('does not symlink workspace copies under npm', () => {
     const fixture = makeSymlinkFixture();
-    const copyPath = join(
-      fixture.dir,
-      'packages',
-      'bar',
-      'node_modules',
-      '@vybestack',
-      'foo',
-    );
+    const copyPath = staticCopyPath(fixture.dir);
 
     // Under npm, postinstall takes the bootstrap path (here a stubbed npm) and
     // never invokes the Bun-only symlinker, so the static copy must remain a

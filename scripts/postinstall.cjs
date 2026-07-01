@@ -15,13 +15,6 @@ const lockfilePath = path.join(__dirname, '..', 'package-lock.json');
 const repoRoot = path.join(__dirname, '..');
 
 /**
- * Resolves the workspace directories declared in the root package.json
- * `workspaces` glob. Supports `packages/*` style globs and literal paths.
- *
- * @returns {Array<{name: string, dir: string}>} Workspace package names and
- *   their repo-relative directories.
- */
-/**
  * Expands a single root-`workspaces` entry (a `packages/*`-style glob or a
  * literal path) into the list of repo-relative workspace directories it
  * matches that contain a `package.json`.
@@ -86,7 +79,26 @@ function isStaticWorkspaceCopy(nameToDir, fullName, target) {
   } catch {
     return false;
   }
-  return !stat.isSymbolicLink();
+  return stat.isDirectory() && !stat.isSymbolicLink();
+}
+
+/**
+ * Atomically replaces `target` (a static workspace copy directory) with a
+ * symlink to `rel`. The static copy is renamed aside first, so a failure to
+ * create the symlink restores the original rather than leaving the dependency
+ * missing.
+ */
+function replaceWithSymlink(target, rel) {
+  const backup = `${target}.postinstall-bak`;
+  fs.renameSync(target, backup);
+  try {
+    fs.symlinkSync(rel, target);
+    fs.rmSync(backup, { recursive: true, force: true });
+  } catch (e) {
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.renameSync(backup, target);
+    throw e;
+  }
 }
 
 /**
@@ -108,8 +120,7 @@ function symlinkScopedCopies(wsDir, nameToDir) {
     }
     const realWs = path.join(repoRoot, nameToDir[fullName]);
     const rel = path.relative(path.dirname(target), realWs);
-    fs.rmSync(target, { recursive: true, force: true });
-    fs.symlinkSync(rel, target);
+    replaceWithSymlink(target, rel);
     replaced++;
   }
   return replaced;

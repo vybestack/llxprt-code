@@ -646,8 +646,11 @@ jobs:
       # dev-docs/bun.md). Build/bundle/test run under Node via `npm run …`
       # (`npm run test --workspaces` recurses under `bun run`).
       - name: 'Install dependencies for testing'
+        # Bun re-normalizes `bun.lock` on every install (dev-docs/bun.md);
+        # restore the committed lockfile so no downstream step sees a dirty one.
         run: |-
           bun install
+          git checkout -- bun.lock
       - name: 'Build project'
         run: |-
           npm run build
