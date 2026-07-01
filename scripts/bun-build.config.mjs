@@ -118,8 +118,8 @@ const a2aServerConfig = {
 
 const { build } = await import('bun');
 
-// Execute both builds. CLI failure is fatal; a2a-server failure is non-fatal
-// (matches the previous esbuild Promise.allSettled semantics).
+// Execute both builds. Both outputs are required by downstream bundle/release
+// workflows, so either failure must fail the command.
 const results = await Promise.allSettled([
   build(cliConfig),
   build(a2aServerConfig),
@@ -154,17 +154,16 @@ const a2aOk =
   a2aResult.status === 'fulfilled' && a2aResult.value.success !== false;
 if (!a2aOk) {
   if (a2aResult.status === 'rejected') {
-    console.warn('a2a-server build failed:', a2aResult.reason);
+    console.error('a2a-server build failed:', a2aResult.reason);
   } else {
-    console.warn('a2a-server build completed with errors (non-fatal).');
+    console.error('a2a-server build completed with errors.');
     reportLogs('a2a-server', a2aResult);
   }
+  process.exit(1);
 }
 
 console.log(
   'bun build complete:',
   cliResult.value.outputs.map((o) => `${o.path}=${o.size}`),
-  a2aOk
-    ? a2aResult.value.outputs.map((o) => `${o.path}=${o.size}`)
-    : 'a2a failed (non-fatal)',
+  a2aResult.value.outputs.map((o) => `${o.path}=${o.size}`),
 );

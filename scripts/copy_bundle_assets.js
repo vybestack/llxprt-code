@@ -20,11 +20,13 @@
 import { copyFileSync, existsSync, mkdirSync, cpSync } from 'fs';
 import { dirname, join, basename } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'node:module';
 import { glob } from 'glob';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const bundleDir = join(root, 'bundle');
+const require = createRequire(import.meta.url);
 
 // Remove verbose logging
 
@@ -68,16 +70,10 @@ if (existsSync(treeSitterWasmPath)) {
 // Copy the tree-sitter bash grammar WASM. shell-parser.ts loads this from disk
 // via require.resolve at runtime (the esbuild ?binary embedding plugin was
 // retired), so the bundle must ship the grammar alongside the other WASM files.
-const treeSitterBashWasmPath = join(
-  root,
-  'node_modules/tree-sitter-bash/tree-sitter-bash.wasm',
+const treeSitterBashWasmPath = require.resolve(
+  'tree-sitter-bash/tree-sitter-bash.wasm',
 );
-if (existsSync(treeSitterBashWasmPath)) {
-  copyFileSync(
-    treeSitterBashWasmPath,
-    join(bundleDir, 'tree-sitter-bash.wasm'),
-  );
-}
+copyFileSync(treeSitterBashWasmPath, join(bundleDir, 'tree-sitter-bash.wasm'));
 
 // Copy all markdown files from prompt-config/defaults preserving directory structure
 const promptMdFiles = glob.sync(
