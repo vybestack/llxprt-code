@@ -35,15 +35,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Use official install script and put bun on PATH for both root and node users.
 ENV BUN_INSTALL=/usr/local/bun
 ENV PATH=$PATH:/usr/local/bun/bin
-# Switch to bash with pipefail so a failed curl in the `curl | bash` install
-# fails the build instead of silently succeeding (hadolint DL4006).
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Pin Bun from the repo-level .bun-version so release, CI, and the image never drift.
 COPY .bun-version /tmp/.bun-version
+# Scope bash+pipefail to this RUN only: a failed curl in `curl | bash` must fail
+# the build instead of silently succeeding (hadolint DL4006). The SHELL is reset
+# right after so downstream layers keep the default /bin/sh semantics.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN BUN_VERSION="$(tr -d '[:space:]' < /tmp/.bun-version)" && \
   curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" && \
   ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun && \
   bun --version
+SHELL ["/bin/sh", "-c"]
 
 # set up npm global package folder under /usr/local/share
 # give it to non-root user node, already set up in base image
