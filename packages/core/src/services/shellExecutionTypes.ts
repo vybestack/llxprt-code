@@ -7,6 +7,8 @@
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import type { EnvironmentSanitizationConfig } from './environmentSanitization.js';
 
+export type PtyExecutionMethod = 'lydell-node-pty' | 'node-pty' | 'bun-pty';
+
 /** A structured result from a shell command execution. */
 export interface ShellExecutionResult {
   /** The raw, unprocessed output buffer. */
@@ -26,10 +28,11 @@ export interface ShellExecutionResult {
   /** The process ID of the spawned shell. */
   pid: number | undefined;
   /** The method used to execute the shell command. */
-  executionMethod: 'lydell-node-pty' | 'node-pty' | 'child_process' | 'none';
+  executionMethod: PtyExecutionMethod | 'child_process' | 'none';
 }
 
 export interface ShellExecutionHandle {
+  /** The spawned process id. */
   pid: number | undefined;
   result: Promise<ShellExecutionResult>;
 }

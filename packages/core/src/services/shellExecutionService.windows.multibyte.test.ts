@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as os from 'os';
 import { spawn } from 'child_process';
 import EventEmitter from 'events';
@@ -31,8 +31,18 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     terminalHeight: 24,
   };
 
+  function stubProcessPlatform(platform: NodeJS.Platform): void {
+    const processStub = Object.create(process) as NodeJS.Process;
+    Object.defineProperty(processStub, 'platform', {
+      value: platform,
+      configurable: true,
+    });
+    vi.stubGlobal('process', processStub);
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
+    stubProcessPlatform('win32');
     vi.mocked(os.platform).mockReturnValue('win32');
 
     mockChildProcess = new EventEmitter() as EventEmitter &
@@ -47,6 +57,10 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     });
 
     vi.mocked(spawn).mockReturnValue(mockChildProcess as ChildProcess);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('should handle Japanese text in shell commands without hanging', async () => {
@@ -115,35 +129,32 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it.skipIf(process.platform !== 'win32')(
-    'should handle mixed English and Japanese output',
-    async () => {
-      const command = 'echo "Hello 世界"';
-      const mixedOutput = 'Hello 世界\r\n';
+  it('should handle mixed English and Japanese output', async () => {
+    const command = 'echo "Hello 世界"';
+    const mixedOutput = 'Hello 世界\r\n';
 
-      const promise = await ShellExecutionService.execute(
-        command,
-        '.',
-        () => {},
-        new AbortController().signal,
-        false,
-        defaultShellConfig,
-      );
+    const promise = await ShellExecutionService.execute(
+      command,
+      '.',
+      () => {},
+      new AbortController().signal,
+      false,
+      defaultShellConfig,
+    );
 
-      setImmediate(() => {
-        // Split the output to test chunked decoding
-        const buffer = Buffer.from(mixedOutput, 'utf-8');
-        mockChildProcess.stdout?.emit('data', buffer.slice(0, 7)); // "Hello "
-        mockChildProcess.stdout?.emit('data', buffer.slice(7)); // "世界\r\n"
-        mockChildProcess.emit('exit', 0, null);
-      });
+    setImmediate(() => {
+      // Split the output to test chunked decoding
+      const buffer = Buffer.from(mixedOutput, 'utf-8');
+      mockChildProcess.stdout?.emit('data', buffer.slice(0, 7)); // "Hello "
+      mockChildProcess.stdout?.emit('data', buffer.slice(7)); // "世界\r\n"
+      mockChildProcess.emit('exit', 0, null);
+    });
 
-      const result = await promise.result;
+    const result = await promise.result;
 
-      expect(result.output).toContain('Hello 世界');
-      expect(result.exitCode).toBe(0);
-    },
-  );
+    expect(result.output).toContain('Hello 世界');
+    expect(result.exitCode).toBe(0);
+  });
 
   it('should not escape quotes excessively in commands', async () => {
     const command = 'git commit -m "日本語のコミットメッセージ"';

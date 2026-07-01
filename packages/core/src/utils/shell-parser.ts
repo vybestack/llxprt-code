@@ -22,11 +22,37 @@ import type {
   Node,
   Query as QueryType,
 } from 'web-tree-sitter';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { isBunRuntime } from './runtime.js';
 
+const require = createRequire(import.meta.url);
 const debugLogger = new DebugLogger('llxprt:shell-parser');
 
 const PARSE_TIMEOUT_MICROS = 1000 * 1000; // 1 second
+
+/**
+ * Shape of the dynamically imported `web-tree-sitter` module. In 0.25.x the
+ * `Parser` and `Language` classes are top-level named exports; some bundler
+ * configurations also nest `Parser` under `default`.
+ */
+type TreeSitterLanguageLoader = {
+  load(input: Uint8Array): Promise<Language>;
+};
+
+type TreeSitterDefaultExport =
+  | {
+      Parser?: new () => ParserType;
+      Language?: TreeSitterLanguageLoader;
+    }
+  | (new () => ParserType);
+
+interface TreeSitterModule {
+  Parser?: new () => ParserType;
+  Language?: TreeSitterLanguageLoader;
+  default?: TreeSitterDefaultExport;
+}
 
 /**
  * Resolve the tree-sitter Parser constructor. web-tree-sitter's export shape
@@ -45,6 +71,79 @@ function resolveTreeSitterParser(
     return defaultExport;
   }
   return fallback;
+}
+
+type ObjectOrFunction = object | ((...args: never[]) => unknown);
+
+function isObjectOrFunction(value: unknown): value is ObjectOrFunction {
+  if (value === null) {
+    return false;
+  }
+  const valueType = typeof value;
+  return valueType === 'object' || valueType === 'function';
+}
+
+function isLanguageLoader(value: unknown): value is TreeSitterLanguageLoader {
+  if (!isObjectOrFunction(value)) {
+    return false;
+  }
+  if (!('load' in value)) {
+    return false;
+  }
+  return typeof value.load === 'function';
+}
+
+function resolveTreeSitterLanguage(
+  named: unknown,
+  defaultExport: unknown,
+): TreeSitterLanguageLoader | undefined {
+  if (isLanguageLoader(named)) {
+    return named;
+  }
+  if (
+    typeof defaultExport === 'object' &&
+    defaultExport !== null &&
+    'Language' in defaultExport
+  ) {
+    const nestedLanguage = defaultExport.Language;
+    if (isLanguageLoader(nestedLanguage)) {
+      return nestedLanguage;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the bash grammar WASM bytes.
+ *
+ * Three execution contexts must be served:
+ * - **esbuild bundle (Node CLI)**: the `?binary` suffix triggers the wasm-binary
+ *   plugin which embeds the `.wasm` as a `Uint8Array` at build time.
+ * - **Raw Bun (POSIX)**: bypasses esbuild entirely, so `?binary` cannot resolve.
+ *   The grammar file is read directly via `fs`.
+ * - **vitest / direct Node**: the `?binary` plugin is also absent; fall back to
+ *   the same `fs` read.
+ *
+ * The `fs`-read fallback is strictly more portable, so `?binary` is attempted
+ * first (preserving the embedded-bytes optimization for the production bundle)
+ * and `fs` is used whenever that import is unavailable.
+ */
+async function resolveBashWasmBytes(): Promise<Uint8Array> {
+  if (!isBunRuntime()) {
+    try {
+      const wasmModule = (await import(
+        'tree-sitter-bash/tree-sitter-bash.wasm?binary'
+      )) as { default: Uint8Array };
+      return wasmModule.default;
+    } catch (error) {
+      debugLogger.log(
+        'tree-sitter-bash ?binary import failed; falling back to filesystem WASM load',
+        error,
+      );
+    }
+  }
+  const wasmPath = require.resolve('tree-sitter-bash/tree-sitter-bash.wasm');
+  return new Uint8Array(readFileSync(wasmPath));
 }
 
 // Type definitions for tree-sitter query results
@@ -88,40 +187,36 @@ export async function initializeParser(): Promise<boolean> {
   initializationAttempted = true;
 
   try {
-    // Dynamic import to get the Parser class
-    const TreeSitter = (await import('web-tree-sitter')) as {
-      Parser?: new () => unknown;
-      default?: { Parser?: new () => unknown };
-    };
-    // web-tree-sitter exports Parser directly as a named export, not default
+    const TreeSitter = (await import('web-tree-sitter')) as TreeSitterModule;
     const parserCandidate = TreeSitter.Parser;
     const defaultCandidate = TreeSitter.default;
     const Parser = resolveTreeSitterParser(
       parserCandidate,
       defaultCandidate,
       TreeSitter,
-    ) as typeof ParserType & {
-      init(): Promise<void>;
-      Language: typeof Language;
-    };
+    ) as (new () => ParserType) & { init(): Promise<void> };
 
     await Parser.init();
     parser = new Parser();
 
-    // Load the bash language WASM
-    // The ?binary suffix triggers our esbuild plugin to embed the wasm
-    const wasmModule = await import(
-      'tree-sitter-bash/tree-sitter-bash.wasm?binary'
+    const LanguageLoader = resolveTreeSitterLanguage(
+      TreeSitter.Language,
+      TreeSitter.default,
     );
-    bashLanguage = await Parser.Language.load(wasmModule.default);
+    if (!LanguageLoader) {
+      throw new Error(
+        'web-tree-sitter Language export not found; expected top-level or default-nested Language.load()',
+      );
+    }
+
+    const wasmBytes = await resolveBashWasmBytes();
+    bashLanguage = await LanguageLoader.load(wasmBytes);
     parser.setLanguage(bashLanguage);
 
     return true;
   } catch (error) {
     initializationError =
       error instanceof Error ? error : new Error(String(error));
-    // Use debug logging instead of console.warn to avoid polluting output
-    // The fallback to regex is seamless and doesn't need user notification
     parser = null;
     bashLanguage = null;
     return false;
@@ -157,7 +252,7 @@ export function parseShellCommand(
       progressCallback: () => {
         if (performance.now() > deadline) {
           parseState.timedOut = true;
-          return true as unknown as void; // Returning true cancels parsing
+          return true;
         }
         return undefined;
       },
@@ -165,6 +260,9 @@ export function parseShellCommand(
 
     if (parseState.timedOut) {
       debugLogger.error('Bash command parsing timed out for command:', command);
+      // A cancelled parse leaves the parser in a resume state; reset so the
+      // next parse starts fresh rather than resuming the cancelled command.
+      parser.reset();
       return null;
     }
 
@@ -187,10 +285,14 @@ export function extractCommandNames(tree: Tree): string[] {
 
   // Query for command_name nodes which are the actual command being executed
   const query = bashLanguage.query('(command name: (command_name) @cmd)');
-  const matches = query.matches(tree.rootNode) as QueryMatch[];
+  try {
+    const matches = query.matches(tree.rootNode) as QueryMatch[];
 
-  for (const match of matches) {
-    collectCommandNamesFromCaptures(match.captures, commands);
+    for (const match of matches) {
+      collectCommandNamesFromCaptures(match.captures, commands);
+    }
+  } finally {
+    query.delete();
   }
 
   return commands;
@@ -226,6 +328,76 @@ export interface ParsedCommandDetail {
 export interface CommandParseResult {
   details: ParsedCommandDetail[];
   hasError: boolean;
+}
+
+function hasShellSubstitutionSyntax(command: string): boolean {
+  let inSingleQuotes = false;
+  let inDoubleQuotes = false;
+  let skipCurrent = false;
+
+  for (let i = 0; i < command.length; i += 1) {
+    const char = command[i];
+    if (skipCurrent) {
+      skipCurrent = false;
+    } else if (char === '\\' && !inSingleQuotes) {
+      skipCurrent = true;
+    } else if (char === "'" && !inDoubleQuotes) {
+      inSingleQuotes = !inSingleQuotes;
+    } else if (char === '"' && !inSingleQuotes) {
+      inDoubleQuotes = !inDoubleQuotes;
+    } else if (
+      !inSingleQuotes &&
+      isShellSubstitutionStart(command, i, inDoubleQuotes)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isShellSubstitutionStart(
+  command: string,
+  index: number,
+  inDoubleQuotes: boolean,
+): boolean {
+  return (
+    isCommandSubstitutionStart(command, index) ||
+    isProcessSubstitutionStart(command, index, inDoubleQuotes) ||
+    command[index] === '`'
+  );
+}
+
+function isCommandSubstitutionStart(command: string, index: number): boolean {
+  if (command[index] !== '$') {
+    return false;
+  }
+  if (command[index + 1] !== '(') {
+    return false;
+  }
+  // Exclude arithmetic expansion $(( )) which is not command substitution
+  if (index + 2 < command.length && command[index + 2] === '(') {
+    return false;
+  }
+  return true;
+}
+
+function isProcessSubstitutionStart(
+  command: string,
+  index: number,
+  inDoubleQuotes: boolean,
+): boolean {
+  if (inDoubleQuotes) {
+    return false;
+  }
+  return (
+    isProcessSubstitutionOperator(command[index]) &&
+    index + 1 < command.length &&
+    command[index + 1] === '('
+  );
+}
+
+function isProcessSubstitutionOperator(char: string | undefined): boolean {
+  return char === '<' || char === '>';
 }
 
 /**
@@ -324,7 +496,7 @@ export function collectCommandDetails(
  * commands via `${attacker_controlled@P}` — even if the surrounding command
  * appears harmless.  Detection here causes the command to be hard-denied.
  */
-function hasPromptCommandTransform(root: Node): boolean {
+export function hasPromptCommandTransform(root: Node): boolean {
   const stack: Node[] = [root];
 
   while (stack.length > 0) {
@@ -355,10 +527,7 @@ function hasPromptTransformInExpansion(node: Node): boolean {
   for (let i = 0; i < node.childCount - 1; i += 1) {
     const operatorNode = node.child(i);
     const transformNode = node.child(i + 1);
-    if (
-      operatorNode?.text === '@' &&
-      transformNode?.text.toLowerCase() === 'p'
-    ) {
+    if (operatorNode?.text === '@' && transformNode?.text === 'P') {
       return true;
     }
   }
@@ -384,11 +553,15 @@ export function parseCommandDetails(
 
     const details = collectCommandDetails(tree, command);
 
-    // Check for syntax errors, empty command list, or dangerous prompt transformations
+    // Check for syntax errors, empty command list, dangerous prompt transformations,
+    // or substitution syntax that the grammar failed to expose as executable commands.
+    const hasMissingSubstitutionDetails =
+      hasShellSubstitutionSyntax(command) && !hasCommandSubstitution(tree);
     const hasError =
       tree.rootNode.hasError ||
       details.length === 0 ||
-      hasPromptCommandTransform(tree.rootNode);
+      hasPromptCommandTransform(tree.rootNode) ||
+      hasMissingSubstitutionDetails;
 
     if (hasError) {
       let query: QueryType | null = null;
@@ -440,8 +613,12 @@ export function hasCommandSubstitution(tree: Tree): boolean {
     ]
   `);
 
-  const matches = query.matches(tree.rootNode) as QueryMatch[];
-  return matches.length > 0;
+  try {
+    const matches = query.matches(tree.rootNode) as QueryMatch[];
+    return matches.length > 0;
+  } finally {
+    query.delete();
+  }
 }
 
 /**
