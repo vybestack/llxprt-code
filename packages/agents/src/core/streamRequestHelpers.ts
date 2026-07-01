@@ -86,22 +86,6 @@ export function buildRequestContentsResult(
 }
 
 /**
- * Build the request contents (curated IContent[]) from user input.
- * Thin wrapper around buildRequestContentsResult for backward compatibility.
- */
-export function buildRequestContents(
-  userContent: Content | Content[],
-  conversationManager: ConversationManager,
-  historyService: HistoryService,
-): IContent[] {
-  return buildRequestContentsResult(
-    userContent,
-    conversationManager,
-    historyService,
-  ).contents;
-}
-
-/**
  * Select the tools for the request from params or the fallback generationConfig.
  */
 export function selectRequestTools(

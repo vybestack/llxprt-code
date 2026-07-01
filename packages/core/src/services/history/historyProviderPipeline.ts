@@ -92,20 +92,3 @@ export interface ProviderContentEnvelope {
    */
   pendingContents: IContent[] | undefined;
 }
-
-/**
- * Build a ProviderContentEnvelope from curated history and the pending
- * (new, unsent) tail contents. The envelope carries both the provider-ready
- * contents and the raw pending items so enforcement can recompose after
- * compression without re-deriving the pending boundary.
- */
-export function buildProviderContentEnvelope(
-  curated: IContent[],
-  pendingContents: IContent[],
-  logger: DebugLogger,
-): ProviderContentEnvelope {
-  return {
-    contents: buildProviderContent(curated, pendingContents, logger),
-    pendingContents,
-  };
-}
