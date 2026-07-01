@@ -79,9 +79,11 @@ trusted. These are the 16 entries in `trustedDependencies`:
 
 ### Why other lifecycle-script packages are NOT trusted
 
-- **`esbuild`** — does not need trust. Its platform binary is delivered by the
-  separate `@esbuild/<platform>` package, which Bun installs directly without
-  running a script.
+- **`esbuild`** — retired in S4 (the run path and distributable bundle now use
+  `bun build`; see [S4](https://github.com/vybestack/llxprt-code/issues/2241)).
+  When it was still a dependency it did not need trust: its platform binary was
+  delivered by the separate `@esbuild/<platform>` package, which Bun installs
+  directly without running a script.
 - **`node-pty`** — not trusted because the runtime prefers `@lydell/node-pty`
   (see `packages/core/src/utils/getPty.ts`), whose native binary is supplied by
   the prebuilt `@lydell/node-pty-*` platform packages. `node-pty` is the

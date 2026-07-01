@@ -65,6 +65,20 @@ if (existsSync(treeSitterWasmPath)) {
   copyFileSync(treeSitterWasmPath, join(bundleDir, 'tree-sitter.wasm'));
 }
 
+// Copy the tree-sitter bash grammar WASM. shell-parser.ts loads this from disk
+// via require.resolve at runtime (the esbuild ?binary embedding plugin was
+// retired), so the bundle must ship the grammar alongside the other WASM files.
+const treeSitterBashWasmPath = join(
+  root,
+  'node_modules/tree-sitter-bash/tree-sitter-bash.wasm',
+);
+if (existsSync(treeSitterBashWasmPath)) {
+  copyFileSync(
+    treeSitterBashWasmPath,
+    join(bundleDir, 'tree-sitter-bash.wasm'),
+  );
+}
+
 // Copy all markdown files from prompt-config/defaults preserving directory structure
 const promptMdFiles = glob.sync(
   'packages/core/src/prompt-config/defaults/**/*.md',
