@@ -182,12 +182,20 @@ jobs:
   #
   # Lint: Javascript
   #
-  # Runs on the Bun flow for S6 (#2243): dependencies are installed with
-  # `bun install` and scripts are launched with `bun run`/`bunx`. Node is still
-  # set up because several scripts invoke `node` explicitly (notably the
-  # eslint-guard) and the type-aware ESLint engine (tsserver via projectService
-  # in eslint.config.js) runs under Node; Bun is the installer/launcher here.
-  # See dev-docs/bun.md for the dual-lockfile and hoisting rationale.
+  # Stays on npm (not Bun) for S6 (#2243): the type-aware ESLint config
+  # (`projectService` in eslint.config.js) degrades under Bun's hoisted
+  # node_modules on the Linux runner. This was confirmed on CI (run
+  # 28529150595): `bun install` + `bun run lint:ci` produced hundreds of
+  # spurious type-aware errors (@typescript-eslint/strict-boolean-expressions
+  # "Unexpected any value in conditional", no-unnecessary-type-assertion, etc.)
+  # that do NOT reproduce on macOS or under npm — a tsserver x Bun-hoisting x
+  # Linux interaction, independent of package materialization (which is
+  # complete). It cannot be worked around without loosening type-aware lint
+  # rules, which is forbidden by the guardrail policy. Lint is a quality gate,
+  # not the run path, so keeping it on npm carries no runtime cost. Bun is still
+  # set up here only because the bundle step builds via
+  # `bun scripts/bun-build.config.mjs` (#2241/S4). See dev-docs/bun.md and
+  # follow-up #2308.
   lint_javascript:
     name: 'Lint (Javascript)'
     runs-on: 'ubuntu-latest'
@@ -204,36 +212,39 @@ jobs:
         uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4.4.0
         with:
           node-version-file: '.nvmrc'
+          cache: 'npm'
 
+      # Required only for the bundle step (`bun scripts/bun-build.config.mjs`,
+      # #2241/S4 retired esbuild). Lint/typecheck/format run under Node via npm.
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
-      - name: 'Cache Bun dependencies'
-        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-lint-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-lint-
-
       - name: 'Run lockfile check'
         run: |-
-          bun run check:lockfile
+          npm run check:lockfile
 
       - name: 'Install dependencies'
         run: |-
-          bun install
+          npm ci
+
+      - name: Fix rollup platform dependency
+        run: |
+          # Explicitly install the platform-specific rollup package
+          # This is a workaround for https://github.com/npm/cli/issues/4828
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          fi
+        shell: bash
 
       - name: 'Run formatter check'
         run: |-
-          bun run format
-          # Check for changes, excluding project-plans and the generated
-          # bun.lock (Bun may re-normalize it during install; it is not
-          # prettier-formatted source).
-          git diff --exit-code -- . ':!project-plans/' ':!bun.lock'
+          npm run format
+          # Check for changes, excluding project-plans directory
+          git diff --exit-code -- . ':!project-plans/'
 
       - name: 'Run ESLint policy guard'
         env:
@@ -244,41 +255,41 @@ jobs:
               || 'origin/main' }}
           ESLINT_GUARD_HEAD: ${{ github.sha }}
         run: |-
-          bun run lint:eslint-guard
+          npm run lint:eslint-guard
 
       - name: 'Run CLI import-boundary guard'
         run: |-
-          bun run lint:cli-boundary
+          npm run lint:cli-boundary
 
       - name: 'Run linter'
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
         run: |-
-          bun run lint:ci
+          npm run lint:ci
 
       - name: 'Run LSP package linter'
         run: |-
-          cd packages/lsp && bunx eslint .
+          cd packages/lsp && npx eslint .
 
       - name: 'Run linter on integration tests'
         run: |-
-          bunx eslint integration-tests
+          npx eslint integration-tests
 
       - name: 'Run formatter on integration tests'
         run: |-
-          bunx prettier --check integration-tests
+          npx prettier --check integration-tests
           git diff --exit-code
 
       - name: 'Build project'
         run: |-
-          bun run build
+          npm run build
 
       - name: Create bundle
-        run: bun run bundle
+        run: npm run bundle
 
       - name: 'Run type check'
         run: |-
-          bun run typecheck
+          npm run typecheck
 
       - name: 'Run sensitive keyword linter'
         run: 'node scripts/lint.js --sensitive-keywords'
