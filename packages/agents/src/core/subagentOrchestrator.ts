@@ -42,6 +42,7 @@ import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runti
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { canonicalizeToolName } from './toolGovernance.js';
@@ -95,6 +96,12 @@ export interface SubagentOrchestratorOptions {
   runtimeLoader?: RuntimeLoader;
   scopeFactory?: ScopeFactory;
   idFactory?: () => string;
+  /**
+   * Session/runtime MessageBus threaded into the SubAgentScope so
+   * non-interactive subagent tool execution can satisfy
+   * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
+   */
+  messageBus?: MessageBus;
 }
 
 /**
@@ -157,6 +164,7 @@ export class SubagentOrchestrator {
         runtimeBundle: runtimeResult,
         environmentContextLoader: async (_runtime) =>
           getEnvironmentContext(this.options.foregroundConfig),
+        messageBus: this.options.messageBus,
       },
       signal,
     );

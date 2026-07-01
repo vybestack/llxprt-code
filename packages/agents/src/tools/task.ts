@@ -89,12 +89,18 @@ export interface TaskToolParams {
 }
 
 export interface TaskToolDependencies {
-  orchestratorFactory?: () => SubagentOrchestrator;
+  orchestratorFactory?: (messageBus?: MessageBus) => SubagentOrchestrator;
   profileManager?: ProfileManager;
   subagentManager?: SubagentManager;
   schedulerFactoryProvider?: () => SubagentSchedulerFactory | undefined;
   isInteractiveEnvironment?: () => boolean;
   getAsyncTaskManager?: () => AsyncTaskManager | undefined;
+  /**
+   * Session/runtime MessageBus threaded into the SubagentOrchestrator so
+   * non-interactive subagent tool execution can satisfy
+   * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
+   */
+  messageBus?: MessageBus;
 }
 function launchRequestName(
   launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
@@ -119,7 +125,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     params: TaskToolParams,
     private readonly normalized: TaskToolInvocationParams,
     private readonly deps: TaskToolInvocationDeps,
-    messageBus: MessageBus,
+    messageBus?: MessageBus,
   ) {
     super(params, messageBus);
   }
@@ -792,6 +798,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       },
       true,
       true,
+      dependencies.messageBus,
     );
   }
 
@@ -826,7 +833,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
 
   protected createInvocation(
     params: TaskToolParams,
-    messageBus: MessageBus,
+    messageBus?: MessageBus,
   ): TaskToolInvocation {
     const normalized = this.normalizeParams(params);
     return new TaskToolInvocation(
@@ -834,7 +841,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       params,
       normalized,
       {
-        createOrchestrator: () => this.ensureOrchestrator(),
+        createOrchestrator: () => this.ensureOrchestrator(messageBus),
         getToolRegistry:
           typeof this.config.getToolRegistry === 'function'
             ? () => this.config.getToolRegistry()
@@ -853,9 +860,9 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
     return normalizeTaskParams(params);
   }
 
-  private ensureOrchestrator(): SubagentOrchestrator {
+  private ensureOrchestrator(messageBus?: MessageBus): SubagentOrchestrator {
     if (this.dependencies.orchestratorFactory) {
-      return this.dependencies.orchestratorFactory();
+      return this.dependencies.orchestratorFactory(messageBus);
     }
 
     const profileManager =
@@ -875,6 +882,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       subagentManager,
       profileManager,
       foregroundConfig: this.config,
+      messageBus,
     });
   }
 }

@@ -13,43 +13,63 @@ import type { SubAgentScope } from './subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from './subagent.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { SubagentOrchestrator } from './subagentOrchestrator.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   makeForegroundConfig,
   createRuntimeBundle,
 } from './__tests__/subagentOrchestrator-test-helpers.js';
 
-describe('SubagentOrchestrator - Config Resolution', () => {
-  const baseProfile: Profile = {
-    version: 1,
-    provider: 'gemini',
-    model: 'gemini-2.0-pro',
-    modelParams: {
-      temperature: 0.42,
-      top_p: 0.9,
+const baseProfile: Profile = {
+  version: 1,
+  provider: 'gemini',
+  model: 'gemini-2.0-pro',
+  modelParams: {
+    temperature: 0.42,
+    top_p: 0.9,
+  },
+  ephemeralSettings: {},
+};
+
+const defaultRunConfig: RunConfig = {
+  max_time_minutes: 3,
+  max_turns: 5,
+};
+
+const foregroundConfig = makeForegroundConfig();
+
+const createScopeFactory = () => {
+  const fakeScope = {
+    runtimeContext: {
+      state: { runtimeId: 'runtime#1' },
+      history: { clear: vi.fn() },
     },
-    ephemeralSettings: {},
-  };
+    getAgentId: () => 'agent-helper-123',
+  } as unknown as SubAgentScopeInstance;
 
-  const defaultRunConfig: RunConfig = {
-    max_time_minutes: 3,
-    max_turns: 5,
-  };
+  const factory = vi.fn<typeof SubAgentScope.create>(async () => fakeScope);
+  return { factory, fakeScope };
+};
+const messageBusSubagentConfig: SubagentConfig = {
+  name: 'messagebus-helper',
+  profile: 'default-profile',
+  systemPrompt: 'Assist.',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
 
-  const foregroundConfig = makeForegroundConfig();
+function buildMessageBusManagers() {
+  const loadSubagent = vi.fn().mockResolvedValue(messageBusSubagentConfig);
+  const subagentManager = {
+    loadSubagent,
+  } as unknown as SubagentManager;
+  const loadProfile = vi.fn().mockResolvedValue(baseProfile);
+  const profileManager = {
+    loadProfile,
+  } as unknown as ProfileManager;
+  return { subagentManager, profileManager };
+}
 
-  const createScopeFactory = () => {
-    const fakeScope = {
-      runtimeContext: {
-        state: { runtimeId: 'runtime#1' },
-        history: { clear: vi.fn() },
-      },
-      getAgentId: () => 'agent-helper-123',
-    } as unknown as SubAgentScopeInstance;
-
-    const factory = vi.fn<typeof SubAgentScope.create>(async () => fakeScope);
-    return { factory, fakeScope };
-  };
-
+describe('SubagentOrchestrator - Config Resolution', () => {
   it('throws an enhanced error message suggesting list_subagents tool when subagent not found', async () => {
     const subagentName = 'nonexistent-helper';
     const loadSubagent = vi
@@ -682,5 +702,54 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(loadSubagent).not.toHaveBeenCalled();
     expect(runtimeLoader).not.toHaveBeenCalled();
     expect(factory).not.toHaveBeenCalled();
+  });
+});
+
+describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
+  it('threads the orchestrator messageBus into the scope factory overrides', async () => {
+    const { subagentManager, profileManager } = buildMessageBusManagers();
+    const { factory } = createScopeFactory();
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+    const sessionMessageBus = new MessageBus();
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+      messageBus: sessionMessageBus,
+    });
+
+    await orchestrator.launch({ name: messageBusSubagentConfig.name });
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    const factoryCall = factory.mock.calls[0];
+    // SubAgentScope.create(name, config, prompt, model, run, toolConfig, outputConfig, overrides, signal)
+    const overridesArg = factoryCall[7];
+    expect(overridesArg).toBeDefined();
+    expect(overridesArg?.messageBus).toBe(sessionMessageBus);
+  });
+
+  it('leaves overrides.messageBus undefined when no messageBus is configured', async () => {
+    const { subagentManager, profileManager } = buildMessageBusManagers();
+    const { factory } = createScopeFactory();
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({ name: messageBusSubagentConfig.name });
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    const factoryCall = factory.mock.calls[0];
+    const overridesArg = factoryCall[7];
+    expect(overridesArg).toBeDefined();
+    expect(overridesArg?.messageBus).toBeUndefined();
   });
 });
