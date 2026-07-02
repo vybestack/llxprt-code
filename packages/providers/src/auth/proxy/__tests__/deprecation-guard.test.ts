@@ -177,7 +177,9 @@ describe('Deprecation Guards (P36)', () => {
       // re-exported through the providers auth barrel
       // (@vybestack/llxprt-code-providers/auth.js). CLI consumers import it from
       // that barrel rather than from core directly.
-      // These are: runtimeContextFactory.ts, providerManagerInstance.ts, authCommand.ts
+      // These are: runtimeContextFactory.ts and providerManagerInstance.ts.
+      // authCommand.ts must consume the registered runtime OAuthManager instead
+      // of creating a partial fallback manager.
 
       const runtimeMatches = grepFiles(
         'createTokenStore',
@@ -200,20 +202,21 @@ describe('Deprecation Guards (P36)', () => {
         ['node_modules', 'dist', '__tests__'],
       );
 
-      // At least one consumer in each category should use the factory
+      // At least one consumer in each category that creates OAuthManager should
+      // use the factory; the auth command should no longer create OAuthManager.
       const hasRuntimeFactoryImport = runtimeMatches.some((m) =>
         m.includes('runtimeContextFactory.ts'),
       );
       const hasProviderFactoryImport = providerMatches.some((m) =>
         m.includes('providerManagerInstance.ts'),
       );
-      const hasCommandFactoryImport = commandMatches.some((m) =>
+      const commandStillReferencesFactory = commandMatches.some((m) =>
         m.includes('authCommand.ts'),
       );
 
       expect(hasRuntimeFactoryImport).toBe(true);
       expect(hasProviderFactoryImport).toBe(true);
-      expect(hasCommandFactoryImport).toBe(true);
+      expect(commandStillReferencesFactory).toBe(false);
     });
   });
 

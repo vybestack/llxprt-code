@@ -53,6 +53,7 @@ import {
   resolveActiveRuntimeIdentity,
   setDefaultCliRuntimeId,
 } from './runtimeRegistry.js';
+import { MissingProviderRuntimeError } from './messages.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
@@ -79,7 +80,10 @@ export async function activateIsolatedRuntimeContext(
   };
 
   enterRuntimeScope({ runtimeId, metadata: mergedMetadata });
-  upsertRuntimeEntry(runtimeId, { metadata: mergedMetadata });
+  upsertRuntimeEntry(runtimeId, {
+    runtimeKind: 'isolated',
+    metadata: mergedMetadata,
+  });
 
   await handle.activate(overrides);
 }
@@ -103,6 +107,8 @@ export function registerCliProviderInfrastructure(
   validateRuntimeId(options.runtimeId);
   const { messageBus, runtimeId, metadata } = options;
   const entry = upsertRuntimeEntry(runtimeId, {
+    runtimeKind:
+      options.registerAsGlobalSingleton === false ? 'isolated' : 'cli',
     providerManager: manager,
     oauthManager,
     metadata,
@@ -130,14 +136,7 @@ export function registerCliProviderInfrastructure(
 }
 
 export function isMissingRuntimeError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  return (
-    error.name === 'MissingProviderRuntimeError' ||
-    /No active runtime/i.test(error.message) ||
-    /MissingProviderRuntimeError/.test(error.message)
-  );
+  return error instanceof MissingProviderRuntimeError;
 }
 
 export function resetCliProviderInfrastructure(runtimeId?: string): void {
@@ -207,6 +206,7 @@ export function setCliRuntimeContext(
   setSettingsProviderRuntimeContext(nextContext);
 
   upsertRuntimeEntry(runtimeId, {
+    runtimeKind: options.setAsDefault === false ? 'isolated' : 'cli',
     settingsService,
     config: config ?? null,
     metadata,

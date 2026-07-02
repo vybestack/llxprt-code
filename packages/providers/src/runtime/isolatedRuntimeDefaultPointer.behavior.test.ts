@@ -133,7 +133,7 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
     expect(getCliOAuthManager()).toBe(cliOAuthManager);
   });
 
-  it('activating an isolated runtime does not overwrite the provider singleton', async () => {
+  it('activating an isolated runtime through the wrapper does not overwrite the provider singleton', async () => {
     const handle = createTrackedIsolatedRuntimeContext({
       runtimeId: 'isolated-no-singleton-overwrite',
       workspaceDir: process.cwd(),
@@ -150,6 +150,27 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
     );
 
     expect(getProviderManager()).toBe(cliProviderManager);
+  });
+
+  it('direct handle activation does not clear CLI provider or OAuth infrastructure', async () => {
+    const handle = createTrackedIsolatedRuntimeContext({
+      runtimeId: 'isolated-direct-activation-safe',
+      workspaceDir: process.cwd(),
+      model: 'isolated-model',
+    });
+
+    await runWithRuntimeScope(
+      { runtimeId: handle.runtimeId, metadata: {} },
+      async () => {
+        await handle.activate({ runtimeId: handle.runtimeId });
+      },
+    );
+
+    const cliEntry = runtimeRegistry.get(cliRuntimeId);
+    expect(cliEntry?.providerManager).toBe(cliProviderManager);
+    expect(cliEntry?.oauthManager).toBe(cliOAuthManager);
+    expect(getProviderManager()).toBe(cliProviderManager);
+    expect(getCliOAuthManager()).toBe(cliOAuthManager);
   });
 
   it('getCliOAuthManager outside the isolated ALS scope resolves the CLI manager', async () => {
@@ -334,36 +355,36 @@ describe('runtime id validation (issue #2300)', () => {
     });
 
     it('accepts a valid runtimeId and sets the pointer', () => {
-      describe('resetCliProviderInfrastructure rejects invalid runtimeId', () => {
-        it('rejects reset with an explicit empty runtimeId without clearing active infrastructure', () => {
-          const settings = new SettingsService();
-          const config = createRuntimeConfigStub(settings, {
-            setProviderManager: vi.fn(),
-          });
-          const manager = {
-            setConfig: vi.fn(),
-          } as unknown as RuntimeProviderManager;
-          const oauth = {} as unknown as OAuthManager;
-          const bus = {} as unknown as MessageBus;
-          const runtimeId = 'active-reset-validation-runtime';
-
-          setCliRuntimeContext(settings, config, { runtimeId });
-          registerCliProviderInfrastructure(manager, oauth, {
-            messageBus: bus,
-            runtimeId,
-          });
-
-          expect(() => resetCliProviderInfrastructure('')).toThrow(
-            /Invalid runtimeId/,
-          );
-          const entry = runtimeRegistry.get(runtimeId);
-          expect(entry?.providerManager).toBe(manager);
-          expect(entry?.oauthManager).toBe(oauth);
-        });
-      });
-
       setDefaultCliRuntimeId('valid-default');
       expect(getDefaultCliRuntimeId()).toBe('valid-default');
+    });
+  });
+
+  describe('resetCliProviderInfrastructure rejects invalid runtimeId', () => {
+    it('rejects reset with an explicit empty runtimeId without clearing active infrastructure', () => {
+      const settings = new SettingsService();
+      const config = createRuntimeConfigStub(settings, {
+        setProviderManager: vi.fn(),
+      });
+      const manager = {
+        setConfig: vi.fn(),
+      } as unknown as RuntimeProviderManager;
+      const oauth = {} as unknown as OAuthManager;
+      const bus = {} as unknown as MessageBus;
+      const runtimeId = 'active-reset-validation-runtime';
+
+      setCliRuntimeContext(settings, config, { runtimeId });
+      registerCliProviderInfrastructure(manager, oauth, {
+        messageBus: bus,
+        runtimeId,
+      });
+
+      expect(() => resetCliProviderInfrastructure('')).toThrow(
+        /Invalid runtimeId/,
+      );
+      const entry = runtimeRegistry.get(runtimeId);
+      expect(entry?.providerManager).toBe(manager);
+      expect(entry?.oauthManager).toBe(oauth);
     });
   });
 });

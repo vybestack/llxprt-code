@@ -56,10 +56,24 @@ describe('runtimeRegistry', () => {
       });
 
       expect(entry.runtimeId).toBe(runtimeId);
+      expect(entry.runtimeKind).toBe('cli');
       expect(entry.metadata).toStrictEqual({ testKey: 'testValue' });
       expect(entry.config).toBeNull();
       expect(entry.providerManager).toBeNull();
       expect(entry.settingsService).toBeNull();
+    });
+
+    it('preserves explicit runtimeKind metadata on update', () => {
+      const runtimeId = 'test-runtime-kind';
+      upsertRuntimeEntry(runtimeId, {
+        runtimeKind: 'isolated',
+        metadata: { source: 'test' },
+      });
+      upsertRuntimeEntry(runtimeId, { metadata: { updated: true } });
+
+      const entry = requireRuntimeEntry(runtimeId);
+      expect(entry.runtimeKind).toBe('isolated');
+      expect(entry.metadata).toStrictEqual({ source: 'test', updated: true });
     });
 
     it('should retrieve created entry via requireRuntimeEntry', () => {

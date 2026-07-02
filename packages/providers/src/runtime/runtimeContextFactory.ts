@@ -143,7 +143,7 @@ export function resetRuntimeScopeForTesting(): void {
 }
 
 interface RuntimeActivationBindings {
-  resetInfrastructure: () => void | Promise<void>;
+  resetInfrastructure: (runtimeId?: string) => void | Promise<void>;
   setRuntimeContext: (
     settingsService: SettingsService,
     config: Config,
@@ -390,7 +390,9 @@ function buildActivateClosure(
       });
       providerManager.setRuntimeContext(scopedRuntime);
 
-      await Promise.resolve(bindings.resetInfrastructure());
+      await Promise.resolve(
+        bindings.resetInfrastructure(state.currentRuntimeId),
+      );
       await Promise.resolve(
         bindings.setRuntimeContext(resolvedSettingsService, config, {
           runtimeId: state.currentRuntimeId,
@@ -455,7 +457,9 @@ function buildCleanupClosure(
 
     await runWithRuntimeScope(scope, async () => {
       if (bindings) {
-        await Promise.resolve(bindings.resetInfrastructure());
+        await Promise.resolve(
+          bindings.resetInfrastructure(state.currentRuntimeId),
+        );
       }
       clearSettingsProviderRuntimeContext();
 

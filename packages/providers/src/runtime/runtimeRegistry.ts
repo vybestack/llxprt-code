@@ -43,8 +43,13 @@ import {
   getCurrentRuntimeScope,
   type RuntimeScopeValue,
 } from './runtimeContextFactory.js';
-import { formatMissingRuntimeMessage } from './messages.js';
+import {
+  formatMissingRuntimeMessage,
+  MissingProviderRuntimeError,
+} from './messages.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
+
+export type RuntimeKind = 'cli' | 'isolated';
 
 type RuntimeIdentity = RuntimeScopeValue;
 
@@ -52,6 +57,7 @@ const logger = new DebugLogger('llxprt:runtime:settings');
 
 export interface RuntimeRegistryEntry {
   runtimeId: string;
+  runtimeKind: RuntimeKind;
   settingsService: SettingsService | null;
   config: Config | null;
   providerManager: RuntimeProviderManager | null;
@@ -151,14 +157,17 @@ export function resolveActiveRuntimeIdentity(): RuntimeIdentity {
     );
   }
 
-  throw new Error(
-    `No active runtime. Ensure enterRuntimeScope() or setCliRuntimeContext() was called before consuming CLI runtime helpers. ` +
+  throw new MissingProviderRuntimeError({
+    providerKey: 'provider-runtime',
+    missingFields: ['active runtime'],
+    message:
+      `No active runtime. Ensure enterRuntimeScope() or setCliRuntimeContext() was called before consuming CLI runtime helpers. ` +
       formatMissingRuntimeMessage({
         runtimeId: alsScope?.runtimeId ?? defaultId ?? 'unknown',
         missingFields: ['active runtime'],
         hint: 'Identity is resolved from a registered AsyncLocalStorage scope or an explicit default CLI runtime id set via setCliRuntimeContext().',
       }),
-  );
+  });
 }
 
 export function upsertRuntimeEntry(
@@ -168,6 +177,7 @@ export function upsertRuntimeEntry(
   const current = runtimeRegistry.get(runtimeId);
   const next: RuntimeRegistryEntry = {
     runtimeId,
+    runtimeKind: update.runtimeKind ?? current?.runtimeKind ?? 'cli',
     settingsService: resolveFieldUpdate(
       update,
       'settingsService',
@@ -235,13 +245,15 @@ export function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
   const hint =
     'Ensure setCliRuntimeContext() was called before consuming CLI helpers.';
 
-  throw new Error(
-    formatMissingRuntimeMessage({
+  throw new MissingProviderRuntimeError({
+    providerKey: 'provider-runtime',
+    missingFields: ['runtime registration'],
+    message: formatMissingRuntimeMessage({
       runtimeId,
       missingFields: ['runtime registration'],
       hint,
     }),
-  );
+  });
 }
 
 export function disposeCliRuntime(

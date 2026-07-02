@@ -44,6 +44,7 @@ import {
   resolveActiveRuntimeIdentity,
   requireRuntimeEntry,
 } from './runtimeRegistry.js';
+import { isMissingRuntimeError } from './runtimeLifecycle.js';
 import { isStatelessProviderIntegrationEnabled } from './statelessHardening.js';
 import {
   formatMissingRuntimeMessage,
@@ -211,7 +212,17 @@ export function isCliRuntimeStatelessReady(): boolean {
   if (!isStatelessProviderIntegrationEnabled()) {
     return true;
   }
-  const { runtimeId } = resolveActiveRuntimeIdentity();
+
+  let runtimeId: string;
+  try {
+    runtimeId = resolveActiveRuntimeIdentity().runtimeId;
+  } catch (error) {
+    if (isMissingRuntimeError(error)) {
+      return false;
+    }
+    throw error;
+  }
+
   const entry = runtimeRegistry.get(runtimeId);
   if (!entry) {
     return false;

@@ -298,6 +298,12 @@ describe('runtimeAccessors', () => {
   });
 
   describe('stateless readiness', () => {
+    it('returns false instead of throwing when stateless mode has no active runtime', () => {
+      configureCliStatelessHardening('strict');
+
+      expect(isCliRuntimeStatelessReady()).toBe(false);
+    });
+
     it('should check if runtime is stateless ready', () => {
       setupCompleteRuntime();
 
