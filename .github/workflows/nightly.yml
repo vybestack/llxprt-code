@@ -5,6 +5,10 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: 'nightly-${{ github.ref }}'
+  cancel-in-progress: false
+
 permissions:
   checks: 'write'
   contents: 'read'
@@ -75,6 +79,11 @@ jobs:
             npm install @rollup/rollup-win32-x64-msvc --no-save || true
           fi
         shell: 'bash'
+
+      - name: 'Generate agents API surface report'
+        shell: 'bash'
+        run: |-
+          npm run lint:agents-api-surface
 
       - name: 'Limit Vitest forks on Windows'
         if: runner.os == 'Windows'
@@ -285,3 +294,121 @@ jobs:
           LLXPRT_FORCE_FILE_STORAGE: 'true'
           RUN_EVALS: '1'
         run: 'npm run test:all_evals'
+
+  notify_failure:
+    name: 'Create Issue on Failure'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 5
+    needs:
+      - 'windows_ci'
+      - 'e2e_full'
+      - 'behavioral_evals'
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    permissions:
+      issues: 'write'
+    steps:
+      - name: 'Create Issue on Failure'
+        env:
+          GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          RUN_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+          WINDOWS_CI_RESULT: '${{ needs.windows_ci.result }}'
+          E2E_FULL_RESULT: '${{ needs.e2e_full.result }}'
+          BEHAVIORAL_EVALS_RESULT: '${{ needs.behavioral_evals.result }}'
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          ISSUE_TITLE="Nightly workflow failed"
+
+          ensure_label() {
+            local name="$1"
+            local color="$2"
+            local description="$3"
+            local existing=""
+            local create_err=""
+            # Capture stderr in create_err while discarding stdout; redirect order matters.
+            if create_err="$(gh label create "${name}" --color "${color}" --description "${description}" 2>&1 >/dev/null)"; then
+              return
+            fi
+            if ! existing="$(gh label list --search "${name}" --json name --jq ".[] | select(.name == \"${name}\") | .name" 2>&1)"; then
+              echo "Failed to check for label: ${name}" >&2
+              echo "  create error: ${create_err}" >&2
+              echo "  list error: ${existing}" >&2
+              return 1
+            fi
+            if [[ "${existing}" != "${name}" ]]; then
+              echo "Failed to create or find label: ${name}" >&2
+              echo "  create error: ${create_err}" >&2
+              return 1
+            fi
+          }
+
+          LABEL_ARGS=()
+          if ensure_label "ci/cd" "e33539" "Issues with github and the workflow scripts and CI CD environment."; then
+            LABEL_ARGS+=(--label "ci/cd")
+          else
+            echo "Warning: continuing without ci/cd label" >&2
+          fi
+          if ensure_label "bug" "d73a4a" "Something is not working"; then
+            LABEL_ARGS+=(--label "bug")
+          else
+            echo "Warning: continuing without bug label" >&2
+          fi
+
+          FAILED_JOBS=()
+          [[ "${WINDOWS_CI_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("windows_ci=${WINDOWS_CI_RESULT}")
+          [[ "${E2E_FULL_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("e2e_full=${E2E_FULL_RESULT}")
+          [[ "${BEHAVIORAL_EVALS_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("behavioral_evals=${BEHAVIORAL_EVALS_RESULT}")
+          if [[ ${#FAILED_JOBS[@]} -eq 0 ]]; then
+            echo "No failed or cancelled jobs detected; nothing to report."
+            exit 0
+          fi
+          FAILED_JOBS_TEXT="${FAILED_JOBS[*]}"
+
+          retry_gh() {
+            local attempt
+            for attempt in 1 2 3 4; do
+              if "$@"; then
+                return 0
+              fi
+              if [[ "${attempt}" -lt 4 ]]; then
+                echo "Attempt ${attempt} failed, retrying issue notification" >&2
+                sleep 5
+              fi
+            done
+            echo "All retries exhausted for: $*" >&2
+            return 1
+          }
+
+          if ! EXISTING_ISSUE="$(
+            retry_gh gh issue list \
+              --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
+              --limit 30 \
+              --json number,title \
+              --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
+          )"; then
+            echo "ERROR: Failed to search for existing issues; aborting to avoid duplicates." >&2
+            exit 1
+          fi
+
+          if [[ -n "${EXISTING_ISSUE}" ]]; then
+            retry_gh gh issue comment "${EXISTING_ISSUE}" \
+              --body "Nightly workflow failed again on $(date +'%Y-%m-%d'). Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" || {
+              echo "ERROR: Failed to comment on existing issue #${EXISTING_ISSUE}" >&2
+              exit 1
+            }
+          elif [[ ${#LABEL_ARGS[@]} -gt 0 ]]; then
+            retry_gh gh issue create \
+              --title "${ISSUE_TITLE}" \
+              --body "The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" \
+              "${LABEL_ARGS[@]}" || {
+              echo "ERROR: Failed to create issue with labels" >&2
+              exit 1
+            }
+          else
+            retry_gh gh issue create \
+              --title "${ISSUE_TITLE}" \
+              --body "The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" || {
+              echo "ERROR: Failed to create issue without labels" >&2
+              exit 1
+            }
+          fi

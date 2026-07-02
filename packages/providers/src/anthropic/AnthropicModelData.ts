@@ -62,6 +62,17 @@ function stripTrailingDateSegment(modelId: string): string {
  */
 export const OAUTH_MODELS: Array<Omit<IModel, 'provider'>> = [
   {
+    id: 'claude-fable-5',
+    name: 'Claude Fable 5',
+    supportedToolFormats: ['anthropic'],
+    // Claude Code / subscription (auth) 200K context window; the advertised
+    // 1M window is API-only and plan-gated (raise via /set or a profile
+    // context-limit). Output defaults to 40K — a 128K cap is not realistic at
+    // a 200K context window (raise via /set or a profile maxOutputTokens).
+    contextWindow: 200000,
+    maxOutputTokens: 40000,
+  },
+  {
     id: 'claude-opus-4-8',
     name: 'Claude Opus 4.8',
     supportedToolFormats: ['anthropic'],
@@ -284,11 +295,27 @@ export function isSonnet5(modelId: string): boolean {
 }
 
 /**
+ * Anchored Fable 5 identifier: matches the bare `claude-fable-5` alias, the
+ * `claude-fable-5-latest` pointer, and dated snapshots
+ * (`claude-fable-5-YYYYMMDD`), but NOT a future `claude-fable-50`. An anchored
+ * regex is used instead of a substring test so version boundaries are exact.
+ */
+const FABLE_5_PATTERN = /^claude-fable-5(-latest|-\d{8})?$/i;
+
+/**
+ * Whether the model is Claude Fable 5. Adaptive thinking is always on and
+ * cannot be disabled (control depth via the `effort` parameter).
+ */
+export function isFable5(modelId: string): boolean {
+  return FABLE_5_PATTERN.test(modelId);
+}
+
+/**
  * Whether the model supports adaptive thinking (the Anthropic `effort`
- * parameter). Currently Opus 4.6+ and Sonnet 5.
+ * parameter). Currently Opus 4.6+, Sonnet 5, and Fable 5.
  */
 export function supportsAdaptiveThinking(modelId: string): boolean {
-  return isOpus46Plus(modelId) || isSonnet5(modelId);
+  return isOpus46Plus(modelId) || isSonnet5(modelId) || isFable5(modelId);
 }
 
 /**
@@ -311,6 +338,13 @@ export function getMaxTokensForModel(modelId: string): number {
   // alias and dated snapshot IDs like claude-sonnet-5-YYYYMMDD).
   if (isSonnet5(modelId)) {
     return 128000;
+  }
+  // Claude Fable 5 defaults to 40K max output on the Claude Code /
+  // subscription tier (a 128K cap is not realistic at a 200K context window;
+  // raise via /set or a profile). Fable IDs contain no opus/sonnet/haiku, so
+  // without this explicit branch they fall through to the 4096 default.
+  if (isFable5(modelId)) {
+    return 40000;
   }
 
   const normalizedModelId = stripTrailingDateSegment(modelId.toLowerCase());
@@ -348,6 +382,13 @@ export function getContextWindowForModel(modelId: string): number {
   // via /set or a profile (context-limit). Matches the -latest alias and
   // dated snapshots too.
   if (isSonnet5(modelId)) {
+    return 200000;
+  }
+  // Claude Fable 5 defaults to the Claude Code / subscription 200K context
+  // window. The advertised 1M window is API-only and plan-gated; raise it
+  // via /set or a profile (context-limit). Matches the -latest alias and
+  // dated snapshots too.
+  if (isFable5(modelId)) {
     return 200000;
   }
   if (modelId.includes('claude-sonnet-4')) {

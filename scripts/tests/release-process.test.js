@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import yaml from 'js-yaml';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const NON_NPM_RELEASE_PACKAGES = new Set([
@@ -491,5 +492,200 @@ describe('scripts/bind-release-deps.js', () => {
         packagesByPath,
       ),
     ).toThrow('workspace file: dependencies');
+  });
+});
+
+/**
+ * Issue #2323: Behavioral regression tests for nightly workflow invariants.
+ *
+ * The nightly release preflight failed because tests ran before the agents
+ * API-surface report existed. The same gap existed in .github/workflows/nightly.yml,
+ * which ran `npm run test` without first generating the report via
+ * `npm run lint:agents-api-surface`. Additionally, unlike release.yml, the
+ * nightly workflow lacked a failure-notification step. These tests lock the
+ * nightly workflow contract: report generation precedes tests, the failure
+ * notification job has issues:write permission, and it opens or updates a gh
+ * issue with ci/cd and bug labels linking to the workflow run.
+ */
+describe('.github/workflows/nightly.yml', () => {
+  let nightlyWorkflow;
+  let windowsCiJob;
+  let notifyFailureJob;
+
+  function stepNamed(job, name) {
+    expect(job?.steps, 'job should have a steps array').toBeDefined();
+    const step = job?.steps.find((candidate) => candidate.name === name);
+    expect(step, `job should contain step: ${name}`).toBeTruthy();
+    return step;
+  }
+
+  function failureNotificationStep() {
+    const step = stepNamed(notifyFailureJob, 'Create Issue on Failure');
+    expect(
+      step.run,
+      "'Create Issue on Failure' step should have a run script",
+    ).toBeTruthy();
+    return step;
+  }
+
+  function failureNotificationRun() {
+    return failureNotificationStep().run;
+  }
+
+  beforeAll(() => {
+    const nightlyYml = readRootFile('.github/workflows/nightly.yml');
+    expect(
+      nightlyYml.trim(),
+      '.github/workflows/nightly.yml should have content',
+    ).toBeTruthy();
+    try {
+      nightlyWorkflow = yaml.load(nightlyYml);
+    } catch (error) {
+      throw new Error(
+        `Failed to parse .github/workflows/nightly.yml: ${error.message}`,
+        { cause: error },
+      );
+    }
+    expect(
+      nightlyWorkflow && typeof nightlyWorkflow === 'object',
+      '.github/workflows/nightly.yml should parse to a YAML mapping',
+    ).toBeTruthy();
+    windowsCiJob = nightlyWorkflow.jobs?.windows_ci;
+    notifyFailureJob = nightlyWorkflow.jobs?.notify_failure;
+  });
+
+  it('defines the expected nightly workflow structure', () => {
+    expect(
+      windowsCiJob,
+      'nightly.yml should contain job: windows_ci',
+    ).toBeTruthy();
+    expect(
+      notifyFailureJob,
+      'nightly.yml should contain job: notify_failure',
+    ).toBeTruthy();
+    failureNotificationStep();
+    expect(nightlyWorkflow.concurrency?.group).toBe(
+      'nightly-${{ github.ref }}',
+    );
+    expect(nightlyWorkflow.concurrency?.['cancel-in-progress']).toBe(false);
+  });
+
+  it('runs lint:agents-api-surface before npm run test in the Windows CI job', () => {
+    const surfaceIndex = windowsCiJob.steps.findIndex((step) =>
+      String(step.run ?? '').includes('npm run lint:agents-api-surface'),
+    );
+    const testRunIndex = windowsCiJob.steps.findIndex((step) =>
+      // Match npm run test exactly, not npm run test:scripts or similar.
+      /(?:^|\s)npm run test(?:\s|$)/.test(String(step.run ?? '')),
+    );
+    expect(
+      surfaceIndex,
+      'windows_ci should run npm run lint:agents-api-surface',
+    ).toBeGreaterThan(-1);
+    expect(testRunIndex, 'windows_ci should run npm run test').toBeGreaterThan(
+      -1,
+    );
+    expect(surfaceIndex).toBeLessThan(testRunIndex);
+  });
+
+  it('grants bounded issues: write access in the failure notification job', () => {
+    const notifyFailureStep = failureNotificationStep();
+    const notifyFailureRun = failureNotificationRun();
+    expect(notifyFailureJob.permissions?.issues).toBe('write');
+    expect(notifyFailureJob['timeout-minutes']).toBeGreaterThanOrEqual(5);
+    expect(notifyFailureStep.shell).toBe('bash');
+    expect(notifyFailureRun).toContain('set -euo pipefail');
+  });
+
+  it('creates a failure issue with ci/cd and bug labels linking to the workflow run', () => {
+    const notifyFailureStep = failureNotificationStep();
+    const normalizedRun = failureNotificationRun().replace(/\s+/g, ' ').trim();
+    expect(notifyFailureStep.env?.RUN_URL).toBe(
+      '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+    );
+    expect(normalizedRun).toContain('ensure_label "ci/cd"');
+    expect(normalizedRun).toContain('ensure_label "bug"');
+    expect(notifyFailureStep.env?.WINDOWS_CI_RESULT).toBe(
+      '${{ needs.windows_ci.result }}',
+    );
+    expect(notifyFailureStep.env?.E2E_FULL_RESULT).toBe(
+      '${{ needs.e2e_full.result }}',
+    );
+    expect(notifyFailureStep.env?.BEHAVIORAL_EVALS_RESULT).toBe(
+      '${{ needs.behavioral_evals.result }}',
+    );
+    expect(normalizedRun).toContain('LABEL_ARGS+=(--label "ci/cd")');
+    expect(normalizedRun).toContain('LABEL_ARGS+=(--label "bug")');
+    expect(normalizedRun).toContain('windows_ci=${WINDOWS_CI_RESULT}');
+    expect(normalizedRun).toContain('e2e_full=${E2E_FULL_RESULT}');
+    expect(normalizedRun).toContain(
+      'behavioral_evals=${BEHAVIORAL_EVALS_RESULT}',
+    );
+    expect(normalizedRun).toContain('if [[ ${#FAILED_JOBS[@]} -eq 0 ]]');
+    expect(normalizedRun).toContain('No failed or cancelled jobs detected');
+    expect(normalizedRun).toContain('retry_gh gh issue create');
+    expect(normalizedRun).toContain('--title "${ISSUE_TITLE}"');
+    expect(normalizedRun).toContain('--body');
+    expect(normalizedRun).toContain('${FAILED_JOBS_TEXT}');
+    expect(normalizedRun).toContain('${RUN_URL}');
+    expect(normalizedRun).toContain('elif [[ ${#LABEL_ARGS[@]} -gt 0 ]]');
+    expect(normalizedRun).toContain('"${LABEL_ARGS[@]}"');
+  });
+
+  it('updates an existing open nightly failure issue instead of duplicating it', () => {
+    const normalizedRun = failureNotificationRun().replace(/\s+/g, ' ').trim();
+    expect(normalizedRun).toContain('for attempt in 1 2 3 4');
+    expect(normalizedRun).toContain('All retries exhausted for: $*');
+    expect(normalizedRun).toContain('return 1');
+    expect(normalizedRun).toContain('if ! EXISTING_ISSUE=');
+    expect(normalizedRun).toContain('retry_gh gh issue list');
+    const searchMatch = normalizedRun.match(
+      /retry_gh gh issue list.*?--search\s+"((?:\\.|[^"\\])*)"/,
+    );
+    expect(
+      searchMatch,
+      'gh issue list should contain a --search argument',
+    ).toBeTruthy();
+    const searchQuery = (searchMatch?.[1] ?? '').replace(/\\(.)/g, '$1');
+    expect(
+      searchQuery,
+      'gh issue list --search argument should be parseable',
+    ).not.toBe('');
+    expect(searchQuery).toContain('${ISSUE_TITLE}');
+    expect(searchQuery).toContain('in:title');
+    expect(searchQuery).toContain('is:issue');
+    expect(searchQuery).toContain('state:open');
+    expect(searchQuery).toContain('sort:created-desc');
+    expect(normalizedRun).not.toContain('--state open');
+    expect(normalizedRun).toContain('--limit 30');
+    expect(normalizedRun).toContain('--json number,title');
+    expect(normalizedRun).not.toContain('| true');
+    expect(normalizedRun).not.toContain('|| true');
+    expect(normalizedRun).toContain('if [[ -n "${EXISTING_ISSUE}" ]]');
+    expect(normalizedRun).toContain(
+      'retry_gh gh issue comment "${EXISTING_ISSUE}"',
+    );
+    expect(normalizedRun).toContain("$(date +'%Y-%m-%d')");
+    expect(normalizedRun).toContain('Full run: ${RUN_URL}');
+  });
+
+  it('runs the failure notification job when a dependency fails or is cancelled', () => {
+    expect(notifyFailureJob.if).toContain('always()');
+    expect(notifyFailureJob.if).toContain(
+      "contains(needs.*.result, 'failure')",
+    );
+    expect(notifyFailureJob.if).toContain(
+      "contains(needs.*.result, 'cancelled')",
+    );
+  });
+
+  it('makes the failure notification job depend on all nightly test jobs', () => {
+    // Keep in sync with .github/workflows/nightly.yml — every non-notify job
+    // MUST be listed here, otherwise notify_failure won't fire on its failure.
+    const expectedNeeds = ['windows_ci', 'e2e_full', 'behavioral_evals'];
+    const actualNeeds = Array.isArray(notifyFailureJob.needs)
+      ? notifyFailureJob.needs
+      : [notifyFailureJob.needs];
+    expect([...actualNeeds].sort()).toEqual([...expectedNeeds].sort());
   });
 });

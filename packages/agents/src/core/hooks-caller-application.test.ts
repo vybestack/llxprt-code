@@ -626,23 +626,37 @@ describe('Hook Caller Application', () => {
     it('chatSession should call applyLLMRequestModifications (currently does not)', async () => {
       // This test verifies that the hook handler calls applyLLMRequestModifications
       // after getting a BeforeModel hook result (when not blocking/synthetic).
-      // After decomposition, this logic lives in DirectMessageProcessor.ts
-
+      // After decomposition, this logic lives in DirectMessageProcessor.ts.
+      //
+      // F1 DRY unification: DirectMessageProcessor delegates to the shared
+      // applyRequestModifications helper (streamRequestHelpers.ts), which in
+      // turn calls applyLLMRequestModifications. Verify BOTH the delegation
+      // in DMP and the actual call in the shared helper.
       const fs = await import('node:fs/promises');
       const directMessageProcessorPath = new URL(
         '../core/DirectMessageProcessor.ts',
         import.meta.url,
       ).pathname;
-      const sourceCode = await fs.readFile(directMessageProcessorPath, 'utf-8');
+      const streamRequestHelpersPath = new URL(
+        '../core/streamRequestHelpers.ts',
+        import.meta.url,
+      ).pathname;
+      const dmpSource = await fs.readFile(directMessageProcessorPath, 'utf-8');
+      const helperSource = await fs.readFile(streamRequestHelpersPath, 'utf-8');
 
-      // The test FAILS if the hook handler doesn't call applyLLMRequestModifications
-      // The test PASSES when it applies request modifications from hook
-      const callsApplyLLMRequestModifications = sourceCode.includes(
+      // DMP delegates content modification to the shared helper.
+      const dmpDelegatesToSharedHelper = dmpSource.includes(
+        'applyRequestModifications',
+      );
+      // The shared helper calls applyLLMRequestModifications.
+      const helperCallsApplyLLMRequestModifications = helperSource.includes(
         'applyLLMRequestModifications',
       );
+      const callsApplyLLMRequestModifications =
+        dmpDelegatesToSharedHelper && helperCallsApplyLLMRequestModifications;
 
-      // This assertion will FAIL with current code (doesn't apply modifications)
-      // and PASS when fixed (calls applyLLMRequestModifications)
+      // This assertion PASSES when the hook handler applies request
+      // modifications (directly or via the shared helper).
       expect(callsApplyLLMRequestModifications).toBe(true);
     });
   });
@@ -668,14 +682,15 @@ describe('Hook Caller Application', () => {
       //     );
       //   }
       //
-      // After decomposition, this logic lives in StreamProcessor.ts.
+      // After decomposition, this logic lives in beforeModelHookDecision.ts
+      // (extracted from StreamProcessor.ts).
 
       const fs = await import('node:fs/promises');
-      const streamProcessorPath = new URL(
-        '../core/StreamProcessor.ts',
+      const hookDecisionPath = new URL(
+        '../core/beforeModelHookDecision.ts',
         import.meta.url,
       ).pathname;
-      const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
+      const sourceCode = await fs.readFile(hookDecisionPath, 'utf-8');
 
       // Check that AgentExecutionStoppedError exists (constructor lives in chatSession.ts)
       const hasStoppedErrorReference = sourceCode.includes(

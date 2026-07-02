@@ -572,6 +572,35 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['context-limit']).toBe(200000);
   });
 
+  // Claude Fable 5: the broad Claude pattern includes `fable` and a
+  // fable-specific rule sets effort + context-limit. Guards the config-regex
+  // gap where fable previously matched no rule.
+  it('claude-fable-5 matches the broad Claude rule (reasoning defaults) @issue:2328', () => {
+    const entry = getAnthropicEntry();
+    const defaults = computeMatchedDefaults(
+      'claude-fable-5',
+      entry.config.modelDefaults!,
+    );
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+  });
+
+  it('rules merge in order — claude-fable-5 gets broad + fable-specific settings @issue:2328', () => {
+    const entry = getAnthropicEntry();
+    const defaults = computeMatchedDefaults(
+      'claude-fable-5',
+      entry.config.modelDefaults!,
+    );
+    // From the broad "claude-(opus|sonnet|haiku|fable)" rule
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+    // From the specific "claude-fable-5" rule (merged on top)
+    expect(defaults['reasoning.effort']).toBe('high');
+    expect(defaults['context-limit']).toBe(200000);
+  });
+
   it('user anthropic.config with different modelDefaults shadows the builtin', async () => {
     const { Storage } = await import('@vybestack/llxprt-code-settings');
     const fakeLlxprtDir = path.join(tmpDir, '.llxprt');

@@ -229,6 +229,21 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
+    // The OAuth model list is static, so return it directly when OAuth is the
+    // configured auth for this provider. We deliberately do NOT resolve a live
+    // token here: model listing is a config-time operation and OAuth token
+    // refresh is reserved for prompt sends (BaseProvider.getAuthToken resolves
+    // with includeOAuth: false, yielding '' for OAuth-only accounts). Resolving
+    // a token merely to pick a static list would either trigger an unwanted
+    // refresh or — for OAuth-only accounts with no API key — fall through to
+    // getDefaultModels() (DEFAULT_MODELS), hiding the curated OAuth list.
+    if (this.isOAuthEnabled()) {
+      this.getAuthLogger().debug(
+        () => 'Using hardcoded model list for OAuth authentication',
+      );
+      return OAUTH_MODELS.map((m) => ({ ...m, provider: this.name }));
+    }
+
     const authToken = await this.getAuthToken();
     if (!authToken) {
       this.getAuthLogger().debug(
@@ -239,7 +254,9 @@ export class AnthropicProvider extends BaseProvider {
       return this.getDefaultModels();
     }
 
-    // Check if using OAuth - the models.list endpoint doesn't work with OAuth tokens
+    // API-key path: the models.list endpoint does not work with OAuth tokens.
+    // classifyOAuthToken is kept as a defensive fallback for the rare case
+    // where an OAuth token is resolved despite isOAuthEnabled() being false.
     const isOAuthToken = this.classifyOAuthToken(authToken);
 
     if (isOAuthToken) {

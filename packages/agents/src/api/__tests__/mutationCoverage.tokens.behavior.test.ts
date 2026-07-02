@@ -36,6 +36,7 @@ import {
   drain,
   countType,
   isTextEvent,
+  ASYNC_PROPERTY_TIMEOUT_MS,
 } from './helpers/agentHarness.js';
 
 // ─── getProviderStatus auth-shape divergence ────────────────────────────────
@@ -86,42 +87,50 @@ describe('mutation P23.b — getProviderStatus auth-shape divergence (REQ-002)',
     }
   }, 30000);
 
-  it('PROP generate: for any non-empty input string, generate returns a string (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 50 }),
-        async (input) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            const result = await agent.generate(input);
-            return typeof result === 'string';
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+  it(
+    'PROP generate: for any non-empty input string, generate returns a string (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 50 }),
+          async (input) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              const result = await agent.generate(input);
+              return typeof result === 'string';
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 
-  it('PROP getStats: for any turn, totalTokens is a non-negative number (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 30 }),
-        async (input) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            await drain(agent.stream(input));
-            const stats = agent.getStats();
-            return (
-              typeof stats.totalTokens === 'number' && stats.totalTokens >= 0
-            );
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+  it(
+    'PROP getStats: for any turn, totalTokens is a non-negative number (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 30 }),
+          async (input) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              await drain(agent.stream(input));
+              const stats = agent.getStats();
+              return (
+                typeof stats.totalTokens === 'number' && stats.totalTokens >= 0
+              );
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 });
 
 // ─── compress: status mapping + token counts (lines 873-883) ────────────────
@@ -248,93 +257,109 @@ describe('mutation P23.b — restoreChatVisibility switch continuity (REQ-005)',
 // ─── Property-based (>=30% ratio) ───────────────────────────────────────────
 
 describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @requirement:REQ-005', () => {
-  it('PROP setModel: for any model string, setModel reflects it and preserves continuity (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (model) => {
-          const { agent, cleanup } = await buildAgent(
-            'provider-switch-two-turn.jsonl',
-          );
-          try {
-            await drain(agent.stream('turn one'));
-            await agent.setModel(model);
-            const continuity =
-              countType(await drain(agent.stream('turn two')), 'done') === 1;
-            return agent.getModel() === model && continuity;
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-      { numRuns: 8 },
-    );
-  }, 30000);
-
-  it('PROP setModelParam/clear: for any string key + json value, round-trips through getModelParams (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 30 })
-          .filter((k) => k !== '__proto__' && k !== 'constructor'),
-        fc.jsonValue(),
-        async (key, value) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            agent.setModelParam(key, value);
-            const afterSet = agent.getModelParams()[key];
-            agent.clearModelParam(key);
-            const afterClear = key in agent.getModelParams();
-            // JSON values round-trip via strict equality; compare structurally.
-            const roundTripped =
-              JSON.stringify(afterSet) === JSON.stringify(value);
-            return roundTripped && !afterClear;
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
-
-  it('PROP keyFile auth: for any non-empty keyFile path, getProviderStatus surfaces it (keyfile guard) (REQ-002)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 60 }),
-        async (keyFile) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-            auth: { apiKeyFile: keyFile },
-          });
-          try {
-            const status = agent.getProviderStatus();
-            return (
-              status.authStatus === 'authenticated' &&
-              status.keyFile === keyFile &&
-              status.keyName === undefined
+  it(
+    'PROP setModel: for any model string, setModel reflects it and preserves continuity (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 40 }),
+          async (model) => {
+            const { agent, cleanup } = await buildAgent(
+              'provider-switch-two-turn.jsonl',
             );
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+            try {
+              await drain(agent.stream('turn one'));
+              await agent.setModel(model);
+              const continuity =
+                countType(await drain(agent.stream('turn two')), 'done') === 1;
+              return agent.getModel() === model && continuity;
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+        { numRuns: 8 },
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 
-  it('PROP compress: for any custom promptId string, compress echoes it (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (promptId) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            await drain(agent.stream('turn'));
-            const result = await agent.compress({ promptId });
-            return result.promptId === promptId;
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+  it(
+    'PROP setModelParam/clear: for any string key + json value, round-trips through getModelParams (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc
+            .string({ minLength: 1, maxLength: 30 })
+            .filter((k) => k !== '__proto__' && k !== 'constructor'),
+          fc.jsonValue(),
+          async (key, value) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              agent.setModelParam(key, value);
+              const afterSet = agent.getModelParams()[key];
+              agent.clearModelParam(key);
+              const afterClear = key in agent.getModelParams();
+              // JSON values round-trip via strict equality; compare structurally.
+              const roundTripped =
+                JSON.stringify(afterSet) === JSON.stringify(value);
+              return roundTripped && !afterClear;
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
+
+  it(
+    'PROP keyFile auth: for any non-empty keyFile path, getProviderStatus surfaces it (keyfile guard) (REQ-002)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 60 }),
+          async (keyFile) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+              auth: { apiKeyFile: keyFile },
+            });
+            try {
+              const status = agent.getProviderStatus();
+              return (
+                status.authStatus === 'authenticated' &&
+                status.keyFile === keyFile &&
+                status.keyName === undefined
+              );
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
+
+  it(
+    'PROP compress: for any custom promptId string, compress echoes it (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 40 }),
+          async (promptId) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              await drain(agent.stream('turn'));
+              const result = await agent.compress({ promptId });
+              return result.promptId === promptId;
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 });

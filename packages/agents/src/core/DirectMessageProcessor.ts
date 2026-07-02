@@ -29,7 +29,10 @@ import {
   convertIContentToResponse,
   aggregateTextWithSpacing,
 } from './MessageConverter.js';
-import { resolveUserMemory } from './streamRequestHelpers.js';
+import {
+  resolveUserMemory,
+  applyRequestModifications,
+} from './streamRequestHelpers.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
   nextStreamEventWithIdleTimeout,
@@ -37,6 +40,7 @@ import {
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { getResponseTextFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
+import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -640,26 +644,9 @@ export class DirectMessageProcessor {
     }
 
     if (beforeModelResult?.isBlockingDecision() === true) {
-      const syntheticResponse = beforeModelResult.getSyntheticResponse();
       return {
         syntheticResponse:
-          syntheticResponse ??
-          ({
-            candidates: [
-              {
-                content: {
-                  role: 'model',
-                  parts: [
-                    {
-                      text:
-                        beforeModelResult.getEffectiveReason() ||
-                        'Request blocked by BeforeModel hook',
-                    },
-                  ],
-                },
-              },
-            ],
-          } as GenerateContentResponse),
+          this._buildBlockingSyntheticResponse(beforeModelResult),
       };
     }
 
@@ -669,22 +656,81 @@ export class DirectMessageProcessor {
     }
 
     if (beforeModelResult) {
-      const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
-        model: this.runtimeContext.state.model || '',
-        contents: ContentConverters.toGeminiContents(userIContents),
-      });
-      // Runtime-widen to handle potential undefined from API
-      const contentsRuntime: unknown = modifiedRequest.contents;
-      if (contentsRuntime !== undefined && contentsRuntime !== null) {
-        return {
-          modifiedContents: ContentConverters.toIContents(
-            contentsRuntime as Content[],
-          ),
-        };
+      const modifiedContents = this._applyHookRequestModifications(
+        beforeModelResult,
+        userIContents,
+      );
+      if (modifiedContents !== undefined) {
+        return { modifiedContents };
       }
     }
 
     return {};
+  }
+
+  /**
+   * Build a synthetic response for a blocking BeforeModel hook decision,
+   * preferring the hook's own llm_response when provided.
+   */
+  private _buildBlockingSyntheticResponse(
+    beforeModelResult: BeforeModelHookOutput,
+  ): GenerateContentResponse {
+    return (
+      beforeModelResult.getSyntheticResponse() ??
+      ({
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                {
+                  text:
+                    beforeModelResult.getEffectiveReason() ||
+                    'Request blocked by BeforeModel hook',
+                },
+              ],
+            },
+          },
+        ],
+      } as GenerateContentResponse)
+    );
+  }
+
+  /**
+   * Apply hook-supplied llm_request modifications to contents.
+   *
+   * H2: only round-trip through the translator when the hook actually supplied
+   * replacement messages (hookProvidedMessages). A messages-less llm_request
+   * (model/config only) must NOT trigger the text-only translator round-trip,
+   * which would destroy tool calls, IDs, and metadata.
+   *
+   * Delegates to the shared `applyRequestModifications` helper
+   * (streamRequestHelpers) so the guard semantics (empty-messages guard,
+   * messages-less preservation, empty-array guard) cannot drift between the
+   * stream and direct-message paths.
+   *
+   * Returns the modified IContent[] when the hook changed contents, or
+   * undefined when no content modification occurred. The shared helper returns
+   * the ORIGINAL contents reference when unmodified; this adapter converts
+   * that into undefined to match the DMP "undefined = no modification"
+   * contract.
+   */
+  private _applyHookRequestModifications(
+    beforeModelResult: BeforeModelHookOutput,
+    userIContents: IContent[],
+  ): IContent[] | undefined {
+    const result = applyRequestModifications(
+      beforeModelResult,
+      userIContents,
+      this.runtimeContext.state.model || '',
+    );
+    // The shared helper returns the original reference when no meaningful
+    // content modification occurred (no messages, messages-less llm_request,
+    // or an empty-messages array). DMP's contract treats that as undefined.
+    if (result === userIContents) {
+      return undefined;
+    }
+    return result;
   }
 
   /**
