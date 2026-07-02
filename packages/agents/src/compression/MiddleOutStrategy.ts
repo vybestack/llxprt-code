@@ -117,13 +117,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
     const compressionProfile =
       context.runtimeContext.ephemerals.compressionProfile();
-    const {
-      provider,
-      resolvedRuntime,
-      resolvedConfig,
-      resolvedOptions,
-      invocation,
-    } = destructureProviderResult(
+    const providerResult = destructureProviderResult(
       await context.resolveProvider(compressionProfile),
     );
 
@@ -133,28 +127,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
       largeLastPromptInjection,
     );
 
-    const { text: summary, usage: capturedUsage } = await this.callProvider(
-      provider,
+    const { finalSummary, capturedUsage } = await this.compressAndVerify(
+      context,
       compressionRequest,
-      context,
-      resolvedRuntime,
-      resolvedConfig,
-      resolvedOptions,
-      invocation,
-    );
-
-    if (!summary.trim()) {
-      throw new EmptySummaryError('middle-out');
-    }
-
-    const finalSummary = await this.maybeVerifySummary(
-      context,
-      provider,
-      summary,
-      resolvedRuntime,
-      resolvedConfig,
-      resolvedOptions,
-      invocation,
+      providerResult,
     );
 
     const newHistory = this.assembleHistory(
@@ -304,6 +280,54 @@ export class MiddleOutStrategy implements CompressionStrategy {
     return fallback;
   }
 
+  /**
+   * Calls the provider, throws EmptySummaryError with diagnostics if the
+   * summary is empty, then runs the optional verification pass.
+   */
+  private async compressAndVerify(
+    context: CompressionContext,
+    request: IContent[],
+    providerResult: ReturnType<typeof destructureProviderResult>,
+  ): Promise<{ finalSummary: string; capturedUsage: UsageStats | undefined }> {
+    const {
+      provider,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    } = providerResult;
+
+    const {
+      text: summary,
+      usage: capturedUsage,
+      diagnostics,
+    } = await this.callProvider(
+      provider,
+      request,
+      context,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    );
+
+    if (!summary.trim()) {
+      throw new EmptySummaryError('middle-out', diagnostics);
+    }
+
+    const finalSummary = await this.maybeVerifySummary(
+      context,
+      provider,
+      summary,
+      resolvedRuntime,
+      resolvedConfig,
+      resolvedOptions,
+      invocation,
+    );
+
+    return { finalSummary, capturedUsage };
+  }
+
   private async callProvider(
     provider: IProvider,
     request: IContent[],
@@ -312,7 +336,15 @@ export class MiddleOutStrategy implements CompressionStrategy {
     resolvedConfig: Config | undefined,
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
     invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
-  ): Promise<{ text: string; usage?: UsageStats }> {
+  ): Promise<{
+    text: string;
+    usage?: UsageStats;
+    diagnostics: {
+      finishReason?: string;
+      stopReason?: string;
+      blockTypeCounts?: Record<string, number>;
+    };
+  }> {
     const providerRuntime = resolvedRuntime;
     try {
       const stream = provider.generateChatCompletion({
@@ -334,8 +366,14 @@ export class MiddleOutStrategy implements CompressionStrategy {
       let summary = '';
       let lastBlockWasNonText = false;
       let capturedUsage: UsageStats | undefined;
+      let finishReason: string | undefined;
+      let stopReason: string | undefined;
+      const blockTypeCounts: Record<string, number> = {};
 
       for await (const chunk of stream) {
+        for (const block of chunk.blocks) {
+          blockTypeCounts[block.type] = (blockTypeCounts[block.type] ?? 0) + 1;
+        }
         const result = aggregateTextFromBlocks(
           chunk.blocks,
           summary,
@@ -346,9 +384,19 @@ export class MiddleOutStrategy implements CompressionStrategy {
         if (chunk.metadata?.usage) {
           capturedUsage = chunk.metadata.usage;
         }
+        if (chunk.metadata?.finishReason) {
+          finishReason = chunk.metadata.finishReason;
+        }
+        if (chunk.metadata?.stopReason) {
+          stopReason = chunk.metadata.stopReason;
+        }
       }
 
-      return { text: summary, usage: capturedUsage };
+      return {
+        text: summary,
+        usage: capturedUsage,
+        diagnostics: { finishReason, stopReason, blockTypeCounts },
+      };
     } catch (error) {
       throw new CompressionExecutionError(
         'middle-out',

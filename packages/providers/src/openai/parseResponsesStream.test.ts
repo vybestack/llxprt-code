@@ -290,3 +290,69 @@ describe('parseErrorResponse', () => {
     });
   });
 });
+
+describe('parseResponsesStream terminal events (issue #2333)', () => {
+  /**
+   * response.failed events must throw so server-side failures propagate
+   * instead of being silently swallowed (root cause of masked empty summaries).
+   */
+  it('throws on response.failed event with provider error message', async () => {
+    const chunks = [
+      'data: {"type":"response.failed","response":{"id":"r1","object":"response","model":"gpt-4o","status":"failed","error":{"message":"Internal server error","type":"server_error"}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const iterator = parseResponsesStream(stream);
+
+    await expect(async () => {
+      for await (const _message of iterator) {
+        // drain
+      }
+    }).rejects.toThrow('Internal server error');
+  });
+
+  /**
+   * Top-level error events (e.g. rate limit) must also throw.
+   */
+  it('throws on top-level error event with error message', async () => {
+    const chunks = [
+      'data: {"type":"error","error":{"message":"rate limit exceeded","type":"rate_limit_error"}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const iterator = parseResponsesStream(stream);
+
+    await expect(async () => {
+      for await (const _message of iterator) {
+        // drain
+      }
+    }).rejects.toThrow('rate limit exceeded');
+  });
+
+  /**
+   * response.incomplete events should NOT throw — partial content may be
+   * useful. Instead, terminal metadata (usage, stopReason) is yielded.
+   * The `incomplete` status maps to `max_tokens` stopReason.
+   */
+  it('yields metadata for response.incomplete with stopReason max_tokens', async () => {
+    const chunks = [
+      'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+      'data: {"type":"response.incomplete","response":{"id":"r1","object":"response","model":"gpt-4o","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":10,"output_tokens":5000,"total_tokens":5010}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages.push(message);
+    }
+
+    const usageMessage = messages.find((m) => m.metadata?.usage);
+    expect(usageMessage).toBeDefined();
+    expect(usageMessage?.metadata?.stopReason).toBe('max_tokens');
+    expect(usageMessage?.metadata?.finishReason).toBe('incomplete');
+  });
+});

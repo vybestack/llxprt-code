@@ -113,7 +113,11 @@ export class OneShotStrategy implements CompressionStrategy {
       toCompress,
     );
 
-    const { text: summary, usage: capturedUsage } = await this.callProvider(
+    const {
+      text: summary,
+      usage: capturedUsage,
+      diagnostics,
+    } = await this.callProvider(
       provider,
       compressionRequest,
       context,
@@ -124,7 +128,7 @@ export class OneShotStrategy implements CompressionStrategy {
     );
 
     if (!summary.trim()) {
-      throw new EmptySummaryError('one-shot');
+      throw new EmptySummaryError('one-shot', diagnostics);
     }
 
     const finalSummary = await this.maybeVerifySummary(
@@ -290,7 +294,15 @@ export class OneShotStrategy implements CompressionStrategy {
     resolvedConfig: Config | undefined,
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
     invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
-  ): Promise<{ text: string; usage?: UsageStats }> {
+  ): Promise<{
+    text: string;
+    usage?: UsageStats;
+    diagnostics: {
+      finishReason?: string;
+      stopReason?: string;
+      blockTypeCounts?: Record<string, number>;
+    };
+  }> {
     const providerRuntime = resolvedRuntime;
     try {
       const stream = provider.generateChatCompletion({
@@ -312,8 +324,14 @@ export class OneShotStrategy implements CompressionStrategy {
       let summary = '';
       let lastBlockWasNonText = false;
       let capturedUsage: UsageStats | undefined;
+      let finishReason: string | undefined;
+      let stopReason: string | undefined;
+      const blockTypeCounts: Record<string, number> = {};
 
       for await (const chunk of stream) {
+        for (const block of chunk.blocks) {
+          blockTypeCounts[block.type] = (blockTypeCounts[block.type] ?? 0) + 1;
+        }
         const result = aggregateTextFromBlocks(
           chunk.blocks,
           summary,
@@ -324,9 +342,19 @@ export class OneShotStrategy implements CompressionStrategy {
         if (chunk.metadata?.usage) {
           capturedUsage = chunk.metadata.usage;
         }
+        if (chunk.metadata?.finishReason) {
+          finishReason = chunk.metadata.finishReason;
+        }
+        if (chunk.metadata?.stopReason) {
+          stopReason = chunk.metadata.stopReason;
+        }
       }
 
-      return { text: summary, usage: capturedUsage };
+      return {
+        text: summary,
+        usage: capturedUsage,
+        diagnostics: { finishReason, stopReason, blockTypeCounts },
+      };
     } catch (error) {
       throw new CompressionExecutionError(
         'one-shot',
