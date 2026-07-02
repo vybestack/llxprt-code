@@ -21,7 +21,7 @@ You keep velocity, but with better guardrails.
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 24+
 - `llxprt` installed
 - one working runtime:
   - Docker (macOS/Linux), or

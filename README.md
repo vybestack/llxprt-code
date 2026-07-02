@@ -80,7 +80,7 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 
 ## Quick Start
 
-1. **Prerequisites:** Node.js 20+ installed (not required for Homebrew)
+1. **Prerequisites:** Node.js 24+ installed (not required for Homebrew)
 2. **Install:**
 
    ```bash
