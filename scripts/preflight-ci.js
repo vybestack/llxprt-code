@@ -41,7 +41,8 @@ function tryRun(cmd) {
   try {
     execSync(cmd, { stdio: 'inherit', env: { ...process.env } });
     return true;
-  } catch (_error) {
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
     return false;
   }
 }

@@ -104,17 +104,6 @@ describe('Issue #2323: runPreflight executes steps in order', () => {
       const nextIndex = executedCommands.indexOf(expectedCommands[index + 1]);
       expect(currentIndex).toBeLessThan(nextIndex);
     }
-
-    const surfaceIndex = executedCommands.indexOf(
-      'npm run lint:agents-api-surface',
-    );
-    const testIndex = executedCommands.indexOf('npm run test:ci');
-    expect(
-      surfaceIndex,
-      'lint:agents-api-surface must be dispatched',
-    ).toBeGreaterThan(-1);
-    expect(testIndex, 'test:ci must be dispatched').toBeGreaterThan(-1);
-    expect(surfaceIndex).toBeLessThan(testIndex);
   });
 
   it('continues through ordered preflight steps when rollup install fails', () => {
@@ -190,6 +179,29 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
         commandsAfterBuild,
         `${command} must not run after ${failingCommand} fails`,
       ).not.toContain(command);
+    }
+  });
+  it('throws Failed to run: npm run clean and skips all subsequent steps', () => {
+    const failingCommand = 'npm run clean';
+    vi.mocked(child_process.execSync).mockImplementation((command) => {
+      if (command === failingCommand) {
+        throw new Error(`boom: ${command}`);
+      }
+      return Buffer.from('');
+    });
+
+    expect(() => runPreflight()).toThrow(`Failed to run: ${failingCommand}`);
+
+    const executedCommands = vi
+      .mocked(child_process.execSync)
+      .mock.calls.map((call) => call[0]);
+
+    expect(executedCommands).not.toContain('npm ci');
+    for (const step of preflightSteps()) {
+      expect(
+        executedCommands,
+        `${step.command} must not run after ${failingCommand} fails`,
+      ).not.toContain(step.command);
     }
   });
   it('throws Failed to run: npm ci and skips all ordered preflight steps', () => {

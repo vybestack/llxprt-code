@@ -393,14 +393,23 @@ jobs:
 
           if [[ -n "${EXISTING_ISSUE}" ]]; then
             retry_gh gh issue comment "${EXISTING_ISSUE}" \
-              --body "Nightly workflow failed again on $(date +'%Y-%m-%d'). Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}"
+              --body "Nightly workflow failed again on $(date +'%Y-%m-%d'). Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" || {
+              echo "ERROR: Failed to comment on existing issue #${EXISTING_ISSUE}" >&2
+              exit 1
+            }
           elif [[ ${#LABEL_ARGS[@]} -gt 0 ]]; then
             retry_gh gh issue create \
               --title "${ISSUE_TITLE}" \
               --body "The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" \
-              "${LABEL_ARGS[@]}"
+              "${LABEL_ARGS[@]}" || {
+              echo "ERROR: Failed to create issue with labels" >&2
+              exit 1
+            }
           else
             retry_gh gh issue create \
               --title "${ISSUE_TITLE}" \
-              --body "The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}"
+              --body "The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}. Full run: ${RUN_URL}" || {
+              echo "ERROR: Failed to create issue without labels" >&2
+              exit 1
+            }
           fi

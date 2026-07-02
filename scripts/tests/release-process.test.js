@@ -546,6 +546,10 @@ describe('.github/workflows/nightly.yml', () => {
         { cause: error },
       );
     }
+    expect(
+      nightlyWorkflow && typeof nightlyWorkflow === 'object',
+      '.github/workflows/nightly.yml should parse to a YAML mapping',
+    ).toBeTruthy();
     windowsCiJob = nightlyWorkflow.jobs?.windows_ci;
     notifyFailureJob = nightlyWorkflow.jobs?.notify_failure;
   });

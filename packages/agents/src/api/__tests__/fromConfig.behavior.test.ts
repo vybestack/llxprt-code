@@ -44,9 +44,8 @@ import {
   buildAgent,
   internalConfig,
   ASYNC_PROPERTY_TIMEOUT_MS,
+  IDENTITY_PROPERTY_TIMEOUT_MS,
 } from './helpers/agentHarness.js';
-
-const IDENTITY_PROPERTY_TIMEOUT_MS = 15000;
 
 // ─── Structural identity probes (cast-free, mirrors agentHarness idiom) ──────
 //
