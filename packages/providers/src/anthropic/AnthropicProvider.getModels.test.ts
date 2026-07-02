@@ -280,6 +280,37 @@ describe('AnthropicProvider', () => {
       expect(fable5?.maxOutputTokens).toBe(40000);
     });
 
+    it('returns OAUTH_MODELS (incl. Fable 5) for an OAuth-enabled provider without resolving a live token @issue:2328', async () => {
+      // Mirrors the real OAuth-only runtime: OAuth is the configured auth and
+      // getAuthToken() resolves with includeOAuth: false -> '' (no API key).
+      // The static OAuth list must be returned without a live token, otherwise
+      // OAuth accounts fall through to DEFAULT_MODELS and Fable is hidden.
+      const oauthManager = {
+        isOAuthEnabled: (provider: string) => provider === 'anthropic',
+      } as unknown as ConstructorParameters<typeof AnthropicProvider>[3];
+      const oauthProvider = new AnthropicProvider(
+        undefined,
+        undefined,
+        TEST_PROVIDER_CONFIG,
+        oauthManager,
+      );
+
+      // No OAuth token resolves at model-list time for OAuth-only accounts.
+      const getAuthTokenSpy = vi.spyOn(oauthProvider, 'getAuthToken');
+      getAuthTokenSpy.mockResolvedValue('');
+
+      const models = await oauthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      // Fable surfaces without resolving a token.
+      expect(modelIds).toContain('claude-fable-5');
+      // The curated OAuth list is returned, not DEFAULT_MODELS: the bare alias
+      // claude-opus-4-5 exists only in OAUTH_MODELS.
+      expect(modelIds).toContain('claude-opus-4-5');
+      // No live token was resolved (no unwanted OAuth refresh at list time).
+      expect(getAuthTokenSpy).not.toHaveBeenCalled();
+    });
+
     it('should NOT include Claude Fable 5 in default list when auth is unavailable @issue:2328', async () => {
       const noAuthProvider = new AnthropicProvider(
         undefined,
