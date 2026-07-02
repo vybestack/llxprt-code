@@ -83,7 +83,8 @@ const a2aServerConfig = {
   outdir: 'packages/a2a-server/dist',
   naming: 'a2a-server.mjs',
   // a2a-server does not import bare 'module'. A static import avoids
-  // Top-Level Await and keeps the banner consistent with the CLI bundle.
+  // Top-Level Await while still exposing require/__filename/__dirname in the
+  // bundled output.
   banner: `import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
 };
 
