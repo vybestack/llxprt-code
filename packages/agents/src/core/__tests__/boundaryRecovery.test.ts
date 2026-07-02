@@ -17,10 +17,10 @@ import {
   recoverPendingBoundary,
   resolvePendingFromHookBoundary,
   resolvePendingBoundaryFromHook,
-  applyRequestModifications,
   snapshotContents,
   snapshotMatches,
-} from '../streamRequestHelpers.js';
+} from '../boundaryRecovery.js';
+import { applyRequestModifications } from '../streamRequestHelpers.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 
@@ -908,5 +908,91 @@ describe('recoverPendingBoundary with snapshot before-state', () => {
     expect(result.classification).toBe('appended');
     expect(result.pendingContents).toHaveLength(2);
     expect(result.pendingContents?.[1]).toBe(appended);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// describeBoundary wiring into resolvePendingBoundaryFromHook diagnostics
+// ---------------------------------------------------------------------------
+
+describe('resolvePendingBoundaryFromHook diagnostics (describeBoundary wiring)', () => {
+  // Behavioral: collect log lines and assert the boundary descriptor fields
+  // appear in observable log output. Never assert on mock call counts.
+  function logCollector(): { logs: string[]; log: (m: string) => void } {
+    const logs: string[] = [];
+    return { logs, log: (m: string) => logs.push(m) };
+  }
+
+  it('emits confidence=authoritative on the caller (unmodified) path', () => {
+    const history = [histUser('hello'), histAi('hi')];
+    const pending = [pendingUser('q')];
+    const original = [...history, ...pending];
+    const { logs, log } = logCollector();
+    const result = resolvePendingBoundaryFromHook(
+      original,
+      original, // reference-equal -> unmodified
+      pending,
+      new BeforeModelHookOutput({}),
+      log,
+    );
+    expect(result).toBe(pending);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('source=caller');
+    expect(logs[0]).toContain('confidence=authoritative');
+    // pendingStartIndex for a 3-item array with 1 pending item = 2.
+    expect(logs[0]).toContain('pendingStartIndex=2');
+    expect(logs[0]).toContain('pendingCount=1');
+  });
+
+  it('emits confidence=recovered on a recovered differential path (append)', () => {
+    const history = [histUser('hello'), histAi('hi')];
+    const pending = [pendingUser('q')];
+    const original = [...history, ...pending];
+    const modified = [...original, histAi('extra note')];
+    const { logs, log } = logCollector();
+    const result = resolvePendingBoundaryFromHook(
+      original,
+      modified,
+      pending,
+      new BeforeModelHookOutput({}),
+      log,
+    );
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(2);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('source=before-model-differential');
+    expect(logs[0]).toContain('classification=appended');
+    expect(logs[0]).toContain('recovered=true');
+    expect(logs[0]).toContain('confidence=recovered');
+    // 4-item modified array with 2 recovered pending -> startIndex 2.
+    expect(logs[0]).toContain('pendingStartIndex=2');
+    expect(logs[0]).toContain('pendingCount=2');
+  });
+
+  it('emits confidence=unrecoverable on an unrecoverable differential path', () => {
+    const history = [histUser('hello'), histAi('hi')];
+    const pending = [pendingUser('q')];
+    const original = [...history, ...pending];
+    // Wholesale replacement: no original items present -> replaced-all.
+    const modified = [
+      histUser('totally'),
+      histAi('different'),
+      pendingUser('conversation'),
+    ];
+    const { logs, log } = logCollector();
+    const result = resolvePendingBoundaryFromHook(
+      original,
+      modified,
+      pending,
+      new BeforeModelHookOutput({}),
+      log,
+    );
+    expect(result).toBeUndefined();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('source=before-model-differential');
+    expect(logs[0]).toContain('recovered=false');
+    expect(logs[0]).toContain('confidence=unrecoverable');
+    expect(logs[0]).toContain('pendingStartIndex=-1');
+    expect(logs[0]).toContain('pendingCount=0');
   });
 });

@@ -60,12 +60,14 @@ import {
   applyRequestModifications,
   resolveUserMemory,
   logOutgoingRequest,
-  resolvePendingBoundaryFromHook,
-  snapshotContents,
-  type ProjectionSnapshot,
   type ToolGroupArray,
   type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
+import {
+  resolvePendingBoundaryFromHook,
+  snapshotContents,
+  type ProjectionSnapshot,
+} from './boundaryRecovery.js';
 import { enforceBeforeModelHookDecision } from './beforeModelHookDecision.js';
 import {
   createStreamAccumulator,
