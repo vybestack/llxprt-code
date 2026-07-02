@@ -216,6 +216,28 @@ export function attachPromptCaching(
   }
 }
 
+type AnthropicThinkingConfig = {
+  thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
+  output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
+};
+
+/**
+ * Build the adaptive-thinking config shared by Fable 5 and other
+ * adaptive-capable models. Centralizes the `{ type: 'adaptive' }` literal and
+ * the `effort` mapping so future thinking-field changes have one source.
+ */
+function buildAdaptiveConfig(
+  thinkingEffort?: 'low' | 'medium' | 'high' | 'max',
+): AnthropicThinkingConfig {
+  const config: AnthropicThinkingConfig = {
+    thinking: { type: 'adaptive' as const },
+  };
+  if (thinkingEffort) {
+    config.output_config = { effort: thinkingEffort };
+  }
+  return config;
+}
+
 /**
  * Build thinking configuration for Anthropic API
  * @issue #1307: Correct adaptive thinking support for Opus 4.6
@@ -228,10 +250,7 @@ export function buildThinkingConfig(options: {
   adaptiveThinking?: boolean;
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max';
   model: string;
-}): {
-  thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
-  output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
-} {
+}): AnthropicThinkingConfig {
   if (!options.reasoningEnabled) {
     return {};
   }
@@ -241,18 +260,7 @@ export function buildThinkingConfig(options: {
   // Depth is controlled exclusively via `effort`, so ignore any
   // reasoningBudgetTokens / adaptiveThinking override for Fable 5.
   if (isFable5(options.model)) {
-    const config: {
-      thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
-      output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
-    } = {
-      thinking: { type: 'adaptive' as const },
-    };
-
-    if (options.thinkingEffort) {
-      config.output_config = { effort: options.thinkingEffort };
-    }
-
-    return config;
+    return buildAdaptiveConfig(options.thinkingEffort);
   }
 
   const adaptiveCapable = supportsAdaptiveThinking(options.model);
@@ -262,24 +270,10 @@ export function buildThinkingConfig(options: {
     options.reasoningBudgetTokens == null &&
     options.adaptiveThinking !== false
   ) {
-    const config: {
-      thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
-      output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
-    } = {
-      thinking: { type: 'adaptive' as const },
-    };
-
-    if (options.thinkingEffort) {
-      config.output_config = { effort: options.thinkingEffort };
-    }
-
-    return config;
+    return buildAdaptiveConfig(options.thinkingEffort);
   }
 
-  const config: {
-    thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
-    output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
-  } = {
+  const config: AnthropicThinkingConfig = {
     thinking: {
       type: 'enabled' as const,
       budget_tokens: options.reasoningBudgetTokens ?? 10000,
