@@ -14,7 +14,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { PerformCompressionResult } from '../../core/turn.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
@@ -38,6 +40,79 @@ vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
     return err;
   },
 }));
+
+// ---- Shared setup/assertion helpers for the Issue #2333 fallback tests ----
+
+interface EmptySummaryFallbackSetup {
+  chat: ChatSession;
+  historyService: HistoryService;
+  addSpy: MockInstance<HistoryService['add']>;
+  getFallbackCalled: () => boolean;
+  getPrimaryCallCount: () => number;
+}
+
+interface EmptySummaryFallbackAssertions {
+  historyService: HistoryService;
+  addSpy: MockInstance<HistoryService['add']>;
+  getFallbackCalled: () => boolean;
+  getPrimaryCallCount: () => number;
+}
+
+/**
+ * Installs the empty-summary fallback factory mock and builds a ChatSession
+ * with the shared historyService.add spy wired up, returning all the handles
+ * the two Issue #2333 tests need. The distinct act step (performCompression
+ * vs ensureCompressionBeforeSend) stays inline in each test.
+ */
+function setupEmptySummaryFallback(
+  runtimeSetup: ReturnType<typeof createChatSessionRuntime>,
+  providerRuntimeSnapshot: ProviderRuntimeContext,
+): EmptySummaryFallbackSetup {
+  const { getFallbackCalled, getPrimaryCallCount } =
+    mockStrategyFactoryWithEmptySummaryFallback();
+
+  const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+  const historyService = chat.getHistoryService();
+  // ChatSession's constructor re-wraps historyService.add with a density
+  // tracker, so spy on it here to observe calls applied during compression.
+  const addSpy = vi.spyOn(historyService, 'add');
+
+  return {
+    chat,
+    historyService,
+    addSpy,
+    getFallbackCalled,
+    getPrimaryCallCount,
+  };
+}
+
+/**
+ * The four shared assertions for the Issue #2333 fallback path: the
+ * truncation fallback was used, the primary strategy was called exactly once
+ * (empty summary is non-retryable), and the fallback summary was applied to
+ * the session history (clear + add).
+ */
+function expectEmptySummaryFallbackApplied({
+  historyService,
+  addSpy,
+  getFallbackCalled,
+  getPrimaryCallCount,
+}: EmptySummaryFallbackAssertions): void {
+  expect(getFallbackCalled()).toBe(true);
+  // Empty summary is non-retryable — primary must be called exactly once
+  expect(getPrimaryCallCount()).toBe(1);
+
+  // The fallback's truncated summary must actually be applied to the session
+  // history (clear + add), not just returned by the mock.
+  expect(historyService.clear).toHaveBeenCalledTimes(1);
+  expect(addSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'mock truncated summary' }],
+    }),
+    expect.any(String),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Phase 2: Retry behavior in performCompression
@@ -305,33 +380,25 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
    * the empty summary.
    */
   it('falls back to truncation when primary strategy returns an empty summary', async () => {
-    const { getFallbackCalled, getPrimaryCallCount } =
-      mockStrategyFactoryWithEmptySummaryFallback();
-
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-    const historyService = chat.getHistoryService();
-    // ChatSession's constructor re-wraps historyService.add with a density
-    // tracker, so spy on it here to observe calls applied during compression.
-    const addSpy = vi.spyOn(historyService, 'add');
+    const {
+      chat,
+      historyService,
+      addSpy,
+      getFallbackCalled,
+      getPrimaryCallCount,
+    } = setupEmptySummaryFallback(runtimeSetup, providerRuntimeSnapshot);
 
     // performCompression should resolve (COMPRESSED) via fallback, not reject
     await expect(chat.performCompression('test-prompt')).resolves.toBe(
       PerformCompressionResult.COMPRESSED,
     );
-    expect(getFallbackCalled()).toBe(true);
-    // Empty summary is non-retryable — primary must be called exactly once
-    expect(getPrimaryCallCount()).toBe(1);
 
-    // The fallback's truncated summary must actually be applied to the session
-    // history (clear + add), not just returned by the mock.
-    expect(historyService.clear).toHaveBeenCalledTimes(1);
-    expect(addSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'mock truncated summary' }],
-      }),
-      expect.any(String),
-    );
+    expectEmptySummaryFallbackApplied({
+      historyService,
+      addSpy,
+      getFallbackCalled,
+      getPrimaryCallCount,
+    });
   });
 
   /**
@@ -346,33 +413,25 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
    * top-down-truncation fallback without retrying the empty summary.
    */
   it('ensureCompressionBeforeSend does not reject on EmptySummaryError and applies the truncation fallback', async () => {
-    const { getFallbackCalled, getPrimaryCallCount } =
-      mockStrategyFactoryWithEmptySummaryFallback();
-
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-    const historyService = chat.getHistoryService();
-    // ChatSession's constructor re-wraps historyService.add with a density
-    // tracker, so spy on it here to observe calls applied during compression.
-    const addSpy = vi.spyOn(historyService, 'add');
+    const {
+      chat,
+      historyService,
+      addSpy,
+      getFallbackCalled,
+      getPrimaryCallCount,
+    } = setupEmptySummaryFallback(runtimeSetup, providerRuntimeSnapshot);
 
     // The threshold-triggered auto-compression path must resolve (not reject)
     // and apply the truncation fallback.
     await expect(
       chat.ensureCompressionBeforeSend('test-prompt', 0, 'send'),
     ).resolves.toBeUndefined();
-    expect(getFallbackCalled()).toBe(true);
-    // Empty summary is non-retryable — primary must be called exactly once
-    expect(getPrimaryCallCount()).toBe(1);
 
-    // The fallback's truncated summary must actually be applied to the session
-    // history (clear + add), not just returned by the mock.
-    expect(historyService.clear).toHaveBeenCalledTimes(1);
-    expect(addSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'mock truncated summary' }],
-      }),
-      expect.any(String),
-    );
+    expectEmptySummaryFallbackApplied({
+      historyService,
+      addSpy,
+      getFallbackCalled,
+      getPrimaryCallCount,
+    });
   });
 });

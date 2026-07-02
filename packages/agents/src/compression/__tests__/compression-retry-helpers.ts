@@ -176,12 +176,14 @@ export function makeChatSession(
 export function mockStrategyFactoryWithEmptySummaryFallback(): {
   getFallbackCalled: () => boolean;
   getPrimaryCallCount: () => number;
+  restore: () => void;
 } {
   let fallbackCalled = false;
   let primaryCallCount = 0;
 
-  vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-    (name) => {
+  const spy = vi
+    .spyOn(compressionFactory, 'getCompressionStrategy')
+    .mockImplementation((name) => {
       if (name === 'top-down-truncation') {
         return {
           name: 'top-down-truncation' as const,
@@ -218,11 +220,11 @@ export function mockStrategyFactoryWithEmptySummaryFallback(): {
           throw new EmptySummaryError('middle-out');
         }),
       };
-    },
-  );
+    });
 
   return {
     getFallbackCalled: () => fallbackCalled,
     getPrimaryCallCount: () => primaryCallCount,
+    restore: () => spy.mockRestore(),
   };
 }
