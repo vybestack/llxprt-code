@@ -26,6 +26,12 @@ export interface PtyExecState {
   onOutputEvent: (event: ShellOutputEvent) => void;
   shellExecutionConfig: ShellExecutionConfig;
   ptyInfo: NonNullable<PtyImplementation>;
+  /**
+   * Whether the PTY backend creates a detached process group, enabling
+   * `process.kill(-pid)` to kill the entire tree. node-pty (forkpty → setsid)
+   * does; Bun.Terminal does not (no new session/group).
+   */
+  supportsProcessGroupKill: boolean;
   inactivityAbortController: AbortController;
   resetInactivityTimer: () => void;
   exitedGuard: ExitGuard;

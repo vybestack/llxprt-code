@@ -110,6 +110,180 @@ function walkDir(dir, excludePatterns) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Context object threaded through the per-node-type handlers.
+ */
+function createAnalysisContext(sourceFile, movedSymbols, fromPackage) {
+  return {
+    sourceFile,
+    movedSymbols,
+    fromPackage,
+    imports: [],
+    getLine: (pos) => sourceFile.getLineAndCharacterOfPosition(pos).line + 1,
+    isFromPackage(specifier) {
+      if (!specifier) return false;
+      return (
+        specifier === fromPackage || specifier.startsWith(fromPackage + '/')
+      );
+    },
+    addImport(symbol, importKind, moduleSpecifier, line) {
+      if (movedSymbols.includes(symbol)) {
+        this.imports.push({ symbol, importKind, moduleSpecifier, line });
+      }
+    },
+  };
+}
+
+function collectIdentifiers(node, set) {
+  if (ts.isIdentifier(node)) {
+    set.add(node.text);
+  }
+  ts.forEachChild(node, (child) => collectIdentifiers(child, set));
+}
+
+function isViMockCall(node) {
+  return (
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.text === 'mock' &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === 'vi'
+  );
+}
+
+// 1. Static imports: import { X } from '...' and import X from '...'
+function visitImportDeclaration(node, ctx) {
+  if (!ts.isImportDeclaration(node)) return;
+  const modSpec = node.moduleSpecifier;
+  if (!modSpec || !ts.isStringLiteral(modSpec)) return;
+  const specifier = modSpec.text;
+  if (!ctx.isFromPackage(specifier)) return;
+
+  const importClause = node.importClause;
+  if (!importClause) return;
+  const line = ctx.getLine(node.getStart());
+
+  if (
+    importClause.namedBindings &&
+    ts.isNamedImports(importClause.namedBindings)
+  ) {
+    for (const element of importClause.namedBindings.elements) {
+      const importedName = element.name.text;
+      const symbolName = element.propertyName
+        ? element.propertyName.text
+        : importedName;
+      ctx.addImport(symbolName, 'static-import', specifier, line);
+    }
+  }
+
+  if (
+    importClause.namedBindings &&
+    ts.isNamespaceImport(importClause.namedBindings)
+  ) {
+    ctx.addImport('*', 'namespace-import', specifier, line);
+  }
+
+  if (importClause.name) {
+    ctx.addImport(importClause.name.text, 'static-import', specifier, line);
+  }
+}
+
+// 2. Import-equals: import X = require('...')
+function visitImportEquals(node, ctx) {
+  if (!ts.isImportEqualsDeclaration(node)) return;
+  if (
+    !node.moduleReference ||
+    !ts.isExternalModuleReference(node.moduleReference)
+  )
+    return;
+  const expr = node.moduleReference.expression;
+  if (!expr || !ts.isStringLiteral(expr)) return;
+  if (!ctx.isFromPackage(expr.text)) return;
+  ctx.addImport(
+    node.name.text,
+    'import-equals',
+    expr.text,
+    ctx.getLine(node.getStart()),
+  );
+}
+
+// 3a. Dynamic imports: import('...')
+function visitDynamicImport(node, ctx) {
+  if (node.expression.kind !== ts.SyntaxKind.ImportKeyword) return;
+  if (node.arguments.length === 0 || !ts.isStringLiteral(node.arguments[0]))
+    return;
+  const specifier = node.arguments[0].text;
+  if (!ctx.isFromPackage(specifier)) return;
+
+  const line = ctx.getLine(node.getStart());
+  let ancestor = node.parent;
+  const ids = new Set();
+  collectIdentifiers(node, ids);
+  for (let i = 0; i < 5 && ancestor; i++) {
+    collectIdentifiers(ancestor, ids);
+    if (ts.isVariableDeclaration(ancestor)) {
+      collectIdentifiers(ancestor.name, ids);
+    }
+    ancestor = ancestor.parent;
+  }
+  for (const sym of ctx.movedSymbols) {
+    if (ids.has(sym)) {
+      ctx.addImport(sym, 'dynamic-import', specifier, line);
+    }
+  }
+}
+
+// 3b. vi.mock('...') detection
+function visitViMockCall(node, ctx) {
+  if (!isViMockCall(node)) return;
+  if (node.arguments.length < 1 || !ts.isStringLiteral(node.arguments[0]))
+    return;
+  const specifier = node.arguments[0].text;
+  if (!ctx.isFromPackage(specifier)) return;
+  if (node.arguments.length < 2) return;
+
+  const line = ctx.getLine(node.getStart());
+  const ids = new Set();
+  collectIdentifiers(node.arguments[1], ids);
+  for (const sym of ctx.movedSymbols) {
+    if (ids.has(sym)) {
+      ctx.addImport(sym, 'vi.mock', specifier, line);
+    }
+  }
+}
+
+function visitCallExpression(node, ctx) {
+  if (!ts.isCallExpression(node)) return;
+  visitDynamicImport(node, ctx);
+  visitViMockCall(node, ctx);
+  ts.forEachChild(node, (child) => visitNode(child, ctx));
+}
+
+function visitNode(node, ctx) {
+  visitImportDeclaration(node, ctx);
+  visitImportEquals(node, ctx);
+
+  if (ts.isCallExpression(node)) {
+    visitCallExpression(node, ctx);
+    return;
+  }
+
+  ts.forEachChild(node, (child) => visitNode(child, ctx));
+}
+
+function deduplicateImports(imports) {
+  const seen = new Set();
+  const deduped = [];
+  for (const imp of imports) {
+    if (imp.symbol === '*') continue; // skip namespace wildcards for inventory
+    const key = `${imp.symbol}|${imp.importKind}|${imp.moduleSpecifier}|${imp.line}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(imp);
+    }
+  }
+  return deduped;
+}
+
+/**
  * Extract all import references to `fromPackage` (root or deep paths)
  * and identify which moved symbols are imported.
  */
@@ -123,192 +297,9 @@ function analyzeFile(filePath, movedSymbols, fromPackage) {
     ts.ScriptKind.TS,
   );
 
-  const imports = [];
-
-  function addImport(symbol, importKind, moduleSpecifier, line) {
-    if (movedSymbols.includes(symbol)) {
-      imports.push({ symbol, importKind, moduleSpecifier, line });
-    }
-  }
-
-  function getLine(pos) {
-    return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
-  }
-
-  function isFromPackage(specifier) {
-    if (!specifier) return false;
-    return specifier === fromPackage || specifier.startsWith(fromPackage + '/');
-  }
-
-  // Collect all identifiers in a tree (deep)
-  function collectIdentifiers(node, set) {
-    if (ts.isIdentifier(node)) {
-      set.add(node.text);
-    }
-    ts.forEachChild(node, (child) => collectIdentifiers(child, set));
-  }
-
-  // 1. Static imports: import { X } from '...' and import X from '...'
-  function visitImportDeclaration(node) {
-    if (!ts.isImportDeclaration(node)) return;
-    const modSpec = node.moduleSpecifier;
-    if (!modSpec || !ts.isStringLiteral(modSpec)) return;
-    const specifier = modSpec.text;
-    if (!isFromPackage(specifier)) return;
-
-    const importClause = node.importClause;
-    if (!importClause) return;
-
-    // Named imports: import { X, Y } from '...'
-    if (
-      importClause.namedBindings &&
-      ts.isNamedImports(importClause.namedBindings)
-    ) {
-      for (const element of importClause.namedBindings.elements) {
-        const importedName = element.name.text;
-        // The original name (before 'as') if present
-        const symbolName = element.propertyName
-          ? element.propertyName.text
-          : importedName;
-        addImport(
-          symbolName,
-          'static-import',
-          specifier,
-          getLine(node.getStart()),
-        );
-      }
-    }
-
-    // Namespace import: import * as X from '...'
-    if (
-      importClause.namedBindings &&
-      ts.isNamespaceImport(importClause.namedBindings)
-    ) {
-      // Record as namespace-import — the namespace itself may reference moved symbols
-      // We'll note the namespace name but we can't resolve individual usages statically
-      // For inventory purposes, we note it as a namespace-import
-      addImport('*', 'namespace-import', specifier, getLine(node.getStart()));
-    }
-
-    // Default import: import X from '...'
-    if (importClause.name) {
-      addImport(
-        importClause.name.text,
-        'static-import',
-        specifier,
-        getLine(node.getStart()),
-      );
-    }
-  }
-
-  // 2. Import-equals: import X = require('...')
-  function visitImportEquals(node) {
-    if (!ts.isImportEqualsDeclaration(node)) return;
-    if (
-      node.moduleReference &&
-      ts.isExternalModuleReference(node.moduleReference)
-    ) {
-      const expr = node.moduleReference.expression;
-      if (expr && ts.isStringLiteral(expr)) {
-        if (isFromPackage(expr.text)) {
-          const name = node.name.text;
-          addImport(name, 'import-equals', expr.text, getLine(node.getStart()));
-        }
-      }
-    }
-  }
-
-  // 3. Dynamic imports: import('...')
-  function visitCallExpression(node) {
-    if (!ts.isCallExpression(node)) return;
-
-    // Dynamic import: import('...')
-    if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-      if (node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0])) {
-        const specifier = node.arguments[0].text;
-        if (isFromPackage(specifier)) {
-          const line = getLine(node.getStart());
-          // Walk up ancestors to find binding pattern
-          // AST chain: CallExpression(import) -> AwaitExpression -> VariableDeclaration (sibling has ObjectBindingPattern)
-          let ancestor = node.parent;
-          const ids = new Set();
-          // Collect identifiers from the node itself
-          collectIdentifiers(node, ids);
-          // Walk up to find VariableDeclaration with binding pattern
-          for (let i = 0; i < 5 && ancestor; i++) {
-            collectIdentifiers(ancestor, ids);
-            if (ts.isVariableDeclaration(ancestor)) {
-              // The name could be an ObjectBindingPattern or identifier
-              collectIdentifiers(ancestor.name, ids);
-            }
-            ancestor = ancestor.parent;
-          }
-          for (const sym of movedSymbols) {
-            if (ids.has(sym)) {
-              addImport(sym, 'dynamic-import', specifier, line);
-            }
-          }
-        }
-      }
-    }
-
-    // vi.mock('...') detection
-    if (
-      ts.isPropertyAccessExpression(node.expression) &&
-      node.expression.name.text === 'mock' &&
-      ts.isIdentifier(node.expression.expression) &&
-      node.expression.expression.text === 'vi'
-    ) {
-      if (node.arguments.length >= 1 && ts.isStringLiteral(node.arguments[0])) {
-        const specifier = node.arguments[0].text;
-        if (isFromPackage(specifier)) {
-          const line = getLine(node.getStart());
-          // Parse factory function to find moved symbol names
-          if (node.arguments.length >= 2) {
-            const factory = node.arguments[1];
-            const ids = new Set();
-            collectIdentifiers(factory, ids);
-            for (const sym of movedSymbols) {
-              if (ids.has(sym)) {
-                addImport(sym, 'vi.mock', specifier, line);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    ts.forEachChild(node, (child) => visitNode(child));
-  }
-
-  function visitNode(node) {
-    visitImportDeclaration(node);
-    visitImportEquals(node);
-
-    if (ts.isCallExpression(node)) {
-      visitCallExpression(node);
-      // Don't recurse further here; visitCallExpression already recurses children
-      return;
-    }
-
-    ts.forEachChild(node, (child) => visitNode(child));
-  }
-
-  visitNode(sourceFile);
-
-  // Deduplicate by symbol+importKind+moduleSpecifier+line
-  const seen = new Set();
-  const deduped = [];
-  for (const imp of imports) {
-    if (imp.symbol === '*') continue; // skip namespace wildcards for inventory
-    const key = `${imp.symbol}|${imp.importKind}|${imp.moduleSpecifier}|${imp.line}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      deduped.push(imp);
-    }
-  }
-
-  return deduped;
+  const ctx = createAnalysisContext(sourceFile, movedSymbols, fromPackage);
+  visitNode(sourceFile, ctx);
+  return deduplicateImports(ctx.imports);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,10 +321,8 @@ function extractP06Consumers(filePath) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-function main() {
-  const args = parseArgs(process.argv);
-  const repoRoot = process.cwd();
-
+function parseOptions(argv) {
+  const args = parseArgs(argv);
   const movedSymbols = (args['moved-symbols'] || '')
     .split(',')
     .map((s) => s.trim())
@@ -344,28 +333,20 @@ function main() {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  // Always exclude dist directories — they are generated build output
   excludeGlobs.push('packages/*/dist/**');
   excludeGlobs.push('packages/*/*/dist/**');
-  const outputJson = args['output-json'] || '';
-  const outputText = args['output-text'] || '';
-  const expectedConsumersFile = args['expected-consumers-file'] || '';
+  return {
+    movedSymbols,
+    fromPackage,
+    scanDir,
+    excludeGlobs,
+    outputJson: args['output-json'] || '',
+    outputText: args['output-text'] || '',
+    expectedConsumersFile: args['expected-consumers-file'] || '',
+  };
+}
 
-  if (!movedSymbols.length) {
-    console.error('ERROR: --moved-symbols is required');
-    process.exit(1);
-  }
-
-  console.log(
-    `Scanning ${scanDir} for imports of moved symbols from ${fromPackage}...`,
-  );
-  console.log(
-    `Moved symbols (${movedSymbols.length}): ${movedSymbols.join(', ')}`,
-  );
-
-  const files = walkDir(scanDir, excludeGlobs);
-  console.log(`Scanning ${files.length} .ts files...`);
-
+function scanFiles(repoRoot, files, movedSymbols, fromPackage) {
   const consumers = [];
   const byImportKind = {};
   const byPackage = {};
@@ -373,29 +354,160 @@ function main() {
   for (const filePath of files) {
     const rel = relative(repoRoot, filePath).replace(/\\/g, '/');
     const fileImports = analyzeFile(filePath, movedSymbols, fromPackage);
-    if (fileImports.length > 0) {
-      consumers.push({ filePath: rel, imports: fileImports });
+    if (fileImports.length === 0) continue;
 
-      for (const imp of fileImports) {
-        byImportKind[imp.importKind] = (byImportKind[imp.importKind] || 0) + 1;
-
-        // Extract package path: packages/XXX/...
-        const pkgMatch = rel.match(/^(packages\/[^/]+)/);
-        if (pkgMatch) {
-          byPackage[pkgMatch[1]] = (byPackage[pkgMatch[1]] || 0) + 1;
-        }
+    consumers.push({ filePath: rel, imports: fileImports });
+    for (const imp of fileImports) {
+      byImportKind[imp.importKind] = (byImportKind[imp.importKind] || 0) + 1;
+      const pkgMatch = rel.match(/^(packages\/[^/]+)/);
+      if (pkgMatch) {
+        byPackage[pkgMatch[1]] = (byPackage[pkgMatch[1]] || 0) + 1;
       }
     }
   }
+  return { consumers, byImportKind, byPackage };
+}
+
+function reconcileConsumers(result, consumers, expectedConsumersFile) {
+  if (!expectedConsumersFile) {
+    result.reconciliation.status = 'pass';
+    console.log(
+      '\nNo P06 consumers file specified; reconciliation auto-passed.',
+    );
+    return;
+  }
+
+  const p06Consumers = extractP06Consumers(expectedConsumersFile);
+  const inventoryConsumers = new Set(consumers.map((c) => c.filePath));
+
+  const missing = [...inventoryConsumers].filter((c) => !p06Consumers.has(c));
+  const extra = [...p06Consumers].filter((c) => !inventoryConsumers.has(c));
+
+  result.reconciliation.missingFromPlan = missing.sort();
+  result.reconciliation.extraInPlan = extra.sort();
+
+  if (missing.length === 0) {
+    result.reconciliation.status = 'pass';
+    console.log(
+      `\nReconciliation: PASS (all inventory consumers found in P06)`,
+    );
+  } else {
+    result.reconciliation.status = 'blocked';
+    console.log(
+      `\nReconciliation: BLOCKED (${missing.length} consumers found by inventory but not listed in P06):`,
+    );
+    for (const f of missing) {
+      console.log(`  - ${f}`);
+    }
+  }
+
+  if (extra.length > 0) {
+    console.log(
+      `\nWarning: ${extra.length} consumers listed in P06 but not found by inventory:`,
+    );
+    for (const f of extra) {
+      console.log(`  - ${f}`);
+    }
+  }
+}
+
+function writeJsonOutput(outputJson, result) {
+  if (!outputJson) return;
+  const jsonDir = resolve(outputJson, '..');
+  mkdirSync(jsonDir, { recursive: true });
+  writeFileSync(outputJson, JSON.stringify(result, null, 2) + '\n');
+  console.log(`\nJSON output written to: ${outputJson}`);
+}
+
+function appendReconciliationLines(lines, reconciliation) {
+  lines.push(`Reconciliation: ${reconciliation.status}`);
+  if (reconciliation.missingFromPlan.length) {
+    lines.push(`Missing from plan (${reconciliation.missingFromPlan.length}):`);
+    for (const f of reconciliation.missingFromPlan) {
+      lines.push(`  - ${f}`);
+    }
+  }
+  if (reconciliation.extraInPlan.length) {
+    lines.push(`Extra in plan (${reconciliation.extraInPlan.length}):`);
+    for (const f of reconciliation.extraInPlan) {
+      lines.push(`  - ${f}`);
+    }
+  }
+}
+
+function writeTextOutput(opts, result, consumers, totalImports) {
+  if (!opts.outputText) return;
+  const { fromPackage, scanDir, movedSymbols, byImportKind, byPackage } = opts;
+  const txtDir = resolve(opts.outputText, '..');
+  mkdirSync(txtDir, { recursive: true });
+  const lines = [];
+  lines.push(`P00a Import Inventory — ${result.generatedAt}`);
+  lines.push('='.repeat(60));
+  lines.push(`From package: ${fromPackage}`);
+  lines.push(`Scan directory: ${scanDir}`);
+  lines.push(`Moved symbols: ${movedSymbols.length}`);
+  lines.push('');
+  lines.push(`Total consumer files: ${consumers.length}`);
+  lines.push(`Total imports: ${totalImports}`);
+  lines.push('');
+  lines.push('Import kinds:');
+  for (const [kind, count] of Object.entries(byImportKind)) {
+    lines.push(`  ${kind}: ${count}`);
+  }
+  lines.push('');
+  lines.push('By package:');
+  for (const [pkg, count] of Object.entries(byPackage).sort()) {
+    lines.push(`  ${pkg}: ${count}`);
+  }
+  lines.push('');
+  lines.push('Consumer files:');
+  for (const c of consumers) {
+    lines.push(`  ${c.filePath}:`);
+    for (const imp of c.imports) {
+      lines.push(
+        `    - ${imp.symbol} (${imp.importKind}) from ${imp.moduleSpecifier} line ${imp.line}`,
+      );
+    }
+  }
+  lines.push('');
+  appendReconciliationLines(lines, result.reconciliation);
+  writeFileSync(opts.outputText, lines.join('\n') + '\n');
+  console.log(`Text output written to: ${opts.outputText}`);
+}
+
+function main() {
+  const opts = parseOptions(process.argv);
+  const repoRoot = process.cwd();
+
+  if (!opts.movedSymbols.length) {
+    console.error('ERROR: --moved-symbols is required');
+    process.exit(1);
+  }
+
+  console.log(
+    `Scanning ${opts.scanDir} for imports of moved symbols from ${opts.fromPackage}...`,
+  );
+  console.log(
+    `Moved symbols (${opts.movedSymbols.length}): ${opts.movedSymbols.join(', ')}`,
+  );
+
+  const files = walkDir(opts.scanDir, opts.excludeGlobs);
+  console.log(`Scanning ${files.length} .ts files...`);
+
+  const { consumers, byImportKind, byPackage } = scanFiles(
+    repoRoot,
+    files,
+    opts.movedSymbols,
+    opts.fromPackage,
+  );
 
   const totalImports = consumers.reduce((sum, c) => sum + c.imports.length, 0);
 
-  // Build JSON output
   const result = {
     generatedAt: new Date().toISOString(),
-    fromPackage,
-    scanDir,
-    movedSymbols,
+    fromPackage: opts.fromPackage,
+    scanDir: opts.scanDir,
+    movedSymbols: opts.movedSymbols,
     consumers,
     summary: {
       totalFiles: consumers.length,
@@ -410,131 +522,21 @@ function main() {
     },
   };
 
-  // Reconcile with P06 consumer list
-  if (expectedConsumersFile) {
-    const p06Consumers = extractP06Consumers(expectedConsumersFile);
-    const inventoryConsumers = new Set(consumers.map((c) => c.filePath));
+  reconcileConsumers(result, consumers, opts.expectedConsumersFile);
 
-    // Consumers in inventory but not in P06
-    const missing = [];
-    for (const c of inventoryConsumers) {
-      if (!p06Consumers.has(c)) {
-        missing.push(c);
-      }
-    }
+  writeJsonOutput(opts.outputJson, result);
+  writeTextOutput(
+    { ...opts, byImportKind, byPackage },
+    result,
+    consumers,
+    totalImports,
+  );
 
-    // Consumers in P06 but not in inventory
-    const extra = [];
-    for (const c of p06Consumers) {
-      if (!inventoryConsumers.has(c)) {
-        extra.push(c);
-      }
-    }
-
-    result.reconciliation.missingFromPlan = missing.sort();
-    result.reconciliation.extraInPlan = extra.sort();
-
-    if (missing.length === 0) {
-      result.reconciliation.status = 'pass';
-      console.log(
-        `\nReconciliation: PASS (all inventory consumers found in P06)`,
-      );
-    } else {
-      result.reconciliation.status = 'blocked';
-      console.log(
-        `\nReconciliation: BLOCKED (${missing.length} consumers found by inventory but not listed in P06):`,
-      );
-      for (const f of missing) {
-        console.log(`  - ${f}`);
-      }
-    }
-
-    if (extra.length > 0) {
-      console.log(
-        `\nWarning: ${extra.length} consumers listed in P06 but not found by inventory:`,
-      );
-      for (const f of extra) {
-        console.log(`  - ${f}`);
-      }
-    }
-  } else {
-    // No P06 file to reconcile — auto-pass
-    result.reconciliation.status = 'pass';
-    console.log(
-      '\nNo P06 consumers file specified; reconciliation auto-passed.',
-    );
-  }
-
-  // Write JSON
-  if (outputJson) {
-    const jsonDir = resolve(outputJson, '..');
-    mkdirSync(jsonDir, { recursive: true });
-    writeFileSync(outputJson, JSON.stringify(result, null, 2) + '\n');
-    console.log(`\nJSON output written to: ${outputJson}`);
-  }
-
-  // Write text
-  if (outputText) {
-    const txtDir = resolve(outputText, '..');
-    mkdirSync(txtDir, { recursive: true });
-    const lines = [];
-    lines.push(`P00a Import Inventory — ${result.generatedAt}`);
-    lines.push('='.repeat(60));
-    lines.push(`From package: ${fromPackage}`);
-    lines.push(`Scan directory: ${scanDir}`);
-    lines.push(`Moved symbols: ${movedSymbols.length}`);
-    lines.push('');
-    lines.push(`Total consumer files: ${consumers.length}`);
-    lines.push(`Total imports: ${totalImports}`);
-    lines.push('');
-    lines.push('Import kinds:');
-    for (const [kind, count] of Object.entries(byImportKind)) {
-      lines.push(`  ${kind}: ${count}`);
-    }
-    lines.push('');
-    lines.push('By package:');
-    for (const [pkg, count] of Object.entries(byPackage).sort()) {
-      lines.push(`  ${pkg}: ${count}`);
-    }
-    lines.push('');
-    lines.push('Consumer files:');
-    for (const c of consumers) {
-      lines.push(`  ${c.filePath}:`);
-      for (const imp of c.imports) {
-        lines.push(
-          `    - ${imp.symbol} (${imp.importKind}) from ${imp.moduleSpecifier} line ${imp.line}`,
-        );
-      }
-    }
-    lines.push('');
-    lines.push(`Reconciliation: ${result.reconciliation.status}`);
-    if (result.reconciliation.missingFromPlan.length) {
-      lines.push(
-        `Missing from plan (${result.reconciliation.missingFromPlan.length}):`,
-      );
-      for (const f of result.reconciliation.missingFromPlan) {
-        lines.push(`  - ${f}`);
-      }
-    }
-    if (result.reconciliation.extraInPlan.length) {
-      lines.push(
-        `Extra in plan (${result.reconciliation.extraInPlan.length}):`,
-      );
-      for (const f of result.reconciliation.extraInPlan) {
-        lines.push(`  - ${f}`);
-      }
-    }
-    writeFileSync(outputText, lines.join('\n') + '\n');
-    console.log(`Text output written to: ${outputText}`);
-  }
-
-  // Print summary
   console.log('\n=== Summary ===');
   console.log(`Consumer files: ${consumers.length}`);
   console.log(`Total imports: ${totalImports}`);
   console.log(`Reconciliation: ${result.reconciliation.status}`);
 
-  // Exit code
   if (result.reconciliation.status === 'blocked') {
     process.exit(1);
   }

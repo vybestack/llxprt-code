@@ -10,10 +10,10 @@ import {
   PostTurnAction,
   type PostTurnContext,
 } from './TodoContinuationService.js';
-import { GeminiEventType } from './turn.js';
+import { GeminiEventType, type ToolCallResponseInfo } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Todo } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType, type Todo } from '@vybestack/llxprt-code-tools';
 
 // Mock TodoStore so persisted todo state doesn't hit the filesystem
 const {
@@ -97,6 +97,33 @@ const pendingTodo: Todo = {
   content: 'Do the thing',
   status: 'pending',
 };
+
+function functionResponsePart(
+  name: string,
+  id = 'pause-1',
+  response: Record<string, unknown> = {},
+): ToolCallResponseInfo['responseParts'][number] {
+  return {
+    functionResponse: {
+      name,
+      id,
+      response,
+    },
+  } as ToolCallResponseInfo['responseParts'][number];
+}
+
+function makeToolResponse(
+  overrides: Partial<ToolCallResponseInfo> = {},
+): ToolCallResponseInfo {
+  return {
+    callId: 'pause-1',
+    responseParts: [functionResponsePart('todo_pause')],
+    resultDisplay: undefined,
+    error: undefined,
+    errorType: undefined,
+    ...overrides,
+  };
+}
 
 describe('TodoContinuationService', () => {
   let service: TodoContinuationService;
@@ -193,45 +220,81 @@ describe('TodoContinuationService', () => {
 
   describe('isTodoPauseResponse', () => {
     it('returns true when response contains todo_pause function response', () => {
-      const response = {
-        callId: 'pause-1',
+      expect(service.isTodoPauseResponse(makeToolResponse())).toBe(true);
+    });
+
+    it('matches pause responses case-insensitively when the pause part is not first', () => {
+      const response = makeToolResponse({
         responseParts: [
-          {
-            functionResponse: {
-              name: 'todo_pause',
-              id: 'pause-1',
-              response: {},
-            },
-          },
+          functionResponsePart('read_file', 'tool-1', { content: 'data' }),
+          functionResponsePart('TODO_PAUSE'),
         ],
-        resultDisplay: undefined,
-        error: undefined,
-        errorType: undefined,
-      };
+      });
       expect(service.isTodoPauseResponse(response)).toBe(true);
     });
 
+    it('returns false for empty response parts', () => {
+      expect(
+        service.isTodoPauseResponse(makeToolResponse({ responseParts: [] })),
+      ).toBe(false);
+    });
+
     it('returns false for non-pause responses', () => {
-      const response = {
+      const response = makeToolResponse({
         callId: 'tool-1',
         responseParts: [
-          {
-            functionResponse: {
-              name: 'read_file',
-              id: 'tool-1',
-              response: { content: 'data' },
-            },
-          },
+          functionResponsePart('read_file', 'tool-1', { content: 'data' }),
         ],
-        resultDisplay: undefined,
-        error: undefined,
-        errorType: undefined,
-      };
+      });
       expect(service.isTodoPauseResponse(response)).toBe(false);
     });
 
     it('returns false for undefined response', () => {
       expect(service.isTodoPauseResponse(undefined)).toBe(false);
+    });
+  });
+
+  describe('isSuccessfulTodoPauseResponse', () => {
+    it('returns true for a todo_pause response with no error or errorType', () => {
+      expect(service.isSuccessfulTodoPauseResponse(makeToolResponse())).toBe(
+        true,
+      );
+    });
+
+    it('returns false for a todo_pause response carrying an error', () => {
+      const response = makeToolResponse({
+        error: new Error('reason exceeds maximum length of 500 characters'),
+        errorType: ToolErrorType.EXECUTION_FAILED,
+      });
+      expect(service.isSuccessfulTodoPauseResponse(response)).toBe(false);
+    });
+
+    it('returns false for a todo_pause response carrying only an error', () => {
+      const response = makeToolResponse({
+        error: new Error('something went wrong'),
+      });
+      expect(service.isSuccessfulTodoPauseResponse(response)).toBe(false);
+    });
+
+    it('returns false for a todo_pause response carrying only an errorType', () => {
+      const response = makeToolResponse({
+        errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+      });
+      expect(service.isSuccessfulTodoPauseResponse(response)).toBe(false);
+    });
+
+    it('returns false for non-pause tool responses', () => {
+      const response = makeToolResponse({
+        callId: 'tool-1',
+        responseParts: [
+          functionResponsePart('read_file', 'tool-1', { content: 'data' }),
+        ],
+      });
+      expect(service.isSuccessfulTodoPauseResponse(response)).toBe(false);
+    });
+
+    it('returns false for undefined response', () => {
+      expect(service.isSuccessfulTodoPauseResponse(undefined)).toBe(false);
     });
   });
 

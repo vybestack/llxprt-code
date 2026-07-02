@@ -34,6 +34,40 @@ for (const f of report) {
   }
 }
 
+/**
+ * Check whether the target rule is already disabled on the preceding line.
+ */
+function isAlreadyDisabled(srcLines, idx, rule) {
+  if (idx <= 0) return false;
+  const prevLine = srcLines[idx - 1];
+  const match = prevLine.match(
+    /^\s*\/\/\s*eslint-disable-next-line\s+([^\n]*)/,
+  );
+  if (!match) return false;
+  // Strip justification (everything after " -- ")
+  const rulesPart = match[1].split(' -- ')[0];
+  const disabledRules = rulesPart
+    .split(/[,\s]+/)
+    .map((r) => r.trim())
+    .filter(Boolean);
+  return disabledRules.includes(rule);
+}
+
+/**
+ * Insert a disable directive for a single line if appropriate.
+ * Returns the directive string to insert, or null if the line should be skipped.
+ */
+function buildDirectiveForLine(srcLines, ln, rule, justification) {
+  // 1-based line number; srcLines is 0-based.
+  const idx = ln - 1;
+  if (idx < 0 || idx >= srcLines.length) return null;
+  // Skip if already disabled on preceding line.
+  if (isAlreadyDisabled(srcLines, idx, rule)) return null;
+  const target = srcLines[idx];
+  const indent = (target.match(/^\s*/) || [''])[0];
+  return `${indent}// eslint-disable-next-line ${rule} -- ${justification}`;
+}
+
 let filesTouched = 0;
 let disablesInserted = 0;
 
@@ -44,32 +78,9 @@ for (const [file, lines] of byFile) {
   const uniq = [...new Set(lines)].sort((a, b) => b - a);
   let fileInserts = 0;
   for (const ln of uniq) {
-    // 1-based line number; srcLines is 0-based.
+    const directive = buildDirectiveForLine(srcLines, ln, rule, justification);
+    if (!directive) continue;
     const idx = ln - 1;
-    if (idx < 0 || idx >= srcLines.length) continue;
-    const target = srcLines[idx];
-    // Skip if already disabled on preceding line.
-    // Parse the previous line for an actual eslint-disable-next-line directive
-    // and check if the target rule is explicitly listed.
-    if (idx > 0) {
-      const prevLine = srcLines[idx - 1];
-      const match = prevLine.match(
-        /^\s*\/\/\s*eslint-disable-next-line\s+([^\n]*)/,
-      );
-      if (match) {
-        // Strip justification (everything after " -- ")
-        const rulesPart = match[1].split(' -- ')[0];
-        const disabledRules = rulesPart
-          .split(/[,\s]+/)
-          .map((r) => r.trim())
-          .filter(Boolean);
-        if (disabledRules.includes(rule)) {
-          continue;
-        }
-      }
-    }
-    const indent = (target.match(/^\s*/) || [''])[0];
-    const directive = `${indent}// eslint-disable-next-line ${rule} -- ${justification}`;
     srcLines.splice(idx, 0, directive);
     fileInserts++;
   }

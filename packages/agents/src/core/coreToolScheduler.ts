@@ -66,7 +66,7 @@ interface QueuedRequest {
 
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
-export {
+export type {
   ValidatingToolCall,
   ScheduledToolCall,
   ErroredToolCall,

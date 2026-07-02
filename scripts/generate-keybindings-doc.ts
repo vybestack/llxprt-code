@@ -152,6 +152,15 @@ function formatBindings(bindings: readonly KeyBinding[]): string[] {
   return results;
 }
 
+function resolveKeyName(
+  key: string | undefined,
+  sequence: string | undefined,
+): string {
+  if (key) return formatKeyName(key);
+  if (sequence) return formatSequence(sequence);
+  return '';
+}
+
 function formatBinding(binding: KeyBinding): string {
   const modifiers: string[] = [];
   if (binding.ctrl) modifiers.push('Ctrl');
@@ -159,11 +168,7 @@ function formatBinding(binding: KeyBinding): string {
   if (binding.shift) modifiers.push('Shift');
   if (binding.paste) modifiers.push('Paste');
 
-  const keyName = binding.key
-    ? formatKeyName(binding.key)
-    : binding.sequence
-      ? formatSequence(binding.sequence)
-      : '';
+  const keyName = resolveKeyName(binding.key, binding.sequence);
 
   if (!keyName) {
     return '';

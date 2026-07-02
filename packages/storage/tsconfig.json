@@ -19,6 +19,9 @@
       "@vybestack/llxprt-code-storage/services/fileDiscoveryService.js": [
         "./src/services/fileDiscoveryService.ts"
       ],
+      "@vybestack/llxprt-code-storage/utils/gitIgnoreParser.js": [
+        "./src/utils/gitIgnoreParser.ts"
+      ],
       "@vybestack/llxprt-code-storage/storage/secure-store.js": [
         "./src/secure-store/secure-store.ts"
       ],

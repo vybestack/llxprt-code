@@ -132,6 +132,49 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
     });
   });
 
+  describe('TodoPause schema and description disclose the 500-character reason cap (issue #2287)', () => {
+    it('main tool description states reason is capped at 500 characters', () => {
+      const tool = new TodoPauseTool(createFakeTodoService());
+      const description: string = tool.description;
+      expect(description.toLowerCase()).toContain('500');
+      expect(description.toLowerCase()).toMatch(/character/);
+    });
+
+    it('reason schema description states the 500-character limit and instructs streaming longer text separately', () => {
+      const tool = new TodoPauseTool(createFakeTodoService());
+      const schema = tool.schema as unknown as {
+        parametersJsonSchema?: {
+          properties?: {
+            reason?: { description?: string; maxLength?: number };
+          };
+        };
+      };
+      const reasonSchema = schema.parametersJsonSchema?.properties?.reason;
+      expect(reasonSchema).toBeDefined();
+      expect(reasonSchema?.maxLength).toBe(500);
+      const reasonDescription = (reasonSchema?.description ?? '').toLowerCase();
+      expect(reasonDescription).toContain('500');
+      // The model must be told to stream any longer explanation as normal
+      // response text, not stuff it into the tool argument.
+      expect(reasonDescription).toMatch(/stream|response text|separately/);
+    });
+
+    it('rejects a reason longer than 500 characters with the explicit length guard', () => {
+      const tool = new TodoPauseTool(createFakeTodoService());
+      const longReason = 'a'.repeat(501);
+      const error = tool.validateToolParams({ reason: longReason });
+      expect(error).not.toBeNull();
+      expect(error?.message.toLowerCase()).toContain('500');
+    });
+
+    it('accepts a reason of exactly 500 characters', () => {
+      const tool = new TodoPauseTool(createFakeTodoService());
+      const boundaryReason = 'a'.repeat(500);
+      const error = tool.validateToolParams({ reason: boundaryReason });
+      expect(error).toBeNull();
+    });
+  });
+
   describe('TodoRead reads items with ToolResult.llmContent containing structured output', () => {
     it('todos appear as structured content in ToolResult', async () => {
       const service = createFakeTodoService([

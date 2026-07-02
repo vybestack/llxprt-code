@@ -41,47 +41,48 @@ for (const [location, details] of Object.entries(packages)) {
     packagesWithPeerFlag.push(location || '<root>');
   }
 
-  // 1. Skip the root package itself.
-  if (location === '') {
+  if (shouldSkipPackage(location, details)) {
     continue;
   }
 
+  // Mark the left dependency as invalid.
+  invalidPackages.push(location);
+}
+
+function shouldSkipPackage(location, details) {
+  // 1. Skip the root package itself.
+  if (location === '') {
+    return true;
+  }
+
   // 2. Skip local workspace packages.
-  // They are identifiable in three ways:
-  // a) As a symlink within node_modules.
-  // b) As the source package definition, whose path is not in node_modules.
-  // c) As workspace-specific overrides in packages/*/node_modules/* which may
-  //    not have resolved/integrity if they're workspace-managed versions.
   if (
     details.link === true ||
     !location.includes('node_modules') ||
     (location.startsWith('packages/') && location.match(/\/node_modules\//))
   ) {
-    continue;
+    return true;
   }
 
   // 3. Skip optional dependencies that aren't installed on this platform.
-  // These are platform-specific binaries (e.g., sharp's @img/* packages)
-  // that only get resolved/integrity when installed on matching platforms.
   if (details.optional === true && !details.resolved) {
-    continue;
+    return true;
   }
 
   // 4. Any remaining package should be a third-party dependency.
   // 1) Registry package with both "resolved" and "integrity" fields is valid.
   if (details.resolved && details.integrity) {
-    continue;
+    return true;
   }
   // 2) Git and file dependencies only need a "resolved" field.
   const isGitOrFileDep =
     details.resolved?.startsWith('git') ||
     details.resolved?.startsWith('file:');
   if (isGitOrFileDep) {
-    continue;
+    return true;
   }
 
-  // Mark the left dependency as invalid.
-  invalidPackages.push(location);
+  return false;
 }
 
 let hasErrors = false;

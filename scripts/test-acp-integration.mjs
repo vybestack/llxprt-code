@@ -25,7 +25,7 @@ console.log('DEBUG env set to:', env.DEBUG);
 const llxprt = spawn('node', llxprtArgs, {
   stdio: ['pipe', 'pipe', 'pipe'],
   cwd: process.cwd(),
-  env: env,
+  env,
 });
 
 llxprt.on('spawn', () => {
@@ -66,56 +66,63 @@ setTimeout(() => {
 let testPassed = false;
 let buffer = '';
 
+/**
+ * Handle a single parsed JSON-RPC message from the ACP server.
+ */
+function handleParsedMessage(parsed, llxprt) {
+  // If initialize succeeded, send newSession
+  if (parsed.id === 1 && parsed.result) {
+    console.log('✓ Initialize succeeded');
+
+    const newSessionRequest = {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'session/new',
+      params: {
+        cwd: process.cwd(),
+        mcpServers: [],
+      },
+    };
+
+    console.log('Sending session/new request...');
+    llxprt.stdin.write(JSON.stringify(newSessionRequest) + '\n');
+  }
+
+  // Check for session created successfully
+  if (parsed.id === 2 && parsed.result && parsed.result.sessionId) {
+    console.log(`✓ Session created with ID: ${parsed.result.sessionId}`);
+    testPassed = true;
+  }
+
+  // Check for errors
+  if (parsed.error) {
+    reportAcpError(parsed.error);
+  }
+}
+
+/**
+ * Report an ACP error, surfacing auth-specific context when relevant.
+ */
+function reportAcpError(error) {
+  console.error(`✗ Error: ${error.message}`);
+  if (error.message.includes('Content generator config not initialized')) {
+    console.error('  This indicates the provider authentication failed');
+  }
+}
+
 llxprt.stdout.on('data', (data) => {
   buffer += data.toString();
   const lines = buffer.split('\n');
   buffer = lines.pop() || '';
 
   for (const line of lines) {
-    if (line.trim()) {
-      try {
-        const parsed = JSON.parse(line);
-
-        // If initialize succeeded, send newSession
-        if (parsed.id === 1 && parsed.result) {
-          console.log('✓ Initialize succeeded');
-
-          const newSessionRequest = {
-            jsonrpc: '2.0',
-            id: 2,
-            method: 'session/new',
-            params: {
-              cwd: process.cwd(),
-              mcpServers: [],
-            },
-          };
-
-          console.log('Sending session/new request...');
-          llxprt.stdin.write(JSON.stringify(newSessionRequest) + '\n');
-        }
-
-        // Check for session created successfully
-        if (parsed.id === 2 && parsed.result && parsed.result.sessionId) {
-          console.log(`✓ Session created with ID: ${parsed.result.sessionId}`);
-          testPassed = true;
-        }
-
-        // Check for errors
-        if (parsed.error) {
-          console.error(`✗ Error: ${parsed.error.message}`);
-          if (
-            parsed.error.message.includes(
-              'Content generator config not initialized',
-            )
-          ) {
-            console.error(
-              '  This indicates the provider authentication failed',
-            );
-          }
-        }
-      } catch (_e) {
-        // Not JSON, ignore
-      }
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      handleParsedMessage(JSON.parse(line), llxprt);
+    } catch (_e) {
+      // Not JSON, ignore
     }
   }
 });

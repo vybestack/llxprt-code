@@ -8,25 +8,55 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ignore, { type Ignore } from 'ignore';
 
+export type IgnoreMatchState = 'ignored' | 'unignored' | 'neutral';
+
 export interface GitIgnoreFilter {
   isIgnored(filePath: string): boolean;
+  getIgnoreState(filePath: string): IgnoreMatchState;
   getPatterns(): string[];
 }
 
+/**
+ * Options controlling which ignore sources a {@link GitIgnoreParser} consults.
+ *
+ * `loadGitSources` controls whether Git-native ignore files are read:
+ * - `true` (default): reads `.gitignore` files (including nested ones),
+ *   `.git/info/exclude`, and always ignores the `.git` directory. Used for
+ *   Git-based filtering.
+ * - `false`: only applies the `extraPatterns` supplied to the constructor.
+ *   Used for independent `.llxprtignore` filtering so it is not contaminated
+ *   by Git ignore rules.
+ *
+ */
+export interface GitIgnoreParserOptions {
+  loadGitSources?: boolean;
+}
+
+/**
+ * Parses Git-style ignore patterns for either Git-native sources plus optional
+ * later extra patterns, or for extra patterns alone. Extra patterns can override
+ * Git matches for final file decisions, but Git-native directory traversal is
+ * intentionally based only on Git-native sources when discovering nested
+ * `.gitignore` files.
+ */
 export class GitIgnoreParser implements GitIgnoreFilter {
   private projectRoot: string;
   private cache: Map<string, Ignore> = new Map();
   private globalPatterns: Ignore | undefined;
   private processedExtraPatterns: Ignore;
+  private readonly loadGitSources: boolean;
+  private readonly extraPatterns?: string[];
 
   constructor(
     projectRoot: string,
-    private readonly extraPatterns?: string[],
+    extraPatterns?: string[],
+    options: GitIgnoreParserOptions = {},
   ) {
     this.projectRoot = path.resolve(projectRoot);
     this.processedExtraPatterns = ignore();
+    this.loadGitSources = options.loadGitSources ?? true;
+    this.extraPatterns = extraPatterns ? [...extraPatterns] : undefined;
     if (this.extraPatterns) {
-      // extraPatterns are assumed to be from project root (like .geminiignore)
       this.processedExtraPatterns.add(
         this.processPatterns(this.extraPatterns, '.'),
       );
@@ -65,7 +95,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     return rawPatterns
       .map((p) => p.trimStart())
       .filter((p) => p !== '' && !p.startsWith('#'))
-      .map((p) => {
+      .flatMap((p) => {
         // Handle escaped special chars at the start: \! or \#
         // These mean the pattern literally starts with ! or #
         // We need to KEEP the backslash for the ignore library to interpret correctly
@@ -81,11 +111,12 @@ export class GitIgnoreParser implements GitIgnoreFilter {
         if (isAnchoredInFile) {
           p = p.substring(1);
         }
+        const isDirectoryPattern = p.endsWith('/');
 
         // An empty pattern can result from a negated pattern like `!`,
         // which we can ignore.
         if (p === '') {
-          return '';
+          return [];
         }
 
         let newPattern = p;
@@ -116,17 +147,45 @@ export class GitIgnoreParser implements GitIgnoreFilter {
         }
 
         if (isNegative) {
+          if (isDirectoryPattern) {
+            const directoryPatternBase = newPattern.endsWith('/')
+              ? newPattern.slice(0, -1)
+              : newPattern;
+            const directoryPattern = `!${directoryPatternBase}/`;
+            return [directoryPattern, `${directoryPattern}**`];
+          }
           newPattern = '!' + newPattern;
         }
 
-        return newPattern;
-      })
-      .filter((p) => p !== '');
+        return [newPattern];
+      });
   }
 
   isIgnored(filePath: string): boolean {
-    if (!filePath || typeof filePath !== 'string') {
+    const context = this.resolveIgnoreContext(filePath);
+    if (!context) {
       return false;
+    }
+    return context.ignore.ignores(context.normalizedPath);
+  }
+
+  getIgnoreState(filePath: string): IgnoreMatchState {
+    const context = this.resolveIgnoreContext(filePath);
+    if (!context) {
+      return 'neutral';
+    }
+
+    const testResult = context.ignore.test(context.normalizedPath);
+    if (testResult.ignored) return 'ignored';
+    if (testResult.unignored) return 'unignored';
+    return 'neutral';
+  }
+
+  private resolveIgnoreContext(
+    filePath: string,
+  ): { ignore: Ignore; normalizedPath: string } | null {
+    if (!filePath || typeof filePath !== 'string') {
+      return null;
     }
 
     if (
@@ -134,7 +193,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
       filePath === '/' ||
       filePath.includes('\0')
     ) {
-      return false;
+      return null;
     }
 
     try {
@@ -142,71 +201,89 @@ export class GitIgnoreParser implements GitIgnoreFilter {
       const relativePath = path.relative(this.projectRoot, resolved);
 
       if (relativePath === '' || relativePath.startsWith('..')) {
-        return false;
+        return null;
       }
 
-      // Even in windows, Ignore expects forward slashes.
-      const normalizedPath = relativePath.replace(/\\/g, '/');
-
-      if (normalizedPath.startsWith('/') || normalizedPath === '') {
-        return false;
+      const normalizedPath = this.toNormalizedRelativePath(relativePath);
+      if (!normalizedPath) {
+        return null;
       }
 
-      const ig = ignore();
-
-      // Always ignore .git directory
-      ig.add('.git');
-
-      // Load global patterns from .git/info/exclude on first call
-      if (this.globalPatterns === undefined) {
-        const excludeFile = path.join(
-          this.projectRoot,
-          '.git',
-          'info',
-          'exclude',
-        );
-        this.globalPatterns = fs.existsSync(excludeFile)
-          ? this.loadPatternsForFile(excludeFile)
-          : ignore();
-      }
-      ig.add(this.globalPatterns);
-
-      const pathParts = relativePath.split(path.sep);
-
-      const dirsToVisit = [this.projectRoot];
-      let currentAbsDir = this.projectRoot;
-      // Collect all directories in the path
-      for (let i = 0; i < pathParts.length - 1; i++) {
-        currentAbsDir = path.join(currentAbsDir, pathParts[i]);
-        dirsToVisit.push(currentAbsDir);
-      }
-
-      for (const dir of dirsToVisit) {
-        const relativeDir = path.relative(this.projectRoot, dir);
-        if (relativeDir && this.isDirIgnoredByAncestor(relativeDir, ig)) {
-          // According to git behavior, we don't need to process this
-          // directory's .gitignore, as nothing inside it can be
-          // un-ignored.
-          break;
-        }
-
-        this.applyDirGitignore(dir, ig);
-      }
-
-      // Apply extra patterns (e.g. from .geminiignore) last for precedence
-      ig.add(this.processedExtraPatterns);
-
-      return ig.ignores(normalizedPath);
+      return {
+        ignore: this.buildIgnoreForRelativePath(relativePath),
+        normalizedPath,
+      };
     } catch {
-      // Path resolution failed; not ignored.
-      return false;
+      // Path resolution failed; cannot determine ignore state.
+      return null;
+    }
+  }
+
+  private toNormalizedRelativePath(relativePath: string): string | null {
+    const normalizedPath = relativePath.replace(/\\/g, '/');
+    if (normalizedPath.startsWith('/')) {
+      return null;
+    }
+    return normalizedPath;
+  }
+
+  private buildIgnoreForRelativePath(relativePath: string): Ignore {
+    const ig = ignore();
+
+    if (this.loadGitSources) {
+      this.loadGitIgnoreSources(ig, relativePath);
+    }
+
+    // Apply extra patterns (e.g. from .llxprtignore) last for precedence
+    ig.add(this.processedExtraPatterns);
+    return ig;
+  }
+
+  /**
+   * Loads Git-native ignore sources into the provided Ignore instance:
+   * the `.git` directory rule, `.git/info/exclude`, and all `.gitignore`
+   * files along the path's ancestor directories.
+   */
+  private loadGitIgnoreSources(ig: Ignore, relativePath: string): void {
+    ig.add('.git');
+
+    if (this.globalPatterns === undefined) {
+      const excludeFile = path.join(
+        this.projectRoot,
+        '.git',
+        'info',
+        'exclude',
+      );
+      this.globalPatterns = fs.existsSync(excludeFile)
+        ? this.loadPatternsForFile(excludeFile)
+        : ignore();
+    }
+    ig.add(this.globalPatterns);
+
+    const pathParts = relativePath.split(path.sep);
+
+    const dirsToVisit = [this.projectRoot];
+    let currentAbsDir = this.projectRoot;
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      currentAbsDir = path.join(currentAbsDir, pathParts[i]);
+      dirsToVisit.push(currentAbsDir);
+    }
+
+    for (const dir of dirsToVisit) {
+      const relativeDir = path.relative(this.projectRoot, dir);
+      if (relativeDir && this.isDirIgnoredByAncestor(relativeDir, ig)) {
+        break;
+      }
+      this.applyDirGitignore(dir, ig);
     }
   }
 
   private isDirIgnoredByAncestor(relativeDir: string, ig: Ignore): boolean {
     const normalizedRelativeDir = relativeDir.replace(/\\/g, '/');
-    const igPlusExtras = ignore().add(ig).add(this.processedExtraPatterns);
-    return igPlusExtras.ignores(normalizedRelativeDir);
+    // This check intentionally uses Git-native rules only. Extra patterns are
+    // applied after traversal so .llxprtignore cannot change nested .gitignore
+    // discovery while still taking precedence in the final match decision.
+    return ig.ignores(normalizedRelativeDir);
   }
 
   private applyDirGitignore(dir: string, ig: Ignore): void {

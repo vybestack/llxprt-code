@@ -8,12 +8,18 @@
 
 ### Added
 
+- Added **Claude Sonnet 5** (`claude-sonnet-5`) to the model menu: it is now selectable in the profile-create wizard, appears in the Anthropic provider model list (both OAuth and default paths), and resolves correct max output tokens (128K), context window (200K subscription default; 1M is API-only/plan-gated), and token limits. The "latest" sonnet alias logic now tracks Sonnet 5, and adaptive thinking / `effort` wiring covers it (#2289).
 - Async task execution: Launch subagents with `async=true` to run in background (#244)
 - `check_async_tasks` tool for model to query async task status
 - `/tasks list` command to show all async tasks
 - `/task end <id>` command to cancel async tasks
 - `task-max-async` setting to limit concurrent async tasks (default: 5)
 - Auto-trigger notifications when async tasks complete
+
+### Changed
+
+- The Anthropic provider's default model is now **Claude Opus 4.8** (`claude-opus-4-8`), aligning `getDefaultModel()` with the `anthropic` alias config (`anthropic.config` already declared `claude-opus-4-8` as its `defaultModel`) (#2289).
+- `AnthropicProvider.getLatestClaude4Model()` was renamed to `getLatestClaudeModel()` so the helper tracks the newest release of each tier (e.g. Sonnet 5) rather than a single generation. The old name is retained as a deprecated alias delegating to the new method and will be removed in a future release (#2289).
 
 ### Migration
 

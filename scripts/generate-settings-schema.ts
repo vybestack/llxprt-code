@@ -154,13 +154,23 @@ function buildSettingSchema(
     base.default = definition.default as JsonValue;
   }
 
-  const schemaShape = definition.ref
-    ? buildRefSchema(definition.ref, defs)
-    : definition.type === 'union' && definition.refs
-      ? buildUnionSchema(definition.refs, defs)
-      : buildSchemaForType(definition, pathSegments, defs);
+  const schemaShape = resolveSchemaShape(definition, pathSegments, defs);
 
   return { ...base, ...schemaShape };
+}
+
+function resolveSchemaShape(
+  definition: SettingDefinition,
+  pathSegments: string[],
+  defs: Map<string, JsonSchema>,
+): JsonSchema {
+  if (definition.ref) {
+    return buildRefSchema(definition.ref, defs);
+  }
+  if (definition.type === 'union' && definition.refs) {
+    return buildUnionSchema(definition.refs, defs);
+  }
+  return buildSchemaForType(definition, pathSegments, defs);
 }
 
 function buildCollectionSchema(
@@ -200,13 +210,7 @@ function buildSchemaForType(
       return buildEnumSchema(source.options);
     case 'array': {
       const itemPath = [...pathSegments, '<items>'];
-      const items = isSettingDefinition(source)
-        ? source.items
-          ? buildCollectionSchema(source.items, itemPath, defs)
-          : {}
-        : source.properties
-          ? buildInlineObjectSchema(source.properties, itemPath, defs)
-          : {};
+      const items = resolveArrayItems(source, itemPath, defs);
       return { type: 'array', items };
     }
     case 'object':
@@ -216,6 +220,21 @@ function buildSchemaForType(
     default:
       return {};
   }
+}
+
+function resolveArrayItems(
+  source: SettingDefinition | SettingCollectionDefinition,
+  itemPath: string[],
+  defs: Map<string, JsonSchema>,
+): JsonSchema {
+  if (isSettingDefinition(source)) {
+    return source.items
+      ? buildCollectionSchema(source.items, itemPath, defs)
+      : {};
+  }
+  return source.properties
+    ? buildInlineObjectSchema(source.properties, itemPath, defs)
+    : {};
 }
 
 function buildEnumSchema(

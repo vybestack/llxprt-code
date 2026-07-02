@@ -70,6 +70,7 @@ export function createPtyResultPromise(
   const activePtyEntry: ActivePty = {
     ptyProcess,
     headlessTerminal,
+    supportsProcessGroupKill: ptyInfo.name !== 'bun-pty',
   };
   activePtys.set(ptyProcess.pid, activePtyEntry);
   lastActivePtyIdRef.value = ptyProcess.pid;
@@ -83,6 +84,7 @@ export function createPtyResultPromise(
     onOutputEvent,
     shellExecutionConfig,
     ptyInfo,
+    supportsProcessGroupKill: ptyInfo.name !== 'bun-pty',
     inactivityAbortController,
     resetInactivityTimer,
     exitedGuard,
@@ -129,18 +131,32 @@ function setupPtyEventHandlers(
     },
   );
 
-  setupPtyInactivityHandler(state);
-  const abortHandler = setupPtyAbortHandler(
-    state,
-    resolveResult,
-    activePtys,
-    lastActivePtyIdRef,
-  );
+  setupPtyInactivityHandler(state, resolveResult);
+  const abortHandler = setupPtyAbortHandler(state, resolveResult);
 
   registerPtyDataHandler(state, render);
   registerPtyExitHandler(state, resolveResult, abortHandler);
 
   state.abortSignal.addEventListener('abort', abortHandler, { once: true });
+}
+
+function teardownPtyState(
+  state: PtyExecState,
+  activePtys: Map<number, ActivePty>,
+  lastActivePtyIdRef: { value: number | null },
+): void {
+  if (state.abortFinalizeTimeout) {
+    clearTimeout(state.abortFinalizeTimeout);
+    state.abortFinalizeTimeout = null;
+  }
+  cleanupActivePtyEntry(
+    state,
+    activePtys,
+    () => lastActivePtyIdRef.value,
+    (id) => {
+      lastActivePtyIdRef.value = id;
+    },
+  );
 }
 
 function makePtyResolveResult(
@@ -154,18 +170,7 @@ function makePtyResolveResult(
       return;
     }
     state.hasResolved = true;
-    if (state.abortFinalizeTimeout) {
-      clearTimeout(state.abortFinalizeTimeout);
-      state.abortFinalizeTimeout = null;
-    }
-    cleanupActivePtyEntry(
-      state,
-      activePtys,
-      () => lastActivePtyIdRef.value,
-      (id) => {
-        lastActivePtyIdRef.value = id;
-      },
-    );
+    teardownPtyState(state, activePtys, lastActivePtyIdRef);
     resolve(resultValue);
   };
 }
@@ -195,7 +200,10 @@ function makePtyRender(
   };
 }
 
-function setupPtyInactivityHandler(state: PtyExecState): void {
+function setupPtyInactivityHandler(
+  state: PtyExecState,
+  resolveResult: (resultValue: ShellExecutionResult) => void,
+): void {
   const inactivityTimeoutMs = state.shellExecutionConfig.inactivityTimeoutMs;
   if (inactivityTimeoutMs === undefined || inactivityTimeoutMs <= 0) {
     return;
@@ -203,52 +211,72 @@ function setupPtyInactivityHandler(state: PtyExecState): void {
   state.inactivityAbortController.signal.addEventListener(
     'abort',
     () => {
-      void ptyInactivityAbortAction(state);
+      void ptyInactivityAbortAction(state, resolveResult);
     },
     { once: true },
   );
   state.resetInactivityTimer();
 }
 
-async function ptyInactivityAbortAction(state: PtyExecState): Promise<void> {
-  // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
+async function ptyInactivityAbortAction(
+  state: PtyExecState,
+  resolveResult: (resultValue: ShellExecutionResult) => void,
+): Promise<void> {
   if (state.ptyProcess.pid === 0 || state.exitedGuard.isExited()) {
     return;
   }
   const pid = state.ptyProcess.pid;
   if (state.isWindows) {
     taskkillTree(pid);
+    finalizeInactivityKill(state, resolveResult);
     return;
   }
-  try {
-    process.kill(-pid, 'SIGTERM');
-    await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-    if (!state.exitedGuard.isExited()) {
-      process.kill(-pid, 'SIGKILL');
+  if (state.supportsProcessGroupKill) {
+    try {
+      process.kill(-pid, 'SIGTERM');
+      await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+      if (!state.exitedGuard.isExited()) {
+        process.kill(-pid, 'SIGKILL');
+      }
+    } catch {
+      if (!state.exitedGuard.isExited()) {
+        state.ptyProcess.kill('SIGKILL');
+      }
     }
-  } catch {
+  } else {
+    state.ptyProcess.kill('SIGTERM');
+    await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
     if (!state.exitedGuard.isExited()) {
       state.ptyProcess.kill('SIGKILL');
     }
   }
+  finalizeInactivityKill(state, resolveResult);
+}
+
+function finalizeInactivityKill(
+  state: PtyExecState,
+  resolveResult: (resultValue: ShellExecutionResult) => void,
+): void {
+  if (state.exitedGuard.isExited()) {
+    return;
+  }
+  state.abortFinalizeTimeout = setTimeout(() => {
+    resolveResult(buildPtyResult(state, 1, null, state.abortSignal.aborted));
+  }, SIGKILL_TIMEOUT_MS);
 }
 
 function setupPtyAbortHandler(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
-  activePtys: Map<number, ActivePty>,
-  lastActivePtyIdRef: { value: number | null },
 ): () => void {
   return () => {
-    void ptyAbortAction(state, resolveResult, activePtys, lastActivePtyIdRef);
+    void ptyAbortAction(state, resolveResult);
   };
 }
 
 async function ptyAbortAction(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
-  activePtys: Map<number, ActivePty>,
-  lastActivePtyIdRef: { value: number | null },
 ): Promise<void> {
   // Preserve old truthiness semantics: skip pid 0 (invalid process ID)
   if (state.ptyProcess.pid === 0 || state.exitedGuard.isExited()) {
@@ -257,22 +285,16 @@ async function ptyAbortAction(
   const pid = state.ptyProcess.pid;
   if (state.isWindows) {
     taskkillTree(pid);
-    cleanupActivePtyEntry(
-      state,
-      activePtys,
-      () => lastActivePtyIdRef.value,
-      (id) => {
-        lastActivePtyIdRef.value = id;
-      },
-    );
     resolveResult(buildPtyResult(state, 1, null, true));
     return;
   }
 
-  try {
-    process.kill(-pid, 'SIGTERM');
-  } catch {
-    // Process may already be terminated.
+  if (state.supportsProcessGroupKill) {
+    try {
+      process.kill(-pid, 'SIGTERM');
+    } catch {
+      // Process group may already be terminated.
+    }
   }
   try {
     state.ptyProcess.kill('SIGTERM');
@@ -285,10 +307,12 @@ async function ptyAbortAction(
     return;
   }
 
-  try {
-    process.kill(-pid, 'SIGKILL');
-  } catch {
-    // Process may already be terminated.
+  if (state.supportsProcessGroupKill) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // Process group may already be terminated.
+    }
   }
   try {
     state.ptyProcess.kill('SIGKILL');

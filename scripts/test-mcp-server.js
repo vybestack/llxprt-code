@@ -83,11 +83,9 @@ const tools = [
 ];
 
 // Handle tools/list request
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools,
-  };
-});
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools,
+}));
 
 // Handle tools/call request
 server.setRequestHandler(CallToolRequestSchema, async (request) => {

@@ -60,15 +60,16 @@ export function buildParameterSchema() {
         properties: {
           respect_git_ignore: {
             description:
-              'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
+              'Optional: Whether to respect .gitignore patterns when reading files. Only available in git repositories. Defaults to true.',
             type: 'boolean',
           },
           respect_llxprt_ignore: {
             description:
-              'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
+              'Optional: Whether to respect .llxprtignore patterns when reading files. Defaults to true.',
             type: 'boolean',
           },
         },
+        additionalProperties: false,
       },
     },
     required: ['paths'],

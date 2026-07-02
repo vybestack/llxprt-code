@@ -92,107 +92,139 @@ function collectWorkspaceLinkResults() {
     };
   }
 
-  // A bare `existsSync(node_modules/<name>)` is too weak: it cannot tell a
-  // locally-linked workspace apart from a same-named package fetched from the
-  // registry. We require that node_modules/<name> realpath-resolves back to the
-  // in-repo workspace directory, which only holds when the manager actually
-  // linked the LOCAL package. This applies to EVERY workspace, including
-  // packages/cli (which shares the root package name @vybestack/llxprt-code):
-  // the root no longer self-depends on that published name, so the manager
-  // links the local source rather than a registry copy.
-  //
-  // workspaces is an explicit list of paths (no globs), so every entry MUST
-  // contain a package.json. A missing one is a real failure, not something to
-  // skip — silently skipping could let the check pass while a workspace went
-  // missing or was mis-declared.
-  const missingPkgJson = [];
-  const missing = [];
-  const notLinkedLocally = [];
-  let linked = 0;
+  const results = workspaces.map((ws) => classifyWorkspaceLink(ws));
+  return summarizeLinkResults(results, workspaces.length);
+}
 
-  const malformed = [];
-  for (const ws of workspaces) {
-    const wpkgPath = `${ws}/package.json`;
-    if (!existsSync(wpkgPath)) {
-      missingPkgJson.push(ws);
-      continue;
-    }
-    // Parsing a workspace package.json, and realpath-resolving the node_modules
-    // entry/workspace directory, can throw (corrupt JSON, broken symlink,
-    // ELOOP). Funnel those into the diagnostic list so the verifier keeps its
-    // "collect failures -> exit 1" contract instead of throwing mid-loop.
-    let wpkg;
-    try {
-      wpkg = JSON.parse(readFileSync(wpkgPath, 'utf8'));
-    } catch (err) {
-      malformed.push(
-        `${ws}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      continue;
-    }
-    const entry = `node_modules/${wpkg.name}`;
-    if (!existsSync(entry)) {
-      missing.push(`${ws} (${wpkg.name})`);
-      continue;
-    }
-    let actual;
-    let expected;
-    try {
-      actual = realpathSync(entry);
-      expected = realpathSync(resolve(ws));
-    } catch (err) {
-      notLinkedLocally.push(
+/**
+ * Classifies a single declared workspace entry against the on-disk
+ * node_modules layout. Returns a result object describing the outcome category
+ * (one of "linked", "missingPkgJson", "malformed", "missing", "notLinked") plus
+ * a human-readable detail. Extracted from the verifier loop so each entry is
+ * checked in isolation without multiple break/continue statements.
+ *
+ * @param {string} ws - A workspace directory path declared in package.json.
+ * @returns {{ category: string, detail: string }}
+ */
+function classifyWorkspaceLink(ws) {
+  const wpkgPath = `${ws}/package.json`;
+  if (!existsSync(wpkgPath)) {
+    return { category: 'missingPkgJson', detail: ws };
+  }
+  // Parsing a workspace package.json, and realpath-resolving the node_modules
+  // entry/workspace directory, can throw (corrupt JSON, broken symlink,
+  // ELOOP). Funnel those into the diagnostic list so the verifier keeps its
+  // "collect failures -> exit 1" contract instead of throwing mid-loop.
+  let wpkg;
+  try {
+    wpkg = JSON.parse(readFileSync(wpkgPath, 'utf8'));
+  } catch (err) {
+    return {
+      category: 'malformed',
+      detail: `${ws}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  const entry = `node_modules/${wpkg.name}`;
+  if (!existsSync(entry)) {
+    return { category: 'missing', detail: `${ws} (${wpkg.name})` };
+  }
+  let actual;
+  let expected;
+  try {
+    actual = realpathSync(entry);
+    expected = realpathSync(resolve(ws));
+  } catch (err) {
+    return {
+      category: 'notLinked',
+      detail:
         `${ws} (${wpkg.name}): could not resolve the node_modules link ` +
-          `(${err instanceof Error ? err.message : String(err)})`,
-      );
-      continue;
-    }
-    if (actual !== expected) {
-      notLinkedLocally.push(
+        `(${err instanceof Error ? err.message : String(err)})`,
+    };
+  }
+  if (actual !== expected) {
+    return {
+      category: 'notLinked',
+      detail:
         `${ws} (${wpkg.name}): node_modules entry resolves to ${actual}, ` +
-          `expected the local workspace at ${expected}`,
-      );
-      continue;
+        `expected the local workspace at ${expected}`,
+    };
+  }
+  return { category: 'linked', detail: ws };
+}
+
+/**
+ * Aggregates per-workspace classification results into the final failure list.
+ * Returns the combined diagnostics plus the workspace count, applying the
+ * defence-in-depth linked-count check.
+ *
+ * @param {{ category: string, detail: string }[]} results
+ * @param {number} workspaceCount
+ * @returns {{ failures: string[], workspaceCount: number }}
+ */
+function summarizeLinkResults(results, workspaceCount) {
+  const grouped = {
+    missingPkgJson: [],
+    missing: [],
+    notLinkedLocally: [],
+    malformed: [],
+  };
+  let linked = 0;
+  for (const result of results) {
+    switch (result.category) {
+      case 'linked':
+        linked++;
+        break;
+      case 'missingPkgJson':
+        grouped.missingPkgJson.push(result.detail);
+        break;
+      case 'missing':
+        grouped.missing.push(result.detail);
+        break;
+      case 'notLinked':
+        grouped.notLinkedLocally.push(result.detail);
+        break;
+      case 'malformed':
+        grouped.malformed.push(result.detail);
+        break;
     }
-    linked++;
   }
 
   const failures = [];
-  if (missingPkgJson.length > 0) {
+  if (grouped.missingPkgJson.length > 0) {
     failures.push(
       'Declared workspace(s) have no package.json on disk: ' +
-        missingPkgJson.join(', '),
+        grouped.missingPkgJson.join(', '),
     );
   }
-  if (missing.length > 0) {
+  if (grouped.missing.length > 0) {
     failures.push(
       'Package manager produced no node_modules entry for workspace(s): ' +
-        missing.join(', '),
+        grouped.missing.join(', '),
     );
   }
-  if (notLinkedLocally.length > 0) {
+  if (grouped.notLinkedLocally.length > 0) {
     failures.push(
       'Package manager did not link the LOCAL workspace for:\n  - ' +
-        notLinkedLocally.join('\n  - '),
+        grouped.notLinkedLocally.join('\n  - '),
     );
   }
-  if (malformed.length > 0) {
+  if (grouped.malformed.length > 0) {
     failures.push(
       'Could not parse package.json for declared workspace(s):\n  - ' +
-        malformed.join('\n  - '),
+        grouped.malformed.join('\n  - '),
     );
   }
   // Defence in depth: even if no per-workspace failure was recorded, the count
   // of locally-linked workspaces must equal the number declared. This catches
   // any silent gap between iteration and verification.
-  if (failures.length === 0 && linked !== workspaces.length) {
+  if (failures.length === 0 && linked !== workspaceCount) {
     failures.push(
-      `Linked ${linked} workspace(s) but ${workspaces.length} are declared; ` +
+      `Linked ${linked} workspace(s) but ${workspaceCount} are declared; ` +
         'counts must match.',
     );
   }
 
-  return { failures, workspaceCount: workspaces.length };
+  return { failures, workspaceCount };
 }
 
 /**

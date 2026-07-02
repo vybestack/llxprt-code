@@ -7,17 +7,6 @@
 import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
 import { escapeShellArg, getShellConfiguration } from './shell-utils.js';
 
-const mockPlatform = vi.hoisted(() => vi.fn());
-const mockHomedir = vi.hoisted(() => vi.fn());
-vi.mock('os', () => ({
-  default: {
-    platform: mockPlatform,
-    homedir: mockHomedir,
-  },
-  platform: mockPlatform,
-  homedir: mockHomedir,
-}));
-
 const mockQuote = vi.hoisted(() => vi.fn());
 vi.mock('shell-quote', () => ({
   quote: mockQuote,
@@ -93,11 +82,12 @@ describe('getShellConfiguration', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
   it('should return bash configuration on Linux', () => {
-    mockPlatform.mockReturnValue('linux');
+    vi.stubGlobal('process', { ...process, platform: 'linux' });
     const config = getShellConfiguration();
     expect(config.executable).toBe('bash');
     expect(config.argsPrefix).toStrictEqual(['-c']);
@@ -105,7 +95,7 @@ describe('getShellConfiguration', () => {
   });
 
   it('should return bash configuration on macOS (darwin)', () => {
-    mockPlatform.mockReturnValue('darwin');
+    vi.stubGlobal('process', { ...process, platform: 'darwin' });
     const config = getShellConfiguration();
     expect(config.executable).toBe('bash');
     expect(config.argsPrefix).toStrictEqual(['-c']);
@@ -114,7 +104,11 @@ describe('getShellConfiguration', () => {
 
   describe('on Windows', () => {
     beforeEach(() => {
-      mockPlatform.mockReturnValue('win32');
+      vi.stubGlobal('process', {
+        ...process,
+        platform: 'win32',
+        env: { ...process.env },
+      });
     });
 
     it('should return PowerShell configuration by default', () => {

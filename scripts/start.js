@@ -36,9 +36,66 @@ const bootstrapSnapshot = parseBootstrapArgs();
  *   react-devtools-core when it tries to access localStorage
  */
 function prepareNodeOptionsForDev(nodeOptions) {
-  // Remove any existing --localstorage-file flags
-  let sanitized = (nodeOptions || '')
-    .replace(/\s*--localstorage-file(?:(?:\s*=\s*|\s+)(?!-)\S+)?/g, '')
+  // Remove any existing --localstorage-file flags (with or without values).
+  // This faithfully reproduces the original regex semantics:
+  //   /\s*--localstorage-file(?:(?:\s*=\s*|\s+)(?!-)\S+)?/g
+  // (leading whitespace, optional value via '=' or a whitespace separator, and
+  // a value is only consumed when it does not start with '-'). A manual scanner
+  // avoids the catastrophic-backtracking risk of the regex while covering the
+  // same inputs, including whitespace around '=' and tab separators.
+  function skipWhitespace(options, i) {
+    while (i < options.length && /\s/.test(options[i])) {
+      i += 1;
+    }
+    return i;
+  }
+  function skipNonWhitespace(options, i) {
+    while (i < options.length && !/\s/.test(options[i])) {
+      i += 1;
+    }
+    return i;
+  }
+  // Given the index right after a flag token, return the index after any value
+  // that should be consumed, or the unchanged flagEnd when no value is taken.
+  function indexOfValueEnd(options, flagEnd) {
+    const peek = skipWhitespace(options, flagEnd);
+    const hadSeparator = peek > flagEnd;
+    if (peek >= options.length) {
+      return flagEnd;
+    }
+    if (options[peek] === '=') {
+      const valueStart = skipWhitespace(options, peek + 1);
+      if (valueStart >= options.length || options[valueStart] === '-') {
+        return flagEnd;
+      }
+      return skipNonWhitespace(options, valueStart);
+    }
+    if (hadSeparator && options[peek] !== '-') {
+      return skipNonWhitespace(options, peek);
+    }
+    return flagEnd;
+  }
+  function removeLocalStorageFlag(options) {
+    if (!options) return '';
+    const token = '--localstorage-file';
+    let result = '';
+    let cursor = 0;
+    let searchFrom = options.indexOf(token);
+    while (searchFrom !== -1) {
+      // Consume leading whitespace immediately before the flag (the original
+      // regex's leading \s*) so removing the flag does not leave a double space.
+      let start = searchFrom;
+      while (start > cursor && /\s/.test(options[start - 1])) {
+        start -= 1;
+      }
+      result += options.slice(cursor, start);
+      cursor = indexOfValueEnd(options, searchFrom + token.length);
+      searchFrom = options.indexOf(token, cursor);
+    }
+    result += options.slice(cursor);
+    return result;
+  }
+  const sanitized = removeLocalStorageFlag(nodeOptions)
     .replace(/\s+/g, ' ')
     .trim();
 

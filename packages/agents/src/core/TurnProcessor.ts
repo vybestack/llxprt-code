@@ -355,16 +355,9 @@ export class TurnProcessor {
     const overallStartTime = Date.now();
 
     try {
-      const iContents = await this.compressionHandler.enforceProviderContents(
-        this.historyService.getCuratedForProvider(userIContents),
-        prompt_id,
+      const iContents = await this._enforceAndLogProviderContents(
+        userIContents,
         provider,
-      );
-      logApiRequest(
-        this.runtimeContext,
-        this.runtimeContext.state,
-        ContentConverters.toGeminiContents(iContents),
-        this.runtimeContext.state.model,
         prompt_id,
       );
 
@@ -425,6 +418,29 @@ export class TurnProcessor {
     } finally {
       this.compressionHandler.clearProviderCompressionCallback(provider);
     }
+  }
+
+  private async _enforceAndLogProviderContents(
+    userIContents: IContent[],
+    provider: IProvider,
+    prompt_id: string,
+  ): Promise<IContent[]> {
+    const iContents = await this.compressionHandler.enforceProviderContents(
+      {
+        contents: this.historyService.getCuratedForProvider(userIContents),
+        pendingContents: userIContents,
+      },
+      prompt_id,
+      provider,
+    );
+    logApiRequest(
+      this.runtimeContext,
+      this.runtimeContext.state,
+      ContentConverters.toGeminiContents(iContents),
+      this.runtimeContext.state.model,
+      prompt_id,
+    );
+    return iContents;
   }
 
   private _validateProvider(provider: IProvider): void {

@@ -33,8 +33,8 @@
 import type { AnyToolInvocation } from '../index.js';
 import type { Config } from '../config/config.js';
 import { normalizeShellReplacement } from '../config/config.js';
-import os from 'node:os';
 import { quote } from 'shell-quote';
+import { isWindows } from './runtime.js';
 import { doesToolInvocationMatch } from './tool-utils.js';
 import {
   isParserAvailable,
@@ -43,6 +43,7 @@ import {
   hasCommandSubstitution as treeSitterHasCommandSubstitution,
   splitCommandsWithTree,
   parseCommandDetails,
+  hasPromptCommandTransform,
 } from './shell-parser.js';
 import { debugLogger } from './debugLogger.js';
 
@@ -103,11 +104,6 @@ export function getShellConfiguration(): ShellConfiguration {
   // Unix-like systems (Linux, macOS)
   return { executable: 'bash', argsPrefix: ['-c'], shell: 'bash' };
 }
-
-/**
- * Export the platform detection constant for use in process management (e.g., killing processes).
- */
-export const isWindows = () => os.platform() === 'win32';
 
 /**
  * Escapes a string so that it can be safely used as a single argument
@@ -355,6 +351,11 @@ export function getCommandRoots(command: string): string[] {
   if (isParserAvailable()) {
     const tree = parseShellCommand(command);
     if (tree) {
+      // Prompt transformations (${var@P}) can execute arbitrary commands, so
+      // the command is treated as unsafe and no roots are returned.
+      if (hasPromptCommandTransform(tree.rootNode)) {
+        return [];
+      }
       const result = extractCommandNames(tree);
       if (result.length > 0) {
         return result;

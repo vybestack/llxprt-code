@@ -16,7 +16,7 @@ import type { TextBuffer } from './shared/text-buffer.js';
 import type React from 'react';
 
 export { calculatePromptWidths } from './inputPromptText.js';
-export { InputPromptProps } from './inputPromptTypes.js';
+export type { InputPromptProps } from './inputPromptTypes.js';
 
 type InputPromptViewProps = {
   buffer: TextBuffer;

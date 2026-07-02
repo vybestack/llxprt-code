@@ -5,17 +5,9 @@
  */
 
 /**
- * Type declarations for WASM binary imports.
- * These are handled by esbuild's wasm-binary plugin which embeds
- * WASM files as Uint8Array at build time.
+ * Type declarations for WASM binary resources.
+ *
+ * Tree-sitter grammar `.wasm` files are loaded at runtime via
+ * `require.resolve` + `readFileSync` (see `shell-parser.ts`), so no build-time
+ * `?binary` plugin or module augmentation is required.
  */
-
-declare module '*.wasm?binary' {
-  const content: Uint8Array;
-  export default content;
-}
-
-declare module 'tree-sitter-bash/tree-sitter-bash.wasm?binary' {
-  const content: Uint8Array;
-  export default content;
-}

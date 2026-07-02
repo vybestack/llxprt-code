@@ -400,6 +400,19 @@ function check9_antiShim() {
 }
 
 /**
+ * Returns true if the given line exports any moved symbol.
+ * Uses word boundary matching to avoid false positives like
+ * "MCPOAuthTokenStorage" matching "Storage".
+ */
+function lineExportsMovedSymbol(line) {
+  for (const sym of MOVED_SYMBOLS) {
+    const regex = new RegExp(`\\b${sym}\\b`);
+    if (regex.test(line)) return true;
+  }
+  return false;
+}
+
+/**
  * @plan PLAN-20260608-ISSUE1588.P03
  * Check 10: Core re-export scan (post-P09 enforced, report-only before).
  */
@@ -415,13 +428,8 @@ function check10_coreReExports(reportOnly) {
     const lines = content.split('\n');
     for (const line of lines) {
       if (!/^export/.test(line.trim())) continue;
-      for (const sym of MOVED_SYMBOLS) {
-        // Use word boundary matching to avoid false positives like "MCPOAuthTokenStorage" matching "Storage"
-        const regex = new RegExp(`\\b${sym}\\b`);
-        if (regex.test(line)) {
-          violations += `${barrelPath}: ${line.trim()}\n`;
-          break;
-        }
+      if (lineExportsMovedSymbol(line)) {
+        violations += `${barrelPath}: ${line.trim()}\n`;
       }
     }
   }
@@ -706,6 +714,21 @@ function check17_noStoragePackage() {
 }
 
 /**
+ * Collect export lines from barrel content that reference a given symbol.
+ */
+function collectExportLinesForSymbol(content, sym) {
+  const lines = content.split('\n');
+  const result = [];
+  const lineRegex = new RegExp(`\\b${sym}\\b`);
+  for (const line of lines) {
+    if (/^export/.test(line.trim()) && lineRegex.test(line)) {
+      result.push(line.trim());
+    }
+  }
+  return result;
+}
+
+/**
  * @plan PLAN-20260608-ISSUE1588.P03
  * Check 18: Core barrel shim export scan (post-P09 enforced, report-only before).
  */
@@ -718,18 +741,14 @@ function check18_coreBarrelShim(reportOnly) {
   for (const bp of barrelPaths) {
     if (!existsSync(bp)) continue;
     const content = readFileSync(bp, 'utf-8');
-    for (const sym of MOVED_SYMBOLS) {
+    const matchedSym = MOVED_SYMBOLS.find((sym) => {
       const regex = new RegExp(`export.*\\b${sym}\\b`);
-      if (regex.test(content)) {
-        // Find the matching lines
-        const lines = content.split('\n');
-        for (const line of lines) {
-          const lineRegex = new RegExp(`\\b${sym}\\b`);
-          if (/^export/.test(line.trim()) && lineRegex.test(line)) {
-            violations += `${bp}:${line.trim()}\n`;
-          }
-        }
-        break;
+      return regex.test(content);
+    });
+    if (matchedSym !== undefined) {
+      const matchingLines = collectExportLinesForSymbol(content, matchedSym);
+      for (const lineText of matchingLines) {
+        violations += `${bp}:${lineText}\n`;
       }
     }
   }
@@ -815,12 +834,9 @@ function check20_lockfile() {
 }
 
 /**
- * @plan PLAN-20260608-ISSUE1588.P03
- * Main entry point.
+ * Parses --check and --phase flags from CLI args.
  */
-function main() {
-  const args = process.argv.slice(2);
-
+function parseMainArgs(args) {
   let checksToRun = DEFAULT_CHECKS;
   let phase = null;
 
@@ -833,8 +849,75 @@ function main() {
       i++;
     }
   }
+  return { checksToRun, phase };
+}
 
-  // Determine report-only behavior based on phase
+const PRE_P08_CHECKS = ['old-paths', 'vi-mock-paths', 'dynamic-import-paths'];
+const PRE_P09_CHECKS = [
+  'core-re-exports',
+  'modelParams',
+  'modelParams-subpath',
+  'relative-settings-imports',
+  'relative-storage-imports',
+  'core-barrel-shim',
+];
+
+function shouldReportOnly(checkName, isPreP08, isPreP09) {
+  if (isPreP08 && PRE_P08_CHECKS.includes(checkName)) return true;
+  if (isPreP09 && PRE_P09_CHECKS.includes(checkName)) return true;
+  return false;
+}
+
+/**
+ * Maps each check name to a handler function that takes reportOnly
+ * and returns a boolean pass result.
+ */
+const CHECK_HANDLERS = {
+  'source-imports': () => check1_sourceImports(),
+  'all-files-imports': () => check2_allFilesImports(),
+  metadata: () => check3_metadata(),
+  'tsconfig-references': () => check4_tsconfigReferences(),
+  'vitest-aliases': () => check5_vitestAliases(),
+  'export-style': () => check6_exportStyle(),
+  'old-paths': (reportOnly) => check7_oldPaths(reportOnly),
+  'root-barrel': () => check8_rootBarrel(),
+  'anti-shim': () => check9_antiShim(),
+  'core-re-exports': (reportOnly) => check10_coreReExports(reportOnly),
+  modelParams: (reportOnly) => check11_modelParamsSubpath(reportOnly),
+  'modelParams-subpath': (reportOnly) => check11_modelParamsSubpath(reportOnly),
+  'relative-settings-imports': (reportOnly) =>
+    check12_relativeSettingsImports(reportOnly),
+  'relative-storage-imports': (reportOnly) =>
+    check13_relativeStorageImports(reportOnly),
+  'vi-mock-paths': (reportOnly) => check14_viMockPaths(reportOnly),
+  'dynamic-import-paths': (reportOnly) =>
+    check15_dynamicImportPaths(reportOnly),
+  'provider-runtime-context': () => check16_providerRuntimeContext(),
+  'no-storage-package': () => check17_noStoragePackage(),
+  'core-barrel-shim': (reportOnly) => check18_coreBarrelShim(reportOnly),
+  'adapter-single-owner': () => check19_adapterSingleOwner(),
+  lockfile: () => check20_lockfile(),
+};
+
+/**
+ * Dispatches a single check by name, returning its boolean pass result.
+ */
+function runCheckByName(checkName, reportOnly) {
+  const handler = CHECK_HANDLERS[checkName];
+  if (!handler) {
+    console.error(`Unknown check: ${checkName}`);
+    process.exit(1);
+  }
+  return handler(reportOnly);
+}
+
+/**
+ * Main entry point.
+ */
+function main() {
+  const args = process.argv.slice(2);
+  const { checksToRun, phase } = parseMainArgs(args);
+
   const isPreP08 = phase === 'pre-p08' || phase === 'pre-p09';
   const isPreP09 = phase === 'pre-p09';
 
@@ -847,99 +930,8 @@ function main() {
       process.exit(1);
     }
 
-    let reportOnly = false;
-
-    // P08+ checks (7, 14, 15) are report-only before P08
-    if (
-      isPreP08 &&
-      ['old-paths', 'vi-mock-paths', 'dynamic-import-paths'].includes(checkName)
-    ) {
-      reportOnly = true;
-    }
-    // P09+ checks (10, 11, 12, 13, 18) are report-only before P09
-    if (
-      isPreP09 &&
-      [
-        'core-re-exports',
-        'modelParams',
-        'modelParams-subpath',
-        'relative-settings-imports',
-        'relative-storage-imports',
-        'core-barrel-shim',
-      ].includes(checkName)
-    ) {
-      reportOnly = true;
-    }
-
-    let passed;
-    switch (checkName) {
-      case 'source-imports':
-        passed = check1_sourceImports();
-        break;
-      case 'all-files-imports':
-        passed = check2_allFilesImports();
-        break;
-      case 'metadata':
-        passed = check3_metadata();
-        break;
-      case 'tsconfig-references':
-        passed = check4_tsconfigReferences();
-        break;
-      case 'vitest-aliases':
-        passed = check5_vitestAliases();
-        break;
-      case 'export-style':
-        passed = check6_exportStyle();
-        break;
-      case 'old-paths':
-        passed = check7_oldPaths(reportOnly);
-        break;
-      case 'root-barrel':
-        passed = check8_rootBarrel();
-        break;
-      case 'anti-shim':
-        passed = check9_antiShim();
-        break;
-      case 'core-re-exports':
-        passed = check10_coreReExports(reportOnly);
-        break;
-      case 'modelParams':
-        passed = check11_modelParamsSubpath(reportOnly);
-        break;
-      case 'modelParams-subpath':
-        passed = check11_modelParamsSubpath(reportOnly);
-        break;
-      case 'relative-settings-imports':
-        passed = check12_relativeSettingsImports(reportOnly);
-        break;
-      case 'relative-storage-imports':
-        passed = check13_relativeStorageImports(reportOnly);
-        break;
-      case 'vi-mock-paths':
-        passed = check14_viMockPaths(reportOnly);
-        break;
-      case 'dynamic-import-paths':
-        passed = check15_dynamicImportPaths(reportOnly);
-        break;
-      case 'provider-runtime-context':
-        passed = check16_providerRuntimeContext();
-        break;
-      case 'no-storage-package':
-        passed = check17_noStoragePackage();
-        break;
-      case 'core-barrel-shim':
-        passed = check18_coreBarrelShim(reportOnly);
-        break;
-      case 'adapter-single-owner':
-        passed = check19_adapterSingleOwner();
-        break;
-      case 'lockfile':
-        passed = check20_lockfile();
-        break;
-      default:
-        console.error(`Unknown check: ${checkName}`);
-        process.exit(1);
-    }
+    const reportOnly = shouldReportOnly(checkName, isPreP08, isPreP09);
+    const passed = runCheckByName(checkName, reportOnly);
 
     if (!passed && !reportOnly) {
       allPassed = false;

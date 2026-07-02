@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'vitest';
 import EventEmitter from 'events';
 import type { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';
@@ -60,12 +68,17 @@ const mockProcessKill = vi
   .spyOn(process, 'kill')
   .mockImplementation(() => true);
 
+const stubProcessPlatform = (platform: NodeJS.Platform): void => {
+  vi.stubGlobal('process', { ...process, env: process.env, platform });
+};
+
 describe('ShellExecutionService child_process fallback', () => {
   let mockChildProcess: EventEmitter & Partial<ChildProcess>;
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    stubProcessPlatform('linux');
 
     mockIsBinary.mockReturnValue(false);
     mockPlatform.mockReturnValue('linux');
@@ -87,6 +100,10 @@ describe('ShellExecutionService child_process fallback', () => {
     mockChildProcess.once = mockChildProcess.on.bind(mockChildProcess);
 
     mockCpSpawn.mockReturnValue(mockChildProcess);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   // Default shell execution config for tests
@@ -285,6 +302,7 @@ describe('ShellExecutionService child_process fallback', () => {
       ({ platform, expectedSignal, expectedCommand, expectedExit }) => {
         it('should abort a running process and set the aborted flag', async () => {
           mockPlatform.mockReturnValue(platform);
+          stubProcessPlatform(platform as NodeJS.Platform);
 
           const { result } = await simulateExecution(
             'sleep 10',
@@ -432,6 +450,7 @@ describe('ShellExecutionService child_process fallback', () => {
   describe('Platform-Specific Behavior', () => {
     it('should use powershell.exe on Windows', async () => {
       mockPlatform.mockReturnValue('win32');
+      stubProcessPlatform('win32');
       await simulateExecution('dir "foo bar"', (cp) =>
         cp.emit('exit', 0, null),
       );

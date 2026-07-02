@@ -149,7 +149,8 @@ jobs:
       - name: Setup Bun
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
-          bun-version: '1.3.3'
+          # Pin to the single source of truth shared with CI and Docker.
+          bun-version-file: '.bun-version'
 
       - name: Install dependencies
         run: npm ci
@@ -599,6 +600,10 @@ jobs:
           RELEASE_BRANCH: ${{ steps.release_branch.outputs.BRANCH_NAME }}
           VSIX_PATH: ${{ steps.vscode_package.outputs.VSIX_PATH }}
           SHOULD_CREATE_BRANCH: ${{ steps.branch_decision.outputs.should_create_branch }}
+          # Thread version values through env (not inline expansion) to avoid shell
+          # injection if a release version ever carries metacharacters.
+          RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG }}
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
         run: |
           # Determine target for the release: branch if created, otherwise current commit
           if [[ "$SHOULD_CREATE_BRANCH" == "true" && -n "$RELEASE_BRANCH" ]]; then
@@ -607,18 +612,27 @@ jobs:
             TARGET_REF="${{ github.sha }}"
           fi
 
+          # Ship the source-containing CLI npm tarball as the release asset
+          # instead of the esbuild bundle (retired by S4). The tarball is
+          # packed in the "Prepare sandbox package tarballs" step above.
+          CLI_TARBALL="packages/cli/dist/vybestack-llxprt-code-${RELEASE_VERSION}.tgz"
+          if [[ ! -f "$CLI_TARBALL" ]]; then
+            echo "CLI tarball not found at $CLI_TARBALL; cannot create release" >&2
+            exit 1
+          fi
+
           if [[ -n "${VSIX_PATH}" && -f "${VSIX_PATH}" ]]; then
-            gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
-              bundle/llxprt.js \
+            gh release create "$RELEASE_TAG" \
+              "$CLI_TARBALL" \
               "${VSIX_PATH}" \
               --target "$TARGET_REF" \
-              --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
+              --title "Release $RELEASE_TAG" \
               --notes-file release-notes.md
           else
-            gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
-              bundle/llxprt.js \
+            gh release create "$RELEASE_TAG" \
+              "$CLI_TARBALL" \
               --target "$TARGET_REF" \
-              --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
+              --title "Release $RELEASE_TAG" \
               --notes-file release-notes.md
           fi
 

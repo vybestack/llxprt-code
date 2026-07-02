@@ -253,7 +253,7 @@ describe.skipIf(skipInCI)(
      * @when logout command executed
      * @then Command recognized properly
      */
-    it('should handle case sensitivity for logout action', async () => {
+    it('should handle case variations for logout action', async () => {
       const testCases = [
         'gemini logout',
         'gemini LOGOUT',
@@ -266,7 +266,6 @@ describe.skipIf(skipInCI)(
 
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
-
         expect(messageResult.messageType).toBe('info');
         expect(messageResult.content).toContain('Successfully logged out');
       }
@@ -414,7 +413,6 @@ describe.skipIf(skipInCI)(
 
         expect(result.type).toBe('message');
         const messageResult = result as MessageActionReturn;
-
         expect(messageResult.messageType).toBe('info');
         expect(messageResult.content).toContain('Successfully logged out');
       }
@@ -686,7 +684,6 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
 
       expect(result.type).toBe('message');
       const messageResult = result as MessageActionReturn;
-
       expect(messageResult.messageType).toBe('info');
       expect(messageResult.content).toContain('Successfully logged out');
     },

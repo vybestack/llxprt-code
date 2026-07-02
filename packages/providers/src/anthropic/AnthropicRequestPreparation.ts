@@ -11,7 +11,7 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 5)
  */
 
-import { isOpus46Plus } from './AnthropicModelData.js';
+import { supportsAdaptiveThinking } from './AnthropicModelData.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -402,7 +402,7 @@ function mapEffortLevel(
     return undefined;
   }
 
-  const opus46Plus = isOpus46Plus(currentModel);
+  const adaptiveCapable = supportsAdaptiveThinking(currentModel);
 
   if (rawEffort === 'minimal' || rawEffort === 'low') {
     return 'low';
@@ -411,11 +411,11 @@ function mapEffortLevel(
   } else if (rawEffort === 'high') {
     return 'high';
   } else if (rawEffort === 'xhigh') {
-    return opus46Plus ? 'max' : 'high';
+    return adaptiveCapable ? 'max' : 'high';
   }
 
   // rawEffort is 'max' here
-  return opus46Plus ? 'max' : 'high';
+  return adaptiveCapable ? 'max' : 'high';
 }
 
 /**
