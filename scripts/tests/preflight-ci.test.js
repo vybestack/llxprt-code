@@ -168,6 +168,10 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
       'the failing build command must have been dispatched',
     ).toBeGreaterThan(-1);
 
+    // Verify steps before build ran before the failure
+    expect(executedCommands).toContain('npm run format');
+    expect(executedCommands).toContain('npm run lint:ci');
+
     const commandsAfterBuild = executedCommands.slice(buildIndex + 1);
     const notAfterFailure = [
       'npm run typecheck',

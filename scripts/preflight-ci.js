@@ -53,7 +53,7 @@ function run(cmd) {
   }
 }
 
-function runPreflight() {
+export function runPreflight() {
   run('npm run clean');
   run('npm ci');
 
@@ -86,5 +86,3 @@ if (
     process.exit(1);
   }
 }
-
-export { runPreflight };

@@ -514,7 +514,7 @@ describe('.github/workflows/nightly.yml', () => {
 
   function stepNamed(job, name) {
     expect(job?.steps, 'job should have a steps array').toBeDefined();
-    const step = job.steps.find((candidate) => candidate.name === name);
+    const step = job?.steps.find((candidate) => candidate.name === name);
     expect(step, `job should contain step: ${name}`).toBeTruthy();
     return step;
   }
@@ -592,7 +592,7 @@ describe('.github/workflows/nightly.yml', () => {
     const notifyFailureStep = failureNotificationStep();
     const notifyFailureRun = failureNotificationRun();
     expect(notifyFailureJob.permissions?.issues).toBe('write');
-    expect(notifyFailureJob['timeout-minutes']).toBeGreaterThan(0);
+    expect(notifyFailureJob['timeout-minutes']).toBeGreaterThanOrEqual(5);
     expect(notifyFailureStep.shell).toBe('bash');
     expect(notifyFailureRun).toContain('set -euo pipefail');
   });
@@ -637,6 +637,7 @@ describe('.github/workflows/nightly.yml', () => {
     expect(normalizedRun).toContain('for attempt in 1 2 3 4');
     expect(normalizedRun).toContain('All retries exhausted for: $*');
     expect(normalizedRun).toContain('return 1');
+    expect(normalizedRun).toContain('if ! EXISTING_ISSUE=');
     expect(normalizedRun).toContain('retry_gh gh issue list');
     const searchMatch = normalizedRun.match(
       /retry_gh gh issue list.*?--search\s+"((?:\\.|[^"\\])*)"/,
@@ -679,6 +680,8 @@ describe('.github/workflows/nightly.yml', () => {
   });
 
   it('makes the failure notification job depend on all nightly test jobs', () => {
+    // Keep in sync with .github/workflows/nightly.yml — every non-notify job
+    // MUST be listed here, otherwise notify_failure won't fire on its failure.
     const expectedNeeds = ['windows_ci', 'e2e_full', 'behavioral_evals'];
     const actualNeeds = Array.isArray(notifyFailureJob.needs)
       ? notifyFailureJob.needs
