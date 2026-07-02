@@ -27,22 +27,22 @@ import {
   testProviderRuntime,
 } from './MiddleOutStrategy-test-helpers.js';
 
-describe('MiddleOutStrategy empty summary handling', () => {
-  /**
-   * Helper: runs compress and returns the thrown error, asserting it throws.
-   */
-  async function captureCompressError(
-    ctx: Parameters<MiddleOutStrategy['compress']>[0],
-  ): Promise<unknown> {
-    const strategy = new MiddleOutStrategy();
-    try {
-      await strategy.compress(ctx);
-      throw new Error('Expected compress() to throw but it did not');
-    } catch (error) {
-      return error;
-    }
+/**
+ * Helper: runs compress and returns the thrown error, asserting it throws.
+ */
+async function captureCompressError(
+  ctx: Parameters<MiddleOutStrategy['compress']>[0],
+): Promise<unknown> {
+  const strategy = new MiddleOutStrategy();
+  try {
+    await strategy.compress(ctx);
+    throw new Error('Expected compress() to throw but it did not');
+  } catch (error) {
+    return error;
   }
+}
 
+describe('MiddleOutStrategy empty summary handling', () => {
   it('throws EmptySummaryError when LLM returns empty summary', async () => {
     const emptyProvider = createFakeProvider('empty-provider', '');
     const history = generateHistory(20);
@@ -126,14 +126,7 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
       }),
     });
 
-    const strategy = new MiddleOutStrategy();
-    let thrownError: unknown;
-    try {
-      await strategy.compress(ctx);
-      throw new Error('Expected compress() to throw but it did not');
-    } catch (error) {
-      thrownError = error;
-    }
+    const thrownError = await captureCompressError(ctx);
 
     expect(thrownError).toBeInstanceOf(EmptySummaryError);
     const emptyError = thrownError as EmptySummaryError;

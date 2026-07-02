@@ -304,6 +304,15 @@ export class OneShotStrategy implements CompressionStrategy {
     };
   }> {
     const providerRuntime = resolvedRuntime;
+    // Declared above the try block so partial diagnostics are available
+    // to the catch handler when a mid-stream error interrupts the loop.
+    let summary = '';
+    let lastBlockWasNonText = false;
+    let capturedUsage: UsageStats | undefined;
+    let finishReason: string | undefined;
+    let stopReason: string | undefined;
+    const blockTypeCounts: Record<string, number> = {};
+
     try {
       const stream = provider.generateChatCompletion({
         contents: request,
@@ -320,13 +329,6 @@ export class OneShotStrategy implements CompressionStrategy {
           source: 'OneShotStrategy.callProvider',
         },
       });
-
-      let summary = '';
-      let lastBlockWasNonText = false;
-      let capturedUsage: UsageStats | undefined;
-      let finishReason: string | undefined;
-      let stopReason: string | undefined;
-      const blockTypeCounts: Record<string, number> = {};
 
       for await (const chunk of stream) {
         for (const block of chunk.blocks) {
@@ -356,9 +358,13 @@ export class OneShotStrategy implements CompressionStrategy {
         diagnostics: { finishReason, stopReason, blockTypeCounts },
       };
     } catch (error) {
+      const blocksSummary =
+        Object.entries(blockTypeCounts)
+          .map(([type, count]) => `${type}:${count}`)
+          .join(',') || 'none';
       throw new CompressionExecutionError(
         'one-shot',
-        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)}`,
+        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${finishReason ?? 'none'}, blocks=${blocksSummary}]`,
         { isTransient: isTransientCompressionError(error) },
       );
     }

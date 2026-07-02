@@ -332,6 +332,26 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
   });
 
   /**
+   * response.failed events without an error object must still throw using
+   * the fallback message.
+   */
+  it('throws fallback message on response.failed event with no error payload', async () => {
+    const chunks = [
+      'data: {"type":"response.failed","response":{"id":"r1","object":"response","model":"gpt-4o","status":"failed"}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const iterator = parseResponsesStream(stream);
+
+    await expect(async () => {
+      for await (const _message of iterator) {
+        // drain
+      }
+    }).rejects.toThrow('OpenAI Responses API stream failed');
+  });
+
+  /**
    * response.incomplete events should NOT throw — partial content may be
    * useful. Instead, terminal metadata (usage, stopReason) is yielded.
    * The `incomplete` status maps to `max_tokens` stopReason.
@@ -354,5 +374,31 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     expect(usageMessage).toBeDefined();
     expect(usageMessage?.metadata?.stopReason).toBe('max_tokens');
     expect(usageMessage?.metadata?.finishReason).toBe('incomplete');
+  });
+
+  /**
+   * response.incomplete without usage should NOT throw and should complete
+   * normally, yielding the text delta but no usage metadata message.
+   */
+  it('completes normally for response.incomplete with no usage object', async () => {
+    const chunks = [
+      'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+      'data: {"type":"response.incomplete","response":{"id":"r1","object":"response","model":"gpt-4o","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages.push(message);
+    }
+
+    // The text delta was yielded; no usage metadata message is present.
+    expect(messages).toHaveLength(1);
+    expect(messages[0].blocks).toStrictEqual([
+      { type: 'text', text: 'partial' },
+    ]);
+    expect(messages.find((m) => m.metadata?.usage)).toBeUndefined();
   });
 });

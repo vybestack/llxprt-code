@@ -361,12 +361,12 @@ function* handleFunctionCallDone(
  * or top-level `error` events. Uses createStreamInterruptionError so the error
  * is classified as transient/retryable (server-side failures should be retried).
  */
-function throwTerminalStreamError(
+function createTerminalStreamError(
   errorPayload: ResponsesApiError | undefined,
   responseStatus?: string | number,
-): never {
+): Error {
   const message = errorPayload?.message ?? 'OpenAI Responses API stream failed';
-  throw createStreamInterruptionError(message, {
+  return createStreamInterruptionError(message, {
     providerError: errorPayload,
     responseStatus,
   });
@@ -424,11 +424,18 @@ function* handleResponseCompleted(
 
   // Usage data
   const terminalReason = event.response?.status ?? 'completed';
+  const incompleteReason =
+    terminalReason === 'incomplete'
+      ? event.response?.incomplete_details?.reason
+      : undefined;
 
   // Defensive: some implementations send failure via response.completed with
   // status "failed" rather than a standalone response.failed event.
   if (terminalReason === 'failed') {
-    throwTerminalStreamError(event.response?.error, event.response?.status);
+    throw createTerminalStreamError(
+      event.response?.error,
+      event.response?.status,
+    );
   }
 
   if (event.response?.usage) {
@@ -445,6 +452,7 @@ function* handleResponseCompleted(
         },
         stopReason: mapFinishReasonToStopReason(terminalReason),
         finishReason: terminalReason,
+        ...(incompleteReason ? { incompleteReason } : {}),
       },
     };
   }
@@ -648,14 +656,12 @@ function* dispatchEventCases(
       );
       break;
     case 'response.failed':
-      throwTerminalStreamError(
+      throw createTerminalStreamError(
         event.response?.error ?? event.error,
         event.response?.status,
       );
-      break;
     case 'error':
-      throwTerminalStreamError(event.error);
-      break;
+      throw createTerminalStreamError(event.error);
     default:
       break;
   }
