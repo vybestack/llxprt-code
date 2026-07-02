@@ -342,7 +342,8 @@ bun install
 bun run auth
 bun run prerelease:dev
 for package_dir in packages/*; do
-  if [ -f "${package_dir}/package.json" ]; then
+  if [ -f "${package_dir}/package.json" ] && \
+    [ "$(node -p "require('./${package_dir}/package.json').private === true ? 'true' : 'false'")" != "true" ]; then
     (cd "${package_dir}" && bun publish)
   fi
 done
