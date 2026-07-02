@@ -304,7 +304,7 @@ bun run typecheck
 
 ### Windows pty Behavior
 
-On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level and uses `@lydell/node-pty` (with `node-pty` as fallback) — **not** the Bun adapter. The `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is POSIX-only and is not used on Windows. If you encounter terminal sizing or resize issues on Windows, ensure you are using a recent Bun version and a compatible terminal emulator.
+On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level and uses `@lydell/node-pty` (with `node-pty` as fallback) — **not** the Bun adapter. The `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is POSIX-only and is not used on Windows. If you encounter terminal sizing or resize issues on Windows, use a compatible terminal emulator; the resize race is in `node-pty` itself, not the Bun runtime.
 
 ## See Also
 
