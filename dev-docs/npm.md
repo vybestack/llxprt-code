@@ -6,13 +6,13 @@ This monorepo contains two main packages: `@vybestack/llxprt-code` and `@vybesta
 
 This is the main package for the LLxprt Code. It is responsible for the user interface, command parsing, and all other user-facing functionality.
 
-LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's run path uses the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`) to execute the TypeScript (`.ts`) entry point directly — no pre-compiled `dist/` artifact is required for the CLI to run. Type checking uses `tsc --noEmit` (no JavaScript output is produced). However, the published npm package still ships `dist` (produced by `tsc` during the build) for Node.js compatibility. The esbuild bundle artifact has been retired; releases now ship the compiled `dist` entry plus TypeScript source for the Bun launcher.
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. The published package ships a checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) as its `bin` entry: Node starts the launcher, the launcher resolves Bun (from the package's own `bun` dependency or `PATH`), and Bun executes the TypeScript (`.ts`) entry point directly. No compilation to JavaScript happens at install or run time, and no pre-compiled `dist/` artifact is shipped or required. Type checking uses `tsc --noEmit`. The esbuild bundle artifact has been retired.
 
 ## `@vybestack/llxprt-code-core`
 
 This package contains the core logic for interacting with the Gemini API. It is responsible for making API requests, handling authentication, and managing the local cache.
 
-This package is not bundled. When it is published, it is published as a standard Node.js package with its own dependencies. This allows it to be used as a standalone package in other projects, if needed. All transpiled js code in the `dist` folder is included in the package.
+This package is not bundled. When it is published, it is published as a standard npm package with its own dependencies. This allows it to be used as a standalone package in other projects, if needed. The package ships its TypeScript source (`index.ts`, `src/`), which Bun consumers resolve directly via the `bun` export condition.
 
 Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 
@@ -165,9 +165,9 @@ By performing a dry run, you can be confident that your changes to the packaging
 
 ## Release Deep Dive
 
-The main goal of the release process is to take the source code from the packages/ directory, build it, and publish the
-CLI package with its compiled `dist/` entry plus the TypeScript sources executed by the Bun launcher. The retired
-`bundle/llxprt.js` artifact is no longer produced.
+The main goal of the release process is to take the source code from the packages/ directory, validate it, and publish
+the CLI package with its checked-in Node launcher (`bin/llxprt.cjs`) plus the TypeScript sources executed by Bun. No
+compilation step is required for the published package; the retired `bundle/llxprt.js` artifact is no longer produced.
 
 Here are the key stages:
 
@@ -179,13 +179,14 @@ Stage 1: Pre-Release Sanity Checks and Versioning
 - Why: This guarantees that only high-quality, working code is released. Versioning is the first step to signify a new
   release.
 
-Stage 2: Building the Source Code
+Stage 2: Validating the Source Code
 
-- What happens: The TypeScript source code (`.ts`) is compiled into JavaScript by `tsc`. The CLI's run path uses the Bun launcher to execute the `.ts` entry point directly, but the published npm package still ships `dist/` for Node.js compatibility. Type checking uses `tsc --noEmit` (no JavaScript output is produced).
-- File movement:
-  - packages/core/src/\*_/_.ts -> compiled to -> packages/core/dist/
-  - packages/cli/src/\*_/_.ts -> compiled to -> packages/cli/dist/
-- Why: The TypeScript code is compiled into JavaScript for the published npm package (`dist/`) and for type-checking. The core package is built first as the cli package depends on it. The CLI run path uses the Bun launcher to execute `.ts` directly, but `dist/` is still produced and shipped for Node.js compatibility.
+- What happens: The TypeScript source code (`.ts`) is type-checked with `tsc --noEmit`. No JavaScript is emitted for the
+  published package — the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun at run time and Bun
+  executes the TypeScript sources directly. Development builds may still produce local `dist/` output for tooling, but the
+  published package does not depend on it.
+- Why: The published package ships TypeScript source, so correctness is enforced by type-checking and tests rather than a
+  compilation step.
 
 Stage 3: Preparing the Final Publishable Package
 
@@ -193,13 +194,14 @@ This is the stage where the CLI package is prepared for publishing.
 
 1.  The workspace package metadata is validated and transformed as needed:
     - What happens: release scripts ensure the package metadata, dependency ranges, bin, main, and files fields point at
-      the compiled `dist/` entry and the shipped TypeScript sources used by the Bun launcher.
+      the checked-in launcher (`bin/llxprt.cjs`) and the shipped TypeScript sources executed by Bun.
     - Why: The final package must not expose development-only dependencies while still containing the runtime assets needed
       by npm/npx/Homebrew users.
 
 2.  Runtime files are included from the package `files` allowlist:
-    - What happens: `packages/cli/package.json` ships `dist`, `src`, and `index.ts` while excluding tests and snapshots.
-    - Why: `dist/index.js` is the Node-compatible launcher entry; the Bun launcher executes the TypeScript source at runtime.
+    - What happens: `packages/cli/package.json` ships `bin`, `src`, and `index.ts` while excluding tests and snapshots.
+    - Why: `bin/llxprt.cjs` is the Node-compatible launcher entry; it re-execs Bun, which runs the TypeScript source
+      directly.
 
 Stage 4: Publishing to NPM
 

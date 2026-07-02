@@ -73,6 +73,15 @@ function isSpawnableUnixCandidate(path) {
 }
 
 function resolveEntry() {
+  // The launcher always lives at <package root>/bin/llxprt.cjs, so the
+  // package's own entry point is a sibling of this file's directory. This
+  // covers the published standalone package layout, where the install
+  // directory is named after the package (not "cli").
+  const packageRootEntry = join(dirname(__dirname), 'index.ts');
+  if (isFile(packageRootEntry)) {
+    return packageRootEntry;
+  }
+
   for (const dir of ancestors(__dirname)) {
     const packageEntry = join(dir, 'index.ts');
     if (isFile(packageEntry) && basename(dir) === 'cli') {
@@ -92,7 +101,12 @@ function bunNames() {
 }
 
 function directBunNames() {
-  return process.platform === 'win32' ? ['bun.exe', 'bun.cmd'] : ['bun.exe'];
+  // The bun npm package ships its binary as bun.exe on every platform (the
+  // postinstall replaces the placeholder in-place), but check the bare name
+  // too in case a future version drops the .exe suffix on Unix.
+  return process.platform === 'win32'
+    ? ['bun.exe', 'bun.cmd']
+    : ['bun.exe', 'bun'];
 }
 
 function resolveBunFromNodeModules() {

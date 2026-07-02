@@ -226,9 +226,6 @@
       "bun": "./src/test-utils/runtime.ts",
       "import": "./dist/src/test-utils/runtime.js"
     },
-    "./types/modelParams.js": {
-      "import": "./dist/src/types/modelParams.js"
-    },
     "./utils/debugLogger.js": {
       "bun": "./src/utils/debugLogger.ts",
       "import": "./dist/src/utils/debugLogger.js"
@@ -365,9 +362,6 @@
       "bun": "./src/hooks/types.ts",
       "import": "./dist/src/hooks/types.js"
     },
-    "./ide/ideContext.js": {
-      "import": "./dist/src/ide/ideContext.js"
-    },
     "./policy/policy-engine.js": {
       "bun": "./src/policy/policy-engine.ts",
       "import": "./dist/src/policy/policy-engine.js"
@@ -427,48 +421,6 @@
     "./skills/skillManager.js": {
       "bun": "./src/skills/skillManager.ts",
       "import": "./dist/src/skills/skillManager.js"
-    },
-    "./tools/glob.js": {
-      "import": "./dist/src/tools/glob.js"
-    },
-    "./tools/google-web-search.js": {
-      "import": "./dist/src/tools/google-web-search.js"
-    },
-    "./tools/grep.js": {
-      "import": "./dist/src/tools/grep.js"
-    },
-    "./tools/ls.js": {
-      "import": "./dist/src/tools/ls.js"
-    },
-    "./tools/mediaUtils.js": {
-      "import": "./dist/src/tools/mediaUtils.js"
-    },
-    "./tools/memoryTool.js": {
-      "import": "./dist/src/tools/memoryTool.js"
-    },
-    "./tools/modifiable-tool.js": {
-      "import": "./dist/src/tools/modifiable-tool.js"
-    },
-    "./tools/read-file.js": {
-      "import": "./dist/src/tools/read-file.js"
-    },
-    "./tools/read-many-files.js": {
-      "import": "./dist/src/tools/read-many-files.js"
-    },
-    "./tools/ripGrep.js": {
-      "import": "./dist/src/tools/ripGrep.js"
-    },
-    "./tools/todo-schemas.js": {
-      "import": "./dist/src/tools/todo-schemas.js"
-    },
-    "./tools/todo-store.js": {
-      "import": "./dist/src/tools/todo-store.js"
-    },
-    "./tools/tool-confirmation-types.js": {
-      "import": "./dist/src/tools/tool-confirmation-types.js"
-    },
-    "./tools/tool-context.js": {
-      "import": "./dist/src/tools/tool-context.js"
     },
     "./utils/asyncIterator.js": {
       "bun": "./src/utils/asyncIterator.ts",
@@ -562,8 +514,6 @@
     "@google/genai": "1.30.0",
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.25.2",
-    "@types/glob": "^8.1.0",
-    "@types/html-to-text": "^9.0.4",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "@xterm/headless": "5.5.0",
     "ai": "^5.0.104",
@@ -615,6 +565,7 @@
     "@types/debug": "^4.1.12",
     "@types/diff": "^7.0.2",
     "@types/fast-levenshtein": "^0.0.4",
+    "@types/html-to-text": "^9.0.4",
     "@types/js-yaml": "^4.0.9",
     "@types/minimatch": "^5.1.2",
     "@types/node": "^24.2.1",
