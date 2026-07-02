@@ -242,7 +242,7 @@ silently passing on an unresolvable dynamic path.
 
 - **`postinstall.cjs`** normally does two npm-specific things: it strips
   unsupported `"peer": true` flags from `package-lock.json`, and — on a
-  bundle-less GitHub-source checkout —   it bootstraps a build by shelling out to
+  bundle-less GitHub-source checkout — it bootstraps a build by shelling out to
   `npm install --workspaces` and `npm run build`. **Under
   Bun both must be skipped:** Bun does not consume `package-lock.json` (so
   mutating it would be wrong), and the bootstrap shells out to npm, which would
