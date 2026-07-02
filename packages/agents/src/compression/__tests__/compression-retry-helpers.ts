@@ -14,7 +14,11 @@
  */
 
 import { vi } from 'vitest';
-import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  EmptySummaryError,
+  type CompressionContext,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
 import type { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -183,18 +187,21 @@ export function mockStrategyFactoryWithEmptySummaryFallback(): {
           name: 'top-down-truncation' as const,
           requiresLLM: false,
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-          compress: vi.fn().mockImplementation(async () => {
-            fallbackCalled = true;
-            return {
-              newHistory: [],
-              metadata: {
-                originalMessageCount: 10,
-                compressedMessageCount: 5,
-                strategyUsed: 'top-down-truncation' as const,
-                llmCallMade: false,
-              },
-            };
-          }),
+          compress: vi
+            .fn()
+            .mockImplementation(async (context: CompressionContext) => {
+              fallbackCalled = true;
+              const newHistory: IContent[] = [];
+              return {
+                newHistory,
+                metadata: {
+                  originalMessageCount: context.history.length,
+                  compressedMessageCount: newHistory.length,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              };
+            }),
         };
       }
       return {
