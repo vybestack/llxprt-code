@@ -191,7 +191,12 @@ export function mockStrategyFactoryWithEmptySummaryFallback(): {
             .fn()
             .mockImplementation(async (context: CompressionContext) => {
               fallbackCalled = true;
-              const newHistory: IContent[] = [];
+              const newHistory: IContent[] = [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: 'mock truncated summary' }],
+                },
+              ];
               return {
                 newHistory,
                 metadata: {

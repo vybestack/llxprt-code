@@ -470,6 +470,21 @@ describe('isFallbackEligibleCompressionError @plan PLAN-20260218-COMPRESSION-RET
     expect(isFallbackEligibleCompressionError(makeHttpError(401))).toBe(false);
   });
 
+  it('returns false for generic programming error (permanent)', () => {
+    const err = new TypeError('Cannot read property of undefined');
+    expect(isFallbackEligibleCompressionError(err)).toBe(false);
+  });
+
+  it('returns false for null', () => {
+    expect(isFallbackEligibleCompressionError(null)).toBe(false);
+  });
+
+  it('returns false for string error', () => {
+    expect(isFallbackEligibleCompressionError('some error message')).toBe(
+      false,
+    );
+  });
+
   /**
    * Verify EmptySummaryError transience classification is unchanged — it must
    * stay non-transient / non-retryable; only fallback-eligibility changes.

@@ -309,6 +309,10 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
       mockStrategyFactoryWithEmptySummaryFallback();
 
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+    const historyService = chat.getHistoryService();
+    // ChatSession's constructor re-wraps historyService.add with a density
+    // tracker, so spy on it here to observe calls applied during compression.
+    const addSpy = vi.spyOn(historyService, 'add');
 
     // performCompression should resolve (COMPRESSED) via fallback, not reject
     await expect(chat.performCompression('test-prompt')).resolves.toBe(
@@ -317,6 +321,17 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
     expect(getFallbackCalled()).toBe(true);
     // Empty summary is non-retryable — primary must be called exactly once
     expect(getPrimaryCallCount()).toBe(1);
+
+    // The fallback's truncated summary must actually be applied to the session
+    // history (clear + add), not just returned by the mock.
+    expect(historyService.clear).toHaveBeenCalledTimes(1);
+    expect(addSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'mock truncated summary' }],
+      }),
+      expect.any(String),
+    );
   });
 
   /**
@@ -335,6 +350,10 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
       mockStrategyFactoryWithEmptySummaryFallback();
 
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+    const historyService = chat.getHistoryService();
+    // ChatSession's constructor re-wraps historyService.add with a density
+    // tracker, so spy on it here to observe calls applied during compression.
+    const addSpy = vi.spyOn(historyService, 'add');
 
     // The threshold-triggered auto-compression path must resolve (not reject)
     // and apply the truncation fallback.
@@ -344,5 +363,16 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
     expect(getFallbackCalled()).toBe(true);
     // Empty summary is non-retryable — primary must be called exactly once
     expect(getPrimaryCallCount()).toBe(1);
+
+    // The fallback's truncated summary must actually be applied to the session
+    // history (clear + add), not just returned by the mock.
+    expect(historyService.clear).toHaveBeenCalledTimes(1);
+    expect(addSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'mock truncated summary' }],
+      }),
+      expect.any(String),
+    );
   });
 });
