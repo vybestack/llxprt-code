@@ -220,24 +220,25 @@ graph TD
     end
 
     subgraph "Process"
-        D["Build (tsc → dist/)"]
-        E["Transform package.json"]
-        F["Assemble bundle/"]
+        D["Typecheck (tsc --noEmit)"]
+        E["Package source + launcher"]
+        F["npm pack"]
         G["Publish"]
     end
 
     subgraph "Artifacts"
-        H["packages/cli/dist/index.js"]
-        I["Final package.json"]
-        J["bundle/"]
+        H["packages/cli/bin/llxprt.cjs"]
+        I["TypeScript source packages"]
+        J["npm tarball"]
     end
 
     subgraph "Destination"
         K["NPM Registry"]
     end
 
-    A --> D --> H
-    B --> E --> I
+    A --> D
+    A --> E --> I
+    B --> E --> H
     C --> F
     H --> F
     I --> F

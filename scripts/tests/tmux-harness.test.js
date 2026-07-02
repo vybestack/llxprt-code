@@ -206,12 +206,12 @@ describe('resolveStartArgsForTmux', () => {
       resolveStartArgsForTmux([
         'node',
         'scripts/start.js',
-        'NODE_OPTIONS= ${node} packages/cli/dist/index.js',
+        'NODE_OPTIONS= ${node} packages/cli/bin/llxprt.cjs',
       ]),
     ).toEqual([
       process.execPath,
       'scripts/start.js',
-      `NODE_OPTIONS= ${process.execPath} packages/cli/dist/index.js`,
+      `NODE_OPTIONS= ${process.execPath} packages/cli/bin/llxprt.cjs`,
     ]);
   });
 });
@@ -225,9 +225,9 @@ describe('buildTmuxStartCommand', () => {
 
     expect(
       buildTmuxStartCommand([
-        'NODE_OPTIONS= ${node} packages/cli/dist/index.js',
+        'NODE_OPTIONS= ${node} packages/cli/bin/llxprt.cjs',
       ]),
-    ).toBe(`NODE_OPTIONS= ${process.execPath} packages/cli/dist/index.js`);
+    ).toBe(`NODE_OPTIONS= ${process.execPath} packages/cli/bin/llxprt.cjs`);
   });
 
   it('shell-quotes multi-argument commands after resolving node', async () => {

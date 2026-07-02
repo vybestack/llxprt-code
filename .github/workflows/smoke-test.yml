@@ -35,7 +35,7 @@ jobs:
       - name: 'Build project'
         run: 'npm run build'
       - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
-        run: 'node ./packages/cli/dist/index.js --version'
+        run: 'node ./packages/cli/bin/llxprt.cjs --version'
       - name: 'Create Issue on Failure'
         if: '${{ failure() && github.event.inputs.dry-run == false }}'
         env:

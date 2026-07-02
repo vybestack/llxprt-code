@@ -13,122 +13,201 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
       "import": "./dist/index.js"
     },
     "./auth.js": {
       "types": "./dist/src/auth/index.d.ts",
+      "bun": "./src/auth/index.ts",
       "import": "./dist/src/auth/index.js"
     },
     "./composition.js": {
       "types": "./dist/src/composition/index.d.ts",
+      "bun": "./src/composition/index.ts",
       "import": "./dist/src/composition/index.js"
     },
     "./composition/providerManagerInstance.js": {
       "types": "./dist/src/composition/providerManagerInstance.d.ts",
+      "bun": "./src/composition/providerManagerInstance.ts",
       "import": "./dist/src/composition/providerManagerInstance.js"
     },
     "./composition/providerAliases.js": {
       "types": "./dist/src/composition/providerAliases.d.ts",
+      "bun": "./src/composition/providerAliases.ts",
       "import": "./dist/src/composition/providerAliases.js"
     },
     "./composition/oauth-provider-registration.js": {
       "types": "./dist/src/composition/oauth-provider-registration.d.ts",
+      "bun": "./src/composition/oauth-provider-registration.ts",
       "import": "./dist/src/composition/oauth-provider-registration.js"
     },
     "./composition/IFileSystem.js": {
       "types": "./dist/src/composition/IFileSystem.d.ts",
+      "bun": "./src/composition/IFileSystem.ts",
       "import": "./dist/src/composition/IFileSystem.js"
     },
     "./runtime.js": {
       "types": "./dist/src/runtime/index.d.ts",
+      "bun": "./src/runtime/index.ts",
       "import": "./dist/src/runtime/index.js"
     },
     "./runtime/runtimeSettings.js": {
       "types": "./dist/src/runtime/runtimeSettings.d.ts",
+      "bun": "./src/runtime/runtimeSettings.ts",
       "import": "./dist/src/runtime/runtimeSettings.js"
     },
     "./runtime/runtimeAccessors.js": {
       "types": "./dist/src/runtime/runtimeAccessors.d.ts",
+      "bun": "./src/runtime/runtimeAccessors.ts",
       "import": "./dist/src/runtime/runtimeAccessors.js"
     },
     "./runtime/runtimeLifecycle.js": {
       "types": "./dist/src/runtime/runtimeLifecycle.d.ts",
+      "bun": "./src/runtime/runtimeLifecycle.ts",
       "import": "./dist/src/runtime/runtimeLifecycle.js"
     },
     "./runtime/runtimeRegistry.js": {
       "types": "./dist/src/runtime/runtimeRegistry.d.ts",
+      "bun": "./src/runtime/runtimeRegistry.ts",
       "import": "./dist/src/runtime/runtimeRegistry.js"
     },
     "./runtime/runtimeContextFactory.js": {
       "types": "./dist/src/runtime/runtimeContextFactory.d.ts",
+      "bun": "./src/runtime/runtimeContextFactory.ts",
       "import": "./dist/src/runtime/runtimeContextFactory.js"
     },
     "./runtime/providerSwitch.js": {
       "types": "./dist/src/runtime/providerSwitch.d.ts",
+      "bun": "./src/runtime/providerSwitch.ts",
       "import": "./dist/src/runtime/providerSwitch.js"
     },
     "./runtime/providerMutations.js": {
       "types": "./dist/src/runtime/providerMutations.d.ts",
+      "bun": "./src/runtime/providerMutations.ts",
       "import": "./dist/src/runtime/providerMutations.js"
     },
     "./runtime/providerConfigUtils.js": {
       "types": "./dist/src/runtime/providerConfigUtils.d.ts",
+      "bun": "./src/runtime/providerConfigUtils.ts",
       "import": "./dist/src/runtime/providerConfigUtils.js"
     },
     "./runtime/profileSnapshot.js": {
       "types": "./dist/src/runtime/profileSnapshot.d.ts",
+      "bun": "./src/runtime/profileSnapshot.ts",
       "import": "./dist/src/runtime/profileSnapshot.js"
     },
     "./runtime/profileApplication.js": {
       "types": "./dist/src/runtime/profileApplication.d.ts",
+      "bun": "./src/runtime/profileApplication.ts",
       "import": "./dist/src/runtime/profileApplication.js"
     },
     "./runtime/settingsResolver.js": {
       "types": "./dist/src/runtime/settingsResolver.d.ts",
+      "bun": "./src/runtime/settingsResolver.ts",
       "import": "./dist/src/runtime/settingsResolver.js"
     },
     "./runtime/statelessHardening.js": {
       "types": "./dist/src/runtime/statelessHardening.d.ts",
+      "bun": "./src/runtime/statelessHardening.ts",
       "import": "./dist/src/runtime/statelessHardening.js"
     },
     "./runtime/bucketFailover.js": {
       "types": "./dist/src/runtime/bucketFailover.d.ts",
+      "bun": "./src/runtime/bucketFailover.ts",
       "import": "./dist/src/runtime/bucketFailover.js"
     },
     "./runtime/messages.js": {
       "types": "./dist/src/runtime/messages.d.ts",
+      "bun": "./src/runtime/messages.ts",
       "import": "./dist/src/runtime/messages.js"
     },
     "./runtime/cliEphemeralSettings.js": {
       "types": "./dist/src/runtime/cliEphemeralSettings.d.ts",
+      "bun": "./src/runtime/cliEphemeralSettings.ts",
       "import": "./dist/src/runtime/cliEphemeralSettings.js"
     },
     "./runtime/ephemeralSettings.js": {
       "types": "./dist/src/runtime/ephemeralSettings.d.ts",
+      "bun": "./src/runtime/ephemeralSettings.ts",
       "import": "./dist/src/runtime/ephemeralSettings.js"
     },
     "./runtime/modelParamParser.js": {
       "types": "./dist/src/runtime/modelParamParser.d.ts",
+      "bun": "./src/runtime/modelParamParser.ts",
       "import": "./dist/src/runtime/modelParamParser.js"
     },
-    "./BaseProvider.js": "./dist/src/BaseProvider.js",
-    "./IModel.js": "./dist/src/IModel.js",
-    "./IProvider.js": "./dist/src/IProvider.js",
-    "./IProviderManager.js": "./dist/src/IProviderManager.js",
-    "./ITool.js": "./dist/src/ITool.js",
-    "./LoggingProviderWrapper.js": "./dist/src/LoggingProviderWrapper.js",
-    "./ProviderContentGenerator.js": "./dist/src/ProviderContentGenerator.js",
-    "./ProviderManager.js": "./dist/src/ProviderManager.js",
-    "./logging/ProviderPerformanceTracker.js": "./dist/src/logging/ProviderPerformanceTracker.js",
-    "./providerConfigKeys.js": "./dist/src/providerConfigKeys.js",
-    "./reasoning/reasoningUtils.js": "./dist/src/reasoning/reasoningUtils.js",
-    "./tokenizers/AnthropicTokenizer.js": "./dist/src/tokenizers/AnthropicTokenizer.js",
-    "./tokenizers/ITokenizer.js": "./dist/src/tokenizers/ITokenizer.js",
-    "./tokenizers/OpenAITokenizer.js": "./dist/src/tokenizers/OpenAITokenizer.js",
-    "./types.js": "./dist/src/types.js",
-    "./types/IProviderConfig.js": "./dist/src/types/IProviderConfig.js",
-    "./types/providerRuntime.js": "./dist/src/types/providerRuntime.js",
-    "./utils/mediaUtils.js": "./dist/src/utils/mediaUtils.js"
+    "./BaseProvider.js": {
+      "bun": "./src/BaseProvider.ts",
+      "import": "./dist/src/BaseProvider.js"
+    },
+    "./IModel.js": {
+      "bun": "./src/IModel.ts",
+      "import": "./dist/src/IModel.js"
+    },
+    "./IProvider.js": {
+      "bun": "./src/IProvider.ts",
+      "import": "./dist/src/IProvider.js"
+    },
+    "./IProviderManager.js": {
+      "bun": "./src/IProviderManager.ts",
+      "import": "./dist/src/IProviderManager.js"
+    },
+    "./ITool.js": {
+      "bun": "./src/ITool.ts",
+      "import": "./dist/src/ITool.js"
+    },
+    "./LoggingProviderWrapper.js": {
+      "bun": "./src/LoggingProviderWrapper.ts",
+      "import": "./dist/src/LoggingProviderWrapper.js"
+    },
+    "./ProviderContentGenerator.js": {
+      "bun": "./src/ProviderContentGenerator.ts",
+      "import": "./dist/src/ProviderContentGenerator.js"
+    },
+    "./ProviderManager.js": {
+      "bun": "./src/ProviderManager.ts",
+      "import": "./dist/src/ProviderManager.js"
+    },
+    "./logging/ProviderPerformanceTracker.js": {
+      "bun": "./src/logging/ProviderPerformanceTracker.ts",
+      "import": "./dist/src/logging/ProviderPerformanceTracker.js"
+    },
+    "./providerConfigKeys.js": {
+      "bun": "./src/providerConfigKeys.ts",
+      "import": "./dist/src/providerConfigKeys.js"
+    },
+    "./reasoning/reasoningUtils.js": {
+      "bun": "./src/reasoning/reasoningUtils.ts",
+      "import": "./dist/src/reasoning/reasoningUtils.js"
+    },
+    "./tokenizers/AnthropicTokenizer.js": {
+      "bun": "./src/tokenizers/AnthropicTokenizer.ts",
+      "import": "./dist/src/tokenizers/AnthropicTokenizer.js"
+    },
+    "./tokenizers/ITokenizer.js": {
+      "bun": "./src/tokenizers/ITokenizer.ts",
+      "import": "./dist/src/tokenizers/ITokenizer.js"
+    },
+    "./tokenizers/OpenAITokenizer.js": {
+      "bun": "./src/tokenizers/OpenAITokenizer.ts",
+      "import": "./dist/src/tokenizers/OpenAITokenizer.js"
+    },
+    "./types.js": {
+      "bun": "./src/types.ts",
+      "import": "./dist/src/types.js"
+    },
+    "./types/IProviderConfig.js": {
+      "bun": "./src/types/IProviderConfig.ts",
+      "import": "./dist/src/types/IProviderConfig.js"
+    },
+    "./types/providerRuntime.js": {
+      "bun": "./src/types/providerRuntime.ts",
+      "import": "./dist/src/types/providerRuntime.js"
+    },
+    "./utils/mediaUtils.js": {
+      "bun": "./src/utils/mediaUtils.ts",
+      "import": "./dist/src/utils/mediaUtils.js"
+    }
   },
   "scripts": {
     "build": "node ../../scripts/build_package.js",
@@ -139,6 +218,14 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
     "dist"
   ],
   "dependencies": {

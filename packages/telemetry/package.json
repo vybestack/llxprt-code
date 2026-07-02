@@ -13,27 +13,85 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
       "import": "./dist/index.js"
     },
-    "./debug/index.js": "./dist/src/debug/index.js",
-    "./debug/DebugLogger.js": "./dist/src/debug/DebugLogger.js",
-    "./debug/ConfigurationManager.js": "./dist/src/debug/ConfigurationManager.js",
-    "./debug/FileOutput.js": "./dist/src/debug/FileOutput.js",
-    "./debug/MockConfigurationManager.js": "./dist/src/debug/MockConfigurationManager.js",
-    "./debug/MockFileOutput.js": "./dist/src/debug/MockFileOutput.js",
-    "./utils/index.js": "./dist/src/utils/index.js",
-    "./utils/debugLogger.js": "./dist/src/utils/debugLogger.js",
-    "./utils/safeJsonStringify.js": "./dist/src/utils/safeJsonStringify.js",
-    "./utils/session.js": "./dist/src/utils/session.js",
-    "./telemetry/loggers.js": "./dist/src/telemetry/loggers.js",
-    "./telemetry/types.js": "./dist/src/telemetry/types.js",
-    "./telemetry/index.js": "./dist/src/telemetry/index.js",
-    "./telemetry/sdk.js": "./dist/src/telemetry/sdk.js",
-    "./telemetry/constants.js": "./dist/src/telemetry/constants.js",
-    "./telemetry/metrics.js": "./dist/src/telemetry/metrics.js",
-    "./telemetry/uiTelemetry.js": "./dist/src/telemetry/uiTelemetry.js",
-    "./telemetry/tool-call-decision.js": "./dist/src/telemetry/tool-call-decision.js",
-    "./telemetry/file-exporters.js": "./dist/src/telemetry/file-exporters.js"
+    "./debug/index.js": {
+      "bun": "./src/debug/index.ts",
+      "import": "./dist/src/debug/index.js"
+    },
+    "./debug/DebugLogger.js": {
+      "bun": "./src/debug/DebugLogger.ts",
+      "import": "./dist/src/debug/DebugLogger.js"
+    },
+    "./debug/ConfigurationManager.js": {
+      "bun": "./src/debug/ConfigurationManager.ts",
+      "import": "./dist/src/debug/ConfigurationManager.js"
+    },
+    "./debug/FileOutput.js": {
+      "bun": "./src/debug/FileOutput.ts",
+      "import": "./dist/src/debug/FileOutput.js"
+    },
+    "./debug/MockConfigurationManager.js": {
+      "bun": "./src/debug/MockConfigurationManager.ts",
+      "import": "./dist/src/debug/MockConfigurationManager.js"
+    },
+    "./debug/MockFileOutput.js": {
+      "bun": "./src/debug/MockFileOutput.ts",
+      "import": "./dist/src/debug/MockFileOutput.js"
+    },
+    "./utils/index.js": {
+      "bun": "./src/utils/index.ts",
+      "import": "./dist/src/utils/index.js"
+    },
+    "./utils/debugLogger.js": {
+      "bun": "./src/utils/debugLogger.ts",
+      "import": "./dist/src/utils/debugLogger.js"
+    },
+    "./utils/safeJsonStringify.js": {
+      "bun": "./src/utils/safeJsonStringify.ts",
+      "import": "./dist/src/utils/safeJsonStringify.js"
+    },
+    "./utils/session.js": {
+      "bun": "./src/utils/session.ts",
+      "import": "./dist/src/utils/session.js"
+    },
+    "./telemetry/loggers.js": {
+      "bun": "./src/telemetry/loggers.ts",
+      "import": "./dist/src/telemetry/loggers.js"
+    },
+    "./telemetry/types.js": {
+      "bun": "./src/telemetry/types.ts",
+      "import": "./dist/src/telemetry/types.js"
+    },
+    "./telemetry/index.js": {
+      "bun": "./src/telemetry/index.ts",
+      "import": "./dist/src/telemetry/index.js"
+    },
+    "./telemetry/sdk.js": {
+      "bun": "./src/telemetry/sdk.ts",
+      "import": "./dist/src/telemetry/sdk.js"
+    },
+    "./telemetry/constants.js": {
+      "bun": "./src/telemetry/constants.ts",
+      "import": "./dist/src/telemetry/constants.js"
+    },
+    "./telemetry/metrics.js": {
+      "bun": "./src/telemetry/metrics.ts",
+      "import": "./dist/src/telemetry/metrics.js"
+    },
+    "./telemetry/uiTelemetry.js": {
+      "bun": "./src/telemetry/uiTelemetry.ts",
+      "import": "./dist/src/telemetry/uiTelemetry.js"
+    },
+    "./telemetry/tool-call-decision.js": {
+      "bun": "./src/telemetry/tool-call-decision.ts",
+      "import": "./dist/src/telemetry/tool-call-decision.js"
+    },
+    "./telemetry/file-exporters.js": {
+      "bun": "./src/telemetry/file-exporters.ts",
+      "import": "./dist/src/telemetry/file-exporters.js"
+    }
   },
   "scripts": {
     "build": "node ../../scripts/build_package.js",
@@ -44,6 +102,14 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
     "dist"
   ],
   "dependencies": {

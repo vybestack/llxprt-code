@@ -200,6 +200,7 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 'Set up Node.js'
         uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
@@ -511,11 +512,11 @@ jobs:
   #
   # Node consumer smoke (issue 2243, S6)
   #
-  # Guards published-package Node compatibility on a pure npm/Node path (no
-  # Bun), representing an external Node consumer: install, build, then run the
-  # compiled CLI entry under `node` (Node -> launcher -> Bun). Wired into the
-  # `lint` aggregator so the expensive test matrix waits for this fast
-  # build+smoke check first.
+  # Guards npm install/invocation compatibility while keeping the application
+  # runtime on Bun/TypeScript source: install with npm, then run the checked-in
+  # Node bin launcher, which re-execs Bun against packages/cli/index.ts. Wired
+  # into the `lint` aggregator so the expensive test matrix waits for this fast
+  # install+smoke check first.
   node_consumer_smoke:
     name: 'Node Consumer Smoke'
     runs-on: 'ubuntu-latest'
@@ -526,8 +527,8 @@ jobs:
     # This job runs npm ci (executing third-party install scripts) and only
     # needs to read the repo, so scope permissions to contents:read and drop
     # credential persistence (matches bun_native_modules_smoke hardening). It
-    # still validates the published Node entry path by running the compiled CLI
-    # entry with node after build.
+    # validates the published npm entry path by running the checked-in Node
+    # launcher after install; the launcher starts Bun on TypeScript source.
     permissions:
       contents: 'read'
     steps:
@@ -543,27 +544,20 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: 'Install dependencies'
+      - name: 'Pack source-runtime package'
         run: |-
-          npm ci
+          mkdir -p "$RUNNER_TEMP/llxprt-pack"
+          npm pack --pack-destination "$RUNNER_TEMP/llxprt-pack"
 
-      - name: 'Fix rollup platform dependency'
+      - name: 'Install packed package with npm'
         run: |-
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            npm install @rollup/rollup-linux-x64-gnu --no-save || true
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            npm install @rollup/rollup-win32-x64-msvc --no-save || true
-          fi
-        shell: 'bash'
+          mkdir -p "$RUNNER_TEMP/llxprt-consumer"
+          cd "$RUNNER_TEMP/llxprt-consumer"
+          npm init -y
+          npm install "$RUNNER_TEMP/llxprt-pack"/*.tgz
 
-      - name: 'Build project'
-        run: |-
-          npm run build
-
-      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
-        run: 'node ./packages/cli/dist/index.js --version'
+      - name: 'Smoke test installed CLI entry (Node launcher -> Bun -> TypeScript)'
+        run: 'node "$RUNNER_TEMP/llxprt-consumer/node_modules/.bin/llxprt" --version'
 
   #
   # Test: Node (Linux and macOS - always run)
@@ -604,6 +598,8 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
         uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
@@ -675,8 +671,8 @@ jobs:
           CI: true
         run: npm run test:scripts
 
-      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
-        run: 'node ./packages/cli/dist/index.js --version'
+      - name: 'Smoke test CLI entry (Node launcher -> Bun -> TypeScript)'
+        run: 'node ./packages/cli/bin/llxprt.cjs --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'

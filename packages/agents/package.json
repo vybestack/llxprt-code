@@ -13,14 +13,17 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
       "import": "./dist/index.js"
     },
     "./internals.js": {
       "types": "./dist/src/internals.d.ts",
+      "bun": "./src/internals.ts",
       "import": "./dist/src/internals.js"
     },
     "./app-service.js": {
       "types": "./dist/src/app-service.d.ts",
+      "bun": "./src/app-service.ts",
       "import": "./dist/src/app-service.js"
     }
   },
@@ -34,6 +37,14 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
     "dist"
   ],
   "dependencies": {

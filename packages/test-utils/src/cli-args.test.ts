@@ -91,7 +91,7 @@ describe('cli-args helpers', () => {
     vi.stubEnv('LLXPRT_TEST_PROFILE', ' profile-name ');
 
     expect(
-      getCommandAndArgs('/packages/cli/dist/index.js', ['--flag']),
+      getCommandAndArgs('/packages/cli/bin/llxprt.cjs', ['--flag']),
     ).toStrictEqual({
       command: 'llxprt',
       initialArgs: ['--flag'],

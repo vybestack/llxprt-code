@@ -21,6 +21,20 @@ const repoRoot = resolve(__dirname, '..', '..');
  * the regression these tests guard against.
  */
 const LIFECYCLE_HOOKS = ['preinstall', 'postinstall'] as const;
+interface RootPackageMetadata {
+  bin?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  files?: string[];
+  workspaces?: string[];
+}
+
+interface CliPackageMetadata {
+  main?: string;
+  types?: string;
+  bin?: Record<string, string>;
+  scripts?: Record<string, string>;
+  files?: string[];
+}
 
 interface PackageScripts {
   scripts?: Record<string, string>;
@@ -368,7 +382,7 @@ describe('published package integrity (S1)', () => {
       missing,
       `Published-package integrity violations:\n  - ${missing.join('\n  - ')}`,
     ).toStrictEqual([]);
-  });
+  }, 15000);
 
   it('ships the shared detect-installer helper required by both lifecycle scripts', () => {
     // An explicit, named assertion for the specific shared module introduced in
@@ -383,6 +397,82 @@ describe('published package integrity (S1)', () => {
         'listed in package.json "files".',
     ).toBe(true);
   });
+});
+describe('published package no-compile runtime contract (S6)', () => {
+  it('publishes a checked-in launcher bin instead of a compiled dist entry', () => {
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    ) as RootPackageMetadata;
+    const cliPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
+    ) as CliPackageMetadata;
+
+    expect(rootPackage.bin?.llxprt).toBe('packages/cli/bin/llxprt.cjs');
+    expect(cliPackage.bin?.llxprt).toBe('bin/llxprt.cjs');
+    expect(cliPackage.scripts?.prepack).toBeUndefined();
+    expect(cliPackage.scripts?.start).toBe('bun index.ts');
+    expect(cliPackage.scripts?.debug).toBe('bun --inspect-brk index.ts');
+  });
+
+  it('ships the launcher and TypeScript source needed by Bun at runtime', () => {
+    const packed = getPackedPaths();
+
+    expect(packed.has('packages/cli/bin/llxprt.cjs')).toBe(true);
+    expect(packed.has('packages/cli/index.ts')).toBe(true);
+    expect(packed.has('packages/cli/src/cli.tsx')).toBe(true);
+    expect(packed.has('packages/core/index.ts')).toBe(true);
+    expect(packed.has('packages/core/src/index.ts')).toBe(true);
+  });
+
+  it('declares runtime dependencies needed by shipped workspace source', () => {
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    ) as RootPackageMetadata;
+    const dependencies = rootPackage.dependencies ?? {};
+    const shippedWorkspaceDirs = new Set(
+      (rootPackage.files ?? [])
+        .filter((entry) => entry.startsWith('packages/'))
+        .map((entry) => entry.split('/').slice(0, 2).join('/')),
+    );
+    const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
+      .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
+      .map((workspaceDir) => ({
+        workspaceDir,
+        packagePath: join(repoRoot, workspaceDir, 'package.json'),
+      }))
+      .filter(({ packagePath }) => existsSync(packagePath));
+
+    const missing = shippedWorkspacePackagePaths.flatMap(
+      ({ workspaceDir, packagePath }) => {
+        const workspacePackage = JSON.parse(
+          readFileSync(packagePath, 'utf-8'),
+        ) as { dependencies?: Record<string, string> };
+        return Object.keys(workspacePackage.dependencies ?? {})
+          .filter(
+            (dependencyName) =>
+              !dependencyName.startsWith('@vybestack/') &&
+              dependencies[dependencyName] === undefined,
+          )
+          .map((dependencyName) => `${workspaceDir}: ${dependencyName}`);
+      },
+    );
+
+    expect(missing).toEqual([]);
+  });
+
+  it('runs the checked-in Node launcher without a compiled CLI entry', () => {
+    const stdout = execFileSync(
+      process.execPath,
+      [join(repoRoot, 'packages', 'cli', 'bin', 'llxprt.cjs'), '--version'],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024,
+      },
+    );
+
+    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+  }, 15000);
 });
 
 describe('findRelativeDependencySpecifiers (tarball-walker regex coverage)', () => {
