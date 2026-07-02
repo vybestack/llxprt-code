@@ -45,5 +45,5 @@ jobs:
         run: |
           gh issue create \
             --title "Smoke test failed on ${REF} @ $(date +'%Y-%m-%d')" \
-            --body "Smoke test build failed. See the full run for details: ${DETAILS_URL}" \
+            --body "Smoke test failed. See the full run for details: ${DETAILS_URL}" \
             --label 'kind/bug,priority/p0'

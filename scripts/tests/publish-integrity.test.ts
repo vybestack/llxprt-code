@@ -390,7 +390,6 @@ describe('published package integrity (S1)', () => {
         `Published-package integrity violations:\n  - ${missing.join('\n  - ')}`,
       ).toStrictEqual([]);
     },
-    15000,
   );
 
   it('ships the shared detect-installer helper required by both lifecycle scripts', () => {
