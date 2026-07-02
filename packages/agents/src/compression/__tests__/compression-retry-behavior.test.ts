@@ -43,20 +43,21 @@ vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
 
 // ---- Shared setup/assertion helpers for the Issue #2333 fallback tests ----
 
+let restoreStrategyFactory: (() => void) | undefined;
+
 interface EmptySummaryFallbackSetup {
   chat: ChatSession;
   historyService: HistoryService;
   addSpy: MockInstance<HistoryService['add']>;
   getFallbackCalled: () => boolean;
   getPrimaryCallCount: () => number;
+  restore: () => void;
 }
 
-interface EmptySummaryFallbackAssertions {
-  historyService: HistoryService;
-  addSpy: MockInstance<HistoryService['add']>;
-  getFallbackCalled: () => boolean;
-  getPrimaryCallCount: () => number;
-}
+type EmptySummaryFallbackAssertions = Omit<
+  EmptySummaryFallbackSetup,
+  'chat' | 'restore'
+>;
 
 /**
  * Installs the empty-summary fallback factory mock and builds a ChatSession
@@ -68,7 +69,7 @@ function setupEmptySummaryFallback(
   runtimeSetup: ReturnType<typeof createChatSessionRuntime>,
   providerRuntimeSnapshot: ProviderRuntimeContext,
 ): EmptySummaryFallbackSetup {
-  const { getFallbackCalled, getPrimaryCallCount } =
+  const { getFallbackCalled, getPrimaryCallCount, restore } =
     mockStrategyFactoryWithEmptySummaryFallback();
 
   const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
@@ -83,6 +84,7 @@ function setupEmptySummaryFallback(
     addSpy,
     getFallbackCalled,
     getPrimaryCallCount,
+    restore,
   };
 }
 
@@ -297,6 +299,8 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
   });
 
   afterEach(() => {
+    restoreStrategyFactory?.();
+    restoreStrategyFactory = undefined;
     vi.restoreAllMocks();
   });
 
@@ -386,7 +390,9 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
       addSpy,
       getFallbackCalled,
       getPrimaryCallCount,
+      restore,
     } = setupEmptySummaryFallback(runtimeSetup, providerRuntimeSnapshot);
+    restoreStrategyFactory = restore;
 
     // performCompression should resolve (COMPRESSED) via fallback, not reject
     await expect(chat.performCompression('test-prompt')).resolves.toBe(
@@ -419,7 +425,9 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
       addSpy,
       getFallbackCalled,
       getPrimaryCallCount,
+      restore,
     } = setupEmptySummaryFallback(runtimeSetup, providerRuntimeSnapshot);
+    restoreStrategyFactory = restore;
 
     // The threshold-triggered auto-compression path must resolve (not reject)
     // and apply the truncation fallback.
