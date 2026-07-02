@@ -63,7 +63,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   fromConfig,
-  AgenticLoop,
+  createAgenticLoop,
   mapLoopStream,
   type AgentEvent,
   type Agent,
@@ -93,7 +93,7 @@ async function driveReferenceLoop(
   const approvalHandler: ApprovalHandler = async () => ({
     outcome: ToolConfirmationOutcome.ProceedOnce,
   });
-  const loop = new AgenticLoop({
+  const loop = createAgenticLoop({
     agentClient: config.getAgentClient(),
     config,
     messageBus,

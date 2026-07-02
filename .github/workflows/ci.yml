@@ -207,9 +207,7 @@ jobs:
           node-version-file: '.nvmrc'
 
       # S6 (#2243): Bun is the package manager for this job. Node remains
-      # required because the lint/typecheck/format/build scripts (and the
-      # bundle step's `bun scripts/bun-build.config.mjs`, #2241/S4) execute
-      # under it.
+      # required because the lint/typecheck/format/build scripts execute under it.
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
@@ -267,6 +265,10 @@ jobs:
       - name: 'Build project'
         run: |-
           npm run build
+
+      - name: 'Run agents API-surface guard'
+        run: |-
+          npm run lint:agents-api-surface
 
       - name: 'Run linter'
         env:
@@ -577,10 +579,9 @@ jobs:
   # setup-bun is still installed here (pinned via .bun-version) because the LSP
   # service client resolves `bun` through `which` and disables the LSP/MCP
   # service when bun is absent from PATH (failing config-lsp-integration and
-  # e2e-lsp tests), and because the bundle step builds via
-  # `bun scripts/bun-build.config.mjs` (#2241/S4). Pinning to .bun-version
-  # reconciles the CI toolchain with dev-docs/bun.md and replaces the floating
-  # 'latest' that previously triggered a Zizmor cache-poisoning warning.
+  # e2e-lsp tests). Pinning to .bun-version reconciles the CI toolchain with
+  # dev-docs/bun.md and replaces the floating 'latest' that previously triggered
+  # a Zizmor cache-poisoning warning.
   test:
     name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'
@@ -628,7 +629,7 @@ jobs:
       # S6 (#2243): `bun install` resolves dependencies; the root postinstall
       # (scripts/postinstall.cjs) then symlinks Bun's static workspace copies to
       # the real workspace dirs so build/test resolve workspace `dist/` (see
-      # dev-docs/bun.md). Build/bundle/test run under Node via `npm run …`
+      # dev-docs/bun.md). Build/test run under Node via `npm run …`
       # (`npm run test --workspaces` recurses under `bun run`).
       - name: 'Install dependencies for testing'
         # Bun re-normalizes `bun.lock` on every install (dev-docs/bun.md);
@@ -639,6 +640,10 @@ jobs:
       - name: 'Build project'
         run: |-
           npm run build
+
+      - name: 'Run agents API-surface guard'
+        run: |-
+          npm run lint:agents-api-surface
 
       - name: 'Limit Vitest forks on Windows'
         if: runner.os == 'Windows'

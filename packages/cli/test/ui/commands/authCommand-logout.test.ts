@@ -248,12 +248,12 @@ describe.skipIf(skipInCI)(
     /**
      * @plan PLAN-20250823-AUTHFIXES.P13
      * @requirement REQ-002
-     * @scenario Logout command case sensitivity
+     * @scenario Logout command action normalization
      * @given Mixed case logout action
      * @when logout command executed
      * @then Command recognized properly
      */
-    it('should handle case sensitivity for logout action', async () => {
+    it('should handle case variations for logout action', async () => {
       const testCases = [
         'gemini logout',
         'gemini LOGOUT',

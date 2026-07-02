@@ -104,6 +104,13 @@ describe('validateDnsResolutionOrder', () => {
 });
 
 describe('startInteractiveUI', () => {
+  beforeEach(async () => {
+    const { __resetInteractiveUIStateForTesting } = await import(
+      './session/interactiveUI.js'
+    );
+    __resetInteractiveUIStateForTesting();
+  });
+
   // Mock dependencies
   const mockConfig = {
     getProjectRoot: () => '/root',
@@ -187,7 +194,11 @@ describe('startInteractiveUI', () => {
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
-  it('should register exit handler that disables bracketed paste and focus tracking', async () => {
+  it('should register exit handlers that restore terminal protocols and disable mouse state', async () => {
+    const { restoreTerminalProtocolsSync } = await import(
+      './ui/utils/terminalProtocolCleanup.js'
+    );
+    const { disableMouseEvents } = await import('./ui/utils/mouse.js');
     const exitHandlers: Array<() => void> = [];
     const processOnSpy = vi
       .spyOn(process, 'on')
@@ -199,13 +210,6 @@ describe('startInteractiveUI', () => {
           return process;
         },
       );
-
-    // Ensure isTTY is true so the guard passes
-    const originalIsTTY = process.stdout.isTTY;
-    Object.defineProperty(process.stdout, 'isTTY', {
-      value: true,
-      configurable: true,
-    });
 
     const mouseEnabledConfig = {
       ...mockConfig,
@@ -222,8 +226,6 @@ describe('startInteractiveUI', () => {
     } as unknown as LoadedSettings;
 
     try {
-      mockWriteToStdout.mockClear();
-
       await startInteractiveUI(
         mouseEnabledConfig,
         mockAgent,
@@ -232,29 +234,70 @@ describe('startInteractiveUI', () => {
         mockWorkspaceRoot,
       );
 
-      // Fire all exit handlers
       for (const handler of exitHandlers) {
         handler();
       }
 
-      // Verify bracketed paste disabled (via mocked writeToStdout)
-      expect(mockWriteToStdout).toHaveBeenCalledWith(
-        expect.stringContaining('\x1b[?2004l'),
-      );
-      // Verify focus tracking disabled
-      expect(mockWriteToStdout).toHaveBeenCalledWith(
-        expect.stringContaining('\x1b[?1004l'),
-      );
+      expect(restoreTerminalProtocolsSync).toHaveBeenCalledTimes(1);
+      expect(disableMouseEvents).toHaveBeenCalledTimes(1);
     } finally {
-      Object.defineProperty(process.stdout, 'isTTY', {
-        value: originalIsTTY,
-        configurable: true,
-      });
       processOnSpy.mockRestore();
     }
   });
 
+  it('should restore terminal protocols when Ink render throws synchronously', async () => {
+    const { render } = await import('ink');
+    const { restoreTerminalProtocolsSync } = await import(
+      './ui/utils/terminalProtocolCleanup.js'
+    );
+    const { disableMouseEvents } = await import('./ui/utils/mouse.js');
+    const renderSpy = vi.mocked(render);
+    const processOffSpy = vi.spyOn(process, 'off');
+    const renderError = new Error('render failed');
+    renderSpy.mockImplementationOnce(() => {
+      throw renderError;
+    });
+
+    const mouseEnabledConfig = {
+      ...mockConfig,
+      getScreenReader: () => false,
+    } as Config;
+    const mouseEnabledSettings = {
+      merged: {
+        ui: {
+          hideWindowTitle: true,
+          useAlternateBuffer: true,
+          enableMouseEvents: true,
+        },
+      },
+    } as unknown as LoadedSettings;
+
+    await expect(
+      startInteractiveUI(
+        mouseEnabledConfig,
+        mockAgent,
+        mouseEnabledSettings,
+        mockStartupWarnings,
+        mockWorkspaceRoot,
+      ),
+    ).rejects.toThrow('render failed');
+
+    expect(disableMouseEvents).toHaveBeenCalledTimes(1);
+    expect(restoreTerminalProtocolsSync).toHaveBeenCalledTimes(1);
+    expect(processOffSpy).toHaveBeenCalledWith(
+      'exit',
+      restoreTerminalProtocolsSync,
+    );
+    processOffSpy.mockRestore();
+  });
+
   it('should not write terminal escape sequences on exit when stdout is not a TTY', async () => {
+    const { restoreTerminalProtocolsSync } = await import(
+      './ui/utils/terminalProtocolCleanup.js'
+    );
+    const { enableMouseEvents, disableMouseEvents } = await import(
+      './ui/utils/mouse.js'
+    );
     const exitHandlers: Array<() => void> = [];
     const processOnSpy = vi
       .spyOn(process, 'on')
@@ -298,20 +341,15 @@ describe('startInteractiveUI', () => {
         mockWorkspaceRoot,
       );
 
-      // Clear any writes from render setup
       mockWriteToStdout.mockClear();
 
-      // Fire all exit handlers
       for (const handler of exitHandlers) {
         handler();
       }
 
-      // When not a TTY, should not write any escape sequences via writeToStdout
-      const calls = mockWriteToStdout.mock.calls.map((c: unknown[]) => c[0]);
-      const hasEscapeSeq = calls.some(
-        (arg: unknown) => typeof arg === 'string' && arg.includes('\x1b['),
-      );
-      expect(hasEscapeSeq).toBe(false);
+      expect(enableMouseEvents).toHaveBeenCalledTimes(1);
+      expect(restoreTerminalProtocolsSync).toHaveBeenCalledTimes(1);
+      expect(disableMouseEvents).toHaveBeenCalledTimes(1);
     } finally {
       Object.defineProperty(process.stdout, 'isTTY', {
         value: originalIsTTY,

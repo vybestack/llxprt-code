@@ -46,13 +46,12 @@ import {
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import { stripSandboxSegment } from './fixtureRoot.js';
+import { toConfigParameters } from '@vybestack/llxprt-code-agents';
 import {
-  toConfigParameters,
   AgentClient,
   CoreToolScheduler,
-  type AgentEvent,
-  type DoneReason,
-} from '@vybestack/llxprt-code-agents';
+} from '@vybestack/llxprt-code-agents/internals.js';
+import type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import {

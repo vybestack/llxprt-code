@@ -1,0 +1,56 @@
+222:    expect(dispatchTrace).toContain('createForegroundAgent');
+223:    expect(dispatchTrace).not.toContain('runNonInteractive');
+236:    await expect(
+251:    ).rejects.toThrow('process.exit');
+255:    expect(dispatchTrace).toContain('runNonInteractive');
+256:    expect(dispatchTrace).not.toContain('createForegroundAgent');
+283:    expect(listeners.listenerCount('SIGINT')).toBeGreaterThanOrEqual(1);
+299:    expect(caught).toBeDefined();
+300:    expect(caught!.exitCode).toBe(130);
+301:    expect(stdio.stderrContent).toContain('Cancelled');
+308:    expect(countAfterInstall).toBe(countBefore + 1);
+314:    expect(listeners.listenerCount('SIGINT')).toBe(countBefore);
+327:    expect(firstExit?.exitCode).toBe(130);
+332:    expect(exitSpy).not.toHaveBeenCalled();
+360:    expect(outputCountBefore).toBe(0);
+366:    expect(coreEvents.listenerCount(CoreEvent.Output)).toBe(1);
+367:    expect(coreEvents.listenerCount(CoreEvent.ConsoleLog)).toBe(1);
+380:    expect(routed).toHaveLength(2);
+381:    expect(routed[0].chunk).toBe('post-install-1');
+382:    expect(routed[0].isStderr).toBe(false);
+383:    expect(routed[1].chunk).toBe('post-install-2');
+384:    expect(routed[1].isStderr).toBe(true);
+396:    expect(countBefore).toBe(1);
+402:    expect(coreEvents.listenerCount(CoreEvent.Output)).toBe(1);
+425:    expect(routed).toHaveLength(2);
+426:    expect(routed[0].type).toBe('error');
+427:    expect(routed[0].content).toBe('error-content');
+428:    expect(routed[1].type).toBe('log');
+429:    expect(routed[1].content).toBe('log-content');
+452:    expect(
+472:    expect(combined).toContain('test rejection reason');
+473:    expect(combined).toContain('Unhandled Promise Rejection');
+481:    expect(listeners.listenerCount('unhandledRejection')).toBe(countBefore + 1);
+486:    expect(listeners.listenerCount('unhandledRejection')).toBe(countBefore);
+518:    await expect(
+536:    ).rejects.toThrow('process.exit');
+540:    expect(readStdinCalls).toBe(1);
+543:    expect(dispatchTrace).toContain('runNonInteractive');
+580:    expect(caught).toBeDefined();
+581:    expect(caught!.exitCode).toBe(1);
+583:    expect(dispatchTrace).not.toContain('runNonInteractive');
+593:    await expect(
+611:    ).rejects.toThrow('process.exit');
+615:    expect(readStdinCalls).toBe(0);
+616:    expect(dispatchTrace).toContain('runNonInteractive');
+657:    expect(exitAfter).toBeGreaterThan(exitBefore);
+683:    expect(exitAfter - exitBefore).toBeGreaterThanOrEqual(2);
+702:    expect(renderCalls.length).toBeGreaterThanOrEqual(1);
+719:    expect(formatted).toContain('something went wrong');
+720:    expect(formatted).toContain('[API Error:');
+730:    expect(formatted).toContain('[API Error: An unknown error occurred.]');
+738:    expect(formatted).toContain('[API Error: An unknown error occurred.]');
+746:    expect(formatted).toContain('[API Error: An unknown error occurred.]');
+754:    expect(formatted).toContain('[API Error: An unknown error occurred.]');
+764:    expect(formatted).toContain('type mismatch');
+765:    expect(formatted).toContain('[API Error:');

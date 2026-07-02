@@ -12,7 +12,7 @@
  * Thin CLI orchestrator (issue #2204). main() is an ordered sequence of
  * delegated calls: bootstrap → config → provider activation → sandbox hop →
  * session dispatch. The interactive-UI render, non-interactive session driving,
- * and dispatch helpers live in ./cliSessionDispatch.tsx. This file no longer
+ * and dispatch helpers live in the ./session/ modules. This file no longer
  * co-architects runtime construction — it consumes the public Agent/runtime
  * surface via the bootstrap modules.
  */
@@ -48,13 +48,11 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
 }
 
 import { parseArguments } from './config/cliArgParser.js';
-import { loadSettings, type LoadedSettings } from './config/settings.js';
+import { loadSettings } from './config/settings.js';
 import {
   patchStdio,
   ExitCodes,
   debugLogger,
-  type Config,
-  type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { runStartupMigration } from './config/pathMigration.js';
@@ -87,15 +85,16 @@ import {
 import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
-  type SessionRecordingSetup,
 } from './cliSessionBootstrap.js';
+import { dispatchInteractiveOrNonInteractive } from './session/nonInteractiveSession.js';
+import { formatNonInteractiveError } from './session/errorReporting.js';
+import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
 import {
-  formatNonInteractiveError,
-  initializeOutputListenersAndFlush,
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
-} from './cliProcessUtils.js';
-import type { startInteractiveUI as startInteractiveUIImpl } from './cliSessionDispatch.js';
+  __resetUnhandledRejectionStateForTesting,
+} from './session/signalHandlers.js';
+import { startInteractiveUI } from './session/interactiveUI.js';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -103,16 +102,10 @@ export {
   formatNonInteractiveError,
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
+  __resetUnhandledRejectionStateForTesting,
+  startInteractiveUI,
   initializeOutputListenersAndFlush,
 };
-export async function startInteractiveUI(
-  ...args: Parameters<typeof startInteractiveUIImpl>
-): ReturnType<typeof startInteractiveUIImpl> {
-  const { startInteractiveUI: implementation } = await import(
-    './cliSessionDispatch.js'
-  );
-  return implementation(...args);
-}
 
 /**
  * Patch stdio, register flush-on-exit, install the unhandled-rejection handler,
@@ -147,51 +140,6 @@ function setupProcessLifecycle(): () => void {
     mkdirSync(llxprtDir, { recursive: true });
   }
   return cleanupStdio;
-}
-interface SessionDispatchOptions {
-  readonly config: Config;
-  readonly settings: LoadedSettings;
-  readonly workspaceRoot: string;
-  readonly sessionMessageBus: MessageBus;
-  readonly recording: SessionRecordingSetup;
-  readonly hasPipedInput: boolean;
-  readonly readStdinData: () => Promise<string>;
-}
-
-async function dispatchConfiguredSession({
-  config,
-  settings,
-  workspaceRoot,
-  sessionMessageBus,
-  recording,
-  hasPipedInput,
-  readStdinData,
-}: SessionDispatchOptions): Promise<void> {
-  if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-    const { dispatchInteractiveSession } = await import(
-      './cliSessionDispatch.js'
-    );
-    await dispatchInteractiveSession({
-      config,
-      settings,
-      workspaceRoot,
-      sessionMessageBus,
-      recording,
-    });
-    return;
-  }
-
-  const { runPipedOrPromptSession } = await import(
-    './cliSessionNonInteractive.js'
-  );
-  await runPipedOrPromptSession({
-    config,
-    settings,
-    sessionMessageBus,
-    initialInput: config.getQuestion(),
-    hasPipedInput,
-    readStdinData,
-  });
 }
 
 export async function main() {
@@ -284,7 +232,7 @@ export async function main() {
     return;
   }
 
-  await dispatchConfiguredSession({
+  await dispatchInteractiveOrNonInteractive({
     config,
     settings,
     workspaceRoot,

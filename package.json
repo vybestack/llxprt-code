@@ -88,6 +88,7 @@
     "lint:ci": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --ext .ts,.tsx --max-warnings 0 && cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint integration-tests --max-warnings 0",
     "lint:eslint-guard": "node scripts/check-eslint-guard.js",
     "lint:cli-boundary": "node scripts/check-cli-import-boundary.mjs",
+    "lint:agents-api-surface": "node scripts/check-agents-api-surface.mjs",
     "lint:all": "./scripts/lint-all.sh",
     "format": "prettier --experimental-cli --write . --ignore-path .gitignore --ignore-path .prettierignore",
     "format:check": "prettier --check .",

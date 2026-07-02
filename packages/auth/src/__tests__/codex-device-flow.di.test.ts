@@ -21,7 +21,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
 import { CodexDeviceFlow } from '../flows/codex-device-flow.js';
-import type { IDebugLogger } from '../interfaces/debug-logger.js';
+import type { IDebugLogger } from '../interfaces/index.js';
 
 // ─── Test doubles ────────────────────────────────────────────────────────────
 

@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -26,6 +27,30 @@ describe('TaskTool', () => {
       getSessionId: () => 'session-123',
     } as unknown as Config;
   });
+
+  function createMockOrchestrator(agentId: string) {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn().mockResolvedValue(undefined),
+      runNonInteractive: vi.fn(),
+    };
+    const orchestrator = {
+      launch: vi.fn().mockResolvedValue({
+        agentId,
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      }),
+    } as unknown as SubagentOrchestrator;
+    return { orchestrator, scope };
+  }
 
   it('launches the orchestrator and returns subagent output', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
@@ -119,6 +144,50 @@ describe('TaskTool', () => {
     });
     expect(result.llmContent).toContain('"agent_id": "agent-42"');
     expect(result.error).toBeUndefined();
+  });
+
+  it('passes the invocation messageBus into injected orchestrator factories', async () => {
+    const messageBus = {} as MessageBus;
+    const { orchestrator, scope } = createMockOrchestrator('agent-messagebus');
+    const orchestratorFactory = vi.fn(() => orchestrator);
+    const tool = new TaskTool(config, {
+      orchestratorFactory,
+      isInteractiveEnvironment: () => true,
+      messageBus,
+    });
+
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship the feature',
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(orchestratorFactory).toHaveBeenCalledWith(messageBus);
+    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
+    expect(scope.runNonInteractive).not.toHaveBeenCalled();
+  });
+
+  it('passes undefined messageBus when no messageBus is configured', async () => {
+    const { orchestrator, scope } = createMockOrchestrator(
+      'agent-without-messagebus',
+    );
+    const orchestratorFactory = vi.fn(() => orchestrator);
+    const tool = new TaskTool(config, {
+      orchestratorFactory,
+      isInteractiveEnvironment: () => true,
+    });
+
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship the feature',
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(orchestratorFactory).toHaveBeenCalledWith(undefined);
+    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
+    expect(scope.runNonInteractive).not.toHaveBeenCalled();
   });
 
   it('filters explicit tool_whitelist against enabled registry tools', async () => {

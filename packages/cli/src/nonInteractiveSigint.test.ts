@@ -5,33 +5,24 @@
  */
 
 import { installNonInteractiveSigintHandler } from './cli.js';
+import { runExitCleanup } from './utils/cleanup.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-class ExitCalledError extends Error {
-  readonly exitCode: number;
-  constructor(code: number) {
-    super(`process.exit(${code}) called`);
-    this.name = 'ExitCalledError';
-    this.exitCode = code;
-  }
-}
+vi.mock('./utils/cleanup.js', () => ({
+  runExitCleanup: vi.fn(async () => {}),
+}));
 
 describe('installNonInteractiveSigintHandler', () => {
   let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
   let capturedSigintListeners: Array<() => void> = [];
 
   beforeEach(() => {
     capturedSigintListeners = [];
+    vi.mocked(runExitCleanup).mockClear();
     stderrWriteSpy = vi
       .spyOn(process.stderr, 'write')
       .mockImplementation(() => true);
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation(((
-      code?: string | number | null,
-    ) => {
-      throw new ExitCalledError(typeof code === 'number' ? code : 0);
-    }) as typeof process.exit);
     vi.spyOn(process, 'on').mockImplementation(
       (event: string | symbol, listener: (...args: unknown[]) => void) => {
         if (event === 'SIGINT') {
@@ -62,25 +53,18 @@ describe('installNonInteractiveSigintHandler', () => {
     expect(capturedSigintListeners.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should write cancellation message to stderr and hard-exit 130 on SIGINT', () => {
-    installNonInteractiveSigintHandler();
+  it('should write cancellation message to stderr, clean up, and hard-exit 130 on SIGINT', async () => {
+    const exitProcess = vi.fn<(code: number) => never>();
+    installNonInteractiveSigintHandler(exitProcess);
 
     expect(capturedSigintListeners.length).toBeGreaterThanOrEqual(1);
     const handler = capturedSigintListeners[capturedSigintListeners.length - 1];
 
-    let caughtExit: ExitCalledError | undefined;
-    try {
-      handler();
-    } catch (error: unknown) {
-      if (error instanceof ExitCalledError) {
-        caughtExit = error;
-      } else {
-        throw error;
-      }
-    }
-
-    expect(caughtExit).toBeDefined();
-    expect(caughtExit!.exitCode).toBe(130);
+    handler();
+    await vi.waitFor(() => {
+      expect(exitProcess).toHaveBeenCalledWith(130);
+      expect(runExitCleanup).toHaveBeenCalledTimes(1);
+    });
 
     const stderrOutput = stderrWriteSpy.mock.calls
       .map(([value]: [string]) => value)
@@ -88,25 +72,26 @@ describe('installNonInteractiveSigintHandler', () => {
     expect(stderrOutput).toContain('Cancelled');
   });
 
-  it('should not double-exit on repeated SIGINT signals', () => {
-    installNonInteractiveSigintHandler();
+  it('should not double-exit on repeated SIGINT signals', async () => {
+    const exitProcess = vi.fn<(code: number) => never>();
+    installNonInteractiveSigintHandler(exitProcess);
 
     const handler = capturedSigintListeners[capturedSigintListeners.length - 1];
 
-    try {
-      handler();
-    } catch (error: unknown) {
-      if (!(error instanceof ExitCalledError)) {
-        throw error;
-      }
-    }
+    handler();
+    await vi.waitFor(() => {
+      expect(exitProcess).toHaveBeenCalledWith(130);
+    });
 
-    processExitSpy.mockClear();
+    vi.mocked(exitProcess).mockClear();
+    vi.mocked(runExitCleanup).mockClear();
     stderrWriteSpy.mockClear();
 
     handler();
 
-    expect(processExitSpy).not.toHaveBeenCalled();
+    expect(exitProcess).not.toHaveBeenCalled();
+    expect(runExitCleanup).not.toHaveBeenCalled();
+    expect(stderrWriteSpy).not.toHaveBeenCalled();
   });
 
   it('should return a removal function that unregisters the SIGINT listener', () => {
@@ -134,7 +119,8 @@ describe('installNonInteractiveSigintHandler', () => {
     });
 
     it('should allow SIGINT to be caught during async setup when installed early', async () => {
-      const removalFn = installNonInteractiveSigintHandler();
+      const exitProcess = vi.fn<(code: number) => never>();
+      const removalFn = installNonInteractiveSigintHandler(exitProcess);
 
       expect(capturedSigintListeners.length).toBeGreaterThanOrEqual(1);
       const handler =
@@ -144,20 +130,10 @@ describe('installNonInteractiveSigintHandler', () => {
       // triggerSessionStartHook) where SIGINT could arrive.
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      // SIGINT during the async gap should still be handled
-      let caughtExit: ExitCalledError | undefined;
-      try {
-        handler();
-      } catch (error: unknown) {
-        if (error instanceof ExitCalledError) {
-          caughtExit = error;
-        } else {
-          throw error;
-        }
-      }
-
-      expect(caughtExit).toBeDefined();
-      expect(caughtExit!.exitCode).toBe(130);
+      handler();
+      await vi.waitFor(() => {
+        expect(exitProcess).toHaveBeenCalledWith(130);
+      });
 
       removalFn();
     });
