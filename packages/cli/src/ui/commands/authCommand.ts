@@ -237,29 +237,37 @@ export class AuthCommandExecutor {
     // Parse args while preserving original parts for error messages
     const trimmedArgs = args?.trim() ?? '';
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0);
-    const provider = parts[0]?.toLowerCase();
-    const action = parts[1]?.toLowerCase();
+    const rawProvider = parts[0];
+    const rawAction = parts[1];
     const param = parts[2];
 
-    const originalProvider = parts[0] || '';
-
     // If no provider specified, show the auth dialog
-    if (!provider) {
+    if (!rawProvider) {
       return {
         type: 'dialog',
         dialog: 'auth',
       };
     }
 
+    const normalizedAction =
+      parts.length > 1 ? rawAction.toLowerCase() : undefined;
+    const action =
+      normalizedAction === 'logout' || normalizedAction === 'signout'
+        ? rawAction
+        : normalizedAction;
+    const usesStrictLogoutProvider =
+      action === 'logout' || action === 'signout';
+    const provider = usesStrictLogoutProvider
+      ? rawProvider
+      : rawProvider.toLowerCase();
+
     // Check if provider is supported before processing actions
     const supportedProviders = this.oauthManager.getSupportedProviders();
     if (!supportedProviders.includes(provider)) {
-      // Use the original provider string from args for the error message
-      // This preserves whatever the user actually typed (including spaces)
       return {
         type: 'message',
         messageType: 'error',
-        content: `Unknown provider: ${originalProvider}. Supported providers: ${supportedProviders.join(', ')}`,
+        content: `Unknown provider: ${rawProvider}. Supported providers: ${supportedProviders.join(', ')}`,
       };
     }
 

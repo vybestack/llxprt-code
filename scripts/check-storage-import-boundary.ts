@@ -1,7 +1,7 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
- * check-storage-import-boundary.mjs
+ * check-storage-import-boundary.ts
  *
  * Validates that no non-core file imports moved storage symbols from
  * @vybestack/llxprt-code-core (root or deep paths). Uses TypeScript
@@ -10,15 +10,40 @@
  * See plan/06-consumer-integration-dependency-graph.md for usage examples.
  */
 
-import { createRequire } from 'node:module';
 import { readFileSync, readdirSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { join, relative, resolve, extname } from 'node:path';
+import ts from 'typescript';
+import { isErrnoException } from './utils/error-guards.ts';
 
-const require = createRequire(import.meta.url);
-const ts = require('typescript');
+interface ParsedArgs {
+  [key: string]: string | true;
+}
 
-function parseArgs(argv) {
-  const args = {};
+interface ImportViolation {
+  symbol: string;
+  importKind: string;
+  moduleSpecifier: string;
+  line: number;
+}
+
+interface BoundaryContext {
+  sourceFile: ts.SourceFile;
+  movedSymbols: string[];
+  fromPackage: string;
+  deepPaths: string[];
+  violations: ImportViolation[];
+  getLine: (pos: number) => number;
+  checkSymbol: (
+    name: string,
+    importKind: string,
+    specifier: string,
+    line: number,
+  ) => void;
+}
+
+function parseArgs(argv: string[]): ParsedArgs {
+  const args: ParsedArgs = {};
   for (let i = 2; i < argv.length; i++) {
     if (argv[i].startsWith('--')) {
       const key = argv[i].slice(2);
@@ -30,24 +55,29 @@ function parseArgs(argv) {
   return args;
 }
 
+function argAsString(args: ParsedArgs, key: string): string {
+  const val = args[key];
+  return typeof val === 'string' ? val : '';
+}
+
 /**
  * Converts a simple glob (only `*` is special, matching a single path
  * segment) into a safe regex source string. All other regex metacharacters
  * are escaped first so that user-supplied patterns cannot inject regex
  * syntax (prevents regular-expression-injection; see CodeQL js/regex-injection).
  */
-function globToRegexSource(glob) {
+function globToRegexSource(glob: string): string {
   const escaped = glob.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Re-enable the single supported wildcard: escaped `\*` -> `[^/]+`.
   return escaped.replace(/\\\*/g, '[^/]+');
 }
 
-function walkDir(dir, excludePatterns) {
-  const results = [];
+function walkDir(dir: string, excludePatterns: string[]): string[] {
+  const results: string[] = [];
   const absDir = resolve(dir);
   const cwd = process.cwd();
 
-  function shouldExclude(filePath) {
+  function shouldExclude(filePath: string): boolean {
     const rel = relative(cwd, filePath).replace(/\\/g, '/');
     for (const pat of excludePatterns) {
       const normalized = pat.replace(/\\/g, '/');
@@ -65,13 +95,23 @@ function walkDir(dir, excludePatterns) {
     return false;
   }
 
-  function walk(d) {
+  function walk(d: string): void {
     if (shouldExclude(d)) return;
-    let entries;
+    let entries: Dirent[];
     try {
       entries = readdirSync(d, { withFileTypes: true });
-    } catch {
-      return;
+    } catch (error) {
+      if (
+        isErrnoException(error, 'ENOENT') ||
+        isErrnoException(error, 'ENOTDIR')
+      ) {
+        return;
+      }
+      if (isErrnoException(error, 'EACCES')) {
+        console.warn(`Warning: permission denied accessing ${d}; skipping.`);
+        return;
+      }
+      throw error;
     }
     for (const entry of entries) {
       const full = join(d, entry.name);
@@ -87,11 +127,15 @@ function walkDir(dir, excludePatterns) {
   return results;
 }
 
-function getLine(sourceFile, pos) {
+function getLine(sourceFile: ts.SourceFile, pos: number): number {
   return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
 }
 
-function isFromPackage(specifier, fromPackage, deepPaths) {
+function isFromPackage(
+  specifier: string | undefined,
+  fromPackage: string,
+  deepPaths: string[],
+): boolean {
   if (!specifier) return false;
   if (specifier === fromPackage) return true;
   if (specifier.startsWith(fromPackage + '/')) {
@@ -103,7 +147,7 @@ function isFromPackage(specifier, fromPackage, deepPaths) {
   return false;
 }
 
-function collectIdentifiers(node, set) {
+function collectIdentifiers(node: ts.Node, set: Set<string>): void {
   if (ts.isIdentifier(node)) set.add(node.text);
   ts.forEachChild(node, (child) => collectIdentifiers(child, set));
 }
@@ -112,9 +156,12 @@ function collectIdentifiers(node, set) {
  * Collect all X.Y property-access identifiers where X matches namespaceVarName.
  * Returns the set of Y identifiers accessed through the namespace.
  */
-function collectNamespaceAccesses(sourceFile, namespaceVarName) {
-  const accessed = new Set();
-  function walk(node) {
+function collectNamespaceAccesses(
+  sourceFile: ts.SourceFile,
+  namespaceVarName: string,
+): Set<string> {
+  const accessed = new Set<string>();
+  function walk(node: ts.Node): void {
     if (
       ts.isPropertyAccessExpression(node) &&
       ts.isIdentifier(node.expression) &&
@@ -140,7 +187,12 @@ function collectNamespaceAccesses(sourceFile, namespaceVarName) {
 /**
  * Context object threaded through the per-node-type handlers.
  */
-function createContext(sourceFile, movedSymbols, fromPackage, deepPaths) {
+function createContext(
+  sourceFile: ts.SourceFile,
+  movedSymbols: string[],
+  fromPackage: string,
+  deepPaths: string[],
+): BoundaryContext {
   return {
     sourceFile,
     movedSymbols,
@@ -161,7 +213,7 @@ function createContext(sourceFile, movedSymbols, fromPackage, deepPaths) {
   };
 }
 
-function isViMockCall(node) {
+function isViMockCall(node: ts.CallExpression): boolean {
   return (
     ts.isPropertyAccessExpression(node.expression) &&
     node.expression.name.text === 'mock' &&
@@ -170,10 +222,15 @@ function isViMockCall(node) {
   );
 }
 
-function collectDynamicImportViolations(ctx, node, specifier, line) {
+function collectDynamicImportViolations(
+  ctx: BoundaryContext,
+  node: ts.CallExpression,
+  specifier: string,
+  line: number,
+): void {
   const parent = node.parent;
   if (!parent) return;
-  const ids = new Set();
+  const ids = new Set<string>();
   collectIdentifiers(parent, ids);
   for (const sym of ctx.movedSymbols) {
     if (ids.has(sym)) {
@@ -187,8 +244,14 @@ function collectDynamicImportViolations(ctx, node, specifier, line) {
   }
 }
 
-function collectFactoryViolations(ctx, factory, specifier, line, importKind) {
-  const ids = new Set();
+function collectFactoryViolations(
+  ctx: BoundaryContext,
+  factory: ts.Node,
+  specifier: string,
+  line: number,
+  importKind: string,
+): void {
+  const ids = new Set<string>();
   collectIdentifiers(factory, ids);
   for (const sym of ctx.movedSymbols) {
     if (ids.has(sym)) {
@@ -202,7 +265,12 @@ function collectFactoryViolations(ctx, factory, specifier, line, importKind) {
   }
 }
 
-function handleNamespaceImport(ctx, nsName, specifier, line) {
+function handleNamespaceImport(
+  ctx: BoundaryContext,
+  nsName: string,
+  specifier: string,
+  line: number,
+): void {
   if (ctx.movedSymbols.length === 0) return;
   const accessed = collectNamespaceAccesses(ctx.sourceFile, nsName);
   const usedMoved = [...accessed].filter((s) => ctx.movedSymbols.includes(s));
@@ -216,7 +284,7 @@ function handleNamespaceImport(ctx, nsName, specifier, line) {
   }
 }
 
-function visitImportDeclaration(node, ctx) {
+function visitImportDeclaration(node: ts.Node, ctx: BoundaryContext): void {
   if (!ts.isImportDeclaration(node)) return;
   const modSpec = node.moduleSpecifier;
   if (!modSpec || !ts.isStringLiteral(modSpec)) return;
@@ -241,7 +309,7 @@ function visitImportDeclaration(node, ctx) {
   }
 }
 
-function visitImportEquals(node, ctx) {
+function visitImportEquals(node: ts.Node, ctx: BoundaryContext): void {
   if (!ts.isImportEqualsDeclaration(node)) return;
   if (
     !node.moduleReference ||
@@ -259,11 +327,14 @@ function visitImportEquals(node, ctx) {
   );
 }
 
-function visitDynamicImport(node, ctx) {
+function visitDynamicImport(
+  node: ts.CallExpression,
+  ctx: BoundaryContext,
+): void {
   if (node.expression.kind !== ts.SyntaxKind.ImportKeyword) return;
-  if (node.arguments.length === 0 || !ts.isStringLiteral(node.arguments[0]))
-    return;
-  const specifier = node.arguments[0].text;
+  const specifierArg = node.arguments[0];
+  if (!specifierArg || !ts.isStringLiteral(specifierArg)) return;
+  const specifier = specifierArg.text;
   if (!isFromPackage(specifier, ctx.fromPackage, ctx.deepPaths)) return;
   // LIMITATION: we only scan the immediate parent node for symbol
   // identifiers. Moved symbols bound through intermediate variable
@@ -278,32 +349,34 @@ function visitDynamicImport(node, ctx) {
   );
 }
 
-function visitViMockCall(node, ctx) {
+function visitViMockCall(node: ts.CallExpression, ctx: BoundaryContext): void {
   if (!isViMockCall(node)) return;
-  if (node.arguments.length < 1 || !ts.isStringLiteral(node.arguments[0]))
-    return;
-  const specifier = node.arguments[0].text;
+  const specifierArg = node.arguments[0];
+  if (!specifierArg || !ts.isStringLiteral(specifierArg)) return;
+  const specifier = specifierArg.text;
   if (!isFromPackage(specifier, ctx.fromPackage, ctx.deepPaths)) return;
   const line = ctx.getLine(node.getStart());
   if (node.arguments.length < 2) return;
   collectFactoryViolations(ctx, node.arguments[1], specifier, line, 'vi.mock');
 }
 
-function visitCallExpression(node, ctx) {
+function visitCallExpression(node: ts.Node, ctx: BoundaryContext): void {
   if (!ts.isCallExpression(node)) return;
   visitDynamicImport(node, ctx);
   visitViMockCall(node, ctx);
 }
 
-function visitNode(node, ctx) {
+function visitNode(node: ts.Node, ctx: BoundaryContext): void {
   visitImportDeclaration(node, ctx);
   visitImportEquals(node, ctx);
   visitCallExpression(node, ctx);
   ts.forEachChild(node, (child) => visitNode(child, ctx));
 }
 
-function deduplicateViolations(violations) {
-  const seen = new Set();
+function deduplicateViolations(
+  violations: ImportViolation[],
+): ImportViolation[] {
+  const seen = new Set<string>();
   return violations.filter((v) => {
     const key = `${v.symbol}|${v.importKind}|${v.moduleSpecifier}|${v.line}`;
     if (seen.has(key)) return false;
@@ -312,7 +385,12 @@ function deduplicateViolations(violations) {
   });
 }
 
-function analyzeFile(filePath, movedSymbols, fromPackage, deepPaths) {
+function analyzeFile(
+  filePath: string,
+  movedSymbols: string[],
+  fromPackage: string,
+  deepPaths: string[],
+): ImportViolation[] {
   const sourceText = readFileSync(filePath, 'utf-8');
   const sourceFile = ts.createSourceFile(
     filePath,
@@ -328,24 +406,25 @@ function analyzeFile(filePath, movedSymbols, fromPackage, deepPaths) {
   return deduplicateViolations(ctx.violations);
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv);
   const repoRoot = process.cwd();
 
-  const movedSymbols = (args['moved-symbols'] || '')
+  const movedSymbols = argAsString(args, 'moved-symbols')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  const fromPackage = args['from-package'] || '@vybestack/llxprt-code-core';
-  const scanDir = args['scan-dir'] || 'packages';
-  const excludeGlobs = (args['exclude-glob'] || '')
+  const fromPackage =
+    argAsString(args, 'from-package') || '@vybestack/llxprt-code-core';
+  const scanDir = argAsString(args, 'scan-dir') || 'packages';
+  const excludeGlobs = argAsString(args, 'exclude-glob')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
   // Always exclude dist directories — they are generated build output
   excludeGlobs.push('packages/*/dist/**');
   excludeGlobs.push('packages/*/*/dist/**');
-  const deepPaths = (args['deep-paths'] || '')
+  const deepPaths = argAsString(args, 'deep-paths')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -365,7 +444,7 @@ function main() {
   console.log(`Scanning ${files.length} .ts files...\n`);
 
   let totalViolations = 0;
-  const violationsByFile = {};
+  const violationsByFile: Record<string, ImportViolation[]> = {};
 
   for (const filePath of files) {
     const rel = relative(repoRoot, filePath).replace(/\\/g, '/');

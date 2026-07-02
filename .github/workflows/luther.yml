@@ -352,6 +352,12 @@ jobs:
           node-version: '24.x'
           cache: 'npm'
 
+      - name: Setup Bun
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
       - name: Install dependencies
         if: steps.claim_issue.outputs.should_continue == 'true'
         run: npm ci

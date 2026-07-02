@@ -1289,7 +1289,7 @@ Before marking a phase complete, the verifier must answer YES to ALL of these:
 
 ```bash
 # Manual test command (run and paste actual output):
-node scripts/start.js --profile '{"provider":"openai","model":"gpt-4"}'
+bun scripts/start.ts --profile '{"provider":"openai","model":"gpt-4"}'
 # Expected: Starts with openai/gpt-4 active
 # Actual: [PASTE OUTPUT HERE]
 

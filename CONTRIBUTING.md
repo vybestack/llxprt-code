@@ -125,7 +125,7 @@ To build the entire project (all packages):
 npm run build
 ```
 
-This command typically compiles TypeScript to JavaScript, bundles assets, and prepares the packages for execution. Refer to `scripts/build.js` and `package.json` scripts for more details on what happens during the build.
+This command typically compiles TypeScript to JavaScript, bundles assets, and prepares the packages for execution. Refer to `scripts/build.ts` and `package.json` scripts for more details on what happens during the build.
 
 ### Enabling Sandboxing
 

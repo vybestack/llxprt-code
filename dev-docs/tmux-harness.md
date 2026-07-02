@@ -2,7 +2,7 @@
 
 `scripts/tmux-harness.js` is an automation harness for the Ink-based terminal UI (in `packages/cli`).
 
-It runs `node scripts/start.js` inside a tmux session (a real TTY), sends keystrokes, and captures both the rendered screen and scrollback to artifact files. This lets us reproduce UI-only bugs (like scrollback redraw spam) without manually launching the app and eyeballing it.
+It runs `bun scripts/start.ts` inside a tmux session (a real TTY), sends keystrokes, and captures both the rendered screen and scrollback to artifact files. This lets us reproduce UI-only bugs (like scrollback redraw spam) without manually launching the app and eyeballing it.
 
 ## Why tmux
 
@@ -39,8 +39,8 @@ On success it prints the artifacts directory. On failure it also prints the arti
 Scripted mode loads a JSON file with these top-level keys:
 
 - `tmux`: `{ cols, rows, historyLimit, scrollbackLines, initialWaitMs }`
-- `yolo`: boolean (if true, starts `node scripts/start.js --yolo`)
-- `startCommand`: array of argv (defaults to `["node","scripts/start.js"]`)
+- `yolo`: boolean (if true, starts `bun scripts/start.ts --yolo`)
+- `startCommand`: array of argv (defaults to `["bun","scripts/start.ts"]`)
 - `macros`: optional object mapping macro name → array of steps
 - `steps`: array of steps (expanded after macro expansion)
 

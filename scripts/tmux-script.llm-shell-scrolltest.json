@@ -6,7 +6,7 @@
     "scrollbackLines": 20000,
     "initialWaitMs": 6000
   },
-  "startCommand": ["node", "scripts/start.js"],
+  "startCommand": ["bun", "scripts/start.ts"],
   "yolo": false,
   "steps": [
     {

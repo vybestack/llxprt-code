@@ -9,7 +9,12 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError, debugLogger } from '@vybestack/llxprt-code-core';
+import {
+  FatalSandboxError,
+  debugLogger,
+  getErrorMessage,
+  isNodeError,
+} from '@vybestack/llxprt-code-core';
 import type {
   PortForwardingResult,
   CredentialProxyBridgeResult,
@@ -46,6 +51,20 @@ import {
   sandboxPorts,
 } from './sandbox-env.js';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
+
+function stderrOf(error: unknown): string {
+  if (typeof error !== 'object' || error === null || !('stderr' in error)) {
+    return '';
+  }
+  const stderr = (error as { stderr?: unknown }).stderr;
+  if (typeof stderr === 'string') {
+    return stderr.trim();
+  }
+  if (Buffer.isBuffer(stderr)) {
+    return stderr.toString('utf8').trim();
+  }
+  return '';
+}
 
 /** Validates image and builds initial container run args. */
 async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
@@ -315,6 +334,21 @@ export async function runContainerSandbox(
   return executeContainerSandbox(config, cliConfig, prepared);
 }
 
+export function buildSandboxCommandArgs(
+  isCustomProjectSandbox: boolean,
+  resolvedProjectSandboxDockerfile: string,
+  image: string,
+): string[] {
+  const buildArgsArray = ['scripts/build_sandbox.ts', '-s'];
+  if (isCustomProjectSandbox) {
+    if (resolvedProjectSandboxDockerfile.length === 0 || image.length === 0) {
+      throw new Error('Custom sandbox requires both a Dockerfile and image.');
+    }
+    buildArgsArray.push('-f', resolvedProjectSandboxDockerfile, '-i', image);
+  }
+  return buildArgsArray;
+}
+
 function buildSandboxImage(
   gcPath: string,
   isCustomProjectSandbox: boolean,
@@ -334,23 +368,37 @@ function buildSandboxImage(
   if (isCustomProjectSandbox) {
     debugLogger.error(`using ${projectSandboxDockerfile} for sandbox`);
   }
-  const buildArgsArray = ['-s'];
-  if (isCustomProjectSandbox) {
-    buildArgsArray.push(
-      '-f',
-      path.resolve(projectSandboxDockerfile),
-      '-i',
-      image,
+  const resolvedProjectSandboxDockerfile = isCustomProjectSandbox
+    ? path.resolve(projectSandboxDockerfile)
+    : '';
+  const buildArgsArray = buildSandboxCommandArgs(
+    isCustomProjectSandbox,
+    resolvedProjectSandboxDockerfile,
+    image,
+  );
+  try {
+    execFileSync('bun', buildArgsArray, {
+      cwd: gcRoot,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        LLXPRT_SANDBOX: config.command,
+      },
+    });
+  } catch (error) {
+    if (
+      isNodeError(error) &&
+      (error.code === 'ENOENT' || error.code === 'EACCES')
+    ) {
+      throw new FatalSandboxError(
+        `Bun runtime was not found or could not be executed: ${error.message}. Install Bun from https://bun.sh and ensure it is on PATH.`,
+      );
+    }
+    const stderr = stderrOf(error);
+    throw new FatalSandboxError(
+      `Sandbox image build failed: ${getErrorMessage(error)}${stderr.length > 0 ? `\n${stderr}` : ''}`,
     );
   }
-  execFileSync('node', ['scripts/build_sandbox.js', ...buildArgsArray], {
-    cwd: gcRoot,
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      LLXPRT_SANDBOX: config.command,
-    },
-  });
 }
 
 async function setupPodmanMacosPortForwarding(

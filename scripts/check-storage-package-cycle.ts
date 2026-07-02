@@ -1,75 +1,164 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
- * check-storage-package-cycle.mjs
+ * check-storage-package-cycle.ts
  *
  * Validates that no dependency cycle includes @vybestack/llxprt-code-storage.
  * Reads package.json manifests for all workspace packages and checks
  * dependency graphs.
  *
  * Usage:
- *   node scripts/check-storage-package-cycle.mjs --production
- *   node scripts/check-storage-package-cycle.mjs --all-dependencies
+ *   bun scripts/check-storage-package-cycle.ts --production
+ *   bun scripts/check-storage-package-cycle.ts --all-dependencies
  */
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { Dirent } from 'node:fs';
+import { messageOf } from './utils/error-guards.ts';
 
 const STORAGE_PKG = '@vybestack/llxprt-code-storage';
 const WORKSPACE_PREFIX = '@vybestack/llxprt-code-';
 
-function parseArgs(argv) {
-  const args = {};
+interface WorkspacePackageInfo {
+  name: string;
+  dir: string;
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
+  optionalDependencies: Record<string, string>;
+}
+
+interface PackageJsonLike {
+  name?: unknown;
+  dependencies?: unknown;
+  devDependencies?: unknown;
+  optionalDependencies?: unknown;
+}
+
+type ParsedArgs = Record<string, boolean | string> & {
+  production?: boolean | string;
+  'all-dependencies'?: boolean | string;
+};
+
+interface CycleResult {
+  hasCycle: boolean;
+  cycles: string[][];
+}
+
+function dependencyMap(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null) {
+    return {};
+  }
+  // package.json dependency specifiers are strings; malformed non-string entries
+  // are outside this cycle check and are intentionally ignored here.
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
+}
+
+function parseArgs(argv: string[]): ParsedArgs {
+  const args: ParsedArgs = {};
   for (let i = 2; i < argv.length; i++) {
     if (argv[i].startsWith('--')) {
       const key = argv[i].slice(2);
-      const val =
+      const raw =
         argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : true;
-      args[key] = val;
+      args[key] = raw;
     }
   }
   return args;
 }
 
-function getWorkspacePackages(packagesDir) {
-  const pkgs = {};
-  let entries;
+function getWorkspacePackages(
+  packagesDir: string,
+): Record<string, WorkspacePackageInfo> {
+  const pkgs: Record<string, WorkspacePackageInfo> = {};
+  let entries: Dirent[];
   try {
     entries = readdirSync(packagesDir, { withFileTypes: true });
-  } catch {
-    return pkgs;
+  } catch (error) {
+    throw new Error(
+      `Could not read packages directory ${packagesDir}: ${messageOf(error)}`,
+    );
   }
 
   for (const entry of entries) {
     const pkgJsonPath = join(packagesDir, entry.name, 'package.json');
     if (!entry.isDirectory() || !existsSync(pkgJsonPath)) continue;
     try {
-      const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-      if (pkg.name) {
+      const pkg = JSON.parse(
+        readFileSync(pkgJsonPath, 'utf-8'),
+      ) as PackageJsonLike;
+      if (typeof pkg.name === 'string') {
         pkgs[pkg.name] = {
           name: pkg.name,
           dir: join(packagesDir, entry.name),
-          dependencies: pkg.dependencies || {},
-          devDependencies: pkg.devDependencies || {},
-          optionalDependencies: pkg.optionalDependencies || {},
+          dependencies: dependencyMap(pkg.dependencies),
+          devDependencies: dependencyMap(pkg.devDependencies),
+          optionalDependencies: dependencyMap(pkg.optionalDependencies),
         };
       }
-    } catch {
-      /* skip invalid json */
+    } catch (error) {
+      console.warn(
+        `Warning: could not parse ${pkgJsonPath}: ${messageOf(error)}`,
+      );
     }
   }
   return pkgs;
 }
 
-function getDeps(pkg, productionOnly) {
-  const deps = { ...pkg.dependencies, ...pkg.optionalDependencies };
+function getDeps(pkg: WorkspacePackageInfo, productionOnly: boolean): string[] {
+  const deps = new Set([
+    ...Object.keys(pkg.dependencies),
+    ...Object.keys(pkg.optionalDependencies),
+  ]);
   if (!productionOnly) {
-    Object.assign(deps, pkg.devDependencies);
+    for (const depName of Object.keys(pkg.devDependencies)) {
+      deps.add(depName);
+    }
   }
-  return Object.keys(deps);
+  return [...deps];
 }
 
-function detectCycles(pkgs, storagePkgName, productionOnly) {
+function findReverseStorageCycles(
+  name: string,
+  pkgs: Record<string, WorkspacePackageInfo>,
+  storagePkgName: string,
+  storageDeps: readonly string[],
+  productionOnly: boolean,
+): string[][] {
+  const cycles: string[][] = [];
+  const visited = new Set<string>();
+
+  function dfs(pName: string, trail: string[]): void {
+    if (pName === name) {
+      cycles.push([...trail, storagePkgName]);
+      return;
+    }
+    if (visited.has(pName) || !pName.startsWith(WORKSPACE_PREFIX)) return;
+    visited.add(pName);
+    const pkg = pkgs[pName];
+    if (!pkg) return;
+    for (const dep of getDeps(pkg, productionOnly)) {
+      dfs(dep, [...trail, dep]);
+    }
+  }
+
+  for (const dep of storageDeps) {
+    visited.clear();
+    dfs(dep, [storagePkgName, dep]);
+  }
+
+  return cycles;
+}
+
+function detectCycles(
+  pkgs: Record<string, WorkspacePackageInfo>,
+  storagePkgName: string,
+  productionOnly: boolean,
+): CycleResult {
   // Check if storage package exists
   if (!pkgs[storagePkgName]) {
     console.log(
@@ -78,12 +167,12 @@ function detectCycles(pkgs, storagePkgName, productionOnly) {
     return { hasCycle: false, cycles: [] };
   }
 
-  // BFS from storage to find cycles
+  // DFS from storage to find cycles
   // Check: does any dependency of storage transitively depend on storage?
-  const visited = new Set();
-  const cycles = [];
+  const visited = new Set<string>();
+  const cycles: string[][] = [];
 
-  function dfs(pkgName, path) {
+  function dfs(pkgName: string, path: string[]): void {
     if (pkgName === storagePkgName && path.length > 1) {
       cycles.push([...path, pkgName]);
       return;
@@ -114,35 +203,22 @@ function detectCycles(pkgs, storagePkgName, productionOnly) {
     if (name === storagePkgName) continue;
     const deps = getDeps(pkg, productionOnly);
     if (deps.includes(storagePkgName)) {
-      // Check if storage transitively depends on this package, tracking the
-      // full path so the reported cycle shows the real dependency chain.
-      const visited2 = new Set();
-      function dfs2(pName, trail) {
-        if (pName === name) {
-          // trail already begins with storagePkgName and ends with `name`.
-          cycles.push([...trail, storagePkgName]);
-          return;
-        }
-        if (visited2.has(pName)) return;
-        if (!pName.startsWith(WORKSPACE_PREFIX)) return;
-        visited2.add(pName);
-        const p = pkgs[pName];
-        if (!p) return;
-        for (const d of getDeps(p, productionOnly)) {
-          dfs2(d, [...trail, d]);
-        }
-      }
-      for (const d of storageDeps) {
-        visited2.clear();
-        dfs2(d, [storagePkgName, d]);
-      }
+      cycles.push(
+        ...findReverseStorageCycles(
+          name,
+          pkgs,
+          storagePkgName,
+          storageDeps,
+          productionOnly,
+        ),
+      );
     }
   }
 
   return { hasCycle: cycles.length > 0, cycles };
 }
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv);
   const packagesDir = resolve('packages');
   const productionOnly = args.production === true;
@@ -158,7 +234,13 @@ function main() {
     `Checking for dependency cycles involving ${STORAGE_PKG} (${mode} mode)...`,
   );
 
-  const pkgs = getWorkspacePackages(packagesDir);
+  let pkgs: Record<string, WorkspacePackageInfo>;
+  try {
+    pkgs = getWorkspacePackages(packagesDir);
+  } catch (error) {
+    console.error(`Fatal: ${messageOf(error)}`);
+    return process.exit(1);
+  }
   console.log(`Found ${Object.keys(pkgs).length} workspace packages.`);
 
   // Check storage leaf constraint

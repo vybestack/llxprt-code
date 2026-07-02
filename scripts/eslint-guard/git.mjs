@@ -32,7 +32,7 @@ export function parseArgs(argv) {
       args.head = argv[++i];
     } else if (arg === '--help' || arg === '-h') {
       console.log(
-        'Usage: node scripts/check-eslint-guard.js [--base REF] [--head REF]',
+        'Usage: bun scripts/check-eslint-guard.ts [--base REF] [--head REF]',
       );
       process.exit(0);
     } else {

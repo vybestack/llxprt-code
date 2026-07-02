@@ -162,7 +162,7 @@
     "./utils/tool-utils.js": "./dist/src/utils/tool-utils.js"
   },
   "scripts": {
-    "build": "node ../../scripts/build_package.js",
+    "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",

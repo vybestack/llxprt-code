@@ -11,7 +11,7 @@ import {
 
 export function shouldCheckInlineDirective(file) {
   if (
-    file === 'scripts/check-eslint-guard.js' ||
+    file === 'scripts/check-eslint-guard.ts' ||
     file === 'scripts/tests/eslint-guard.test.js'
   ) {
     return false;

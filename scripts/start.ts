@@ -11,22 +11,33 @@
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law_or_agreed to in writing, software
+// Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { spawn, execSync } from 'child_process';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { readFileSync } from 'fs';
-import { tmpdir } from 'os';
+import { spawn, execFileSync, execSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { parseBootstrapArgs } from '../packages/cli/dist/src/config/profileBootstrap.js';
+import {
+  isErrnoException,
+  messageOf,
+  propertyValue,
+} from './utils/error-guards.ts';
+
+interface PackageJson {
+  version: string;
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
-const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
+const pkg = JSON.parse(
+  readFileSync(join(root, 'package.json'), 'utf-8'),
+) as PackageJson;
 const bootstrapSnapshot = parseBootstrapArgs();
 
 /**
@@ -35,7 +46,7 @@ const bootstrapSnapshot = parseBootstrapArgs();
  * - Adds --localstorage-file with a valid temp path to prevent warnings from
  *   react-devtools-core when it tries to access localStorage
  */
-function prepareNodeOptionsForDev(nodeOptions) {
+function prepareNodeOptionsForDev(nodeOptions: string | undefined): string {
   // Remove any existing --localstorage-file flags (with or without values).
   // This faithfully reproduces the original regex semantics:
   //   /\s*--localstorage-file(?:(?:\s*=\s*|\s+)(?!-)\S+)?/g
@@ -43,13 +54,13 @@ function prepareNodeOptionsForDev(nodeOptions) {
   // a value is only consumed when it does not start with '-'). A manual scanner
   // avoids the catastrophic-backtracking risk of the regex while covering the
   // same inputs, including whitespace around '=' and tab separators.
-  function skipWhitespace(options, i) {
+  function skipWhitespace(options: string, i: number): number {
     while (i < options.length && /\s/.test(options[i])) {
       i += 1;
     }
     return i;
   }
-  function skipNonWhitespace(options, i) {
+  function skipNonWhitespace(options: string, i: number): number {
     while (i < options.length && !/\s/.test(options[i])) {
       i += 1;
     }
@@ -57,7 +68,7 @@ function prepareNodeOptionsForDev(nodeOptions) {
   }
   // Given the index right after a flag token, return the index after any value
   // that should be consumed, or the unchanged flagEnd when no value is taken.
-  function indexOfValueEnd(options, flagEnd) {
+  function indexOfValueEnd(options: string, flagEnd: number): number {
     const peek = skipWhitespace(options, flagEnd);
     const hadSeparator = peek > flagEnd;
     if (peek >= options.length) {
@@ -75,8 +86,7 @@ function prepareNodeOptionsForDev(nodeOptions) {
     }
     return flagEnd;
   }
-  function removeLocalStorageFlag(options) {
-    if (!options) return '';
+  function removeLocalStorageFlag(options: string): string {
     const token = '--localstorage-file';
     let result = '';
     let cursor = 0;
@@ -95,9 +105,8 @@ function prepareNodeOptionsForDev(nodeOptions) {
     result += options.slice(cursor);
     return result;
   }
-  const sanitized = removeLocalStorageFlag(nodeOptions)
-    .replace(/\s+/g, ' ')
-    .trim();
+  const input = nodeOptions ?? '';
+  const sanitized = removeLocalStorageFlag(input).replace(/\s+/g, ' ').trim();
 
   // Add --localstorage-file with a valid path for DEV mode
   // This prevents warnings from react-devtools-core accessing localStorage
@@ -108,25 +117,58 @@ function prepareNodeOptionsForDev(nodeOptions) {
 }
 
 // check build status, write warnings to file for app to display if needed
-execSync('node ./scripts/check-build-status.js', {
-  stdio: 'inherit',
-  cwd: root,
-});
-
-const nodeArgs = [];
-let sandboxCommand = undefined;
 try {
-  sandboxCommand = execSync('node scripts/sandbox_command.js', {
+  execSync('bun ./scripts/check-build-status.ts', {
+    stdio: 'inherit',
     cwd: root,
+  });
+} catch (error) {
+  const status = propertyValue(error, 'status');
+  if (isErrnoException(error, 'ENOENT') || status === 127) {
+    console.error(
+      'Bun runtime was not found or failed to start. Install Bun (>=1.3.0) and ensure it is on PATH.',
+    );
+    process.exit(1);
+  }
+  if (typeof status === 'number' && Number.isInteger(status)) {
+    process.exit(status & 0xff);
+  }
+  const signal = propertyValue(error, 'signal');
+  if (typeof signal === 'string' && signal.length > 0) {
+    process.exit(128);
+  }
+  throw new Error(`Failed to run build-status check: ${messageOf(error)}`, {
+    cause: error,
+  });
+}
+
+const nodeArgs: string[] = [];
+let sandboxCommand: string | undefined;
+try {
+  const output = execFileSync('bun', ['./scripts/sandbox_command.ts'], {
+    cwd: root,
+    stdio: ['ignore', 'pipe', 'ignore'],
   })
     .toString()
     .trim();
-} catch {
-  // ignore
+  sandboxCommand = output || undefined;
+} catch (error) {
+  if (isErrnoException(error, 'ENOENT')) {
+    console.error(
+      'Bun runtime was not found. Install Bun (>=1.3.0) and ensure it is on PATH.',
+    );
+    process.exit(1);
+  }
+  const expectedNoSandbox = propertyValue(error, 'status') === 1;
+  if (!expectedNoSandbox) {
+    console.error(
+      `Warning: sandbox command discovery failed: ${messageOf(error)}`,
+    );
+  }
 }
 // if debugging is enabled and sandboxing is disabled, use --inspect-brk flag
 // note with sandboxing this flag is passed to the binary inside the sandbox
-// inside sandbox SANDBOX should be set and sandbox_command.js should fail
+// inside sandbox SANDBOX should be set and sandbox_command.ts should fail
 const isInDebugMode = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
 
 if (isInDebugMode && !sandboxCommand) {
@@ -150,7 +192,7 @@ if (experimentalUi) {
   const filteredArgs = args.filter((a) => a !== '--experimental-ui');
   uiArgs.push(...filteredArgs);
 
-  const uiEnv = {
+  const uiEnv: NodeJS.ProcessEnv = {
     ...process.env,
     CLI_VERSION: pkg.version,
     DEV: 'true',
@@ -166,15 +208,19 @@ if (experimentalUi) {
     cwd: join(root, 'packages/ui'),
   });
 
+  uiChild.on('error', (error) => {
+    console.error(`Failed to spawn bun for UI: ${messageOf(error)}`);
+    process.exit(1);
+  });
   uiChild.on('close', (code) => {
-    process.exit(code);
+    process.exit(code ?? 1);
   });
 } else {
   // Standard CLI path
   nodeArgs.push('./packages/cli');
   nodeArgs.push(...args);
 
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     CLI_VERSION: pkg.version,
     DEV: 'true',
@@ -200,7 +246,11 @@ if (experimentalUi) {
   }
   const child = spawn('node', nodeArgs, { stdio: 'inherit', env });
 
+  child.on('error', (error) => {
+    console.error(`Failed to spawn node: ${messageOf(error)}`);
+    process.exit(1);
+  });
   child.on('close', (code) => {
-    process.exit(code);
+    process.exit(code ?? 1);
   });
 }

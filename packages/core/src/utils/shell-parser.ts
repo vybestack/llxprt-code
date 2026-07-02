@@ -125,7 +125,7 @@ function resolveTreeSitterLanguage(
  *    resolves the grammar from `node_modules`. This covers source, dev, and
  *    npm-installed package layouts.
  * 2. The bundle directory: the self-contained distributable bundle ships the
- *    grammar next to its entry (see `scripts/copy_bundle_assets.js`). When this
+ *    grammar next to its entry (see `scripts/copy_bundle_assets.ts`). When this
  *    module is bundled, `import.meta.url` resolves to the bundle file, so the
  *    grammar is a sibling file in the same directory.
  *

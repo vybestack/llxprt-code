@@ -256,7 +256,7 @@ export default tseslint.config(
       // Issue #2079: warning-only SonarJS recommendations are not permitted
       // because lint:ci uses --max-warnings 0. Start from off, then promote
       // project-signal rules below to error. Future off decisions must be
-      // explicit and justified so the guard in scripts/check-eslint-guard.js
+      // explicit and justified so the guard in scripts/check-eslint-guard.ts
       // can reject accidental policy weakening.
       ...Object.fromEntries(
         Object.entries(sonarjs.configs.recommended.rules ?? {}).map(

@@ -17,15 +17,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { execSync } from 'child_process';
-import { existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { messageOf } from './utils/error-guards.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-// npm install if node_modules was removed (e.g. via npm run clean or scripts/clean.js)
+// npm install if node_modules was removed (e.g. via npm run clean or scripts/clean.ts)
 if (!existsSync(join(root, 'node_modules'))) {
   execSync('npm install', { stdio: 'inherit', cwd: root });
 }
@@ -36,20 +37,27 @@ execSync('npm run build --workspaces', { stdio: 'inherit', cwd: root });
 
 // also build container image if sandboxing is enabled
 // skip (-s) npm install + build since we did that above
+let sandboxAvailable = true;
 try {
-  execSync('node scripts/sandbox_command.js -q', {
+  execSync('bun scripts/sandbox_command.ts -q', {
     stdio: 'inherit',
     cwd: root,
   });
-  if (
-    process.env.BUILD_SANDBOX === '1' ||
-    process.env.BUILD_SANDBOX === 'true'
-  ) {
-    execSync('node scripts/build_sandbox.js -s', {
+} catch {
+  sandboxAvailable = false;
+}
+
+if (
+  sandboxAvailable &&
+  (process.env.BUILD_SANDBOX === '1' || process.env.BUILD_SANDBOX === 'true')
+) {
+  try {
+    execSync('bun scripts/build_sandbox.ts -s', {
       stdio: 'inherit',
       cwd: root,
     });
+  } catch (error) {
+    console.error(`Sandbox image build failed: ${messageOf(error)}`);
+    throw error;
   }
-} catch {
-  // ignore
 }

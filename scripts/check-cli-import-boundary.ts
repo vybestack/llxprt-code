@@ -1,7 +1,12 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 /**
- * check-cli-import-boundary.mjs
+ * check-cli-import-boundary.ts
  *
  * Enforces the public API boundary for packages/cli/src (#2204, parent #1595).
  *
@@ -18,7 +23,7 @@
  *     surface, not an opaque getConfig back-door).
  *   - asserts packages/cli/index.ts stays under a thin-entry line threshold.
  *
- * Modeled on scripts/check-storage-import-boundary.mjs (TypeScript compiler
+ * Modeled on scripts/check-storage-import-boundary.ts (TypeScript compiler
  * API) for accurate specifier detection across all import kinds.
  *
  * The allowlist is a QUARANTINE BOUNDARY THAT MUST SHRINK OVER TIME: each entry
@@ -26,13 +31,34 @@
  * replacement yet. New entries require explicit justification.
  */
 
-import { createRequire } from 'node:module';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { join, relative, resolve, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+import { isErrnoException } from './utils/error-guards.ts';
 
-const require = createRequire(import.meta.url);
-const ts = require('typescript');
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+interface ImportViolation {
+  line: number;
+  importKind: string;
+  specifier: string;
+  symbol?: string;
+}
+
+interface GetConfigHit {
+  line: number;
+}
+
+interface StaleEntry {
+  kind: 'missing-file' | 'unused-specifier';
+  detail: string;
+}
+
+interface ScanResult {
+  failed: boolean;
+}
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -40,7 +66,7 @@ const ts = require('typescript');
  * Anchor the repo root to THIS script's location (import.meta.url) rather than
  * process.cwd(), so the boundary check is deterministic regardless of which
  * directory the script is invoked from (#2204). The script lives at
- * <repo>/scripts/check-cli-import-boundary.mjs, so the repo root is one level
+ * <repo>/scripts/check-cli-import-boundary.ts, so the repo root is one level
  * up from the script directory.
  *
  * An override via the CLI_BOUNDARY_ROOT env var is supported for the script's
@@ -48,13 +74,13 @@ const ts = require('typescript');
  * which builds throwaway trees under temp dirs. Production/CI invocations never
  * set this env var and always resolve against the script-anchored root.
  */
-const REPO_ROOT = process.env.CLI_BOUNDARY_ROOT
+const REPO_ROOT: string = process.env.CLI_BOUNDARY_ROOT
   ? resolve(process.env.CLI_BOUNDARY_ROOT)
   : resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-const CLI_SRC_DIR = join(REPO_ROOT, 'packages/cli/src');
-const CLI_INDEX = join(REPO_ROOT, 'packages/cli/index.ts');
-const CLI_ENTRY = join(REPO_ROOT, 'packages/cli/src/cli.tsx');
+const CLI_SRC_DIR: string = join(REPO_ROOT, 'packages/cli/src');
+const CLI_INDEX: string = join(REPO_ROOT, 'packages/cli/index.ts');
+const CLI_ENTRY: string = join(REPO_ROOT, 'packages/cli/src/cli.tsx');
 
 // Real entry/bootstrap files must stay thin (under-200-line spirit of #1595).
 // packages/cli/index.ts is the true entrypoint: shebang + error handling only.
@@ -63,7 +89,7 @@ const THIN_ENTRY_MAX_LINES = 200;
 // Deep sub-paths of these runtime packages are violations unless allowlisted.
 // The bare package roots (@vybestack/llxprt-code-core etc.) are PUBLIC and
 // always allowed; only the `/<deep>` forms are constrained.
-const RUNTIME_PACKAGES = [
+const RUNTIME_PACKAGES: readonly string[] = [
   '@vybestack/llxprt-code-core',
   '@vybestack/llxprt-code-providers',
   '@vybestack/llxprt-code-agents',
@@ -85,7 +111,7 @@ const AGENTS_PACKAGE_ROOT = '@vybestack/llxprt-code-agents';
 // `@vybestack/llxprt-code-core/runtime.js`, `…settings/runtime.js`, etc.,
 // masking real boundary violations. Each key is a RUNTIME_PACKAGES entry;
 // the value is the list of public subpaths for that package.
-const PUBLIC_SUBPATHS_BY_PACKAGE = {
+const PUBLIC_SUBPATHS_BY_PACKAGE: Record<string, readonly string[]> = {
   // providers public barrels / curated subpath entrypoints. Each is a declared
   // package.json `exports` entry with its own barrel index.ts and a documented
   // public API (#2204). They are NOT deep/internal imports.
@@ -118,7 +144,7 @@ const PUBLIC_SUBPATHS_BY_PACKAGE = {
  *     the core settings-runtime adapter (a core-internal composition seam
  *     not yet promoted to a public core entrypoint).
  */
-const ALLOWLIST = {
+const ALLOWLIST: Record<string, readonly string[]> = {
   // ── config bootstrap: core settings-runtime adapter ────────────────────
   // These are genuine composition-boundary sites: the core-owned
   // settingsRuntimeAdapter is the dependency-inversion seam that binds a
@@ -136,7 +162,7 @@ const ALLOWLIST = {
 // Paths under packages/cli/src that are test infrastructure (excluded from the
 // import scan — tests may freely mock/import internals). The import-boundary
 // rule governs PRODUCTION source only.
-const TEST_DIR_GLOBS = [
+const TEST_DIR_GLOBS: readonly string[] = [
   '**/__tests__/**',
   '**/*.test.*',
   '**/*.spec.*',
@@ -149,13 +175,24 @@ const TEST_DIR_GLOBS = [
 ];
 
 /**
+ * Precompiled regex form of TEST_DIR_GLOBS. Compiling the glob→regex transform
+ * once at module init avoids rebuilding RegExp objects inside the hot walkDir
+ * recursion (previously `matchGlob` allocated a fresh RegExp per glob per
+ * directory entry). The regex body construction is identical to the body
+ * produced by `compileGlobRegex` below; this array preserves the exact
+ * matching behavior of the previous per-call `matchGlob(glob, rel)`.
+ */
+const TEST_DIR_REGEXES: readonly RegExp[] =
+  TEST_DIR_GLOBS.map(compileGlobRegex);
+
+/**
  * Bare directory base-names that are test infrastructure. When walkDir
  * encounters a directory whose name matches one of these, it prunes the
  * entire subtree early (skips recursion) for both clarity and performance —
  * the file-level TEST_DIR_GLOBS above still catch stray test files outside
  * these directories.
  */
-const TEST_DIR_BASE_NAMES = new Set([
+const TEST_DIR_BASE_NAMES: Set<string> = new Set([
   '__tests__',
   'test-utils',
   'integration-tests',
@@ -168,7 +205,7 @@ const TEST_DIR_BASE_NAMES = new Set([
  * deep import. walkDir prunes the entire subtree early, just like
  * TEST_DIR_BASE_NAMES.
  */
-const NON_SOURCE_DIR_BASE_NAMES = new Set([
+const NON_SOURCE_DIR_BASE_NAMES: Set<string> = new Set([
   'node_modules',
   'dist',
   'build',
@@ -180,30 +217,29 @@ const NON_SOURCE_DIR_BASE_NAMES = new Set([
  * All base-names whose subtrees walkDir prunes (test infra + non-source).
  * Composed once so the recursion check is a single Set membership test.
  */
-const PRUNED_DIR_BASE_NAMES = new Set([
+const PRUNED_DIR_BASE_NAMES: Set<string> = new Set([
   ...TEST_DIR_BASE_NAMES,
   ...NON_SOURCE_DIR_BASE_NAMES,
 ]);
 
+const VI_MOCK_METHOD_NAMES: Set<string> = new Set([
+  'mock',
+  'doMock',
+  'unmock',
+  'doUnmock',
+]);
+
 /**
- * Public symbols of the agents package.
+ * Symbols the CLI may import from the agents package root.
  *
- * The bare root `@vybestack/llxprt-code-agents` re-exports BOTH the curated
- * public Agent API (./api/index.js) AND the low-level internals barrel
- * (./internals.js) for non-breaking compatibility. Importing an INTERNAL
- * symbol from the bare root is a boundary violation even though the specifier
- * itself is the public root: it couples the CLI to runtime construction it
- * must not own (#2204).
- *
- * This allowlist names ONLY the symbols that are part of the curated public
- * Agent API (the ./api/index.js surface) plus the small set of genuinely
- * public value exports. Any named import from the bare root that is NOT here
- * is a boundary violation — there is no per-file internal-symbol escape hatch
- * (#2204 burn-down removed AGENT_INTERNAL_SYMBOL_ALLOWLIST entirely).
- *
- * QUARANTINE BOUNDARY (shrinks as #1595 trims the root to the public API).
+ * The bare root `@vybestack/llxprt-code-agents` still re-exports BOTH the
+ * curated public Agent API (./api/index.js) and compatibility internals
+ * (./internals.js). This quarantine allowlist is the explicit transition
+ * contract for production CLI imports while #1595 trims the root to the public
+ * API. Any named import from the bare root that is not here is a boundary
+ * violation.
  */
-const PUBLIC_AGENT_SYMBOLS = new Set([
+const PUBLIC_AGENT_SYMBOLS: Set<string> = new Set([
   // Public factory functions
   'createAgent',
   'fromConfig',
@@ -213,6 +249,7 @@ const PUBLIC_AGENT_SYMBOLS = new Set([
   'mapStreamEvent',
   'toConfigParameters',
   'AdapterError',
+  'createTaskToolRegistration',
   // Curated public runtime-construction factories (#2204). Consumers
   // construct agent-client / tool-scheduler / task-registration /
   // agentic-loop primitives via these helpers instead of importing the
@@ -234,6 +271,7 @@ const PUBLIC_AGENT_SYMBOLS = new Set([
   'PolicyDecision',
   'ApprovalMode',
   // Public type symbols (only matter for value imports, but listed for clarity
+  'TaskToolRegistration',
   // so reviewers can see the full public surface that is always allowed).
   'Agent',
   'AgentEvent',
@@ -274,7 +312,7 @@ const PUBLIC_AGENT_SYMBOLS = new Set([
   'ChatSessionFactory',
   'ModelInfo',
   'ChatCompressionInfo',
-  // engine helpers re-exported on the public api surface (api/index.ts maps)
+  // Transitional root-compatibility helpers still used by CLI production/tests.
   'classifyCompletedTools',
   'splitPartsByRole',
   'buildToolResponses',
@@ -283,18 +321,18 @@ const PUBLIC_AGENT_SYMBOLS = new Set([
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function walkDir(dir) {
-  const results = [];
+function walkDir(dir: string): string[] {
+  const results: string[] = [];
   const absDir = resolve(dir);
 
-  function shouldExclude(filePath) {
+  function shouldExclude(filePath: string): boolean {
     const rel = relative(REPO_ROOT, filePath).replace(/\\/g, '/');
-    return TEST_DIR_GLOBS.some((glob) => matchGlob(glob, rel));
+    return TEST_DIR_REGEXES.some((re) => re.test(rel));
   }
 
-  function walk(d) {
+  function walk(d: string): void {
     if (shouldExclude(d)) return;
-    let entries;
+    let entries: Dirent[];
     try {
       entries = readdirSync(d, { withFileTypes: true });
     } catch (err) {
@@ -303,17 +341,18 @@ function walkDir(dir) {
       // Any OTHER failure (permissions, broken symlink, I/O error) MUST fail
       // loudly so the boundary check cannot silently pass by skipping an
       // unreadable directory full of violations.
-      if (err && err.code === 'ENOENT') return;
+      if (isErrnoException(err, 'ENOENT') || isErrnoException(err, 'ENOTDIR')) {
+        return;
+      }
       throw err;
     }
-    function processEntry(entry) {
+    function processEntry(entry: Dirent): void {
       const full = join(d, entry.name);
       if (entry.isDirectory()) {
         // Prune entire test-infrastructure and non-source (node_modules,
         // dist, build, ...) subtrees by base-name for clarity and
         // performance, before recursing into them.
         if (PRUNED_DIR_BASE_NAMES.has(entry.name)) return;
-        if (shouldExclude(full)) return;
         walk(full);
       } else if (
         !shouldExclude(full) &&
@@ -332,8 +371,8 @@ function walkDir(dir) {
 }
 
 /**
- * Minimal glob matcher supporting `*` (single segment, non-slash) and `**`
- * (any path). Anchored to the full relative path.
+ * Compile a minimal glob supporting `*` (single segment, non-slash) and `**`
+ * (any path) into an anchored RegExp. The result tests the full relative path.
  *
  * Implementation: escape ALL regex metacharacters in the glob first, then
  * convert the (now-safe) glob tokens `**` and `*` back into regex. After
@@ -342,19 +381,19 @@ function walkDir(dir) {
  * literal metacharacter in a path can ever slip through unescaped. A literal
  * `/` in the glob is NOT a regex metacharacter, so it passes through
  * unescaped and is matched directly.
+ *
+ * The caller is responsible for normalizing backslashes to forward slashes in
+ * the path before testing.
  */
-function matchGlob(glob, relPath) {
-  const normalized = relPath.replace(/\\/g, '/');
+function compileGlobRegex(glob: string): RegExp {
   // 1. Escape every regex metacharacter so the glob is treated literally.
-  const escaped = glob.replace(/[\\^$.|?*+(){}[\]]/g, (ch) => '\\' + ch);
+  const escaped = glob.replace(/[-\\^$.|?*+(){}[\]]/g, (ch) => '\\' + ch);
   // 2. Re-introduce glob semantics on the escaped tokens.
-  //    `\*\*` → `.*` (any path, including across slashes). The following
-  //    literal `/` (which is never escaped) is matched by the regex directly
-  //    — no optional-slash group is needed.
-  //    A lone `\*` → `[^/]*` (single segment, no slash).
-  //    Order matters: resolve `\*\*` before `\*`.
-  const body = escaped.replace(/\\\*\\\*/g, '.*').replace(/\\\*/g, '[^/]*');
-  return new RegExp('^' + body + '$').test(normalized);
+  const body = escaped
+    .replace(/\\\*\\\*\//g, '(?:.*/)?')
+    .replace(/\\\*\\\*/g, '.*')
+    .replace(/\\\*/g, '[^/]*');
+  return new RegExp('^' + body + '$');
 }
 
 /**
@@ -365,7 +404,7 @@ function matchGlob(glob, relPath) {
  * subpath that is public for one package (e.g. providers/runtime.js) is still
  * treated as a violation for any other package (e.g. core/runtime.js).
  */
-function isDisallowedDeepImport(specifier) {
+function isDisallowedDeepImport(specifier: string): boolean {
   for (const pkg of RUNTIME_PACKAGES) {
     if (specifier === pkg) return false; // bare root is public
     if (specifier.startsWith(pkg + '/')) {
@@ -379,11 +418,11 @@ function isDisallowedDeepImport(specifier) {
   return false;
 }
 
-function getLine(sourceFile, pos) {
+function getLine(sourceFile: ts.SourceFile, pos: number): number {
   return sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
 }
 
-function isAllowed(relFile, specifier) {
+function isAllowed(relFile: string, specifier: string): boolean {
   const allowed = ALLOWLIST[relFile];
   return Boolean(allowed && allowed.includes(specifier));
 }
@@ -391,18 +430,17 @@ function isAllowed(relFile, specifier) {
 /**
  * Extract the named import symbols from a static ImportDeclaration node.
  * Returns an array of local-occurrence symbol names (resolving `as` aliases to
- * the original exported name). Returns an empty array for namespace imports
- * (`import * as ns`) since those do not name a specific symbol — a namespace
- * import of the agents root is flagged separately as a whole-root coupling.
+ * the original exported name). For namespace imports (`import * as ns`), returns
+ * ['*'] as a sentinel; the caller treats that as whole-module coupling.
  *
  * Only static `import { X } from '...'` / `import type { X }` forms carry
  * named symbols; dynamic import() and vi.mock return [].
  */
-function importedSymbolsOf(node) {
+function importedSymbolsOf(node: ts.Node): string[] {
   if (!node || !ts.isImportDeclaration(node)) return [];
   const clause = node.importClause;
   if (!clause) return [];
-  const names = [];
+  const names: string[] = [];
   // default import. The agents root has NO default export (verified: no
   // `export default` exists in packages/agents/src), so `import X from
   // '@vybestack/llxprt-code-agents'` cannot resolve at runtime. The symbol
@@ -418,6 +456,7 @@ function importedSymbolsOf(node) {
   if (ts.isNamespaceImport(bindings)) {
     // `import * as ns` — whole-module coupling; cannot name a symbol. Caller
     // treats a namespace import of the agents root as a violation on its own.
+    // A default import may already be present in names and remains a violation.
     names.push('*');
     return names;
   }
@@ -441,12 +480,16 @@ function importedSymbolsOf(node) {
  * isNonLiteralViMock, and analyzeFile's import-kind classification, so the
  * three call sites can never drift apart (#2204).
  */
-function isViMockCall(node) {
+function isViMockMethodName(name: string): boolean {
+  return VI_MOCK_METHOD_NAMES.has(name);
+}
+
+function isViMockCall(node: ts.Node): node is ts.CallExpression {
   if (!ts.isCallExpression(node)) return false;
   const expr = node.expression;
   return (
     ts.isPropertyAccessExpression(expr) &&
-    expr.name.text === 'mock' &&
+    isViMockMethodName(expr.name.text) &&
     ts.isIdentifier(expr.expression) &&
     expr.expression.text === 'vi'
   );
@@ -461,30 +504,39 @@ function isViMockCall(node) {
  * rules — a dynamic specifier cannot be statically analyzed and could hide a
  * deep runtime import).
  */
-function specifierOf(node) {
+function literalSpecifierText(node: ts.Node | undefined): string | null {
+  if (node === undefined) {
+    return null;
+  }
+  return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
+    ? node.text
+    : null;
+}
+
+function specifierOf(node: ts.Node): string | null {
   if (!node) return null;
   // static import / import-equals
   if (ts.isImportDeclaration(node)) {
-    const m = node.moduleSpecifier;
-    return m && ts.isStringLiteral(m) ? m.text : null;
+    return literalSpecifierText(node.moduleSpecifier);
   }
   if (
     ts.isImportEqualsDeclaration(node) &&
     node.moduleReference &&
     ts.isExternalModuleReference(node.moduleReference)
   ) {
-    const expr = node.moduleReference.expression;
-    return expr && ts.isStringLiteral(expr) ? expr.text : null;
+    return literalSpecifierText(node.moduleReference.expression);
   }
   // dynamic import(...) and vi.mock(...)
   if (ts.isCallExpression(node)) {
     if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-      const arg = node.arguments[0];
-      return arg && ts.isStringLiteral(arg) ? arg.text : null;
+      return node.arguments.length > 0
+        ? literalSpecifierText(node.arguments[0])
+        : null;
     }
     if (isViMockCall(node)) {
-      const arg = node.arguments[0];
-      return arg && ts.isStringLiteral(arg) ? arg.text : null;
+      return node.arguments.length > 0
+        ? literalSpecifierText(node.arguments[0])
+        : null;
     }
   }
   return null;
@@ -501,102 +553,167 @@ function specifierOf(node) {
  * Returns the CallExpression node when it matches `vi.mock(<non-string>)`, or
  * null otherwise.
  */
-function isNonLiteralViMock(node) {
+function isNonLiteralViMock(node: ts.Node): ts.CallExpression | null {
   if (!isViMockCall(node)) return null;
+  if (node.arguments.length === 0) return null;
   const arg = node.arguments[0];
-  // Flag only when there IS an argument and it is NOT a string literal.
-  if (arg !== undefined && !ts.isStringLiteral(arg)) {
+  if (literalSpecifierText(arg) === null) {
     return node;
   }
   return null;
 }
 
-/**
- * Analyze a single file for boundary violations. Returns a list of violation
- * objects: { line, importKind, specifier }.
- */
-function analyzeFile(filePath) {
-  const sourceText = readFileSync(filePath, 'utf-8');
-  const sourceFile = ts.createSourceFile(
+function isNonLiteralDynamicImport(node: ts.Node): ts.CallExpression | null {
+  if (
+    !ts.isCallExpression(node) ||
+    node.expression.kind !== ts.SyntaxKind.ImportKeyword
+  ) {
+    return null;
+  }
+  if (node.arguments.length === 0) {
+    return null;
+  }
+  return literalSpecifierText(node.arguments[0]) === null ? node : null;
+}
+
+function importKindOf(node: ts.Node): string {
+  if (
+    ts.isCallExpression(node) &&
+    node.expression.kind === ts.SyntaxKind.ImportKeyword
+  ) {
+    return 'dynamic-import';
+  }
+  if (isViMockCall(node)) {
+    return 'vi.mock';
+  }
+  if (ts.isImportEqualsDeclaration(node)) {
+    return 'import-equals';
+  }
+
+  return 'static-import';
+}
+
+function parseSourceFile(filePath: string): ts.SourceFile | null {
+  let sourceText: string;
+  try {
+    sourceText = readFileSync(filePath, 'utf-8');
+  } catch (error) {
+    if (isErrnoException(error, 'ENOENT')) {
+      return null;
+    }
+    throw error;
+  }
+  return ts.createSourceFile(
     filePath,
     sourceText,
     ts.ScriptTarget.Latest,
     true,
     filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
-  const violations = [];
+}
 
-  function visit(node) {
+function dynamicRootImport(
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  specifier: string | null,
+): ImportViolation | null {
+  if (
+    specifier !== AGENTS_PACKAGE_ROOT ||
+    !ts.isCallExpression(node) ||
+    node.expression.kind !== ts.SyntaxKind.ImportKeyword
+  ) {
+    return null;
+  }
+  return {
+    line: getLine(sourceFile, node.getStart()),
+    importKind: 'agents-dynamic-import',
+    specifier,
+    symbol: '*',
+  };
+}
+
+function appendAgentsRootViolations(
+  violations: ImportViolation[],
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+  specifier: string | null,
+): void {
+  if (
+    specifier !== AGENTS_PACKAGE_ROOT ||
+    !ts.isImportDeclaration(node) ||
+    !node.importClause
+  ) {
+    return;
+  }
+  for (const sym of importedSymbolsOf(node)) {
+    if (sym === '*') {
+      violations.push({
+        line: getLine(sourceFile, node.getStart()),
+        importKind: 'agents-namespace-import',
+        specifier,
+        symbol: sym,
+      });
+      continue;
+    }
+    if (!PUBLIC_AGENT_SYMBOLS.has(sym)) {
+      violations.push({
+        line: getLine(sourceFile, node.getStart()),
+        importKind: 'agents-internal-symbol',
+        specifier,
+        symbol: sym,
+      });
+    }
+  }
+}
+
+/**
+ * Analyze a single file for boundary violations. Returns a list of violation
+ * objects: { line, importKind, specifier }.
+ */
+function analyzeFile(filePath: string): ImportViolation[] {
+  const sourceFile = parseSourceFile(filePath);
+  if (sourceFile === null) {
+    return [];
+  }
+  const parsedSourceFile = sourceFile;
+  const violations: ImportViolation[] = [];
+  const relFile = relative(REPO_ROOT, filePath).replace(/\\/g, '/');
+
+  function visit(node: ts.Node): void {
     const specifier = specifierOf(node);
-    if (specifier !== null && isDisallowedDeepImport(specifier)) {
-      const relFile = relative(REPO_ROOT, filePath).replace(/\\/g, '/');
-      if (!isAllowed(relFile, specifier)) {
-        let importKind = 'static-import';
-        if (
-          ts.isCallExpression(node) &&
-          node.expression.kind === ts.SyntaxKind.ImportKeyword
-        ) {
-          importKind = 'dynamic-import';
-        } else if (
-          // Use the shared isViMockCall predicate so the vi.mock shape stays
-          // identical to the one in specifierOf / isNonLiteralViMock. The
-          // receiver MUST be the identifier `vi`, not just any `.mock(...)`
-          // call, so `somethingElse.mock('...')` is classified as a
-          // static-import (the specifier still came from specifierOf) rather
-          // than vi.mock.
-          isViMockCall(node)
-        ) {
-          importKind = 'vi.mock';
-        } else if (ts.isImportEqualsDeclaration(node)) {
-          importKind = 'import-equals';
-        }
-        violations.push({
-          line: getLine(sourceFile, node.getStart()),
-          importKind,
-          specifier,
-        });
-      }
-    }
-    // Bare agents-root symbol check: the bare root re-exports internals, so a
-    // named import of an INTERNAL symbol from the public root is still a
-    // boundary violation (#2204). There is no per-file escape hatch.
     if (
-      specifier === AGENTS_PACKAGE_ROOT &&
-      ts.isImportDeclaration(node) &&
-      node.importClause
+      specifier !== null &&
+      isDisallowedDeepImport(specifier) &&
+      !isAllowed(relFile, specifier)
     ) {
-      const symbols = importedSymbolsOf(node);
-      for (const sym of symbols) {
-        // A namespace import (`import * as ns`) of the agents root couples to
-        // the whole (internals-leaking) surface — flag it.
-        if (sym === '*') {
-          violations.push({
-            line: getLine(sourceFile, node.getStart()),
-            importKind: 'agents-namespace-import',
-            specifier,
-            symbol: sym,
-          });
-          continue;
-        }
-        if (!PUBLIC_AGENT_SYMBOLS.has(sym)) {
-          violations.push({
-            line: getLine(sourceFile, node.getStart()),
-            importKind: 'agents-internal-symbol',
-            specifier,
-            symbol: sym,
-          });
-        }
-      }
+      violations.push({
+        line: getLine(parsedSourceFile, node.getStart()),
+        importKind: importKindOf(node),
+        specifier,
+      });
     }
-    // Non-literal vi.mock detection: a vi.mock call whose first argument is
-    // not a string literal cannot be statically analyzed by this guard and
-    // could hide a deep runtime import. Flag it so it cannot silently bypass
-    // the boundary check (#2204).
+    appendAgentsRootViolations(violations, parsedSourceFile, node, specifier);
+    const dynamicRootViolation = dynamicRootImport(
+      node,
+      parsedSourceFile,
+      specifier,
+    );
+    if (dynamicRootViolation !== null) {
+      violations.push(dynamicRootViolation);
+    }
     const nonLiteralMock = isNonLiteralViMock(node);
     if (nonLiteralMock !== null) {
       violations.push({
-        line: getLine(sourceFile, nonLiteralMock.getStart()),
+        line: getLine(parsedSourceFile, nonLiteralMock.getStart()),
         importKind: 'vi.mock-non-literal',
+        specifier: '<dynamic>',
+      });
+    }
+    const nonLiteralDynamicImport = isNonLiteralDynamicImport(node);
+    if (nonLiteralDynamicImport !== null) {
+      violations.push({
+        line: getLine(parsedSourceFile, nonLiteralDynamicImport.getStart()),
+        importKind: 'dynamic-import-non-literal',
         specifier: '<dynamic>',
       });
     }
@@ -605,7 +722,7 @@ function analyzeFile(filePath) {
   ts.forEachChild(sourceFile, visit);
 
   // Deduplicate
-  const seen = new Set();
+  const seen = new Set<string>();
   return violations.filter((v) => {
     const key = `${v.line}|${v.importKind}|${v.specifier}|${v.symbol ?? ''}`;
     if (seen.has(key)) return false;
@@ -620,22 +737,13 @@ function analyzeFile(filePath) {
  * that every allowlisted specifier is still actually imported by its file.
  * Returns an empty set for unreadable/empty files.
  */
-function collectAllSpecifiers(filePath) {
-  let sourceText;
-  try {
-    sourceText = readFileSync(filePath, 'utf-8');
-  } catch {
+function collectAllSpecifiers(filePath: string): Set<string> {
+  const sourceFile = parseSourceFile(filePath);
+  if (sourceFile === null) {
     return new Set();
   }
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
-  const specifiers = new Set();
-  function visit(node) {
+  const specifiers = new Set<string>();
+  function visit(node: ts.Node): void {
     const spec = specifierOf(node);
     if (spec !== null) {
       specifiers.add(spec);
@@ -647,7 +755,7 @@ function collectAllSpecifiers(filePath) {
 }
 
 /**
- * Scan for the getConfig escape hatch. Three shapes are forbidden in
+ * Scan for the getConfig escape hatch. Four shapes are forbidden in
  * production CLI source so the Config is never reached via an opaque
  * back-door:
  *
@@ -659,6 +767,8 @@ function collectAllSpecifiers(filePath) {
  *      reference is read WITHOUT being called). Without this guard the
  *      reference can be invoked later as `fn()`, bypassing shapes 1 and 2
  *      because the receiver is no longer named `getConfig`.
+ *   4. Destructuring binding extraction: `const { getConfig } = agent`, which
+ *      can later be passed as an opaque value without a `getConfig` callee.
  *
  * This guard is INTENTIONALLY BROAD: it matches ANY call whose receiver or
  * identifier is named `getConfig`, and ANY read of a `.getConfig` property,
@@ -676,51 +786,97 @@ function collectAllSpecifiers(filePath) {
  * allowlist because type-information (which binding the identifier resolves
  * to) is not available in this lightweight AST scan.
  */
-function scanGetConfigEscapeHatch(filePath) {
-  const sourceText = readFileSync(filePath, 'utf-8');
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+function isAssignmentWriteTarget(node: ts.Node): boolean {
+  let target = node;
+  while (target.parent && ts.isParenthesizedExpression(target.parent)) {
+    target = target.parent;
+  }
+  return (
+    target.parent !== undefined &&
+    ts.isBinaryExpression(target.parent) &&
+    target.parent.left === target &&
+    target.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
   );
-  const hits = [];
+}
+
+function isGetConfigBindingElement(node: ts.Node): node is ts.BindingElement {
+  if (!ts.isBindingElement(node)) {
+    return false;
+  }
+  if (!node.parent || !ts.isObjectBindingPattern(node.parent)) {
+    return false;
+  }
+  const propertyName = node.propertyName ?? node.name;
+  return (
+    (ts.isIdentifier(propertyName) && propertyName.text === 'getConfig') ||
+    (ts.isStringLiteral(propertyName) && propertyName.text === 'getConfig')
+  );
+}
+
+function isGetConfigMemberAccess(
+  node: ts.Node,
+): node is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+  // TypeScript exposes optional chaining here through the regular property and
+  // element access predicates, so these checks cover both dot and optional forms.
+  if (ts.isPropertyAccessExpression(node)) {
+    return node.name.text === 'getConfig';
+  }
+  if (!ts.isElementAccessExpression(node)) {
+    return false;
+  }
+  return (
+    ts.isStringLiteral(node.argumentExpression) &&
+    node.argumentExpression.text === 'getConfig'
+  );
+}
+
+function scanGetConfigEscapeHatch(filePath: string): GetConfigHit[] {
+  const sourceFile = parseSourceFile(filePath);
+  if (sourceFile === null) {
+    return [];
+  }
+  const parsedSourceFile = sourceFile;
+  const hits: GetConfigHit[] = [];
   // Property accesses named `getConfig` that ARE the callee of a call
   // expression are reported by Shape 1 (the call-expression visit). This set
   // records every `.getConfig` property access so the Shape 3 check can tell
   // whether a given access is the called form (already reported) or the
   // extracted form (reported here), avoiding double-reporting.
-  const calledPropertyAccesses = new Set();
-  function visit(node) {
+  const calledPropertyAccesses = new Set<
+    ts.PropertyAccessExpression | ts.ElementAccessExpression
+  >();
+  function visit(node: ts.Node): void {
     if (ts.isCallExpression(node)) {
       // Shape 1: <expr>.getConfig()
-      if (
-        ts.isPropertyAccessExpression(node.expression) &&
-        node.expression.name.text === 'getConfig'
-      ) {
+      if (isGetConfigMemberAccess(node.expression)) {
         calledPropertyAccesses.add(node.expression);
-        hits.push({ line: getLine(sourceFile, node.getStart()) });
+        hits.push({ line: getLine(parsedSourceFile, node.getStart()) });
       } else if (
-        // Shape 2: bare getConfig() — the identifier is bound via
-        // destructuring or a named import, so it has no property-access
-        // receiver. Catching the bare identifier form closes the escape
-        // hatch that destructuring/import would otherwise open.
+        // Shape 2: literal bare getConfig() calls, typically from destructuring
+        // or a named import. Aliased calls such as fn() are caught at the
+        // extraction site by Shapes 3 and 4.
         ts.isIdentifier(node.expression) &&
         node.expression.text === 'getConfig'
       ) {
-        hits.push({ line: getLine(sourceFile, node.getStart()) });
+        hits.push({ line: getLine(parsedSourceFile, node.getStart()) });
       }
+    } else if (
+      isGetConfigBindingElement(node) &&
+      !isAssignmentWriteTarget(node)
+    ) {
+      hits.push({ line: getLine(parsedSourceFile, node.getStart()) });
     } else if (
       // Shape 3: `agent.getConfig` read WITHOUT being called (e.g.
       // `const fn = agent.getConfig`). The extracted reference can be invoked
       // later as `fn()`, bypassing shapes 1 and 2. Skip accesses that are the
-      // callee of a call expression — those are reported by Shape 1.
-      ts.isPropertyAccessExpression(node) &&
-      node.name.text === 'getConfig' &&
-      !calledPropertyAccesses.has(node)
+      // callee of a call expression — those are reported by Shape 1 — and
+      // assignment write targets, which write the property rather than read
+      // or extract the escape hatch.
+      isGetConfigMemberAccess(node) &&
+      !calledPropertyAccesses.has(node) &&
+      !isAssignmentWriteTarget(node)
     ) {
-      hits.push({ line: getLine(sourceFile, node.getStart()) });
+      hits.push({ line: getLine(parsedSourceFile, node.getStart()) });
     }
     ts.forEachChild(node, visit);
   }
@@ -728,16 +884,24 @@ function scanGetConfigEscapeHatch(filePath) {
   return hits;
 }
 
-function countLines(relPath) {
+function countLines(filePath: string): number | null {
+  let sourceText: string;
+  try {
+    sourceText = readFileSync(filePath, 'utf-8');
+  } catch (error) {
+    if (isErrnoException(error, 'ENOENT')) return null;
+    throw error;
+  }
   // trimEnd() before split so a trailing newline does not produce a phantom
   // empty element that inflates the count by one. 'a\nb\n' splits to 3
   // elements without trimming but represents 2 actual lines.
-  return readFileSync(relPath, 'utf-8').trimEnd().split('\n').length;
+  const trimmed = sourceText.trimEnd();
+  return trimmed === '' ? 0 : trimmed.split('\n').length;
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-function relRepo(filePath) {
+function relRepo(filePath: string): string {
   return relative(REPO_ROOT, filePath).replace(/\\/g, '/');
 }
 
@@ -745,12 +909,19 @@ function relRepo(filePath) {
  * Format a single deep-import violation for console output. Extracted from
  * the scan phase to keep reporting concerns separate from collection logic.
  */
-function formatViolationLine(v) {
+function formatViolationLine(v: ImportViolation): string {
   if (v.importKind === 'vi.mock-non-literal') {
     return (
-      `    line ${v.line}: vi.mock(<non-literal>) — vi.mock specifiers must` +
-      ' be static string literals so this guard can analyze them; a dynamic' +
-      ' specifier could hide a deep runtime import'
+      `    line ${v.line}: vi.mock(<non-literal>) — vi.mock specifiers must ` +
+      `be static string literals so this guard can analyze them; a dynamic ` +
+      `specifier could hide a deep runtime import`
+    );
+  }
+  if (v.importKind === 'dynamic-import-non-literal') {
+    return (
+      `    line ${v.line}: import(<non-literal>) — dynamic import specifiers ` +
+      `must be static string literals so this guard can analyze them; a ` +
+      `dynamic specifier could hide a deep runtime import`
     );
   }
   if (v.symbol !== undefined) {
@@ -768,13 +939,12 @@ function formatViolationLine(v) {
 
 /**
  * Phase 1: Deep-import boundary scan. Walks all production source files and
- * reports any disallowed deep runtime imports. Returns the per-file violation
- * map (reused by the thin-entry guard in phase 4) and whether any violations
+ * reports any disallowed deep runtime imports. Returns whether any violations
  * were found.
  */
-function runDeepImportScan(files) {
+function runDeepImportScan(files: string[]): ScanResult {
   console.log('Checking CLI import boundary (packages/cli/src)...');
-  const violationsByFile = {};
+  const violationsByFile: Record<string, ImportViolation[]> = {};
   let totalViolations = 0;
   for (const filePath of files) {
     const rel = relRepo(filePath);
@@ -796,7 +966,7 @@ function runDeepImportScan(files) {
   } else {
     console.log('PASS: no disallowed deep runtime imports in CLI source.\n');
   }
-  return { failed: totalViolations > 0, violationsByFile };
+  return { failed: totalViolations > 0 };
 }
 
 /**
@@ -804,10 +974,10 @@ function runDeepImportScan(files) {
  * in CLI production source — the Config must be reached via the public Agent
  * surface, not an opaque getConfig back-door.
  */
-function runGetConfigScan(files) {
+function runGetConfigScan(files: string[]): boolean {
   console.log('Checking for getConfig() escape-hatch usage...');
   let getConfigHits = 0;
-  const getConfigByFile = {};
+  const getConfigByFile: Record<string, GetConfigHit[]> = {};
   for (const filePath of files) {
     const rel = relRepo(filePath);
     const hits = scanGetConfigEscapeHatch(filePath);
@@ -844,7 +1014,7 @@ function runGetConfigScan(files) {
  * still be imported. This prevents stale allowlist entries from accumulating
  * after a refactor removes the import.
  */
-function runAllowlistFreshness(scannedRelFiles) {
+function runAllowlistFreshness(scannedRelFiles: Set<string>): boolean {
   console.log('Checking allowlist freshness (self-pruning guard)...');
   // Only run the freshness check against the real production source tree.
   // Synthetic test fixtures (CLI_BOUNDARY_ROOT set) do not contain the full
@@ -855,7 +1025,7 @@ function runAllowlistFreshness(scannedRelFiles) {
     return false;
   }
   let staleEntries = 0;
-  const staleByFile = {};
+  const staleByFile: Record<string, StaleEntry[]> = {};
   for (const [allowFile, allowSpecs] of Object.entries(ALLOWLIST)) {
     collectStaleEntries(allowFile, allowSpecs, scannedRelFiles, staleByFile);
     staleEntries += (staleByFile[allowFile] ?? []).length;
@@ -876,18 +1046,18 @@ function runAllowlistFreshness(scannedRelFiles) {
 }
 
 function collectStaleEntries(
-  allowFile,
-  allowSpecs,
-  scannedRelFiles,
-  staleByFile,
-) {
+  allowFile: string,
+  allowSpecs: readonly string[],
+  scannedRelFiles: Set<string>,
+  staleByFile: Record<string, StaleEntry[]>,
+): void {
   if (!scannedRelFiles.has(allowFile)) {
     staleByFile[allowFile] = [{ kind: 'missing-file', detail: allowFile }];
     return;
   }
   const absFile = join(REPO_ROOT, allowFile);
   const actualSpecs = collectAllSpecifiers(absFile);
-  const stale = [];
+  const stale: StaleEntry[] = [];
   for (const spec of allowSpecs) {
     if (!actualSpecs.has(spec)) {
       stale.push({ kind: 'unused-specifier', detail: spec });
@@ -898,7 +1068,7 @@ function collectStaleEntries(
   }
 }
 
-function formatStaleEntry(e) {
+function formatStaleEntry(e: StaleEntry): string {
   if (e.kind === 'missing-file') {
     return '    allowlisted file no longer exists in production source — remove the entry';
   }
@@ -910,7 +1080,7 @@ function formatStaleEntry(e) {
  * thin-entry line threshold and that cli.tsx does not directly import
  * runtime-construction deep paths.
  */
-function runThinEntryGuard(violationsByFile) {
+function runThinEntryGuard(): boolean {
   console.log('Checking thin-entry structure...');
   // These guards only apply when the real entrypoint files exist (they are
   // absent in synthetic fixture trees used by the script's own tests). The
@@ -921,42 +1091,45 @@ function runThinEntryGuard(violationsByFile) {
   // CLI_INDEX existence check would silently skip the cli.tsx guard in that
   // scenario (#2204).
   let failed = checkThinIndex();
-  failed = checkCliEntryDeepImports(violationsByFile) || failed;
+  failed = checkCliEntryDeepImports() || failed;
   return failed;
 }
 
-function checkThinIndex() {
-  if (!existsSync(CLI_INDEX)) {
-    console.log(`SKIP: thin CLI_INDEX guard (${CLI_INDEX} absent).`);
+function checkThinIndex(): boolean {
+  const indexRel = relRepo(CLI_INDEX);
+  const indexLines = countLines(CLI_INDEX);
+  if (indexLines === null) {
+    console.log(`SKIP: thin CLI_INDEX guard (${indexRel} absent).`);
     return false;
   }
-  const indexLines = countLines(CLI_INDEX);
   if (indexLines > THIN_ENTRY_MAX_LINES) {
     console.log(
-      `FAIL: ${CLI_INDEX} is ${indexLines} lines (threshold ${THIN_ENTRY_MAX_LINES}). ` +
+      `FAIL: ${indexRel} is ${indexLines} lines (threshold ${THIN_ENTRY_MAX_LINES}). ` +
         'The real entrypoint must stay thin: shebang + top-level error handling + main() invocation only.',
     );
     return true;
   }
   console.log(
-    `PASS: ${CLI_INDEX} is ${indexLines} lines (<= ${THIN_ENTRY_MAX_LINES}).`,
+    `PASS: ${indexRel} is ${indexLines} lines (<= ${THIN_ENTRY_MAX_LINES}).`,
   );
   return false;
 }
 
-function checkCliEntryDeepImports(violationsByFile) {
-  // Reuse the analysis from phase 1 (CLI_ENTRY is under CLI_SRC_DIR and was
-  // already scanned) instead of re-analyzing the file.
+function checkCliEntryDeepImports(): boolean {
+  // CLI_ENTRY is re-analyzed independently because the phase 1 violations map
+  // only contains files with findings; a clean entrypoint may be absent.
+  const entryRel = relRepo(CLI_ENTRY);
   if (!existsSync(CLI_ENTRY)) {
-    if (existsSync(CLI_INDEX)) {
-      console.log(`SKIP: CLI_ENTRY deep-import guard (${CLI_ENTRY} absent).`);
-    } else {
-      console.log('SKIP: thin-entry guard (entrypoint files absent).');
-    }
+    console.log(`SKIP: CLI_ENTRY deep-import guard (${entryRel} absent).`);
     return false;
   }
-  const entryRel = relRepo(CLI_ENTRY);
-  const entryViolations = violationsByFile[entryRel] ?? [];
+  if (Object.prototype.hasOwnProperty.call(ALLOWLIST, entryRel)) {
+    console.log(
+      `FAIL: ${entryRel} must not appear in ALLOWLIST; the thin-entry guard requires zero direct deep imports.`,
+    );
+    return true;
+  }
+  const entryViolations = analyzeFile(CLI_ENTRY);
   if (entryViolations.length > 0) {
     console.log(
       `\nFAIL: ${entryRel} directly imports runtime-construction deep paths:`,
@@ -967,23 +1140,23 @@ function checkCliEntryDeepImports(violationsByFile) {
     return true;
   }
   console.log(
-    `PASS: ${CLI_ENTRY} does not directly import runtime-construction deep paths.`,
+    `PASS: ${entryRel} does not directly import runtime-construction deep paths.`,
   );
   return false;
 }
 
-function main() {
+function main(): void {
   // ── 1. Deep-import boundary scan ───────────────────────────────────────
   const files = walkDir(CLI_SRC_DIR);
   if (files.length === 0) {
-    // An empty file list means the scan directory was not found or is empty
-    // — the boundary check would silently PASS without scanning anything,
-    // which is a dangerous false-positive. Fail loudly instead.
+    const reason = existsSync(CLI_SRC_DIR)
+      ? 'all TypeScript files under the scan directory were classified as test infrastructure'
+      : 'the scan directory does not exist';
     console.log(
-      `FAIL: no TypeScript source files found under ${CLI_SRC_DIR}. ` +
-        'The scan directory must exist and contain production source.',
+      `FAIL: no production TypeScript source files found under ${relRepo(CLI_SRC_DIR)} (${reason}).`,
     );
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   console.log(`Scanning ${files.length} production source files...\n`);
   const scanResult = runDeepImportScan(files);
@@ -997,14 +1170,25 @@ function main() {
   failed = runAllowlistFreshness(scannedRelFiles) || failed;
 
   // ── 4. Thin-entry guard ────────────────────────────────────────────────
-  failed = runThinEntryGuard(scanResult.violationsByFile) || failed;
+  failed = runThinEntryGuard() || failed;
 
   if (failed) {
     console.log('\nCLI import boundary check FAILED.');
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   console.log('\nCLI import boundary check PASSED.');
-  process.exit(0);
 }
 
-main();
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    main();
+  } catch (error) {
+    console.error('\nCLI import boundary check FAILED (unexpected error):');
+    console.error(error);
+    process.exitCode = 1;
+  }
+}

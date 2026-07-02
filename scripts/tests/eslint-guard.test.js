@@ -28,7 +28,7 @@ import {
   scanPackageTypeScriptSuppressions,
   scanRepositoryLintEscapeHatches,
   scanRootTypeScriptSuppressions,
-} from '../check-eslint-guard.js';
+} from '../check-eslint-guard.ts';
 
 const repoRoot = resolve(__dirname, '..', '..');
 
@@ -181,11 +181,11 @@ describe('check-eslint-guard', () => {
       // safe, but a real // @ts-ignore comment added to the file must be
       // rejected.
       const violations = checkDiff(
-        diffFor('scripts/check-eslint-guard.js', '// @ts-ignore real bug'),
+        diffFor('scripts/check-eslint-guard.ts', '// @ts-ignore real bug'),
       );
 
       expect(violations).toHaveLength(1);
-      expect(violations[0].file).toBe('scripts/check-eslint-guard.js');
+      expect(violations[0].file).toBe('scripts/check-eslint-guard.ts');
       expect(violations[0].message).toContain('TypeScript suppression');
     });
 
@@ -217,7 +217,7 @@ describe('check-eslint-guard', () => {
     it('does not flag TS suppression text inside template literals in the guard implementation file', () => {
       const violations = checkDiff(
         diffFor(
-          'scripts/check-eslint-guard.js',
+          'scripts/check-eslint-guard.ts',
           'const msg = `@ts-expect-error directive`;',
         ),
       );
@@ -2153,7 +2153,7 @@ describe('check-eslint-guard', () => {
 
       describe('zero-context diffs (edge case for minimal-context hunks)', () => {
         // Production uses git diff --unified=5 (DIFF_CONTEXT_LINES in
-        // check-eslint-guard.js), which normally includes enough context for
+        // check-eslint-guard.ts), which normally includes enough context for
         // the rules: { block and rule key lines. These tests exercise the
         // minimal-context edge case (hunks with no surrounding context lines)
         // so the same-rule-key fallback heuristic stays correct even when a
@@ -7847,7 +7847,7 @@ describe('scanRootTypeScriptSuppressions (#2189 review finding)', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'eslint-guard-root-guard-'));
     mkdirSync(join(tmpDir, 'scripts'), { recursive: true });
     writeFileSync(
-      join(tmpDir, 'scripts', 'check-eslint-guard.js'),
+      join(tmpDir, 'scripts', 'check-eslint-guard.ts'),
       [
         'export function check() {',
         '  // @ts-ignore real suppression in guard file',
@@ -7859,7 +7859,7 @@ describe('scanRootTypeScriptSuppressions (#2189 review finding)', () => {
     const violations = scanRootTypeScriptSuppressions(tmpDir, '2189');
 
     expect(violations).toHaveLength(1);
-    expect(violations[0].file).toBe('scripts/check-eslint-guard.js');
+    expect(violations[0].file).toBe('scripts/check-eslint-guard.ts');
     expect(violations[0].message).toContain('TypeScript suppression');
   });
 

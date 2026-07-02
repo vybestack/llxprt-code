@@ -50,6 +50,13 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Bun
+        # npm run build below is backed by bun scripts/build.ts and requires
+        # the Bun runtime to be on PATH.
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
       - name: Install dependencies
         run: npm ci
 

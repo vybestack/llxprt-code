@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+import { isErrnoException } from './utils/error-guards.ts';
 
 // Script to deflake tests
 // Ex. npm run deflake -- --command="npm run test:e2e -- --test-name-pattern 'extension'" --runs=3
@@ -22,11 +23,11 @@ const DOCKERIGNORE_CONTENT = `.integration-tests`.trim();
 
 /**
  * Runs a command and streams its output to the console.
- * @param {string} command The command string to execute (e.g., 'npm run test:e2e -- --watch').
- * @param {string[]} args Additional arguments to pass to the command.
- * @returns {Promise<number>} A Promise that resolves with the exit code of the process.
+ * @param command The command string to execute (e.g., 'npm run test:e2e -- --watch').
+ * @param args Additional arguments to pass to the command.
+ * @returns A Promise that resolves with the exit code of the process.
  */
-function runCommand(command, args = []) {
+function runCommand(command: string, args: string[] = []): Promise<number> {
   if (!command) {
     return Promise.resolve(1);
   }
@@ -50,7 +51,10 @@ function runCommand(command, args = []) {
   });
 }
 
-async function runSingleIteration(command, args) {
+async function runSingleIteration(
+  command: string,
+  args: string[],
+): Promise<boolean> {
   try {
     const exitCode = await runCommand(command, args);
     if (exitCode === 0) {
@@ -65,7 +69,7 @@ async function runSingleIteration(command, args) {
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   const argv = await yargs(hideBin(process.argv))
     .option('command', {
       type: 'string',
@@ -80,7 +84,7 @@ async function main() {
 
   const NUM_RUNS = argv.runs;
   const COMMAND = argv.command;
-  const ARGS = argv._;
+  const ARGS = argv._.map(String);
   let failures = 0;
 
   const backupDockerIgnorePath = dockerIgnorePath + '.bak';
@@ -95,7 +99,7 @@ async function main() {
       originalDockerIgnoreRenamed = true;
     } catch (err) {
       // If the file doesn't exist, that's fine. Otherwise, rethrow.
-      if (err.code !== 'ENOENT') throw err;
+      if (!isErrnoException(err, 'ENOENT')) throw err;
     }
 
     // Create the temporary .dockerignore for this run.

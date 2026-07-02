@@ -26,7 +26,7 @@
     "./confirmation-bus/message-bus.js": "./dist/src/confirmation-bus/message-bus.js"
   },
   "scripts": {
-    "build": "node ../../scripts/build_package.js",
+    "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
