@@ -15,7 +15,7 @@ import type {
   AnthropicMessage,
   AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
-import { supportsAdaptiveThinking } from './AnthropicModelData.js';
+import { isFable5, supportsAdaptiveThinking } from './AnthropicModelData.js';
 
 /**
  * A content block with cache_control attached.
@@ -220,6 +220,7 @@ export function attachPromptCaching(
  * Build thinking configuration for Anthropic API
  * @issue #1307: Correct adaptive thinking support for Opus 4.6
  * @issue #2289: Extended to Sonnet 5 (also supports adaptive thinking)
+ * @issue #2328: Fable 5 is adaptive-only (never budgeted 'enabled' or 'disabled')
  */
 export function buildThinkingConfig(options: {
   reasoningEnabled: boolean;
@@ -233,6 +234,25 @@ export function buildThinkingConfig(options: {
 } {
   if (!options.reasoningEnabled) {
     return {};
+  }
+
+  // Claude Fable 5: adaptive thinking is the only mode and is always on — it
+  // cannot be disabled or switched to legacy budgeted 'enabled' thinking.
+  // Depth is controlled exclusively via `effort`, so ignore any
+  // reasoningBudgetTokens / adaptiveThinking override for Fable 5.
+  if (isFable5(options.model)) {
+    const config: {
+      thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
+      output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
+    } = {
+      thinking: { type: 'adaptive' as const },
+    };
+
+    if (options.thinkingEffort) {
+      config.output_config = { effort: options.thinkingEffort };
+    }
+
+    return config;
   }
 
   const adaptiveCapable = supportsAdaptiveThinking(options.model);

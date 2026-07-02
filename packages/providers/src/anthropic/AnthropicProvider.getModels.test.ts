@@ -255,6 +255,46 @@ describe('AnthropicProvider', () => {
       expect(opus48?.maxOutputTokens).toBe(32000);
     });
 
+    it('should include Claude Fable 5 model in OAuth model list @issue:2328', async () => {
+      const oauthProvider = new AnthropicProvider(
+        'sk-ant-oat01-fable-test-token',
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(oauthProvider, 'getAuthToken').mockResolvedValue(
+        'sk-ant-oat01-fable-test-token',
+      );
+
+      const models = await oauthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-fable-5');
+
+      const fable5 = models.find((m) => m.id === 'claude-fable-5');
+      expect(fable5).toBeDefined();
+      expect(fable5?.name).toBe('Claude Fable 5');
+      expect(fable5?.provider).toBe('anthropic');
+      expect(fable5?.supportedToolFormats).toContain('anthropic');
+      expect(fable5?.contextWindow).toBe(200000);
+      expect(fable5?.maxOutputTokens).toBe(40000);
+    });
+
+    it('should NOT include Claude Fable 5 in default list when auth is unavailable @issue:2328', async () => {
+      const noAuthProvider = new AnthropicProvider(
+        undefined,
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(noAuthProvider, 'getAuthToken').mockResolvedValue(undefined);
+
+      const models = await noAuthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).not.toContain('claude-fable-5');
+    });
+
     it('should include Claude Opus 4.6 model in default list when auth is unavailable', async () => {
       const noAuthProvider = new AnthropicProvider(
         undefined,

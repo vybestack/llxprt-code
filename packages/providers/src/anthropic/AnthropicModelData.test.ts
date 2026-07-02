@@ -10,6 +10,7 @@ import {
   DEFAULT_MODELS,
   isOpus46Plus,
   isSonnet5,
+  isFable5,
   supportsAdaptiveThinking,
   getLatestClaudeModel,
   getMaxTokensForModel,
@@ -182,6 +183,83 @@ describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
 
     it('returns the Opus latest alias for the opus tier', () => {
       expect(getLatestClaudeModel('opus')).toBe('claude-opus-4-latest');
+    });
+  });
+});
+
+describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
+  describe('catalog entries', () => {
+    // Context window reflects the Claude Code / subscription (auth) 200K
+    // default; the advertised 1M window is API-only/plan-gated. Max output
+    // defaults to 40K (a 128K cap is not realistic at a 200K context window).
+    it('includes claude-fable-5 with 200K context / 40K output in OAUTH_MODELS', () => {
+      const model = OAUTH_MODELS.find((m) => m.id === 'claude-fable-5');
+      expect(model).toBeDefined();
+      expect(model?.name).toBe('Claude Fable 5');
+      expect(model?.contextWindow).toBe(200000);
+      expect(model?.maxOutputTokens).toBe(40000);
+    });
+
+    it('places claude-fable-5 at the top of OAUTH_MODELS', () => {
+      expect(OAUTH_MODELS[0].id).toBe('claude-fable-5');
+    });
+
+    it('does NOT include claude-fable-5 in DEFAULT_MODELS (OAuth-only)', () => {
+      expect(DEFAULT_MODELS.some((m) => m.id === 'claude-fable-5')).toBe(false);
+    });
+  });
+
+  describe('isFable5', () => {
+    it('returns true for claude-fable-5 and dated snapshot variants', () => {
+      expect(isFable5('claude-fable-5')).toBe(true);
+      expect(isFable5('claude-fable-5-20260701')).toBe(true);
+      expect(isFable5('claude-fable-5-latest')).toBe(true);
+    });
+
+    it('returns false for opus, sonnet, and non-claude models', () => {
+      expect(isFable5('claude-opus-4-8')).toBe(false);
+      expect(isFable5('claude-sonnet-5')).toBe(false);
+      expect(isFable5('gpt-5.5')).toBe(false);
+    });
+
+    it('is case-insensitive', () => {
+      expect(isFable5('Claude-Fable-5')).toBe(true);
+    });
+  });
+
+  describe('supportsAdaptiveThinking', () => {
+    it('returns true for claude-fable-5 and dated variants', () => {
+      expect(supportsAdaptiveThinking('claude-fable-5')).toBe(true);
+      expect(supportsAdaptiveThinking('claude-fable-5-20260701')).toBe(true);
+    });
+
+    it('returns false for models without adaptive thinking', () => {
+      expect(supportsAdaptiveThinking('claude-opus-4-5')).toBe(false);
+      expect(supportsAdaptiveThinking('claude-haiku-4-5')).toBe(false);
+    });
+  });
+
+  describe('getMaxTokensForModel', () => {
+    it('returns 40000 for claude-fable-5, the -latest alias, and dated variants', () => {
+      expect(getMaxTokensForModel('claude-fable-5')).toBe(40000);
+      expect(getMaxTokensForModel('claude-fable-5-latest')).toBe(40000);
+      expect(getMaxTokensForModel('claude-fable-5-20260701')).toBe(40000);
+    });
+
+    it('is case-insensitive (routes through isFable5)', () => {
+      expect(getMaxTokensForModel('Claude-Fable-5')).toBe(40000);
+    });
+  });
+
+  describe('getContextWindowForModel', () => {
+    it('returns 200000 (auth default) for claude-fable-5, the -latest alias, and dated variants', () => {
+      expect(getContextWindowForModel('claude-fable-5')).toBe(200000);
+      expect(getContextWindowForModel('claude-fable-5-latest')).toBe(200000);
+      expect(getContextWindowForModel('claude-fable-5-20260701')).toBe(200000);
+    });
+
+    it('is case-insensitive (routes through isFable5)', () => {
+      expect(getContextWindowForModel('Claude-Fable-5')).toBe(200000);
     });
   });
 });
