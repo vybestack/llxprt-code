@@ -430,6 +430,11 @@ describe('published package no-compile runtime contract (S6)', () => {
     expect(packed.has('packages/cli/src/cli.tsx')).toBe(true);
     expect(packed.has('packages/core/index.ts')).toBe(true);
     expect(packed.has('packages/core/src/index.ts')).toBe(true);
+    // git-commit.ts is gitignored (regenerated per build) but imported by
+    // shipped source (AboutBox, bugCommand). The root prepack hook must
+    // generate it so `npm pack` always includes it — without it the installed
+    // CLI dies at startup with a module-resolution error.
+    expect(packed.has('packages/cli/src/generated/git-commit.ts')).toBe(true);
   });
 
   it('declares runtime dependencies needed by shipped workspace source', () => {
