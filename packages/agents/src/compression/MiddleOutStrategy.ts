@@ -406,7 +406,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
           .join(',') || 'none';
       throw new CompressionExecutionError(
         'middle-out',
-        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${finishReason ?? 'none'}, blocks=${blocksSummary}]`,
+        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${finishReason ?? 'none'}, stopReason=${stopReason ?? 'none'}, blocks=${blocksSummary}]`,
         { isTransient: isTransientCompressionError(error) },
       );
     }

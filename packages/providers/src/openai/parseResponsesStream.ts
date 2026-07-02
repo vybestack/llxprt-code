@@ -357,9 +357,10 @@ function* handleFunctionCallDone(
 }
 
 /**
- * Build and throw a stream-interruption error for terminal `response.failed`
+ * Build a stream-interruption error for terminal `response.failed`
  * or top-level `error` events. Uses createStreamInterruptionError so the error
  * is classified as transient/retryable (server-side failures should be retried).
+ * Callers are responsible for throwing the returned Error.
  */
 function createTerminalStreamError(
   errorPayload: ResponsesApiError | undefined,
