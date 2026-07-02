@@ -1,6 +1,7 @@
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P21
  * @requirement:REQ-006
+ * @plan:PLAN-20260629-ISSUE2285.P05
  *
  * Full non-breaking characterization of the agents public export surface.
  *
@@ -59,10 +60,9 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     }
 
     // Classes are also `typeof 'function'` at runtime.
-    const expectedRootClasses: readonly string[] = [
-      'AdapterError',
-      'AgenticLoop',
-    ];
+    // P05: AgenticLoop (concrete low-level class) removed from the root
+    // surface; consumers use createAgenticLoop from the curated api barrel.
+    const expectedRootClasses: readonly string[] = ['AdapterError'];
     for (const key of expectedRootClasses) {
       expect(rootKeys.has(key), `root barrel must export "${key}"`).toBe(true);
       expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
@@ -87,6 +87,13 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     expect(typeof root.getTokenLimitForConfiguredContext).toBe('function');
   });
 
+  it('Test C2: createAgenticLoop factory remains on the root barrel after AgenticLoop class removal (P05)', () => {
+    // P05 removed the concrete AgenticLoop CLASS from the root surface, but
+    // the curated createAgenticLoop FACTORY must remain so consumers can still
+    // construct loops without importing the class directly.
+    expect(typeof root.createAgenticLoop).toBe('function');
+  });
+
   it('Test D: internals.js value exports (AgentClient, PostTurnAction) remain intact', () => {
     // REQ-004.1: the concrete AgentClient class stays a runtime value on the
     // documented internals subpath.
@@ -102,6 +109,8 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
   it('PROP: every sampled #1594-era root key is present in the dynamic root barrel (REQ-006)', () => {
     // Property over the curated expected key set: each sampled key MUST be a
     // live key of the dynamically-enumerated root barrel.
+    // P05: AgenticLoop removed from the root (curated createAgenticLoop
+    // remains).
     const expectedRootKeys: readonly string[] = [
       'createAgent',
       'fromConfig',
@@ -112,7 +121,6 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
       'toConfigParameters',
       'AdapterError',
       'createTaskToolRegistration',
-      'AgenticLoop',
     ];
     const rootKeys = new Set(Object.keys(root));
     fc.assert(
@@ -131,7 +139,6 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
       'toConfigParameters',
       'AdapterError',
       'createTaskToolRegistration',
-      'AgenticLoop',
     ];
     fc.assert(
       fc.property(
@@ -165,6 +172,8 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
 describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non-breaking', () => {
   it('Test A: full #1594-era load-bearing value set is still present as runtime functions (prior ⊂ current)', () => {
     const rootKeys = new Set(Object.keys(root));
+    // P05: AgenticLoop removed from the root (curated createAgenticLoop
+    // remains).
     const priorLoadBearing: readonly string[] = [
       'createAgent',
       'fromConfig',
@@ -175,7 +184,6 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
       'toConfigParameters',
       'createTaskToolRegistration',
       'AdapterError',
-      'AgenticLoop',
     ];
     for (const key of priorLoadBearing) {
       expect(rootKeys.has(key), `prior root key "${key}" must remain`).toBe(
@@ -186,15 +194,18 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
   });
 
   it('Test B: internals identity unchanged — AgentClient binding preserved on the documented internals subpath', () => {
-    // AgentClient is a runtime VALUE on the internals.js subpath (REQ-004.1).
+    // P05: the root no longer re-exports internals, so root.AgentClient is
+    // undefined (deny). AgentClient remains a runtime VALUE on the
+    // internals.js subpath (REQ-004.1).
     expect(typeof internals.AgentClient).toBe('function');
     // PostTurnAction is a value (enum/const) on internals.
     expect(internals.PostTurnAction).not.toBeUndefined();
-    // Binding identity: AgentClient is a runtime value on BOTH the root barrel
-    // (via `export * from './agent.js'`) AND the documented internals subpath.
-    // The two MUST be the same binding: root.AgentClient === internals.AgentClient
-    const rootAgentClient = (root as Record<string, unknown>).AgentClient;
-    expect(rootAgentClient).toBe(internals.AgentClient);
+    // Root DENY: AgentClient must NOT appear on the root barrel after
+    // depollution.
+    expect(
+      (root as Record<string, unknown>).AgentClient,
+      'root.AgentClient must be undefined after depollution (P05)',
+    ).toBeUndefined();
   });
 
   it('Test C: new value enums are present and round-trip (additive surface growth)', () => {
@@ -209,6 +220,8 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
   });
 
   it('PROP 1: each sampled prior load-bearing key is a live root key AND callable (REQ-009)', () => {
+    // P05: AgenticLoop removed from the root (curated createAgenticLoop
+    // remains).
     const priorLoadBearing: readonly string[] = [
       'createAgent',
       'fromConfig',
@@ -219,7 +232,6 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
       'toConfigParameters',
       'createTaskToolRegistration',
       'AdapterError',
-      'AgenticLoop',
     ];
     const rootKeys = new Set(Object.keys(root));
     fc.assert(

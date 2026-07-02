@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   main,
   setupUnhandledRejectionHandler,
+  __resetUnhandledRejectionStateForTesting,
   formatNonInteractiveError,
 } from './cli.js';
 import type { LoadedSettings } from './config/settings.js';
@@ -349,7 +350,33 @@ describe('cli.tsx main function', () => {
     expect(loadSettingsMock).not.toHaveBeenCalled();
   });
 
+  it('should preserve shared sibling objects when stringifying rejection reasons', async () => {
+    __resetUnhandledRejectionStateForTesting();
+    const appEventsMock = vi.mocked(appEvents);
+    const shared = { value: 'shared object' };
+
+    const removeHandler = setupUnhandledRejectionHandler();
+    try {
+      process.emit(
+        'unhandledRejection',
+        { first: shared, second: shared },
+        Promise.resolve(),
+      );
+      await new Promise(process.nextTick);
+
+      const logErrorCall = appEventsMock.emit.mock.calls.find(
+        (call) => call[0] === AppEvent.LogError,
+      );
+      expect(logErrorCall?.[1]).toContain('"first"');
+      expect(logErrorCall?.[1]).toContain('"second"');
+      expect(logErrorCall?.[1]).not.toContain('[Circular]');
+    } finally {
+      removeHandler();
+    }
+  });
+
   it('should log unhandled promise rejections and open debug console on first error', async () => {
+    __resetUnhandledRejectionStateForTesting();
     const appEventsMock = vi.mocked(appEvents);
     const rejectionError = new Error('Test unhandled rejection');
 
@@ -371,12 +398,14 @@ describe('cli.tsx main function', () => {
       expect(appEventsMock.emit).toHaveBeenCalledWith(
         AppEvent.LogError,
         expect.stringContaining('Unhandled Promise Rejection'),
+        rejectionError,
       );
       expect(appEventsMock.emit).toHaveBeenCalledWith(
         AppEvent.LogError,
         expect.stringContaining(
           'Please file a bug report using the /bug tool.',
         ),
+        rejectionError,
       );
 
       // Simulate a second rejection

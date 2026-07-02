@@ -11,8 +11,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { KeyringTokenStore } from '../keyring-token-store.js';
 import type { OAuthToken } from '../types.js';
-import type { IDebugLogger } from '../interfaces/debug-logger.js';
-import type { ISecureStore } from '../interfaces/secure-store.js';
+import type { IDebugLogger, ISecureStore } from '../interfaces/index.js';
 
 function createFakeSecureStore(): ISecureStore & {
   store: Map<string, string>;

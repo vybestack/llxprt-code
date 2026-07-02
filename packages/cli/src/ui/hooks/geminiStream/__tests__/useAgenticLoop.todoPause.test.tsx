@@ -19,7 +19,7 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { CoreToolScheduler } from '@vybestack/llxprt-code-agents';
+import { CoreToolScheduler } from '@vybestack/llxprt-code-agents/internals.js';
 import {
   GeminiEventType,
   DEFAULT_AGENT_ID,

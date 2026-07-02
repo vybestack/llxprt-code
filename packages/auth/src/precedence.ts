@@ -20,7 +20,7 @@
 
 import type { ISettingsService } from './interfaces/settings-service.js';
 import type { IProviderRuntimeContext } from './interfaces/runtime-context.js';
-import type { IDebugLogger } from './interfaces/debug-logger.js';
+import type { IDebugLogger } from './interfaces/index.js';
 
 export interface AuthPrecedenceConfig {
   // Constructor/direct API key

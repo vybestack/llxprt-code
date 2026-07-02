@@ -12,7 +12,7 @@ import type {
   IProviderRuntimeContext,
   GetActiveRuntimeContext,
 } from './interfaces/runtime-context.js';
-import type { IDebugLogger } from './interfaces/debug-logger.js';
+import type { IDebugLogger } from './interfaces/index.js';
 import type { IProviderKeyStorage } from './interfaces/provider-key-storage.js';
 import { type OAuthToken } from './types.js';
 import type {
