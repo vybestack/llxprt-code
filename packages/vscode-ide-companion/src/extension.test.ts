@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { activate } from './extension.js';
-import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
+import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-ide-integration';
 
 vi.mock('vscode', () => ({
   window: {
@@ -65,10 +65,10 @@ const { mockDetectIdeFromEnv } = vi.hoisted(() => {
   return { mockDetectIdeFromEnv: mock };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
+vi.mock('@vybestack/llxprt-code-ide-integration', async () => {
   const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+    typeof import('@vybestack/llxprt-code-ide-integration')
+  >('@vybestack/llxprt-code-ide-integration');
   return {
     ...actual,
     detectIdeFromEnv: mockDetectIdeFromEnv,

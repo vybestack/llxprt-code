@@ -411,6 +411,10 @@ function collectDependencies(
     return;
   }
 
+  if (packageInfo.link && typeof packageInfo.resolved === 'string') {
+    packageInfo = packageLock.packages[packageInfo.resolved] ?? packageInfo;
+  }
+
   dependenciesMap.set(packageName, packageInfo.version);
 
   if (packageInfo.dependencies) {

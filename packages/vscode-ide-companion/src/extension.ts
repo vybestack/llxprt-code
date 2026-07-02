@@ -14,7 +14,7 @@ import {
   detectIdeFromEnv,
   IDE_DEFINITIONS,
   type IdeInfo,
-} from '@vybestack/llxprt-code-core';
+} from '@vybestack/llxprt-code-ide-integration';
 
 const CLI_IDE_COMPANION_IDENTIFIER =
   'vybestack.llxprt-code-vscode-ide-companion';
