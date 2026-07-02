@@ -132,8 +132,10 @@ function assertNotContains(haystack, needle, context, stderr) {
  * down after `expect` returns.
  */
 const regressionFailures = [];
+let scenariosRun = 0;
 
 function regress(name, run, expect) {
+  scenariosRun++;
   try {
     const result = withFixture(({ root, write }) => run({ root, write }));
     expect(result);
@@ -148,11 +150,9 @@ function regress(name, run, expect) {
 
 // ─── Regression assertions (NEW specifier-based behavior) ───────────────────
 
-let scenariosRun = 0;
 
 // Assertion 1: The NEW checker ALLOWS a bare-root INTERNAL-symbol import
 // (AgentClient) at the specifier level. The old symbol-level gate is gone.
-scenariosRun++;
 regress(
   'bare-root internal-symbol import (AgentClient) is ALLOWED at the specifier level',
   ({ root, write }) => {
@@ -185,7 +185,6 @@ regress(
 
 // Assertion 2: The NEW checker STILL flags the internals subpath
 // (@vybestack/llxprt-code-agents/internals.js) as a deep-import violation.
-scenariosRun++;
 regress(
   'internals subpath (@vybestack/llxprt-code-agents/internals.js) is forbidden as a deep import',
   ({ root, write }) => {
@@ -215,7 +214,6 @@ regress(
 
 // Assertion 3: The NEW checker STILL flags a deep source-path import
 // (e.g. /core/client.js) as a deep-import violation.
-scenariosRun++;
 regress(
   'deep agents source-path import (/core/client.js) is forbidden as a deep import',
   ({ root, write }) => {
@@ -245,7 +243,6 @@ regress(
 
 // Assertion 4: The NEW checker ALLOWS a bare-root PUBLIC-symbol import
 // (createAgent). This documents that the bare root remains a public specifier.
-scenariosRun++;
 regress(
   'bare-root public-symbol import (createAgent) is allowed at the specifier level',
   ({ root, write }) => {
@@ -270,7 +267,6 @@ regress(
 // Assertion 5: The NEW checker ALLOWS a namespace import from the bare agents
 // root at the specifier level. The old agents-namespace-import classification
 // is gone.
-scenariosRun++;
 regress(
   'namespace import (import * as ns) from bare agents root is allowed at the specifier level',
   ({ root, write }) => {
@@ -314,4 +310,3 @@ console.log(
   'Bare agents root imports are allowed at the specifier level; internals subpath and deep source paths are forbidden.',
 );
 process.exit(0);
-

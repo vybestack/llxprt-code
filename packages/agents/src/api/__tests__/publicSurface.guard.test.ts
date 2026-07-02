@@ -43,21 +43,45 @@ const SNAPSHOT_PATH = join(__dirname, 'expected-root-surface.json');
 
 const REPORT_EXISTS = existsSync(API_SURFACE_REPORT_PATH);
 const IN_CI = process.env.CI === 'true';
+// Honored only outside CI; in CI the skip env var is ignored so the suite
+// fail-closes if the API-surface report is absent.
 const LOCAL_SKIP_REQUESTED =
-  process.env.LLXPRT_API_SURFACE_SKIP === '1' && IN_CI === false;
+  process.env.LLXPRT_API_SURFACE_SKIP === '1' && !IN_CI;
 const SKIP_SUITE = REPORT_EXISTS === false && LOCAL_SKIP_REQUESTED;
 
-function readReport(): string[] {
+function reportMissingError(): Error {
+  const where = IN_CI ? 'CI' : 'local';
+  return new Error(
+    `[${where}] API-surface report not found at ${API_SURFACE_REPORT_PATH}. ` +
+      'Run `npm run lint:agents-api-surface` first to build declarations and emit the report.',
+  );
+}
+
+function hasErrorCode(err: unknown): err is { code: unknown } {
+  return typeof err === 'object' && err !== null && 'code' in err;
+}
+
+function readReportText(): string {
   if (REPORT_EXISTS === false) {
-    const where = IN_CI ? 'CI' : 'local';
+    throw reportMissingError();
+  }
+  try {
+    return readFileSync(API_SURFACE_REPORT_PATH, 'utf8');
+  } catch (err) {
+    if (hasErrorCode(err) && err.code === 'ENOENT') {
+      throw reportMissingError();
+    }
     throw new Error(
-      `[${where}] API-surface report not found at ${API_SURFACE_REPORT_PATH}. ` +
-        'Run `npm run lint:agents-api-surface` first to build declarations and emit the report.',
+      `Failed to read API-surface report at ${API_SURFACE_REPORT_PATH}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+}
+
+function readReport(): string[] {
+  const reportText = readReportText();
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(API_SURFACE_REPORT_PATH, 'utf8'));
+    parsed = JSON.parse(reportText);
   } catch (err) {
     throw new Error(
       `Failed to parse API-surface report JSON at ${API_SURFACE_REPORT_PATH}: ${err instanceof Error ? err.message : String(err)}`,

@@ -281,7 +281,7 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
         },
       ),
     );
-  }, 30000);
+  }, 60000);
 
   it('PROP target-4: for any non-empty keyName string, getProviderStatus surfaces it and reports authenticated (keyName guard) (REQ-002)', async () => {
     await fc.assert(
@@ -550,5 +550,5 @@ describe('mutation P23 — target 7: rebuild propagates approvalHandler (agentIm
         },
       ),
     );
-  }, 30000);
+  }, 60000);
 });

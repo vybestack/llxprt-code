@@ -20,12 +20,25 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+const { mockWriteToStderr } = vi.hoisted(() => ({
+  mockWriteToStderr: vi.fn<(chunk: string | Uint8Array) => boolean>(() => true),
+}));
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...actual,
+    writeToStderr: mockWriteToStderr,
+  };
+});
+
 import {
   coreEvents,
   CoreEvent,
   OutputFormat,
   JsonStreamEventType,
-  debugLogger,
   type OutputPayload,
   type ConsoleLogPayload,
 } from '@vybestack/llxprt-code-core';
@@ -805,7 +818,9 @@ describe('session-dispatch characterization — non-interactive error output / f
   });
 
   it('reportNonInteractiveError emits a structured stream-json error event', () => {
-    const stdio = installCapturedStdio();
+    const stdoutWrite = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
     const config = createMinimalConfig({
       interactive: false,
       outputFormat: OutputFormat.STREAM_JSON,
@@ -813,25 +828,24 @@ describe('session-dispatch characterization — non-interactive error output / f
 
     try {
       reportNonInteractiveError(config as never, new Error('stream failure'));
-    } finally {
-      stdio.stdoutSpy.mockRestore();
-      stdio.stderrSpy.mockRestore();
-    }
 
-    expect(stdio.stdoutContent).toBe('');
-    const event = JSON.parse(stdio.stderrContent);
-    expect(event).toStrictEqual({
-      type: JsonStreamEventType.ERROR,
-      timestamp: expect.any(String),
-      severity: 'error',
-      message: expect.stringContaining('stream failure'),
-    });
+      expect(stdoutWrite).not.toHaveBeenCalled();
+      expect(mockWriteToStderr).toHaveBeenCalledTimes(1);
+      const written = mockWriteToStderr.mock.calls[0][0];
+      expect(typeof written).toBe('string');
+      const event = JSON.parse(written as string);
+      expect(event).toStrictEqual({
+        type: JsonStreamEventType.ERROR,
+        timestamp: expect.any(String),
+        severity: 'error',
+        message: expect.stringContaining('stream failure'),
+      });
+    } finally {
+      stdoutWrite.mockRestore();
+    }
   });
 
   it('reportNonInteractiveError emits json errors to stderr and not stdout', () => {
-    const stderrWrite = vi
-      .spyOn(process.stderr, 'write')
-      .mockImplementation(() => true);
     const stdoutWrite = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
@@ -844,8 +858,8 @@ describe('session-dispatch characterization — non-interactive error output / f
       reportNonInteractiveError(config as never, new Error('json failure'));
 
       expect(stdoutWrite).not.toHaveBeenCalled();
-      expect(stderrWrite).toHaveBeenCalledTimes(1);
-      const written = stderrWrite.mock.calls[0][0];
+      expect(mockWriteToStderr).toHaveBeenCalledTimes(1);
+      const written = mockWriteToStderr.mock.calls[0][0];
       expect(typeof written).toBe('string');
       const envelope = JSON.parse(written as string);
       expect(envelope).toStrictEqual({
@@ -855,15 +869,14 @@ describe('session-dispatch characterization — non-interactive error output / f
         },
       });
     } finally {
-      stderrWrite.mockRestore();
       stdoutWrite.mockRestore();
     }
   });
 
-  it('reportNonInteractiveError reports plain text errors through the debug logger', () => {
-    const debugError = vi
-      .spyOn(debugLogger, 'error')
-      .mockImplementation(() => {});
+  it('reportNonInteractiveError emits plain text errors to stderr and not stdout', () => {
+    const stdoutWrite = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
     const config = createMinimalConfig({
       interactive: false,
       outputFormat: 'text',
@@ -872,15 +885,16 @@ describe('session-dispatch characterization — non-interactive error output / f
     try {
       reportNonInteractiveError(config as never, new Error('plain failure'));
 
-      expect(debugError).toHaveBeenCalledTimes(1);
-      expect(debugError).toHaveBeenCalledWith(
+      expect(stdoutWrite).not.toHaveBeenCalled();
+      expect(mockWriteToStderr).toHaveBeenCalledTimes(1);
+      expect(mockWriteToStderr).toHaveBeenCalledWith(
         expect.stringContaining('Non-interactive run failed:'),
       );
-      expect(debugError).toHaveBeenCalledWith(
+      expect(mockWriteToStderr).toHaveBeenCalledWith(
         expect.stringContaining('plain failure'),
       );
     } finally {
-      debugError.mockRestore();
+      stdoutWrite.mockRestore();
     }
   });
 });

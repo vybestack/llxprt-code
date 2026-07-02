@@ -27,7 +27,10 @@ if grep -q "alias llxprt=" "${CONFIG_FILE}"; then
     exit 0
 fi
 
-read -p "Do you want to proceed? (y/n) " -n 1 -r
+REPLY=""
+if ! read -p "Do you want to proceed? (y/n) " -n 1 -r; then
+    REPLY=""
+fi
 echo ""
 if [[ "${REPLY}" =~ ^[Yy]$ ]]; then
     echo "${ALIAS_COMMAND}" >> "${CONFIG_FILE}"

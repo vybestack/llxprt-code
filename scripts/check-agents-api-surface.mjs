@@ -58,9 +58,32 @@ const SNAPSHOT_PATH = join(
   '__tests__',
   'expected-root-surface.json',
 );
+const TYPE_ROOT_CANDIDATES = [
+  join(AGENTS_PACKAGE_DIR, 'node_modules', '@types'),
+  join(REPO_ROOT, 'node_modules', '@types'),
+];
 
 const tempDir = mkdtempSync(join(tmpdir(), 'agents-api-surface-'));
 let tempDirCleaned = false;
+
+function getTypeRoots() {
+  const seen = new Set();
+  const existingTypeRoots = TYPE_ROOT_CANDIDATES.filter((typeRoot) => {
+    if (seen.has(typeRoot)) {
+      return false;
+    }
+    seen.add(typeRoot);
+    return existsSync(typeRoot);
+  });
+
+  return existingTypeRoots.length > 0
+    ? existingTypeRoots
+    : [join(REPO_ROOT, 'node_modules', '@types')];
+}
+
+function normalizePathForTsConfig(path) {
+  return path.replace(/\\/g, '/');
+}
 
 function cleanupTempDir() {
   if (tempDirCleaned) {
@@ -84,6 +107,8 @@ process.on('SIGTERM', () => {
 });
 
 function createTempTsConfig() {
+  const repoRootGlob = normalizePathForTsConfig(REPO_ROOT);
+  const agentsPackageGlob = normalizePathForTsConfig(AGENTS_PACKAGE_DIR);
   const tempConfig = {
     extends: SOURCE_TSCONFIG,
     compilerOptions: {
@@ -98,9 +123,9 @@ function createTempTsConfig() {
       types: ['node'],
       // The temp config lives in a temp dir, so TypeScript's default
       // typeRoots resolution (relative to the config file) cannot find
-      // @types/node. Explicitly point typeRoots at the repo's node_modules
-      // so `types: ['node']` resolves correctly.
-      typeRoots: [join(REPO_ROOT, 'node_modules', '@types')],
+      // @types/node. Mirror package-first, repo-root fallback lookup so
+      // `types: ['node']` resolves correctly across workspace install shapes.
+      typeRoots: getTypeRoots(),
       // The source tsconfig.json sets baseUrl to the agents package dir so
       // its paths mappings resolve relative to packages/agents. Overriding
       // rootDir to REPO_ROOT shifts the root but does NOT re-anchor baseUrl,
@@ -109,18 +134,18 @@ function createTempTsConfig() {
       baseUrl: AGENTS_PACKAGE_DIR,
     },
     include: [
-      join(AGENTS_PACKAGE_DIR, 'index.ts'),
-      `${AGENTS_PACKAGE_DIR}/src/**/*.ts`,
-      `${REPO_ROOT}/packages/core/src/types/wasm.d.ts`,
+      normalizePathForTsConfig(join(AGENTS_PACKAGE_DIR, 'index.ts')),
+      `${agentsPackageGlob}/src/**/*.ts`,
+      `${repoRootGlob}/packages/core/src/types/wasm.d.ts`,
     ],
     exclude: [
-      `${REPO_ROOT}/node_modules`,
-      `${REPO_ROOT}/**/dist/**`,
-      `${AGENTS_PACKAGE_DIR}/**/*.test.ts`,
-      `${AGENTS_PACKAGE_DIR}/**/*.spec.ts`,
-      `${AGENTS_PACKAGE_DIR}/src/api/__tests__/fixtures/**`,
-      `${REPO_ROOT}/packages/*/src/**/*.test.ts`,
-      `${REPO_ROOT}/packages/*/src/**/*.spec.ts`,
+      `${repoRootGlob}/node_modules`,
+      `${repoRootGlob}/**/dist/**`,
+      `${agentsPackageGlob}/**/*.test.ts`,
+      `${agentsPackageGlob}/**/*.spec.ts`,
+      `${agentsPackageGlob}/src/api/__tests__/fixtures/**`,
+      `${repoRootGlob}/packages/*/src/**/*.test.ts`,
+      `${repoRootGlob}/packages/*/src/**/*.spec.ts`,
     ],
   };
   const tempConfigPath = join(tempDir, 'tsconfig.api-surface.json');
@@ -145,10 +170,15 @@ function describeTscSpawnError(err) {
       'Ensure Node.js/npx is installed and on PATH.'
     );
   }
+  if (err.signal === 'SIGTERM' && err.status == null) {
+    if (err.stdout) console.log(err.stdout);
+    if (err.stderr) console.error(err.stderr);
+    return 'tsc declaration build timed out after 120000ms; API-surface check did not complete.';
+  }
   if (err.signal) {
     return `tsc process terminated by signal ${err.signal}; declaration build did not complete.`;
   }
-  if (err.code && err.status === undefined) {
+  if (err.code && err.status == null) {
     return (
       `tsc spawn failed with system error code '${err.code}'` +
       (err.errno ? ` (errno ${err.errno})` : '') +
@@ -168,6 +198,7 @@ function runTscBuild(tempConfigPath) {
       cwd: REPO_ROOT,
       encoding: 'utf8',
       maxBuffer: 10 * 1024 * 1024,
+      timeout: 120_000,
     });
   } catch (err) {
     const spawnErrorMsg = describeTscSpawnError(err);

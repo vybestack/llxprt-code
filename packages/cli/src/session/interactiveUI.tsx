@@ -94,6 +94,9 @@ export function __resetInteractiveUIStateForTesting() {
   cleanupRegistered = false;
   titleResetExitListenerRegistered = false;
   syncCleanupRegistered = false;
+  process.off('exit', resetTitleExitHandler);
+  process.off('exit', mouseEventsExitHandler);
+  process.off('exit', restoreTerminalProtocolsSync);
 }
 
 export function setWindowTitle(title: string, settings: LoadedSettings) {

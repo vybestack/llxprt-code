@@ -182,11 +182,13 @@ jobs:
   #
   # Lint: Javascript
   #
-  # Stays on npm (not Bun) for S6 (#2243): the type-aware ESLint config
-  # (`projectService` in eslint.config.js) deterministically degrades under
-  # Bun's hoisted node_modules on the CI runner (Linux + Node 24), emitting
-  # hundreds of spurious `any` errors that do not reproduce locally or under
-  # npm. Revisit once the Bun hoisting/type-resolution interaction is resolved.
+  # S6 (#2243): installs dependencies with `bun install`. The root postinstall
+  # script (scripts/postinstall.cjs) replaces Bun's hoisted static workspace
+  # copies with symlinks to the real workspace dirs, so esbuild/tsserver
+  # resolve workspace `dist/` correctly (see dev-docs/bun.md). Lint/typecheck/
+  # format/build run under Node via `npm run …` (the workspace-fanout scripts
+  # `npm run typecheck --workspaces` / `npm run test --workspaces` recurse under
+  # `bun run`, so execution stays on npm; only the install moved to Bun.
   lint_javascript:
     name: 'Lint (Javascript)'
     runs-on: 'ubuntu-latest'
@@ -203,26 +205,35 @@ jobs:
         uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
+
+      # S6 (#2243): Bun is the package manager for this job. Node remains
+      # required because the lint/typecheck/format/build scripts execute under it.
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Cache Bun dependencies'
+        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
 
       - name: 'Run lockfile check'
         run: |-
           npm run check:lockfile
 
       - name: 'Install dependencies'
+        # `bun install` drives dependency resolution; the root postinstall
+        # (scripts/postinstall.cjs) then replaces Bun's static workspace copies
+        # with symlinks so esbuild/tsserver resolve workspace `dist/` (see
+        # dev-docs/bun.md). Bun re-normalizes `bun.lock` on every install
+        # (dev-docs/bun.md), so restore the committed lockfile or the
+        # formatter's `git diff --exit-code` below would flag the re-write.
         run: |-
-          npm ci
-
-      - name: Fix rollup platform dependency
-        run: |
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            npm install @rollup/rollup-linux-x64-gnu --no-save || true
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            npm install @rollup/rollup-win32-x64-msvc --no-save || true
-          fi
-        shell: bash
+          bun install
+          git checkout -- bun.lock
 
       - name: 'Run formatter check'
         run: |-
@@ -244,6 +255,16 @@ jobs:
       - name: 'Run CLI import-boundary guard'
         run: |-
           npm run lint:cli-boundary
+
+      # Build must run BEFORE the type-aware lint: several workspace tsconfigs
+      # map cross-workspace imports to `dist/*.d.ts` (e.g. storage, settings),
+      # so tsserver (projectService) needs the compiled declarations on disk to
+      # resolve types. Under npm `npm ci`'s postinstall builds implicitly; under
+      # `bun install` (whose postinstall only symlinks, see scripts/postinstall.cjs)
+      # it does not, so the build is explicit here.
+      - name: 'Build project'
+        run: |-
+          npm run build
 
       - name: 'Run agents API-surface guard'
         run: |-
@@ -267,10 +288,6 @@ jobs:
         run: |-
           npx prettier --check integration-tests
           git diff --exit-code
-
-      - name: 'Build project'
-        run: |-
-          npm run build
 
       - name: 'Run type check'
         run: |-
@@ -508,7 +525,9 @@ jobs:
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     # This job runs npm ci (executing third-party install scripts) and only
     # needs to read the repo, so scope permissions to contents:read and drop
-    # credential persistence (matches bun_native_modules_smoke hardening).
+    # credential persistence (matches bun_native_modules_smoke hardening). It
+    # still validates the published Node entry path by running the compiled CLI
+    # entry with node after build.
     permissions:
       contents: 'read'
     steps:
@@ -552,10 +571,13 @@ jobs:
   # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
   # deterministically materializes incomplete copies of third-party packages
   # (e.g. uuid, yargs, ajv) whose package.json entry points at files that the
-  # copy is missing, breaking vitest's import resolution (and the now-retired
-  # esbuild bundle). The workspace-shadow subset is dedupe-able, but
-  # version-conflict copies (e.g. ajv@8.18.0 vs root 8.20.0) cannot be safely
-  # removed. Revisit once Bun's hoisted linker materializes complete packages.
+  # copy is missing, breaking vitest's import resolution. Revisit once Bun's
+  # hoisted linker materializes complete packages.
+  #
+  # setup-bun is still installed here (pinned via .bun-version) because the LSP
+  # service client resolves `bun` through `which` and disables the LSP/MCP
+  # service when bun is absent from PATH. Pinning to .bun-version reconciles the
+  # CI toolchain with dev-docs/bun.md and avoids a floating Bun version.
   test:
     name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'
@@ -587,30 +609,33 @@ jobs:
         uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '${{ matrix.node-version }}'
-          cache: 'npm'
 
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
+      - name: 'Cache Bun dependencies'
+        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+
+      # S6 (#2243): `bun install` resolves dependencies; the root postinstall
+      # (scripts/postinstall.cjs) then symlinks Bun's static workspace copies to
+      # the real workspace dirs so build/test resolve workspace `dist/` (see
+      # dev-docs/bun.md). Build/test run under Node via `npm run …`
+      # (`npm run test --workspaces` recurses under `bun run`).
       - name: 'Install dependencies for testing'
+        # Bun re-normalizes `bun.lock` on every install (dev-docs/bun.md);
+        # restore the committed lockfile so no downstream step sees a dirty one.
         run: |-
-          npm ci
+          bun install
+          git checkout -- bun.lock
       - name: 'Build project'
         run: |-
           npm run build
-
-      - name: 'Fix rollup platform dependency'
-        run: |-
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            npm install @rollup/rollup-linux-x64-gnu --no-save || true
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            npm install @rollup/rollup-win32-x64-msvc --no-save || true
-          fi
-        shell: 'bash'
 
       - name: 'Run agents API-surface guard'
         run: |-
