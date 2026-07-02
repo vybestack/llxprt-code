@@ -28,6 +28,7 @@ import {
   buildAgent,
   drain,
   ToolConfirmationOutcome,
+  ASYNC_PROPERTY_TIMEOUT_MS,
 } from './helpers/agentHarness.js';
 
 // ─── auth.status() winner mapping (line 1208) ───────────────────────────────
@@ -342,25 +343,29 @@ describe('mutation P23.d — compress + generate NoCoverage (REQ-005)', () => {
 
   // ─── Property-based (maintain >=30% ratio) ──────────────────────────────
 
-  it('PROP compress promptId: for any explicit promptId, compress returns that same id (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 30 })
-          .filter((s) => !s.includes('__proto__')),
-        async (id) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            await drain(agent.stream('init'));
-            const result = await agent.compress({ promptId: id });
-            return result.promptId === id;
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+  it(
+    'PROP compress promptId: for any explicit promptId, compress returns that same id (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc
+            .string({ minLength: 1, maxLength: 30 })
+            .filter((s) => !s.includes('__proto__')),
+          async (id) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              await drain(agent.stream('init'));
+              const result = await agent.compress({ promptId: id });
+              return result.promptId === id;
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 });
 
 // ─── rebuild-with-callbacks NoCoverage (lines 1192-1197) ───────────────────
@@ -416,22 +421,26 @@ describe('mutation P23.e — rebuild with approval + display callbacks (REQ-005)
 
   // ─── Property-based (maintain >=30% ratio) ──────────────────────────────
 
-  it('PROP setModel: for any non-empty model string, getModel reflects it after setModel (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 30 })
-          .filter((s) => !s.includes('__proto__')),
-        async (model) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            await agent.setModel(model);
-            return agent.getModel() === model;
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+  it(
+    'PROP setModel: for any non-empty model string, getModel reflects it after setModel (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc
+            .string({ minLength: 1, maxLength: 30 })
+            .filter((s) => !s.includes('__proto__')),
+          async (model) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              await agent.setModel(model);
+              return agent.getModel() === model;
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 });

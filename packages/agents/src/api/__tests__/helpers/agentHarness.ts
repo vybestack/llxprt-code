@@ -53,6 +53,9 @@ const TEMP_ROOT = mkdtempSync(join(tmpdir(), 'llxprt-agent-tests-'));
 
 // ─── Public-safe re-exports (so specs avoid deep imports) ───────────────────
 
+// Full-workspace coverage runs can push real-agent properties over 30s.
+export const ASYNC_PROPERTY_TIMEOUT_MS = 60000;
+
 export { ToolConfirmationOutcome };
 export type {
   Agent,
