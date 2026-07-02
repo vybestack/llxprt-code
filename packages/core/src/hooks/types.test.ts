@@ -12,8 +12,10 @@ import {
   AfterAgentHookOutput,
   DefaultHookOutput,
   BeforeAgentHookOutput,
+  BeforeModelHookOutput,
 } from './types.js';
 import type { LLMResponse } from './types.js';
+import { parseHookLLMRequestBoundaryResult } from './hookTranslator.js';
 
 describe('Hook Types', () => {
   describe('HookEventName', () => {
@@ -194,6 +196,386 @@ describe('Hook Types', () => {
         hookSpecificOutput: { clearContext: true },
       });
       expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+  });
+
+  describe('BeforeModelHookOutput.applyLLMRequestModifications', () => {
+    // H2: a messages-less llm_request (only model/config) must not throw and
+    // must not destroy contents. The defensive guard in fromHookLLMRequest
+    // handles undefined messages gracefully.
+    it('H2: does not throw when llm_request has no messages array (only model)', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request: {
+            model: 'other-model',
+            // NO messages array
+          },
+        },
+      });
+      const target = {
+        model: 'original',
+        contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+      };
+
+      // Must not throw — defensive guard handles missing messages.
+      expect(() =>
+        hookOutput.applyLLMRequestModifications(target),
+      ).not.toThrow();
+    });
+
+    it('H2: preserves the target model override when llm_request has no messages', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request: {
+            model: 'overridden-model',
+          },
+        },
+      });
+      const target = {
+        model: 'original',
+        contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+      };
+
+      const result = hookOutput.applyLLMRequestModifications(target);
+      // The model override is applied even without messages.
+      expect(result.model).toBe('overridden-model');
+    });
+
+    it('returns the same target reference when no llm_request is present', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        systemMessage: 'context',
+      });
+      const target = {
+        model: 'm',
+        contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+      };
+
+      const result = hookOutput.applyLLMRequestModifications(target);
+      expect(result).toBe(target);
+    });
+  });
+
+  describe('BeforeModelHookOutput.getLLMRequestBoundary', () => {
+    it('returns a typed boundary object when valid metadata is present', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            version: 1,
+            pendingMessageStartIndex: 2,
+            pendingMessageCount: 1,
+          },
+        },
+      });
+      const boundary = hookOutput.getLLMRequestBoundary();
+      expect(boundary).toStrictEqual({
+        version: 1,
+        pendingMessageStartIndex: 2,
+        pendingMessageCount: 1,
+      });
+    });
+
+    it('returns undefined when no boundary metadata is present', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+        },
+      });
+      expect(hookOutput.getLLMRequestBoundary()).toBeUndefined();
+    });
+
+    it('returns undefined when hookSpecificOutput is absent', () => {
+      const hookOutput = new BeforeModelHookOutput({});
+      expect(hookOutput.getLLMRequestBoundary()).toBeUndefined();
+    });
+
+    it('returns undefined for a negative pendingMessageStartIndex', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            pendingMessageStartIndex: -1,
+          },
+        },
+      });
+      expect(hookOutput.getLLMRequestBoundary()).toBeUndefined();
+    });
+
+    it('returns undefined for a non-integer pendingMessageStartIndex', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            pendingMessageStartIndex: 1.5,
+          },
+        },
+      });
+      expect(hookOutput.getLLMRequestBoundary()).toBeUndefined();
+    });
+
+    it('returns undefined for a wrong version literal', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            version: 2,
+            pendingMessageStartIndex: 0,
+          },
+        },
+      });
+      expect(hookOutput.getLLMRequestBoundary()).toBeUndefined();
+    });
+
+    it('returns undefined for an invalid onInvalidBoundary enum value', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            pendingMessageStartIndex: 0,
+            onInvalidBoundary: 'panic',
+          },
+        },
+      });
+      expect(hookOutput.getLLMRequestBoundary()).toBeUndefined();
+    });
+
+    it('tolerates an omitted pendingMessageCount', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            pendingMessageStartIndex: 1,
+          },
+        },
+      });
+      const boundary = hookOutput.getLLMRequestBoundary();
+      expect(boundary).toStrictEqual({ pendingMessageStartIndex: 1 });
+    });
+
+    it('strips unknown extra fields (zod strips unknown fields by default)', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            pendingMessageStartIndex: 0,
+            pendingMessageCount: 1,
+            bogus: 'nope',
+          } as unknown,
+        },
+      });
+      const boundary = hookOutput.getLLMRequestBoundary();
+      expect(boundary).toStrictEqual({
+        pendingMessageStartIndex: 0,
+        pendingMessageCount: 1,
+      });
+    });
+  });
+
+  describe('BeforeModelHookOutput.getLLMRequestBoundaryResult', () => {
+    it('returns status absent when no boundary metadata is present', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: { hookEventName: 'BeforeModel' },
+      });
+      const result = hookOutput.getLLMRequestBoundaryResult();
+      expect(result).toStrictEqual({ status: 'absent' });
+    });
+
+    it('returns status absent when hookSpecificOutput is absent', () => {
+      const hookOutput = new BeforeModelHookOutput({});
+      expect(hookOutput.getLLMRequestBoundaryResult()).toStrictEqual({
+        status: 'absent',
+      });
+    });
+
+    it('returns status valid with the boundary when metadata is well-formed', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            version: 1,
+            pendingMessageStartIndex: 2,
+            pendingMessageCount: 1,
+          },
+        },
+      });
+      const result = hookOutput.getLLMRequestBoundaryResult();
+      expect(result).toStrictEqual({
+        status: 'valid',
+        boundary: {
+          version: 1,
+          pendingMessageStartIndex: 2,
+          pendingMessageCount: 1,
+        },
+      });
+    });
+
+    it('returns status malformed with skip-compression default for a negative index', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: { pendingMessageStartIndex: -1 },
+        },
+      });
+      const result = hookOutput.getLLMRequestBoundaryResult();
+      expect(result).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
+    it('returns status malformed preserving onInvalidBoundary throw when readable', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            pendingMessageStartIndex: -1,
+            onInvalidBoundary: 'throw',
+          },
+        },
+      });
+      const result = hookOutput.getLLMRequestBoundaryResult();
+      expect(result).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'throw',
+      });
+    });
+
+    it('returns status malformed for a non-integer index even with a throw policy', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            pendingMessageStartIndex: 1.5,
+            onInvalidBoundary: 'throw',
+          },
+        },
+      });
+      const result = hookOutput.getLLMRequestBoundaryResult();
+      expect(result).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'throw',
+      });
+    });
+
+    it('returns status malformed (skip-compression) for an invalid onInvalidBoundary enum', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            pendingMessageStartIndex: 0,
+            onInvalidBoundary: 'panic',
+          },
+        },
+      });
+      const result = hookOutput.getLLMRequestBoundaryResult();
+      expect(result).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
+    // G2: key PRESENCE decides absence, not truthiness. A hook that sets
+    // llm_request_boundary: null explicitly attempted to control the boundary.
+    it('returns status malformed (skip-compression) when llm_request_boundary is explicitly null', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: null,
+        },
+      });
+      const result = hookOutput.getLLMRequestBoundaryResult();
+      expect(result).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
+    // G2: explicit undefined is indistinguishable from absent after JSON
+    // parsing (key-present-with-explicit-undefined === absent in JS conventions).
+    it('returns status absent when llm_request_boundary is explicitly undefined', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: undefined,
+        },
+      });
+      expect(hookOutput.getLLMRequestBoundaryResult()).toStrictEqual({
+        status: 'absent',
+      });
+    });
+  });
+
+  describe('parseHookLLMRequestBoundaryResult', () => {
+    it('returns absent for undefined (key not present / "not provided")', () => {
+      expect(parseHookLLMRequestBoundaryResult(undefined)).toStrictEqual({
+        status: 'absent',
+      });
+    });
+
+    it('returns malformed (skip-compression) for present-but-falsy null', () => {
+      // G2: key PRESENCE decides absence, not truthiness. A hook that
+      // explicitly sets llm_request_boundary: null attempted to control the
+      // boundary; it must be malformed (skip-compression), not absent.
+      expect(parseHookLLMRequestBoundaryResult(null)).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
+    it('returns malformed (skip-compression) for present-but-falsy false', () => {
+      expect(parseHookLLMRequestBoundaryResult(false)).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
+    it('returns malformed (skip-compression) for present-but-falsy 0', () => {
+      expect(parseHookLLMRequestBoundaryResult(0)).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
+    it('returns malformed (skip-compression) for present-but-falsy empty string', () => {
+      expect(parseHookLLMRequestBoundaryResult('')).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
+    it('returns valid for a well-formed boundary', () => {
+      expect(
+        parseHookLLMRequestBoundaryResult({
+          pendingMessageStartIndex: 1,
+          pendingMessageCount: 2,
+        }),
+      ).toStrictEqual({
+        status: 'valid',
+        boundary: { pendingMessageStartIndex: 1, pendingMessageCount: 2 },
+      });
+    });
+
+    it('returns malformed (skip-compression) for a structurally invalid value', () => {
+      expect(
+        parseHookLLMRequestBoundaryResult({ pendingMessageStartIndex: -1 }),
+      ).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
+    it('returns malformed preserving a readable throw policy', () => {
+      expect(
+        parseHookLLMRequestBoundaryResult({
+          pendingMessageStartIndex: 'not-a-number',
+          onInvalidBoundary: 'throw',
+        }),
+      ).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'throw',
+      });
     });
   });
 });

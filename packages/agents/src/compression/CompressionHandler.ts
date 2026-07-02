@@ -429,8 +429,10 @@ export class CompressionHandler {
     const callback = async (_contents: IContent[]): Promise<IContent[]> => {
       if (pendingContents === undefined) {
         throw new Error(
-          'Compression callback invoked but pending-content boundary is unknown ' +
-            '(BeforeModel hook modified contents). Tracked in #2306.',
+          'Compression callback invoked but the pending-content boundary is ' +
+            'unrecoverable: a BeforeModel hook replaced or restructured the ' +
+            'conversation contents and supplied no llm_request_boundary ' +
+            'metadata, so compression cannot safely recompose the pending region.',
         );
       }
       try {

@@ -29,7 +29,10 @@ import {
   convertIContentToResponse,
   aggregateTextWithSpacing,
 } from './MessageConverter.js';
-import { resolveUserMemory } from './streamRequestHelpers.js';
+import {
+  resolveUserMemory,
+  hookProvidedMessages,
+} from './streamRequestHelpers.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
   nextStreamEventWithIdleTimeout,
@@ -37,6 +40,7 @@ import {
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { getResponseTextFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
+import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -640,26 +644,9 @@ export class DirectMessageProcessor {
     }
 
     if (beforeModelResult?.isBlockingDecision() === true) {
-      const syntheticResponse = beforeModelResult.getSyntheticResponse();
       return {
         syntheticResponse:
-          syntheticResponse ??
-          ({
-            candidates: [
-              {
-                content: {
-                  role: 'model',
-                  parts: [
-                    {
-                      text:
-                        beforeModelResult.getEffectiveReason() ||
-                        'Request blocked by BeforeModel hook',
-                    },
-                  ],
-                },
-              },
-            ],
-          } as GenerateContentResponse),
+          this._buildBlockingSyntheticResponse(beforeModelResult),
       };
     }
 
@@ -669,22 +656,79 @@ export class DirectMessageProcessor {
     }
 
     if (beforeModelResult) {
-      const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
-        model: this.runtimeContext.state.model || '',
-        contents: ContentConverters.toGeminiContents(userIContents),
-      });
-      // Runtime-widen to handle potential undefined from API
-      const contentsRuntime: unknown = modifiedRequest.contents;
-      if (contentsRuntime !== undefined && contentsRuntime !== null) {
-        return {
-          modifiedContents: ContentConverters.toIContents(
-            contentsRuntime as Content[],
-          ),
-        };
+      const modifiedContents = this._applyHookRequestModifications(
+        beforeModelResult,
+        userIContents,
+      );
+      if (modifiedContents !== undefined) {
+        return { modifiedContents };
       }
     }
 
     return {};
+  }
+
+  /**
+   * Build a synthetic response for a blocking BeforeModel hook decision,
+   * preferring the hook's own llm_response when provided.
+   */
+  private _buildBlockingSyntheticResponse(
+    beforeModelResult: BeforeModelHookOutput,
+  ): GenerateContentResponse {
+    return (
+      beforeModelResult.getSyntheticResponse() ??
+      ({
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                {
+                  text:
+                    beforeModelResult.getEffectiveReason() ||
+                    'Request blocked by BeforeModel hook',
+                },
+              ],
+            },
+          },
+        ],
+      } as GenerateContentResponse)
+    );
+  }
+
+  /**
+   * Apply hook-supplied llm_request modifications to contents.
+   *
+   * H2: only round-trip through the translator when the hook actually supplied
+   * replacement messages (hookProvidedMessages). A messages-less llm_request
+   * (model/config only) must NOT trigger the text-only translator round-trip,
+   * which would destroy tool calls, IDs, and metadata.
+   *
+   * Returns the modified IContent[] when the hook changed contents, or
+   * undefined when no content modification occurred.
+   */
+  private _applyHookRequestModifications(
+    beforeModelResult: BeforeModelHookOutput,
+    userIContents: IContent[],
+  ): IContent[] | undefined {
+    if (!hookProvidedMessages(beforeModelResult)) {
+      return undefined;
+    }
+    const target = {
+      model: this.runtimeContext.state.model || '',
+      contents: ContentConverters.toGeminiContents(userIContents),
+    };
+    // hookProvidedMessages guarantees llm_request has a messages array, so
+    // applyLLMRequestModifications always returns a new object here
+    // ({...target, ...sdkRequest}); the meaningful condition is whether the
+    // merged request carries usable contents.
+    const modifiedRequest =
+      beforeModelResult.applyLLMRequestModifications(target);
+    const contentsRuntime: unknown = modifiedRequest.contents;
+    if (contentsRuntime === undefined || contentsRuntime === null) {
+      return undefined;
+    }
+    return ContentConverters.toIContents(contentsRuntime as Content[]);
   }
 
   /**

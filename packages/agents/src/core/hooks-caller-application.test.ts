@@ -668,14 +668,15 @@ describe('Hook Caller Application', () => {
       //     );
       //   }
       //
-      // After decomposition, this logic lives in StreamProcessor.ts.
+      // After decomposition, this logic lives in beforeModelHookDecision.ts
+      // (extracted from StreamProcessor.ts).
 
       const fs = await import('node:fs/promises');
-      const streamProcessorPath = new URL(
-        '../core/StreamProcessor.ts',
+      const hookDecisionPath = new URL(
+        '../core/beforeModelHookDecision.ts',
         import.meta.url,
       ).pathname;
-      const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
+      const sourceCode = await fs.readFile(hookDecisionPath, 'utf-8');
 
       // Check that AgentExecutionStoppedError exists (constructor lives in chatSession.ts)
       const hasStoppedErrorReference = sourceCode.includes(
