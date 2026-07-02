@@ -83,6 +83,7 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 1. **Prerequisites:** Node.js 24+ installed (not required for Homebrew)
 
    > **Note:** LLxprt Code runs on the [Bun](https://bun.sh) runtime under the covers. Node.js remains the compatibility target for invocation — the npm/npx/Homebrew install commands below work unchanged. The published package bundles Bun as a dependency, so most users never need to install Bun separately. See the [Bun fallback](#bun-runtime-and-install-fallback) section if Bun is missing.
+
 2. **Install:**
 
    ```bash

@@ -105,6 +105,7 @@ This section guides contributors on how to build, modify, and understand the dev
 2.  **Bun**: Install [Bun](https://bun.sh) (version pinned in [`.bun-version`](./.bun-version), currently `1.3.14`). Bun is the runtime for the CLI run path and the package manager for development. The npm/npx/Homebrew install flows still work, but the development workflow uses Bun directly. See [dev-docs/bun.md](./dev-docs/bun.md) for details on the dual-lockfile policy and Bun-specific configuration.
 
     > **Note:** The root `package.json` still declares `packageManager: npm@11.6.2`, and several root scripts (`presubmit`, `preflight`, `build:all`) chain to `npm run ...` internally. During the migration transition, `bun run presubmit` delegates to npm internally. This will be reconciled in a later subissue.
+
 3.  **Git**
 
 ### Build Process
