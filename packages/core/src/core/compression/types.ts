@@ -387,3 +387,18 @@ export function isTransientCompressionError(error: unknown): boolean {
 export function shouldRetryCompressionError(error: unknown): boolean {
   return isTransientCompressionError(error);
 }
+
+/**
+ * Returns true if a failed primary compression attempt should fall back
+ * to the non-LLM truncation strategy instead of aborting the turn.
+ * Transient errors (already retried) and empty-summary failures are
+ * fallback-eligible; configuration/logic errors (unknown strategy,
+ * prompt resolution, permanent execution errors) are not.
+ *
+ * (Issue #2333: EmptySummaryError is intentionally non-transient so it is not
+ * retried, but it IS fallback-eligible so the turn degrades gracefully.)
+ */
+export function isFallbackEligibleCompressionError(error: unknown): boolean {
+  if (error instanceof EmptySummaryError) return true;
+  return isTransientCompressionError(error);
+}

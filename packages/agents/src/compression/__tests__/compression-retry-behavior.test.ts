@@ -14,7 +14,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  CompressionExecutionError,
+  EmptySummaryError,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { PerformCompressionResult } from '../../core/turn.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
@@ -294,5 +297,120 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
     await expect(chat.performCompression('test-prompt')).resolves.toBe(
       PerformCompressionResult.FAILED,
     );
+  });
+
+  /**
+   * @requirement REQ-CR-004
+   * Issue #2333: When the primary strategy deterministically returns an empty
+   * summary (EmptySummaryError), the turn must not abort. Instead it should
+   * fall back to the non-LLM top-down-truncation strategy without retrying
+   * the empty summary.
+   */
+  it('falls back to truncation when primary strategy returns an empty summary', async () => {
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+    let fallbackCalled = false;
+    let primaryCallCount = 0;
+
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
+        if (name === 'top-down-truncation') {
+          return {
+            name: 'top-down-truncation' as const,
+            requiresLLM: false,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockImplementation(async () => {
+              fallbackCalled = true;
+              return {
+                newHistory: [],
+                metadata: {
+                  originalMessageCount: 10,
+                  compressedMessageCount: 5,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              };
+            }),
+          };
+        }
+        return {
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryCallCount++;
+            throw new EmptySummaryError('middle-out');
+          }),
+        };
+      },
+    );
+
+    // performCompression should resolve (COMPRESSED) via fallback, not reject
+    await expect(chat.performCompression('test-prompt')).resolves.toBe(
+      PerformCompressionResult.COMPRESSED,
+    );
+    expect(fallbackCalled).toBe(true);
+    // Empty summary is non-retryable — primary must be called exactly once
+    expect(primaryCallCount).toBe(1);
+  });
+
+  /**
+   * @requirement REQ-CR-004
+   * Issue #2333: The threshold-triggered auto-compression path exercised at
+   * send time — `ChatSession.ensureCompressionBeforeSend(...)` — must not
+   * reject when the primary (middle-out) strategy throws an
+   * EmptySummaryError. This is the exact user-facing failure mode from the
+   * issue: an empty summary from the primary strategy aborted the turn with a
+   * surfaced "[API Error: Compression strategy "middle-out" produced an empty
+   * summary]" message. Instead the turn should complete via the non-LLM
+   * top-down-truncation fallback without retrying the empty summary.
+   */
+  it('ensureCompressionBeforeSend does not reject on EmptySummaryError and applies the truncation fallback', async () => {
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+    let fallbackCalled = false;
+    let primaryCallCount = 0;
+
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
+        if (name === 'top-down-truncation') {
+          return {
+            name: 'top-down-truncation' as const,
+            requiresLLM: false,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockImplementation(async () => {
+              fallbackCalled = true;
+              return {
+                newHistory: [],
+                metadata: {
+                  originalMessageCount: 10,
+                  compressedMessageCount: 5,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              };
+            }),
+          };
+        }
+        return {
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockImplementation(async () => {
+            primaryCallCount++;
+            throw new EmptySummaryError('middle-out');
+          }),
+        };
+      },
+    );
+
+    // The threshold-triggered auto-compression path must resolve (not reject)
+    // and apply the truncation fallback.
+    await expect(
+      chat.ensureCompressionBeforeSend('test-prompt', 0, 'send'),
+    ).resolves.toBeUndefined();
+    expect(fallbackCalled).toBe(true);
+    // Empty summary is non-retryable — primary must be called exactly once
+    expect(primaryCallCount).toBe(1);
   });
 });
