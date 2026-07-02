@@ -155,8 +155,8 @@ export class TestRig {
 
   /**
    * The command and args to use to invoke LLxprt CLI. Allows switching between
-   * the dist entry (run under Node, relaunching into Bun via the launcher) and
-   * the installed 'llxprt' binary.
+   * the checked-in Node launcher (which re-execs Bun on the TypeScript source)
+   * and the installed 'llxprt' binary.
    */
   private _getCommandAndArgs(extraInitialArgs: string[] = []): {
     command: string;

@@ -216,6 +216,7 @@ function ensureInternalWorkspaceLinks() {
     );
   }
 }
+
 function stripPeerFlagsFromLockfile() {
   if (!fs.existsSync(lockfilePath)) {
     return;

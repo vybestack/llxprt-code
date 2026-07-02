@@ -32,8 +32,8 @@ jobs:
           fetch-depth: 1
       - name: 'Install Dependencies'
         run: 'npm ci'
-      - name: 'Build project'
-        run: 'npm run build'
+      # No build step: the checked-in launcher resolves packages/cli/index.ts
+      # and re-execs it with Bun; no dist/ output is consumed.
       - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
         run: 'node ./packages/cli/bin/llxprt.cjs --version'
       - name: 'Create Issue on Failure'

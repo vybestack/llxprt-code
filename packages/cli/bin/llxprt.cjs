@@ -151,6 +151,14 @@ function fatal(message) {
   process.exit(43);
 }
 
+function describeError(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// Note: LLXPRT_BUN_RELAUNCHED may already be set when a Bun-hosted LLxprt
+// process re-invokes this bin (e.g. nested tooling). That is safe: we always
+// spawn Bun directly on the TypeScript entry, never this launcher, so no
+// relaunch loop is possible and nested invocations must keep working.
 const bunPath = resolveBun();
 if (bunPath === null) {
   fatal(
@@ -181,7 +189,7 @@ try {
   });
 } catch (error) {
   fatal(
-    `Failed to launch Bun at "${bunPath}" (${error.message}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
+    `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
   );
 }
 
@@ -195,12 +203,19 @@ for (const signal of FORWARDED_SIGNALS) {
 }
 
 child.on('error', (error) => {
+  if (settled) {
+    return;
+  }
+  settled = true;
   fatal(
-    `Failed to launch Bun at "${bunPath}" (${error.message}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
+    `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
   );
 });
 
 child.on('close', (code, signal) => {
+  if (settled) {
+    return;
+  }
   settled = true;
   if (code !== null) {
     process.exit(code);

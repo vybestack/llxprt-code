@@ -336,53 +336,62 @@ function dependencyDiagnostic(
 }
 
 describe('published package integrity (S1)', () => {
-  it('includes every local module the lifecycle scripts transitively require', () => {
-    // The bug this guards against: a lifecycle script gains a
-    // `require('./helper.cjs')` but the helper is not added to package.json
-    // `files`, so the published tarball omits it and `npm install` of the
-    // released package dies with MODULE_NOT_FOUND. We compute the transitive
-    // closure of relative requires starting from the lifecycle entry points and
-    // assert each referenced local module actually ships.
-    const packed = getPackedPaths();
-    const lifecycleEntryScripts = deriveLifecycleEntryScripts();
+  // Generous timeout: the first getPackedPaths() call runs `npm pack
+  // --dry-run` over the full TypeScript source tree, which can exceed the
+  // default 15s under CI/parallel-suite load. Subsequent callers reuse the
+  // memoized result.
+  it(
+    'includes every local module the lifecycle scripts transitively require',
+    { timeout: 60000 },
+    () => {
+      // The bug this guards against: a lifecycle script gains a
+      // `require('./helper.cjs')` but the helper is not added to package.json
+      // `files`, so the published tarball omits it and `npm install` of the
+      // released package dies with MODULE_NOT_FOUND. We compute the transitive
+      // closure of relative requires starting from the lifecycle entry points and
+      // assert each referenced local module actually ships.
+      const packed = getPackedPaths();
+      const lifecycleEntryScripts = deriveLifecycleEntryScripts();
 
-    // Sanity: the entry points themselves must ship, or the whole premise is moot.
-    for (const entry of lifecycleEntryScripts) {
+      // Sanity: the entry points themselves must ship, or the whole premise is moot.
+      for (const entry of lifecycleEntryScripts) {
+        expect(
+          packed.has(entry),
+          `Lifecycle entry "${entry}" is declared in package.json scripts but is ` +
+            'not in the published tarball (check the package.json "files" allowlist).',
+        ).toBe(true);
+      }
+
+      const visited = new Set<string>();
+      const queue: string[] = [...lifecycleEntryScripts];
+      const missing: string[] = [];
+
+      while (queue.length > 0) {
+        const current = queue.shift() as string;
+        if (visited.has(current)) {
+          continue;
+        }
+        visited.add(current);
+
+        const source = readFileSync(join(repoRoot, current), 'utf-8');
+        const { missing: entryMissing, follow } = checkEntryDependencies(
+          current,
+          source,
+          packed,
+        );
+        missing.push(...entryMissing);
+        for (const resolved of follow) {
+          queue.push(resolved);
+        }
+      }
+
       expect(
-        packed.has(entry),
-        `Lifecycle entry "${entry}" is declared in package.json scripts but is ` +
-          'not in the published tarball (check the package.json "files" allowlist).',
-      ).toBe(true);
-    }
-
-    const visited = new Set<string>();
-    const queue: string[] = [...lifecycleEntryScripts];
-    const missing: string[] = [];
-
-    while (queue.length > 0) {
-      const current = queue.shift() as string;
-      if (visited.has(current)) {
-        continue;
-      }
-      visited.add(current);
-
-      const source = readFileSync(join(repoRoot, current), 'utf-8');
-      const { missing: entryMissing, follow } = checkEntryDependencies(
-        current,
-        source,
-        packed,
-      );
-      missing.push(...entryMissing);
-      for (const resolved of follow) {
-        queue.push(resolved);
-      }
-    }
-
-    expect(
-      missing,
-      `Published-package integrity violations:\n  - ${missing.join('\n  - ')}`,
-    ).toStrictEqual([]);
-  }, 15000);
+        missing,
+        `Published-package integrity violations:\n  - ${missing.join('\n  - ')}`,
+      ).toStrictEqual([]);
+    },
+    15000,
+  );
 
   it('ships the shared detect-installer helper required by both lifecycle scripts', () => {
     // An explicit, named assertion for the specific shared module introduced in
@@ -429,11 +438,27 @@ describe('published package no-compile runtime contract (S6)', () => {
       readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
     ) as RootPackageMetadata;
     const dependencies = rootPackage.dependencies ?? {};
+    // Derive "packages/<name>" from each shipped file entry. Only entries that
+    // literally start with "packages/<name>/" (or equal "packages/<name>")
+    // count; anything else is ignored rather than silently mis-parsed.
     const shippedWorkspaceDirs = new Set(
       (rootPackage.files ?? [])
-        .filter((entry) => entry.startsWith('packages/'))
-        .map((entry) => entry.split('/').slice(0, 2).join('/')),
+        .map((entry) => {
+          const segments = entry.split('/');
+          if (segments[0] !== 'packages' || segments.length < 2) {
+            return null;
+          }
+          return `${segments[0]}/${segments[1]}`;
+        })
+        .filter((dir): dir is string => dir !== null),
     );
+    // Guard: this check relies on explicit workspace paths. If workspaces ever
+    // switch to glob patterns (e.g. "packages/*"), the intersection below
+    // would silently become empty and the test would pass vacuously.
+    const globWorkspaces = (rootPackage.workspaces ?? []).filter((entry) =>
+      /[*?[\]{}]/.test(entry),
+    );
+    expect(globWorkspaces).toEqual([]);
     const shippedWorkspacePackagePaths = (rootPackage.workspaces ?? [])
       .filter((workspaceDir) => shippedWorkspaceDirs.has(workspaceDir))
       .map((workspaceDir) => ({
@@ -441,6 +466,7 @@ describe('published package no-compile runtime contract (S6)', () => {
         packagePath: join(repoRoot, workspaceDir, 'package.json'),
       }))
       .filter(({ packagePath }) => existsSync(packagePath));
+    expect(shippedWorkspacePackagePaths.length).toBeGreaterThan(0);
 
     const missing = shippedWorkspacePackagePaths.flatMap(
       ({ workspaceDir, packagePath }) => {

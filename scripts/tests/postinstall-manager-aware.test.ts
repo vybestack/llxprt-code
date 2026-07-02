@@ -55,7 +55,6 @@ function peerFlaggedLockfile(): string {
 interface RunResult {
   status: number | null;
   stderr: string;
-  npmInvoked: boolean;
   npmCommands: string[];
   lockfile: string;
   legacyBundleExists: boolean;
@@ -81,7 +80,6 @@ function spawnPostinstall(
 ): {
   status: number | null;
   stderr: string;
-  npmInvoked: boolean;
   npmCommands: string[];
 } {
   const env: NodeJS.ProcessEnv = {
@@ -115,7 +113,6 @@ function spawnPostinstall(
         ? `spawn failed: ${result.error.message}
 `
         : '') + (result.stderr ?? ''),
-    npmInvoked: npmCommands.length > 0,
     npmCommands,
   };
 }
@@ -312,7 +309,7 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
     const result = makeFixture().run(BUN_USER_AGENT);
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.npmInvoked).toBe(false);
+    expect(result.npmCommands).toEqual([]);
     expect(result.legacyBundleExists).toBe(false);
   });
 
@@ -349,10 +346,24 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
   });
 
   it('does not compile TypeScript to JavaScript during npm postinstall', () => {
-    const result = makeFixture().run(NPM_USER_AGENT);
+    const fixture = makeFixture();
+    writeFileSync(
+      join(fixture.dir, 'packages', 'dummy', 'index.ts'),
+      'export const marker = true;\n',
+    );
+
+    const result = fixture.run(NPM_USER_AGENT);
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.npmCommands).toEqual([]);
+    // The no-compile install path must not emit any build output next to the
+    // TypeScript source it hydrates.
+    expect(existsSync(join(fixture.dir, 'packages', 'dummy', 'dist'))).toBe(
+      false,
+    );
+    expect(existsSync(join(fixture.dir, 'packages', 'dummy', 'index.js'))).toBe(
+      false,
+    );
   });
 
   it('strips unsupported peer flags from package-lock.json under npm', () => {

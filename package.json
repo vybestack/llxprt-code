@@ -186,8 +186,6 @@
   ],
   "devDependencies": {
     "@fast-check/vitest": "^0.2.2",
-    "@iarna/toml": "^2.2.5",
-    "@modelcontextprotocol/sdk": "^1.25.2",
     "@types/debug": "^4.1.12",
     "@types/marked": "^5.0.2",
     "@types/mime-types": "^3.0.1",
@@ -211,9 +209,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-sonarjs": "4.0.2",
     "fast-check": "4.5.3",
-    "glob": "^12.0.0",
     "globals": "^16.0.0",
-    "ink": "npm:@jrichman/ink@6.4.8",
     "json": "^11.0.0",
     "jsonc-parser": "^3.3.1",
     "lodash": "^4.18.0",
@@ -226,8 +222,7 @@
     "ts-prune": "^0.10.3",
     "tsx": "^4.20.3",
     "typescript-eslint": "8.35.0",
-    "vitest": "^3.2.6",
-    "yargs": "^18.0.0"
+    "vitest": "^3.2.6"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.14.1",
@@ -337,13 +332,13 @@
     "typescript-language-server": "^4.0.0 || ^5.0.0",
     "undici": "^7.28.0",
     "update-notifier": "^7.3.1",
+    "uuid": "11.1.1",
     "vscode-jsonrpc": "^8.2.1",
     "web-tree-sitter": "^0.25.10",
     "wrap-ansi": "9.0.2",
     "yargs": "^17.7.2",
     "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.25.1",
-    "uuid": "11.1.1"
+    "zod-to-json-schema": "^3.25.1"
   },
   "optionalDependencies": {
     "@lydell/node-pty": "1.1.0",
