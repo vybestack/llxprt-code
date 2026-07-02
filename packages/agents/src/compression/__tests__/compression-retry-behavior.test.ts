@@ -305,10 +305,10 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
    * the empty summary.
    */
   it('falls back to truncation when primary strategy returns an empty summary', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
     const { getFallbackCalled, getPrimaryCallCount } =
       mockStrategyFactoryWithEmptySummaryFallback();
+
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     // performCompression should resolve (COMPRESSED) via fallback, not reject
     await expect(chat.performCompression('test-prompt')).resolves.toBe(
@@ -331,10 +331,10 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
    * top-down-truncation fallback without retrying the empty summary.
    */
   it('ensureCompressionBeforeSend does not reject on EmptySummaryError and applies the truncation fallback', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
     const { getFallbackCalled, getPrimaryCallCount } =
       mockStrategyFactoryWithEmptySummaryFallback();
+
+    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     // The threshold-triggered auto-compression path must resolve (not reject)
     // and apply the truncation fallback.

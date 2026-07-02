@@ -415,6 +415,14 @@ describe('isFallbackEligibleCompressionError @plan PLAN-20260218-COMPRESSION-RET
     ).toBe(true);
   });
 
+  it('returns true for Anthropic SDK-wrapped overloaded_error (issue #2053 shape)', () => {
+    expect(
+      isFallbackEligibleCompressionError(
+        makeAnthropicSdkWrappedError('overloaded_error'),
+      ),
+    ).toBe(true);
+  });
+
   it('returns false for CompressionExecutionError default (non-transient)', () => {
     expect(
       isFallbackEligibleCompressionError(
