@@ -102,6 +102,12 @@ export interface TaskToolArgs {
   subagentManager: SubagentManager | undefined;
   schedulerFactoryProvider: () => SubagentSchedulerFactory | undefined;
   getAsyncTaskManager: () => AsyncTaskManager | undefined;
+  /**
+   * Session/runtime MessageBus threaded into the SubagentOrchestrator so
+   * non-interactive subagent tool execution can satisfy
+   * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
+   */
+  messageBus: MessageBus | undefined;
 }
 
 /** Tool record for settings UI */
@@ -448,6 +454,7 @@ function registerAgentTools(
   allPotentialTools: ToolRecord[],
   registry: ToolRegistry,
   effectiveCoreTools: string[] | undefined,
+  messageBus: MessageBus,
 ): void {
   // @plan PLAN-20260610-ISSUE1592.P03
   // @requirement REQ-INV-003
@@ -470,6 +477,7 @@ function registerAgentTools(
       schedulerFactoryProvider: () =>
         host.getInteractiveSubagentSchedulerFactory(),
       getAsyncTaskManager: () => host.getAsyncTaskManager(),
+      messageBus,
     };
 
     if (profileManager !== undefined && subagentManager !== undefined) {
@@ -566,6 +574,7 @@ export async function createToolRegistry(
     allPotentialTools,
     registry,
     effectiveCoreTools,
+    messageBus,
   );
 
   await registry.discoverAllTools();

@@ -32,10 +32,10 @@ jobs:
           fetch-depth: 1
       - name: 'Install Dependencies'
         run: 'npm ci'
-      - name: 'Build bundle'
-        run: 'npm run bundle'
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Build project'
+        run: 'npm run build'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
       - name: 'Create Issue on Failure'
         if: '${{ failure() && github.event.inputs.dry-run == false }}'
         env:

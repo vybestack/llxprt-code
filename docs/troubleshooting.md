@@ -277,7 +277,7 @@ Cache metrics only appear when the provider supports and reports them. OAuth use
 
 ## Building from Source
 
-The CLI's run path uses the [Bun](https://bun.sh) runtime to execute the TypeScript (`.ts`) entry point directly — no pre-compiled `dist/` artifact is required for the CLI to run. The published npm package still ships `dist/` (produced by `tsc`) for Node.js compatibility and type-checking uses `tsc --noEmit`. The self-contained `bundle/llxprt.js` release artifact is produced by `scripts/bun-build.config.mjs`.
+The CLI's run path uses the [Bun](https://bun.sh) runtime to execute the TypeScript (`.ts`) entry point directly via the Bun launcher. The published npm package still ships `dist/` (produced by `tsc`) for Node.js compatibility — the `bin` entry points to `packages/cli/dist/index.js`, which invokes the Bun launcher. Type checking uses `tsc --noEmit` (no JavaScript output is produced). The retired `esbuild` bundling step is no longer part of the build; only the a2a-server artifact is bundled (by `scripts/bun-build.config.mjs`).
 
 To build from source:
 

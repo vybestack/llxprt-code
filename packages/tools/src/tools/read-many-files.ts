@@ -113,15 +113,12 @@ class ReadManyFilesToolInvocation extends BaseToolInvocation<
   ReadManyFilesParams,
   ToolResult
 > {
-  private readonly llxprtIgnorePatterns: string[] = [];
-
   constructor(
     private readonly host: IToolHost,
     params: ReadManyFilesParams,
     messageBus: IToolMessageBus,
   ) {
     super(params, messageBus);
-    this.llxprtIgnorePatterns = host.getLlxprtIgnorePatterns();
   }
 
   getDescription(): string {
@@ -216,12 +213,8 @@ ${this.host.getTargetDir()}
     };
     const fileDiscovery = this.host.getFileService();
     const effectiveExcludes = useDefaultExcludes
-      ? [
-          ...getDefaultExcludes(this.host),
-          ...exclude,
-          ...this.llxprtIgnorePatterns,
-        ]
-      : [...exclude, ...this.llxprtIgnorePatterns];
+      ? [...getDefaultExcludes(this.host), ...exclude]
+      : [...exclude];
     return { fileFilteringOptions, fileDiscovery, effectiveExcludes };
   }
 
@@ -411,18 +404,21 @@ ${this.host.getTargetDir()}
 
     const normalizedPath = path.normalize(absoluteFilePath);
 
+    // Use the unified decision path so that .llxprtignore negations can
+    // un-ignore gitignored files when both flags are true.
     if (
-      fileFilteringOptions.respectGitIgnore &&
-      fileDiscovery.shouldGitIgnoreFile(absoluteFilePath)
+      fileDiscovery.shouldIgnoreFile(absoluteFilePath, fileFilteringOptions)
     ) {
-      return { skipped: true, type: 'git' };
-    }
-
-    if (
-      fileFilteringOptions.respectLlxprtIgnore &&
-      fileDiscovery.shouldLlxprtIgnoreFile(absoluteFilePath)
-    ) {
-      return { skipped: true, type: 'llxprt' };
+      // Categorize the skip reason for reporting. Prefer .llxprtignore when
+      // it explicitly matched, because the unified decision above gives that
+      // source precedence in combined mode. The dedicated check is intentionally
+      // limited to skipped files so the public file-service API can remain boolean.
+      const type: 'git' | 'llxprt' =
+        fileFilteringOptions.respectLlxprtIgnore &&
+        fileDiscovery.shouldLlxprtIgnoreFile(absoluteFilePath)
+          ? 'llxprt'
+          : 'git';
+      return { skipped: true, type };
     }
 
     return { skipped: false, normalizedPath };

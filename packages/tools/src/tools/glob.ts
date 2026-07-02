@@ -81,9 +81,20 @@ export interface GlobToolParams {
   case_sensitive?: boolean;
 
   /**
-   * Whether to respect .gitignore patterns (optional, defaults to true)
+   * @deprecated Use `file_filtering_options.respect_git_ignore` instead. When
+   * used without `file_filtering_options`, setting this to false preserves
+   * legacy behavior by disabling all ignore filtering; setting it to true uses
+   * the host's .llxprtignore default.
    */
   respect_git_ignore?: boolean;
+
+  /**
+   * Whether to respect .gitignore and .llxprtignore patterns (optional, defaults to true)
+   */
+  file_filtering_options?: {
+    respect_git_ignore?: boolean;
+    respect_llxprt_ignore?: boolean;
+  };
 }
 
 class GlobToolInvocation extends BaseToolInvocation<
@@ -131,18 +142,35 @@ class GlobToolInvocation extends BaseToolInvocation<
       if (searchDirectoriesResult.error) return searchDirectoriesResult.error;
       const searchDirectories = searchDirectoriesResult.directories;
 
-      const respectGitIgnore =
-        this.params.respect_git_ignore ??
-        this.host.getFileFilteringOptions().respectGitIgnore;
+      const defaultFileIgnores = this.host.getFileFilteringOptions();
+      const usingLegacyRespectGitIgnore =
+        this.params.file_filtering_options === undefined &&
+        this.params.respect_git_ignore !== undefined;
+      if (this.params.respect_git_ignore !== undefined) {
+        debugLogger.warn(
+          usingLegacyRespectGitIgnore
+            ? 'GlobTool: respect_git_ignore is deprecated; use file_filtering_options.respect_git_ignore instead.'
+            : 'GlobTool: both respect_git_ignore and file_filtering_options were provided; using file_filtering_options.',
+        );
+      }
+      const respectGitIgnore = this.resolveRespectGitIgnore(
+        defaultFileIgnores.respectGitIgnore,
+        usingLegacyRespectGitIgnore,
+      );
+      const respectLlxprtIgnore = this.resolveRespectLlxprtIgnore(
+        defaultFileIgnores.respectLlxprtIgnore,
+        usingLegacyRespectGitIgnore,
+      );
+      const fileFilteringOptions = { respectGitIgnore, respectLlxprtIgnore };
       const fileDiscovery = this.host.getFileService();
 
       const allEntries = await this.collectGlobEntries(
         searchDirectories,
         signal,
       );
-      const { filteredEntries, ignoredCount } = this.applyGitIgnoreFilter(
+      const { filteredEntries, ignoredCount } = this.applyFileFilters(
         allEntries,
-        respectGitIgnore,
+        fileFilteringOptions,
         fileDiscovery,
       );
 
@@ -170,6 +198,34 @@ class GlobToolInvocation extends BaseToolInvocation<
         },
       };
     }
+  }
+
+  private resolveRespectGitIgnore(
+    defaultRespectGitIgnore: boolean,
+    usingLegacyRespectGitIgnore: boolean,
+  ): boolean {
+    if (usingLegacyRespectGitIgnore) {
+      return this.params.respect_git_ignore ?? defaultRespectGitIgnore;
+    }
+    return (
+      this.params.file_filtering_options?.respect_git_ignore ??
+      defaultRespectGitIgnore
+    );
+  }
+
+  private resolveRespectLlxprtIgnore(
+    defaultRespectLlxprtIgnore: boolean,
+    usingLegacyRespectGitIgnore: boolean,
+  ): boolean {
+    if (usingLegacyRespectGitIgnore) {
+      return this.params.respect_git_ignore === false
+        ? false
+        : defaultRespectLlxprtIgnore;
+    }
+    return (
+      this.params.file_filtering_options?.respect_llxprt_ignore ??
+      defaultRespectLlxprtIgnore
+    );
   }
 
   private resolveSearchDirectories(workspaceRoots: readonly string[]): {
@@ -229,9 +285,12 @@ class GlobToolInvocation extends BaseToolInvocation<
     return allEntries;
   }
 
-  private applyGitIgnoreFilter(
+  private applyFileFilters(
     entries: GlobPath[],
-    respectGitIgnore: boolean,
+    fileFilteringOptions: {
+      respectGitIgnore: boolean;
+      respectLlxprtIgnore: boolean;
+    },
     fileDiscovery: {
       filterFiles(
         paths: string[],
@@ -239,7 +298,10 @@ class GlobToolInvocation extends BaseToolInvocation<
       ): string[];
     },
   ): { filteredEntries: GlobPath[]; ignoredCount: number } {
-    if (!respectGitIgnore) {
+    if (
+      !fileFilteringOptions.respectGitIgnore &&
+      !fileFilteringOptions.respectLlxprtIgnore
+    ) {
       return { filteredEntries: entries, ignoredCount: 0 };
     }
     const toCanonicalPath = (filePath: string): string => {
@@ -255,8 +317,8 @@ class GlobToolInvocation extends BaseToolInvocation<
     const filteredCanonicalPaths = new Set(
       fileDiscovery
         .filterFiles(canonicalPaths, {
-          respectGitIgnore,
-          respectLlxprtIgnore: false,
+          respectGitIgnore: fileFilteringOptions.respectGitIgnore,
+          respectLlxprtIgnore: fileFilteringOptions.respectLlxprtIgnore,
         })
         .map((p) => toCanonicalPath(p)),
     );
@@ -365,8 +427,26 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
           },
           respect_git_ignore: {
             description:
-              'Optional: Whether to respect .gitignore patterns when finding files. Only available in git repositories. Defaults to true.',
+              'Deprecated: use file_filtering_options.respect_git_ignore. If file_filtering_options is provided, it takes precedence over this legacy option. Defaults to true.',
             type: 'boolean',
+          },
+          file_filtering_options: {
+            description:
+              'Optional: Whether to respect ignore patterns from .gitignore or .llxprtignore',
+            type: 'object',
+            properties: {
+              respect_git_ignore: {
+                description:
+                  'Optional: Whether to respect .gitignore patterns when finding files. Only available in git repositories. Defaults to true.',
+                type: 'boolean',
+              },
+              respect_llxprt_ignore: {
+                description:
+                  'Optional: Whether to respect .llxprtignore patterns when finding files. Defaults to true.',
+                type: 'boolean',
+              },
+            },
+            additionalProperties: false,
           },
         },
         required: ['pattern'],

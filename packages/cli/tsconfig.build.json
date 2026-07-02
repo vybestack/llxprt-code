@@ -19,5 +19,13 @@
     "src/**/*.d.ts",
     "src/**/*.json",
     "./package.json"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/**/__tests__/**",
+    "src/**/__snapshots__/**"
   ]
 }

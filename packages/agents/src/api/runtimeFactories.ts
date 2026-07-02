@@ -30,6 +30,7 @@ import type {
   TaskToolArgs,
   TaskToolRegistration,
 } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import { AgentClient } from '../core/client.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { TaskTool } from '../tools/task.js';
@@ -44,25 +45,7 @@ import type {
   DisplayCallbacks,
 } from '../core/agenticLoop/types.js';
 
-/**
- * A descriptor the composition root (the CLI bootstrap) registers with the
- * providers package's dependency-inversion seam (`registerAgentRuntimeFactories`)
- * so the providers package can construct agent-owned primitives without a
- * providers→agents dependency cycle.
- *
- * This is a structural re-declaration of the providers-owned
- * `AgentRuntimeFactoryBindings` interface, expressed purely in terms of
- * core-owned contract types so this module has no providers dependency. The
- * shapes are identical and structurally compatible.
- */
-export interface AgentRuntimeFactoryBindings {
-  agentClientFactory: (
-    config: Config,
-    runtimeState: AgentRuntimeState,
-  ) => AgentClientContract;
-  toolSchedulerFactory: ToolSchedulerFactory;
-  taskToolRegistration: () => TaskToolRegistration;
-}
+export type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 
 function assertConfig(
   value: unknown,

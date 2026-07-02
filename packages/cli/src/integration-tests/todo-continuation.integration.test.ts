@@ -15,7 +15,10 @@ import {
   type TodoUpdateEvent,
   type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
-import { AgentClient, type Turn } from '@vybestack/llxprt-code-agents';
+import {
+  AgentClient,
+  type Turn,
+} from '@vybestack/llxprt-code-agents/internals.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { PartListUnion } from '@google/genai';
 import {

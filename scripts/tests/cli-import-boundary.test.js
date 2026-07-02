@@ -357,14 +357,21 @@ describe('check-cli-import-boundary', () => {
     expect(code).toBe(0);
   });
 
-  // ── bare agents-root internal-symbol checks (#2204) ─────────────────────
+  // ── agents specifier-level boundary checks (#2204 / #2285) ──────────────
   //
-  // The bare root `@vybestack/llxprt-code-agents` re-exports the internals
-  // barrel, so importing an INTERNAL symbol from the public root is still a
-  // boundary violation. These tests prove public symbols pass and internal
-  // root symbols fail unless explicitly allowlisted.
+  // The boundary checker enforces agents-package imports purely via
+  // specifier/subpath contracts: the bare root is allowed at the specifier
+  // level, and deep subpaths (including the internals barrel) are forbidden
+  // because @vybestack/llxprt-code-agents has no entry in
+  // PUBLIC_SUBPATHS_BY_PACKAGE. The API-surface guard owns "what does the
+  // agents root expose"; this checker owns "which specifiers may production
+  // CLI import".
 
-  it('allows importing a PUBLIC agents symbol (createAgent) from the bare root', () => {
+  it('allows a bare agents root import (specifier-level, always)', () => {
+    // The bare root @vybestack/llxprt-code-agents is a public specifier and is
+    // always allowed. Any symbol-level concern (an internal name leaking back
+    // into the root) is owned by the API-surface guard + typecheck, NOT this
+    // checker.
     const { code, stdout } = withCliFixture(({ root, write }) => {
       write(
         'packages/cli/src/ok.ts',
@@ -377,82 +384,36 @@ describe('check-cli-import-boundary', () => {
     expect(code).toBe(0);
   });
 
-  it('flags importing an INTERNAL symbol (AgentClient) from the bare agents root', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/rogue.ts',
-        "import { AgentClient } from '@vybestack/llxprt-code-agents';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    expect(stdout).toContain('rogue.ts');
-    expect(stdout).toContain('AgentClient');
-    expect(stdout).toContain('agents-internal-symbol');
-  });
-
-  it('flags importing an INTERNAL type-only symbol (CoreToolScheduler) from the bare root', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/rogue.ts',
-        "import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    expect(stdout).toContain('rogue.ts');
-    expect(stdout).toContain('CoreToolScheduler');
-    // For consistency with the AgentClient test, assert the classification
-    // label so a regression that re-buckets internal symbols (e.g. as a
-    // generic static-import) is caught.
-    expect(stdout).toContain('agents-internal-symbol');
-  });
-
-  it('flags a namespace import (import * as ns) from the bare agents root', () => {
-    // `import * as ns` couples to the whole (internals-leaking) bare root
-    // surface; it must be flagged as a whole-root coupling violation.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/namespace.ts',
-        "import * as agentsApi from '@vybestack/llxprt-code-agents';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    expect(stdout).toContain('namespace.ts');
-    expect(stdout).toContain('agents-namespace-import');
-  });
-
-  it('flags a default import from the bare agents root (no default export)', () => {
-    // The agents root has no default export, so `import X from '...'` cannot
-    // resolve at runtime and is flagged as an internal/default boundary
-    // violation.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/default.ts',
-        "import agentsDefault from '@vybestack/llxprt-code-agents';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    expect(stdout).toContain('default.ts');
-    expect(stdout).toContain('agents-internal-symbol');
-    // The flagged symbol is the reserved 'default' name.
-    expect(stdout).toContain("'default'");
-  });
-
-  it('allows importing PUBLIC runtime-construction factories (createAgentRuntimeFactoryBindings, createAgenticLoop) from the bare root', () => {
-    // #2204: these curated public factories/types replace the internal
-    // AgentClient / CoreToolScheduler / AgenticLoop imports. They MUST be
-    // allowed.
+  it('does not symbol-check the bare agents root (delegated to API-surface guard)', () => {
+    // Characterization: the boundary checker is SPECIFIER-level, not
+    // symbol-level. It allows any named import from the bare agents root
+    // because the root itself is a public specifier. Enforcing WHICH names a
+    // consumer may import from the root is the responsibility of the
+    // API-surface guard (scripts/check-agents-api-surface.mjs) plus typecheck
+    // — NOT this boundary checker. This test documents that an
+    // internal-named symbol (e.g. AgentClient) imported from the BARE root
+    // passes here by design, so a future change that adds symbol checking to
+    // this script is caught as an intentional contract change.
+    //
+    // Defense-in-depth note: the API-surface guard uses TWO complementary
+    // mechanisms to catch internal-symbol leaks on the agents root:
+    //   (1) DENIED_INTERNAL_NAMES — a hard-deny set of 3 known historical
+    //       leaks (AgentClient, CoreToolScheduler, AgenticLoop). These always
+    //       fail the guard regardless of snapshot state.
+    //   (2) expected-root-surface.json snapshot — a file-equality comparison
+    //       that catches ANY change to the root export surface, including a
+    //       NEW internal symbol leaking onto the root. A new leak causes
+    //       snapshot drift (the report will have an unexpected "+" entry),
+    //       which fails the guard until the snapshot is intentionally
+    //       reviewed and updated.
+    // The old PUBLIC_AGENT_SYMBOLS allowlist was deny-by-default; the
+    // snapshot is not. A NEW internal symbol added to the root would be
+    // caught by snapshot drift (requiring an intentional update), not by a
+    // deny-by-default policy. Do NOT reintroduce PUBLIC_AGENT_SYMBOLS.
     const { code, stdout } = withCliFixture(({ root, write }) => {
       write(
         'packages/cli/src/ok.ts',
-        "import { createAgentRuntimeFactoryBindings, createAgenticLoop, type AgenticLoopRunner, type AgenticLoopEvent, type AgenticLoopMessage, type AgenticLoopApprovalHandler } from '@vybestack/llxprt-code-agents';\n",
+        "import { AgentClient } from '@vybestack/llxprt-code-agents';\n",
       );
       write(...thinIndex());
       return runScript(root, 0);
@@ -461,75 +422,61 @@ describe('check-cli-import-boundary', () => {
     expect(code).toBe(0);
   });
 
-  it('flags importing the concrete AgenticLoop class from the bare root', () => {
+  it('flags importing from the agents internals.js subpath (deep import)', () => {
+    // @vybestack/llxprt-code-agents/internals.js is a deep subpath NOT in
+    // PUBLIC_SUBPATHS_BY_PACKAGE (agents has no entry there), so it is a
+    // deep-import violation regardless of which named symbol is imported.
     const { code, stdout } = withCliFixture(({ root, write }) => {
       write(
-        'packages/cli/src/agentic-loop.ts',
-        "import { AgenticLoop } from '@vybestack/llxprt-code-agents';\n",
+        'packages/cli/src/rogue.ts',
+        "import { AgentClient } from '@vybestack/llxprt-code-agents/internals.js';\n",
       );
       write(...thinIndex());
       return runScript(root, 1);
     });
     expect(code).toBe(1);
-    expect(stdout).toContain('agentic-loop.ts');
-    expect(stdout).toContain('AgenticLoop');
-    expect(stdout).toContain('agents-internal-symbol');
+    expect(stdout).toContain('rogue.ts');
+    // Assert the exact offending specifier literal.
+    expect(stdout).toContain('@vybestack/llxprt-code-agents/internals.js');
+    // Static import syntax is reported as 'static-import'; the deep nature of
+    // the violation is conveyed by the offending specifier literal above.
+    expect(stdout).toContain('static-import');
   });
 
-  it('flags importing an internal symbol via an alias (X as Y) from the bare root', () => {
-    // Use SubagentOrchestrator — a genuinely internal symbol not promoted to
-    // the public API.
+  it('flags a namespace import from the agents internals.js subpath', () => {
+    // Specifier-level enforcement must catch all static import syntaxes,
+    // including namespace imports, because the checker reads the
+    // ImportDeclaration moduleSpecifier independently of the import clause form.
     const { code, stdout } = withCliFixture(({ root, write }) => {
       write(
-        'packages/cli/src/aliased.ts',
-        "import { SubagentOrchestrator as Orchestrator } from '@vybestack/llxprt-code-agents';\n",
+        'packages/cli/src/namespace-deep.ts',
+        "import * as internals from '@vybestack/llxprt-code-agents/internals.js';\n",
       );
       write(...thinIndex());
       return runScript(root, 1);
     });
     expect(code).toBe(1);
-    expect(stdout).toContain('aliased.ts');
-    // The ORIGINAL exported name (SubagentOrchestrator) is flagged, not the alias.
-    expect(stdout).toContain('SubagentOrchestrator');
-    // Assert the classification label so a regression that re-buckets aliased
-    // internal symbols (e.g. as a generic static-import) is caught, consistent
-    // with the AgentClient and CoreToolScheduler tests above.
-    expect(stdout).toContain('agents-internal-symbol');
+    expect(stdout).toContain('namespace-deep.ts');
+    expect(stdout).toContain('@vybestack/llxprt-code-agents/internals.js');
+    expect(stdout).toContain('static-import');
   });
 
-  it('flags internal agents symbols with NO per-file escape hatch (AGENT_INTERNAL_SYMBOL_ALLOWLIST removed)', () => {
-    // #2204 burn-down: there is no longer a per-file internal-symbol allowlist.
-    // Even config/configBuilder.ts (previously allowlisted) must be flagged if
-    // it imports AgentClient/CoreToolScheduler/createTaskToolRegistration.
+  it('flags a deep agents source path import', () => {
+    // A deep source path like /core/client.js is a deep subpath NOT in
+    // PUBLIC_SUBPATHS_BY_PACKAGE and is forbidden.
     const { code, stdout } = withCliFixture(({ root, write }) => {
       write(
-        'packages/cli/src/config/configBuilder.ts',
-        "import { AgentClient, CoreToolScheduler, createTaskToolRegistration } from '@vybestack/llxprt-code-agents';\n",
+        'packages/cli/src/deepsource.ts',
+        "import { AgentClient } from '@vybestack/llxprt-code-agents/core/client.js';\n",
       );
       write(...thinIndex());
       return runScript(root, 1);
     });
     expect(code).toBe(1);
-    expect(stdout).toContain('configBuilder.ts');
-    expect(stdout).toContain('AgentClient');
-    expect(stdout).toContain('agents-internal-symbol');
-  });
-
-  it('flags internal agents symbols from ANY file — no file is exempt', () => {
-    // Even ui/hooks and ui/utils files that WERE previously allowlisted must
-    // now be flagged if they import AgenticLoop/AgentClient directly.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ui/hooks/useReactToolScheduler.ts',
-        "import type { CoreToolScheduler } from '@vybestack/llxprt-code-agents';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    expect(stdout).toContain('useReactToolScheduler.ts');
-    expect(stdout).toContain('CoreToolScheduler');
-    expect(stdout).toContain('agents-internal-symbol');
+    expect(stdout).toContain('deepsource.ts');
+    // Assert the exact offending specifier literal.
+    expect(stdout).toContain('@vybestack/llxprt-code-agents/core/client.js');
+    expect(stdout).toContain('static-import');
   });
 
   it('fails when packages/cli/src contains no TypeScript files (empty scan guard)', () => {

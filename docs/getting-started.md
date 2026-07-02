@@ -4,7 +4,7 @@ This guide walks you through your first session — from installation to your fi
 
 ## Prerequisites
 
-- **Node.js 20+** installed on your system (not required for Homebrew)
+- **Node.js 24+** installed on your system (not required for Homebrew)
 - A terminal/command line
 
 > **Note:** LLxprt Code runs on the [Bun](https://bun.sh) runtime under the covers. Node.js remains the compatibility target for invocation — the npm/npx/Homebrew install commands below work unchanged. The published package bundles Bun as a dependency, so most users never need to install Bun separately.

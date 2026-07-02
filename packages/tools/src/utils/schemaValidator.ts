@@ -48,8 +48,8 @@ const AjvClass: AjvConstructor =
  * `dist/refs/json-schema-draft-07.json`.
  *
  * This is inlined (rather than resolved via `createRequire` or a JSON
- * import) so that it survives esbuild bundling into `bundle/llxprt.js`
- * unchanged.
+ * import) so that the meta-schema is available at module scope without a
+ * runtime file lookup.
  */
 const draft07MetaSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',

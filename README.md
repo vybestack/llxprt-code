@@ -80,10 +80,9 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 
 ## Quick Start
 
-1. **Prerequisites:** Node.js 20+ installed (not required for Homebrew)
+1. **Prerequisites:** Node.js 24+ installed (not required for Homebrew)
 
    > **Note:** LLxprt Code runs on the [Bun](https://bun.sh) runtime under the covers. Node.js remains the compatibility target for invocation — the npm/npx/Homebrew install commands below work unchanged. The published package bundles Bun as a dependency, so most users never need to install Bun separately. See the [Bun fallback](#bun-runtime-and-install-fallback) section if Bun is missing.
-
 2. **Install:**
 
    ```bash
@@ -104,7 +103,7 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 
 ### Bun Runtime and Install Fallback
 
-LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, an internal launcher (see `packages/cli/src/launcher/bun-launcher.ts`) resolves Bun and re-execs the CLI under it. The launcher executes the TypeScript (`.ts`) entry point directly — the CLI's run path does not require a pre-compiled `dist/` artifact. (TypeScript is still compiled to `dist/` for type-checking via `tsc --noEmit` and for the published npm package; the Bun launcher reads the `.ts` source at runtime.) The self-contained `bundle/llxprt.js` release artifact is produced by `scripts/bun-build.config.mjs` (which replaced the retired `esbuild.config.js`).
+LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, an internal launcher (see `packages/cli/src/launcher/bun-launcher.ts`) resolves Bun and re-execs the CLI under it, executing the TypeScript (`.ts`) entry point directly. The published npm package ships a compiled `dist/` (produced by `tsc` during the build) for Node.js compatibility — the `bin` entry points to `packages/cli/dist/index.js`, which in turn invokes the Bun launcher. Type checking uses `tsc --noEmit` (no JavaScript output is produced). The retired `esbuild` bundling step is no longer part of the build; only the a2a-server artifact is bundled (by `scripts/bun-build.config.mjs`).
 
 **Bun resolution order (production launcher):**
 

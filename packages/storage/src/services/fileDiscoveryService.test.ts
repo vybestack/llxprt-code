@@ -46,14 +46,14 @@ describe('FileDiscoveryService', () => {
       expect(service.shouldIgnoreFile('src/foo.js')).toBe(false);
     });
 
-    it('should not load git repo patterns when not in a git repo', async () => {
+    it('should not apply git ignore sources when not in a git repo', async () => {
       // No .git directory
       await createTestFile('.gitignore', 'node_modules/');
       const service = new FileDiscoveryService(projectRoot);
 
-      // Without .git, GitIgnoreParser still loads .gitignore files from project root
-      // This is the current behavior of the lazy-loading implementation
-      expect(service.shouldIgnoreFile('node_modules/foo.js')).toBe(true);
+      // Without .git, gitIgnoreFilter is null and the dedicated .llxprtignore
+      // filter never loads git sources, so node_modules/ is not ignored.
+      expect(service.shouldIgnoreFile('node_modules/foo.js')).toBe(false);
     });
 
     it('should load .llxprtignore patterns even when not in a git repo', async () => {
@@ -89,7 +89,7 @@ describe('FileDiscoveryService', () => {
       );
     });
 
-    it('should not filter files when respectGitIgnore is false', () => {
+    it('should not filter git-ignored files when respectGitIgnore is false', () => {
       const files = [
         'src/index.ts',
         'node_modules/package/index.js',
@@ -104,11 +104,13 @@ describe('FileDiscoveryService', () => {
         respectLlxprtIgnore: true, // still respect this one
       });
 
-      // Note: Even when respectGitIgnore is false, llxprtIgnoreFilter still uses GitIgnoreParser
-      // which loads .gitignore patterns. Additionally, .git is always ignored.
-      // logs/ is filtered by .llxprtignore
+      // With independent filters, disabling respectGitIgnore means Git-native
+      // ignore sources, including .gitignore and the hardcoded .git/ rule, are
+      // no longer applied. Only .llxprtignore (logs/) is applied.
       expect(filtered).toStrictEqual(
-        ['src/index.ts'].map((f) => path.join(projectRoot, f)),
+        ['src/index.ts', 'node_modules/package/index.js', '.git/config'].map(
+          (f) => path.join(projectRoot, f),
+        ),
       );
     });
 
@@ -415,6 +417,47 @@ describe('FileDiscoveryService', () => {
       expect(filtered).toStrictEqual(files);
     });
 
+    it('should un-ignore a file under a gitignored directory when explicitly negated in .llxprtignore', async () => {
+      await createTestFile('.gitignore', 'tmp/');
+      await createTestFile('.llxprtignore', '!tmp/example.txt');
+      await createTestFile('tmp/example.txt', 'example');
+      await createTestFile('tmp/other.txt', 'other');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['tmp/example.txt', 'tmp/other.txt'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const filtered = service.filterFiles(files);
+      expect(
+        service.shouldIgnoreFile(path.join(projectRoot, 'tmp/example.txt')),
+      ).toBe(false);
+      expect(
+        service.shouldIgnoreFile(path.join(projectRoot, 'tmp/other.txt')),
+      ).toBe(true);
+      expect(filtered).toStrictEqual([
+        path.join(projectRoot, 'tmp/example.txt'),
+      ]);
+    });
+
+    it('should honor later .llxprtignore re-ignore after a negation', async () => {
+      await createTestFile('.gitignore', 'tmp/');
+      await createTestFile(
+        '.llxprtignore',
+        '!tmp/example.txt\ntmp/example.txt',
+      );
+      await createTestFile('tmp/example.txt', 'example');
+
+      const service = new FileDiscoveryService(projectRoot);
+
+      expect(
+        service.shouldIgnoreFile(path.join(projectRoot, 'tmp/example.txt')),
+      ).toBe(true);
+      expect(
+        service.filterFiles([path.join(projectRoot, 'tmp/example.txt')]),
+      ).toStrictEqual([]);
+    });
+
     it('should extend ignore rules in .llxprtignore', async () => {
       await createTestFile('.gitignore', '*.log');
       await createTestFile('.llxprtignore', 'temp/');
@@ -445,7 +488,7 @@ describe('FileDiscoveryService', () => {
       expect(filtered).toStrictEqual([]);
     });
 
-    it('should use .llxprtignore rules if respectGitIgnore is false', async () => {
+    it('should apply only .llxprtignore when respectGitIgnore is false', async () => {
       await createTestFile('.gitignore', '*.txt');
       await createTestFile('.llxprtignore', 'temp/');
 
@@ -459,10 +502,161 @@ describe('FileDiscoveryService', () => {
         respectLlxprtIgnore: true,
       });
 
-      // Even when respectGitIgnore is false, llxprtIgnoreFilter uses GitIgnoreParser
-      // which still loads .gitignore patterns, so *.txt IS applied.
-      // .llxprtignore ignores temp/
-      expect(filtered).toStrictEqual([]);
+      expect(filtered).toStrictEqual(
+        ['file.txt', 'important.txt'].map((f) => path.join(projectRoot, f)),
+      );
+    });
+
+    it('gitignored path is NOT llxprtignored when .llxprtignore does not exclude it', async () => {
+      await createTestFile('.gitignore', '*.secret');
+      await createTestFile('.llxprtignore', 'logs/');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const secretPath = path.join(projectRoot, 'my.secret');
+
+      expect(service.shouldGitIgnoreFile(secretPath)).toBe(true);
+      expect(service.shouldLlxprtIgnoreFile(secretPath)).toBe(false);
+    });
+
+    it('lets .llxprtignore negation override nested .gitignore rules', async () => {
+      await createTestFile('.gitignore', 'sub');
+      await createTestFile('.llxprtignore', '!sub/');
+      await createTestFile('sub/.gitignore', 'nested-secret.txt');
+      await createTestFile('sub/nested-secret.txt', 'secret');
+      await createTestFile('sub/visible.txt', 'visible');
+
+      // A project-level .llxprtignore negation is an explicit request to expose
+      // this subtree to LLxprt tools, so it intentionally overrides nested Git
+      // ignore files as part of the combined-precedence contract.
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['sub/nested-secret.txt', 'sub/visible.txt'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      expect(service.filterFiles(files)).toStrictEqual(files);
+    });
+
+    it('respectGitIgnore true + respectLlxprtIgnore false applies only gitignore', async () => {
+      await createTestFile('.gitignore', '*.md');
+      await createTestFile('.llxprtignore', 'drafts/');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['readme.md', 'drafts/notes.js'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const filtered = service.filterFiles(files, {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: false,
+      });
+
+      expect(filtered).toStrictEqual(
+        ['drafts/notes.js'].map((f) => path.join(projectRoot, f)),
+      );
+    });
+
+    it('both flags false keeps all files', async () => {
+      await createTestFile('.gitignore', '*.md');
+      await createTestFile('.llxprtignore', 'drafts/');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['readme.md', 'drafts/notes.js'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const filtered = service.filterFiles(files, {
+        respectGitIgnore: false,
+        respectLlxprtIgnore: false,
+      });
+
+      expect(filtered).toStrictEqual(files);
+    });
+  });
+
+  describe('nested workspace (.llxprtignore basing)', () => {
+    let repoRoot: string;
+    let workspaceDir: string;
+
+    beforeEach(async () => {
+      repoRoot = path.join(testRootDir, 'nested-repo');
+      await fs.mkdir(repoRoot, { recursive: true });
+      repoRoot = await fs.realpath(repoRoot);
+      await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
+      workspaceDir = path.join(repoRoot, 'workspace');
+      await fs.mkdir(workspaceDir, { recursive: true });
+    });
+
+    it('applies .llxprtignore patterns relative to workspace root, not repo root', async () => {
+      await fs.writeFile(
+        path.join(workspaceDir, '.llxprtignore'),
+        'local-only.txt\n',
+      );
+      await fs.writeFile(path.join(workspaceDir, 'keep.ts'), 'keep');
+      await fs.writeFile(path.join(workspaceDir, 'local-only.txt'), 'local');
+
+      const service = new FileDiscoveryService(workspaceDir);
+
+      expect(
+        service.shouldLlxprtIgnoreFile(
+          path.join(workspaceDir, 'local-only.txt'),
+        ),
+      ).toBe(true);
+      expect(
+        service.shouldLlxprtIgnoreFile(path.join(workspaceDir, 'keep.ts')),
+      ).toBe(false);
+    });
+
+    it('combined filter with both flags applies .llxprtignore relative to workspace root', async () => {
+      await fs.writeFile(path.join(repoRoot, '.gitignore'), '*.secret\n');
+      await fs.writeFile(
+        path.join(workspaceDir, '.llxprtignore'),
+        'workspace-draft.txt\n',
+      );
+      await fs.writeFile(path.join(workspaceDir, 'keep.ts'), 'keep');
+      await fs.writeFile(path.join(workspaceDir, 'hidden.secret'), 'secret');
+      await fs.writeFile(
+        path.join(workspaceDir, 'workspace-draft.txt'),
+        'draft',
+      );
+
+      const service = new FileDiscoveryService(workspaceDir);
+
+      const filtered = service.filterFiles(
+        [
+          path.join(workspaceDir, 'keep.ts'),
+          path.join(workspaceDir, 'hidden.secret'),
+          path.join(workspaceDir, 'workspace-draft.txt'),
+        ],
+        { respectGitIgnore: true, respectLlxprtIgnore: true },
+      );
+
+      expect(filtered).toStrictEqual([path.join(workspaceDir, 'keep.ts')]);
+    });
+
+    it('.llxprtignore negation un-ignores gitignored file in nested workspace', async () => {
+      await fs.writeFile(path.join(repoRoot, '.gitignore'), '*.txt\n');
+      // Workspace .llxprtignore un-ignores important.txt
+      await fs.writeFile(
+        path.join(workspaceDir, '.llxprtignore'),
+        '!important.txt\n',
+      );
+      await fs.writeFile(path.join(workspaceDir, 'normal.txt'), 'normal');
+      await fs.writeFile(path.join(workspaceDir, 'important.txt'), 'important');
+
+      const service = new FileDiscoveryService(workspaceDir);
+
+      const filtered = service.filterFiles(
+        [
+          path.join(workspaceDir, 'normal.txt'),
+          path.join(workspaceDir, 'important.txt'),
+        ],
+        { respectGitIgnore: true, respectLlxprtIgnore: true },
+      );
+
+      // important.txt survives because .llxprtignore negation overrides .gitignore
+      expect(filtered).toStrictEqual([
+        path.join(workspaceDir, 'important.txt'),
+      ]);
     });
   });
 });

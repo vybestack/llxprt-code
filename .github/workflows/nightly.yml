@@ -30,7 +30,7 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '${{ matrix.node-version }}'
           cache: 'npm'
@@ -64,10 +64,6 @@ jobs:
       - name: 'Build project'
         run: |-
           npm run build
-
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
 
       - name: 'Fix rollup platform dependency'
         run: |-
@@ -112,8 +108,8 @@ jobs:
           CI: true
         run: npm run test:scripts
 
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'
@@ -153,23 +149,23 @@ jobs:
         include:
           - os: 'ubuntu-latest'
             sandbox: 'sandbox:none'
-            node-version: '20.x'
+            node-version: '24.x'
           - os: 'ubuntu-latest'
             sandbox: 'sandbox:docker'
-            node-version: '20.x'
+            node-version: '24.x'
           - os: 'macos-latest'
             sandbox: 'sandbox:none'
-            node-version: '20.x'
+            node-version: '24.x'
           - os: 'windows-latest'
             sandbox: 'sandbox:none'
-            node-version: '20.x'
+            node-version: '24.x'
 
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '${{ matrix.node-version }}'
 
@@ -268,7 +264,7 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '24.x'
           cache: 'npm'

@@ -8,6 +8,13 @@ LLxprt Code includes the ability to automatically ignore files, similar to `.git
 
 When you add a path to your `.llxprtignore` file, tools that respect this file will exclude matching files and directories from their operations. For example, when you use the `read_many_files` tool, any paths in your `.llxprtignore` file will be automatically excluded.
 
+`.gitignore` and `.llxprtignore` filtering are independent. Toggling one does not affect the other. Tools that expose `file_filtering_options` (such as `glob`, `ls`, `grep`/`ripgrep`, and `read_many_files`) allow you to control each independently:
+
+- `respect_git_ignore` — whether to apply `.gitignore` patterns.
+- `respect_llxprt_ignore` — whether to apply `.llxprtignore` patterns.
+
+Both default to `true`. When both are enabled, `.llxprtignore` patterns are applied after `.gitignore` patterns, so a negation in `.llxprtignore` can un-ignore a file ignored by `.gitignore`.
+
 For the most part, `.llxprtignore` follows the conventions of `.gitignore` files:
 
 - Blank lines and lines starting with `#` are ignored.

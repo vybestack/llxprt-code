@@ -145,11 +145,12 @@ export class Logger {
     }
 
     ensureDir(Storage.getGlobalLogDir());
-    this.llxprtDir = this.storage.getProjectTempDir();
-    this.logFilePath = path.join(this.llxprtDir, LOG_FILE_NAME);
+    const llxprtDir = this.storage.getProjectTempDir();
+    this.llxprtDir = llxprtDir;
+    this.logFilePath = path.join(llxprtDir, LOG_FILE_NAME);
 
     try {
-      await fs.mkdir(this.llxprtDir, { recursive: true });
+      await fs.mkdir(llxprtDir, { recursive: true });
       let fileExisted = true;
       try {
         await fs.access(this.logFilePath);

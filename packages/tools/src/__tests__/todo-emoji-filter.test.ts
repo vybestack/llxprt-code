@@ -40,6 +40,7 @@ function createToolHostWithEmojiMode(mode: string) {
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
+      shouldIgnoreFile: () => false,
       filterFiles: (paths: string[]) => paths,
     }),
     getFileFilteringOptions: () => ({

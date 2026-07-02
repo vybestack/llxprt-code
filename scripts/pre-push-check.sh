@@ -47,7 +47,6 @@ run_check "Integration tests lint" npx eslint integration-tests --max-warnings 0
 run_check "Integration tests format" npx prettier --check integration-tests
 run_check "Typecheck" npm run typecheck
 run_check "Build" npm run build
-run_check "Bundle" npm run bundle
 
 # Tests
 echo "Running tests (this may take a while)..."

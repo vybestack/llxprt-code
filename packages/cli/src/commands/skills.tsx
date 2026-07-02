@@ -10,7 +10,7 @@ import { enableCommand } from './skills/enable.js';
 import { disableCommand } from './skills/disable.js';
 import { installCommand } from './skills/install.js';
 import { uninstallCommand } from './skills/uninstall.js';
-import { initializeOutputListenersAndFlush } from '../cliProcessUtils.js';
+import { initializeOutputListenersAndFlush } from '../session/outputListeners.js';
 
 export const skillsCommand: CommandModule = {
   command: 'skills <command>',

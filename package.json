@@ -2,7 +2,7 @@
   "name": "@vybestack/llxprt-code",
   "version": "0.10.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "type": "module",
   "workspaces": [
@@ -72,7 +72,6 @@
     "build:all": "npm run build && npm run build:sandbox && npm run build:vscode",
     "build:packages": "npm run build --workspaces",
     "build:sandbox": "node scripts/build_sandbox.js --skip-npm-install-build",
-    "bundle": "npm run generate && bun scripts/bun-build.config.mjs && node scripts/chmod_executable.js bundle/llxprt.js && node scripts/copy_bundle_assets.js",
     "test": "npm run test --workspaces --if-present",
     "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts",
     "test:scripts": "vitest run --config ./scripts/tests/vitest.config.ts",
@@ -89,6 +88,7 @@
     "lint:ci": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --ext .ts,.tsx --max-warnings 0 && cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint integration-tests --max-warnings 0",
     "lint:eslint-guard": "node scripts/check-eslint-guard.js",
     "lint:cli-boundary": "node scripts/check-cli-import-boundary.mjs",
+    "lint:agents-api-surface": "node scripts/check-agents-api-surface.mjs",
     "lint:all": "./scripts/lint-all.sh",
     "format": "prettier --experimental-cli --write . --ignore-path .gitignore --ignore-path .prettierignore",
     "format:check": "prettier --check .",
@@ -136,10 +136,9 @@
     "typescript": "5.8.3"
   },
   "bin": {
-    "llxprt": "bundle/llxprt.js"
+    "llxprt": "packages/cli/dist/index.js"
   },
   "files": [
-    "bundle/",
     "scripts/preinstall.cjs",
     "scripts/postinstall.cjs",
     "scripts/detect-installer.cjs",
@@ -155,7 +154,7 @@
     "@types/mime-types": "^3.0.1",
     "@types/minimatch": "^5.1.2",
     "@types/mock-fs": "^4.13.4",
-    "@types/node": "^24.0.13",
+    "@types/node": "^24.2.1",
     "@types/semver": "^7.7.0",
     "@types/shell-quote": "^1.7.5",
     "@types/turndown": "^5.0.6",

@@ -99,10 +99,9 @@ This section guides contributors on how to build, modify, and understand the dev
 
 **Prerequisites:**
 
-1.  **Bun**: Install [Bun](https://bun.sh) (version pinned in [`.bun-version`](./.bun-version), currently `1.3.14`). Bun is the runtime for the CLI run path and the package manager for development. Node.js `>=20` remains the compatibility target for invocation — the npm/npx/Homebrew install flows still work — but the development workflow uses Bun directly. See [dev-docs/bun.md](./dev-docs/bun.md) for details on the dual-lockfile policy and Bun-specific configuration.
+1.  **Bun**: Install [Bun](https://bun.sh) (version pinned in [`.bun-version`](./.bun-version), currently `1.3.14`). Bun is the runtime for the CLI run path and the package manager for development. Node.js `>=24` (pinned in `.nvmrc`) remains the compatibility target for invocation — the npm/npx/Homebrew install flows still work — but the development workflow uses Bun directly. See [dev-docs/bun.md](./dev-docs/bun.md) for details on the dual-lockfile policy and Bun-specific configuration.
 
     > **Note:** The root `package.json` still declares `packageManager: npm@11.6.2`, and several root scripts (`presubmit`, `preflight`, `build:all`) chain to `npm run ...` internally. During the migration transition, `bun run presubmit` delegates to npm internally. This will be reconciled in a later subissue.
-
 2.  **Git**
 
 ### Build Process
@@ -126,7 +125,7 @@ To build the entire project (all packages):
 bun run build
 ```
 
-TypeScript source (`.ts`) is shipped directly. The CLI's run path uses the [Bun](https://bun.sh) runtime to execute the `.ts` entry point directly — no pre-compiled `dist/` artifact is required for the CLI to run. Type checking uses `tsc --noEmit` (no JavaScript output is produced). However, the published npm package still ships `dist/` (produced by `tsc` during `bun run build`) for Node.js compatibility, and the self-contained `bundle/llxprt.js` release artifact is produced by `scripts/bun-build.config.mjs` (which replaced the retired `esbuild.config.js`). Refer to `scripts/build.js`, `scripts/build_package.js`, and `package.json` scripts for more details on what happens during the build.
+TypeScript source (`.ts`) is compiled to `dist/` by `tsc` during `bun run build`. The CLI's run path uses the [Bun](https://bun.sh) runtime — the `bin` entry (`packages/cli/dist/index.js`) invokes the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`), which executes the `.ts` entry point directly. Type checking uses `tsc --noEmit` (no JavaScript output is produced). The published npm package ships `dist/` for Node.js compatibility. The retired `esbuild` bundling step is no longer part of the build; only the a2a-server artifact is bundled (by `scripts/bun-build.config.mjs`). Refer to `scripts/build.js`, `scripts/build_package.js`, and `package.json` scripts for more details on what happens during the build.
 
 ### Enabling Sandboxing
 
@@ -338,5 +337,5 @@ bun run clean
 bun install
 bun run auth
 bun run prerelease:dev
-bun publish --workspaces
+npm publish --workspaces
 ```

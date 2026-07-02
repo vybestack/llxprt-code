@@ -14,8 +14,8 @@ import { MessageBus } from '@vybestack/llxprt-code-core';
 import {
   AgentClient,
   CoreToolScheduler,
-  createTaskToolRegistration,
-} from '@vybestack/llxprt-code-agents';
+} from '@vybestack/llxprt-code-agents/internals.js';
+import { createTaskToolRegistration } from '@vybestack/llxprt-code-agents';
 
 /**
  * Creates a temporary directory for tests

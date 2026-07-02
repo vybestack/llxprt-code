@@ -200,19 +200,17 @@ function recordIgnoredPath(
 ): boolean {
   const fileDiscovery = config.getFileService();
   const respectFileIgnore = config.getFileFilteringOptions();
+  if (!fileDiscovery.shouldIgnoreFile(pathName, respectFileIgnore))
+    return false;
+
+  // The combined check above decides whether to skip; these source-specific
+  // checks are only for reporting and intentionally ignore cross-filter negation.
   const gitIgnored =
     respectFileIgnore.respectGitIgnore === true &&
-    fileDiscovery.shouldIgnoreFile(pathName, {
-      respectGitIgnore: true,
-      respectLlxprtIgnore: false,
-    });
+    fileDiscovery.shouldGitIgnoreFile(pathName);
   const llxprtIgnored =
     respectFileIgnore.respectLlxprtIgnore === true &&
-    fileDiscovery.shouldIgnoreFile(pathName, {
-      respectGitIgnore: false,
-      respectLlxprtIgnore: true,
-    });
-  if (!gitIgnored && !llxprtIgnored) return false;
+    fileDiscovery.shouldLlxprtIgnoreFile(pathName);
   const reason = getIgnoredReason(gitIgnored, llxprtIgnored);
   state.ignoredByReason[reason].push(pathName);
   onDebugMessage(
@@ -227,7 +225,8 @@ function getIgnoredReason(
 ): IgnoredReason {
   if (gitIgnored && llxprtIgnored) return 'both';
   if (gitIgnored) return 'git';
-  return 'llxprt';
+  if (llxprtIgnored) return 'llxprt';
+  throw new Error('Unexpected ignore attribution state');
 }
 
 function getIgnoredReasonText(reason: IgnoredReason): string {

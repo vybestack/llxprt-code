@@ -24,10 +24,10 @@ import {
 } from './types.js';
 import { type TokenStore } from './token-store.js';
 import {
+  type IDebugLogger,
   type ISecureStore,
   type ISecureStoreError,
-} from './interfaces/secure-store.js';
-import { type IDebugLogger } from './interfaces/debug-logger.js';
+} from './interfaces/index.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

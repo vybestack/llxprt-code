@@ -46,6 +46,7 @@ function createFakeToolHost(overrides?: Partial<IToolHost>): IToolHost {
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
+      shouldIgnoreFile: () => false,
       filterFiles: (paths) => paths,
     }),
     getFileFilteringOptions: () => ({

@@ -24,8 +24,8 @@ import {
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import {
-  AgentClient,
-  CoreToolScheduler,
+  createAgentClient,
+  createToolScheduler,
   createTaskToolRegistration,
 } from '@vybestack/llxprt-code-agents';
 
@@ -102,10 +102,10 @@ function createBaseConfigParameters(
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-001
     agentClientFactory: (config, runtimeState) =>
-      new AgentClient(config, runtimeState),
+      createAgentClient(config, runtimeState),
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-002
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
+    toolSchedulerFactory: (options) => createToolScheduler(options),
     // @plan PLAN-20260610-ISSUE1592.P03
     // @requirement REQ-INV-003
     taskToolRegistration: createTaskToolRegistration(),
