@@ -324,6 +324,37 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
       parsed.packages?.['node_modules/example-peer']?.peer,
     ).toBeUndefined();
   });
+
+  it('rebuilds when only the bin entry is present (partial pack)', () => {
+    const fixture = makeFixture();
+    // Simulate npm force-including just the `bin` target (dist/index.js) in a
+    // packed install, without the launcher module that entry imports. The
+    // dual-file hasBuild check must treat this as incomplete and bootstrap.
+    mkdirSync(join(fixture.dir, 'packages', 'cli', 'dist'), {
+      recursive: true,
+    });
+    writeFileSync(join(fixture.dir, 'packages', 'cli', 'dist', 'index.js'), '');
+
+    const result = fixture.run(NPM_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.npmInvoked).toBe(true);
+  });
+
+  it('skips the bootstrap when the build is complete (entry + launcher)', () => {
+    const fixture = makeFixture();
+    // A complete build has both the entry and its sibling launcher module, so
+    // hasBuild is true and the npm bootstrap must be skipped entirely.
+    const distDir = join(fixture.dir, 'packages', 'cli', 'dist');
+    mkdirSync(join(distDir, 'src', 'launcher'), { recursive: true });
+    writeFileSync(join(distDir, 'index.js'), '');
+    writeFileSync(join(distDir, 'src', 'launcher', 'bun-launcher.js'), '');
+
+    const result = fixture.run(NPM_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.npmInvoked).toBe(false);
+  });
 });
 
 describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {

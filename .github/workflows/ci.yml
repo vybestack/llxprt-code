@@ -512,9 +512,9 @@ jobs:
   # Node consumer smoke (issue 2243, S6)
   #
   # Guards published-package Node compatibility on a pure npm/Node path (no
-  # bun install), representing an external Node consumer: install, build, then
-  # run the compiled CLI entry under `node` (Node -> launcher -> Bun). Wired
-  # into the `lint` aggregator so the expensive test matrix waits for this fast
+  # Bun), representing an external Node consumer: install, build, then run the
+  # compiled CLI entry under `node` (Node -> launcher -> Bun). Wired into the
+  # `lint` aggregator so the expensive test matrix waits for this fast
   # build+smoke check first.
   node_consumer_smoke:
     name: 'Node Consumer Smoke'
@@ -568,20 +568,16 @@ jobs:
   #
   # Test: Node (Linux and macOS - always run)
   #
-  # Stays on npm (not Bun) for S6 (#2243): confirmed on CI (run 28529894703)
-  # that `bun install` + `bun run build` fails on the Linux runner because the
-  # vscode-ide-companion esbuild build cannot resolve workspace packages
-  # (@vybestack/llxprt-code-tools, -policy, -storage) under Bun's hoisted
-  # node_modules. Like the lint blocker, it does not reproduce on macOS or under
-  # npm -- a Bun-hoisting x Linux interaction. Revisit once Bun's hoisted linker
-  # materializes a node_modules topology esbuild can resolve on Linux.
+  # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
+  # deterministically materializes incomplete copies of third-party packages
+  # (e.g. uuid, yargs, ajv) whose package.json entry points at files that the
+  # copy is missing, breaking vitest's import resolution. Revisit once Bun's
+  # hoisted linker materializes complete packages.
   #
   # setup-bun is still installed here (pinned via .bun-version) because the LSP
   # service client resolves `bun` through `which` and disables the LSP/MCP
-  # service when bun is absent from PATH (failing config-lsp-integration and
-  # e2e-lsp tests). Pinning to .bun-version reconciles the CI toolchain with
-  # dev-docs/bun.md and replaces the floating 'latest' that previously triggered
-  # a Zizmor cache-poisoning warning.
+  # service when bun is absent from PATH. Pinning to .bun-version reconciles the
+  # CI toolchain with dev-docs/bun.md and avoids a floating Bun version.
   test:
     name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'

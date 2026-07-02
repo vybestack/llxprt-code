@@ -126,7 +126,17 @@ function resolveTreeSitterLanguage(
  * filesystem paths.
  */
 async function resolveBashWasmBytes(): Promise<Uint8Array> {
-  const wasmPath = require.resolve('tree-sitter-bash/tree-sitter-bash.wasm');
+  let wasmPath: string;
+  try {
+    wasmPath = require.resolve('tree-sitter-bash/tree-sitter-bash.wasm');
+  } catch (error) {
+    throw new Error(
+      'Could not resolve the tree-sitter-bash grammar WASM ' +
+        '(tree-sitter-bash/tree-sitter-bash.wasm). Ensure the ' +
+        '`tree-sitter-bash` dependency is installed.',
+      { cause: error },
+    );
+  }
   return new Uint8Array(readFileSync(wasmPath));
 }
 
