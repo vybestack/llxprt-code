@@ -419,10 +419,10 @@ export async function fetchAllQuotaInfo(
   runtimeApi: RuntimeApi,
 ): Promise<string[]> {
   const output: string[] = [];
-  const oauthManager = runtimeApi.getCliOAuthManager();
 
   try {
-    if (oauthManager) {
+    const oauthManager = runtimeApi.maybeGetCliOAuthManager();
+    if (oauthManager != null) {
       const oauthLines = await fetchOAuthQuotaLines(oauthManager);
       output.push(...oauthLines);
     }

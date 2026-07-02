@@ -52,11 +52,26 @@ import {
   runtimeRegistry,
   resolveActiveRuntimeIdentity,
   setDefaultCliRuntimeId,
+  type RuntimeKind,
 } from './runtimeRegistry.js';
 import { MissingProviderRuntimeError } from './messages.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
+function resolveRuntimeKind(
+  requestedKind: RuntimeKind | undefined,
+  metadata: Record<string, unknown> | undefined,
+  fallback: RuntimeKind,
+): RuntimeKind {
+  if (requestedKind) {
+    return requestedKind;
+  }
+  const source = metadata?.['source'];
+  if (source === 'cli-bootstrap') {
+    return 'cli-bootstrap';
+  }
+  return fallback;
+}
 
 /**
  * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
@@ -81,7 +96,11 @@ export async function activateIsolatedRuntimeContext(
 
   enterRuntimeScope({ runtimeId, metadata: mergedMetadata });
   upsertRuntimeEntry(runtimeId, {
-    runtimeKind: 'isolated',
+    runtimeKind: resolveRuntimeKind(
+      options.runtimeKind,
+      mergedMetadata,
+      'agent',
+    ),
     metadata: mergedMetadata,
   });
 
@@ -102,13 +121,17 @@ export function registerCliProviderInfrastructure(
     runtimeId: string;
     metadata?: Record<string, unknown>;
     registerAsGlobalSingleton?: boolean;
+    runtimeKind?: RuntimeKind;
   },
 ): void {
   validateRuntimeId(options.runtimeId);
   const { messageBus, runtimeId, metadata } = options;
   const entry = upsertRuntimeEntry(runtimeId, {
-    runtimeKind:
-      options.registerAsGlobalSingleton === false ? 'isolated' : 'cli',
+    runtimeKind: resolveRuntimeKind(
+      options.runtimeKind,
+      metadata,
+      options.registerAsGlobalSingleton === false ? 'agent' : 'cli-interactive',
+    ),
     providerManager: manager,
     oauthManager,
     metadata,
@@ -184,6 +207,7 @@ export function setCliRuntimeContext(
     metadata?: Record<string, unknown>;
     profileManager?: ProfileManager;
     setAsDefault?: boolean;
+    runtimeKind?: RuntimeKind;
   },
 ): void {
   const { runtimeId } = options;
@@ -206,7 +230,11 @@ export function setCliRuntimeContext(
   setSettingsProviderRuntimeContext(nextContext);
 
   upsertRuntimeEntry(runtimeId, {
-    runtimeKind: options.setAsDefault === false ? 'isolated' : 'cli',
+    runtimeKind: resolveRuntimeKind(
+      options.runtimeKind,
+      metadata,
+      options.setAsDefault === false ? 'agent' : 'cli-interactive',
+    ),
     settingsService,
     config: config ?? null,
     metadata,

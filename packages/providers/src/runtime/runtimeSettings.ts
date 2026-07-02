@@ -84,6 +84,7 @@ export {
   isCliRuntimeStatelessReady,
   ensureStatelessProviderReady,
   getCliOAuthManager,
+  maybeGetCliOAuthManager,
   getCliRuntimeConfig,
   getActiveModelName,
   getActiveProviderStatus,

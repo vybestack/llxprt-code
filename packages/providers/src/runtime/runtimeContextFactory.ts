@@ -22,6 +22,7 @@ import {
   type KeyringTokenStore,
   MessageBus,
   flushRuntimeAuthScope,
+  peekActiveProviderRuntimeContext,
   type RuntimeAuthScopeFlushResult,
   SubagentManager,
   type RuntimeProviderManager,
@@ -39,6 +40,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
+import type { RuntimeKind } from './runtimeRegistry.js';
 import { createFileOAuthSettingsProvider } from '../auth/file-oauth-settings.js';
 import { registerStandardOAuthProviders } from '../composition/oauth-provider-registration.js';
 
@@ -151,6 +153,7 @@ interface RuntimeActivationBindings {
       metadata?: Record<string, unknown>;
       runtimeId: string;
       setAsDefault?: boolean;
+      runtimeKind?: RuntimeKind;
     },
   ) => void | Promise<void>;
   registerInfrastructure: (
@@ -161,6 +164,7 @@ interface RuntimeActivationBindings {
       runtimeId: string;
       metadata?: Record<string, unknown>;
       registerAsGlobalSingleton?: boolean;
+      runtimeKind?: RuntimeKind;
     },
   ) => void | Promise<void>;
   linkProviderManager: (
@@ -188,6 +192,7 @@ interface RuntimeActivationState {
 export interface IsolatedRuntimeActivationOptions {
   metadata?: Record<string, unknown>;
   runtimeId?: string;
+  runtimeKind?: RuntimeKind;
 }
 
 /**
@@ -198,6 +203,7 @@ export interface IsolatedRuntimeActivationOptions {
  */
 export interface IsolatedRuntimeContextOptions {
   runtimeId?: string;
+  runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
   settingsService?: SettingsService;
   config?: Config;
@@ -378,6 +384,8 @@ function buildActivateClosure(
       runtimeId: state.currentRuntimeId,
       metadata: state.currentMetadata,
     };
+    const effectiveRuntimeKind =
+      activationOptions?.runtimeKind ?? options.runtimeKind ?? 'agent';
 
     enterRuntimeScope(scope);
 
@@ -400,6 +408,7 @@ function buildActivateClosure(
           // Isolated runtimes MUST NOT mutate the CLI default pointer (issue
           // #2300); only the CLI composition boundary sets the default.
           setAsDefault: false,
+          runtimeKind: effectiveRuntimeKind,
         }),
       );
 
@@ -420,6 +429,7 @@ function buildActivateClosure(
           runtimeId: state.currentRuntimeId,
           metadata: state.currentMetadata,
           registerAsGlobalSingleton: false,
+          runtimeKind: effectiveRuntimeKind,
         }),
       );
       await Promise.resolve(
@@ -461,7 +471,10 @@ function buildCleanupClosure(
           bindings.resetInfrastructure(state.currentRuntimeId),
         );
       }
-      clearSettingsProviderRuntimeContext();
+      const activeContext = peekActiveProviderRuntimeContext();
+      if (activeContext?.runtimeId === state.currentRuntimeId) {
+        clearSettingsProviderRuntimeContext();
+      }
 
       const revocation: RuntimeAuthScopeFlushResult = flushRuntimeAuthScope(
         state.currentRuntimeId,

@@ -10,7 +10,10 @@ import type {
   MessageBus,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
+import {
+  clearActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { ProviderManager } from '../ProviderManager.js';
@@ -219,6 +222,33 @@ describe('isolated runtime never mutates the CLI default pointer (issue #2300)',
     // OAuth manager.
     const oauth = getCliOAuthManager();
     expect(oauth).toBe(cliOAuthManager);
+  });
+
+  it('cleaning up an isolated runtime does not clear a re-established CLI provider context', async () => {
+    const handle = createTrackedIsolatedRuntimeContext({
+      runtimeId: 'isolated-cleanup-ownership-safe',
+      workspaceDir: process.cwd(),
+      model: 'isolated-model',
+    });
+
+    await runWithRuntimeScope(
+      { runtimeId: handle.runtimeId, metadata: {} },
+      async () => {
+        await activateIsolatedRuntimeContext(handle, {
+          runtimeId: handle.runtimeId,
+        });
+      },
+    );
+
+    setCliRuntimeContext(cliSettingsService, cliConfig, {
+      runtimeId: cliRuntimeId,
+    });
+    expect(peekActiveProviderRuntimeContext()?.runtimeId).toBe(cliRuntimeId);
+
+    await handle.cleanup();
+
+    expect(peekActiveProviderRuntimeContext()?.runtimeId).toBe(cliRuntimeId);
+    expect(getCliOAuthManager()).toBe(cliOAuthManager);
   });
 
   it('an isolated runtime registered and activated inside runWithRuntimeScope does not become default', async () => {

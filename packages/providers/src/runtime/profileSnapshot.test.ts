@@ -16,7 +16,7 @@ vi.mock('./runtimeAccessors.js', () => ({
     settingsService: { setCurrentProfileName: vi.fn() },
     providerManager: {},
   })),
-  getCliOAuthManager: vi.fn(() => null),
+  maybeGetCliOAuthManager: vi.fn(() => null),
   getActiveModelName: vi.fn(() => 'test-model'),
   getActiveModelParams: vi.fn(() => ({})),
   _internal: {

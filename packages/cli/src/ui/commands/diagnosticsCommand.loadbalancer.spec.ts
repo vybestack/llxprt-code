@@ -64,7 +64,7 @@ function setupLoadBalancerRuntime(options: {
         name === 'load-balancer' ? lbProvider : null,
       ),
     })),
-    getCliOAuthManager: vi.fn(() => null),
+    maybeGetCliOAuthManager: vi.fn(() => null),
   });
 }
 

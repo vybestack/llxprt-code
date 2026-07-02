@@ -49,7 +49,25 @@ import {
 } from './messages.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
 
-export type RuntimeKind = 'cli' | 'isolated';
+export type RuntimeKind =
+  | 'cli-bootstrap'
+  | 'cli-interactive'
+  | 'agent'
+  | 'subagent';
+
+export const RUNTIME_KINDS: readonly RuntimeKind[] = [
+  'cli-bootstrap',
+  'cli-interactive',
+  'agent',
+  'subagent',
+] as const;
+
+export function isRuntimeKind(value: unknown): value is RuntimeKind {
+  return (
+    typeof value === 'string' &&
+    (RUNTIME_KINDS as readonly string[]).includes(value)
+  );
+}
 
 type RuntimeIdentity = RuntimeScopeValue;
 
@@ -177,7 +195,8 @@ export function upsertRuntimeEntry(
   const current = runtimeRegistry.get(runtimeId);
   const next: RuntimeRegistryEntry = {
     runtimeId,
-    runtimeKind: update.runtimeKind ?? current?.runtimeKind ?? 'cli',
+    runtimeKind:
+      update.runtimeKind ?? current?.runtimeKind ?? 'cli-interactive',
     settingsService: resolveFieldUpdate(
       update,
       'settingsService',

@@ -61,13 +61,6 @@ async function logoutViaRuntimeApi(
 ): Promise<MessageActionReturn> {
   try {
     const oauthManager = getRuntimeApi().getCliOAuthManager();
-    if (!oauthManager) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'OAuth manager not available. Please try again.',
-      };
-    }
     const supportedProviders = oauthManager.getSupportedProviders();
     if (!supportedProviders.includes(provider)) {
       return {

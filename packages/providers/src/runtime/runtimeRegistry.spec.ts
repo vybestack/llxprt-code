@@ -56,7 +56,7 @@ describe('runtimeRegistry', () => {
       });
 
       expect(entry.runtimeId).toBe(runtimeId);
-      expect(entry.runtimeKind).toBe('cli');
+      expect(entry.runtimeKind).toBe('cli-interactive');
       expect(entry.metadata).toStrictEqual({ testKey: 'testValue' });
       expect(entry.config).toBeNull();
       expect(entry.providerManager).toBeNull();
@@ -66,14 +66,24 @@ describe('runtimeRegistry', () => {
     it('preserves explicit runtimeKind metadata on update', () => {
       const runtimeId = 'test-runtime-kind';
       upsertRuntimeEntry(runtimeId, {
-        runtimeKind: 'isolated',
+        runtimeKind: 'agent',
         metadata: { source: 'test' },
       });
       upsertRuntimeEntry(runtimeId, { metadata: { updated: true } });
 
       const entry = requireRuntimeEntry(runtimeId);
-      expect(entry.runtimeKind).toBe('isolated');
+      expect(entry.runtimeKind).toBe('agent');
       expect(entry.metadata).toStrictEqual({ source: 'test', updated: true });
+    });
+
+    it('supports explicit subagent runtime kind metadata', () => {
+      const runtimeId = 'test-subagent-runtime-kind';
+      upsertRuntimeEntry(runtimeId, {
+        runtimeKind: 'subagent',
+        metadata: { source: 'test' },
+      });
+
+      expect(requireRuntimeEntry(runtimeId).runtimeKind).toBe('subagent');
     });
 
     it('should retrieve created entry via requireRuntimeEntry', () => {

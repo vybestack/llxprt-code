@@ -15,7 +15,7 @@ import { DebugLogger, coreEvents } from '@vybestack/llxprt-code-core';
 import type { IProvider } from '../IProvider.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import {
-  getCliOAuthManager,
+  maybeGetCliOAuthManager,
   getCliRuntimeServices,
   _internal as runtimeAccessorsInternal,
 } from './runtimeAccessors.js';
@@ -483,8 +483,8 @@ async function handleAnthropicOAuth(
     return;
   }
 
-  const oauthManager = getCliOAuthManager();
-  if (!oauthManager) {
+  const oauthManager = maybeGetCliOAuthManager();
+  if (oauthManager == null) {
     return;
   }
 
@@ -510,8 +510,7 @@ async function handleAnthropicOAuth(
     }
 
     logger.debug(
-      () =>
-        `[cli-runtime] Anthropic OAuth check: hasNonOAuth=${hasNonOAuth} manager=${Boolean(oauthManager)}`,
+      () => `[cli-runtime] Anthropic OAuth check: hasNonOAuth=${hasNonOAuth}`,
     );
 
     if (!oauthManager.isOAuthEnabled('anthropic')) {
@@ -541,7 +540,7 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
     return;
   }
 
-  const oauthManager = getCliOAuthManager();
+  const oauthManager = maybeGetCliOAuthManager();
   const authOnlyEnabled =
     context.authOnlyBeforeSwitch === true ||
     context.authOnlyBeforeSwitch === 'true';

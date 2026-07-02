@@ -304,22 +304,18 @@ export class AuthPrecedenceResolver {
     runtimeContext: IProviderRuntimeContext | null;
     runtimeState: RuntimeScopedState | null;
   } {
-    try {
-      const runtimeContext = this.getActiveRuntimeContext();
-      if (!runtimeContext) {
-        return { runtimeContext: null, runtimeState: null };
-      }
-      const runtimeState = ensureRuntimeState(runtimeContext);
-      registerSettingsSubscriptions(
-        runtimeState,
-        settingsService,
-        providerId,
-        this.logger,
-      );
-      return { runtimeContext, runtimeState };
-    } catch {
+    const runtimeContext = this.getActiveRuntimeContext();
+    if (!runtimeContext) {
       return { runtimeContext: null, runtimeState: null };
     }
+    const runtimeState = ensureRuntimeState(runtimeContext);
+    registerSettingsSubscriptions(
+      runtimeState,
+      settingsService,
+      providerId,
+      this.logger,
+    );
+    return { runtimeContext, runtimeState };
   }
 
   private async isOAuthDisabledByManager(): Promise<boolean> {

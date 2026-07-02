@@ -32,16 +32,14 @@ const logger = new DebugLogger('llxprt:ui:auth-command');
  * @plan:PLAN-20250214-CREDPROXY.P33
  */
 function getOAuthManager(): OAuthManager {
-  const runtime = getRuntimeApi();
-  const oauthManager = runtime.getCliOAuthManager();
-
-  if (!oauthManager) {
+  try {
+    return getRuntimeApi().getCliOAuthManager();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      'Auth command requires registered OAuth runtime infrastructure.',
+      `Auth command requires registered OAuth runtime infrastructure: ${message}`,
     );
   }
-
-  return oauthManager;
 }
 
 /**

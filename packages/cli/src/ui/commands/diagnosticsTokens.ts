@@ -6,6 +6,7 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface McpServerToken {
@@ -23,13 +24,8 @@ interface ProviderToken {
 async function appendProviderTokens(
   diagnostics: string[],
   logger: DebugLogger,
+  oauthManager: OAuthManager,
 ): Promise<void> {
-  const runtimeApi = getRuntimeApi();
-  const oauthManager = runtimeApi.getCliOAuthManager();
-  if (!oauthManager) {
-    return;
-  }
-
   const supportedProviders = oauthManager.getSupportedProviders();
   if (supportedProviders.length === 0) {
     return;
@@ -181,16 +177,15 @@ export async function appendOAuthTokens(
 
   try {
     const runtimeApi = getRuntimeApi();
-    const oauthManager = runtimeApi.getCliOAuthManager();
-
-    if (!oauthManager) {
+    const oauthManager = runtimeApi.maybeGetCliOAuthManager();
+    if (oauthManager == null) {
       diagnostics.push('- No OAuth tokens configured');
       return;
     }
 
     // Capture diagnostics length before provider tokens are added
     const beforeLength = diagnostics.length;
-    await appendProviderTokens(diagnostics, logger);
+    await appendProviderTokens(diagnostics, logger, oauthManager);
     const hasProviderTokens = diagnostics.length > beforeLength;
 
     const hasMCPTokens = await appendMcpTokens(diagnostics, logger);

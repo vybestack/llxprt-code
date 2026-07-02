@@ -21,6 +21,7 @@ import type {
   Config,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import type { OAuthManager } from '../auth/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 
@@ -289,11 +290,21 @@ describe('runtimeAccessors', () => {
       expect(Array.isArray(models)).toBe(true);
     });
 
-    it('should get CLI OAuth manager (null when not set)', () => {
+    it('should throw when CLI OAuth manager is missing from a partial runtime entry', () => {
       setupCompleteRuntime();
 
-      const oauthManager = getCliOAuthManager();
-      expect(oauthManager).toBeNull();
+      expect(() => getCliOAuthManager()).toThrow(/OAuthManager/);
+    });
+
+    it('should get CLI OAuth manager for a complete subagent runtime entry', () => {
+      const runtimeId = setupCompleteRuntime();
+      const oauthManager = {} as OAuthManager;
+      upsertRuntimeEntry(runtimeId, {
+        runtimeKind: 'subagent',
+        oauthManager,
+      });
+
+      expect(getCliOAuthManager()).toBe(oauthManager);
     });
   });
 

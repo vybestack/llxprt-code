@@ -8,7 +8,7 @@
  * Behavioral coverage for the /auth command ACTION runtime infrastructure guard
  * (issue #2300).
  *
- * When getCliOAuthManager() returns null after the provider manager resolved,
+ * When getCliOAuthManager() throws after runtime infrastructure resolution,
  * the runtime is only partially registered. The command must fail clearly
  * instead of synthesizing a fallback OAuthManager that masks broken bootstrap
  * state.
@@ -17,7 +17,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const runtimeApi = {
-  getCliOAuthManager: vi.fn().mockReturnValue(null),
+  getCliOAuthManager: vi.fn().mockImplementation(() => {
+    throw new Error('OAuthManager missing from runtime registration');
+  }),
 };
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
@@ -47,7 +49,9 @@ describe('auth command action rejects partial runtime infrastructure (issue #230
 
   beforeEach(() => {
     runtimeApi.getCliOAuthManager.mockReset();
-    runtimeApi.getCliOAuthManager.mockReturnValue(null);
+    runtimeApi.getCliOAuthManager.mockImplementation(() => {
+      throw new Error('OAuthManager missing from runtime registration');
+    });
 
     context = {
       services: {
@@ -60,9 +64,9 @@ describe('auth command action rejects partial runtime infrastructure (issue #230
     } as unknown as CommandContext;
   });
 
-  it('throws instead of synthesizing OAuth infrastructure when getCliOAuthManager is null', async () => {
+  it('throws instead of synthesizing OAuth infrastructure when getCliOAuthManager rejects partial infrastructure', async () => {
     await expect(action(context, 'gemini status')).rejects.toThrow(
-      'Auth command requires registered OAuth runtime infrastructure.',
+      /Auth command requires registered OAuth runtime infrastructure: .*OAuthManager/,
     );
   });
 
