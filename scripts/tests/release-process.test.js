@@ -639,7 +639,7 @@ describe('.github/workflows/nightly.yml', () => {
     expect(normalizedRun).toContain('return 1');
     expect(normalizedRun).toContain('retry_gh gh issue list');
     const searchMatch = normalizedRun.match(
-      /retry_gh gh issue list.*?--search\s+"((?:\\.|[^"])*)"/,
+      /retry_gh gh issue list.*?--search\s+"((?:\\.|[^"\\])*)"/,
     );
     expect(
       searchMatch,
