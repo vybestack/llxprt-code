@@ -341,5 +341,9 @@ bun run clean
 bun install
 bun run auth
 bun run prerelease:dev
-bun publish --workspaces
+for package_dir in packages/*; do
+  if [ -f "${package_dir}/package.json" ]; then
+    (cd "${package_dir}" && bun publish)
+  fi
+done
 ```

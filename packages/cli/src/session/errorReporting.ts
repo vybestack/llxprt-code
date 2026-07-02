@@ -1,7 +1,6 @@
 import {
   type Config,
   parseAndFormatApiError,
-  debugLogger,
   OutputFormat,
   JsonFormatter,
   StreamJsonFormatter,
@@ -39,10 +38,9 @@ function normalizeErrorForJson(error: unknown): Error {
 }
 
 /**
- * Format and report a non-interactive error to the appropriate output stream
- * (JSON formatter when JSON output is configured, otherwise the debug logger).
- * Extracted so both the auth-validation catch and the run-phase catch share a
- * single error-reporting path.
+ * Format and report a non-interactive error to stderr, using JSON formatters
+ * when JSON output is configured. Extracted so both the auth-validation catch
+ * and the run-phase catch share a single error-reporting path.
  */
 export function reportNonInteractiveError(
   config: Config,
@@ -70,6 +68,6 @@ export function reportNonInteractiveError(
     );
   } else {
     const printableError = formatNonInteractiveError(error);
-    debugLogger.error(`Non-interactive run failed: ${printableError}`);
+    writeToStderr(`Non-interactive run failed: ${printableError}\n`);
   }
 }

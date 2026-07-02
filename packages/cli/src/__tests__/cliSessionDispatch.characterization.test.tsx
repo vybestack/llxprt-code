@@ -39,7 +39,6 @@ import {
   CoreEvent,
   OutputFormat,
   JsonStreamEventType,
-  debugLogger,
   type OutputPayload,
   type ConsoleLogPayload,
 } from '@vybestack/llxprt-code-core';
@@ -874,10 +873,10 @@ describe('session-dispatch characterization — non-interactive error output / f
     }
   });
 
-  it('reportNonInteractiveError reports plain text errors through the debug logger', () => {
-    const debugError = vi
-      .spyOn(debugLogger, 'error')
-      .mockImplementation(() => {});
+  it('reportNonInteractiveError emits plain text errors to stderr and not stdout', () => {
+    const stdoutWrite = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
     const config = createMinimalConfig({
       interactive: false,
       outputFormat: 'text',
@@ -886,15 +885,16 @@ describe('session-dispatch characterization — non-interactive error output / f
     try {
       reportNonInteractiveError(config as never, new Error('plain failure'));
 
-      expect(debugError).toHaveBeenCalledTimes(1);
-      expect(debugError).toHaveBeenCalledWith(
+      expect(stdoutWrite).not.toHaveBeenCalled();
+      expect(mockWriteToStderr).toHaveBeenCalledTimes(1);
+      expect(mockWriteToStderr).toHaveBeenCalledWith(
         expect.stringContaining('Non-interactive run failed:'),
       );
-      expect(debugError).toHaveBeenCalledWith(
+      expect(mockWriteToStderr).toHaveBeenCalledWith(
         expect.stringContaining('plain failure'),
       );
     } finally {
-      debugError.mockRestore();
+      stdoutWrite.mockRestore();
     }
   });
 });

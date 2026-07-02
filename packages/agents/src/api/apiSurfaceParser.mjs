@@ -144,8 +144,11 @@ function collectDirectExports(sourceFile) {
       }
       return;
     }
-    const hasExportModifier = node.modifiers
-      ? node.modifiers.some(
+    const modifiers = ts.canHaveModifiers(node)
+      ? ts.getModifiers(node)
+      : undefined;
+    const hasExportModifier = modifiers
+      ? modifiers.some(
           (m) =>
             m.kind === ts.SyntaxKind.ExportKeyword ||
             m.kind === ts.SyntaxKind.DefaultKeyword,
