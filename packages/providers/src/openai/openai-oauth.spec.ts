@@ -106,7 +106,6 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     process.env = originalEnv;
     flushRuntimeAuthScope('openai.oauth.spec.runtime');
     flushRuntimeAuthScope('test-global-runtime');
-    flushRuntimeAuthScope('legacy-singleton');
   });
 
   describe('Authentication Precedence', () => {

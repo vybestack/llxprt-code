@@ -46,6 +46,7 @@ import {
   internalConfig,
 } from './helpers/agentHarness.js';
 import { captureProbe, agentClientDisposed } from './helpers/disposalProbe.js';
+import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 
 describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirement:REQ-INT-001', () => {
   it('T1 fromConfig adopts the external Config: internalConfig() identity, non-empty runtimeId, single terminal done (REQ-INT-001)', async () => {
@@ -130,46 +131,40 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
 
   it('PROP runtime reuse: for any non-empty sessionId, the adopted Config provider/model are reflected on the agent (REQ-INT-001.2)', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (sessionId) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
-          try {
-            const agent: Agent = await fromConfig({
-              config: built.config,
-              sessionId,
-            });
-            return (
-              agent.getProvider() === 'fake' &&
-              agent.getModel() === 'fake-model' &&
-              agent.getProvider() === built.config.getProvider() &&
-              agent.getModel() === built.config.getModel()
-            );
-          } finally {
-            await built.cleanup();
-          }
-        },
-      ),
+      fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+        const built = await buildCliStyleConfig('plain-text.jsonl');
+        try {
+          const agent: Agent = await fromConfig({
+            config: built.config,
+            sessionId,
+          });
+          return (
+            agent.getProvider() === 'fake' &&
+            agent.getModel() === 'fake-model' &&
+            agent.getProvider() === built.config.getProvider() &&
+            agent.getModel() === built.config.getModel()
+          );
+        } finally {
+          await built.cleanup();
+        }
+      }),
     );
   }, 30000);
 
   it('PROP adoption identity: for any non-empty sessionId, internalConfig(agent) === the caller-supplied Config (REQ-INT-001)', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (sessionId) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
-          try {
-            const agent: Agent = await fromConfig({
-              config: built.config,
-              sessionId,
-            });
-            return internalConfig(agent) === built.config;
-          } finally {
-            await built.cleanup();
-          }
-        },
-      ),
+      fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+        const built = await buildCliStyleConfig('plain-text.jsonl');
+        try {
+          const agent: Agent = await fromConfig({
+            config: built.config,
+            sessionId,
+          });
+          return internalConfig(agent) === built.config;
+        } finally {
+          await built.cleanup();
+        }
+      }),
     );
   }, 30000);
 });

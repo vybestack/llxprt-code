@@ -16,13 +16,8 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import {
-  OAuthManager,
-  createTokenStore,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import { registerStandardOAuthProviders } from '@vybestack/llxprt-code-providers/composition.js';
-import { LoadedSettingsOAuthAdapter } from '../../auth/oauth-settings-adapter.js';
-import { DebugLogger, MessageBus } from '@vybestack/llxprt-code-core';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   type CommandArgumentSchema,
@@ -40,14 +35,13 @@ function getOAuthManager(): OAuthManager {
   const runtime = getRuntimeApi();
   const oauthManager = runtime.getCliOAuthManager();
 
-  if (oauthManager) {
-    return oauthManager;
+  if (!oauthManager) {
+    throw new Error(
+      'Auth command requires registered OAuth runtime infrastructure.',
+    );
   }
 
-  const tokenStore = createTokenStore();
-  const fallback = new OAuthManager(tokenStore);
-  registerStandardOAuthProviders(fallback, tokenStore);
-  return fallback;
+  return oauthManager;
 }
 
 /**
@@ -673,41 +667,7 @@ export const authCommand: SlashCommand = {
   autoExecute: true,
   schema: authCommandSchema,
   action: async (context, args) => {
-    const runtime = getRuntimeApi();
-    // Ensure provider manager is initialized (throws if bootstrap skipped registration)
-    const providerManager = runtime.getCliProviderManager();
-
-    // Get the shared OAuth manager instance
-    let oauthManager = runtime.getCliOAuthManager();
-
-    // If for some reason it doesn't exist yet, create it
-    // @plan:PLAN-20250214-CREDPROXY.P33
-    if (!oauthManager) {
-      // This should rarely happen, but handle it as a fallback
-      const tokenStore = createTokenStore();
-      const config = context.services.config;
-      if (!config) {
-        throw new Error('Auth command requires an initialized Config service.');
-      }
-      const runtimeMessageBus = new MessageBus(
-        config.getPolicyEngine(),
-        config.getDebugMode(),
-      );
-      oauthManager = new OAuthManager(
-        tokenStore,
-        new LoadedSettingsOAuthAdapter(context.services.settings),
-        {
-          messageBus: runtimeMessageBus,
-          config,
-        },
-      );
-
-      registerStandardOAuthProviders(oauthManager, tokenStore);
-
-      runtime.registerCliProviderInfrastructure(providerManager, oauthManager, {
-        messageBus: runtimeMessageBus,
-      });
-    }
+    const oauthManager = getOAuthManager();
 
     const executor = new AuthCommandExecutor(oauthManager);
     return executor.execute(context, args);

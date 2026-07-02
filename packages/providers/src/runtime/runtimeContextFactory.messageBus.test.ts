@@ -127,7 +127,11 @@ describe('runtime context messageBus seam (P12 RED) @plan:PLAN-20260617-COREAPI.
       registerCliProviderInfrastructure(
         handle.providerManager,
         handle.oauthManager,
-        { messageBus: providedBus },
+        {
+          messageBus: providedBus,
+          runtimeId: handle.runtimeId,
+          metadata: { source: 'p12-messageBus-provided' },
+        },
       );
 
       // Observe which bus the OAuthManager wired as its runtime bus — the same

@@ -55,6 +55,7 @@ import { buildAgent } from './agentImpl.js';
 import {
   resolveAuthType,
   generateRuntimeId,
+  validateAgentRuntimeId,
   buildAgentClientFactory,
   wrapSchedulerFactory,
   wrapApprovalHandler,
@@ -82,6 +83,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   const parsed = AgentConfigSchema.parse(validatable);
   const resolvedAuth = resolveAuthType(parsed.auth);
   const runtimeId = parsed.sessionId ?? generateRuntimeId();
+  validateAgentRuntimeId(runtimeId);
 
   // @pseudocode createAgent.md steps 20-27: ConfigParameters + factory injection
   const agentClientFactory = buildAgentClientFactory();

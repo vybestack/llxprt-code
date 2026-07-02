@@ -24,6 +24,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
+import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import {
   buildAgent,
   drain,
@@ -186,17 +187,14 @@ describe('mutation P23.c — auth control delegation (REQ-002)', () => {
 describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @requirement:REQ-002', () => {
   it('PROP auth.status: for any provider string, a no-auth agent reports unauthenticated (REQ-002)', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (provider) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            return agent.auth.status(provider) === 'unauthenticated';
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
+      fc.asyncProperty(nonBlankStringArbitrary, async (provider) => {
+        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        try {
+          return agent.auth.status(provider) === 'unauthenticated';
+        } finally {
+          await cleanup();
+        }
+      }),
     );
   }, 30000);
 

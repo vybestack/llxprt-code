@@ -61,9 +61,11 @@ describe('Base URL Runtime Helper Integration', () => {
     await initializeTestConfig(config);
 
     settingsService = config.getSettingsService();
+    const runtimeId = 'base-url-test-runtime';
     const runtime = createProviderRuntimeContext({
       settingsService,
       config,
+      runtimeId,
       metadata: { source: 'base-url-test' },
     });
     const runtimeMessageBus = new MessageBus(
@@ -78,8 +80,10 @@ describe('Base URL Runtime Helper Integration', () => {
     providerManager = manager;
     registerCliProviderInfrastructure(providerManager, oauthManager, {
       messageBus: runtimeMessageBus,
+      runtimeId,
     });
     setCliRuntimeContext(settingsService, config, {
+      runtimeId,
       metadata: { source: 'base-url-test' },
     });
 

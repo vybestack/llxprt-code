@@ -79,6 +79,7 @@ export async function runZedIntegration(
   logger.debug(() => 'Streams created');
 
   setCliRuntimeContext(config.getSettingsService(), config, {
+    runtimeId: 'cli.runtime.zed',
     metadata: { source: 'zed-integration', stage: 'bootstrap' },
   });
 

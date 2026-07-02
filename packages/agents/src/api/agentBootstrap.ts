@@ -89,6 +89,26 @@ export function generateRuntimeId(): string {
 }
 
 /**
+ * Validate a caller-visible agent runtime/session id before it reaches the
+ * providers runtime registry, where runtime ids must be deterministic keys.
+ */
+export function validateAgentRuntimeId(runtimeId: unknown): void {
+  if (
+    typeof runtimeId !== 'string' ||
+    runtimeId.length === 0 ||
+    runtimeId.trim() === ''
+  ) {
+    throw new AgentBootstrapError(
+      `Invalid runtimeId: expected a non-empty string but received ${
+        typeof runtimeId === 'string'
+          ? JSON.stringify(runtimeId)
+          : String(runtimeId)
+      }.`,
+    );
+  }
+}
+
+/**
  * Returns an AgentClientFactory that constructs the agents-owned AgentClient.
  * @pseudocode createAgent.md step 21
  */

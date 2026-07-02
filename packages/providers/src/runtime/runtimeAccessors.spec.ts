@@ -117,11 +117,8 @@ describe('runtimeAccessors', () => {
 
   // Helper to set up a complete runtime context with provider manager
   const setupCompleteRuntime = () => {
-    // setCliRuntimeContext generates its own runtimeId based on process.pid
-    // We need to call it with a specific ID and then update with provider manager
     const runtimeId = `test-runtime-${Date.now()}`;
 
-    // Set context with the specific ID
     setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
 
     // Update the entry with the provider manager
@@ -301,6 +298,12 @@ describe('runtimeAccessors', () => {
   });
 
   describe('stateless readiness', () => {
+    it('returns false instead of throwing when stateless mode has no active runtime', () => {
+      configureCliStatelessHardening('strict');
+
+      expect(isCliRuntimeStatelessReady()).toBe(false);
+    });
+
     it('should check if runtime is stateless ready', () => {
       setupCompleteRuntime();
 

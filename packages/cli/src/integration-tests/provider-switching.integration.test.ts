@@ -82,10 +82,12 @@ describe('Runtime Provider Switching Integration', () => {
     });
     providerManager = manager;
     setCliRuntimeContext(settingsService, config, {
+      runtimeId: 'provider-switch-test',
       metadata: { source: 'provider-switch-test' },
     });
     registerCliProviderInfrastructure(providerManager, oauthManager, {
       messageBus: runtimeMessageBus,
+      runtimeId: 'provider-switch-test',
     });
   });
 

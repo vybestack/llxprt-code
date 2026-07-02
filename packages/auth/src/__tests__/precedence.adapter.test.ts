@@ -24,7 +24,10 @@ function createSettingsService(authKey: string): ISettingsService {
 describe('AuthPrecedenceResolver migrated adapter test destination', () => {
   it('uses auth-local runtime context and settings-service shapes', () => {
     const settingsService = createSettingsService('adapter-key');
-    const runtimeContext: IProviderRuntimeContext = { settingsService };
+    const runtimeContext: IProviderRuntimeContext = {
+      settingsService,
+      runtimeId: 'adapter-runtime',
+    };
     const resolver = new AuthPrecedenceResolver(
       {},
       {

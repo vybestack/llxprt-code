@@ -30,6 +30,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
+import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import {
   type AgentEvent,
   buildAgent,
@@ -250,23 +251,20 @@ describe('mutation P23.b — restoreChatVisibility switch continuity (REQ-005)',
 describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @requirement:REQ-005', () => {
   it('PROP setModel: for any model string, setModel reflects it and preserves continuity (REQ-005)', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (model) => {
-          const { agent, cleanup } = await buildAgent(
-            'provider-switch-two-turn.jsonl',
-          );
-          try {
-            await drain(agent.stream('turn one'));
-            await agent.setModel(model);
-            const continuity =
-              countType(await drain(agent.stream('turn two')), 'done') === 1;
-            return agent.getModel() === model && continuity;
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
+      fc.asyncProperty(nonBlankStringArbitrary, async (model) => {
+        const { agent, cleanup } = await buildAgent(
+          'provider-switch-two-turn.jsonl',
+        );
+        try {
+          await drain(agent.stream('turn one'));
+          await agent.setModel(model);
+          const continuity =
+            countType(await drain(agent.stream('turn two')), 'done') === 1;
+          return agent.getModel() === model && continuity;
+        } finally {
+          await cleanup();
+        }
+      }),
       { numRuns: 8 },
     );
   }, 30000);
@@ -322,19 +320,16 @@ describe('mutation P23.b — property cases @plan:PLAN-20260621-COREAPIREMED.P23
 
   it('PROP compress: for any custom promptId string, compress echoes it (REQ-005)', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (promptId) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            await drain(agent.stream('turn'));
-            const result = await agent.compress({ promptId });
-            return result.promptId === promptId;
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
+      fc.asyncProperty(nonBlankStringArbitrary, async (promptId) => {
+        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        try {
+          await drain(agent.stream('turn'));
+          const result = await agent.compress({ promptId });
+          return result.promptId === promptId;
+        } finally {
+          await cleanup();
+        }
+      }),
     );
   }, 30000);
 });
