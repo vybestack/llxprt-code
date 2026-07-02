@@ -31,7 +31,7 @@ import {
 } from './MessageConverter.js';
 import {
   resolveUserMemory,
-  hookProvidedMessages,
+  applyRequestModifications,
 } from './streamRequestHelpers.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
@@ -704,31 +704,33 @@ export class DirectMessageProcessor {
    * (model/config only) must NOT trigger the text-only translator round-trip,
    * which would destroy tool calls, IDs, and metadata.
    *
+   * Delegates to the shared `applyRequestModifications` helper
+   * (streamRequestHelpers) so the guard semantics (empty-messages guard,
+   * messages-less preservation, empty-array guard) cannot drift between the
+   * stream and direct-message paths.
+   *
    * Returns the modified IContent[] when the hook changed contents, or
-   * undefined when no content modification occurred.
+   * undefined when no content modification occurred. The shared helper returns
+   * the ORIGINAL contents reference when unmodified; this adapter converts
+   * that into undefined to match the DMP "undefined = no modification"
+   * contract.
    */
   private _applyHookRequestModifications(
     beforeModelResult: BeforeModelHookOutput,
     userIContents: IContent[],
   ): IContent[] | undefined {
-    if (!hookProvidedMessages(beforeModelResult)) {
+    const result = applyRequestModifications(
+      beforeModelResult,
+      userIContents,
+      this.runtimeContext.state.model || '',
+    );
+    // The shared helper returns the original reference when no meaningful
+    // content modification occurred (no messages, messages-less llm_request,
+    // or an empty-messages array). DMP's contract treats that as undefined.
+    if (result === userIContents) {
       return undefined;
     }
-    const target = {
-      model: this.runtimeContext.state.model || '',
-      contents: ContentConverters.toGeminiContents(userIContents),
-    };
-    // hookProvidedMessages guarantees llm_request has a messages array, so
-    // applyLLMRequestModifications always returns a new object here
-    // ({...target, ...sdkRequest}); the meaningful condition is whether the
-    // merged request carries usable contents.
-    const modifiedRequest =
-      beforeModelResult.applyLLMRequestModifications(target);
-    const contentsRuntime: unknown = modifiedRequest.contents;
-    if (contentsRuntime === undefined || contentsRuntime === null) {
-      return undefined;
-    }
-    return ContentConverters.toIContents(contentsRuntime as Content[]);
+    return result;
   }
 
   /**

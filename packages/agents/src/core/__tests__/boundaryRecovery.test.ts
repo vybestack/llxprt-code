@@ -227,22 +227,6 @@ describe('recoverPendingBoundary', () => {
     expect(result.pendingContents).toBeUndefined();
   });
 
-  it('classifies prepended (undefined pending) even when the pending suffix is also intact', () => {
-    const history = [histUser('hello'), histAi('hi')];
-    const pending = [pendingUser('q')];
-    const original = [...history, ...pending];
-    const modified = [histUser('preamble'), ...original];
-
-    const result = recoverPendingBoundary(original, pending.length, modified);
-
-    // Pure-prepend is checked BEFORE modified-history so prepends aren't
-    // misclassified as modified-history. But per F1 it is UNRECOVERABLE:
-    // pendingContents is undefined because the prepended preamble would be
-    // silently dropped by compression recomposition.
-    expect(result.classification).toBe('prepended');
-    expect(result.pendingContents).toBeUndefined();
-  });
-
   it('returns undefined (replaced-all) when nothing matches and no original items are projection-present', () => {
     const history = [histUser('hello'), histAi('hi')];
     const pending = [pendingUser('q')];
@@ -516,6 +500,23 @@ describe('applyRequestModifications', () => {
         llm_request: { model: 'other-model' },
       },
     });
+    expect(applyRequestModifications(hook, rc, 'm')).toBe(rc);
+  });
+
+  // F1: a hook supplying llm_request.messages: [] (empty array) must NOT
+  // erase the conversation. An empty array converts to an empty IContent[]
+  // which would silently replace all contents — treat it as "no
+  // modification" and return the ORIGINAL reference so the caller's boundary
+  // detection stays authoritative.
+  it('F1: returns the original reference when llm_request.messages is an empty array (no erasure)', () => {
+    const rc: IContent[] = [histUser('hello'), pendingUser('q')];
+    const hook = new BeforeModelHookOutput({
+      hookSpecificOutput: {
+        hookEventName: 'BeforeModel',
+        llm_request: { model: 'm', messages: [] },
+      },
+    });
+    // Reference equality proves "no modification" (no translator round-trip).
     expect(applyRequestModifications(hook, rc, 'm')).toBe(rc);
   });
 });

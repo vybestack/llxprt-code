@@ -508,11 +508,12 @@ export function resolvePendingFromHookBoundary(
   const count =
     boundary.pendingMessageCount ??
     Math.max(0, modifiedContents.length - startIndex);
-  const isSuffix =
-    startIndex >= 0 &&
-    count >= 0 &&
-    startIndex + count === modifiedContents.length &&
-    startIndex <= modifiedContents.length;
+  // Non-negativity of startIndex and count is guaranteed by the zod schema
+  // (hookLLMRequestBoundarySchema) at the structural parse layer, and count
+  // falls back to Math.max(0, ...). Therefore startIndex >= 0, count >= 0,
+  // and startIndex <= modifiedContents.length are all implied by the single
+  // meaningful check: the pending region must be a SUFFIX of modifiedContents.
+  const isSuffix = startIndex + count === modifiedContents.length;
 
   if (isSuffix) {
     return {

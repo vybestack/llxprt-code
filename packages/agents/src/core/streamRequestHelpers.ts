@@ -236,7 +236,17 @@ export function applyRequestModifications(
   const modifiedContents = (modifiedRequest as { contents?: Content[] | null })
     .contents;
   if (modifiedContents !== undefined && modifiedContents !== null) {
-    return ContentConverters.toIContents(modifiedContents);
+    const converted = ContentConverters.toIContents(modifiedContents);
+    // Guard: if the hook supplied llm_request.messages: [] (empty array) —
+    // which converts to an empty contents array — treat it as "no
+    // modification" and return the ORIGINAL reference. An empty contents
+    // array would silently erase the entire conversation (and break the
+    // provider call); returning the original reference keeps the caller's
+    // boundary detection authoritative.
+    if (converted.length === 0) {
+      return requestContents;
+    }
+    return converted;
   }
   return requestContents;
 }

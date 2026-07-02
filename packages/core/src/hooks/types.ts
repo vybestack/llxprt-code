@@ -15,12 +15,12 @@ import type {
   LLMResponse,
   HookToolConfig,
   HookLLMRequestBoundary,
+  HookLLMRequestBoundaryParseResult,
 } from './hookTranslator.js';
 import {
   defaultHookTranslator,
   parseHookLLMRequestBoundary,
   parseHookLLMRequestBoundaryResult,
-  type HookLLMRequestBoundaryParseResult,
 } from './hookTranslator.js';
 import type { ConfigSource } from './hookRegistry.js';
 
@@ -367,17 +367,17 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
    * full-replacement llm_request payloads. Returns undefined when absent or
    * malformed (fail-open parse; the caller enforces policy on invalid indices).
    *
+   * @deprecated This method conflates 'absent' and 'malformed' into a single
+   * `undefined` return, so callers cannot honor `onInvalidBoundary` for
+   * malformed metadata and would wrongly fall back to differential analysis.
+   * Use {@link getLLMRequestBoundaryResult} instead, which returns a
+   * discriminated result distinguishing absent from malformed.
+   *
    * G2: uses key presence (hasOwnProperty) to decide absence, consistent with
    * getLLMRequestBoundaryResult.
    */
   getLLMRequestBoundary(): HookLLMRequestBoundary | undefined {
-    if (!this.hookSpecificOutput) return undefined;
-    const present =
-      Object.prototype.hasOwnProperty.call(
-        this.hookSpecificOutput,
-        'llm_request_boundary',
-      ) && this.hookSpecificOutput['llm_request_boundary'] !== undefined;
-    if (!present) return undefined;
+    if (!this.hookSpecificOutput || !this.hasBoundaryValue()) return undefined;
     return parseHookLLMRequestBoundary(
       this.hookSpecificOutput['llm_request_boundary'],
     );
@@ -404,14 +404,25 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
    */
   getLLMRequestBoundaryResult(): HookLLMRequestBoundaryParseResult {
     if (!this.hookSpecificOutput) return { status: 'absent' };
-    const present =
+    return parseHookLLMRequestBoundaryResult(
+      this.hookSpecificOutput['llm_request_boundary'],
+      this.hasBoundaryValue(),
+    );
+  }
+
+  /**
+   * Shared presence check for the llm_request_boundary key. Returns true when
+   * hookSpecificOutput is present, the key exists (hasOwnProperty), and the
+   * value is not undefined (explicit undefined is indistinguishable from
+   * absent after JSON parsing).
+   */
+  private hasBoundaryValue(): boolean {
+    if (!this.hookSpecificOutput) return false;
+    return (
       Object.prototype.hasOwnProperty.call(
         this.hookSpecificOutput,
         'llm_request_boundary',
-      ) && this.hookSpecificOutput['llm_request_boundary'] !== undefined;
-    return parseHookLLMRequestBoundaryResult(
-      this.hookSpecificOutput['llm_request_boundary'],
-      present,
+      ) && this.hookSpecificOutput['llm_request_boundary'] !== undefined
     );
   }
 }

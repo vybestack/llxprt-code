@@ -299,6 +299,10 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
         ],
       }));
     } else if (Array.isArray(baseContents)) {
+      // Shallow copy: a new array protects baseRequest from array-level
+      // mutation (push/splice on the result), but the Content objects/parts
+      // within are SHARED by reference. Downstream code must not mutate
+      // nested objects/parts in place.
       contents = baseContents.slice();
     } else {
       contents = baseContents ?? [];
@@ -481,10 +485,15 @@ function readOnInvalidBoundaryPolicy(
  * Parse and validate llm_request_boundary metadata from an untyped hook
  * payload. Returns undefined for absent or malformed values (fail-open).
  *
- * Kept for backward compatibility; new code should prefer
- * parseHookLLMRequestBoundaryResult which distinguishes absent from malformed.
- * Note: callers with key context (BeforeModelHookOutput.getLLMRequestBoundary)
- * perform the presence check themselves via hasOwnProperty.
+ * @deprecated This function conflates 'absent' and 'malformed' into a single
+ * `undefined` return, so callers cannot honor `onInvalidBoundary` for
+ * malformed metadata and would wrongly fall back to differential analysis.
+ * Use {@link parseHookLLMRequestBoundaryResult} instead, which returns a
+ * discriminated result distinguishing absent from malformed.
+ *
+ * Kept for backward compatibility. Callers with key context
+ * (BeforeModelHookOutput.getLLMRequestBoundaryResult) perform the presence
+ * check themselves via hasOwnProperty.
  */
 export function parseHookLLMRequestBoundary(
   value: unknown,
@@ -515,6 +524,11 @@ export function parseHookLLMRequestBoundary(
  */
 export function parseHookLLMRequestBoundaryResult(
   value: unknown,
+  // Default: `value !== undefined`. After a JSON round-trip, `undefined` is
+  // indistinguishable from an absent key (JSON cannot encode undefined), so
+  // it defaults to absent. All other values (including null, false, 0, '')
+  // are treated as present — the hook attempted to control the boundary.
+  // Callers with key context (hasOwnProperty) pass `present` explicitly.
   present: boolean = value !== undefined,
 ): HookLLMRequestBoundaryParseResult {
   if (!present) return { status: 'absent' };

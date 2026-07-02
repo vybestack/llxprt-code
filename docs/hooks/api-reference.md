@@ -409,8 +409,11 @@ attempted to control the boundary, so differential recovery is not used.
 
 When `llm_request_boundary` is absent, the runtime attempts deterministic
 differential analysis (comparing the pre-hook and post-hook messages) to
-recover the boundary automatically. Simple modifications — append, prepend,
-and modify-pending — are recovered without any hook changes.
+recover the boundary automatically. Pending-side modifications — append and
+modify-pending — are recovered without any hook changes. Prepends are
+detected but intentionally left unrecoverable: the prepended content lives on
+the history side of the boundary and would be silently discarded if
+compression rebuilt that prefix, so compression is skipped instead.
 
 **Example - Full replacement with a boundary:**
 
@@ -418,7 +421,13 @@ and modify-pending — are recovered without any hook changes.
 {
   "hookSpecificOutput": {
     "hookEventName": "BeforeModel",
-    "llm_request": { "messages": ["...replaced conversation..."] },
+    "llm_request": {
+      "messages": [
+        { "role": "user", "content": "Summarized earlier conversation..." },
+        { "role": "model", "content": "Understood." },
+        { "role": "user", "content": "The new (pending) user message" }
+      ]
+    },
     "llm_request_boundary": {
       "version": 1,
       "pendingMessageStartIndex": 2,

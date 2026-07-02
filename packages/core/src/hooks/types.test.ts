@@ -486,6 +486,26 @@ describe('Hook Types', () => {
       });
     });
 
+    // F3: a wrong version literal is structurally invalid (zod version literal
+    // is 1). The discriminated result must be malformed with the default
+    // skip-compression policy, NOT absent.
+    it('F3: returns status malformed (skip-compression) for a wrong version literal', () => {
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request_boundary: {
+            version: 2,
+            pendingMessageStartIndex: 0,
+          },
+        },
+      });
+      const result = hookOutput.getLLMRequestBoundaryResult();
+      expect(result).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
+      });
+    });
+
     it('returns status malformed (skip-compression) for an invalid onInvalidBoundary enum', () => {
       const hookOutput = new BeforeModelHookOutput({
         hookSpecificOutput: {
@@ -602,6 +622,29 @@ describe('Hook Types', () => {
       ).toStrictEqual({
         status: 'malformed',
         onInvalidBoundary: 'throw',
+      });
+    });
+
+    // F2: explicit present=false overrides a non-undefined value — the caller
+    // (BeforeModelHookOutput.getLLMRequestBoundaryResult) has key context
+    // (hasOwnProperty) and passes present explicitly. An absent key with a
+    // structurally-valid-looking value in the output object must be absent.
+    it('F2: explicit present=false overrides a non-undefined value to absent', () => {
+      expect(
+        parseHookLLMRequestBoundaryResult(
+          { pendingMessageStartIndex: 0 },
+          false,
+        ),
+      ).toStrictEqual({ status: 'absent' });
+    });
+
+    // F2: explicit present=true with an undefined value — a present key whose
+    // value is structurally invalid (undefined fails zod parse) is malformed,
+    // defaulting to skip-compression.
+    it('F2: explicit present=true with an undefined value is malformed (skip-compression)', () => {
+      expect(parseHookLLMRequestBoundaryResult(undefined, true)).toStrictEqual({
+        status: 'malformed',
+        onInvalidBoundary: 'skip-compression',
       });
     });
   });
