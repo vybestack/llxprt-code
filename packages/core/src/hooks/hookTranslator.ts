@@ -304,10 +304,17 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
       contents = baseContents ?? [];
     }
 
-    // Build the result with proper typing
+    // Build the result with proper typing.
+    // model must be defined: a config-only hook llm_request may omit model
+    // (hooks send arbitrary JSON), and an explicit `model: undefined` here
+    // would clobber the target's model when spread in applyLLMRequestModifications.
+    // hookRequest is typed LLMRequest but arrives as Partial at runtime, so
+    // read model defensively as an optional string before coalescing.
+    const hookModel =
+      typeof hookRequest.model === 'string' ? hookRequest.model : undefined;
     const result: GenerateContentParameters = {
       ...baseRequest,
-      model: hookRequest.model,
+      model: hookModel ?? baseRequest?.model ?? DEFAULT_GEMINI_FLASH_MODEL,
       contents,
     };
 

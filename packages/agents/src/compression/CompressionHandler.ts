@@ -431,8 +431,9 @@ export class CompressionHandler {
         throw new Error(
           'Compression callback invoked but the pending-content boundary is ' +
             'unrecoverable: a BeforeModel hook replaced or restructured the ' +
-            'conversation contents and supplied no llm_request_boundary ' +
-            'metadata, so compression cannot safely recompose the pending region.',
+            'conversation contents, and no usable llm_request_boundary ' +
+            'metadata was available, so compression cannot safely recompose ' +
+            'the pending region.',
         );
       }
       try {

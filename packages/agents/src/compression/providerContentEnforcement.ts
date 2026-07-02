@@ -86,9 +86,9 @@ export class ProviderContentEnforcer {
       }
       throw new Error(
         'Context overflow requires compression, but the pending-content boundary is unrecoverable: ' +
-          'a BeforeModel hook replaced or restructured the conversation contents and supplied no ' +
-          'llm_request_boundary metadata, so compression cannot safely recompose the pending region. ' +
-          'Consider reducing the context size, or have the hook supply llm_request_boundary metadata. ' +
+          'a BeforeModel hook replaced or restructured the conversation contents, and no usable ' +
+          'llm_request_boundary metadata was available, so compression cannot safely recompose the pending region. ' +
+          'Consider reducing the context size, or have the hook supply valid llm_request_boundary metadata. ' +
           `Projected ${initialProjected} exceeds safety-adjusted limit ${marginAdjustedLimit}.`,
       );
     }

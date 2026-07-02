@@ -118,12 +118,12 @@ export interface ProviderContentEnvelope {
    * The raw pending (new, unsent) IContent items, or undefined when the
    * pending boundary is unrecoverable.
    *
-   * undefined means the boundary could not be recovered after differential
-   * analysis (the BeforeModel hook replaced or restructured the conversation)
-   * and the hook did not supply explicit llm_request_boundary metadata. When
-   * undefined, compression is NOT available — enforce() returns contents as-is
-   * if under the hard limit, or throws a clear error if compression is
-   * required.
+   * undefined means the pending boundary cannot be used safely. This can
+   * happen when differential recovery is unrecoverable, or when explicit
+   * llm_request_boundary metadata is malformed/positionally invalid with
+   * skip-compression policy. When undefined, compression is NOT available —
+   * enforce() returns contents as-is if under the hard limit, or throws a
+   * clear error if compression is required.
    */
   pendingContents: IContent[] | undefined;
 }

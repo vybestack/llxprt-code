@@ -648,8 +648,11 @@ function anyOriginalProjectionPresent(
   snapshot: ProjectionSnapshot,
   modifiedContents: IContent[],
 ): boolean {
+  const modifiedKeys = new Set(
+    modifiedContents.map((mod) => contentProjectionKey(mod)),
+  );
   for (const key of snapshot.keys) {
-    if (modifiedContents.some((mod) => key === contentProjectionKey(mod))) {
+    if (modifiedKeys.has(key)) {
       return true;
     }
   }

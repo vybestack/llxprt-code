@@ -243,6 +243,33 @@ describe('Hook Types', () => {
       expect(result.model).toBe('overridden-model');
     });
 
+    it('H2: preserves the base request model when llm_request omits model (config-only hook)', () => {
+      // A config-only hook (no model, no messages) must not clobber the
+      // target's model with an explicit `undefined`. The defensive fallback
+      // in fromHookLLMRequest preserves the base request's model.
+      const hookOutput = new BeforeModelHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'BeforeModel',
+          llm_request: {
+            // NO model, NO messages — config-only override
+            config: { temperature: 0.5 },
+          },
+        },
+      });
+      const target = {
+        model: 'original-model',
+        contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+      };
+
+      const result = hookOutput.applyLLMRequestModifications(target);
+      // The target's original model is preserved (not clobbered by undefined).
+      expect(result.model).toBe('original-model');
+      // Contents are preserved.
+      expect(result.contents).toStrictEqual([
+        { role: 'user', parts: [{ text: 'hello' }] },
+      ]);
+    });
+
     it('returns the same target reference when no llm_request is present', () => {
       const hookOutput = new BeforeModelHookOutput({
         systemMessage: 'context',
