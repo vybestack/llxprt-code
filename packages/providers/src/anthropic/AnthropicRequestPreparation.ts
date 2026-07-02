@@ -497,6 +497,7 @@ function convertMessagesAndTools(params: {
   isOAuth: boolean;
   reasoningSettings: ReasoningSettings;
   config: Config | undefined;
+  currentModel: string;
   unprefixToolName: (name: string, isOAuth: boolean) => string;
   logger: DebugLogger;
 }): {
@@ -512,6 +513,7 @@ function convertMessagesAndTools(params: {
     isOAuth,
     reasoningSettings,
     config,
+    currentModel,
     unprefixToolName,
     logger,
   } = params;
@@ -523,6 +525,7 @@ function convertMessagesAndTools(params: {
     includeInContext: reasoningSettings.includeInContext,
     reasoningEnabled: reasoningSettings.reasoningEnabled as boolean,
     config,
+    currentModel,
     unprefixToolName,
     logger,
   });
@@ -738,6 +741,7 @@ export async function prepareAnthropicRequest(
       isOAuth: params.isOAuth,
       reasoningSettings,
       config: configForMessages,
+      currentModel: params.options.resolved.model,
       unprefixToolName: params.unprefixToolName,
       logger: params.logger,
     });
