@@ -272,9 +272,6 @@ jobs:
         run: |-
           npm run build
 
-      - name: Create bundle
-        run: npm run bundle
-
       - name: 'Run type check'
         run: |-
           npm run typecheck
@@ -398,8 +395,8 @@ jobs:
       - 'lint_javascript'
       - 'lint_shell'
       - 'lint_yaml'
-      # Gates the expensive test matrix behind a cheap npm build+bundle+smoke
-      # so a broken build fails fast on ubuntu instead of on every matrix leg.
+      # Gates the expensive test matrix behind a cheap npm build+smoke so a
+      # broken build fails fast on ubuntu instead of on every matrix leg.
       - 'node_consumer_smoke'
     runs-on: 'ubuntu-latest'
     steps:
@@ -498,9 +495,10 @@ jobs:
   # Node consumer smoke (issue 2243, S6)
   #
   # Guards published-package Node compatibility on a pure npm/Node path (no
-  # Bun), representing an external Node consumer: install, build, bundle, then
-  # run the produced bundle under `node`. Wired into the `lint` aggregator so
-  # the expensive test matrix waits for this fast build+smoke check first.
+  # Bun), representing an external Node consumer: install, build, then run the
+  # compiled CLI entry under `node` (Node -> launcher -> Bun). Wired into the
+  # `lint` aggregator so the expensive test matrix waits for this fast
+  # build+smoke check first.
   node_consumer_smoke:
     name: 'Node Consumer Smoke'
     runs-on: 'ubuntu-latest'
@@ -545,12 +543,8 @@ jobs:
         run: |-
           npm run build
 
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
-
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
 
   #
   # Test: Node (Linux and macOS - always run)
@@ -558,10 +552,10 @@ jobs:
   # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
   # deterministically materializes incomplete copies of third-party packages
   # (e.g. uuid, yargs, ajv) whose package.json entry points at files that the
-  # copy is missing, breaking esbuild's bundle resolution and vitest's import
-  # resolution. The workspace-shadow subset is dedupe-able, but version-conflict
-  # copies (e.g. ajv@8.18.0 vs root 8.20.0) cannot be safely removed. Revisit
-  # once Bun's hoisted linker materializes complete packages.
+  # copy is missing, breaking vitest's import resolution (and the now-retired
+  # esbuild bundle). The workspace-shadow subset is dedupe-able, but
+  # version-conflict copies (e.g. ajv@8.18.0 vs root 8.20.0) cannot be safely
+  # removed. Revisit once Bun's hoisted linker materializes complete packages.
   test:
     name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'
@@ -606,10 +600,6 @@ jobs:
       - name: 'Build project'
         run: |-
           npm run build
-
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
 
       - name: 'Fix rollup platform dependency'
         run: |-
@@ -660,8 +650,8 @@ jobs:
           CI: true
         run: npm run test:scripts
 
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'

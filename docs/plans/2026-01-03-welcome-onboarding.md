@@ -1426,7 +1426,7 @@ rm -f ~/.llxprt/welcomeConfig.json
 **Step 2: Run llxprt**
 
 ```bash
-npm run bundle && node scripts/start.js
+npm run build && node scripts/start.js
 ```
 
 **Step 3: Test welcome flow**

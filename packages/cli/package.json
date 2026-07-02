@@ -33,7 +33,13 @@
   "files": [
     "dist",
     "src",
-    "index.ts"
+    "index.ts",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**"
   ],
   "config": {
     "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.10.0"
