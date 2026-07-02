@@ -70,6 +70,9 @@ describe('AnthropicProvider Fable 5 Extended Thinking @issue:2328', () => {
     expect(request.thinking).toBeDefined();
     expect(request.thinking?.type).toBe('adaptive');
     expect(request.thinking?.budget_tokens).toBeUndefined();
+    // Fable 5 never returns raw chain-of-thought; request 'summarized' so
+    // thinking blocks carry readable summaries instead of empty fields.
+    expect(request.thinking?.display).toBe('summarized');
     // Fable 5 defaults to 40K max output (not the API-only 128K ceiling).
     expect(request.max_tokens).toBe(40000);
   });
@@ -113,5 +116,14 @@ describe('AnthropicProvider Fable 5 Extended Thinking @issue:2328', () => {
     // omit the thinking field entirely (never send the unsupported 'disabled'
     // type); the API then applies its adaptive default.
     expect(request.thinking).toBeUndefined();
+  });
+
+  it('does not carry a zero-data-retention/privacy directive for Claude Fable 5 @issue:2328', async () => {
+    const request = await generateFable5Request([['reasoning.enabled', true]]);
+    // Fable 5 is a designated Covered Model: it requires 30-day data retention
+    // and is NOT available under zero-data-retention. A privacy/ZDR directive
+    // would be rejected by the API, so the request body must never include one.
+    expect(request).not.toHaveProperty('privacy');
+    expect(request).not.toHaveProperty('zero_data_retention');
   });
 });

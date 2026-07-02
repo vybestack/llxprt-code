@@ -295,12 +295,19 @@ export function isSonnet5(modelId: string): boolean {
 }
 
 /**
- * Whether the model is Claude Fable 5 (adaptive thinking is always on and
- * cannot be disabled; control depth via the `effort` parameter). Matches the
- * bare alias and dated snapshot variants (e.g. claude-fable-5-YYYYMMDD).
+ * Anchored Fable 5 identifier: matches the bare `claude-fable-5` alias, the
+ * `claude-fable-5-latest` pointer, and dated snapshots
+ * (`claude-fable-5-YYYYMMDD`), but NOT a future `claude-fable-50`. An anchored
+ * regex is used instead of a substring test so version boundaries are exact.
+ */
+const FABLE_5_PATTERN = /^claude-fable-5(-latest|-\d{8})?$/i;
+
+/**
+ * Whether the model is Claude Fable 5. Adaptive thinking is always on and
+ * cannot be disabled (control depth via the `effort` parameter).
  */
 export function isFable5(modelId: string): boolean {
-  return modelId.toLowerCase().includes('claude-fable-5');
+  return FABLE_5_PATTERN.test(modelId);
 }
 
 /**
