@@ -21,7 +21,7 @@ import type {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   shouldRetryCompressionError,
-  isTransientCompressionError,
+  isFallbackEligibleCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   getCompressionStrategy,
@@ -429,8 +429,11 @@ export class CompressionHandler {
     const callback = async (_contents: IContent[]): Promise<IContent[]> => {
       if (pendingContents === undefined) {
         throw new Error(
-          'Compression callback invoked but pending-content boundary is unknown ' +
-            '(BeforeModel hook modified contents). Tracked in #2306.',
+          'Compression callback invoked but the pending-content boundary is ' +
+            'unrecoverable: a BeforeModel hook replaced or restructured the ' +
+            'conversation contents, and no usable llm_request_boundary ' +
+            'metadata was available, so compression cannot safely recompose ' +
+            'the pending region.',
         );
       }
       try {
@@ -765,13 +768,15 @@ export class CompressionHandler {
       primaryError = err;
     }
 
-    // Permanent errors are rethrown immediately — no fallback
-    if (!isTransientCompressionError(primaryError)) {
+    // Permanent errors that are not fallback-eligible are rethrown immediately.
+    // Transient errors (already retried) and EmptySummaryError fall back to
+    // truncation instead of aborting the turn. (Issue #2333)
+    if (!isFallbackEligibleCompressionError(primaryError)) {
       throw primaryError;
     }
 
     this.logger.warn(
-      'Primary compression strategy failed after retries (transient), attempting fallback',
+      'Primary compression strategy failed after retries, attempting fallback truncation',
       primaryError,
     );
     return this.performFallbackCompression(context, primaryError, applyResult);

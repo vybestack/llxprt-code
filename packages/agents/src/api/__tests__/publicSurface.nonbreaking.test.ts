@@ -38,23 +38,32 @@ const _createAgentShape: (cfg: AgentConfig) => Promise<Agent> =
 // runtime; this is a compile-only guard).
 void _createAgentShape;
 
+const LOAD_BEARING_ROOT_FUNCTIONS: readonly string[] = [
+  'createAgent',
+  'fromConfig',
+  'listProviders',
+  'listTools',
+  'mapLoopStream',
+  'mapStreamEvent',
+  'toConfigParameters',
+  'createTaskToolRegistration',
+  'createAgenticLoop',
+];
+
+const LOAD_BEARING_ROOT_CLASSES: readonly string[] = ['AdapterError'];
+
+const LOAD_BEARING_ROOT_KEYS: readonly string[] = [
+  ...LOAD_BEARING_ROOT_FUNCTIONS,
+  ...LOAD_BEARING_ROOT_CLASSES,
+];
+
 describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export surface is non-breaking', () => {
   it('Test A: curated root barrel exposes every load-bearing #1594-era runtime value (superset)', () => {
     // Dynamic enumeration: read the actual keys the built barrel ships, then
     // assert the #1594-era load-bearing set is a SUBSET (the barrel may grow
     // additively but MUST never drop one of these).
     const rootKeys = new Set(Object.keys(root));
-    const expectedRootFunctions: readonly string[] = [
-      'createAgent',
-      'fromConfig',
-      'listProviders',
-      'listTools',
-      'mapLoopStream',
-      'mapStreamEvent',
-      'toConfigParameters',
-      'createTaskToolRegistration',
-    ];
-    for (const key of expectedRootFunctions) {
+    for (const key of LOAD_BEARING_ROOT_FUNCTIONS) {
       expect(rootKeys.has(key), `root barrel must export "${key}"`).toBe(true);
       expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
     }
@@ -62,8 +71,7 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     // Classes are also `typeof 'function'` at runtime.
     // P05: AgenticLoop (concrete low-level class) removed from the root
     // surface; consumers use createAgenticLoop from the curated api barrel.
-    const expectedRootClasses: readonly string[] = ['AdapterError'];
-    for (const key of expectedRootClasses) {
+    for (const key of LOAD_BEARING_ROOT_CLASSES) {
       expect(rootKeys.has(key), `root barrel must export "${key}"`).toBe(true);
       expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
     }
@@ -111,38 +119,16 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     // live key of the dynamically-enumerated root barrel.
     // P05: AgenticLoop removed from the root (curated createAgenticLoop
     // remains).
-    const expectedRootKeys: readonly string[] = [
-      'createAgent',
-      'fromConfig',
-      'listProviders',
-      'listTools',
-      'mapLoopStream',
-      'mapStreamEvent',
-      'toConfigParameters',
-      'AdapterError',
-      'createTaskToolRegistration',
-    ];
     const rootKeys = new Set(Object.keys(root));
     fc.assert(
-      fc.property(fc.constantFrom(...expectedRootKeys), (key) =>
+      fc.property(fc.constantFrom(...LOAD_BEARING_ROOT_KEYS), (key) =>
         rootKeys.has(key),
       ),
     );
     // A second distinct property: each sampled value-symbol is callable.
-    const valueSymbols: readonly string[] = [
-      'createAgent',
-      'fromConfig',
-      'listProviders',
-      'listTools',
-      'mapLoopStream',
-      'mapStreamEvent',
-      'toConfigParameters',
-      'AdapterError',
-      'createTaskToolRegistration',
-    ];
     fc.assert(
       fc.property(
-        fc.constantFrom(...valueSymbols),
+        fc.constantFrom(...LOAD_BEARING_ROOT_KEYS),
         (key) => typeof (root as Record<string, unknown>)[key] === 'function',
       ),
     );
@@ -174,18 +160,7 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
     const rootKeys = new Set(Object.keys(root));
     // P05: AgenticLoop removed from the root (curated createAgenticLoop
     // remains).
-    const priorLoadBearing: readonly string[] = [
-      'createAgent',
-      'fromConfig',
-      'listProviders',
-      'listTools',
-      'mapLoopStream',
-      'mapStreamEvent',
-      'toConfigParameters',
-      'createTaskToolRegistration',
-      'AdapterError',
-    ];
-    for (const key of priorLoadBearing) {
+    for (const key of LOAD_BEARING_ROOT_KEYS) {
       expect(rootKeys.has(key), `prior root key "${key}" must remain`).toBe(
         true,
       );
@@ -193,7 +168,7 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
     }
   });
 
-  it('Test B: internals identity unchanged — AgentClient binding preserved on the documented internals subpath', () => {
+  it('Test B: AgentClient denied on root barrel and preserved on internals subpath', () => {
     // P05: the root no longer re-exports internals, so root.AgentClient is
     // undefined (deny). AgentClient remains a runtime VALUE on the
     // internals.js subpath (REQ-004.1).
@@ -222,20 +197,9 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
   it('PROP 1: each sampled prior load-bearing key is a live root key AND callable (REQ-009)', () => {
     // P05: AgenticLoop removed from the root (curated createAgenticLoop
     // remains).
-    const priorLoadBearing: readonly string[] = [
-      'createAgent',
-      'fromConfig',
-      'listProviders',
-      'listTools',
-      'mapLoopStream',
-      'mapStreamEvent',
-      'toConfigParameters',
-      'createTaskToolRegistration',
-      'AdapterError',
-    ];
     const rootKeys = new Set(Object.keys(root));
     fc.assert(
-      fc.property(fc.constantFrom(...priorLoadBearing), (key) => {
+      fc.property(fc.constantFrom(...LOAD_BEARING_ROOT_KEYS), (key) => {
         expect(rootKeys.has(key)).toBe(true);
         expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
         return true;

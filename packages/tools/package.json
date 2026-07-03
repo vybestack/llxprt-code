@@ -13,16 +13,42 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
       "import": "./dist/index.js"
     },
-    "./IToolFormatter.js": "./dist/src/formatters/IToolFormatter.js",
-    "./ToolFormatter.js": "./dist/src/formatters/ToolFormatter.js",
-    "./ToolIdStrategy.js": "./dist/src/formatters/ToolIdStrategy.js",
-    "./toolIdNormalization.js": "./dist/src/formatters/toolIdNormalization.js",
-    "./doubleEscapeUtils.js": "./dist/src/formatters/doubleEscapeUtils.js",
-    "./toolNameUtils.js": "./dist/src/formatters/toolNameUtils.js",
+    "./IToolFormatter.js": {
+      "types": "./dist/src/formatters/IToolFormatter.d.ts",
+      "bun": "./src/formatters/IToolFormatter.ts",
+      "import": "./dist/src/formatters/IToolFormatter.js"
+    },
+    "./ToolFormatter.js": {
+      "types": "./dist/src/formatters/ToolFormatter.d.ts",
+      "bun": "./src/formatters/ToolFormatter.ts",
+      "import": "./dist/src/formatters/ToolFormatter.js"
+    },
+    "./ToolIdStrategy.js": {
+      "types": "./dist/src/formatters/ToolIdStrategy.d.ts",
+      "bun": "./src/formatters/ToolIdStrategy.ts",
+      "import": "./dist/src/formatters/ToolIdStrategy.js"
+    },
+    "./toolIdNormalization.js": {
+      "types": "./dist/src/formatters/toolIdNormalization.d.ts",
+      "bun": "./src/formatters/toolIdNormalization.ts",
+      "import": "./dist/src/formatters/toolIdNormalization.js"
+    },
+    "./doubleEscapeUtils.js": {
+      "types": "./dist/src/formatters/doubleEscapeUtils.d.ts",
+      "bun": "./src/formatters/doubleEscapeUtils.ts",
+      "import": "./dist/src/formatters/doubleEscapeUtils.js"
+    },
+    "./toolNameUtils.js": {
+      "types": "./dist/src/formatters/toolNameUtils.d.ts",
+      "bun": "./src/formatters/toolNameUtils.ts",
+      "import": "./dist/src/formatters/toolNameUtils.js"
+    },
     "./utils/fetch.js": {
       "types": "./dist/src/utils/fetch.d.ts",
+      "bun": "./src/utils/fetch.ts",
       "import": "./dist/src/utils/fetch.js"
     }
   },
@@ -35,6 +61,14 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
     "dist"
   ],
   "dependencies": {

@@ -43,11 +43,11 @@ const CORE_INTERFACE_SOURCE =
 const CORE_INTERFACE_RE = new RegExp(CORE_INTERFACE_SOURCE);
 const CORE_INTERFACE_GLOBAL_RE = new RegExp(CORE_INTERFACE_SOURCE, 'g');
 const CORE_TYPE_EXPORT_RE =
-  /export\s+(?:type\s+)?\{[\s\S]*?\bAgentRuntimeFactoryBindings\b[\s\S]*?\}\s*from\s*['"]@vybestack\/llxprt-code-core['"]/;
+  /export\s+(?:type\s+)?\{[^}]*\bAgentRuntimeFactoryBindings\b[^}]*\}\s*from\s*['"]@vybestack\/llxprt-code-core['"]/;
 const LOCAL_INTERFACE_RE =
   /export\s+interface\s+AgentRuntimeFactoryBindings\s*\{/;
 const CORE_IMPORT_RE =
-  /import\s+(?:type\s+)?\{[\s\S]*?\bAgentRuntimeFactoryBindings\b[\s\S]*?\}\s*from\s*['"]@vybestack\/llxprt-code-core['"]/;
+  /import\s+(?:type\s+)?\{[^}]*\bAgentRuntimeFactoryBindings\b[^}]*\}\s*from\s*['"]@vybestack\/llxprt-code-core['"]/;
 const CORE_BARREL_RE =
   /export\s+\*\s+from\s+['"]\.\/core\/clientContract(?:\.js)?['"]/;
 
@@ -166,10 +166,6 @@ if (!agentsReExports && !providersReExports) {
       '@vybestack/llxprt-code-core (at least one consumer must re-export from core)',
   );
 }
-const reExporters = [];
-if (agentsReExports) reExporters.push('agents');
-if (providersReExports) reExporters.push('providers');
-
 // ── Report ──────────────────────────────────────────────────────────────
 if (failures.length > 0) {
   console.error(
@@ -180,6 +176,10 @@ if (failures.length > 0) {
   }
   process.exit(1);
 }
+
+const reExporters = [];
+if (agentsReExports) reExporters.push('agents');
+if (providersReExports) reExporters.push('providers');
 
 console.log(
   'PASS: AgentRuntimeFactoryBindings single-source migration invariants hold.',

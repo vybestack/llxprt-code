@@ -422,6 +422,18 @@ describe('check-cli-import-boundary', () => {
     expect(code).toBe(0);
   });
 
+  it('allows a namespace import from the bare agents root (specifier-level)', () => {
+    const { code, stdout } = withCliFixture(({ root, write }) => {
+      write(
+        'packages/cli/src/ok.ts',
+        "import * as agentsApi from '@vybestack/llxprt-code-agents';\n",
+      );
+      write(...thinIndex());
+      return runScript(root, 0);
+    });
+    expect(stdout).toContain('CLI import boundary check PASSED.');
+    expect(code).toBe(0);
+  });
   it('flags importing from the agents internals.js subpath (deep import)', () => {
     // @vybestack/llxprt-code-agents/internals.js is a deep subpath NOT in
     // PUBLIC_SUBPATHS_BY_PACKAGE (agents has no entry there), so it is a

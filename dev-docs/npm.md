@@ -6,13 +6,13 @@ This monorepo contains two main packages: `@vybestack/llxprt-code` and `@vybesta
 
 This is the main package for the LLxprt Code. It is responsible for the user interface, command parsing, and all other user-facing functionality.
 
-LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's run path uses the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`) to execute the TypeScript (`.ts`) entry point directly. The published npm package ships `dist/` (produced by `tsc` during the build) for Node.js compatibility — the `bin` entry (`packages/cli/dist/index.js`) invokes the Bun launcher at runtime. Type checking uses `tsc --noEmit` (no JavaScript output is produced). The retired `esbuild` bundling step is no longer part of the build; only the a2a-server artifact is bundled (by `scripts/bun-build.config.mjs`).
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. The published package ships a checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) as its `bin` entry: Node starts the launcher, the launcher resolves Bun (from the package's own `bun` dependency or `PATH`), and Bun executes the TypeScript (`.ts`) entry point directly. No compilation to JavaScript happens at install or run time, and no pre-compiled `dist/` artifact is shipped or required. Type checking uses `tsc --noEmit`. The esbuild bundle artifact has been retired.
 
 ## `@vybestack/llxprt-code-core`
 
 This package contains the core logic for interacting with the Gemini API. It is responsible for making API requests, handling authentication, and managing the local cache.
 
-This package is not bundled. When it is published, it is published as a standard Node.js package with its own dependencies. This allows it to be used as a standalone package in other projects, if needed. All transpiled js code in the `dist` folder is included in the package.
+This package is not bundled. When it is published, it is published as a standard npm package with its own dependencies. This allows it to be used as a standalone package in other projects, if needed. The package ships its TypeScript source (`index.ts`, `src/`), which Bun consumers resolve directly via the `bun` export condition.
 
 Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 
@@ -165,65 +165,49 @@ By performing a dry run, you can be confident that your changes to the packaging
 
 ## Release Deep Dive
 
-The main goal of the release process is to take the source code from the packages/ directory, build it, and assemble a
-clean, self-contained package in a temporary `bundle` directory at the root of the project. This `bundle` directory is what
-actually gets published to NPM.
+The main goal of the release process is to take the source code from the packages/ directory, validate it, and publish
+the CLI package with its checked-in Node launcher (`bin/llxprt.cjs`) plus the TypeScript sources executed by Bun. No
+compilation step is required for the published package; the retired `bundle/llxprt.js` artifact is no longer produced.
 
 Here are the key stages:
 
 Stage 1: Pre-Release Sanity Checks and Versioning
 
 - What happens: Before any files are moved, the process ensures the project is in a good state. This involves running tests,
-  linting, and type-checking (npm run preflight). The version number in the root package.json and packages/cli/package.json
+  linting, and type-checking (bun run preflight). The version number in the root package.json and packages/cli/package.json
   is updated to the new release version.
 - Why: This guarantees that only high-quality, working code is released. Versioning is the first step to signify a new
   release.
 
-Stage 2: Building the Source Code
+Stage 2: Validating the Source Code
 
-- What happens: The TypeScript source code (`.ts`) is compiled into JavaScript by `tsc`. The CLI's run path uses the Bun launcher to execute the `.ts` entry point directly, but the published npm package still ships `dist/` for Node.js compatibility. Type checking uses `tsc --noEmit` (no JavaScript output is produced).
-- File movement:
-  - packages/core/src/\*_/_.ts -> compiled to -> packages/core/dist/
-  - packages/cli/src/\*_/_.ts -> compiled to -> packages/cli/dist/
-- Why: The TypeScript code is compiled into JavaScript for the published npm package (`dist/`) and for type-checking. The core package is built first as the cli package depends on it. The CLI run path uses the Bun launcher to execute `.ts` directly, but `dist/` is still produced and shipped for Node.js compatibility.
+- What happens: The TypeScript source code (`.ts`) is type-checked with `tsc --noEmit`. No JavaScript is emitted for the
+  published package — the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun at run time and Bun
+  executes the TypeScript sources directly. Development builds may still produce local `dist/` output for tooling, but the
+  published package does not depend on it.
+- Why: The published package ships TypeScript source, so correctness is enforced by type-checking and tests rather than a
+  compilation step.
 
-Stage 3: Assembling the Final Publishable Package
+Stage 3: Preparing the Final Publishable Package
 
-This is the most critical stage where files are moved and transformed into their final state for publishing. A temporary
-`bundle` folder is created at the project root to house the final package contents.
+This is the stage where the CLI package is prepared for publishing.
 
-1.  The `package.json` is Transformed:
-    - What happens: The package.json from packages/cli/ is read, modified, and written into the root `bundle`/ directory.
-    - File movement: packages/cli/package.json -> (in-memory transformation) -> `bundle`/package.json
-    - Why: The final package.json must be different from the one used in development. Key changes include:
-      - Removing devDependencies.
-      - Removing workspace-specific "dependencies": { "@gemini-cli/core": "workspace:\*" } and ensuring the core code is
-        bundled directly into the final package.
-      - Ensuring the bin, main, and files fields point to the correct locations within the final package structure.
+1.  The workspace package metadata is validated and transformed as needed:
+    - What happens: release scripts ensure the package metadata, dependency ranges, bin, main, and files fields point at
+      the checked-in launcher (`bin/llxprt.cjs`) and the shipped TypeScript sources executed by Bun.
+    - Why: The final package must not expose development-only dependencies while still containing the runtime assets needed
+      by npm/npx/Homebrew users.
 
-2.  The Published Entry Point:
-    - What happens: The TypeScript source is compiled by `tsc` into `packages/cli/dist/`. The published `bin` entry is `packages/cli/dist/index.js`, which invokes the Bun launcher at runtime to execute the `.ts` source directly. The `bundle/llxprt.js` CLI bundle has been retired; `scripts/bun-build.config.mjs` now bundles only the a2a-server artifact.
-    - File movement: packages/cli/src/\*_/_.ts -> (compiled by `tsc`) -> packages/cli/dist/index.js (the published `bin` entry)
-    - Why: The retired esbuild/bundle approach was replaced by shipping `dist/` directly. The `bin` entry (`packages/cli/dist/index.js`) invokes the Bun launcher, which executes the `.ts` entry point at runtime. This removes the need for a single bundled file while keeping Node.js compatibility via `dist/`.
-
-3.  Static and Supporting Files are Copied:
-    - What happens: Essential files that are not part of the source code but are required for the package to work correctly
-      or be well-described are copied into the `bundle` directory.
-    - File movement:
-      - README.md -> `bundle`/README.md
-      - LICENSE -> `bundle`/LICENSE
-      - packages/cli/src/utils/\*.sb (sandbox profiles) -> `bundle`/
-    - Why:
-      - The README.md and LICENSE are standard files that should be included in any NPM package.
-      - The sandbox profiles (.sb files) are critical runtime assets required for the CLI's sandboxing feature to
-        function. They must be located next to the final executable.
+2.  Runtime files are included from the package `files` allowlist:
+    - What happens: `packages/cli/package.json` ships `bin`, `src`, and `index.ts` while excluding tests and snapshots.
+    - Why: `bin/llxprt.cjs` is the Node-compatible launcher entry; it re-execs Bun, which runs the TypeScript source
+      directly.
 
 Stage 4: Publishing to NPM
 
-- What happens: The npm publish command is run from inside the root `bundle` directory.
-- Why: By running npm publish from within the `bundle` directory, only the files we carefully assembled in Stage 3 are uploaded
-  to the NPM registry. This prevents any source code, test files, or development configurations from being accidentally
-  published, resulting in a clean and minimal package for users.
+- What happens: The npm publish command publishes the prepared CLI package.
+- Why: Publishing from the package with an explicit `files` allowlist prevents test files and development-only configuration
+  from being accidentally uploaded while preserving the runtime sources the Bun launcher needs.
 
 Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 
@@ -238,24 +222,25 @@ graph TD
     end
 
     subgraph "Process"
-        D["Build (tsc → dist/)"]
-        E["Transform package.json"]
-        F["Assemble bundle/"]
+        D["Typecheck (tsc --noEmit)"]
+        E["Package source + launcher"]
+        F["npm pack"]
         G["Publish"]
     end
 
     subgraph "Artifacts"
-        H["packages/cli/dist/index.js (published bin)"]
-        I["Final package.json"]
-        J["bundle/"]
+        H["packages/cli/bin/llxprt.cjs"]
+        I["TypeScript source packages"]
+        J["npm tarball"]
     end
 
     subgraph "Destination"
         K["NPM Registry"]
     end
 
-    A --> D --> H
-    B --> E --> I
+    A --> D
+    A --> E --> I
+    B --> E --> H
     C --> F
     H --> F
     I --> F
@@ -284,6 +269,6 @@ This tells NPM that any folder inside the `packages` directory is a separate pac
 
 ### Benefits of Workspaces
 
-- **Simplified Dependency Management**: Running `npm install` from the root of the project will install all dependencies for all packages in the workspace and link them together. This means you don't need to run `npm install` in each package's directory. (Bun is also supported during the migration — see [dev-docs/bun.md](./bun.md).)
-- **Automatic Linking**: Packages within the workspace can depend on each other. When you run `npm install`, NPM will automatically create symlinks between the packages. This means that when you make changes to one package, the changes are immediately available to other packages that depend on it.
-- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `npm run build --workspace @vybestack/llxprt-code`.
+- **Simplified Dependency Management**: Running `bun install` from the root of the project will install all dependencies for all packages in the workspace and link them together. This means you don't need to run `bun install` in each package's directory.
+- **Automatic Linking**: Packages within the workspace can depend on each other. When you run `bun install`, Bun will automatically create symlinks between the packages. This means that when you make changes to one package, the changes are immediately available to other packages that depend on it.
+- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `bun run build --workspace @vybestack/llxprt-code`.

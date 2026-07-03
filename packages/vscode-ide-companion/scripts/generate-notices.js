@@ -246,22 +246,25 @@ async function getDependencyLicense(depName, depVersion) {
 
     const packageDir = path.dirname(depPackageJsonPath);
 
-    const noticeFileCandidates = [
-      'NOTICE',
-      'NOTICE.txt',
-      'NOTICE.md',
-      'notice',
-      'notice.txt',
-    ];
-
-    let noticeFile = null;
-    for (const candidate of noticeFileCandidates) {
-      const potentialFile = path.join(packageDir, candidate);
-      if (await fs.stat(potentialFile).catch(() => false)) {
-        noticeFile = potentialFile;
-        break;
+    // Match candidate file names case-insensitively so output is identical on
+    // case-sensitive (Linux CI) and case-insensitive (macOS) filesystems —
+    // e.g. vscode-jsonrpc ships "License.txt".
+    const packageDirEntries = await fs.readdir(packageDir).catch(() => []);
+    const findPackageFile = (candidates) => {
+      for (const candidate of candidates) {
+        const match = packageDirEntries.find(
+          (entry) => entry.toLowerCase() === candidate.toLowerCase(),
+        );
+        if (match) {
+          return path.join(packageDir, match);
+        }
       }
-    }
+      return null;
+    };
+
+    const noticeFileCandidates = ['NOTICE', 'NOTICE.txt', 'NOTICE.md'];
+
+    const noticeFile = findPackageFile(noticeFileCandidates);
 
     const licenseFileCandidates = [
       depPackageJson.licenseFile,
@@ -269,18 +272,9 @@ async function getDependencyLicense(depName, depVersion) {
       'LICENSE.md',
       'LICENSE.txt',
       'LICENSE-MIT.txt',
-      'license.md',
-      'license',
     ].filter(Boolean);
 
-    let licenseFile;
-    for (const candidate of licenseFileCandidates) {
-      const potentialFile = path.join(packageDir, candidate);
-      if (await fs.stat(potentialFile).catch(() => false)) {
-        licenseFile = potentialFile;
-        break;
-      }
-    }
+    const licenseFile = findPackageFile(licenseFileCandidates);
 
     const specialMapping = SPECIAL_COPYRIGHT_MAPPINGS[depName];
 
@@ -409,6 +403,10 @@ function collectDependencies(
       `Warning: Could not find package info for ${packageName} in package-lock.json.`,
     );
     return;
+  }
+
+  if (packageInfo.link && typeof packageInfo.resolved === 'string') {
+    packageInfo = packageLock.packages[packageInfo.resolved] ?? packageInfo;
   }
 
   dependenciesMap.set(packageName, packageInfo.version);

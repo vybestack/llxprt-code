@@ -13,17 +13,45 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
       "import": "./dist/index.js"
     },
-    "./types.js": "./dist/src/types.js",
-    "./policy-engine.js": "./dist/src/policy-engine.js",
-    "./stable-stringify.js": "./dist/src/stable-stringify.js",
-    "./config.js": "./dist/src/config.js",
-    "./toml-loader.js": "./dist/src/toml-loader.js",
-    "./utils.js": "./dist/src/utils.js",
-    "./confirmation-bus/index.js": "./dist/src/confirmation-bus/index.js",
-    "./confirmation-bus/types.js": "./dist/src/confirmation-bus/types.js",
-    "./confirmation-bus/message-bus.js": "./dist/src/confirmation-bus/message-bus.js"
+    "./types.js": {
+      "bun": "./src/types.ts",
+      "import": "./dist/src/types.js"
+    },
+    "./policy-engine.js": {
+      "bun": "./src/policy-engine.ts",
+      "import": "./dist/src/policy-engine.js"
+    },
+    "./stable-stringify.js": {
+      "bun": "./src/stable-stringify.ts",
+      "import": "./dist/src/stable-stringify.js"
+    },
+    "./config.js": {
+      "bun": "./src/config.ts",
+      "import": "./dist/src/config.js"
+    },
+    "./toml-loader.js": {
+      "bun": "./src/toml-loader.ts",
+      "import": "./dist/src/toml-loader.js"
+    },
+    "./utils.js": {
+      "bun": "./src/utils.ts",
+      "import": "./dist/src/utils.js"
+    },
+    "./confirmation-bus/index.js": {
+      "bun": "./src/confirmation-bus/index.ts",
+      "import": "./dist/src/confirmation-bus/index.js"
+    },
+    "./confirmation-bus/types.js": {
+      "bun": "./src/confirmation-bus/types.ts",
+      "import": "./dist/src/confirmation-bus/types.js"
+    },
+    "./confirmation-bus/message-bus.js": {
+      "bun": "./src/confirmation-bus/message-bus.ts",
+      "import": "./dist/src/confirmation-bus/message-bus.js"
+    }
   },
   "scripts": {
     "build": "node ../../scripts/build_package.js",
@@ -34,6 +62,14 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
     "dist"
   ],
   "dependencies": {

@@ -364,7 +364,76 @@ interface BeforeModelOutput extends HookOutput {
 
     /** Synthetic response (skips actual LLM call) */
     llm_response?: LLMResponse;
+
+    /** Pending-content boundary for hook-modified contents (enables compression for full-replacement hooks) */
+    llm_request_boundary?: HookLLMRequestBoundary;
   };
+}
+
+interface HookLLMRequestBoundary {
+  /** Schema version (currently 1) */
+  version?: 1;
+
+  /** 0-based index where the pending (new, unsent) suffix starts */
+  pendingMessageStartIndex: number;
+
+  /** Number of pending messages; defaults to the rest of the messages */
+  pendingMessageCount?: number;
+
+  /** Policy when the boundary is invalid: 'skip-compression' (default) or 'throw' */
+  onInvalidBoundary?: 'skip-compression' | 'throw';
+}
+```
+
+`llm_request_boundary` is only relevant when the hook modifies
+`llm_request.messages`. When a hook replaces or restructures the conversation,
+the runtime can no longer tell which trailing messages are the new (unsent)
+"pending" content versus prior history. Without that boundary, context
+compression is skipped (the modified contents are sent as-is under the context
+limit, and a clear error is thrown when they exceed it).
+
+The metadata declares that the messages from `pendingMessageStartIndex` onward
+(`pendingMessageCount` items, defaulting to the rest) are the pending suffix —
+these are preserved verbatim through compression. The prefix **before** that
+index is declared history-semantics: if compression runs, that prefix is
+**replaced** by the compressed real history from the history service. Hooks
+that need history-side rewrites to survive compression must **not** supply this
+metadata (they should accept skip-compression instead).
+
+The boundary must describe a suffix of the modified messages:
+`pendingMessageStartIndex + pendingMessageCount` must equal `messages.length`.
+Otherwise the boundary is invalid and `onInvalidBoundary` applies
+(`'skip-compression'` by default, or `'throw'`). Malformed (structurally
+invalid) metadata is treated as invalid, not ignored — the hook explicitly
+attempted to control the boundary, so differential recovery is not used.
+
+When `llm_request_boundary` is absent, the runtime attempts deterministic
+differential analysis (comparing the pre-hook and post-hook messages) to
+recover the boundary automatically. Pending-side modifications — append and
+modify-pending — are recovered without any hook changes. Prepends are
+detected but intentionally left unrecoverable: the prepended content lives on
+the history side of the boundary and would be silently discarded if
+compression rebuilt that prefix, so compression is skipped instead.
+
+**Example - Full replacement with a boundary:**
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "BeforeModel",
+    "llm_request": {
+      "messages": [
+        { "role": "user", "content": "Summarized earlier conversation..." },
+        { "role": "model", "content": "Understood." },
+        { "role": "user", "content": "The new (pending) user message" }
+      ]
+    },
+    "llm_request_boundary": {
+      "version": 1,
+      "pendingMessageStartIndex": 2,
+      "onInvalidBoundary": "skip-compression"
+    }
+  }
 }
 ```
 

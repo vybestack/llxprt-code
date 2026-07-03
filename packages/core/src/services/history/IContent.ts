@@ -78,6 +78,9 @@ export interface ContentMetadata {
 
   /** Finish reason from OpenAI-style providers (e.g., stop, length, tool_calls) */
   finishReason?: string;
+
+  /** Reason the response was incomplete (e.g., max_output_tokens) */
+  incompleteReason?: string;
 }
 
 export interface UsageStats {

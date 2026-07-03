@@ -144,8 +144,11 @@ function collectDirectExports(sourceFile) {
       }
       return;
     }
-    const hasExportModifier = node.modifiers
-      ? node.modifiers.some(
+    const modifiers = ts.canHaveModifiers(node)
+      ? ts.getModifiers(node)
+      : undefined;
+    const hasExportModifier = modifiers
+      ? modifiers.some(
           (m) =>
             m.kind === ts.SyntaxKind.ExportKeyword ||
             m.kind === ts.SyntaxKind.DefaultKeyword,
@@ -285,7 +288,10 @@ export function loadExpectedSurface(snapshotPath) {
       `Failed to parse expected API-surface snapshot JSON at ${absolute}: ${err.message}`,
     );
   }
-  if (!Array.isArray(parsed)) {
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((item) => typeof item !== 'string')
+  ) {
     throw new Error(
       `Expected API-surface snapshot at ${absolute} must be a JSON array of strings, got ${typeof parsed}.`,
     );

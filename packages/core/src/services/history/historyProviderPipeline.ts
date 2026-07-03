@@ -71,6 +71,38 @@ export function buildProviderContent(
 }
 
 /**
+ * Describes how the pending-content boundary was established for a provider
+ * content envelope. Used by enforcement paths to decide whether compression is
+ * safe.
+ */
+export interface ProviderContentBoundary {
+  pendingStartIndex: number;
+  pendingContentCount: number;
+  confidence: 'authoritative' | 'recovered' | 'unrecoverable';
+  source:
+    | 'caller'
+    | 'before-model-differential'
+    | 'before-model-hook-metadata'
+    | 'unknown';
+}
+
+/**
+ * Classification of how a BeforeModel hook transformed the conversation
+ * contents, used for diagnosis and tests. The pendingContents result of
+ * recovery is what matters operationally; the classification is informational.
+ */
+export type BoundaryChangeClassification =
+  | 'unchanged'
+  | 'prepended'
+  | 'appended'
+  | 'inserted-at-boundary'
+  | 'modified-pending'
+  | 'replaced-pending'
+  | 'modified-history'
+  | 'replaced-all'
+  | 'complex';
+
+/**
  * Bundles provider-ready contents with the raw pending (new, unsent) IContent
  * items so downstream enforcement does not have to reverse-engineer the
  * pending boundary from the contents array.
@@ -84,11 +116,14 @@ export interface ProviderContentEnvelope {
 
   /**
    * The raw pending (new, unsent) IContent items, or undefined when the
-   * pending boundary is unknown (e.g., a BeforeModel hook modified contents).
+   * pending boundary is unrecoverable.
    *
-   * When undefined, compression is NOT available — enforce() will return
-   * contents as-is if under the hard limit, or throw a clear error if
-   * compression is required. Hook-path resolution is tracked in #2306.
+   * undefined means the pending boundary cannot be used safely. This can
+   * happen when differential recovery is unrecoverable, or when explicit
+   * llm_request_boundary metadata is malformed/positionally invalid with
+   * skip-compression policy. When undefined, compression is NOT available —
+   * enforce() returns contents as-is if under the hard limit, or throws a
+   * clear error if compression is required.
    */
   pendingContents: IContent[] | undefined;
 }

@@ -285,16 +285,48 @@ export class CompressionExecutionError extends CompressionStrategyError {
  * This is always a permanent (non-retryable) failure — the model returned
  * nothing deterministically; retrying is unlikely to succeed.
  *
+ * Carries optional diagnostics (finishReason, stopReason, blockTypeCounts)
+ * so the caller can distinguish a genuinely empty model response from a
+ * masked provider failure (e.g. reasoning model that burns its entire
+ * output-token budget on thinking and produces no text — issue #2333).
+ *
  * @plan PLAN-20260211-COMPRESSION.P14
  */
 export class EmptySummaryError extends CompressionStrategyError {
-  constructor(strategy: string) {
-    super(
+  readonly finishReason?: string;
+  readonly stopReason?: string;
+  readonly blockTypeCounts?: Readonly<Record<string, number>>;
+  readonly thinkingBlockCount?: number;
+
+  constructor(
+    strategy: string,
+    diagnostics?: {
+      finishReason?: string;
+      stopReason?: string;
+      blockTypeCounts?: Readonly<Record<string, number>>;
+    },
+  ) {
+    const parts: string[] = [
       `Compression strategy "${strategy}" produced an empty summary`,
-      COMPRESSION_ERROR_CODES.EMPTY_SUMMARY,
-      { strategy },
-    );
+    ];
+    if (diagnostics?.finishReason) {
+      parts.push(`(finishReason: ${diagnostics.finishReason}`);
+      if (diagnostics.stopReason)
+        parts.push(`, stopReason: ${diagnostics.stopReason}`);
+      parts.push(`)`);
+    }
+    if (diagnostics?.blockTypeCounts) {
+      const summary = Object.entries(diagnostics.blockTypeCounts)
+        .map(([type, count]) => `${type}:${count}`)
+        .join(', ');
+      parts.push(`[blocks received: ${summary}]`);
+    }
+    super(parts.join(' '), COMPRESSION_ERROR_CODES.EMPTY_SUMMARY, { strategy });
     this.name = 'EmptySummaryError';
+    this.finishReason = diagnostics?.finishReason;
+    this.stopReason = diagnostics?.stopReason;
+    this.blockTypeCounts = diagnostics?.blockTypeCounts;
+    this.thinkingBlockCount = diagnostics?.blockTypeCounts?.['thinking'];
   }
 }
 
@@ -385,5 +417,20 @@ export function isTransientCompressionError(error: unknown): boolean {
  * @requirement REQ-CR-001, REQ-CR-002
  */
 export function shouldRetryCompressionError(error: unknown): boolean {
+  return isTransientCompressionError(error);
+}
+
+/**
+ * Returns true if a failed primary compression attempt should fall back
+ * to the non-LLM truncation strategy instead of aborting the turn.
+ * Transient errors (already retried) and empty-summary failures are
+ * fallback-eligible; configuration/logic errors (unknown strategy,
+ * prompt resolution, permanent execution errors) are not.
+ *
+ * (Issue #2333: EmptySummaryError is intentionally non-transient so it is not
+ * retried, but it IS fallback-eligible so the turn degrades gracefully.)
+ */
+export function isFallbackEligibleCompressionError(error: unknown): boolean {
+  if (error instanceof EmptySummaryError) return true;
   return isTransientCompressionError(error);
 }

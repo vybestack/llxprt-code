@@ -242,13 +242,42 @@ silently passing on an unresolvable dynamic path.
 
 - **`postinstall.cjs`** normally does two npm-specific things: it strips
   unsupported `"peer": true` flags from `package-lock.json`, and — on a
-  bundle-less GitHub-source checkout — it bootstraps a build by shelling out to
+  build-less GitHub-source checkout — it bootstraps a build by shelling out to
   `npm install --workspaces` and `npm run build`. **Under
   Bun both must be skipped:** Bun does not consume `package-lock.json` (so
   mutating it would be wrong), and the bootstrap shells out to npm, which would
-  defeat the `bun install` the user just ran. The script therefore exits early
-  (`process.exit(0)`) when `detectInstaller()` returns `'bun'`, before either
-  action. Under npm the behavior is byte-for-byte unchanged.
+  defeat the `bun install` the user just ran. **Under Bun the script instead
+  runs `symlinkBunWorkspaceCopies()`** (described just below) and then exits.
+  Under npm the behavior is byte-for-byte unchanged.
+
+  ### Bun hoisted-linker workspace symlinks
+
+  Bun's `hoisted` linker (see `bunfig.toml`) does not always install a local
+  workspace dependency as a _symlink_ to the real workspace directory the way
+  npm does. When a version conflict forces a workspace package to be nested
+  inside another workspace's own `node_modules/@vybestack/`, Bun materializes it
+  as a **static copy** — a real directory snapshot of the workspace _source_
+  tree taken at install time. Because the copy is taken before any build runs,
+  it contains `src/` but **not `dist/`**, yet the package's `exports`/`main`
+  point at `dist/`. Tooling that resolves a transitive import through one of
+  these nested copies — esbuild/vite bundling (which follows imports into
+  compiled workspace output) and the TypeScript language server used by
+  type-aware ESLint — then fails to resolve the entry point and degrades to
+  errors/`any`.
+
+  `symlinkBunWorkspaceCopies()` (in `postinstall.cjs`, run only when
+  `detectInstaller()` returns `'bun'`) restores npm's behavior: for every
+  workspace's nested `node_modules/@vybestack/<pkg>` entry that is a real
+  directory (not already a symlink) and whose name matches a declared local
+  workspace, it replaces the static copy with a relative symlink to the real
+  workspace directory. That directory gains `dist/` once `tsc` runs, so the
+  links resolve correctly for both bundlers and the type checker. The function
+  is self-contained (only `fs`/`path`), idempotent (an existing symlink is left
+  untouched), and a no-op when no static copies exist. It is verified on a
+  clean checkout on both macOS and Linux (the failure reproduced identically on
+  both once stale `dist/` artifacts from prior npm installs were purged — it is
+  **not** a platform-specific bug).
+
 - **`preinstall.cjs`** cleans stale OS temp directories from previous runs.
   Under Bun it is a guarded no-op, both because the cleanup targets npm's
   install temp layout and to keep the Bun install path side-effect-free.
@@ -259,8 +288,12 @@ It builds a throwaway clean-checkout fixture (the real `postinstall.cjs`, a
 peer-flagged lockfile, a `packages/` source dir, and no bundle) and shadows
 `npm` on `PATH` with a stub, then asserts that a **Bun** invocation neither
 shells out to npm nor mutates the lockfile, while an **npm** invocation still
-bootstraps and still strips the peer flags. (The test is skipped on Windows,
-where the shell stub is not portable; `test:scripts` runs on macOS in CI.)
+bootstraps and still strips the peer flags. A second fixture suite seeds a
+nested static workspace copy (mimicking Bun's hoisted linker) and asserts that
+a **Bun** invocation replaces it with a symlink to the real workspace (and that
+this is idempotent on re-run), while an **npm** invocation leaves the copy
+untouched. (The test is skipped on Windows, where the shell stub is not
+portable; `test:scripts` runs on macOS in CI.)
 
 ## TypeScript Version Parity (`overrides`)
 

@@ -215,9 +215,16 @@ describe('Auth package metadata constraints', () => {
    * @plan:PLAN-20260608-ISSUE1586.P04
    * @requirement:REQ-DEP-001.2
    */
-  it('auth package.json files field includes dist only', () => {
+  it('auth package.json files field ships dist plus TypeScript source without tests', () => {
     const pkg = readJson<PackageJson>(path.join(AUTH_DIR, 'package.json'));
-    expect(pkg.files).toStrictEqual(['dist']);
+    const files = pkg.files ?? [];
+    // The no-compile Bun run path needs the TS source shipped alongside dist.
+    expect(files).toContain('dist');
+    expect(files).toContain('index.ts');
+    expect(files).toContain('src');
+    expect(files).toContain('!**/*.test.ts');
+    expect(files).toContain('!**/*.spec.ts');
+    expect(files).toContain('!**/__tests__/**');
   });
 });
 

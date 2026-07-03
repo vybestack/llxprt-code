@@ -79,8 +79,8 @@ export function buildExtraArgs(
 
 /**
  * Compute the command and its base args, choosing the installed `llxprt`
- * binary for npm release tests and `node <entryPath>` (the dist entry, which
- * relaunches into Bun via the launcher) otherwise.
+ * binary for npm release tests and `node <entryPath>` (the checked-in launcher,
+ * which relaunches into Bun on TypeScript source) otherwise.
  */
 export function getCommandAndArgs(
   entryPath: string,

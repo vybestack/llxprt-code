@@ -170,7 +170,44 @@ export function patchMissingFinishReason(
 }
 
 /**
+ * Type guard: true when a value is a non-null object record.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Type guard: true when the hook output's llm_request actually contains a
+ * messages array (i.e., the hook intends to REPLACE the conversation
+ * contents). A hook that supplies llm_request with only model/config fields
+ * (no messages) does NOT intend to replace contents — in that case the
+ * original IContent[] must be preserved (tool calls, IDs, metadata would be
+ * destroyed by the text-only translator round-trip).
+ *
+ * Shared by both call sites (applyRequestModifications and
+ * DirectMessageProcessor._handleBeforeModelHook) to avoid drift.
+ */
+export function hookProvidedMessages(
+  beforeModelResult: BeforeModelHookOutput | undefined,
+): boolean {
+  if (!beforeModelResult) return false;
+  const hookSpecificOutput = beforeModelResult.hookSpecificOutput;
+  if (!isRecord(hookSpecificOutput)) return false;
+  const llmRequest = hookSpecificOutput['llm_request'];
+  if (!isRecord(llmRequest)) return false;
+  return Array.isArray(llmRequest['messages']);
+}
+
+/**
  * Apply LLM request modifications from a BeforeModel hook result.
+ *
+ * When the hook output contains NO llm_request field (or an llm_request with
+ * NO messages array — only model/config overrides), the ORIGINAL
+ * requestContents array is returned (reference-equal) so callers can detect
+ * "no content modification" via reference equality, and so tool calls, IDs,
+ * and metadata are preserved (the text-only hook translator round-trip would
+ * otherwise destroy them). Contents are ONLY replaced when the hook actually
+ * supplied replacement messages.
  */
 export function applyRequestModifications(
   beforeModelResult: BeforeModelHookOutput | undefined,
@@ -179,14 +216,37 @@ export function applyRequestModifications(
 ): IContent[] {
   if (!beforeModelResult) return requestContents;
 
-  const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
+  // H2: only round-trip through the translator when the hook actually
+  // supplied replacement messages. A messages-less llm_request (model/config
+  // only) must preserve the original contents reference.
+  if (!hookProvidedMessages(beforeModelResult)) {
+    return requestContents;
+  }
+
+  const target = {
     model: model || '',
     contents: ContentConverters.toGeminiContents(requestContents),
-  });
+  };
+  // hookProvidedMessages guarantees llm_request has a messages array, so
+  // applyLLMRequestModifications always returns a new object here
+  // ({...target, ...sdkRequest}); the meaningful condition is whether the
+  // merged request carries usable contents.
+  const modifiedRequest =
+    beforeModelResult.applyLLMRequestModifications(target);
   const modifiedContents = (modifiedRequest as { contents?: Content[] | null })
     .contents;
   if (modifiedContents !== undefined && modifiedContents !== null) {
-    return ContentConverters.toIContents(modifiedContents);
+    const converted = ContentConverters.toIContents(modifiedContents);
+    // Guard: if the hook supplied llm_request.messages: [] (empty array) —
+    // which converts to an empty contents array — treat it as "no
+    // modification" and return the ORIGINAL reference. An empty contents
+    // array would silently erase the entire conversation (and break the
+    // provider call); returning the original reference keeps the caller's
+    // boundary detection authoritative.
+    if (converted.length === 0) {
+      return requestContents;
+    }
+    return converted;
   }
   return requestContents;
 }

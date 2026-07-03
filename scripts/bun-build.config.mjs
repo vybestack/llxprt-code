@@ -8,10 +8,10 @@
  * Bun-based bundling for the a2a-server distributable artifact.
  * Replaces the retired `esbuild.config.js`.
  *
- * The CLI run path no longer requires a bundle — Bun executes the TypeScript
- * source directly via the S3 launcher, and the published bin is the compiled
- * `packages/cli/dist/index.js` entry. This script produces only the
- * self-contained `packages/a2a-server/dist/a2a-server.mjs` artifact.
+ * The CLI run path no longer requires a bundle or compiled JavaScript entry —
+ * the published bin is a checked-in Node launcher that re-execs Bun against the
+ * TypeScript source. This script produces only the self-contained
+ * `packages/a2a-server/dist/a2a-server.mjs` artifact.
  */
 
 import { readFileSync } from 'node:fs';

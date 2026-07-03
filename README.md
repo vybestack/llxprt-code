@@ -4,7 +4,7 @@
 </h1>
 
 [![LLxprt Code CI](https://github.com/vybestack/llxprt-code/actions/workflows/ci.yml/badge.svg)](https://github.com/vybestack/llxprt-code/actions/workflows/ci.yml)
-&nbsp;[![Discord Server](https://dcbadge.limes.pink/api/server/https://discord.gg/Wc6dZqWWYv?style=flat)](https://discord.gg/Wc6dZqWWYv)&nbsp;![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/vybestack/llxprt-code?utm_source=oss&utm_medium=github&utm_campaign=vybestack%2Fllxprt-code&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+&nbsp;[![Discord Server](https://dcbadge.limes.pink/api/server/https://discord.gg/Wc6dZqWWYv?style=flat)](https://discord.gg/Wc6dZqWWYv)&nbsp;
 
 ![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
@@ -104,7 +104,7 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 
 ### Bun Runtime and Install Fallback
 
-LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, an internal launcher (see `packages/cli/src/launcher/bun-launcher.ts`) resolves Bun and re-execs the CLI under it, executing the TypeScript (`.ts`) entry point directly. The published npm package ships a compiled `dist/` for Node.js compatibility — the `bin` entry points to `packages/cli/dist/index.js`, which in turn invokes the Bun launcher. The `dist/` output is produced by `tsc` during the package build step (`npm run build`); type checking during development uses `tsc --noEmit` separately (no JavaScript output is produced). The retired `esbuild` bundling step is no longer part of the build; only the a2a-server artifact is bundled (by `scripts/bun-build.config.mjs`).
+LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, a checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun and re-execs the CLI under it, executing the TypeScript (`.ts`) entry point directly. No compilation to JavaScript happens at install or run time, and no pre-compiled `dist/` artifact is shipped or required. Type checking during development uses `tsc --noEmit` separately (no JavaScript output is produced). The retired `bundle/llxprt.js` artifact is no longer part of the run path or release pipeline.
 
 **Bun resolution order (production launcher):**
 

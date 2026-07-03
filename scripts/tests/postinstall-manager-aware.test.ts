@@ -9,9 +9,11 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -26,9 +28,8 @@ const realDetectInstaller = join(repoRoot, 'scripts', 'detect-installer.cjs');
 const BUN_USER_AGENT = 'bun/1.3.14 npm/? node/v24.3.0 darwin arm64';
 const NPM_USER_AGENT = 'npm/11.6.2 node/v24.3.0 darwin arm64';
 
-// The npm bootstrap path shells out to `npm`. test:scripts runs on POSIX
-// (macOS) in CI; the shell-script stub below is not portable to Windows, so the
-// suite is skipped there rather than asserting on an unsupported platform.
+// These fixtures assert POSIX symlink behavior. test:scripts runs on POSIX
+// (macOS) in CI; skip on Windows rather than asserting on different link rules.
 const isWindows = process.platform === 'win32';
 
 /**
@@ -54,9 +55,9 @@ function peerFlaggedLockfile(): string {
 interface RunResult {
   status: number | null;
   stderr: string;
-  npmInvoked: boolean;
+  npmCommands: string[];
   lockfile: string;
-  bundleExists: boolean;
+  legacyBundleExists: boolean;
 }
 
 interface Fixture {
@@ -67,11 +68,179 @@ interface Fixture {
 const fixtures: string[] = [];
 
 /**
+ * Spawns the fixture's postinstall under the given user agent (npm_config_user_agent),
+ * with `npm` shadowed by `binDir`'s stub recording into `sentinel`. Shared by both
+ * fixture builders so the spawn/collect logic lives in one place.
+ */
+function spawnPostinstall(
+  dir: string,
+  userAgent: string,
+  binDir: string,
+  sentinel: string,
+): {
+  status: number | null;
+  stderr: string;
+  npmCommands: string[];
+} {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    npm_config_user_agent: userAgent,
+    PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+    NPM_SENTINEL: sentinel,
+  };
+  // Ensure the recursion guard is unset so the npm path reaches bootstrap.
+  delete env.LLXPRT_POSTINSTALL_RUNNING;
+
+  const result = spawnSync(
+    process.execPath,
+    [join(dir, 'scripts', 'postinstall.cjs')],
+    { encoding: 'utf8', env },
+  );
+  const npmCommands = existsSync(sentinel)
+    ? readFileSync(sentinel, 'utf8')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+    : [];
+
+  return {
+    status: result.status,
+    // Surface a spawn failure (result.error, e.g. ENOENT) in the message: on
+    // such a failure status is null and stderr is empty, which would otherwise
+    // assert as an opaque "expected null to be 0".
+    stderr:
+      (result.error
+        ? `spawn failed: ${result.error.message}
+`
+        : '') + (result.stderr ?? ''),
+    npmCommands,
+  };
+}
+
+/**
+ * Path to the nested static workspace copy a symlink fixture seeds under
+ * `bar/node_modules/@vybestack/foo`. Centralized so the layout is defined once.
+ */
+const staticCopyPath = (dir: string) =>
+  join(dir, 'packages', 'bar', 'node_modules', '@vybestack', 'foo');
+
+/**
+ * Builds a fixture that reproduces Bun's hoisted-linker output for workspace
+ * cross-dependencies: a real (non-symlink) static copy of one workspace
+ * package nested inside another workspace's node_modules. Used to assert that
+ * postinstall, under Bun, replaces that static copy with a symlink to the real
+ * workspace directory.
+ */
+function makeSymlinkFixture(): Fixture {
+  const dir = mkdtempSync(join(tmpdir(), 'postinstall-symlink-'));
+  fixtures.push(dir);
+
+  mkdirSync(join(dir, 'scripts'));
+  copyFileSync(realPostinstall, join(dir, 'scripts', 'postinstall.cjs'));
+  copyFileSync(
+    realDetectInstaller,
+    join(dir, 'scripts', 'detect-installer.cjs'),
+  );
+
+  // Root declares both packages as workspaces.
+  writeFileSync(
+    join(dir, 'package.json'),
+    `${JSON.stringify(
+      {
+        name: 'fixture-root',
+        version: '0.0.0',
+        workspaces: ['packages/*'],
+      },
+      null,
+      2,
+    )}
+`,
+  );
+
+  // The "real" workspace `foo`, with a marker file proving identity.
+  mkdirSync(join(dir, 'packages', 'foo'), { recursive: true });
+  writeFileSync(
+    join(dir, 'packages', 'foo', 'package.json'),
+    `${JSON.stringify({ name: '@vybestack/foo', version: '1.0.0' }, null, 2)}
+`,
+  );
+  writeFileSync(join(dir, 'packages', 'foo', 'REAL'), '');
+
+  // A consumer workspace `bar`.
+  mkdirSync(join(dir, 'packages', 'bar'), { recursive: true });
+  writeFileSync(
+    join(dir, 'packages', 'bar', 'package.json'),
+    `${JSON.stringify(
+      {
+        name: '@vybestack/bar',
+        version: '1.0.0',
+        dependencies: { '@vybestack/foo': 'file:../foo' },
+      },
+      null,
+      2,
+    )}
+`,
+  );
+
+  // Bun's hoisted linker would materialize this as a STATIC COPY (real dir),
+  // not a symlink. Seed that copy with a STALE marker so the test can prove it
+  // was replaced (the marker vanishes) rather than left in place.
+  const copyDir = join(
+    dir,
+    'packages',
+    'bar',
+    'node_modules',
+    '@vybestack',
+    'foo',
+  );
+  mkdirSync(copyDir, { recursive: true });
+  writeFileSync(join(copyDir, 'STALE'), '');
+
+  // Shadow `npm` with a recording stub so the test can assert that neither the
+  // npm nor Bun postinstall paths invoke recursive package-manager commands.
+  const binDir = join(dir, 'bin');
+  mkdirSync(binDir);
+  const sentinel = join(dir, 'npm-invoked.sentinel');
+  const npmStub = join(binDir, 'npm');
+  writeFileSync(
+    npmStub,
+    // String.raw keeps printf's literal `\n` (so printf emits a trailing
+    // newline) instead of letting JS interpret it as a line break inside the
+    // stub source.
+    String.raw`#!/bin/sh
+printf '%s\n' "$*" >> "$NPM_SENTINEL"
+exit 0
+`,
+  );
+  chmodSync(npmStub, 0o755);
+
+  return {
+    dir,
+    run(userAgent: string): RunResult {
+      return {
+        ...spawnPostinstall(dir, userAgent, binDir, sentinel),
+        lockfile: '',
+        legacyBundleExists: false,
+      };
+    },
+  };
+}
+
+afterEach(() => {
+  while (fixtures.length > 0) {
+    const dir = fixtures.pop();
+    if (dir) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+/**
  * Builds an isolated fixture that reproduces a clean GitHub-source checkout:
  * the real postinstall script, a peer-flagged lockfile, source `packages/`, and
- * NO prebuilt bundle. `npm` is shadowed on PATH by a stub that records its
- * invocation into a sentinel file, so tests can assert whether the npm
- * bootstrap ran without performing a real (networked) install.
+ * NO prebuilt build output. `npm` is shadowed on PATH by a stub that records its
+ * invocation into a sentinel file, so tests can assert that source-link hydration
+ * runs without invoking npm or compiling the TypeScript application to JavaScript.
  */
 function makeFixture(): Fixture {
   const dir = mkdtempSync(join(tmpdir(), 'postinstall-manager-'));
@@ -88,11 +257,27 @@ function makeFixture(): Fixture {
   writeFileSync(lockfilePath, peerFlaggedLockfile());
   writeFileSync(
     join(dir, 'package.json'),
-    `${JSON.stringify({ name: 'fixture-root', version: '0.0.0' }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        name: 'fixture-root',
+        version: '0.0.0',
+        workspaces: ['packages/*'],
+      },
+      null,
+      2,
+    )}\n`,
   );
 
-  // Source files present + no bundle => the GitHub-source build trigger.
+  // Source files present + no build output => source-link hydration path.
   mkdirSync(join(dir, 'packages', 'dummy'), { recursive: true });
+  writeFileSync(
+    join(dir, 'packages', 'dummy', 'package.json'),
+    `${JSON.stringify(
+      { name: '@vybestack/dummy', version: '1.0.0' },
+      null,
+      2,
+    )}\n`,
+  );
 
   const binDir = join(dir, 'bin');
   mkdirSync(binDir);
@@ -111,54 +296,21 @@ function makeFixture(): Fixture {
   return {
     dir,
     run(userAgent: string): RunResult {
-      const env: NodeJS.ProcessEnv = {
-        ...process.env,
-        npm_config_user_agent: userAgent,
-        PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
-        // The npm stub appends to this path to record that it was invoked.
-        NPM_SENTINEL: sentinel,
-      };
-      // Ensure the recursion guard is unset so the npm path reaches bootstrap.
-      delete env.LLXPRT_POSTINSTALL_RUNNING;
-
-      const result = spawnSync(
-        process.execPath,
-        [join(dir, 'scripts', 'postinstall.cjs')],
-        { encoding: 'utf8', env },
-      );
-
       return {
-        status: result.status,
-        // Surface a spawn failure (result.error, e.g. ENOENT) in the message: on
-        // such a failure status is null and stderr is empty, which would
-        // otherwise assert as an opaque "expected null to be 0".
-        stderr:
-          (result.error ? `spawn failed: ${result.error.message}\n` : '') +
-          (result.stderr ?? ''),
-        npmInvoked: existsSync(sentinel),
+        ...spawnPostinstall(dir, userAgent, binDir, sentinel),
         lockfile: readFileSync(lockfilePath, 'utf8'),
-        bundleExists: existsSync(join(dir, 'bundle', 'llxprt.js')),
+        legacyBundleExists: existsSync(join(dir, 'bundle', 'llxprt.js')),
       };
     },
   };
 }
-
-afterEach(() => {
-  while (fixtures.length > 0) {
-    const dir = fixtures.pop();
-    if (dir) {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }
-});
-
 describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
   it('does not invoke the npm bootstrap when Bun drives the install', () => {
     const result = makeFixture().run(BUN_USER_AGENT);
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.npmInvoked).toBe(false);
-    expect(result.bundleExists).toBe(false);
+    expect(result.npmCommands).toEqual([]);
+    expect(result.legacyBundleExists).toBe(false);
   });
 
   it('leaves package-lock.json untouched when Bun drives the install', () => {
@@ -171,15 +323,47 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
     expect(result.lockfile).toContain('"peer": true');
   });
 
-  it('runs the npm bootstrap when npm drives a bundle-less checkout', () => {
-    const result = makeFixture().run(NPM_USER_AGENT);
+  it('links internal workspace sources when npm drives a build-less checkout', () => {
+    const fixture = makeFixture();
+    const result = fixture.run(NPM_USER_AGENT);
+    const linkedPackage = join(
+      fixture.dir,
+      'node_modules',
+      '@vybestack',
+      'dummy',
+    );
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.npmInvoked).toBe(true);
-    // The stub npm cannot produce a real bundle, so it must stay absent.
-    // Asserting this keeps the test's expectations explicit and prevents a
-    // silent regression if someone later expects the bundle to exist here.
-    expect(result.bundleExists).toBe(false);
+    expect(result.npmCommands).toEqual([]);
+    expect(lstatSync(linkedPackage).isSymbolicLink()).toBe(true);
+    expect(realpathSync(linkedPackage)).toBe(
+      realpathSync(join(fixture.dir, 'packages', 'dummy')),
+    );
+    // The retired bundle artifact must stay absent. Asserting this keeps the
+    // test's expectations explicit and prevents a silent regression if
+    // someone later expects the bundle to exist here.
+    expect(result.legacyBundleExists).toBe(false);
+  });
+
+  it('does not compile TypeScript to JavaScript during npm postinstall', () => {
+    const fixture = makeFixture();
+    writeFileSync(
+      join(fixture.dir, 'packages', 'dummy', 'index.ts'),
+      'export const marker = true;\n',
+    );
+
+    const result = fixture.run(NPM_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.npmCommands).toEqual([]);
+    // The no-compile install path must not emit any build output next to the
+    // TypeScript source it hydrates.
+    expect(existsSync(join(fixture.dir, 'packages', 'dummy', 'dist'))).toBe(
+      false,
+    );
+    expect(existsSync(join(fixture.dir, 'packages', 'dummy', 'index.js'))).toBe(
+      false,
+    );
   });
 
   it('strips unsupported peer flags from package-lock.json under npm', () => {
@@ -197,26 +381,8 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
     ).toBeUndefined();
   });
 
-  it('rebuilds when only the bin entry is present (partial pack)', () => {
+  it('does not treat existing dist output as an install prerequisite', () => {
     const fixture = makeFixture();
-    // Simulate npm force-including just the `bin` target (dist/index.js) in a
-    // packed install, without the launcher module that entry imports. The
-    // dual-file hasBuild check must treat this as incomplete and bootstrap.
-    mkdirSync(join(fixture.dir, 'packages', 'cli', 'dist'), {
-      recursive: true,
-    });
-    writeFileSync(join(fixture.dir, 'packages', 'cli', 'dist', 'index.js'), '');
-
-    const result = fixture.run(NPM_USER_AGENT);
-
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.npmInvoked).toBe(true);
-  });
-
-  it('skips the bootstrap when the build is complete (entry + launcher)', () => {
-    const fixture = makeFixture();
-    // A complete build has both the entry and its sibling launcher module, so
-    // hasBuild is true and the npm bootstrap must be skipped entirely.
     const distDir = join(fixture.dir, 'packages', 'cli', 'dist');
     mkdirSync(join(distDir, 'src', 'launcher'), { recursive: true });
     writeFileSync(join(distDir, 'index.js'), '');
@@ -225,6 +391,63 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
     const result = fixture.run(NPM_USER_AGENT);
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.npmInvoked).toBe(false);
+    expect(result.npmCommands).toEqual([]);
+  });
+});
+
+describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
+  it('replaces a static workspace copy with a symlink under Bun', () => {
+    const fixture = makeSymlinkFixture();
+    const copyPath = staticCopyPath(fixture.dir);
+
+    // Sanity: the fixture seeded a real directory (the static copy), not a link.
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(false);
+
+    const result = fixture.run(BUN_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    // The static copy was replaced with a symlink...
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(true);
+    // ...pointing at the real workspace directory.
+    expect(realpathSync(copyPath)).toBe(
+      realpathSync(join(fixture.dir, 'packages', 'foo')),
+    );
+    // The stale copy's marker is gone, and the real workspace's marker is now
+    // reachable through the link.
+    expect(existsSync(join(copyPath, 'STALE'))).toBe(false);
+    expect(existsSync(join(copyPath, 'REAL'))).toBe(true);
+  });
+
+  it('is idempotent: re-running under Bun leaves the symlink intact', () => {
+    const fixture = makeSymlinkFixture();
+
+    fixture.run(BUN_USER_AGENT);
+    const copyPath = staticCopyPath(fixture.dir);
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(true);
+
+    // A second run must not error and must leave the symlink in place.
+    const result = fixture.run(BUN_USER_AGENT);
+    expect(result.status, result.stderr).toBe(0);
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(copyPath, 'REAL'))).toBe(true);
+  });
+
+  it('does not replace nested Bun static copies under npm', () => {
+    const fixture = makeSymlinkFixture();
+    const copyPath = staticCopyPath(fixture.dir);
+
+    // Under npm, postinstall only creates top-level internal workspace links for
+    // source resolution. The Bun-only nested-copy repair must not run.
+    const result = fixture.run(NPM_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.npmCommands).toEqual([]);
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(false);
+    expect(existsSync(join(copyPath, 'STALE'))).toBe(true);
+    expect(
+      lstatSync(
+        join(fixture.dir, 'node_modules', '@vybestack', 'foo'),
+      ).isSymbolicLink(),
+    ).toBe(true);
   });
 });

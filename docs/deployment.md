@@ -119,11 +119,11 @@ These packages are used when performing the standard installation and when runni
 
 **Build and packaging processes**
 
-LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's run path uses the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`) to execute the TypeScript (`.ts`) entry point directly. Type checking uses `tsc --noEmit` (no JavaScript output is produced). The published npm package ships `dist/` (produced by `tsc` during the build) for Node.js compatibility — the `bin` entry points to `packages/cli/dist/index.js`, which invokes the Bun launcher. The retired `esbuild` bundling step is no longer part of the build; only the a2a-server artifact is bundled (by `scripts/bun-build.config.mjs`). This applies to both distribution channels:
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. The published npm package ships TypeScript source (`.ts`) and a checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) as its `bin` entry. When you run `llxprt`, the launcher resolves Bun and executes the `.ts` entry point directly — no compilation to JavaScript happens at install or run time, and no pre-compiled `dist/` artifact is shipped or required. Type checking during development uses `tsc --noEmit` (no JavaScript output is produced). The retired `bundle/llxprt.js` artifact is no longer produced. This applies to both distribution channels:
 
-- **NPM publication:** The published NPM package ships `dist/` (produced by `tsc`) for Node.js compatibility. The `bin` entry (`packages/cli/dist/index.js`) invokes the Bun launcher to execute the `.ts` source at runtime. `tsc --noEmit` is used for type-checking during development.
+- **NPM publication:** The published NPM package ships `.ts` source and the checked-in launcher (`bin/llxprt.cjs`). The Bun launcher executes the `.ts` source directly at run time. `tsc --noEmit` is used for type-checking during development.
 
-- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, the `postinstall` script builds `dist/` via `tsc`. The `bin` entry (`packages/cli/dist/index.js`) then invokes the Bun launcher to execute the `.ts` source directly.
+- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, the postinstall bootstrap resolves Bun, and the launcher executes the `.ts` source directly. No build step is required.
 
 Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 
@@ -139,6 +139,6 @@ docker run --rm -it ghcr.io/vybestack/llxprt-code/sandbox:0.7.0
 
 The release process is automated through GitHub Actions. The release workflow performs the following actions:
 
-1.  Build the NPM packages (TypeScript compiled to `dist/` by `tsc`).
+1.  Validate type-checking and tests (`tsc --noEmit`, vitest); no compilation to `dist/` is required — the Bun launcher runs `.ts` source directly.
 2.  Publish the NPM packages to the artifact registry.
 3.  Create GitHub releases with bundled assets.

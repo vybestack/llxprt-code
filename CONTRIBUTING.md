@@ -99,11 +99,14 @@ This section guides contributors on how to build, modify, and understand the dev
 
 **Prerequisites:**
 
-1.  **Bun**: Install [Bun](https://bun.sh) (version pinned in [`.bun-version`](./.bun-version), currently `1.3.14`). Bun is the runtime for the CLI run path and the package manager for development. Node.js `>=24` (pinned in `.nvmrc`) remains the compatibility target for invocation — the npm/npx/Homebrew install flows still work — but the development workflow uses Bun directly. See [dev-docs/bun.md](./dev-docs/bun.md) for details on the dual-lockfile policy and Bun-specific configuration.
+1.  **Node.js**:
+    - **Development:** Please use the Node.js version pinned in `.nvmrc` (currently Node.js 24). You can use a tool like [nvm](https://github.com/nvm-sh/nvm) to manage Node.js versions (`nvm use`).
+    - **Production:** For running the CLI in a production environment, any version of Node.js `>=24` is acceptable.
+2.  **Bun**: Install [Bun](https://bun.sh) (version pinned in [`.bun-version`](./.bun-version), currently `1.3.14`). Bun is the runtime for the CLI run path and the package manager for development. The npm/npx/Homebrew install flows still work, but the development workflow uses Bun directly. See [dev-docs/bun.md](./dev-docs/bun.md) for details on the dual-lockfile policy and Bun-specific configuration.
 
     > **Note:** The root `package.json` still declares `packageManager: npm@11.6.2`, and several root scripts (`presubmit`, `preflight`, `build:all`) chain to `npm run ...` internally. During the migration transition, `bun run presubmit` delegates to npm internally. This will be reconciled in a later subissue.
 
-2.  **Git**
+3.  **Git**
 
 ### Build Process
 
@@ -126,7 +129,7 @@ To build the entire project (all packages):
 bun run build
 ```
 
-TypeScript source (`.ts`) is compiled to `dist/` by `tsc` during `bun run build`. The CLI's run path uses the [Bun](https://bun.sh) runtime — the `bin` entry (`packages/cli/dist/index.js`) invokes the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`), which executes the `.ts` entry point directly. Type checking uses `tsc --noEmit` (no JavaScript output is produced). The published npm package ships `dist/` for Node.js compatibility. The retired `esbuild` bundling step is no longer part of the build; only the a2a-server artifact is bundled (by `scripts/bun-build.config.mjs`). Refer to `scripts/build.js`, `scripts/build_package.js`, and `package.json` scripts for more details on what happens during the build.
+TypeScript source (`.ts`) is shipped directly — the published npm package ships `.ts` sources and a checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), not a pre-compiled `dist/`. The CLI's run path uses the [Bun](https://bun.sh) runtime to execute the `.ts` entry point directly — no compilation step is needed for the CLI to run. Type checking uses `tsc --noEmit` (no JavaScript output is produced). The retired `bundle/llxprt.js` artifact is no longer produced. Refer to `scripts/build.js`, `scripts/build_package.js`, and `package.json` scripts for more details on what happens during the build.
 
 ### Enabling Sandboxing
 
@@ -142,13 +145,13 @@ To skip building the sandbox container, you can use `bun run build` instead.
 
 ### Running
 
-To start LLxprt Code from the source code (after building), run the following command from the root directory:
+To start LLxprt Code from the source code, run the following command from the root directory (no build step is required — the launcher runs Bun on the TypeScript sources directly):
 
 ```bash
 bun run start
 ```
 
-Alternatively, the dev launcher (`scripts/start.js`) starts the CLI under Node (spawning `node` against `packages/cli`) and imports compiled `dist/` artifacts — it does **not** resolve Bun using the production launcher logic. In debug mode (`DEBUG=1`), the dev launcher sets `LLXPRT_CODE_NO_RELAUNCH='true'`, which disables the production Bun relaunch so the CLI runs under Node with the inspector attached:
+Alternatively, the dev launcher (`scripts/start.js`) spawns the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), which resolves Bun and re-execs the CLI under it to execute the TypeScript (`.ts`) entry point directly. In debug mode (`DEBUG=1`), the dev launcher sets `LLXPRT_CODE_NO_RELAUNCH='true'`, which disables the production Bun relaunch so the CLI runs under Node with the inspector attached:
 
 ```bash
 node scripts/start.js
@@ -283,7 +286,7 @@ DEBUG=1 llxprt
 
 **Note:** If you have `DEBUG=true` in a project's `.env` file, it won't affect llxprt-code due to automatic exclusion. Use `.llxprt/.env` files for llxprt-code specific debug settings.
 
-**Note:** Debugging via the dev launcher (`scripts/start.js`) runs the CLI under Node against the compiled `dist/` artifacts — the dev launcher imports from `packages/cli/dist/src/config/profileBootstrap.js` and does not use the production Bun launcher. The production run path (the `llxprt` binary or `bun run start`) uses the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`) to execute the `.ts` source directly.
+**Note:** In debug mode (`DEBUG=1`), the dev launcher sets `LLXPRT_CODE_NO_RELAUNCH='true'`, which disables the Bun relaunch so the CLI runs under Node with the inspector attached (Node 24+ native TypeScript support is used). The production run path (the `llxprt` binary or `bun run start`) uses the Bun launcher to execute the `.ts` source directly.
 
 ### React DevTools
 
@@ -338,5 +341,10 @@ bun run clean
 bun install
 bun run auth
 bun run prerelease:dev
-npm publish --workspaces
+for package_dir in packages/*; do
+  if [ -f "${package_dir}/package.json" ] && \
+    [ "$(node -p "require('./${package_dir}/package.json').private === true ? 'true' : 'false'")" != "true" ]; then
+    (cd "${package_dir}" && bun publish)
+  fi
+done
 ```

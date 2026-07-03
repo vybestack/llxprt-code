@@ -56,6 +56,11 @@ const EXACT_LIMITS: Record<string, TokenCount> = {
   // /set or a profile (context-limit).
   'claude-sonnet-5': 200_000,
   'claude-sonnet-5-latest': 200_000,
+  // Claude Fable 5 defaults to the Claude Code / subscription 200K context
+  // window. The advertised 1M window is API-only and plan-gated; override via
+  // /set or a profile (context-limit). Mirrors getContextWindowForModel.
+  'claude-fable-5': 200_000,
+  'claude-fable-5-latest': 200_000,
   'claude-3-7-opus-20250115': 300_000,
   'claude-3-7-sonnet-20250115': 300_000,
   'claude-3-opus-20240229': 200_000,
@@ -137,6 +142,12 @@ export function tokenLimit(
   // subscription-safe 200K default as the bare alias and -latest. Mirrors
   // getContextWindowForModel in the anthropic package.
   if (modelWithoutPrefix.toLowerCase().includes('claude-sonnet-5')) {
+    return 200_000;
+  }
+
+  // Claude Fable 5 dated snapshot variants (e.g. claude-fable-5-YYYYMMDD)
+  // resolve to the same subscription-safe 200K default.
+  if (modelWithoutPrefix.toLowerCase().includes('claude-fable-5')) {
     return 200_000;
   }
 

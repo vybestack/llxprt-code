@@ -1,12 +1,10 @@
-#!/usr/bin/env -S node --no-deprecation
+#!/usr/bin/env -S bun
 
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-// Note: Using --no-deprecation in shebang to suppress deprecation warnings from dependencies
 
 import { FatalError, writeToStderr } from '@vybestack/llxprt-code-core';
 import { runBunLauncherIfNeeded } from './src/launcher/bun-launcher.js';

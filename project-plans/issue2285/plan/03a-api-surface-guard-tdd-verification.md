@@ -79,7 +79,7 @@ grep -rq "AgenticLoop" packages/agents/src/api/__tests__/apiSurfaceParser.mjs pa
 
 # Build-order guarantee via STANDALONE script (revision 3 finding 3 — config/script proof, finding 17)
 test -f scripts/check-agents-api-surface.mjs
-node -e "const p=require('./package.json'); if(!(p.scripts&&p.scripts['lint:agents-api-surface'])) { console.error('FAIL: lint:agents-api-surface not in package.json'); process.exit(1); }" 
+node -e "const p=require('./package.json'); if(!(p.scripts&&p.scripts['lint:agents-api-surface'])) { console.error('FAIL: lint:agents-api-surface not in package.json'); process.exit(1); }"
 # Revision 4 architect findings 1, 8: verify CI workflow enforcement (NOT just package.json).
 # Revision 6 architect finding 7 + architect review finding 3: CI job placement
 # is mechanism-conditional AND must be JOB-SCOPED (not a loose "appears
