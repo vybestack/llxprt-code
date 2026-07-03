@@ -21,7 +21,7 @@ import type {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   shouldRetryCompressionError,
-  isTransientCompressionError,
+  isFallbackEligibleCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   getCompressionStrategy,
@@ -768,13 +768,15 @@ export class CompressionHandler {
       primaryError = err;
     }
 
-    // Permanent errors are rethrown immediately — no fallback
-    if (!isTransientCompressionError(primaryError)) {
+    // Permanent errors that are not fallback-eligible are rethrown immediately.
+    // Transient errors (already retried) and EmptySummaryError fall back to
+    // truncation instead of aborting the turn. (Issue #2333)
+    if (!isFallbackEligibleCompressionError(primaryError)) {
       throw primaryError;
     }
 
     this.logger.warn(
-      'Primary compression strategy failed after retries (transient), attempting fallback',
+      'Primary compression strategy failed after retries, attempting fallback truncation',
       primaryError,
     );
     return this.performFallbackCompression(context, primaryError, applyResult);

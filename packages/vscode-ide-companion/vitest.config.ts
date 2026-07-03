@@ -50,7 +50,7 @@ export default defineConfig({
   test: {
     server: {
       deps: {
-        inline: ['@vybestack/llxprt-code-core', 'ajv', 'fdir'],
+        inline: ['@vybestack/llxprt-code-ide-integration', 'ajv', 'fdir'],
       },
     },
   },

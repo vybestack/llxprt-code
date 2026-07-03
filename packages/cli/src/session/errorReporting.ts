@@ -1,11 +1,11 @@
 import {
   type Config,
   parseAndFormatApiError,
-  debugLogger,
   OutputFormat,
   JsonFormatter,
   StreamJsonFormatter,
   JsonStreamEventType,
+  writeToStderr,
 } from '@vybestack/llxprt-code-core';
 
 export function formatNonInteractiveError(error: unknown): string {
@@ -38,10 +38,9 @@ function normalizeErrorForJson(error: unknown): Error {
 }
 
 /**
- * Format and report a non-interactive error to the appropriate output stream
- * (JSON formatter when JSON output is configured, otherwise the debug logger).
- * Extracted so both the auth-validation catch and the run-phase catch share a
- * single error-reporting path.
+ * Format and report a non-interactive error to stderr, using JSON formatters
+ * when JSON output is configured. Extracted so both the auth-validation catch
+ * and the run-phase catch share a single error-reporting path.
  */
 export function reportNonInteractiveError(
   config: Config,
@@ -56,10 +55,10 @@ export function reportNonInteractiveError(
     // not a process exit status. Hardcoding 1 would conflate exit status with
     // an error code in the JSON envelope. The trailing newline is explicit so
     // the output is unambiguous newline-delimited JSON.
-    process.stderr.write(`${formatter.formatError(normalizedError)}\n`);
+    writeToStderr(`${formatter.formatError(normalizedError)}\n`);
   } else if (outputFormat === OutputFormat.STREAM_JSON) {
     const streamFormatter = new StreamJsonFormatter();
-    process.stderr.write(
+    writeToStderr(
       streamFormatter.formatEvent({
         type: JsonStreamEventType.ERROR,
         timestamp: new Date().toISOString(),
@@ -69,6 +68,6 @@ export function reportNonInteractiveError(
     );
   } else {
     const printableError = formatNonInteractiveError(error);
-    debugLogger.error(`Non-interactive run failed: ${printableError}`);
+    writeToStderr(`Non-interactive run failed: ${printableError}\n`);
   }
 }

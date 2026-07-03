@@ -38,7 +38,7 @@ const root = join(__dirname, '..');
 const pkg = JSON.parse(
   readFileSync(join(root, 'package.json'), 'utf-8'),
 ) as PackageJson;
-const bootstrapSnapshot = parseBootstrapArgs();
+parseBootstrapArgs();
 
 /**
  * Prepare NODE_OPTIONS for child processes in DEV mode.
@@ -216,8 +216,8 @@ if (experimentalUi) {
     process.exit(code ?? 1);
   });
 } else {
-  // Standard CLI path
-  nodeArgs.push('./packages/cli');
+  // Standard CLI path: checked-in Node launcher re-execs Bun on TypeScript source.
+  nodeArgs.push('./packages/cli/bin/llxprt.cjs');
   nodeArgs.push(...args);
 
   const env: NodeJS.ProcessEnv = {
@@ -231,19 +231,6 @@ if (experimentalUi) {
     env.LLXPRT_DEBUG_SESSION_ID = `${process.pid}`;
   }
 
-  if (bootstrapSnapshot.bootstrapArgs.profileName) {
-    env.LLXPRT_BOOTSTRAP_PROFILE = bootstrapSnapshot.bootstrapArgs.profileName;
-  }
-  if (bootstrapSnapshot.bootstrapArgs.providerOverride) {
-    env.LLXPRT_BOOTSTRAP_PROVIDER =
-      bootstrapSnapshot.bootstrapArgs.providerOverride;
-  }
-
-  if (isInDebugMode) {
-    // If this is not set, the debugger will pause on the outer process rather
-    // than the relaunched process making it harder to debug.
-    env.LLXPRT_CODE_NO_RELAUNCH = 'true';
-  }
   const child = spawn('node', nodeArgs, { stdio: 'inherit', env });
 
   child.on('error', (error) => {

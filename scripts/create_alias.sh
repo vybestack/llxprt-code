@@ -78,7 +78,10 @@ if [[ -f "${CONFIG_FILE}" ]] && grep -Eq '^[[:space:]]*alias[[:space:]]+llxprt='
     exit 0
 fi
 
-read -p "Do you want to proceed? (y/n) " -n 1 -r || REPLY=""
+REPLY=""
+if ! read -p "Do you want to proceed? (y/n) " -n 1 -r; then
+    REPLY=""
+fi
 echo ""
 if [[ "${REPLY}" =~ ^[Yy]$ ]]; then
     if [[ -f "${CONFIG_FILE}" ]]; then

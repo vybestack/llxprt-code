@@ -10,7 +10,7 @@ These tests are located in the `integration-tests` directory and are run using a
 
 ## Building the tests
 
-Prior to running any integration tests, you need to build the CLI that you want to actually test:
+Prior to running any integration tests, build the CLI entry that the tests execute:
 
 ```bash
 npm run build

@@ -78,6 +78,9 @@ export interface ContentMetadata {
 
   /** Finish reason from OpenAI-style providers (e.g., stop, length, tool_calls) */
   finishReason?: string;
+
+  /** Reason the response was incomplete (e.g., max_output_tokens) */
+  incompleteReason?: string;
 }
 
 export interface UsageStats {
@@ -296,5 +299,43 @@ export function createToolResponse(
   return {
     speaker: 'tool',
     blocks: [block],
+  };
+}
+
+/**
+ * Stamp the originating model onto a freshly generated AI turn's metadata.
+ *
+ * This MUST only be called at generation-recording boundaries (where an AI
+ * turn that was JUST produced by the model is converted to IContent). It must
+ * NOT be applied to imported, restored, or rebuilt history, whose true origin
+ * model may differ from the current session model. Leaving such turns unstamped
+ * lets downstream consumers (e.g. the Anthropic cross-model thinking strip)
+ * treat them as unknown and leave them untouched.
+ *
+ * The function is pure: it returns the input unchanged when:
+ *  - the speaker is not 'ai',
+ *  - `model` is undefined or empty, or
+ *  - `metadata.model` is already set (never overwrite a known origin).
+ * Otherwise it returns a shallow copy with the model merged into metadata
+ * without mutating the caller's object.
+ *
+ * @issue #2335
+ */
+export function stampAiTurnModel(
+  content: IContent,
+  model: string | undefined,
+): IContent {
+  if (
+    content.speaker !== 'ai' ||
+    model === undefined ||
+    model.length === 0 ||
+    content.metadata?.model
+  ) {
+    return content;
+  }
+
+  return {
+    ...content,
+    metadata: { ...content.metadata, model },
   };
 }

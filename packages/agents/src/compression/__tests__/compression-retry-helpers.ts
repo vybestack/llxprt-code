@@ -14,6 +14,12 @@
  */
 
 import { vi } from 'vitest';
+import {
+  EmptySummaryError,
+  type CompressionContext,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
 import type { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -151,4 +157,74 @@ export function makeChatSession(
   };
 
   return new ChatSession(view, mockContentGenerator, {}, []);
+}
+
+// ---------------------------------------------------------------------------
+// Strategy factory mocks
+// ---------------------------------------------------------------------------
+
+/**
+ * Installs a `vi.spyOn` mock on {@link compressionFactory.getCompressionStrategy}
+ * that returns a deterministic primary (middle-out) strategy throwing
+ * {@link EmptySummaryError} and a non-LLM top-down-truncation fallback
+ * strategy that succeeds. This is the shared mock for the two Issue #2333
+ * tests (performCompression and ensureCompressionBeforeSend).
+ *
+ * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+ * @requirement REQ-CR-004
+ */
+export function mockStrategyFactoryWithEmptySummaryFallback(): {
+  getFallbackCalled: () => boolean;
+  getPrimaryCallCount: () => number;
+  restore: () => void;
+} {
+  let fallbackCalled = false;
+  let primaryCallCount = 0;
+
+  const spy = vi
+    .spyOn(compressionFactory, 'getCompressionStrategy')
+    .mockImplementation((name) => {
+      if (name === 'top-down-truncation') {
+        return {
+          name: 'top-down-truncation' as const,
+          requiresLLM: false,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi
+            .fn()
+            .mockImplementation(async (context: CompressionContext) => {
+              fallbackCalled = true;
+              const newHistory: IContent[] = [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: 'mock truncated summary' }],
+                },
+              ];
+              return {
+                newHistory,
+                metadata: {
+                  originalMessageCount: context.history.length,
+                  compressedMessageCount: newHistory.length,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              };
+            }),
+        };
+      }
+      return {
+        name: 'middle-out' as const,
+        requiresLLM: true,
+        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+        compress: vi.fn().mockImplementation(async () => {
+          primaryCallCount++;
+          throw new EmptySummaryError('middle-out');
+        }),
+      };
+    });
+
+  return {
+    getFallbackCalled: () => fallbackCalled,
+    getPrimaryCallCount: () => primaryCallCount,
+    restore: () => spy.mockRestore(),
+  };
 }

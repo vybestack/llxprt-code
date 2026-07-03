@@ -67,15 +67,14 @@ export {
 } from './util.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Entry is the published CLI dist build (packages/cli/dist/index.js): under Node
-// the bun launcher re-execs into Bun, so this exercises the real runtime path
-// instead of a standalone esbuild/bun bundle artifact.
+// Entry is the checked-in Node launcher: it re-execs Bun against TypeScript
+// source, so integration tests exercise the no-compile runtime path.
 const CLI_ENTRY_PATH = join(
   __dirname,
   '..',
   '..',
   '..',
-  'packages/cli/dist/index.js',
+  'packages/cli/bin/llxprt.cjs',
 );
 
 interface RunMethodOptions {
@@ -156,8 +155,8 @@ export class TestRig {
 
   /**
    * The command and args to use to invoke LLxprt CLI. Allows switching between
-   * the dist entry (run under Node, relaunching into Bun via the launcher) and
-   * the installed 'llxprt' binary.
+   * the checked-in Node launcher (which re-execs Bun on the TypeScript source)
+   * and the installed 'llxprt' binary.
    */
   private _getCommandAndArgs(extraInitialArgs: string[] = []): {
     command: string;

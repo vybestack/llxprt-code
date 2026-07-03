@@ -13,46 +13,57 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
       "import": "./dist/index.js"
     },
     "./config/storage.js": {
       "types": "./dist/src/config/storage.d.ts",
+      "bun": "./src/config/storage.ts",
       "import": "./dist/src/config/storage.js"
     },
     "./services/fileSystemService.js": {
       "types": "./dist/src/services/fileSystemService.d.ts",
+      "bun": "./src/services/fileSystemService.ts",
       "import": "./dist/src/services/fileSystemService.js"
     },
     "./services/fileDiscoveryService.js": {
       "types": "./dist/src/services/fileDiscoveryService.d.ts",
+      "bun": "./src/services/fileDiscoveryService.ts",
       "import": "./dist/src/services/fileDiscoveryService.js"
     },
     "./utils/gitIgnoreParser.js": {
       "types": "./dist/src/utils/gitIgnoreParser.d.ts",
+      "bun": "./src/utils/gitIgnoreParser.ts",
       "import": "./dist/src/utils/gitIgnoreParser.js"
     },
     "./storage/secure-store.js": {
       "types": "./dist/src/secure-store/secure-store.d.ts",
+      "bun": "./src/secure-store/secure-store.ts",
       "import": "./dist/src/secure-store/secure-store.js"
     },
     "./storage/provider-key-storage.js": {
       "types": "./dist/src/secure-store/provider-key-storage.d.ts",
+      "bun": "./src/secure-store/provider-key-storage.ts",
       "import": "./dist/src/secure-store/provider-key-storage.js"
     },
     "./storage/envelope-codec.js": {
       "types": "./dist/src/secure-store/envelope-codec.d.ts",
+      "bun": "./src/secure-store/envelope-codec.ts",
       "import": "./dist/src/secure-store/envelope-codec.js"
     },
     "./storage/sessionTypes.js": {
       "types": "./dist/src/session/sessionTypes.d.ts",
+      "bun": "./src/session/sessionTypes.ts",
       "import": "./dist/src/session/sessionTypes.js"
     },
     "./storage/ConversationFileWriter.js": {
       "types": "./dist/src/conversation/ConversationFileWriter.d.ts",
+      "bun": "./src/conversation/ConversationFileWriter.ts",
       "import": "./dist/src/conversation/ConversationFileWriter.js"
     },
     "./testing": {
       "types": "./dist/src/testing.d.ts",
+      "bun": "./src/testing.ts",
       "import": "./dist/src/testing.js"
     }
   },
@@ -65,6 +76,14 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
     "dist"
   ],
   "dependencies": {

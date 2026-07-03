@@ -8,15 +8,15 @@
     "url": "git+https://github.com/vybestack/llxprt-code.git"
   },
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "index.ts",
+  "types": "index.ts",
   "bin": {
-    "llxprt": "dist/index.js"
+    "llxprt": "bin/llxprt.cjs"
   },
   "scripts": {
     "build": "bun ../../scripts/build_package.ts && bun ../../scripts/chmod_executable.ts dist/index.js",
-    "start": "node dist/index.js",
-    "debug": "node --inspect-brk dist/index.js",
+    "start": "bun index.ts",
+    "debug": "bun --inspect-brk index.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
@@ -29,9 +29,11 @@
     "prepack": "npm run build"
   },
   "files": [
-    "dist",
-    "src",
+    "bin",
     "index.ts",
+    "src",
+    "README.md",
+    "LICENSE",
     "!**/*.test.ts",
     "!**/*.test.tsx",
     "!**/*.spec.ts",
@@ -50,7 +52,6 @@
     "@google/genai": "1.30.0",
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.25.2",
-    "@types/update-notifier": "^6.0.8",
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
@@ -110,6 +111,7 @@
     "@types/semver": "^7.7.0",
     "@types/shell-quote": "^1.7.5",
     "@types/tar": "^6.1.13",
+    "@types/update-notifier": "^6.0.8",
     "@types/yargs": "^17.0.33",
     "@vybestack/llxprt-code-test-utils": "file:../test-utils",
     "archiver": "^7.0.1",

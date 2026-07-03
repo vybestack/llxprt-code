@@ -16,6 +16,12 @@ import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 
 const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
 
+interface ResponsesApiError {
+  message?: string;
+  type?: string;
+  code?: string;
+}
+
 // Types for Responses API events
 interface ResponsesEvent {
   type: string;
@@ -38,11 +44,17 @@ interface ResponsesEvent {
   };
   item_id?: string;
   arguments?: string;
+  /** Top-level error payload (for `error` event type). */
+  error?: ResponsesApiError;
   response?: {
     id: string;
     object: string;
     model: string;
     status: string;
+    /** Error payload for `response.failed` events. */
+    error?: ResponsesApiError;
+    /** Reason metadata for `response.incomplete` events. */
+    incomplete_details?: { reason?: string };
     usage?: {
       input_tokens: number;
       output_tokens: number;
@@ -345,7 +357,24 @@ function* handleFunctionCallDone(
 }
 
 /**
- * Handle response.completed / response.done events.
+ * Build a stream-interruption error for terminal `response.failed`
+ * or top-level `error` events. Uses createStreamInterruptionError so the error
+ * is classified as transient/retryable (server-side failures should be retried).
+ * Callers are responsible for throwing the returned Error.
+ */
+function createTerminalStreamError(
+  errorPayload: ResponsesApiError | undefined,
+  responseStatus?: string | number,
+): Error {
+  const message = errorPayload?.message ?? 'OpenAI Responses API stream failed';
+  return createStreamInterruptionError(message, {
+    providerError: errorPayload,
+    responseStatus,
+  });
+}
+
+/**
+ * Handle response.completed / response.done / response.incomplete events.
  */
 function* handleResponseCompleted(
   event: ResponsesEvent,
@@ -396,6 +425,20 @@ function* handleResponseCompleted(
 
   // Usage data
   const terminalReason = event.response?.status ?? 'completed';
+  const incompleteReason =
+    terminalReason === 'incomplete'
+      ? event.response?.incomplete_details?.reason
+      : undefined;
+
+  // Defensive: some implementations send failure via response.completed with
+  // status "failed" rather than a standalone response.failed event.
+  if (terminalReason === 'failed') {
+    throw createTerminalStreamError(
+      event.response?.error,
+      event.response?.status,
+    );
+  }
+
   if (event.response?.usage) {
     yield {
       speaker: 'ai',
@@ -410,6 +453,7 @@ function* handleResponseCompleted(
         },
         stopReason: mapFinishReasonToStopReason(terminalReason),
         finishReason: terminalReason,
+        ...(incompleteReason ? { incompleteReason } : {}),
       },
     };
   }
@@ -604,6 +648,7 @@ function* dispatchEventCases(
       break;
     case 'response.completed':
     case 'response.done':
+    case 'response.incomplete':
       state = yield* handleCompletedEvent(
         event,
         state,
@@ -611,6 +656,13 @@ function* dispatchEventCases(
         emittedThoughts,
       );
       break;
+    case 'response.failed':
+      throw createTerminalStreamError(
+        event.response?.error ?? event.error,
+        event.response?.status,
+      );
+    case 'error':
+      throw createTerminalStreamError(event.error);
     default:
       break;
   }

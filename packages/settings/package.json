@@ -13,30 +13,37 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
       "import": "./dist/index.js"
     },
     "./settings/SettingsService.js": {
       "types": "./dist/src/settings/SettingsService.d.ts",
+      "bun": "./src/settings/SettingsService.ts",
       "import": "./dist/src/settings/SettingsService.js"
     },
     "./settings/settingsServiceInstance.js": {
       "types": "./dist/src/settings/settingsServiceInstance.d.ts",
+      "bun": "./src/settings/settingsServiceInstance.ts",
       "import": "./dist/src/settings/settingsServiceInstance.js"
     },
     "./settings/settingsRegistry.js": {
       "types": "./dist/src/settings/settingsRegistry.d.ts",
+      "bun": "./src/settings/settingsRegistry.ts",
       "import": "./dist/src/settings/settingsRegistry.js"
     },
     "./profiles/ProfileManager.js": {
       "types": "./dist/src/profiles/ProfileManager.d.ts",
+      "bun": "./src/profiles/ProfileManager.ts",
       "import": "./dist/src/profiles/ProfileManager.js"
     },
     "./profiles/types.js": {
       "types": "./dist/src/profiles/types.d.ts",
+      "bun": "./src/profiles/types.ts",
       "import": "./dist/src/profiles/types.js"
     },
     "./storage/Storage.js": {
       "types": "./dist/src/storage/Storage.d.ts",
+      "bun": "./src/storage/Storage.ts",
       "import": "./dist/src/storage/Storage.js"
     }
   },
@@ -49,6 +56,14 @@
     "format": "prettier --write ."
   },
   "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
     "dist"
   ],
   "dependencies": {

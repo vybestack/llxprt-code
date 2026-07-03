@@ -216,12 +216,12 @@ describe('resolveStartArgsForTmux', () => {
       resolveStartArgsForTmux([
         'node',
         'scripts/start.ts',
-        'NODE_OPTIONS= ${node} packages/cli/dist/index.js',
+        'NODE_OPTIONS= ${node} packages/cli/bin/llxprt.cjs',
       ]),
     ).toEqual([
       TEST_NODE_EXECUTABLE,
       'scripts/start.ts',
-      `NODE_OPTIONS= ${TEST_NODE_EXECUTABLE} packages/cli/dist/index.js`,
+      `NODE_OPTIONS= ${TEST_NODE_EXECUTABLE} packages/cli/bin/llxprt.cjs`,
     ]);
   });
 
@@ -234,12 +234,12 @@ describe('resolveStartArgsForTmux', () => {
       resolveStartArgsForTmux([
         'bun',
         'scripts/start.ts',
-        '${bun} packages/cli/dist/index.js',
+        '${bun} packages/cli/bin/llxprt.cjs',
       ]),
     ).toEqual([
       TEST_BUN_EXECUTABLE,
       'scripts/start.ts',
-      `${TEST_BUN_EXECUTABLE} packages/cli/dist/index.js`,
+      `${TEST_BUN_EXECUTABLE} packages/cli/bin/llxprt.cjs`,
     ]);
   });
 
@@ -268,9 +268,9 @@ describe('buildTmuxStartCommand', () => {
 
     expect(
       buildTmuxStartCommand([
-        'NODE_OPTIONS= ${node} packages/cli/dist/index.js',
+        'NODE_OPTIONS= ${node} packages/cli/bin/llxprt.cjs',
       ]),
-    ).toBe(`NODE_OPTIONS= ${TEST_NODE_EXECUTABLE} packages/cli/dist/index.js`);
+    ).toBe(`NODE_OPTIONS= ${TEST_NODE_EXECUTABLE} packages/cli/bin/llxprt.cjs`);
   });
 
   it('shell-quotes multi-argument commands after resolving node', async () => {
