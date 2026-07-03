@@ -200,12 +200,23 @@ export class ConversationManager {
       automaticFunctionCallingHistory &&
       automaticFunctionCallingHistory.length > 0
     ) {
-      // AFC branch: extract curated history
+      // AFC branch: extract curated history. The curated AFC history mixes
+      // freshly generated model turns with user turns; stamp the generating
+      // model on AI entries (stampAiTurnModel no-ops on non-AI turns) to stay
+      // consistent with TurnProcessor._recordAfcHistory's stamping.
       const curatedAfc = extractCuratedHistory(automaticFunctionCallingHistory);
       for (const content of curatedAfc) {
         const turnKey = this.historyService.generateTurnKey();
         newHistoryEntries.push(
-          ContentConverters.toIContent(content, undefined, undefined, turnKey),
+          stampAiTurnModel(
+            ContentConverters.toIContent(
+              content,
+              undefined,
+              undefined,
+              turnKey,
+            ),
+            this.model,
+          ),
         );
       }
     } else {

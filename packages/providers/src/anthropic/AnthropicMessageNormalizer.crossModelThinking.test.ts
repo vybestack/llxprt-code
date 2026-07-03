@@ -210,6 +210,105 @@ describe('convertToAnthropicMessages - cross-model thinking strip (issue #2335)'
     ).toBe(true);
   });
 
+  it('strips thinking in an OPEN tool loop: cross-model final assistant turn + just-closed tool_response', () => {
+    // Open/just-closed tool-loop shape: the trailing assistant turn carries a
+    // signed thinking block + a tool_use, and the LAST content is the matching
+    // tool_response from the tool speaker (the loop is open, not yet followed
+    // by a fresh user turn).
+    //
+    // Stripping the cross-model signature here is correct and strictly no worse
+    // than the closed-loop case: replaying a signature minted by a different
+    // model to the current model always yields an Anthropic 400
+    // (Invalid signature in thinking block), so keeping it could never succeed.
+    // Additionally, model switches cannot occur mid-loop in this codebase —
+    // loops are closed synthetically before the next request is built — so the
+    // currentModel in effect at the next request equals the model that will
+    // emit any subsequent thinking, never a third party.
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'read the file' }] },
+      {
+        speaker: 'ai',
+        metadata: { model: 'claude-opus-4-8' },
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'deciding which tool to call',
+            sourceField: 'thinking',
+            signature: 'sig-A',
+          } as ThinkingBlock,
+          {
+            type: 'tool_call',
+            id: 'tool_002',
+            name: 'read_file',
+            parameters: { path: '/tmp/note.txt' },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'tool_002',
+            toolName: 'read_file',
+            result: { contents: 'hello world' },
+          },
+        ],
+      },
+    ];
+
+    const messages = convertToAnthropicMessages(contents, {
+      ...baseOptions,
+      currentModel: 'claude-fable-5',
+      logger: noopLogger,
+    });
+
+    // No thinking/redacted_thinking block anywhere.
+    const blocks = flatAssistantBlocks(messages);
+    expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
+    expect(blocks.some((b) => b.type === 'redacted_thinking')).toBe(false);
+    // No block anywhere carries the cross-model signature.
+    expect(
+      blocks.some(
+        (b) =>
+          (b as { signature?: unknown }).signature === 'sig-A' ||
+          (b as { data?: unknown }).data === 'sig-A',
+      ),
+    ).toBe(false);
+
+    // The trailing assistant message still contains the tool_use with the same
+    // id (post-normalization prefix) and name.
+    const trailingAssistant = findAssistantMessages(messages).find((m) =>
+      (Array.isArray(m.content)
+        ? (m.content as Array<{ type?: string }>)
+        : []
+      ).some((b) => b.type === 'tool_use'),
+    );
+    expect(trailingAssistant).toBeDefined();
+    const toolUse = (
+      trailingAssistant!.content as Array<{
+        type: string;
+        [k: string]: unknown;
+      }>
+    ).find((b) => b.type === 'tool_use') as
+      | { type: 'tool_use'; id: string; name: string }
+      | undefined;
+    expect(toolUse).toBeDefined();
+    expect(toolUse?.id).toBe('toolu_tool_002');
+    expect(toolUse?.name).toBe('read_file');
+
+    // The following user message carries the matching tool_result.
+    const assistantIndex = messages.indexOf(trailingAssistant!);
+    const toolResultMessage = messages[assistantIndex + 1];
+    expect(toolResultMessage).toBeDefined();
+    expect(toolResultMessage.role).toBe('user');
+    expect(
+      (toolResultMessage.content as Array<{ type: string }>).some(
+        (b) => b.type === 'tool_result',
+      ),
+    ).toBe(true);
+  });
+
   it('leaves thinking untouched when metadata.model is unset (unknown turn)', () => {
     const contents: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },

@@ -174,6 +174,59 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
       ai?.blocks.some((b) => b.type === 'thinking' && b.signature === 'sig-A'),
     ).toBe(true);
   });
+
+  it('stamps metadata.model on AI turns mixed into automaticFunctionCallingHistory but not user turns', () => {
+    const userInput: Content = {
+      role: 'user',
+      parts: [{ text: 'Run the tool' }],
+    };
+    const modelOutput: Content[] = [
+      { role: 'model', parts: [{ text: 'Done.' }] },
+    ];
+    // AFC history mixes freshly generated model turns with user turns.
+    const automaticFunctionCallingHistory: Content[] = [
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              name: 'get_weather',
+              response: { temperature: 72 },
+            },
+          },
+        ],
+      },
+      {
+        role: 'model',
+        parts: [
+          {
+            functionCall: { name: 'get_weather', args: { city: 'SF' } },
+          },
+        ],
+      },
+    ];
+
+    conversationManager.recordHistory(
+      userInput,
+      modelOutput,
+      automaticFunctionCallingHistory,
+    );
+
+    const all = historyService.getAll();
+    const aiTurns = all.filter((c) => c.speaker === 'ai');
+    const humanTurns = all.filter((c) => c.speaker === 'human');
+
+    // Every recorded AI turn — including the one carried by the AFC history —
+    // is stamped with the generating model.
+    expect(aiTurns.length).toBeGreaterThan(0);
+    for (const ai of aiTurns) {
+      expect(ai.metadata?.model).toBe(GENERATING_MODEL);
+    }
+    // User turns (including those mixed into the AFC history) are not stamped.
+    for (const human of humanTurns) {
+      expect(human.metadata?.model).toBeUndefined();
+    }
+  });
 });
 
 describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', () => {
