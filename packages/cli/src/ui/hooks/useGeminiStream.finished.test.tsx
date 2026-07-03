@@ -305,6 +305,75 @@ describe('useGeminiStream', () => {
         );
       });
     });
+    it('should add refusal notice for Finished with stopReason "refusal" @issue:2329', async () => {
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.Content,
+            value: 'I cannot help with that.',
+          };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: {
+              reason: 'SAFETY',
+              stopReason: 'refusal',
+              usageMetadata: undefined,
+            },
+          };
+        })(),
+      );
+
+      const { result } = renderHookWithDefaults();
+
+      await act(async () => {
+        await result.current.submitQuery('risky request');
+      });
+
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledWith(
+          {
+            type: 'info',
+            text: expect.stringContaining('safety classifier refused'),
+          },
+          expect.any(Number),
+        );
+      });
+    });
+
+    it('should not add refusal notice for a normal STOP without stopReason @issue:2329', async () => {
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.Content,
+            value: 'Here is the answer.',
+          };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'STOP', usageMetadata: undefined },
+          };
+        })(),
+      );
+
+      const { result } = renderHookWithDefaults();
+
+      await act(async () => {
+        await result.current.submitQuery('normal request');
+      });
+
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Idle);
+      });
+
+      const refusalInfoMessages = mockAddItem.mock.calls.filter((call) => {
+        const item = call[0] as { type?: string; text?: unknown };
+        return (
+          item.type === 'info' &&
+          typeof item.text === 'string' &&
+          item.text.includes('safety classifier refused')
+        );
+      });
+      expect(refusalInfoMessages).toHaveLength(0);
+    });
 
     describe('ContextWindowWillOverflow event', () => {
       beforeEach(() => {

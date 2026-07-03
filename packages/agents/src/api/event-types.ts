@@ -36,6 +36,9 @@ export type UsageMetadataValue = Readonly<{
 export type FinishedValue = Readonly<{
   reason: string;
   usageMetadata?: UsageMetadataValue;
+  // @issue:2329 — the raw provider stop reason (e.g. 'refusal') so consumers
+  // can surface a refusal-specific notice distinct from a normal completion.
+  stopReason?: string;
 }>;
 
 export type AgentStopInfo = Readonly<{

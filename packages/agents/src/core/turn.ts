@@ -70,6 +70,23 @@ export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
 
 const TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE =
   'Stream idle timeout: no response received within the allowed time.';
+
+/**
+ * Options object for {@link Turn.emitFinishReason}. Encapsulates the data
+ * needed to emit a Finished event, including the raw provider stop reason
+ * (@issue:2329) so it can be surfaced to consumers.
+ */
+interface EmitFinishReasonOptions {
+  finishReason: FinishReason;
+  allParts: Part[];
+  functionCalls: FunctionCall[];
+  text: string | undefined;
+  usageMetadata: GenerateContentResponseUsageMetadata | undefined;
+  traceId: string | undefined;
+  cumulativeOutcome: ResponseOutcome;
+  stopReason: string | undefined;
+}
+
 /**
  * Safely checks if an AbortSignal (or runtime-nullish value) has been aborted.
  * Runtime payloads can pass null/undefined despite declared types.
@@ -221,15 +238,18 @@ export class Turn {
     };
   }
   private *emitFinishReason(
-    finishReason: FinishReason,
-    allParts: Part[],
-    functionCalls: FunctionCall[],
-    text: string | undefined,
-    usageMetadata: GenerateContentResponseUsageMetadata | undefined,
-    traceId: string | undefined,
-    cumulativeOutcome: ResponseOutcome,
+    opts: EmitFinishReasonOptions,
   ): Generator<ServerGeminiStreamEvent> {
-    const outcome = cumulativeOutcome;
+    const {
+      finishReason,
+      allParts,
+      functionCalls,
+      text,
+      usageMetadata,
+      traceId,
+      cumulativeOutcome: outcome,
+      stopReason,
+    } = opts;
     this.logger.debug(() => `[stream:turn] emitting Finished event`, {
       finishReason,
       traceId,
@@ -237,6 +257,7 @@ export class Turn {
       toolCallCount: functionCalls.length,
       textLength: text?.length ?? 0,
       hasUsageMetadata: Boolean(usageMetadata),
+      stopReason,
       outcome,
     });
     this.finishReason = finishReason;
@@ -250,6 +271,9 @@ export class Turn {
           hadThinking: outcome.hasThinking,
           hadToolCalls: outcome.hasToolCalls,
         },
+        // @issue:2329 — only include stopReason when defined, matching
+        // existing optional-field style so consumers can detect refusals.
+        ...(stopReason !== undefined ? { stopReason } : {}),
       },
     };
   }
@@ -323,6 +347,10 @@ export class Turn {
     }
 
     const finishReason = resp.candidates?.[0]?.finishReason;
+    // @issue:2329 — thread the raw provider stop reason from the candidate's
+    // finishMessage into the Finished event so consumers can surface a
+    // refusal-specific notice.
+    const finishMessage = resp.candidates?.[0]?.finishMessage;
     const text = allowedParts
       .filter((part) => !isThoughtPart(part))
       .map((part) => part.text)
@@ -363,15 +391,16 @@ export class Turn {
     // This is the key change: Only yield 'Finished' if there is a finishReason.
     // Pass only allowed function calls so logging/outcome reflect executable calls.
     if (finishReason != null) {
-      yield* this.emitFinishReason(
+      yield* this.emitFinishReason({
         finishReason,
-        allowedParts,
+        allParts: allowedParts,
         functionCalls,
         text,
-        resp.usageMetadata,
+        usageMetadata: resp.usageMetadata,
         traceId,
         cumulativeOutcome,
-      );
+        stopReason: finishMessage,
+      });
     } else {
       this.logNoFinishReason(
         allowedParts,

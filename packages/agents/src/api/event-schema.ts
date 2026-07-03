@@ -35,6 +35,9 @@ export const UsageMetadataValueSchema = z.object({
 export const FinishedValueSchema = z.object({
   reason: z.string(),
   usageMetadata: UsageMetadataValueSchema.optional(),
+  // @issue:2329 — the raw provider stop reason (e.g. 'refusal') so consumers
+  // can surface a refusal-specific notice distinct from a normal completion.
+  stopReason: z.string().optional(),
 });
 
 export const AgentStopInfoSchema = z.object({

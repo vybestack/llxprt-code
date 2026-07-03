@@ -262,6 +262,20 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     });
   });
 
+  it('parses a done event preserving finished.stopReason @issue:2329', () => {
+    const parsed = AgentEventSchema.parse({
+      type: 'done',
+      reason: 'stop',
+      finished: { reason: 'SAFETY', stopReason: 'refusal' },
+    });
+    expect(parsed.type).toBe('done');
+    expect(parsed).toStrictEqual({
+      type: 'done',
+      reason: 'stop',
+      finished: { reason: 'SAFETY', stopReason: 'refusal' },
+    });
+  });
+
   it('parses a minimal done event (reason only) @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
     const parsed = AgentEventSchema.parse({ type: 'done', reason: 'aborted' });
     expect(parsed).toStrictEqual({ type: 'done', reason: 'aborted' });
@@ -443,6 +457,22 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
       reason: 'done',
     });
     expect(FinishedValueSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('FinishedValueSchema accepts and preserves stopReason @issue:2329', () => {
+    const parsed = FinishedValueSchema.parse({
+      reason: 'SAFETY',
+      stopReason: 'refusal',
+    });
+    expect(parsed).toStrictEqual({
+      reason: 'SAFETY',
+      stopReason: 'refusal',
+    });
+  });
+
+  it('FinishedValueSchema stopReason is optional @issue:2329', () => {
+    const parsed = FinishedValueSchema.parse({ reason: 'done' });
+    expect(parsed).not.toHaveProperty('stopReason');
   });
 
   // ─── property-based invariants ───────────────────────────────────────────

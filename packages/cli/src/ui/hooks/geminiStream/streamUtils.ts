@@ -191,6 +191,21 @@ export function buildFinishReasonMessage(
 }
 
 /**
+ * @issue:2329 — Returns a refusal-specific notice when the raw provider stop
+ * reason indicates the model's safety classifier refused the request.
+ * Returns undefined for all other stop reasons, allowing callers to fall back
+ * to the generic {@link buildFinishReasonMessage}.
+ */
+export function buildRefusalNoticeMessage(
+  stopReason: string | undefined,
+): string | undefined {
+  if (stopReason === 'refusal') {
+    return 'Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.';
+  }
+  return undefined;
+}
+
+/**
  * Deduplicates ToolCallRequestInfo[] by callId, preserving insertion order.
  * Addresses issue #1040 where duplicate ToolCallRequest events cause the same
  * command to execute twice.

@@ -24,6 +24,7 @@ import {
   mergePendingToolGroupsForDisplay,
   collectGeminiTools,
   buildFinishReasonMessage,
+  buildRefusalNoticeMessage,
   deduplicateToolCallRequests,
   buildThinkingBlock,
   buildSplitContent,
@@ -283,6 +284,35 @@ describe('buildFinishReasonMessage', () => {
     expect(
       buildFinishReasonMessage(FinishReason.MALFORMED_FUNCTION_CALL),
     ).toBeDefined();
+  });
+});
+
+// ─── buildRefusalNoticeMessage ────────────────────────────────────────────────
+
+describe('buildRefusalNoticeMessage @issue:2329', () => {
+  it('returns the refusal notice when stopReason is "refusal"', () => {
+    const message = buildRefusalNoticeMessage('refusal');
+    expect(message).toBeDefined();
+    expect(message).toMatch(/safety classifier refused/i);
+    expect(message).toMatch(/rephrasing/i);
+    expect(message).toMatch(/switch to a different model/i);
+  });
+
+  it('returns undefined when stopReason is a normal completion reason', () => {
+    expect(buildRefusalNoticeMessage('end_turn')).toBeUndefined();
+    expect(buildRefusalNoticeMessage('stop_sequence')).toBeUndefined();
+    expect(buildRefusalNoticeMessage('max_tokens')).toBeUndefined();
+    expect(buildRefusalNoticeMessage('tool_use')).toBeUndefined();
+  });
+
+  it('returns undefined when stopReason is undefined', () => {
+    expect(buildRefusalNoticeMessage(undefined)).toBeUndefined();
+  });
+
+  it('uses the exact required message text for refusal', () => {
+    expect(buildRefusalNoticeMessage('refusal')).toBe(
+      'Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.',
+    );
   });
 });
 

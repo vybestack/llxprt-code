@@ -559,7 +559,9 @@ function applyFinishReasonMapping(
       stop_sequence: FinishReason.STOP,
       tool_use: FinishReason.STOP,
       pause_turn: FinishReason.STOP,
-      refusal: FinishReason.STOP,
+      // @issue:2329 — refusal maps to SAFETY so downstream consumers can
+      // distinguish a safety-classifier refusal from a normal completion.
+      refusal: FinishReason.SAFETY,
       model_context_window_exceeded: FinishReason.MAX_TOKENS,
       // OpenAI Chat Completions-style values
       stop: FinishReason.STOP,
@@ -579,6 +581,10 @@ function applyFinishReasonMapping(
     if (hasMapping) {
       const mappedReason = finishReasonByTerminationReason[terminationReason];
       response.candidates[0].finishReason = mappedReason;
+      // @issue:2329 — preserve the raw provider stop reason on the candidate
+      // so downstream consumers (agent loop, CLI) can distinguish e.g. a
+      // safety-classifier refusal from a generic SAFETY stop.
+      response.candidates[0].finishMessage = terminationReason;
       logger.debug(
         () => `[stream:message-converter] applied terminal metadata`,
         {

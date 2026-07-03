@@ -311,7 +311,7 @@ function* mapValueEvent(
     }
     // @pseudocode event-adapter.md steps 243-244: Finished
     case GeminiEventType.Finished: {
-      const v = e.value as { reason: string };
+      const v = e.value as { reason: string; stopReason?: string };
       state.lastFinished = v;
       yield makeDone(state, mapFinishReason(v.reason));
       state.emittedDone = true;
