@@ -310,7 +310,7 @@ export function convertIContentToHistoryItems(
       .join('');
 
     return {
-      type: content.speaker === 'human' ? MessageType.USER : MessageType.GEMINI,
+      type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
       text,
     } as HistoryItemWithoutId;
   });

@@ -34,8 +34,8 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('../GeminiRespondingSpinner.js', () => ({
-  GeminiRespondingSpinner: ({
+vi.mock('../RespondingSpinner.js', () => ({
+  RespondingSpinner: ({
     nonRespondingDisplay,
   }: {
     nonRespondingDisplay?: string;

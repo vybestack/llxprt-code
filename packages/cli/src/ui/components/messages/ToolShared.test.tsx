@@ -16,8 +16,8 @@ import { ToolCallStatus, StreamingState } from '../../types.js';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
 import { renderWithProviders } from '../../../test-utils/render.js';
 
-vi.mock('../GeminiRespondingSpinner.js', () => ({
-  GeminiRespondingSpinner: ({
+vi.mock('../RespondingSpinner.js', () => ({
+  RespondingSpinner: ({
     nonRespondingDisplay,
   }: {
     nonRespondingDisplay?: string;

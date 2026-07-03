@@ -13,9 +13,9 @@ import { StreamingState } from '../types.js';
 import { Colors } from '../colors.js';
 import { vi } from 'vitest';
 
-// Mock GeminiRespondingSpinner
-vi.mock('./GeminiRespondingSpinner.js', () => ({
-  GeminiRespondingSpinner: ({
+// Mock RespondingSpinner
+vi.mock('./RespondingSpinner.js', () => ({
+  RespondingSpinner: ({
     nonRespondingDisplay,
   }: {
     nonRespondingDisplay?: string;

@@ -84,8 +84,8 @@ function createMockConfig(): MockConfig {
 }
 
 // Mock heavy dependencies
-vi.mock('../hooks/geminiStream/index.js', () => ({
-  useGeminiStream: vi.fn(() => ({
+vi.mock('../hooks/agentStream/index.js', () => ({
+  useAgentStream: vi.fn(() => ({
     streamingState: 'Idle',
     submitQuery: vi.fn(),
     initError: null,

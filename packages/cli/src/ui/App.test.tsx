@@ -233,8 +233,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 });
 
 // Mock heavy dependencies or those with side effects
-vi.mock('./hooks/geminiStream/index', () => ({
-  useGeminiStream: vi.fn(() => ({
+vi.mock('./hooks/agentStream/index', () => ({
+  useAgentStream: vi.fn(() => ({
     streamingState: 'Idle',
     submitQuery: vi.fn(),
     initError: null,

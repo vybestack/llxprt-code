@@ -24,7 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { SettingsFile, Settings } from '../config/settings.js';
 import { LoadedSettings } from '../config/settings.js';
-import { useGeminiStream } from './hooks/geminiStream/index.js';
+import { useAgentStream } from './hooks/agentStream/index.js';
 import type { HistoryItem } from './types.js';
 import { StreamingState } from './types.js';
 import * as useTerminalSize from './hooks/useTerminalSize.js';
@@ -230,8 +230,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 });
 
 // Mock heavy dependencies or those with side effects
-vi.mock('./hooks/geminiStream/index', () => ({
-  useGeminiStream: vi.fn(() => ({
+vi.mock('./hooks/agentStream/index', () => ({
+  useAgentStream: vi.fn(() => ({
     streamingState: 'Idle',
     submitQuery: vi.fn(),
     initError: null,
@@ -442,7 +442,7 @@ describe('App UI', () => {
       let onCancelSubmitCallback = () => {};
 
       // Simulate a tool in the "Executing" state.
-      vi.mocked(useGeminiStream).mockImplementation(
+      vi.mocked(useAgentStream).mockImplementation(
         (
           _client,
           _history,

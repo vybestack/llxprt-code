@@ -258,7 +258,7 @@ const resumeCommand: SlashCommand = {
       const text =
         content.parts?.map((part: Part) => part.text ?? '').join('') ?? '';
       return {
-        type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
+        type: content.role === 'user' ? MessageType.USER : MessageType.AI,
         text,
       };
     });
@@ -476,7 +476,7 @@ const restoreHistory = async (
     const text =
       content.parts?.map((part: Part) => part.text ?? '').join('') ?? '';
     return {
-      type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
+      type: content.role === 'user' ? MessageType.USER : MessageType.AI,
       text,
     };
   });

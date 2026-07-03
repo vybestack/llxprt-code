@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { useCallback, useMemo, useRef } from 'react';
-import { useGeminiStream } from '../../../hooks/geminiStream/index.js';
+import { useAgentStream } from '../../../hooks/agentStream/index.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
 import { useMcpStatus } from '../../../hooks/useMcpStatus.js';
@@ -329,7 +329,7 @@ function useInputStreamSetup(
   };
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
-  const geminiResult = useGeminiStream(
+  const geminiResult = useAgentStream(
     // Migration bridge (#1595): this config.getAgentClient() call is the last
     // remaining direct Config consumer in the streaming path. A later subissue
     // replaces it with the threaded Agent once the streaming hooks migrate to

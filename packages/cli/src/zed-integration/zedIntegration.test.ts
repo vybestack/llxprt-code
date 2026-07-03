@@ -50,13 +50,13 @@ describe('zedIntegration auth method validation', () => {
   });
 });
 
-describe('GeminiAgent.authenticate credential cache', () => {
+describe('ZedAgent.authenticate credential cache', () => {
   // Import dynamically after mocks are set up
-  let GeminiAgent: typeof import('./zedIntegration.js').GeminiAgent;
+  let ZedAgent: typeof import('./zedIntegration.js').ZedAgent;
 
   beforeAll(async () => {
     const mod = await import('./zedIntegration.js');
-    GeminiAgent = mod.GeminiAgent;
+    ZedAgent = mod.ZedAgent;
   });
 
   beforeEach(() => {
@@ -64,14 +64,14 @@ describe('GeminiAgent.authenticate credential cache', () => {
     mockLoadProfileByName.mockResolvedValue(undefined);
   });
 
-  function createAgent(): InstanceType<typeof GeminiAgent> {
+  function createAgent(): InstanceType<typeof ZedAgent> {
     const mockConfig = {
       getProfileManager: () => ({
         listProfiles: async () => ['alpha', 'beta'],
       }),
       getEphemeralSetting: () => undefined,
     };
-    const agent = new GeminiAgent(
+    const agent = new ZedAgent(
       mockConfig as never,
       { debug: () => {} } as never,
       undefined as never,

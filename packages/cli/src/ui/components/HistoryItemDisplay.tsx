@@ -10,12 +10,12 @@ import { escapeAnsiCtrlCodes } from '../utils/textUtils.js';
 import type { HistoryItem } from '../types.js';
 import { UserMessage } from './messages/UserMessage.js';
 import { UserShellMessage } from './messages/UserShellMessage.js';
-import { GeminiMessage } from './messages/GeminiMessage.js';
+import { AiMessage } from './messages/AiMessage.js';
 import { InfoMessage } from './messages/InfoMessage.js';
 import { ErrorMessage } from './messages/ErrorMessage.js';
 import { OAuthUrlMessage } from './messages/OAuthUrlMessage.js';
 import { ToolGroupMessage } from './messages/ToolGroupMessage.js';
-import { GeminiMessageContent } from './messages/GeminiMessageContent.js';
+import { AiMessageContent } from './messages/AiMessageContent.js';
 import { CompressionMessage } from './messages/CompressionMessage.js';
 import { WarningMessage } from './messages/WarningMessage.js';
 import { ProfileChangeMessage } from './messages/ProfileChangeMessage.js';
@@ -47,7 +47,7 @@ interface HistoryItemDisplayProps {
   commands?: readonly SlashCommand[];
   activeShellPtyId?: number | null;
   embeddedShellFocused?: boolean;
-  availableTerminalHeightGemini?: number;
+  availableTerminalHeightAi?: number;
 }
 
 function useSanitizedItem(item: HistoryItem) {
@@ -69,7 +69,7 @@ function renderCoreMessages(
   isPending: boolean,
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
-  _availableTerminalHeightGemini: number | undefined,
+  _availableTerminalHeightAi: number | undefined,
 ) {
   switch (itemForDisplay.type) {
     case 'user':
@@ -78,11 +78,11 @@ function renderCoreMessages(
       return <UserShellMessage text={itemForDisplay.text} />;
     case 'gemini':
       return (
-        <GeminiMessage
+        <AiMessage
           text={itemForDisplay.text}
           isPending={isPending}
           availableTerminalHeight={
-            _availableTerminalHeightGemini ?? availableTerminalHeight
+            _availableTerminalHeightAi ?? availableTerminalHeight
           }
           terminalWidth={terminalWidth}
           model={itemForDisplay.model}
@@ -92,11 +92,11 @@ function renderCoreMessages(
       );
     case 'gemini_content':
       return (
-        <GeminiMessageContent
+        <AiMessageContent
           text={itemForDisplay.text}
           isPending={isPending}
           availableTerminalHeight={
-            _availableTerminalHeightGemini ?? availableTerminalHeight
+            _availableTerminalHeightAi ?? availableTerminalHeight
           }
           terminalWidth={terminalWidth}
         />
@@ -247,7 +247,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   showTodoPanel = true,
   activeShellPtyId: _activeShellPtyId,
   embeddedShellFocused: _embeddedShellFocused,
-  availableTerminalHeightGemini: _availableTerminalHeightGemini,
+  availableTerminalHeightAi: _availableTerminalHeightAi,
 }) => {
   const itemForDisplay = useSanitizedItem(item);
 
@@ -258,7 +258,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         isPending,
         availableTerminalHeight,
         terminalWidth,
-        _availableTerminalHeightGemini,
+        _availableTerminalHeightAi,
       )}
       {renderStatsMessages(itemForDisplay)}
       {renderInfoViews(itemForDisplay, slashCommands)}

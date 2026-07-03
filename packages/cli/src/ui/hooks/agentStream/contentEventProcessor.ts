@@ -1,0 +1,210 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Pure functions for processing content stream events.
+ * Extracted from useStreamEventHandlers to keep each function ≤80 lines.
+ * None of these functions call React hooks.
+ */
+
+import type React from 'react';
+import {
+  type ServerGeminiContentEvent as ContentEvent,
+  type ThinkingBlock,
+} from '@vybestack/llxprt-code-core';
+import {
+  type HistoryItemWithoutId,
+  type HistoryItemAi,
+  type HistoryItemAiContent,
+  MessageType,
+} from '../../types.js';
+import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
+import { buildSplitContent, buildFullSplitItem } from './streamUtils.js';
+
+export interface ContentEventDeps {
+  addItem: UseHistoryManagerReturn['addItem'];
+  sanitizeContent: (text: string) => {
+    text: string;
+    blocked: boolean;
+    feedback?: string;
+  };
+  flushPendingHistoryItem: (timestamp: number) => void;
+  pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
+  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
+  turnCancelledRef: React.MutableRefObject<boolean>;
+  setPendingHistoryItem: React.Dispatch<
+    React.SetStateAction<HistoryItemWithoutId | null>
+  >;
+  getContentPrefixIdentity: () => string | null;
+}
+
+function ensureAiPendingItem(
+  pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>,
+  setPendingHistoryItem: React.Dispatch<
+    React.SetStateAction<HistoryItemWithoutId | null>
+  >,
+  flushPendingHistoryItem: (timestamp: number) => void,
+  liveProfileName: string | null,
+  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
+  userMessageTimestamp: number,
+): void {
+  if (
+    pendingHistoryItemRef.current?.type !== 'gemini' &&
+    pendingHistoryItemRef.current?.type !== 'gemini_content'
+  ) {
+    if (pendingHistoryItemRef.current)
+      flushPendingHistoryItem(userMessageTimestamp);
+    setPendingHistoryItem({
+      type: 'gemini',
+      text: '',
+      ...(liveProfileName != null ? { profileName: liveProfileName } : {}),
+      ...(thinkingBlocksRef.current.length > 0
+        ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+        : {}),
+    });
+  }
+}
+
+function applySplitResult(
+  beforeText: string,
+  pendingType: 'gemini' | 'gemini_content',
+  liveProfileName: string | null,
+  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
+  setPendingHistoryItem: React.Dispatch<
+    React.SetStateAction<HistoryItemWithoutId | null>
+  >,
+  addItem: UseHistoryManagerReturn['addItem'],
+  afterItem: HistoryItemAiContent,
+  userMessageTimestamp: number,
+): string {
+  if (beforeText) {
+    addItem(
+      {
+        type: pendingType,
+        text: beforeText,
+        ...(liveProfileName != null ? { profileName: liveProfileName } : {}),
+        ...(thinkingBlocksRef.current.length > 0
+          ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+          : {}),
+      },
+      userMessageTimestamp,
+    );
+    thinkingBlocksRef.current = [];
+  }
+  setPendingHistoryItem(afterItem);
+  return afterItem.text;
+}
+
+function processBlockedContent(
+  currentAiMessageBuffer: string,
+  userMessageTimestamp: number,
+  deps: ContentEventDeps,
+): string {
+  const { addItem } = deps;
+  addItem(
+    {
+      type: MessageType.ERROR,
+      text: '[Error: Response blocked due to emoji detection]',
+    },
+    userMessageTimestamp,
+  );
+  return currentAiMessageBuffer;
+}
+
+function getPendingAiType(
+  item: HistoryItemWithoutId | null,
+): 'gemini' | 'gemini_content' {
+  return item?.type === 'gemini_content' ? 'gemini_content' : 'gemini';
+}
+
+export function processContentEvent(
+  eventValue: ContentEvent['value'],
+  currentAiMessageBuffer: string,
+  userMessageTimestamp: number,
+  deps: ContentEventDeps,
+): string {
+  if (deps.turnCancelledRef.current) {
+    return '';
+  }
+
+  // Normalize empty/whitespace to null so downstream `!= null` checks treat
+  // it as absent — consistent with resolveContentPrefixIdentity's cleaned()
+  // behavior (issue #2263).
+  const rawIdentity = deps.getContentPrefixIdentity();
+  const liveProfileIdentity = rawIdentity === '' ? null : rawIdentity;
+  const pendingType = getPendingAiType(deps.pendingHistoryItemRef.current);
+  const combined = currentAiMessageBuffer + eventValue;
+  const {
+    text: sanitizedCombined,
+    feedback,
+    blocked,
+  } = deps.sanitizeContent(combined);
+
+  if (blocked) {
+    const buffer = processBlockedContent(
+      currentAiMessageBuffer,
+      userMessageTimestamp,
+      deps,
+    );
+    if (feedback)
+      deps.addItem(
+        { type: MessageType.INFO, text: feedback },
+        userMessageTimestamp,
+      );
+    return buffer;
+  }
+  if (feedback)
+    deps.addItem(
+      { type: MessageType.INFO, text: feedback },
+      userMessageTimestamp,
+    );
+
+  ensureAiPendingItem(
+    deps.pendingHistoryItemRef,
+    deps.setPendingHistoryItem,
+    deps.flushPendingHistoryItem,
+    liveProfileIdentity,
+    deps.thinkingBlocksRef,
+    userMessageTimestamp,
+  );
+
+  const existingProfileName = (
+    deps.pendingHistoryItemRef.current as
+      | HistoryItemAi
+      | HistoryItemAiContent
+      | undefined
+  )?.profileName;
+  const { splitPoint, beforeText, afterItem } = buildSplitContent(
+    sanitizedCombined,
+    liveProfileIdentity,
+    existingProfileName ?? null,
+    deps.thinkingBlocksRef.current,
+    pendingType,
+  );
+
+  if (splitPoint === sanitizedCombined.length) {
+    deps.setPendingHistoryItem((item) =>
+      buildFullSplitItem(
+        item,
+        sanitizedCombined,
+        liveProfileIdentity,
+        deps.thinkingBlocksRef.current,
+      ),
+    );
+    return sanitizedCombined;
+  }
+
+  return applySplitResult(
+    beforeText,
+    pendingType,
+    liveProfileIdentity,
+    deps.thinkingBlocksRef,
+    deps.setPendingHistoryItem,
+    deps.addItem,
+    afterItem,
+    userMessageTimestamp,
+  );
+}

@@ -90,8 +90,8 @@ export async function runZedIntegration(
   try {
     const stream = acp.ndJsonStream(stdout, stdin);
     const connection = new acp.AgentSideConnection((conn) => {
-      logger.debug(() => 'Creating GeminiAgent');
-      return new GeminiAgent(config, settings, conn);
+      logger.debug(() => 'Creating ZedAgent');
+      return new ZedAgent(config, settings, conn);
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
 
@@ -104,7 +104,7 @@ export async function runZedIntegration(
   }
 }
 
-export class GeminiAgent {
+export class ZedAgent {
   private sessions: Map<string, Session> = new Map();
   private clientCapabilities: acp.ClientCapabilities | undefined;
   private logger: DebugLogger;

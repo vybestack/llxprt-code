@@ -58,7 +58,7 @@ describe('History conversion #1', () => {
     expect(historyItems).toHaveLength(2);
     expect(historyItems[0].type).toBe(MessageType.USER);
     expect(historyItems[0].text).toBe('user question');
-    expect(historyItems[1].type).toBe(MessageType.GEMINI);
+    expect(historyItems[1].type).toBe(MessageType.AI);
     expect(historyItems[1].text).toBe('ai response');
   });
 });

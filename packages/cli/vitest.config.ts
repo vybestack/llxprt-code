@@ -204,10 +204,10 @@ const baseExcludePatterns = [
   // Tests pass individually but fail when run in sequence due to global ink mock
   '**/ui/components/__tests__/SessionBrowserDialog*.spec.tsx',
   '**/ui/components/messages/DiffRenderer.test.tsx',
-  // GeminiMessage/ToolMessage - behavioral tests excluded due to ink-testing-library/ink-stub
+  // AiMessage/ToolMessage - behavioral tests excluded due to ink-testing-library/ink-stub
   // incompatibility in CI (renders empty string). Tests pass locally but fail in CI.
   // Issue #1034 converted them from snapshot to behavioral tests but CI rendering issue remains.
-  '**/ui/components/messages/GeminiMessage.test.tsx',
+  '**/ui/components/messages/AiMessage.test.tsx',
   '**/ui/components/messages/ToolMessage.test.tsx',
   '**/ui/components/messages/ToolConfirmationMessage.responsive.test.tsx',
   '**/ui/components/messages/ToolConfirmationMessage.test.tsx',
@@ -221,35 +221,35 @@ const baseExcludePatterns = [
   '**/ui/contexts/SessionContext.test.tsx',
   '**/ui/hooks/useEditorSettings.test.tsx',
   '**/ui/hooks/useReverseSearchCompletion.test.tsx',
-  '**/ui/hooks/useGeminiStream.integration.test.tsx',
-  '**/ui/hooks/useGeminiStream.test.tsx',
-  // useGeminiStream.test.tsx split into cohesive shards (issue #2114,
+  '**/ui/hooks/useAgentStream.integration.test.tsx',
+  '**/ui/hooks/useAgentStream.test.tsx',
+  // useAgentStream.test.tsx split into cohesive shards (issue #2114,
   // max-lines); all share the same React 19 setup and remain lint-only like
   // the parent. Exact paths so the runnable dedup/subagent/thinking/ordering
   // siblings are not matched.
-  '**/ui/hooks/useGeminiStream.cancellation.test.tsx',
-  '**/ui/hooks/useGeminiStream.usercancel.test.tsx',
-  '**/ui/hooks/useGeminiStream.commands.test.tsx',
-  '**/ui/hooks/useGeminiStream.approval.test.tsx',
-  '**/ui/hooks/useGeminiStream.finished.test.tsx',
-  '**/ui/hooks/useGeminiStream.include.test.tsx',
-  '**/ui/hooks/useGeminiStream.thought.test.tsx',
-  '**/ui/hooks/useGeminiStream.loopdetect.test.tsx',
-  '**/ui/hooks/useGeminiStream.hooks.test.tsx',
-  '**/ui/hooks/useGeminiStream.mcp.test.tsx',
+  '**/ui/hooks/useAgentStream.cancellation.test.tsx',
+  '**/ui/hooks/useAgentStream.usercancel.test.tsx',
+  '**/ui/hooks/useAgentStream.commands.test.tsx',
+  '**/ui/hooks/useAgentStream.approval.test.tsx',
+  '**/ui/hooks/useAgentStream.finished.test.tsx',
+  '**/ui/hooks/useAgentStream.include.test.tsx',
+  '**/ui/hooks/useAgentStream.thought.test.tsx',
+  '**/ui/hooks/useAgentStream.loopdetect.test.tsx',
+  '**/ui/hooks/useAgentStream.hooks.test.tsx',
+  '**/ui/hooks/useAgentStream.mcp.test.tsx',
   '**/ui/hooks/useKeypress.test.tsx',
   '**/ui/hooks/usePermissionsModifyTrust.test.tsx',
   '**/ui/privacy/**/*.test.tsx',
   '**/ui/utils/**/*.test.tsx',
-  // '**/gemini.test.tsx', // Temporarily enabled for terminal mode cleanup (ba88707b1 reimplementation)
+  // '**/agentStream.test.tsx', // Temporarily enabled for terminal mode cleanup (ba88707b1 reimplementation)
   // Exclude UI component tests that may directly import React DOM
   '**/ui/components/**/*.test.ts',
   // Temporarily suppress remaining React 19 regressions until the hooks are migrated
   // EXCEPT useToolScheduler.test.ts which we're actively working on for issue #1055
   '**/ui/hooks/useEditorSettings.test.ts',
   '**/ui/hooks/useReverseSearchCompletion.test.ts',
-  '**/ui/hooks/useGeminiStream.test.ts',
-  '**/ui/hooks/useGeminiStream.integration.test.ts',
+  '**/ui/hooks/useAgentStream.test.ts',
+  '**/ui/hooks/useAgentStream.integration.test.ts',
   '**/ui/hooks/useKeypress.test.ts',
   '**/ui/hooks/usePermissionsModifyTrust.test.ts',
   // Block the command test that still imports the legacy runtime helpers
@@ -294,19 +294,19 @@ export default defineConfig({
       'src/ui/contexts/KeypressContext.test.tsx',
       'src/ui/contexts/KeypressContext.parsing.test.tsx',
       // ThinkingBlockDisplay test excluded - ink-testing-library doesn't render styled Text in NO_COLOR mode
-      // Include useGeminiStream thinking test for Phase P07
-      'src/ui/hooks/useGeminiStream.thinking.test.tsx',
-      'src/ui/hooks/useGeminiStream.ordering.test.tsx',
-      // Include useGeminiStream dedup test for issue #1040
-      'src/ui/hooks/useGeminiStream.dedup.test.tsx',
+      // Include useAgentStream thinking test for Phase P07
+      'src/ui/hooks/useAgentStream.thinking.test.tsx',
+      'src/ui/hooks/useAgentStream.ordering.test.tsx',
+      // Include useAgentStream dedup test for issue #1040
+      'src/ui/hooks/useAgentStream.dedup.test.tsx',
       // Include useToolScheduler test for issue #1055 - Phase 2
       'src/ui/hooks/useToolScheduler.test.ts',
       // Include OAuthUrlMessage test (migrated from @testing-library/react)
       'src/ui/components/messages/OAuthUrlMessage.test.tsx',
       // Include useSlashCompletion extension filtering tests for fa93b56243 reimplementation
       'src/ui/hooks/useSlashCompletion.extensions.test.tsx',
-      // Include gemini test for terminal mode cleanup (ba88707b1 reimplementation)
-      'src/gemini.test.tsx',
+      // Include agentStream test for terminal mode cleanup (ba88707b1 reimplementation)
+      'src/agentStream.test.tsx',
       // Include directoryCommand test for trust gating implementation (9786c4dcf reimplementation)
       'src/ui/commands/directoryCommand.test.tsx',
       // Include ProfileChangeMessage test for cleanup-plan ab11b2c27
