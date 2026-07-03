@@ -28,7 +28,7 @@ describe('Token Tracking Integration Tests', () => {
     const runtimeId = `token-tracking.integration.${Math.random()
       .toString(36)
       .slice(2, 10)}`;
-    initializeTestProviderRuntime({
+    const { runtime: testRuntime } = initializeTestProviderRuntime({
       runtimeId,
       metadata: { suite: 'token-tracking-integration', runtimeId },
     });
@@ -48,7 +48,7 @@ describe('Token Tracking Integration Tests', () => {
       providerConfig: undefined,
       oauthManager: undefined,
     });
-    providerManager = new ProviderManager();
+    providerManager = new ProviderManager(testRuntime);
     providerManager.setConfig(config);
     config.setProviderManager(providerManager);
   });
