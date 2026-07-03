@@ -24,7 +24,10 @@ export type DoneReason =
   | 'context-overflow'
   | 'loop-detected'
   | 'error'
-  | 'hook-stopped';
+  | 'hook-stopped'
+  // @issue:2329 — emitted when the model's safety classifier declines the
+  // request (Anthropic stop_reason: 'refusal', e.g. Claude Fable 5).
+  | 'refusal';
 
 export type UsageMetadataValue = Readonly<{
   promptTokenCount?: number;

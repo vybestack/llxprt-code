@@ -13,6 +13,8 @@ export const DoneReasonSchema = z.enum([
   'loop-detected',
   'error',
   'hook-stopped',
+  // @issue:2329 — safety-classifier refusal (Anthropic stop_reason: 'refusal').
+  'refusal',
 ]);
 
 export const StructuredErrorSchema = z.object({

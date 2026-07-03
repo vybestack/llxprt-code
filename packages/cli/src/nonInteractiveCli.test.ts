@@ -480,6 +480,64 @@ describe('processAgentStream', () => {
     expect(result).toBeDefined();
   });
 
+  it('writes a refusal warning to stderr and still emits the final text on done{refusal} @issue:2329', async () => {
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'partial response' },
+      {
+        type: 'done',
+        reason: 'refusal',
+        finished: { reason: 'SAFETY', stopReason: 'refusal' },
+      },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    expect(processStderrSpy).toHaveBeenCalledWith(
+      'WARNING: Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.\n',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('partial response');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('emits a stream-json warning and RESULT on done{refusal} @issue:2329', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const metrics = uiTelemetryService.getMetrics();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'partial' },
+      {
+        type: 'done',
+        reason: 'refusal',
+        finished: { reason: 'SAFETY', stopReason: 'refusal' },
+      },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter }),
+      1000,
+      () => metrics,
+    );
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const warning = jsonEvents.find(
+      (event) =>
+        event.type === JsonStreamEventType.ERROR &&
+        event.severity === 'warning',
+    );
+    expect(warning?.message).toBe(
+      'Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.',
+    );
+    const result = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.RESULT,
+    );
+    expect(result).toBeDefined();
+  });
+
   it('writes a warning to stderr and continues on a hook-blocked event', async () => {
     const events: AgentEvent[] = [
       { type: 'text', text: 'partial' },

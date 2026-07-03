@@ -163,8 +163,12 @@ export function streamMaxTurns(): ServerGeminiStreamEvent {
 
 export function streamFinished(
   reason: FinishReason = FinishReason.STOP,
+  stopReason?: string,
 ): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.Finished, value: { reason } };
+  return {
+    type: GeminiEventType.Finished,
+    value: { reason, ...(stopReason !== undefined ? { stopReason } : {}) },
+  };
 }
 
 export function streamUserCancelled(): ServerGeminiStreamEvent {

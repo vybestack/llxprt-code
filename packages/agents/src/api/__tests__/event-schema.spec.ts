@@ -265,13 +265,13 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
   it('parses a done event preserving finished.stopReason @issue:2329', () => {
     const parsed = AgentEventSchema.parse({
       type: 'done',
-      reason: 'stop',
+      reason: 'refusal',
       finished: { reason: 'SAFETY', stopReason: 'refusal' },
     });
     expect(parsed.type).toBe('done');
     expect(parsed).toStrictEqual({
       type: 'done',
-      reason: 'stop',
+      reason: 'refusal',
       finished: { reason: 'SAFETY', stopReason: 'refusal' },
     });
   });
@@ -320,6 +320,7 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
       'loop-detected',
       'error',
       'hook-stopped',
+      'refusal',
     ]) {
       expect(DoneReasonSchema.parse(reason)).toBe(reason);
     }
@@ -486,6 +487,7 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     'loop-detected',
     'error',
     'hook-stopped',
+    'refusal',
   ]);
 
   // The complete set of known AgentEvent discriminator tags (19 variants).
@@ -513,7 +515,7 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
 
   it('property: DoneReasonSchema parses an arbitrary string IFF it is a canonical reason (completeness + soundness) @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
     // Soundness: for ANY generated string, parse success must agree exactly
-    // with membership in the canonical 7-reason set — no extra reason is
+    // with membership in the canonical reason set — no extra reason is
     // accepted, no canonical reason is rejected.
     fc.assert(
       fc.property(fc.string(), (s) => {

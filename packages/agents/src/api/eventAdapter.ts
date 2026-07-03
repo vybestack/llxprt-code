@@ -209,12 +209,17 @@ function toStopInfo(e: StopEvent): AgentStopInfo {
 }
 
 /**
- * Maps a Finished reason to the public DoneReason. A Finished event represents
- * normal completion; other terminal causes arrive via their own variants.
+ * Maps a Finished value to the public DoneReason. A Finished event represents
+ * normal completion; other terminal causes arrive via their own variants. When
+ * the raw provider stop reason is `'refusal'` (the model's safety classifier
+ * declined the request, e.g. Anthropic Claude Fable 5), the done carries
+ * `reason: 'refusal'` so consumers can surface a refusal-specific notice;
+ * otherwise the done is a normal `'stop'`.
  * @pseudocode event-adapter.md step 244: mapFinishReason
+ * @issue:2329
  */
-function mapFinishReason(_reason: string): DoneReason {
-  return 'stop';
+function mapFinishReason(stopReason: string | undefined): DoneReason {
+  return stopReason === 'refusal' ? 'refusal' : 'stop';
 }
 
 /**
@@ -313,7 +318,7 @@ function* mapValueEvent(
     case GeminiEventType.Finished: {
       const v = e.value as { reason: string; stopReason?: string };
       state.lastFinished = v;
-      yield makeDone(state, mapFinishReason(v.reason));
+      yield makeDone(state, mapFinishReason(v.stopReason));
       state.emittedDone = true;
       return;
     }

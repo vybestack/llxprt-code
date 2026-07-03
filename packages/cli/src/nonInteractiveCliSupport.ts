@@ -19,6 +19,7 @@ import type {
   StructuredError,
 } from '@vybestack/llxprt-code-agents';
 import { MAX_TURNS_MESSAGE } from './utils/errors.js';
+import { buildRefusalNoticeMessage } from './ui/hooks/geminiStream/streamUtils.js';
 
 type StreamConsumerContext = {
   config: Config;
@@ -290,6 +291,22 @@ function handleDone(
     case 'context-overflow':
       emitFinalResult(context, jsonResponseText, startTime, getMetrics());
       return;
+    case 'refusal': {
+      // @issue:2329 — surface the safety-classifier refusal as a user-visible
+      // warning while still emitting the final result so stdout/json output
+      // is preserved. The notice text is shared with the interactive CLI via
+      // buildRefusalNoticeMessage so both surfaces stay in sync; the
+      // 'refusal'-case fallback is guaranteed to return a string.
+      const notice =
+        buildRefusalNoticeMessage(event.finished?.stopReason) ??
+        buildRefusalNoticeMessage('refusal');
+      if (notice !== undefined) {
+        process.stderr.write(`WARNING: ${notice}\n`);
+        emitStreamError(context.streamFormatter, 'warning', notice);
+      }
+      emitFinalResult(context, jsonResponseText, startTime, getMetrics());
+      return;
+    }
     case 'hook-stopped': {
       const stop = event.stop;
       const stopMessage = `Agent execution stopped: ${
