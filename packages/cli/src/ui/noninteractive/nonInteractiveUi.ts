@@ -29,7 +29,6 @@ export function createNonInteractiveUI(): CommandContext['ui'] {
     toggleCorgiMode: () => {},
     toggleDebugProfiler: () => {},
     toggleVimEnabled: async () => false,
-    setGeminiMdFileCount: (_count: number) => {},
     setLlxprtMdFileCount: (_count: number) => {},
     updateHistoryTokenCount: (_count: number) => {},
     reloadCommands: () => {},

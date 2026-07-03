@@ -6,7 +6,7 @@
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
-  GeminiCLIExtension,
+  LlxprtExtension,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
@@ -86,7 +86,7 @@ export class McpClientManager {
    *    - Disconnects all MCP clients from their servers.
    *    - Updates the Gemini chat configuration to load the new tools.
    */
-  async stopExtension(extension: GeminiCLIExtension) {
+  async stopExtension(extension: LlxprtExtension) {
     logger.log(`Unloading extension: ${extension.name}`);
     await Promise.all(
       Object.keys(extension.mcpServers ?? {}).map((name) =>
@@ -102,7 +102,7 @@ export class McpClientManager {
    *    - Connects MCP clients to each server and discovers their tools.
    *    - Updates the Gemini chat configuration to load the new tools.
    */
-  async startExtension(extension: GeminiCLIExtension) {
+  async startExtension(extension: LlxprtExtension) {
     logger.log(`Loading extension: ${extension.name}`);
     await Promise.all(
       Object.entries(extension.mcpServers ?? {}).map(([name, config]) =>

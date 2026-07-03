@@ -5,7 +5,7 @@
  */
 
 import { Box, Text, useInput } from 'ink';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { performWorkspaceExtensionMigration } from '../../config/extension.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { Colors } from '../colors.js';
@@ -45,7 +45,7 @@ function MigrationCompleteContent({
 }
 
 interface ExtensionListProps {
-  workspaceExtensions: GeminiCLIExtension[];
+  workspaceExtensions: LlxprtExtension[];
 }
 
 function ExtensionList({ workspaceExtensions }: ExtensionListProps) {
@@ -61,7 +61,7 @@ function ExtensionList({ workspaceExtensions }: ExtensionListProps) {
 }
 
 interface MigrationPromptProps {
-  workspaceExtensions: GeminiCLIExtension[];
+  workspaceExtensions: LlxprtExtension[];
   onSelect: (value: string) => void;
 }
 
@@ -104,7 +104,7 @@ function MigrationPrompt({
 }
 
 export function WorkspaceMigrationDialog(props: {
-  workspaceExtensions: GeminiCLIExtension[];
+  workspaceExtensions: LlxprtExtension[];
   onOpen: () => void;
   onClose: () => void;
 }) {

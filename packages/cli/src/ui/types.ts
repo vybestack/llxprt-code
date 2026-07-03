@@ -6,7 +6,7 @@
 
 import {
   type CompressionStatus,
-  type GeminiCLIExtension,
+  type LlxprtExtension,
   type ToolCallConfirmationDetails,
   type ToolResultDisplay,
   type ThinkingBlock,
@@ -197,7 +197,7 @@ export type HistoryItemCompression = HistoryItemBase & {
 
 export type HistoryItemExtensionsList = HistoryItemBase & {
   type: 'extensions_list';
-  extensions: GeminiCLIExtension[];
+  extensions: LlxprtExtension[];
 };
 
 export type HistoryItemHooksList = HistoryItemBase & {

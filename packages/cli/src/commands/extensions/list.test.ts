@@ -16,7 +16,7 @@ import {
 } from 'vitest';
 import { handleList } from './list.js';
 import type * as extensionModule from '../../config/extension.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockLoadUserExtensions: Mock<typeof extensionModule.loadUserExtensions> =
   vi.hoisted(() => vi.fn());
@@ -76,7 +76,7 @@ describe('handleList', () => {
   });
 
   it('should list single extension', async () => {
-    const extension = { name: 'test-extension' } as GeminiCLIExtension;
+    const extension = { name: 'test-extension' } as LlxprtExtension;
     mockLoadUserExtensions.mockReturnValue([extension]);
     mockToOutputString.mockReturnValue('test-extension output');
 
@@ -90,9 +90,9 @@ describe('handleList', () => {
 
   it('should list multiple extensions with double newline separator', async () => {
     const extensions = [
-      { name: 'extension-1' } as GeminiCLIExtension,
-      { name: 'extension-2' } as GeminiCLIExtension,
-      { name: 'extension-3' } as GeminiCLIExtension,
+      { name: 'extension-1' } as LlxprtExtension,
+      { name: 'extension-2' } as LlxprtExtension,
+      { name: 'extension-3' } as LlxprtExtension,
     ];
     mockLoadUserExtensions.mockReturnValue(extensions);
     mockToOutputString
@@ -127,8 +127,8 @@ describe('handleList', () => {
 
   it('should call toOutputString with process.cwd() for each extension', async () => {
     const extensions = [
-      { name: 'ext-a' } as GeminiCLIExtension,
-      { name: 'ext-b' } as GeminiCLIExtension,
+      { name: 'ext-a' } as LlxprtExtension,
+      { name: 'ext-b' } as LlxprtExtension,
     ];
     mockLoadUserExtensions.mockReturnValue(extensions);
     mockToOutputString.mockReturnValue('output');
@@ -153,7 +153,7 @@ describe('handleList', () => {
   });
 
   it('should handle toOutputString error', async () => {
-    const extension = { name: 'test-extension' } as GeminiCLIExtension;
+    const extension = { name: 'test-extension' } as LlxprtExtension;
     mockLoadUserExtensions.mockReturnValue([extension]);
     mockToOutputString.mockImplementation(() => {
       throw new Error('Output generation failed');

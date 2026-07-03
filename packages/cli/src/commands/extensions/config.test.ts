@@ -12,7 +12,7 @@ import type * as settingsIntegrationModule from '../../config/extensions/setting
 import type * as utilsModule from './utils.js';
 import type * as extensionModule from '../../config/extension.js';
 import type * as settingsModule from './settings.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import type { ExtensionSetting } from '../../config/extensions/extensionSettings.js';
 
 const mockUpdateSetting: Mock<typeof settingsIntegrationModule.updateSetting> =
@@ -142,7 +142,7 @@ describe('extensions config command', () => {
       extension: {
         name: 'test-ext',
         path: '/path/to/extension',
-      } as GeminiCLIExtension,
+      } as LlxprtExtension,
       extensionConfig: {
         name: 'test-ext',
         version: '1.0.0',
@@ -214,7 +214,7 @@ describe('extensions config command', () => {
         extension: {
           name: 'test-ext',
           path: '/path/to/extension',
-        } as GeminiCLIExtension,
+        } as LlxprtExtension,
         extensionConfig: null,
       });
 
@@ -364,9 +364,9 @@ describe('extensions config command', () => {
 
   describe('all extensions mode', () => {
     it('should configure all installed extensions', async () => {
-      const mockExtensions: GeminiCLIExtension[] = [
-        { name: 'ext1', path: '/path/to/ext1' } as GeminiCLIExtension,
-        { name: 'ext2', path: '/path/to/ext2' } as GeminiCLIExtension,
+      const mockExtensions: LlxprtExtension[] = [
+        { name: 'ext1', path: '/path/to/ext1' } as LlxprtExtension,
+        { name: 'ext2', path: '/path/to/ext2' } as LlxprtExtension,
       ];
 
       mockLoadUserExtensions.mockReturnValue(mockExtensions);
@@ -406,10 +406,10 @@ describe('extensions config command', () => {
     });
 
     it('should continue on error and configure remaining extensions', async () => {
-      const mockExtensions: GeminiCLIExtension[] = [
-        { name: 'ext1', path: '/path/to/ext1' } as GeminiCLIExtension,
-        { name: 'ext2', path: '/path/to/ext2' } as GeminiCLIExtension,
-        { name: 'ext3', path: '/path/to/ext3' } as GeminiCLIExtension,
+      const mockExtensions: LlxprtExtension[] = [
+        { name: 'ext1', path: '/path/to/ext1' } as LlxprtExtension,
+        { name: 'ext2', path: '/path/to/ext2' } as LlxprtExtension,
+        { name: 'ext3', path: '/path/to/ext3' } as LlxprtExtension,
       ];
 
       mockLoadUserExtensions.mockReturnValue(mockExtensions);
@@ -435,9 +435,9 @@ describe('extensions config command', () => {
     });
 
     it('should exit with non-zero code when any extension fails', async () => {
-      const mockExtensions: GeminiCLIExtension[] = [
-        { name: 'ext1', path: '/path/to/ext1' } as GeminiCLIExtension,
-        { name: 'ext2', path: '/path/to/ext2' } as GeminiCLIExtension,
+      const mockExtensions: LlxprtExtension[] = [
+        { name: 'ext1', path: '/path/to/ext1' } as LlxprtExtension,
+        { name: 'ext2', path: '/path/to/ext2' } as LlxprtExtension,
       ];
 
       mockLoadUserExtensions.mockReturnValue(mockExtensions);

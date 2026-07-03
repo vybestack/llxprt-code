@@ -52,7 +52,6 @@ describe('permissionsCommand', () => {
       toggleCorgiMode: () => {},
       toggleDebugProfiler: () => {},
       toggleVimEnabled: async () => false,
-      setGeminiMdFileCount: () => {},
       setLlxprtMdFileCount: () => {},
       updateHistoryTokenCount: () => {},
       reloadCommands: () => {},

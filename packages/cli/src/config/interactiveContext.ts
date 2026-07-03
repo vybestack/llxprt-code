@@ -6,14 +6,14 @@
 
 import process from 'node:process';
 import {
-  setLlxprtMdFilename as setServerGeminiMdFilename,
+  setLlxprtMdFilename,
   getCurrentLlxprtMdFilename,
   DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   DebugLogger,
   debugLogger,
   type FileFilteringOptions,
-  type GeminiCLIExtension,
+  type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { resolvePath } from '../utils/resolvePath.js';
@@ -33,7 +33,7 @@ export interface ContextResolutionInput {
   readonly profileMergedSettings: Settings;
   readonly originalSettings: Settings;
   readonly cwd: string;
-  readonly extensions: GeminiCLIExtension[];
+  readonly extensions: LlxprtExtension[];
   readonly extensionEnablementManager: ExtensionEnablementManager;
 }
 
@@ -50,8 +50,8 @@ export interface ContextResolutionResult {
   readonly resolvedLoadMemoryFromIncludeDirectories: boolean;
   readonly jitContextEnabled: boolean;
   readonly interactive: boolean;
-  readonly allExtensions: GeminiCLIExtension[];
-  readonly activeExtensions: GeminiCLIExtension[];
+  readonly allExtensions: LlxprtExtension[];
+  readonly activeExtensions: LlxprtExtension[];
   readonly extensionContextFilePaths: readonly string[];
 }
 
@@ -125,9 +125,9 @@ function resolveFiltering(
   // Set the context filename BEFORE loading memory
   const contextFileName = profileMergedSettings.ui?.contextFileName;
   if (contextFileName !== undefined && contextFileName !== '') {
-    setServerGeminiMdFilename(contextFileName);
+    setLlxprtMdFilename(contextFileName);
   } else {
-    setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
+    setLlxprtMdFilename(getCurrentLlxprtMdFilename());
   }
 
   const fileService = new FileDiscoveryService(cwd);
@@ -170,7 +170,7 @@ function resolveIncludeDirectories(
 }
 
 function resolveExtensions(
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   cwd: string,
   manager: ExtensionEnablementManager,
 ): Pick<

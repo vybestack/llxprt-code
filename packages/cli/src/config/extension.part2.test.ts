@@ -17,8 +17,8 @@ import {
   installOrUpdateExtension,
 } from './extension.js';
 import {
-  GEMINI_DIR,
-  type GeminiCLIExtension,
+  LLXPRT_CONFIG_DIR,
+  type LlxprtExtension,
   ExtensionUninstallEvent,
   ExtensionDisableEvent,
   ExtensionEnableEvent,
@@ -104,7 +104,7 @@ vi.mock('./settings.js', () => ({
   },
 }));
 
-const EXTENSIONS_DIRECTORY_NAME = path.join(GEMINI_DIR, 'extensions');
+const EXTENSIONS_DIRECTORY_NAME = path.join(LLXPRT_CONFIG_DIR, 'extensions');
 
 describe('extension tests', () => {
   let tempHomeDir: string;
@@ -155,7 +155,7 @@ describe('extension tests', () => {
   });
 
   describe('annotateActiveExtensions', () => {
-    const extensions: GeminiCLIExtension[] = [
+    const extensions: LlxprtExtension[] = [
       {
         path: '/path/to/ext1',
         name: 'ext1',
@@ -272,7 +272,7 @@ describe('extension tests', () => {
       });
 
       it('should be true if autoUpdate is true in install metadata', () => {
-        const extensionsWithAutoUpdate: GeminiCLIExtension[] = extensions.map(
+        const extensionsWithAutoUpdate: LlxprtExtension[] = extensions.map(
           (e) => ({
             ...e,
             installMetadata: {
@@ -294,7 +294,7 @@ describe('extension tests', () => {
       });
 
       it('should respect the per-extension settings from install metadata', () => {
-        const extensionsWithAutoUpdate: GeminiCLIExtension[] = [
+        const extensionsWithAutoUpdate: LlxprtExtension[] = [
           {
             path: '/path/to/ext1',
             name: 'ext1',

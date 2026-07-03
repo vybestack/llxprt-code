@@ -134,7 +134,7 @@ export interface TelemetrySettings {
  * around on the config object though Core does not use this information
  * directly.
  */
-export interface GeminiCLIExtension {
+export interface LlxprtExtension {
   name: string;
   version: string;
   isActive: boolean;
@@ -153,6 +153,9 @@ export interface GeminiCLIExtension {
     systemPrompt: string;
   }>;
 }
+
+/** @deprecated Use LlxprtExtension instead. Will be removed in a future release. */
+export type GeminiCLIExtension = LlxprtExtension;
 
 export interface ExtensionInstallMetadata {
   source: string;
@@ -224,7 +227,7 @@ export class MCPServerConfig {
     readonly includeTools?: string[],
     readonly excludeTools?: string[],
     readonly extensionName?: string,
-    readonly extension?: GeminiCLIExtension,
+    readonly extension?: LlxprtExtension,
     // OAuth configuration
     readonly oauth?: MCPOAuthConfig,
     readonly authProviderType?: AuthProviderType,
@@ -393,7 +396,7 @@ export interface ConfigParameters {
   activeExtensions?: ActiveExtension[];
   providerManager?: RuntimeProviderManager;
   provider?: string;
-  extensions?: GeminiCLIExtension[];
+  extensions?: LlxprtExtension[];
   extensionLoader?: ExtensionLoader;
   enabledExtensions?: string[];
   enableExtensionReloading?: boolean;

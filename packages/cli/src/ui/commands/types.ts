@@ -95,7 +95,6 @@ export interface CommandContext {
     toggleCorgiMode: () => void;
     toggleDebugProfiler: () => void;
     toggleVimEnabled: () => Promise<boolean>;
-    setGeminiMdFileCount: (count: number) => void;
     setLlxprtMdFileCount: (count: number) => void;
     updateHistoryTokenCount: (count: number) => void;
     reloadCommands: () => void;
