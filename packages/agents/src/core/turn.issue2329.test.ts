@@ -45,6 +45,12 @@ vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
 
+// Inline duplicate of generateContentResponseUtilitiesMock() from
+// turn-test-helpers.ts. The shared helper cannot be referenced here because
+// vi.mock factories are hoisted above ES imports, and turn-test-helpers.ts
+// imports from ./turn.js (which itself imports this mocked module), creating
+// a load-time circular dependency that deadlocks the dynamic import. This
+// matches the same inline pattern used by turn.test.ts.
 vi.mock(
   '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
   () => ({
@@ -232,5 +238,52 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const finished = findFinishedEvent(events);
     expect(finished).toBeDefined();
     expect(finished?.value).not.toHaveProperty('stopReason');
+  });
+
+  it('threads finishMessage "refusal" from a content-less trailing metadata chunk', async () => {
+    // Models the real streaming shape: Anthropic delivers visible text on an
+    // initial chunk with no finishReason, then emits a SEPARATE trailing
+    // metadata-only chunk carrying the terminal stop reason/message
+    // (content-less, parts: []). The Turn must surface the refusal from that
+    // final chunk.
+    const mockResponseStream = (async function* () {
+      yield {
+        type: StreamEventType.CHUNK,
+        value: {
+          candidates: [
+            {
+              content: { parts: [{ text: 'I decline to answer.' }] },
+            },
+          ],
+        } as GenerateContentResponse,
+      };
+      yield {
+        type: StreamEventType.CHUNK,
+        value: {
+          candidates: [
+            {
+              content: { parts: [] },
+              finishReason: 'STOP',
+              finishMessage: 'refusal',
+            },
+          ],
+        } as GenerateContentResponse,
+      };
+    })();
+    mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+    const events = [];
+    for await (const event of turn.run(
+      [{ text: 'risky request' }],
+      new AbortController().signal,
+    )) {
+      events.push(event);
+    }
+
+    const finished = findFinishedEvent(events);
+    expect(finished).toBeDefined();
+    expect(finished?.type).toBe(GeminiEventType.Finished);
+    expect(finished?.value.reason).toBe('STOP');
+    expect(finished?.value.stopReason).toBe('refusal');
   });
 });

@@ -54,15 +54,46 @@ describe('AnthropicProvider issue #2329 – streaming refusal propagation', () =
   });
 
   it('should propagate stopReason "refusal" from message_delta @issue:2329', async () => {
+    // Realistic full Anthropic SSE event sequence, matching the shapes
+    // AnthropicStreamProcessor consumes (see AnthropicStreamProcessor.ts):
+    // message_start → content_block_start → content_block_delta →
+    // message_delta (with stop_reason) → message_stop.
     const mockStream = {
       async *[Symbol.asyncIterator]() {
         yield {
+          type: 'message_start',
+          message: {
+            id: 'msg_refusal_2329',
+            type: 'message',
+            role: 'assistant',
+            content: [],
+            model: 'claude-fable-5-20250929',
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 12, output_tokens: 0 },
+          },
+        };
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'text', text: '' },
+        };
+        yield {
           type: 'content_block_delta',
+          index: 0,
           delta: { type: 'text_delta', text: 'I cannot help with that.' },
         };
         yield {
+          type: 'content_block_stop',
+          index: 0,
+        };
+        yield {
           type: 'message_delta',
-          delta: { stop_reason: 'refusal' },
+          delta: { stop_reason: 'refusal', stop_sequence: null },
+          usage: { output_tokens: 8 },
+        };
+        yield {
+          type: 'message_stop',
         };
       },
     };
@@ -84,6 +115,16 @@ describe('AnthropicProvider issue #2329 – streaming refusal propagation', () =
       chunks.push(chunk);
     }
 
+    // The visible text content must be yielded from the content_block_delta.
+    const textChunk = chunks.find(
+      (c) =>
+        c.blocks.length > 0 &&
+        c.blocks[0].type === 'text' &&
+        (c.blocks[0] as { text: string }).text === 'I cannot help with that.',
+    );
+    expect(textChunk).toBeDefined();
+
+    // The terminal metadata (stop_reason === 'refusal') must be propagated.
     const refusalChunk = chunks.find(
       (c) => c.metadata?.stopReason === 'refusal',
     );
