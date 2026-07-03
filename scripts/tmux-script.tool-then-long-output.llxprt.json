@@ -8,8 +8,8 @@
   },
   "yolo": true,
   "startCommand": [
-    "node",
-    "scripts/start.js",
+    "bun",
+    "scripts/start.ts",
     "--profile-load",
     "synthetic",
     "--yolo",

@@ -17,9 +17,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { execSync } from 'child_process';
-import { existsSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { execSync } from 'node:child_process';
+import { existsSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 if (!process.cwd().includes('packages')) {
   console.error('must be invoked from a package directory');
@@ -41,7 +41,7 @@ execSync(`tsc --build --clean ${tsconfig}`, { stdio: 'inherit' });
 execSync(`tsc --build ${tsconfig}`, { stdio: 'inherit' });
 
 // copy .{md,json} files
-execSync('node ../../scripts/copy_files.js', { stdio: 'inherit' });
+execSync('bun ../../scripts/copy_files.ts', { stdio: 'inherit' });
 
 // touch dist/.last_build
 writeFileSync(join(process.cwd(), 'dist', '.last_build'), '');

@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -20,15 +18,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const sourceDir = path.join('src');
 const targetDir = path.join('dist', 'src');
 
 const extensionsToCopy = ['.md', '.json', '.config', '.sb', '.png', '.toml'];
 
-function copyFilesRecursive(source, target) {
+function copyFilesRecursive(source: string, target: string): void {
   if (!fs.existsSync(target)) {
     fs.mkdirSync(target, { recursive: true });
   }

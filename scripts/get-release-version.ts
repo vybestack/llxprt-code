@@ -4,21 +4,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-function getPackageVersion() {
+interface ReleaseVersionInfo {
+  releaseTag: string;
+  releaseVersion: string;
+  npmTag: string;
+}
+
+interface PackageJson {
+  version: string;
+}
+
+function getPackageVersion(): string {
   const packageJsonPath = path.resolve(process.cwd(), 'package.json');
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const packageJson = JSON.parse(
+    fs.readFileSync(packageJsonPath, 'utf8'),
+  ) as PackageJson;
   return packageJson.version;
 }
 
-function getShortSha() {
+function getShortSha(): string {
   return execSync('git rev-parse --short HEAD').toString().trim();
 }
 
-export function getNightlyTagName() {
+export function getNightlyTagName(): string {
   const version = getPackageVersion();
   const now = new Date();
   const year = now.getUTCFullYear().toString().slice(-2);
@@ -30,19 +43,19 @@ export function getNightlyTagName() {
   return `v${version}-nightly.${date}.${sha}`;
 }
 
-export function getBetaVersion() {
+export function getBetaVersion(): string {
   const currentVersion = getPackageVersion();
   // Stay in current version, add -beta suffix
   // This keeps us independent from upstream's -preview releases
   return `${currentVersion}-beta.0`;
 }
 
-export function getReleaseVersion() {
+export function getReleaseVersion(): ReleaseVersionInfo {
   const isNightly = process.env.IS_NIGHTLY === 'true';
   const isPreview = process.env.IS_PREVIEW === 'true';
   const manualVersion = process.env.MANUAL_VERSION;
 
-  let releaseTag;
+  let releaseTag: string | undefined;
 
   if (isNightly) {
     console.error('Calculating next nightly version...');
@@ -91,7 +104,7 @@ export function getReleaseVersion() {
   const releaseVersion = releaseTag.substring(1);
   let npmTag = 'latest';
   if (releaseVersion.includes('-')) {
-    // Extract the pre-release identifier (e.g., 'preview', 'nightly', 'alpha')
+    // Extract the pre-release identifier (e.g., 'nightly', 'beta', 'alpha')
     const preReleaseId = releaseVersion.split('-')[1].split('.')[0];
     npmTag = preReleaseId;
   }
@@ -99,12 +112,16 @@ export function getReleaseVersion() {
   return { releaseTag, releaseVersion, npmTag };
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   try {
     const versions = getReleaseVersion();
     console.log(JSON.stringify(versions));
   } catch (error) {
-    console.error(error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
     process.exit(1);
   }
 }

@@ -10,8 +10,8 @@
   "startCommand": [
     "env",
     "LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/system-settings.use-pty.json",
-    "node",
-    "scripts/start.js",
+    "bun",
+    "scripts/start.ts",
     "--profile-load",
     "synthetic",
     "--yolo"

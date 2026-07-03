@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -14,7 +14,10 @@ const __dirname = path.dirname(__filename);
 
 const rootDir = path.resolve(__dirname, '..');
 
-function copyFiles(packageName, filesToCopy) {
+function copyFiles(
+  packageName: string,
+  filesToCopy: Record<string, string>,
+): void {
   const packageDir = path.resolve(rootDir, 'packages', packageName);
   if (!fs.existsSync(packageDir)) {
     console.error(`Error: Package directory not found at ${packageDir}`);

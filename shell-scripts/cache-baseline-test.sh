@@ -23,6 +23,11 @@ echo "Debug dir: ${DEBUG_DIR}"
 echo "Log file: ${LOG_FILE}"
 echo ""
 
+if ! command -v bun >/dev/null 2>&1; then
+    echo "Error: bun is required but not installed." >&2
+    exit 1
+fi
+
 # Step 1: Clear debug directory
 echo "Step 1: Clearing debug directory..."
 rm -rf "${DEBUG_DIR:?}"/*
@@ -36,7 +41,8 @@ echo "  This will spawn multiple subagents to test cache sharing..."
 echo ""
 
 cd "${PROJECT_DIR}"
-LLXPRT_DEBUG='llxprt:*' node scripts/start.js \
+
+LLXPRT_DEBUG='llxprt:*' bun scripts/start.ts \
     --profile-load "${PROFILE}" \
     "use the codereviewer subagent to analyze this project, then use a different task invocation of codereviewer to analyze each identified component" \
     2>&1 | tee "${LOG_FILE}" || true

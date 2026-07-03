@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,7 +11,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const startScript = path.join(scriptDir, 'start.js');
+const startScript = path.join(scriptDir, 'start.ts');
 const DEFAULT_PROFILES = ['gptfirst', 'gpt55high', 'opusthinking', 'glm'];
 const EXPECTED =
   'LLXPRT2208_ALPHA\n\n' +

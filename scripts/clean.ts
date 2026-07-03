@@ -7,11 +7,17 @@
 import { rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { RmOptions, Dirent } from 'node:fs';
+import { isErrnoException } from './utils/error-guards.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-const RMRF_OPTIONS = { recursive: true, force: true };
+const RMRF_OPTIONS: RmOptions = { recursive: true, force: true };
+
+interface WorkspacePackageJson {
+  workspaces: string[];
+}
 
 // remove npm install/build artifacts
 rmSync(join(root, 'node_modules'), RMRF_OPTIONS);
@@ -21,15 +27,15 @@ rmSync(join(root, '.stryker-tmp'), RMRF_OPTIONS);
 // Dynamically clean dist directories in all workspaces
 const rootPackageJson = JSON.parse(
   readFileSync(join(root, 'package.json'), 'utf-8'),
-);
+) as WorkspacePackageJson;
 for (const workspace of rootPackageJson.workspaces) {
   // Note: this is a simple glob implementation that only supports "packages/*".
   const workspaceDir = join(root, dirname(workspace));
-  let packageDirs;
+  let packageDirs: string[];
   try {
     packageDirs = readdirSync(workspaceDir);
-  } catch (e) {
-    if (e.code === 'ENOENT') {
+  } catch (e: unknown) {
+    if (isErrnoException(e, 'ENOENT')) {
       continue;
     }
     throw e;
@@ -40,21 +46,25 @@ for (const workspace of rootPackageJson.workspaces) {
   }
 }
 
-function cleanPackageDistDir(pkgDir) {
+function cleanPackageDistDir(pkgDir: string): void {
   try {
     if (statSync(pkgDir).isDirectory()) {
       rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
     }
-  } catch (e) {
-    if (e.code !== 'ENOENT') {
+  } catch (e: unknown) {
+    if (!isErrnoException(e, 'ENOENT')) {
       throw e;
     }
   }
 }
 
 // Helper function to find directories matching a pattern recursively
-function findDirsRecursive(dir, predicate, results = []) {
-  let entries;
+function findDirsRecursive(
+  dir: string,
+  predicate: (name: string) => boolean,
+  results: string[] = [],
+): string[] {
+  let entries: Dirent[];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -92,8 +102,8 @@ try {
       rmSync(join(vscodeCompanionDir, file), RMRF_OPTIONS);
     }
   }
-} catch (e) {
-  if (e.code !== 'ENOENT') {
+} catch (e: unknown) {
+  if (!isErrnoException(e, 'ENOENT')) {
     throw e;
   }
 }

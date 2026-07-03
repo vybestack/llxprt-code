@@ -17,10 +17,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { execSync } from 'child_process';
-import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import os from 'os';
+import { execSync } from 'node:child_process';
+import {
+  chmodSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { join } from 'node:path';
+import os from 'node:os';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import cliPkgJson from '../packages/cli/package.json' with { type: 'json' };
@@ -46,13 +52,12 @@ const argv = yargs(hideBin(process.argv))
     type: 'string',
     description:
       'Path to write the final image URI. Used for CI/CD pipeline integration.',
-  }).argv;
+  })
+  .parseSync();
 
-let sandboxCommand;
+let sandboxCommand = '';
 try {
-  sandboxCommand = execSync('node scripts/sandbox_command.js')
-    .toString()
-    .trim();
+  sandboxCommand = execSync('bun scripts/sandbox_command.ts').toString().trim();
 } catch (e) {
   console.warn('ERROR: could not detect sandbox container command');
   console.error(e);
@@ -68,7 +73,8 @@ if (sandboxCommand === 'sandbox-exec') {
 
 console.log(`using ${sandboxCommand} for sandboxing`);
 
-const baseImage = cliPkgJson.config.sandboxImageUri;
+const baseImage = (cliPkgJson as { config?: { sandboxImageUri?: string } })
+  .config?.sandboxImageUri;
 const customImage = argv.i;
 const baseDockerfile = 'Dockerfile';
 const customDockerfile = argv.f;
@@ -84,11 +90,6 @@ if (!argv.s) {
   execSync('npm run build --workspaces', { stdio: 'inherit' });
 }
 
-// Rewrite workspace file: dependencies to release versions so packed tarballs
-// have publish-ready metadata instead of file:../ references.
-console.log('Binding release dependencies for sandbox tarballs...');
-execSync('node scripts/bind-release-deps.js --backup', { stdio: 'inherit' });
-
 const toolsPackageDir = join('packages', 'tools');
 const cliPackageDir = join('packages', 'cli');
 const authPackageDir = join('packages', 'auth');
@@ -102,7 +103,41 @@ const agentsPackageDir = join('packages', 'agents');
 const telemetryPackageDir = join('packages', 'telemetry');
 const policyPackageDir = join('packages', 'policy');
 
+function reportRestoreFailure(
+  restoreError: unknown,
+  precedingError: unknown,
+): void {
+  console.error('Failed to restore workspace dependencies after sandbox pack.');
+  console.error(
+    restoreError instanceof Error
+      ? (restoreError.stack ?? restoreError.message)
+      : String(restoreError),
+  );
+  console.error(
+    'CRITICAL: workspace dependencies may still be bound to release versions. ' +
+      'Run `bun scripts/bind-release-deps.ts --restore` manually to fix.',
+  );
+  if (precedingError) {
+    console.error('Restore failed after an earlier sandbox packaging error:');
+    console.error(
+      precedingError instanceof Error
+        ? (precedingError.stack ?? precedingError.message)
+        : String(precedingError),
+    );
+  }
+}
+
+let releaseDepsBound = false;
+let mainError: unknown = null;
+let restoreFailed = false;
+
 try {
+  // Rewrite workspace file: dependencies to release versions so packed tarballs
+  // have publish-ready metadata instead of file:../ references.
+  console.log('Binding release dependencies for sandbox tarballs...');
+  execSync('bun scripts/bind-release-deps.ts --backup', { stdio: 'inherit' });
+  releaseDepsBound = true;
+
   console.log('packing @vybestack/llxprt-code-tools ...');
   rmSync(join(toolsPackageDir, 'dist', 'vybestack-llxprt-code-tools-*.tgz'), {
     force: true,
@@ -222,15 +257,40 @@ try {
       stdio: 'ignore',
     },
   );
+} catch (error) {
+  mainError = error;
 } finally {
-  // Restore workspace file: dependencies so local development is unaffected.
-  console.log('Restoring workspace dependencies after sandbox pack...');
-  execSync('node scripts/bind-release-deps.js --restore', { stdio: 'inherit' });
+  if (!releaseDepsBound) {
+    console.log(
+      'Skipping workspace dependency restore because binding did not complete.',
+    );
+  } else {
+    // Restore workspace file: dependencies so local development is unaffected.
+    console.log('Restoring workspace dependencies after sandbox pack...');
+    try {
+      execSync('bun scripts/bind-release-deps.ts --restore', {
+        stdio: 'inherit',
+      });
+    } catch (restoreError) {
+      reportRestoreFailure(restoreError, mainError);
+      restoreFailed = true;
+    }
+  }
+}
+if (restoreFailed) {
+  process.exit(1);
 }
 
-const packageVersion = JSON.parse(
+if (mainError !== null) {
+  throw mainError;
+}
+const rootPackageJson = JSON.parse(
   readFileSync(join(process.cwd(), 'package.json'), 'utf-8'),
-).version;
+) as { version?: unknown };
+const packageVersion = rootPackageJson.version;
+if (typeof packageVersion !== 'string') {
+  throw new Error('Missing or invalid version in root package.json');
+}
 
 chmodSync(
   join(
@@ -332,7 +392,7 @@ const buildStdout = 'inherit'; // Always show output to debug CI failures
 const isWindows = os.platform() === 'win32';
 const shellToUse = isWindows ? 'powershell.exe' : '/bin/bash';
 
-function buildImage(imageName, dockerfile) {
+function buildImage(imageName: string, dockerfile: string): void {
   console.log(`building ${imageName} ... (can be slow first time)`);
 
   let buildCommandArgs = '';
@@ -351,9 +411,7 @@ function buildImage(imageName, dockerfile) {
     }
   }
 
-  const npmPackageVersion = JSON.parse(
-    readFileSync(join(process.cwd(), 'package.json'), 'utf-8'),
-  ).version;
+  const npmPackageVersion = packageVersion;
 
   const imageTag =
     process.env.LLXPRT_SANDBOX_IMAGE_TAG || imageName.split(':')[1];

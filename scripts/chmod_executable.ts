@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { chmodSync } from 'fs';
-import { platform } from 'os';
+import { chmodSync } from 'node:fs';
+import { platform } from 'node:os';
 
 if (platform() === 'win32') {
   process.exit(0);
@@ -13,7 +13,7 @@ if (platform() === 'win32') {
 
 const target = process.argv[2];
 if (!target) {
-  console.error('Usage: node chmod_executable.js <file>');
+  console.error('Usage: bun chmod_executable.ts <file>');
   process.exit(1);
 }
 

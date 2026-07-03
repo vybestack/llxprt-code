@@ -30,6 +30,17 @@ jobs:
         with:
           ref: '${{ github.event.inputs.ref || github.sha }}'
           fetch-depth: 1
+      - name: 'Setup Bun'
+        # Must run BEFORE `npm ci`: in a fresh checkout without bundle/llxprt.js,
+        # scripts/postinstall.cjs can run `npm run build` and `npm run bundle`,
+        # both now Bun-backed, so Bun must be on PATH during `npm ci` or the
+        # install fails with `bun: command not found`.
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+          # Disable Bun binary caching in this write-permission job to close
+          # the cache-poisoning path flagged by zizmor.
+          no-cache: true
       - name: 'Install Dependencies'
         run: 'npm ci'
       # No build step: the checked-in launcher resolves packages/cli/index.ts
