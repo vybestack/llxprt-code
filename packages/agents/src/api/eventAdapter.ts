@@ -416,7 +416,12 @@ export async function* mapLoopStream(
     !state.emittedDone &&
     (state.sawActivity || state.pendingDoneReason !== null)
   ) {
-    const reason: DoneReason = state.pendingDoneReason ?? 'stop';
+    // A stronger pending terminal reason wins; otherwise derive the reason
+    // from any stored Finished value so a preserved refusal stopReason is
+    // honored even on the synthesized-completion path (@issue:2329).
+    const reason: DoneReason =
+      state.pendingDoneReason ??
+      mapFinishReason(state.lastFinished?.stopReason);
     yield makeDone(state, reason);
   }
 }
