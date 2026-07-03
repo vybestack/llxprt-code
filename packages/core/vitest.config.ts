@@ -190,5 +190,11 @@ export default defineConfig({
       include: ['src/**/*'],
       reporter: coverageReporter,
     },
+    typecheck: {
+      enabled: true,
+      checker: 'tsc',
+      include: ['src/**/*.test-d.ts'],
+      tsconfig: './tsconfig.typecheck.json',
+    },
   },
 });

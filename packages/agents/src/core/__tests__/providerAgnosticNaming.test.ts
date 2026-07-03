@@ -238,7 +238,8 @@ function searchTokenInFiles(
 function isLegacyAliasFile(filePath: string): boolean {
   return (
     filePath.includes('geminiLegacyAliases.ts') ||
-    filePath.includes('geminiLegacyAliases.test.ts')
+    filePath.includes('geminiLegacyAliases.test.ts') ||
+    filePath.includes('geminiLegacyAliases.test-d.ts')
   );
 }
 
