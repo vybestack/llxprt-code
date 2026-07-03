@@ -67,6 +67,7 @@ describe('getProviderManager runtime OAuth MessageBus composition', () => {
       );
     registerCliProviderInfrastructure(explicitManager, explicitOAuthManager, {
       messageBus: sessionMessageBus,
+      runtimeId: runtimeHandle.runtimeId,
     });
 
     const manager = getProviderManager(runtimeHandle.config);

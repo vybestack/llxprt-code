@@ -108,7 +108,9 @@ const mockRuntimeApi: MockRuntimeApi = {
   getRuntimeDiagnosticsSnapshot: () => ({}),
   registerCliProviderInfrastructure: () => {},
   getCliProviderManager: () => null,
-  getCliOAuthManager: () => null,
+  getCliOAuthManager: () => {
+    throw new Error('OAuthManager missing from runtime registration');
+  },
   getCliRuntimeServices: () => null,
   getSessionTokenUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
   getLoadBalancerStats: () => null,

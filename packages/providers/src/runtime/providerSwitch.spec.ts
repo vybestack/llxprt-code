@@ -50,7 +50,7 @@ vi.mock('./runtimeAccessors.js', () => {
       settingsService: mockSettingsService,
       providerManager: mockProviderManager,
     })),
-    getCliOAuthManager: vi.fn(() => null),
+    maybeGetCliOAuthManager: vi.fn(() => null),
     getActiveModelName: vi.fn(() => 'gpt-4'),
     getActiveProviderName: vi.fn(() => 'openai'),
     getEphemeralSettings: vi.fn(() => ({})),

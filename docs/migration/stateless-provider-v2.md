@@ -12,7 +12,7 @@ PLAN-20251018-STATELESSPROVIDER2 finalises the stateless provider architecture b
 
 ## Key changes
 
-1. **Runtime identifiers are required** – Always supply a stable `runtimeId` when creating contexts. Missing identifiers fall back to `legacy-singleton`, which shares credentials across all runtimes and emits debug warnings.
+1. **Runtime identifiers are required** – Always supply a stable `runtimeId` when creating contexts. Missing or blank identifiers are rejected so credentials cannot silently leak into a shared legacy scope.
 2. **OAuth integration is runtime-aware** – When providers call into `OAuthManager`, the request metadata includes the runtime scope. Ensure custom providers pass the metadata through so revoke hooks can flush scoped tokens.
 3. **Profiles exclude secrets by default** – `buildRuntimeProfileSnapshot()` omits runtime-only credentials. If your integration serialises profile snapshots manually, honour the `runtimeOnly` hints to avoid leaking secrets.
 4. **CLI helpers are the source of truth** – Commands and extensions must use the helper bundle in `runtimeSettings.ts` (`switchActiveProvider`, `updateActiveProviderApiKey`, `activateIsolatedRuntimeContext`, etc.) to keep the runtime registry and auth cache in sync.

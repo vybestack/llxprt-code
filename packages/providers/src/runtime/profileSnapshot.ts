@@ -23,7 +23,7 @@ import type {
 } from '@vybestack/llxprt-code-settings';
 import {
   getCliRuntimeServices,
-  getCliOAuthManager,
+  maybeGetCliOAuthManager,
   getActiveModelName,
   getActiveModelParams,
   _internal as runtimeAccessorsInternal,
@@ -63,7 +63,7 @@ type CliRuntimeConfig = ReturnType<typeof getCliRuntimeServices>['config'];
 type CliSettingsService = ReturnType<
   typeof getCliRuntimeServices
 >['settingsService'];
-type CliOAuthManager = NonNullable<ReturnType<typeof getCliOAuthManager>>;
+type CliOAuthManager = NonNullable<ReturnType<typeof maybeGetCliOAuthManager>>;
 
 const resolveRuntimeProfileProviderName = resolveActiveProviderName as (
   settingsService: CliSettingsService,
@@ -560,8 +560,8 @@ export async function applyProfileSnapshot(
 
   setCurrentProfileName(settingsService, options.profileName);
 
-  const oauthManager = getCliOAuthManager();
-  if (oauthManager) {
+  const oauthManager = maybeGetCliOAuthManager();
+  if (oauthManager != null) {
     scheduleProactiveRenewals(oauthManager, profile);
     clearProfileFailoverOnBucketChanges(oauthManager, config, profile);
     wireStandardProfileFailover(oauthManager, profile);

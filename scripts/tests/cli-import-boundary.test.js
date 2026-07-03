@@ -606,6 +606,19 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
     // of the providers package with their own barrel index.ts. They are NOT deep
     // internal imports and must be allowed without an allowlist entry.
 
+    it('allows a namespace import from the bare agents root (specifier-level)', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ok.ts',
+          "import * as agentsApi from '@vybestack/llxprt-code-agents';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
+    });
+
     it('allows imports from the providers auth.js public subpath without an allowlist entry', () => {
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(

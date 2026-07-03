@@ -211,9 +211,12 @@ describe('CLI provider manager creation uses concrete providers', () => {
       config.getDebugMode(),
     );
 
-    setCliRuntimeContext(settingsService, config);
+    setCliRuntimeContext(settingsService, config, {
+      runtimeId: 'p13-consumer-test',
+    });
     registerCliProviderInfrastructure(manager, oauthManager, {
       messageBus: runtimeMessageBus,
+      runtimeId: 'p13-consumer-test',
     });
 
     // getCliProviderManager must return the same manager
@@ -418,10 +421,12 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
     providerManager.registerProvider(providerB);
 
     setCliRuntimeContext(settingsService, config, {
+      runtimeId: 'p13-switch-test',
       metadata: { source: 'p13-switch-test' },
     });
     registerCliProviderInfrastructure(providerManager, oauthManager, {
       messageBus: runtimeMessageBus,
+      runtimeId: 'p13-switch-test',
     });
   });
 

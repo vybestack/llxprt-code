@@ -304,22 +304,18 @@ export class AuthPrecedenceResolver {
     runtimeContext: IProviderRuntimeContext | null;
     runtimeState: RuntimeScopedState | null;
   } {
-    try {
-      const runtimeContext = this.getActiveRuntimeContext();
-      if (!runtimeContext) {
-        return { runtimeContext: null, runtimeState: null };
-      }
-      const runtimeState = ensureRuntimeState(runtimeContext, this.logger);
-      registerSettingsSubscriptions(
-        runtimeState,
-        settingsService,
-        providerId,
-        this.logger,
-      );
-      return { runtimeContext, runtimeState };
-    } catch {
+    const runtimeContext = this.getActiveRuntimeContext();
+    if (!runtimeContext) {
       return { runtimeContext: null, runtimeState: null };
     }
+    const runtimeState = ensureRuntimeState(runtimeContext);
+    registerSettingsSubscriptions(
+      runtimeState,
+      settingsService,
+      providerId,
+      this.logger,
+    );
+    return { runtimeContext, runtimeState };
   }
 
   private async isOAuthDisabledByManager(): Promise<boolean> {
@@ -683,28 +679,16 @@ export class AuthPrecedenceResolver {
    * @requirement Issue #975 - OAuth logout cache invalidation
    */
   invalidateCache(): void {
-    const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];
-    try {
-      const ctx = this.getActiveRuntimeContext();
-      const runtimeId = ctx?.runtimeId;
-      if (
-        typeof runtimeId === 'string' &&
-        runtimeId !== '' &&
-        !knownRuntimeIds.includes(runtimeId)
-      ) {
-        knownRuntimeIds.push(runtimeId);
-      }
-    } catch {
-      // Context not available, proceed with known IDs
+    const ctx = this.getActiveRuntimeContext();
+    if (ctx === null) {
+      return;
     }
-    for (const runtimeId of knownRuntimeIds) {
-      try {
-        flushRuntimeAuthScope(runtimeId);
-      } catch (error) {
-        this.logger.debug(
-          `Failed to flush runtime auth scope ${runtimeId}: ${error}`,
-        );
-      }
+    try {
+      flushRuntimeAuthScope(ctx.runtimeId);
+    } catch (error) {
+      this.logger.debug(
+        `Failed to flush runtime auth scope ${ctx.runtimeId}: ${error}`,
+      );
     }
   }
 

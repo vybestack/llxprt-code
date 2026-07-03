@@ -52,6 +52,7 @@ describe('IProviderRuntimeContext contract', () => {
     const settings = new InMemorySettingsService();
     const ctx: IProviderRuntimeContext = {
       settingsService: settings,
+      runtimeId: 'settings-runtime',
     };
     expect(ctx.settingsService).toBe(settings);
   });
@@ -59,12 +60,13 @@ describe('IProviderRuntimeContext contract', () => {
   it('holds optional config field', () => {
     const ctx: IProviderRuntimeContext = {
       settingsService: new InMemorySettingsService(),
+      runtimeId: 'config-runtime',
       config: { timeout: 5000 },
     };
     expect(ctx.config).toStrictEqual({ timeout: 5000 });
   });
 
-  it('holds optional runtimeId field', () => {
+  it('holds required runtimeId field', () => {
     const ctx: IProviderRuntimeContext = {
       settingsService: new InMemorySettingsService(),
       runtimeId: 'run-abc-123',
@@ -75,17 +77,19 @@ describe('IProviderRuntimeContext contract', () => {
   it('holds optional metadata field', () => {
     const ctx: IProviderRuntimeContext = {
       settingsService: new InMemorySettingsService(),
+      runtimeId: 'metadata-runtime',
       metadata: { source: 'test', version: 2 },
     };
     expect(ctx.metadata).toStrictEqual({ source: 'test', version: 2 });
   });
 
-  it('works with all optional fields omitted', () => {
+  it('works with optional fields omitted', () => {
     const ctx: IProviderRuntimeContext = {
       settingsService: new InMemorySettingsService(),
+      runtimeId: 'minimal-runtime',
     };
     expect(ctx.config).toBeUndefined();
-    expect(ctx.runtimeId).toBeUndefined();
+    expect(ctx.runtimeId).toBe('minimal-runtime');
     expect(ctx.metadata).toBeUndefined();
   });
 });

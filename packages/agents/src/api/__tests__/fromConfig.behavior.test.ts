@@ -46,6 +46,7 @@ import {
   ASYNC_PROPERTY_TIMEOUT_MS,
   IDENTITY_PROPERTY_TIMEOUT_MS,
 } from './helpers/agentHarness.js';
+import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 
 // ─── Structural identity probes (cast-free, mirrors agentHarness idiom) ──────
 //
@@ -325,21 +326,18 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     'PROP1 for any valid sessionId string, fromConfig identity holds: internalConfig(agent) === the caller Config @requirement:REQ-001 @scenario:property-identity @given:any non-empty sessionId string @when:fromConfig({ config, sessionId }) @then:internalConfig(agent) is the SAME Config instance for every generated sessionId',
     async () => {
       await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 1, maxLength: 40 }),
-          async (sessionId) => {
-            const built = await buildCliStyleConfig('plain-text.jsonl');
-            try {
-              const agent: Agent = await fromConfig({
-                config: built.config,
-                sessionId,
-              });
-              return internalConfig(agent) === built.config;
-            } finally {
-              await built.cleanup();
-            }
-          },
-        ),
+        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          const built = await buildCliStyleConfig('plain-text.jsonl');
+          try {
+            const agent: Agent = await fromConfig({
+              config: built.config,
+              sessionId,
+            });
+            return internalConfig(agent) === built.config;
+          } finally {
+            await built.cleanup();
+          }
+        }),
       );
     },
     IDENTITY_PROPERTY_TIMEOUT_MS,
@@ -349,21 +347,18 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     'PROP2 for any valid sessionId string, the runtime id observable equals the supplied sessionId @requirement:REQ-001 @scenario:property-runtimeId @given:any non-empty sessionId string @when:fromConfig({ config, sessionId }) @then:captureRuntimeId(agent) === sessionId for every generated sessionId',
     async () => {
       await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 1, maxLength: 40 }),
-          async (sessionId) => {
-            const built = await buildCliStyleConfig('plain-text.jsonl');
-            try {
-              const agent: Agent = await fromConfig({
-                config: built.config,
-                sessionId,
-              });
-              return captureRuntimeId(agent) === sessionId;
-            } finally {
-              await built.cleanup();
-            }
-          },
-        ),
+        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          const built = await buildCliStyleConfig('plain-text.jsonl');
+          try {
+            const agent: Agent = await fromConfig({
+              config: built.config,
+              sessionId,
+            });
+            return captureRuntimeId(agent) === sessionId;
+          } finally {
+            await built.cleanup();
+          }
+        }),
       );
     },
     IDENTITY_PROPERTY_TIMEOUT_MS,
@@ -448,23 +443,20 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     'PROP5 for any non-empty sessionId, the caller-supplied MessageBus adoption invariant holds (the runtime bus IS the caller bus) @requirement:REQ-001 @scenario:property-caller-bus @given:any non-empty sessionId and a caller-supplied messageBus @when:fromConfig({ config, messageBus, sessionId }) @then:captureAgentMessageBus(agent) === callerBus for every generated sessionId',
     async () => {
       await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 1, maxLength: 40 }),
-          async (sessionId) => {
-            const built = await buildCliStyleConfig('plain-text.jsonl');
-            try {
-              const callerBus: MessageBus = built.messageBus;
-              const agent: Agent = await fromConfig({
-                config: built.config,
-                messageBus: callerBus,
-                sessionId,
-              });
-              return captureAgentMessageBus(agent) === callerBus;
-            } finally {
-              await built.cleanup();
-            }
-          },
-        ),
+        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          const built = await buildCliStyleConfig('plain-text.jsonl');
+          try {
+            const callerBus: MessageBus = built.messageBus;
+            const agent: Agent = await fromConfig({
+              config: built.config,
+              messageBus: callerBus,
+              sessionId,
+            });
+            return captureAgentMessageBus(agent) === callerBus;
+          } finally {
+            await built.cleanup();
+          }
+        }),
       );
     },
     IDENTITY_PROPERTY_TIMEOUT_MS,
@@ -474,22 +466,19 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     'PROP6 for any non-empty sessionId, a single stream turn yields exactly one done event (turn-drive parity) @requirement:REQ-INT-001 @scenario:property-turn-drive @given:any non-empty sessionId @when:agent.stream("hello") is drained @then:exactly one done event is emitted for every generated sessionId',
     async () => {
       await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 1, maxLength: 40 }),
-          async (sessionId) => {
-            const built = await buildCliStyleConfig('plain-text.jsonl');
-            try {
-              const agent: Agent = await fromConfig({
-                config: built.config,
-                sessionId,
-              });
-              const events: AgentEvent[] = await drain(agent.stream('hello'));
-              return countType(events, 'done') === 1;
-            } finally {
-              await built.cleanup();
-            }
-          },
-        ),
+        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          const built = await buildCliStyleConfig('plain-text.jsonl');
+          try {
+            const agent: Agent = await fromConfig({
+              config: built.config,
+              sessionId,
+            });
+            const events: AgentEvent[] = await drain(agent.stream('hello'));
+            return countType(events, 'done') === 1;
+          } finally {
+            await built.cleanup();
+          }
+        }),
       );
     },
     ASYNC_PROPERTY_TIMEOUT_MS,
@@ -499,26 +488,23 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     'PROP7 for any non-empty sessionId, fromConfig with a caller bus AND sessionId preserves both the config identity AND the caller-bus identity @requirement:REQ-001 @scenario:property-combined-identity @given:any non-empty sessionId and a caller-supplied messageBus @when:fromConfig({ config, messageBus, sessionId }) @then:both internalConfig(agent) === config AND captureAgentMessageBus(agent) === callerBus hold for every generated sessionId',
     async () => {
       await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 1, maxLength: 40 }),
-          async (sessionId) => {
-            const built = await buildCliStyleConfig('plain-text.jsonl');
-            try {
-              const callerBus: MessageBus = built.messageBus;
-              const agent: Agent = await fromConfig({
-                config: built.config,
-                messageBus: callerBus,
-                sessionId,
-              });
-              return (
-                internalConfig(agent) === built.config &&
-                captureAgentMessageBus(agent) === callerBus
-              );
-            } finally {
-              await built.cleanup();
-            }
-          },
-        ),
+        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          const built = await buildCliStyleConfig('plain-text.jsonl');
+          try {
+            const callerBus: MessageBus = built.messageBus;
+            const agent: Agent = await fromConfig({
+              config: built.config,
+              messageBus: callerBus,
+              sessionId,
+            });
+            return (
+              internalConfig(agent) === built.config &&
+              captureAgentMessageBus(agent) === callerBus
+            );
+          } finally {
+            await built.cleanup();
+          }
+        }),
       );
     },
     IDENTITY_PROPERTY_TIMEOUT_MS,

@@ -21,10 +21,7 @@ import {
 } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { ProviderCapabilities, ProviderComparison } from './types.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  getActiveProviderRuntimeContext,
-  type ProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { MissingProviderRuntimeError } from './errors.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -119,55 +116,42 @@ export class ProviderManager implements IProviderManager {
     config?: Config;
     runtime?: ProviderRuntimeContext;
   } {
-    let fallback: ProviderRuntimeContext | null = null;
-    const ensureFallback = (): ProviderRuntimeContext => {
-      fallback ??= getActiveProviderRuntimeContext();
-      return fallback;
-    };
-
-    if (!init) {
-      const resolved = ensureFallback();
+    // Identity/settings must be supplied explicitly by the caller. The manager
+    // never reads ambient global runtime state to backfill a missing runtime,
+    // so a background/isolated runtime can never silently adopt the foreground
+    // context (issue #2300). config remains optional — methods that require it
+    // (e.g. prepareStatelessProviderInvocation) throw a precise error when it
+    // is genuinely absent.
+    if (init && isRuntimeContext(init)) {
       return {
-        settingsService: asSettingsService(resolved.settingsService),
-        config: resolved.config,
-        runtime: resolved,
+        settingsService: asSettingsService(init.settingsService),
+        config: init.config,
+        runtime: init,
       };
     }
 
-    if (isRuntimeContext(init)) {
-      const context = init;
-      return {
-        settingsService: asSettingsService(context.settingsService),
-        config: context.config,
-        runtime: context,
-      };
-    }
-
-    const initObj = init;
-    const runtime = initObj.runtime;
-    let settingsService =
-      initObj.settingsService ??
+    const runtime = init?.runtime;
+    const settingsService =
+      init?.settingsService ??
       (runtime?.settingsService
         ? asSettingsService(runtime.settingsService)
-        : null);
-    let config: Config | undefined =
-      initObj.config ?? runtime?.config ?? undefined;
+        : undefined);
 
-    if (!settingsService || !config) {
-      const resolved = ensureFallback();
-      settingsService =
-        settingsService ?? asSettingsService(resolved.settingsService);
-      config = config ?? resolved.config;
-      return {
-        settingsService,
-        config,
-        runtime: runtime ?? resolved,
-      };
+    if (!settingsService) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['settings'],
+        requirement: 'REQ-SP2-002',
+        stage: 'ProviderManager.constructor',
+        message:
+          'ProviderManager requires an explicit runtime context or { settingsService }; ' +
+          'it does not read ambient global runtime state (issue #2300).',
+      });
     }
 
     return {
       settingsService,
-      config,
+      config: init?.config ?? runtime?.config,
       runtime,
     };
   }

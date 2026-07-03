@@ -6,10 +6,15 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_RUNTIME_ID,
   parseBootstrapArgs,
   prepareRuntimeForProfile,
   createBootstrapResult,
 } from '../profileBootstrap.js';
+import {
+  registerCliProviderInfrastructure,
+  setCliRuntimeContext,
+} from '@vybestack/llxprt-code-providers/runtime.js';
 
 vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
@@ -21,6 +26,8 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   })),
   applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
   registerCliProviderInfrastructure: vi.fn(),
+  setCliRuntimeContext: vi.fn(),
+  disposeCliRuntime: vi.fn(),
 }));
 
 type BootstrapProfileArgs = {
@@ -202,6 +209,89 @@ describe('profileBootstrap helpers', () => {
       sessionId: 'bootstrap-session',
       source: 'test',
     });
+  });
+});
+
+describe('prepareRuntimeForProfile binds identity before infrastructure (issue #2300)', () => {
+  const mockedSetContext = vi.mocked(setCliRuntimeContext);
+  const mockedRegister = vi.mocked(registerCliProviderInfrastructure);
+
+  beforeEach(() => {
+    mockedSetContext.mockClear();
+    mockedRegister.mockClear();
+  });
+
+  it('calls setCliRuntimeContext before registerCliProviderInfrastructure and propagates the same runtimeId', async () => {
+    const explicitRuntimeId = 'cli.runtime.bootstrap.ordering-test';
+    const parsed: ParsedBootstrapArgs = {
+      bootstrapArgs: {
+        profileName: 'workspace',
+        profileJson: null,
+        providerOverride: null,
+        modelOverride: null,
+        keyOverride: null,
+        keyfileOverride: null,
+        keyNameOverride: null,
+        baseurlOverride: null,
+        setOverrides: null,
+        debug: null,
+      },
+      runtimeMetadata: {
+        runtimeId: explicitRuntimeId,
+        metadata: { source: 'ordering-test' },
+      },
+    };
+
+    const result = await prepareRuntime(parsed);
+
+    expect(result.runtime.runtimeId).toBe(explicitRuntimeId);
+    expect(mockedSetContext).toHaveBeenCalledTimes(1);
+    expect(mockedRegister).toHaveBeenCalledTimes(1);
+
+    // setCliRuntimeContext must be invoked BEFORE registerCliProviderInfrastructure
+    // so identity is bound before any infrastructure reads ambient state.
+    const setCallOrder = mockedSetContext.mock.invocationCallOrder[0];
+    const registerCallOrder = mockedRegister.mock.invocationCallOrder[0];
+    expect(setCallOrder).toBeLessThan(registerCallOrder);
+
+    // Both must receive the same computed runtimeId (issue #2300 propagation).
+    const setContextOptions = mockedSetContext.mock.calls[0][2];
+    const registerOptions = mockedRegister.mock.calls[0][2];
+    expect(setContextOptions.runtimeId).toBe(explicitRuntimeId);
+    expect(registerOptions.runtimeId).toBe(explicitRuntimeId);
+    expect(registerOptions.runtimeId).toBe(setContextOptions.runtimeId);
+  });
+
+  it('propagates a deterministic default runtimeId when metadata omits one', async () => {
+    const parsed: ParsedBootstrapArgs = {
+      bootstrapArgs: {
+        profileName: null,
+        profileJson: null,
+        providerOverride: null,
+        modelOverride: null,
+        keyOverride: null,
+        keyfileOverride: null,
+        keyNameOverride: null,
+        baseurlOverride: null,
+        setOverrides: null,
+        debug: null,
+      },
+      runtimeMetadata: {
+        // No runtimeId supplied — prepareRuntimeForProfile must choose a
+        // deterministic default rather than a process-derived random id.
+      },
+    };
+
+    await prepareRuntime(parsed);
+
+    expect(mockedSetContext).toHaveBeenCalledTimes(1);
+    expect(mockedRegister).toHaveBeenCalledTimes(1);
+
+    const setContextOptions = mockedSetContext.mock.calls[0][2];
+    const registerOptions = mockedRegister.mock.calls[0][2];
+
+    expect(setContextOptions.runtimeId).toBe(DEFAULT_RUNTIME_ID);
+    expect(registerOptions.runtimeId).toBe(setContextOptions.runtimeId);
   });
 });
 

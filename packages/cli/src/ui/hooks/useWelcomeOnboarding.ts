@@ -350,7 +350,6 @@ function useTriggerAuth(runtime: ReturnType<typeof useRuntimeApi>) {
       apiKey?: string,
     ): Promise<void> => {
       debug.log(`[triggerAuth] START provider=${provider} method=${method}`);
-      const oauthManager = runtime.getCliOAuthManager();
       const providerManager = runtime.getCliProviderManager();
 
       debug.log(
@@ -359,11 +358,8 @@ function useTriggerAuth(runtime: ReturnType<typeof useRuntimeApi>) {
 
       // Authenticate FIRST before switching provider (prevents double OAuth)
       if (method === 'oauth') {
-        if (!oauthManager) {
-          throw new Error('OAuth manager not available');
-        }
         debug.log(`[triggerAuth] Starting OAuth for ${provider}`);
-        await oauthManager.authenticate(provider, undefined, {
+        await runtime.getCliOAuthManager().authenticate(provider, undefined, {
           signalAuthCompletion: true,
         });
         debug.log(`[triggerAuth] OAuth complete for ${provider}`);

@@ -16,7 +16,11 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { FromConfigOptions } from './config-types.js';
 import { FromConfigValidatableSchema } from './config-types.js';
 import type { Agent } from './agent.js';
-import { generateRuntimeId, AgentBootstrapError } from './agentBootstrap.js';
+import {
+  generateRuntimeId,
+  AgentBootstrapError,
+  validateAgentRuntimeId,
+} from './agentBootstrap.js';
 import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
 
 /**
@@ -46,6 +50,7 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
 
   // @pseudocode line 15: runtimeId (sessionId takes precedence; otherwise generate).
   const runtimeId = options.sessionId ?? generateRuntimeId();
+  validateAgentRuntimeId(runtimeId);
 
   // @pseudocode line 16: reach the Config's SettingsService (no second store).
   const settingsService = config.getSettingsService();

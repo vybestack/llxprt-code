@@ -77,7 +77,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -124,7 +124,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -166,7 +166,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -220,7 +220,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -272,7 +272,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -310,7 +310,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -348,7 +348,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -383,7 +383,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -424,7 +424,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -463,7 +463,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -507,7 +507,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -545,7 +545,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -584,7 +584,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -622,7 +622,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');

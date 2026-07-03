@@ -39,7 +39,7 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
     const runtimeId = `token-tracking.provider.${Math.random()
       .toString(36)
       .slice(2, 10)}`;
-    initializeTestProviderRuntime({
+    const { runtime: testRuntime } = initializeTestProviderRuntime({
       runtimeId,
       metadata: { suite: 'token-tracking-provider', runtimeId },
     });
@@ -71,7 +71,7 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
       getConversationLoggingEnabled: () => false,
     };
 
-    providerManager = new ProviderManager();
+    providerManager = new ProviderManager(testRuntime);
     providerManager.setConfig(config);
     config.setProviderManager(providerManager);
   });

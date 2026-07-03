@@ -104,9 +104,11 @@ describe('Runtime model parameter isolation', () => {
       } as unknown as OAuthManager,
       {
         messageBus: runtimeMessageBus,
+        runtimeId: 'model-params-isolation-test',
       },
     );
     setCliRuntimeContext(settingsService, config, {
+      runtimeId: 'model-params-isolation-test',
       metadata: { source: 'model-params-isolation.integration.test.ts' },
     });
 

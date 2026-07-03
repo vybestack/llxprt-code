@@ -62,7 +62,7 @@ describe('Token Tracking Property-Based Tests', () => {
     const runtimeId = `token-tracking.property.${Math.random()
       .toString(36)
       .slice(2, 10)}`;
-    initializeTestProviderRuntime({
+    const { runtime: testRuntime } = initializeTestProviderRuntime({
       runtimeId,
       metadata: { suite: 'token-tracking-property', runtimeId },
     });
@@ -73,7 +73,7 @@ describe('Token Tracking Property-Based Tests', () => {
       call: vi.fn(),
     };
 
-    providerManager = new ProviderManager();
+    providerManager = new ProviderManager(testRuntime);
     tracker = new ProviderPerformanceTracker(mockProvider.id);
     const mockConfig = new MockConfig();
     loggingWrapper = new LoggingProviderWrapper(mockProvider, mockConfig);

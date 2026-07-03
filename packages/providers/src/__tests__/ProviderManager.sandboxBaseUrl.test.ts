@@ -57,7 +57,7 @@ describe('ProviderManager sandbox-base-url resolution', () => {
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     settingsService = new SettingsService();
     registerSettingsService(settingsService);
-    manager = new ProviderManager();
+    manager = new ProviderManager({ settingsService });
     manager.registerProvider(createMockProvider('test-provider'));
     manager.setActiveProvider('test-provider');
   });

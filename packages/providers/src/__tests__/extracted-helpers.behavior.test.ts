@@ -10,10 +10,6 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import {
@@ -40,11 +36,6 @@ import {
 import { extractSimpleContent } from '../logging/streamChunkUtils.js';
 import { accumulateTokenUsage } from '../logging/tokenAccumulator.js';
 import { extractTokenCountsFromResponse } from '../logging/tokenCounts.js';
-import {
-  resolveFromAsyncLocalStorage,
-  resolveFromActiveContext,
-  resolveFromFirstRegistered,
-} from '../runtime/runtimeIdentityResolution.js';
 
 function debugLoggerStub(): DebugLogger {
   return {
@@ -294,39 +285,6 @@ describe('extracted provider helper behavior', () => {
         ],
       }),
     ).toBe('hello world');
-  });
-
-  it('preserves runtime identity fallback ordering', () => {
-    const registry = new Map<string, unknown>([['registered-runtime', {}]]);
-    const scopedIdentity = {
-      runtimeId: 'scoped-runtime',
-      metadata: { scoped: true },
-    };
-    const settingsService = new SettingsService();
-    const config = { getConversationLoggingEnabled: () => false } as Config;
-
-    setActiveProviderRuntimeContext({
-      settingsService,
-      config,
-      runtimeId: 'unregistered-active-runtime',
-      metadata: { active: true },
-    });
-
-    try {
-      expect(resolveFromAsyncLocalStorage(scopedIdentity)).toBe(scopedIdentity);
-      expect(resolveFromFirstRegistered(registry)).toStrictEqual({
-        runtimeId: 'registered-runtime',
-        metadata: {},
-      });
-      expect(
-        resolveFromActiveContext(registry, 'legacy-runtime'),
-      ).toStrictEqual({
-        runtimeId: 'registered-runtime',
-        metadata: { active: true },
-      });
-    } finally {
-      clearActiveProviderRuntimeContext();
-    }
   });
 
   it('preserves provider base-url chain traversal and capability fallbacks', () => {

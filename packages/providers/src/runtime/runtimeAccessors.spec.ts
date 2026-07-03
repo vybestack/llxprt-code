@@ -21,6 +21,7 @@ import type {
   Config,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import type { OAuthManager } from '../auth/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 
@@ -117,11 +118,8 @@ describe('runtimeAccessors', () => {
 
   // Helper to set up a complete runtime context with provider manager
   const setupCompleteRuntime = () => {
-    // setCliRuntimeContext generates its own runtimeId based on process.pid
-    // We need to call it with a specific ID and then update with provider manager
     const runtimeId = `test-runtime-${Date.now()}`;
 
-    // Set context with the specific ID
     setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
 
     // Update the entry with the provider manager
@@ -292,15 +290,31 @@ describe('runtimeAccessors', () => {
       expect(Array.isArray(models)).toBe(true);
     });
 
-    it('should get CLI OAuth manager (null when not set)', () => {
+    it('should throw when CLI OAuth manager is missing from a partial runtime entry', () => {
       setupCompleteRuntime();
 
-      const oauthManager = getCliOAuthManager();
-      expect(oauthManager).toBeNull();
+      expect(() => getCliOAuthManager()).toThrow(/OAuthManager/);
+    });
+
+    it('should get CLI OAuth manager for a complete subagent runtime entry', () => {
+      const runtimeId = setupCompleteRuntime();
+      const oauthManager = {} as OAuthManager;
+      upsertRuntimeEntry(runtimeId, {
+        runtimeKind: 'subagent',
+        oauthManager,
+      });
+
+      expect(getCliOAuthManager()).toBe(oauthManager);
     });
   });
 
   describe('stateless readiness', () => {
+    it('returns false instead of throwing when stateless mode has no active runtime', () => {
+      configureCliStatelessHardening('strict');
+
+      expect(isCliRuntimeStatelessReady()).toBe(false);
+    });
+
     it('should check if runtime is stateless ready', () => {
       setupCompleteRuntime();
 

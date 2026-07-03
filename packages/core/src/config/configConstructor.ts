@@ -60,11 +60,7 @@ import {
   StandardFileSystemService,
   type FileSystemService,
 } from '../services/fileSystemService.js';
-import { peekActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
-import {
-  activateSettingsRuntimeContext,
-  createRuntimeSettingsService,
-} from '../runtime/settingsRuntimeAdapter.js';
+import { createRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { logCliConfiguration, StartSessionEvent } from '../telemetry/index.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -228,37 +224,18 @@ export interface ConfigConstructorTarget {
   getProxy(): string | undefined;
 }
 
-function isSettingsService(value: unknown): value is SettingsService {
-  if (value === null || value === undefined || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  return [
-    'clear',
-    'updateSettings',
-    'switchProvider',
-    'on',
-    'off',
-    'getCurrentProfileName',
-  ].every((methodName) => typeof candidate[methodName] === 'function');
-}
-
 function applySettingsService(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
-  const providedSettingsService = params.settingsService;
-  const existingContext = peekActiveProviderRuntimeContext();
-  if (providedSettingsService) {
-    config.settingsService = providedSettingsService;
-  } else if (isSettingsService(existingContext?.settingsService)) {
-    config.settingsService = existingContext.settingsService;
-  } else {
-    config.settingsService = createRuntimeSettingsService();
-  }
-
-  activateSettingsRuntimeContext(config.settingsService);
+  // The settings service is supplied explicitly by the composition boundary
+  // (or a fresh isolated one is created). Constructing a Config never adopts
+  // ambient global runtime state and never mutates the active runtime context
+  // as a side effect — activating a runtime context is the composition
+  // boundary's job (setCliRuntimeContext / activateSettingsRuntimeContext),
+  // not the constructor's (issue #2300).
+  config.settingsService =
+    params.settingsService ?? createRuntimeSettingsService();
 }
 
 function applyCoreIdentity(

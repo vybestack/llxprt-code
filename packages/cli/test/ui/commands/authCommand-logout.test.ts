@@ -403,7 +403,7 @@ describe.skipIf(skipInCI)(
      * @scenario Provider name normalization
      * @given Provider names with different formatting
      * @when logout command executed
-     * @then Provider names handled consistently
+     * @then Provider names normalize consistently
      */
     it('should handle provider name formatting consistently', async () => {
       const providerVariations = ['gemini', 'Gemini', 'GEMINI'];
@@ -670,13 +670,13 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
   /**
    * @plan PLAN-20250823-AUTHFIXES.P13
    * @requirement REQ-002
-   * Property Test 3: Command argument variations
+   * Property Test 3: Command argument normalization
    */
   it.prop([
     fc.constantFrom('gemini', 'anthropic'),
     fc.constantFrom('logout', 'LOGOUT', 'Logout', 'logOut', 'LogOut'),
   ])(
-    'should handle command argument case variations',
+    'should normalize command argument case variations',
     async (provider, logoutAction) => {
       const args = `${provider} ${logoutAction}`;
 

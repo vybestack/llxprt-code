@@ -78,8 +78,13 @@ export async function runZedIntegration(
 
   logger.debug(() => 'Streams created');
 
+  // Deliberate foreground hand-off: the Zed integration replaces the CLI
+  // bootstrap runtime as the process default. allowDefaultHandoff opts past the
+  // write-once guard for this one intentional transition (issue #2300).
   setCliRuntimeContext(config.getSettingsService(), config, {
+    runtimeId: 'cli.runtime.zed',
     metadata: { source: 'zed-integration', stage: 'bootstrap' },
+    allowDefaultHandoff: true,
   });
 
   try {

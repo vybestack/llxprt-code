@@ -272,6 +272,7 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
       mockOAuthManager,
       {
         messageBus: runtimeMessageBus,
+        runtimeId: 'test-runtime',
       },
     );
   });

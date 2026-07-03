@@ -312,6 +312,21 @@ describe('AuthStatusService.logout', () => {
   beforeEach(() => {
     flushMockRef.current?.mockClear();
     providerManagerRef.current?.getProviderByName.mockReset();
+    oauthRuntimeBridge.setAccessors({
+      getEphemeralSetting: () => undefined,
+      getProviderManager: () => ({
+        getProviderByName: vi.fn(() => undefined),
+      }),
+      getRuntimeContext: () => ({
+        runtimeId: 'test-runtime',
+        metadata: {},
+      }),
+      getCurrentProfileName: () => null,
+    });
+  });
+
+  afterEach(() => {
+    oauthRuntimeBridge.setAccessors(undefined);
   });
 
   it('throws on invalid providerName', async () => {
