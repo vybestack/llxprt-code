@@ -538,6 +538,66 @@ describe('processAgentStream', () => {
     expect(result).toBeDefined();
   });
 
+  it('includes finish_reason:"refusal" in plain jsonOutput on done{refusal} @issue:2329', async () => {
+    const metrics = uiTelemetryService.getMetrics();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'partial response' },
+      {
+        type: 'done',
+        reason: 'refusal',
+        finished: { reason: 'SAFETY', stopReason: 'refusal' },
+      },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({
+        jsonOutput: true,
+        config: createMockConfig({ sessionId: 'refusal-session' }),
+      }),
+      Date.now(),
+      () => metrics,
+    );
+
+    const jsonLine = processStdoutSpy.mock.calls
+      .map(([value]) => String(value).trimEnd())
+      .filter((value) => value.startsWith('{'))
+      .join('');
+    const parsed = JSON.parse(jsonLine) as Record<string, unknown>;
+    expect(parsed).toHaveProperty('session_id', 'refusal-session');
+    expect(parsed).toHaveProperty('response', 'partial response');
+    expect(parsed).toHaveProperty('stats');
+    expect(parsed).toHaveProperty('finish_reason', 'refusal');
+  });
+
+  it('does not include finish_reason in plain jsonOutput on a normal done{stop} @issue:2329', async () => {
+    const metrics = uiTelemetryService.getMetrics();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'The capital is Paris.' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({
+        jsonOutput: true,
+        config: createMockConfig({ sessionId: 'normal-session' }),
+      }),
+      Date.now(),
+      () => metrics,
+    );
+
+    const jsonLine = processStdoutSpy.mock.calls
+      .map(([value]) => String(value).trimEnd())
+      .filter((value) => value.startsWith('{'))
+      .join('');
+    const parsed = JSON.parse(jsonLine) as Record<string, unknown>;
+    expect(parsed).toHaveProperty('session_id', 'normal-session');
+    expect(parsed).toHaveProperty('response', 'The capital is Paris.');
+    expect(parsed).toHaveProperty('stats');
+    expect(parsed).not.toHaveProperty('finish_reason');
+  });
+
   it('writes a warning to stderr and continues on a hook-blocked event', async () => {
     const events: AgentEvent[] = [
       { type: 'text', text: 'partial' },

@@ -19,7 +19,7 @@ import type {
   StructuredError,
 } from '@vybestack/llxprt-code-agents';
 import { MAX_TURNS_MESSAGE } from './utils/errors.js';
-import { buildRefusalNoticeMessage } from './ui/hooks/geminiStream/streamUtils.js';
+import { REFUSAL_NOTICE_MESSAGE } from './ui/hooks/geminiStream/streamUtils.js';
 
 type StreamConsumerContext = {
   config: Config;
@@ -236,6 +236,7 @@ function emitFinalResult(
   jsonResponseText: string,
   startTime: number,
   metrics: SessionMetrics,
+  finishReason?: 'refusal',
 ): void {
   if (context.streamFormatter) {
     context.streamFormatter.emitEvent({
@@ -248,17 +249,20 @@ function emitFinalResult(
       ),
     });
   } else if (context.jsonOutput) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          session_id: context.config.getSessionId(),
-          response: jsonResponseText.trimEnd(),
-          stats: metrics,
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    const payload: {
+      session_id: string;
+      response: string;
+      stats: SessionMetrics;
+      finish_reason?: 'refusal';
+    } = {
+      session_id: context.config.getSessionId(),
+      response: jsonResponseText.trimEnd(),
+      stats: metrics,
+    };
+    if (finishReason !== undefined) {
+      payload.finish_reason = finishReason;
+    }
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   } else {
     process.stdout.write('\n');
   }
@@ -294,17 +298,22 @@ function handleDone(
     case 'refusal': {
       // @issue:2329 — surface the safety-classifier refusal as a user-visible
       // warning while still emitting the final result so stdout/json output
-      // is preserved. The notice text is shared with the interactive CLI via
-      // buildRefusalNoticeMessage so both surfaces stay in sync; the
-      // 'refusal'-case fallback is guaranteed to return a string.
-      const notice =
-        buildRefusalNoticeMessage(event.finished?.stopReason) ??
-        buildRefusalNoticeMessage('refusal');
-      if (notice !== undefined) {
-        process.stderr.write(`WARNING: ${notice}\n`);
-        emitStreamError(context.streamFormatter, 'warning', notice);
-      }
-      emitFinalResult(context, jsonResponseText, startTime, getMetrics());
+      // is preserved. DoneReason is authoritative here, so the shared notice
+      // constant is used directly. Plain-JSON consumers get a finish_reason
+      // field; stream-json already carried the warning event above.
+      process.stderr.write(`WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`);
+      emitStreamError(
+        context.streamFormatter,
+        'warning',
+        REFUSAL_NOTICE_MESSAGE,
+      );
+      emitFinalResult(
+        context,
+        jsonResponseText,
+        startTime,
+        getMetrics(),
+        'refusal',
+      );
       return;
     }
     case 'hook-stopped': {

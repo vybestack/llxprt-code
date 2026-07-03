@@ -51,6 +51,13 @@ import {
 
 export const SYSTEM_NOTICE_EVENT = 'system_notice' as const;
 
+/**
+ * @issue:2329 — Single source of truth for the safety-classifier refusal
+ * notice text shared by the interactive and non-interactive CLI surfaces.
+ */
+export const REFUSAL_NOTICE_MESSAGE =
+  'Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.';
+
 // ─── Pure utility functions ───────────────────────────────────────────────────
 
 /**
@@ -200,7 +207,7 @@ export function buildRefusalNoticeMessage(
   stopReason: string | undefined,
 ): string | undefined {
   if (stopReason === 'refusal') {
-    return 'Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.';
+    return REFUSAL_NOTICE_MESSAGE;
   }
   return undefined;
 }
