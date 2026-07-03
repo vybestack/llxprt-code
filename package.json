@@ -100,7 +100,7 @@
     "check": "npm run lint:all",
     "fix": "npm run format:all",
     "presubmit": "npm run format && npm run lint && npm run build && npm run typecheck && npm run test",
-    "preflight": "npm run clean && npm ci && npm run format && npm run lint:ci && npm run build && npm run typecheck && npm run test:ci",
+    "preflight": "node scripts/preflight-ci.js",
     "prepack": "bun scripts/generate-git-commit-info.ts",
     "prepare:package": "bun scripts/prepare-package.ts",
     "release:version": "bun scripts/version.ts",

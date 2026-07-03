@@ -326,9 +326,9 @@ describe('Issue #2242: workspace package.json build scripts use Bun', () => {
     expect(allScripts).not.toContain('bind_package_version.js');
     expect(allScripts).not.toContain('bind_package_dependencies.js');
   });
-  it('packages/cli prepack delegates to npm run build', () => {
+  it('packages/cli has no prepack (no-compile publish contract ships TS source)', () => {
     const scripts = readWorkspaceScripts('cli');
-    expect(scripts['prepack']).toBe('npm run build');
+    expect(scripts['prepack']).toBeUndefined();
   });
 
   it('workspace build scripts reference build_package.ts via the bun-shared ../../ path', () => {

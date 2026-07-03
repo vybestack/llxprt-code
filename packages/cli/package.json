@@ -25,8 +25,7 @@
     "test:ci:fast": "vitest run -c vitest.ci.fast.config.ts",
     "test:ci": "vitest run",
     "test:legacy": "OPENAI_RESPONSES_DISABLE=true vitest run -t \"legacy|gpt-3.5-turbo\"",
-    "typecheck": "tsc --noEmit",
-    "prepack": "npm run build"
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "bin",
