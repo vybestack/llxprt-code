@@ -26,6 +26,11 @@ export interface JsonOutput {
   response?: string;
   stats?: SessionMetrics;
   error?: JsonError;
+  /**
+   * Present only when the model's safety classifier declined the request
+   * (issue #2329). Omitted on normal completion.
+   */
+  finish_reason?: 'refusal';
 }
 
 // Streaming JSON event types

@@ -536,6 +536,11 @@ describe('processAgentStream', () => {
       (event) => event.type === JsonStreamEventType.RESULT,
     );
     expect(result).toBeDefined();
+    // Stream-json mode relies on the structured warning event, not raw stderr.
+    const stderrWrites = processStderrSpy.mock.calls
+      .map(([value]) => String(value))
+      .join('');
+    expect(stderrWrites).not.toContain('WARNING:');
   });
 
   it('includes finish_reason:"refusal" in plain jsonOutput on done{refusal} @issue:2329', async () => {
@@ -568,6 +573,11 @@ describe('processAgentStream', () => {
     expect(parsed).toHaveProperty('response', 'partial response');
     expect(parsed).toHaveProperty('stats');
     expect(parsed).toHaveProperty('finish_reason', 'refusal');
+    // Plain-JSON mode carries the signal via finish_reason; no raw stderr.
+    const stderrWrites = processStderrSpy.mock.calls
+      .map(([value]) => String(value))
+      .join('');
+    expect(stderrWrites).not.toContain('WARNING:');
   });
 
   it('does not include finish_reason in plain jsonOutput on a normal done{stop} @issue:2329', async () => {

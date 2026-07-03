@@ -6,6 +6,7 @@
 
 import {
   type Config,
+  type JsonOutput,
   JsonStreamEventType,
   type StreamJsonFormatter,
   type EmojiFilter,
@@ -249,12 +250,7 @@ function emitFinalResult(
       ),
     });
   } else if (context.jsonOutput) {
-    const payload: {
-      session_id: string;
-      response: string;
-      stats: SessionMetrics;
-      finish_reason?: 'refusal';
-    } = {
+    const payload: JsonOutput = {
       session_id: context.config.getSessionId(),
       response: jsonResponseText.trimEnd(),
       stats: metrics,
@@ -300,8 +296,15 @@ function handleDone(
       // warning while still emitting the final result so stdout/json output
       // is preserved. DoneReason is authoritative here, so the shared notice
       // constant is used directly. Plain-JSON consumers get a finish_reason
-      // field; stream-json already carried the warning event above.
-      process.stderr.write(`WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`);
+      // field; stream-json already carried the warning event below.
+      //
+      // The unstructured stderr warning is emitted only in pure text mode
+      // (no streamFormatter and no jsonOutput). In stream-json mode the
+      // structured warning event carries the signal; in plain-JSON mode the
+      // finish_reason field carries it.
+      if (!context.jsonOutput && context.streamFormatter === null) {
+        process.stderr.write(`WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`);
+      }
       emitStreamError(
         context.streamFormatter,
         'warning',
