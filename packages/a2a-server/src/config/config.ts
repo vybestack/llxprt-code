@@ -282,7 +282,7 @@ function findEnvFile(startDir: string): string | null {
     parentDir = path.dirname(currentDir);
   } while (parentDir !== currentDir && parentDir !== '');
   // check .env under home as fallback, again preferring llxprt-specific .env
-  const homeLlxprtEnvPath = path.join(process.cwd(), LLXPRT_CONFIG_DIR, '.env');
+  const homeLlxprtEnvPath = path.join(homedir(), LLXPRT_CONFIG_DIR, '.env');
   if (fs.existsSync(homeLlxprtEnvPath)) {
     return homeLlxprtEnvPath;
   }
