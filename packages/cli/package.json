@@ -14,7 +14,7 @@
     "llxprt": "bin/llxprt.cjs"
   },
   "scripts": {
-    "build": "node ../../scripts/build_package.js && node ../../scripts/chmod_executable.js bin/llxprt.cjs",
+    "build": "bun ../../scripts/build_package.ts && bun ../../scripts/chmod_executable.ts dist/index.js",
     "start": "bun index.ts",
     "debug": "bun --inspect-brk index.ts",
     "lint": "eslint . --ext .ts,.tsx",
@@ -25,9 +25,7 @@
     "test:ci:fast": "vitest run -c vitest.ci.fast.config.ts",
     "test:ci": "vitest run",
     "test:legacy": "OPENAI_RESPONSES_DISABLE=true vitest run -t \"legacy|gpt-3.5-turbo\"",
-    "typecheck": "tsc --noEmit",
-    "prerelease:version": "node ../../scripts/bind_package_version.js",
-    "prerelease:deps": "node ../../scripts/bind_package_dependencies.js"
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "bin",

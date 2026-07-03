@@ -119,11 +119,11 @@ These packages are used when performing the standard installation and when runni
 
 **Build and packaging processes**
 
-LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's run path uses the Bun launcher (`packages/cli/src/launcher/bun-launcher.ts`) to execute the TypeScript (`.ts`) entry point directly — no pre-compiled `dist/` artifact is required for the CLI to run. Type checking uses `tsc --noEmit` (no JavaScript output is produced). However, the published npm package still ships `dist/` (produced by `tsc` during the build) for Node.js compatibility. The retired `bundle/llxprt.js` artifact is no longer produced. This applies to both distribution channels:
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's run path starts with the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), which resolves Bun and executes the TypeScript (`.ts`) entry point directly. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run. This applies to both distribution channels:
 
-- **NPM publication:** The published NPM package ships `dist/` (produced by `tsc`) for Node.js compatibility. The CLI run path uses the Bun launcher to execute the `.ts` source directly. `tsc --noEmit` is used for type-checking during development.
+- **NPM publication:** The published NPM package exposes `packages/cli/bin/llxprt.cjs` as the `llxprt` binary. That launcher resolves Bun and executes the `.ts` source entrypoint directly. `tsc --noEmit` is used for type-checking during development.
 
-- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, the postinstall bootstrap builds the CLI `dist/` entry, and the Bun launcher executes the `.ts` source directly.
+- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, the postinstall bootstrap ensures dependencies are available, and the checked-in launcher executes the `.ts` source through Bun.
 
 Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 

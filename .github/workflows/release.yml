@@ -162,7 +162,7 @@ jobs:
       - name: Get the version
         id: version
         run: |
-          VERSION_JSON=$(node scripts/get-release-version.js)
+          VERSION_JSON=$(bun scripts/get-release-version.ts)
           {
             echo "RELEASE_TAG=$(echo "$VERSION_JSON" | jq -r .releaseTag)"
             echo "RELEASE_VERSION=$(echo "$VERSION_JSON" | jq -r .releaseVersion)"
@@ -250,7 +250,7 @@ jobs:
 
       - name: Bind release dependencies
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
-        run: node scripts/bind-release-deps.js
+        run: bun scripts/bind-release-deps.ts
 
       - name: Commit and Conditionally Push package versions
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.branch_decision.outputs.should_create_branch == 'true' }}

@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from 'fs';
-import path from 'path';
-import os from 'os'; // Import os module
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import type { Dirent } from 'node:fs';
+import { isErrnoException, messageOf } from './utils/error-guards.ts';
 
 // --- Configuration ---
 const cliPackageDir = path.resolve('packages', 'cli'); // Base directory for the CLI package
@@ -20,21 +22,21 @@ const buildDir = path.join(cliPackageDir, 'dist'); // Build output directory wit
 const warningsFilePath = path.join(os.tmpdir(), 'llxprt-code-warnings.txt'); // Temp file for warnings
 // ---------------------
 
-function getMtime(filePath) {
+function getMtime(filePath: string): number | null {
   try {
     return fs.statSync(filePath).mtimeMs; // Use mtimeMs for higher precision
   } catch (err) {
-    if (err.code === 'ENOENT') {
+    if (isErrnoException(err, 'ENOENT')) {
       return null; // File doesn't exist
     }
     console.error(`Error getting stats for ${filePath}:`, err);
     process.exit(1); // Exit on unexpected errors getting stats
-    return undefined; // Unreachable, but satisfies consistent-return
+    throw err;
   }
 }
 
-function findSourceFiles(dir, allFiles = []) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+function findSourceFiles(dir: string, allFiles: string[] = []): string[] {
+  const entries: Dirent[] = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     // Simple check to avoid recursing into node_modules or build dir itself
@@ -59,29 +61,31 @@ try {
     fs.unlinkSync(warningsFilePath);
   }
 } catch (err) {
+  const message = messageOf(err);
   console.warn(
-    `[Check Script] Warning: Could not delete previous warnings file: ${err.message}`,
+    `[Check Script] Warning: Could not delete previous warnings file: ${message}`,
   );
 }
 
 const buildMtime = getMtime(buildTimestampPath);
-if (!buildMtime) {
+if (buildMtime === null) {
   // If build is missing, write that as a warning and exit(0) so app can display it
   const errorMessage = `ERROR: Build timestamp file (${path.relative(process.cwd(), buildTimestampPath)}) not found. Run \`npm run build\` first.`;
   console.error(errorMessage); // Still log error here
   try {
     fs.writeFileSync(warningsFilePath, errorMessage);
   } catch (writeErr) {
+    const message = messageOf(writeErr);
     console.error(
-      `[Check Script] Error writing missing build warning file: ${writeErr.message}`,
+      `[Check Script] Error writing missing build warning file: ${message}`,
     );
   }
   process.exit(0); // Allow app to start and show the error
 }
 
 let newerSourceFileFound = false;
-const warningMessages = []; // Collect warnings here
-const allSourceFiles = [];
+const warningMessages: string[] = []; // Collect warnings here
+const allSourceFiles: string[] = [];
 
 // Collect files from specified directories
 sourceDirs.forEach((dir) => {
@@ -107,7 +111,7 @@ filesToWatch.forEach((file) => {
 for (const file of allSourceFiles) {
   const sourceMtime = getMtime(file);
   const relativePath = path.relative(process.cwd(), file);
-  const isNewer = sourceMtime && sourceMtime > buildMtime;
+  const isNewer = sourceMtime !== null && sourceMtime > buildMtime;
 
   if (isNewer) {
     const warning = `Warning: Source file "${relativePath}" has been modified since the last build.`;
@@ -129,7 +133,8 @@ if (newerSourceFileFound) {
     fs.writeFileSync(warningsFilePath, warningMessages.join('\n'));
     // Removed debug log
   } catch (err) {
-    console.error(`[Check Script] Error writing warnings file: ${err.message}`);
+    const message = messageOf(err);
+    console.error(`[Check Script] Error writing warnings file: ${message}`);
     // Proceed without writing, app won't show warnings
   }
 } else {
@@ -140,8 +145,9 @@ if (newerSourceFileFound) {
       fs.unlinkSync(warningsFilePath);
     }
   } catch (err) {
+    const message = messageOf(err);
     console.warn(
-      `[Check Script] Warning: Could not delete previous warnings file: ${err.message}`,
+      `[Check Script] Warning: Could not delete previous warnings file: ${message}`,
     );
   }
 }

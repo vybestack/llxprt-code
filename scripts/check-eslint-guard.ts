@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * @license
@@ -7,7 +7,8 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { diffFromGit, parseArgs } from './eslint-guard/git.mjs';
 import { checkDiff } from './eslint-guard/check-diff.mjs';
@@ -58,7 +59,7 @@ export {
 } from './eslint-guard/bypass-detector.mjs';
 export { formatViolations } from './eslint-guard/violations.mjs';
 
-function main() {
+function main(): void {
   const args = parseArgs(process.argv.slice(2));
   const diff = diffFromGit(args.base, args.head);
   const violations = checkDiff(diff);
@@ -126,6 +127,9 @@ function main() {
   process.exit(1);
 }
 
-if (import.meta.url === 'file://' + process.argv[1]) {
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   main();
 }

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -104,7 +104,7 @@ function createScenario(profile) {
       initialWaitMs: 6000,
     },
     startCommand: [
-      `env CI=0 CONTINUOUS_INTEGRATION=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true node scripts/start.js --profile-load ${profile} --set emojifilter=allowed`,
+      `env CI=0 CONTINUOUS_INTEGRATION=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true bun scripts/start.ts --profile-load ${profile} --set emojifilter=allowed`,
     ],
     yolo: false,
     steps: [

@@ -7,8 +7,8 @@
     "initialWaitMs": 8000
   },
   "startCommand": [
-    "node",
-    "scripts/start.js",
+    "bun",
+    "scripts/start.ts",
     "--provider",
     "gemini",
     "--model",

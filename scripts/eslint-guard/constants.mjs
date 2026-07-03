@@ -168,7 +168,7 @@ export const DEFAULT_BASE = process.env.GITHUB_BASE_REF
 
 export function isGeneratedGuardFixture(file) {
   return (
-    file === 'scripts/check-eslint-guard.js' ||
+    file === 'scripts/check-eslint-guard.ts' ||
     file === 'scripts/tests/eslint-guard.test.js'
   );
 }

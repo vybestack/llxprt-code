@@ -30,7 +30,7 @@ const defaultsDir = path.join(root, 'packages/core/src/prompt-config/defaults');
 const distDir = path.join(root, 'packages/core/dist/prompt-config/defaults');
 const manifestFilename = 'default-prompts.json';
 
-async function main() {
+async function main(): Promise<void> {
   const files = (
     await glob('**/*.md', {
       cwd: defaultsDir,
@@ -41,8 +41,7 @@ async function main() {
     })
   ).sort();
 
-  /** @type {{ [key: string]: string }} */
-  const manifest = {};
+  const manifest: Record<string, string> = {};
 
   for (const relativePath of files) {
     const fullPath = path.join(defaultsDir, relativePath);

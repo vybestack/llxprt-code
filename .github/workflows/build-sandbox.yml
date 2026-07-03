@@ -54,6 +54,17 @@ jobs:
           # package.json declares packageManager, to avoid a cache-poisoning path.
           package-manager-cache: false
 
+      - name: Setup Bun
+        # npm run build below is backed by bun scripts/build.ts and requires
+        # the Bun runtime to be on PATH.
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+          # Disable Bun binary caching in this packages:write job to close
+          # the cache-poisoning path, mirroring package-manager-cache: false
+          # on the Node setup step above.
+          no-cache: true
+
       - name: Install dependencies
         run: npm ci
 

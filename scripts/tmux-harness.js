@@ -6,17 +6,19 @@
  * - Lets us inject keystrokes and capture the rendered screen + scrollback.
  *
  * Usage:
- *   node scripts/tmux-harness.js
+ *   bun scripts/tmux-harness.js
  *
  * Scripted mode:
- *   node scripts/tmux-harness.js --script scripts/tmux-script.example.json
+ *   bun scripts/tmux-harness.js --script scripts/tmux-script.example.json
  */
 
+import { accessSync, constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { quote } from 'shell-quote';
+import { execFileSync } from 'node:child_process';
 import {
   compileMatcher,
   matchText,
@@ -350,12 +352,83 @@ function resolveTmuxConfig(options, script) {
       options.scrollbackLines ?? script?.tmux?.scrollbackLines ?? 2000,
   };
 }
+function resolveExecutable(name, envVar, fallback) {
+  const envValue = process.env[envVar]?.trim();
+  if (envValue) {
+    try {
+      accessSync(envValue, fsConstants.X_OK);
+      return envValue;
+    } catch (error) {
+      const details = error instanceof Error ? ` ${error.message}` : '';
+      console.warn(
+        `[tmux-harness] ${envVar}="${envValue}" is not executable; falling back to PATH lookup.${details}`,
+      );
+    }
+  }
+  try {
+    const locator = process.platform === 'win32' ? 'where' : 'which';
+    const located = execFileSync(locator, [name], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .trim()
+      .split(/\r?\n/)[0];
+    return located || fallback;
+  } catch (error) {
+    const details = error instanceof Error ? ` ${error.message}` : '';
+    console.warn(
+      `[tmux-harness] Could not resolve ${name} executable path; falling back to bare "${fallback}".${details}`,
+    );
+    return fallback;
+  }
+}
+
+function resolveBunExecutable() {
+  if (process.versions.bun) {
+    const envValue = process.env.BUN_EXECUTABLE_PATH?.trim();
+    if (envValue) {
+      try {
+        accessSync(envValue, fsConstants.X_OK);
+        return envValue;
+      } catch (error) {
+        const details = error instanceof Error ? ` ${error.message}` : '';
+        console.warn(
+          `[tmux-harness] BUN_EXECUTABLE_PATH="${envValue}" is not executable; using current Bun runtime.${details}`,
+        );
+      }
+    }
+    return process.execPath;
+  }
+  return resolveExecutable('bun', 'BUN_EXECUTABLE_PATH', 'bun');
+}
+
+function resolveNodeExecutable() {
+  return resolveExecutable('node', 'NODE_EXECUTABLE_PATH', 'node');
+}
+
+function resolveStartArgForTmux(arg, getBunExecutable, getNodeExecutable) {
+  if (arg === 'node') {
+    return getNodeExecutable();
+  }
+  if (arg === 'bun') {
+    return getBunExecutable();
+  }
+  if (!arg.includes('${node}') && !arg.includes('${bun}')) {
+    return arg;
+  }
+  return arg
+    .replaceAll('${node}', getNodeExecutable())
+    .replaceAll('${bun}', getBunExecutable());
+}
 
 export function resolveStartArgsForTmux(startArgs) {
+  let bunExecutable;
+  let nodeExecutable;
+  const getBunExecutable = () => (bunExecutable ??= resolveBunExecutable());
+  const getNodeExecutable = () => (nodeExecutable ??= resolveNodeExecutable());
   return startArgs.map((arg) =>
-    arg === 'node'
-      ? process.execPath
-      : arg.replaceAll('${node}', process.execPath),
+    resolveStartArgForTmux(arg, getBunExecutable, getNodeExecutable),
   );
 }
 
@@ -420,7 +493,7 @@ export function buildStartArgs(script, shouldYolo) {
     );
   }
 
-  const startArgs = command ? [...command] : ['node', 'scripts/start.js'];
+  const startArgs = command ? [...command] : ['bun', 'scripts/start.ts'];
   if (shouldYolo && !startArgs.includes('--yolo')) {
     startArgs.push('--yolo');
   }

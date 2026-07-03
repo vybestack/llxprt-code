@@ -5,7 +5,7 @@
  */
 
 /**
- * Behavioral tests for scripts/check-cli-import-boundary.mjs (#2204).
+ * Behavioral tests for scripts/check-cli-import-boundary.ts (#2204).
  *
  * These tests exercise the boundary guard's classification logic directly
  * against the real CLI source AND synthetic fixtures, so regressions (a new
@@ -13,7 +13,7 @@
  * bloated entrypoint) are caught before merge.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,7 +22,37 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
-const SCRIPT = join(REPO_ROOT, 'scripts', 'check-cli-import-boundary.mjs');
+const SCRIPT = join(REPO_ROOT, 'scripts', 'check-cli-import-boundary.ts');
+const RUNTIME = process.env.BUN_EXECUTABLE ?? 'bun';
+
+/** @type {boolean | undefined} */
+let cachedBunAvailable;
+
+function bunAvailable() {
+  if (cachedBunAvailable !== undefined) {
+    return cachedBunAvailable;
+  }
+  try {
+    execFileSync(RUNTIME, ['--version'], {
+      encoding: 'utf8',
+      timeout: 15_000,
+    });
+    cachedBunAvailable = true;
+  } catch (error) {
+    const isMissingOrDenied =
+      error?.code === 'ENOENT' ||
+      error?.code === 'EACCES' ||
+      error?.code === 'ENOEXEC';
+    if (!isMissingOrDenied) {
+      throw error;
+    }
+    cachedBunAvailable = false;
+  }
+  return cachedBunAvailable;
+}
+
+const missingBunMessage =
+  '[cli-import-boundary] Bun runtime not found — install Bun or set BUN_EXECUTABLE.';
 
 /**
  * Runs the boundary script against `dir` (a temp fixture root or the real
@@ -75,7 +105,10 @@ function runScript(dir, expectedCode = undefined, options = {}) {
   let stderr = '';
   let exitCode = 0;
   try {
-    stdout = execFileSync(process.execPath, [SCRIPT], {
+    // The boundary script is a Bun-executed TypeScript module (see
+    // lint:cli-boundary in package.json). Invoke it via `bun` so the test
+    // exercises the same runtime path as CI/dev.
+    stdout = execFileSync(RUNTIME, [SCRIPT], {
       cwd: REPO_ROOT,
       env,
       encoding: 'utf-8',
@@ -101,6 +134,14 @@ function runScript(dir, expectedCode = undefined, options = {}) {
       throw new Error(
         `Boundary script timed out after 15s (SIGTERM/ETIMEDOUT). This ` +
           `indicates a hang, not the deliberate exit(1) of a violation fixture.`,
+      );
+    }
+    if (err.code === 'ENOENT') {
+      throw new Error(
+        `Boundary script failed with ENOENT. Either runtime "${RUNTIME}" is not on PATH ` +
+          `(install Bun or set BUN_EXECUTABLE), or the script path does not exist: ${SCRIPT}. ` +
+          `Original error: ${err.message}`,
+        { cause: err },
       );
     }
     // A stdio maxBuffer overflow (stdout or stderr exceeding maxBuffer) is
@@ -184,423 +225,478 @@ function cleanProductionFile() {
   return ['packages/cli/src/clean.ts', 'export const x = 1;\n'];
 }
 
-describe('check-cli-import-boundary', () => {
-  it('the real CLI source currently passes the boundary check', () => {
-    // The guard is a regression net: it must pass against the current
-    // quarantined CLI source. If this fails, a new disallowed deep import or
-    // getConfig() usage was introduced without an allowlist entry.
+describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
+  'check-cli-import-boundary',
+  () => {
+    beforeAll(() => {
+      if (process.env.CI === 'true' && !bunAvailable()) {
+        throw new Error(
+          `${missingBunMessage} Boundary tests cannot run in CI.`,
+        );
+      }
+    });
+
+    it('the real CLI source currently passes the boundary check', () => {
+      // The guard is a regression net: it must pass against the current
+      // quarantined CLI source. If this fails, a new disallowed deep import or
+      // getConfig() usage was introduced without an allowlist entry.
+      //
+      // useRealRepo is required so the script omits the CLI_BOUNDARY_ROOT env
+      // override: that env var (even when set to the real repo path) makes the
+      // script treat the tree as a synthetic fixture and SKIP the allowlist
+      // freshness guard. Passing useRealRepo ensures the freshness guard runs.
+      // `dir` is null because useRealRepo ignores it (the script anchors to its
+      // own location); passing a path here would falsely imply it is consulted.
+      const { code, stdout } = runScript(null, 0, { useRealRepo: true });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
+    });
+
+    it('flags a static deep import from providers/runtime not in the allowlist', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/rogue.ts',
+          "import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('rogue.ts');
+      expect(stdout).toContain('runtimeSettings.js');
+    });
+
+    it('flags a dynamic import() of a deep core path not in the allowlist', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/dynamic.ts',
+          "export async function f() { return (await import('@vybestack/llxprt-code-core/scheduler/types.js')).x; }\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('dynamic.ts');
+      expect(stdout).toContain('scheduler/types.js');
+      expect(stdout).toContain('dynamic-import');
+    });
+
+    it('flags a non-literal dynamic import() specifier', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/dynamic-variable.ts',
+          'export async function f(mod: string) { return import(mod); }\n',
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('dynamic-variable.ts');
+      expect(stdout).toContain('import(<non-literal>)');
+    });
+
+    it('flags a no-substitution template literal deep import specifier', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/template-mock.ts',
+          "import { vi } from 'vitest'; vi.mock(`@vybestack/llxprt-code-providers/runtime/runtimeSettings.js`, () => ({}));\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('template-mock.ts');
+      expect(stdout).toContain('runtimeSettings.js');
+    });
+
+    it('flags a vi.mock specifier of a deep providers path', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/mocked.ts',
+          "import { vi } from 'vitest'; vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({}));\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('mocked.ts');
+      expect(stdout).toContain('runtimeSettings.js');
+      expect(stdout).toContain('vi.mock');
+    });
+
+    it('flags a non-literal vi.mock specifier (dynamic specifiers can hide deep imports)', () => {
+      // Production vi.mock specifiers must be static string literals so this
+      // guard can analyze them. A dynamic specifier (variable, template
+      // expression) cannot be inspected and could hide a deep runtime import.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/dynamic-mock.ts',
+          "import { vi } from 'vitest'; const mod = './some.js'; vi.mock(mod, () => ({}));\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('dynamic-mock.ts');
+      expect(stdout).toContain('vi.mock(<non-literal>)');
+    });
+
+    it('flags a .getConfig() escape-hatch call', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/escape.ts',
+          'export function cfg(agent: unknown) { return (agent as { getConfig(): unknown }).getConfig(); }\n',
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('getConfig() escape-hatch');
+      expect(stdout).toContain('escape.ts');
+    });
+
+    it('flags a bare getConfig() escape-hatch call after destructuring', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        // The property-access guard alone misses this: getConfig is destructured
+        // off the agent and then called as a bare identifier. The guard must
+        // catch the bare-identifier call form too.
+        write(
+          'packages/cli/src/bare-escape.ts',
+          'export function cfg(agent: { getConfig(): unknown }) { const { getConfig } = agent; return getConfig(); }\n',
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('getConfig() escape-hatch');
+      expect(stdout).toContain('bare-escape.ts');
+    });
+
+    it('flags a getConfig extraction via destructuring without a call', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/destructure-extract.ts',
+          'export function cfg(agent: { getConfig(): unknown }) { const { getConfig } = agent; return getConfig; }\n',
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('getConfig() escape-hatch');
+      expect(stdout).toContain('destructure-extract.ts');
+    });
+
+    it('flags a getConfig extraction via property access without a call (const fn = agent.getConfig)', () => {
+      // Shape 3: the method reference is read WITHOUT being called. The
+      // extracted reference can be invoked later as fn(), bypassing the
+      // call-expression shapes (1 and 2). The guard must flag the bare
+      // property-access read.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/extract-escape.ts',
+          'export function cfg(agent: { getConfig(): unknown }) { const fn = agent.getConfig; return fn(); }\n',
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('getConfig() escape-hatch');
+      expect(stdout).toContain('extract-escape.ts');
+    });
+
+    it('flags a bloated index.ts entrypoint exceeding the thin-entry threshold', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        // index.ts over 200 lines
+        write(
+          'packages/cli/index.ts',
+          Array.from({ length: 201 }, (_, i) => `// line ${i}`).join('\n') +
+            '\n',
+        );
+        write(...cleanProductionFile());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      // Assert the unique failure-path text (not the preamble 'thin-entry'
+      // label) plus the threshold so a regression that changes the limit or
+      // the failure message is caught.
+      expect(stdout).toContain('must stay thin');
+      expect(stdout).toContain('threshold 200');
+    });
+
+    it('allows bare package roots (public API) without an allowlist entry', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ok.ts',
+          "import { Config } from '@vybestack/llxprt-code-core';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
+    });
+
+    it('excludes test files from the import scan', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        // A test file with a deep import must NOT be flagged.
+        write(
+          'packages/cli/src/__tests__/demo.test.ts',
+          "import { x } from '@vybestack/llxprt-code-core/scheduler/types.js';\n",
+        );
+        write(...cleanProductionFile());
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
+    });
+
+    // ── agents specifier-level boundary checks (#2204 / #2285) ──────────────
     //
-    // useRealRepo is required so the script omits the CLI_BOUNDARY_ROOT env
-    // override: that env var (even when set to the real repo path) makes the
-    // script treat the tree as a synthetic fixture and SKIP the allowlist
-    // freshness guard. Passing useRealRepo ensures the freshness guard runs.
-    // `dir` is null because useRealRepo ignores it (the script anchors to its
-    // own location); passing a path here would falsely imply it is consulted.
-    const { code, stdout } = runScript(null, 0, { useRealRepo: true });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
+    // The boundary checker enforces agents-package imports purely via
+    // specifier/subpath contracts: the bare root is allowed at the specifier
+    // level, and deep subpaths (including the internals barrel) are forbidden
+    // because @vybestack/llxprt-code-agents has no entry in
+    // PUBLIC_SUBPATHS_BY_PACKAGE. The API-surface guard owns "what does the
+    // agents root expose"; this checker owns "which specifiers may production
+    // CLI import".
 
-  it('flags a static deep import from providers/runtime not in the allowlist', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/rogue.ts',
-        "import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+    it('allows a bare agents root import (specifier-level, always)', () => {
+      // The bare root @vybestack/llxprt-code-agents is a public specifier and is
+      // always allowed. Any symbol-level concern (an internal name leaking back
+      // into the root) is owned by the API-surface guard + typecheck, NOT this
+      // checker.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ok.ts',
+          "import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('rogue.ts');
-    expect(stdout).toContain('runtimeSettings.js');
-  });
 
-  it('flags a dynamic import() of a deep core path not in the allowlist', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/dynamic.ts',
-        "export async function f() { return (await import('@vybestack/llxprt-code-core/scheduler/types.js')).x; }\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+    it('does not symbol-check the bare agents root (delegated to API-surface guard)', () => {
+      // Characterization: the boundary checker is SPECIFIER-level, not
+      // symbol-level. It allows any named import from the bare agents root
+      // because the root itself is a public specifier. Enforcing WHICH names a
+      // consumer may import from the root is the responsibility of the
+      // API-surface guard (scripts/check-agents-api-surface.mjs) plus typecheck
+      // — NOT this boundary checker. This test documents that an
+      // internal-named symbol (e.g. AgentClient) imported from the BARE root
+      // passes here by design, so a future change that adds symbol checking to
+      // this script is caught as an intentional contract change.
+      //
+      // Defense-in-depth note: the API-surface guard uses TWO complementary
+      // mechanisms to catch internal-symbol leaks on the agents root:
+      //   (1) DENIED_INTERNAL_NAMES — a hard-deny set of 3 known historical
+      //       leaks (AgentClient, CoreToolScheduler, AgenticLoop). These always
+      //       fail the guard regardless of snapshot state.
+      //   (2) expected-root-surface.json snapshot — a file-equality comparison
+      //       that catches ANY change to the root export surface, including a
+      //       NEW internal symbol leaking onto the root. A new leak causes
+      //       snapshot drift (the report will have an unexpected "+" entry),
+      //       which fails the guard until the snapshot is intentionally
+      //       reviewed and updated.
+      // The old PUBLIC_AGENT_SYMBOLS allowlist was deny-by-default; the
+      // snapshot is not. A NEW internal symbol added to the root would be
+      // caught by snapshot drift (requiring an intentional update), not by a
+      // deny-by-default policy. Do NOT reintroduce PUBLIC_AGENT_SYMBOLS.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ok.ts',
+          "import { AgentClient } from '@vybestack/llxprt-code-agents';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('dynamic.ts');
-    expect(stdout).toContain('scheduler/types.js');
-    expect(stdout).toContain('dynamic-import');
-  });
 
-  it('flags a vi.mock specifier of a deep providers path', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/mocked.ts',
-        "import { vi } from 'vitest'; vi.mock('@vybestack/llxprt-code-providers/runtime/runtimeSettings.js', () => ({}));\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+    it('flags importing from the agents internals.js subpath (deep import)', () => {
+      // @vybestack/llxprt-code-agents/internals.js is a deep subpath NOT in
+      // PUBLIC_SUBPATHS_BY_PACKAGE (agents has no entry there), so it is a
+      // deep-import violation regardless of which named symbol is imported.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/rogue.ts',
+          "import { AgentClient } from '@vybestack/llxprt-code-agents/internals.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('rogue.ts');
+      // Assert the exact offending specifier literal.
+      expect(stdout).toContain('@vybestack/llxprt-code-agents/internals.js');
+      // Static import syntax is reported as 'static-import'; the deep nature of
+      // the violation is conveyed by the offending specifier literal above.
+      expect(stdout).toContain('static-import');
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('mocked.ts');
-    expect(stdout).toContain('runtimeSettings.js');
-    expect(stdout).toContain('vi.mock');
-  });
 
-  it('flags a non-literal vi.mock specifier (dynamic specifiers can hide deep imports)', () => {
-    // Production vi.mock specifiers must be static string literals so this
-    // guard can analyze them. A dynamic specifier (variable, template
-    // expression) cannot be inspected and could hide a deep runtime import.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/dynamic-mock.ts',
-        "import { vi } from 'vitest'; const mod = './some.js'; vi.mock(mod, () => ({}));\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+    it('flags a namespace import from the agents internals.js subpath', () => {
+      // Specifier-level enforcement must catch all static import syntaxes,
+      // including namespace imports, because the checker reads the
+      // ImportDeclaration moduleSpecifier independently of the import clause form.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/namespace-deep.ts',
+          "import * as internals from '@vybestack/llxprt-code-agents/internals.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('namespace-deep.ts');
+      expect(stdout).toContain('@vybestack/llxprt-code-agents/internals.js');
+      expect(stdout).toContain('static-import');
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('dynamic-mock.ts');
-    expect(stdout).toContain('vi.mock(<non-literal>)');
-  });
 
-  it('flags a .getConfig() escape-hatch call', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/escape.ts',
-        'export function cfg(agent: unknown) { return (agent as { getConfig(): unknown }).getConfig(); }\n',
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+    it('flags a deep agents source path import', () => {
+      // A deep source path like /core/client.js is a deep subpath NOT in
+      // PUBLIC_SUBPATHS_BY_PACKAGE and is forbidden.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/deepsource.ts',
+          "import { AgentClient } from '@vybestack/llxprt-code-agents/core/client.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('deepsource.ts');
+      // Assert the exact offending specifier literal.
+      expect(stdout).toContain('@vybestack/llxprt-code-agents/core/client.js');
+      expect(stdout).toContain('static-import');
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('getConfig() escape-hatch');
-    expect(stdout).toContain('escape.ts');
-  });
 
-  it('flags a bare getConfig() escape-hatch call after destructuring', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      // The property-access guard alone misses this: getConfig is destructured
-      // off the agent and then called as a bare identifier. The guard must
-      // catch the bare-identifier call form too.
-      write(
-        'packages/cli/src/bare-escape.ts',
-        'export function cfg(agent: { getConfig(): unknown }) { const { getConfig } = agent; return getConfig(); }\n',
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+    it('fails when packages/cli/src contains no TypeScript files (empty scan guard)', () => {
+      // An empty fixture root has no packages/cli/src at all — walkDir returns 0
+      // files, and the guard must fail loudly rather than silently passing.
+      const { code, stdout } = withCliFixture(({ root }) => runScript(root, 1));
+      expect(code).toBe(1);
+      expect(stdout).toContain('no TypeScript source files found');
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('getConfig() escape-hatch');
-    expect(stdout).toContain('bare-escape.ts');
-  });
 
-  it('flags a getConfig extraction via property access without a call (const fn = agent.getConfig)', () => {
-    // Shape 3: the method reference is read WITHOUT being called. The
-    // extracted reference can be invoked later as fn(), bypassing the
-    // call-expression shapes (1 and 2). The guard must flag the bare
-    // property-access read.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/extract-escape.ts',
-        'export function cfg(agent: { getConfig(): unknown }) { const fn = agent.getConfig; return fn(); }\n',
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    expect(stdout).toContain('getConfig() escape-hatch');
-    expect(stdout).toContain('extract-escape.ts');
-  });
-
-  it('flags a bloated index.ts entrypoint exceeding the thin-entry threshold', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      // index.ts over 200 lines
-      write(
-        'packages/cli/index.ts',
-        Array.from({ length: 201 }, (_, i) => `// line ${i}`).join('\n') + '\n',
-      );
-      write(...cleanProductionFile());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    // Assert the unique failure-path text (not the preamble 'thin-entry'
-    // label) plus the threshold so a regression that changes the limit or
-    // the failure message is caught.
-    expect(stdout).toContain('must stay thin');
-    expect(stdout).toContain('threshold 200');
-  });
-
-  it('allows bare package roots (public API) without an allowlist entry', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ok.ts',
-        "import { Config } from '@vybestack/llxprt-code-core';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 0);
-    });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
-
-  it('excludes test files from the import scan', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      // A test file with a deep import must NOT be flagged.
-      write(
-        'packages/cli/src/__tests__/demo.test.ts',
-        "import { x } from '@vybestack/llxprt-code-core/scheduler/types.js';\n",
-      );
-      write(...cleanProductionFile());
-      write(...thinIndex());
-      return runScript(root, 0);
-    });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
-
-  // ── agents specifier-level boundary checks (#2204 / #2285) ──────────────
-  //
-  // The boundary checker enforces agents-package imports purely via
-  // specifier/subpath contracts: the bare root is allowed at the specifier
-  // level, and deep subpaths (including the internals barrel) are forbidden
-  // because @vybestack/llxprt-code-agents has no entry in
-  // PUBLIC_SUBPATHS_BY_PACKAGE. The API-surface guard owns "what does the
-  // agents root expose"; this checker owns "which specifiers may production
-  // CLI import".
-
-  it('allows a bare agents root import (specifier-level, always)', () => {
-    // The bare root @vybestack/llxprt-code-agents is a public specifier and is
-    // always allowed. Any symbol-level concern (an internal name leaking back
-    // into the root) is owned by the API-surface guard + typecheck, NOT this
-    // checker.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ok.ts',
-        "import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 0);
-    });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
-
-  it('does not symbol-check the bare agents root (delegated to API-surface guard)', () => {
-    // Characterization: the boundary checker is SPECIFIER-level, not
-    // symbol-level. It allows any named import from the bare agents root
-    // because the root itself is a public specifier. Enforcing WHICH names a
-    // consumer may import from the root is the responsibility of the
-    // API-surface guard (scripts/check-agents-api-surface.mjs) plus typecheck
-    // — NOT this boundary checker. This test documents that an
-    // internal-named symbol (e.g. AgentClient) imported from the BARE root
-    // passes here by design, so a future change that adds symbol checking to
-    // this script is caught as an intentional contract change.
+    // ── self-pruning allowlist guard (#2204) ────────────────────────────────
     //
-    // Defense-in-depth note: the API-surface guard uses TWO complementary
-    // mechanisms to catch internal-symbol leaks on the agents root:
-    //   (1) DENIED_INTERNAL_NAMES — a hard-deny set of 3 known historical
-    //       leaks (AgentClient, CoreToolScheduler, AgenticLoop). These always
-    //       fail the guard regardless of snapshot state.
-    //   (2) expected-root-surface.json snapshot — a file-equality comparison
-    //       that catches ANY change to the root export surface, including a
-    //       NEW internal symbol leaking onto the root. A new leak causes
-    //       snapshot drift (the report will have an unexpected "+" entry),
-    //       which fails the guard until the snapshot is intentionally
-    //       reviewed and updated.
-    // The old PUBLIC_AGENT_SYMBOLS allowlist was deny-by-default; the
-    // snapshot is not. A NEW internal symbol added to the root would be
-    // caught by snapshot drift (requiring an intentional update), not by a
-    // deny-by-default policy. Do NOT reintroduce PUBLIC_AGENT_SYMBOLS.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ok.ts',
-        "import { AgentClient } from '@vybestack/llxprt-code-agents';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 0);
+    // The allowlist must stay fresh: every allowlisted file must exist in
+    // production source, and every allowlisted specifier/symbol must still be
+    // imported. These tests run against the REAL repo (not synthetic fixtures)
+    // because the allowlist entries reference real production files.
+
+    it('the real CLI allowlist has no stale specifier entries', () => {
+      // The self-pruning guard runs as part of the normal boundary check against
+      // the real repo. Invoke the script WITHOUT the CLI_BOUNDARY_ROOT override
+      // (useRealRepo) so it anchors to its own location (the real repo) and runs
+      // the freshness guard that is skipped under synthetic fixtures. If any
+      // allowlisted specifier is no longer imported, the check fails with a
+      // "stale allowlist" message. `dir` is null because useRealRepo ignores it.
+      const { code, stdout } = runScript(null, 0, { useRealRepo: true });
+      expect(stdout).toContain('allowlist is fresh');
+      expect(code).toBe(0);
     });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
 
-  it('allows a namespace import from the bare agents root (specifier-level)', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ok.ts',
-        "import * as agentsApi from '@vybestack/llxprt-code-agents';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 0);
+    // ── public subpath treatment (#2204 burn-down) ──────────────────────────
+    //
+    // auth.js and composition.js are declared package.json `exports` entrypoints
+    // of the providers package with their own barrel index.ts. They are NOT deep
+    // internal imports and must be allowed without an allowlist entry.
+
+    it('allows a namespace import from the bare agents root (specifier-level)', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ok.ts',
+          "import * as agentsApi from '@vybestack/llxprt-code-agents';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
     });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
-  it('flags importing from the agents internals.js subpath (deep import)', () => {
-    // @vybestack/llxprt-code-agents/internals.js is a deep subpath NOT in
-    // PUBLIC_SUBPATHS_BY_PACKAGE (agents has no entry there), so it is a
-    // deep-import violation regardless of which named symbol is imported.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/rogue.ts',
-        "import { AgentClient } from '@vybestack/llxprt-code-agents/internals.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+
+    it('allows imports from the providers auth.js public subpath without an allowlist entry', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ui/commands/authCommand.ts',
+          "import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('rogue.ts');
-    // Assert the exact offending specifier literal.
-    expect(stdout).toContain('@vybestack/llxprt-code-agents/internals.js');
-    // Static import syntax is reported as 'static-import'; the deep nature of
-    // the violation is conveyed by the offending specifier literal above.
-    expect(stdout).toContain('static-import');
-  });
 
-  it('flags a namespace import from the agents internals.js subpath', () => {
-    // Specifier-level enforcement must catch all static import syntaxes,
-    // including namespace imports, because the checker reads the
-    // ImportDeclaration moduleSpecifier independently of the import clause form.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/namespace-deep.ts',
-        "import * as internals from '@vybestack/llxprt-code-agents/internals.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+    it('allows imports from the providers composition.js public subpath without an allowlist entry', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ui/commands/providerCommand.ts',
+          "import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('namespace-deep.ts');
-    expect(stdout).toContain('@vybestack/llxprt-code-agents/internals.js');
-    expect(stdout).toContain('static-import');
-  });
 
-  it('flags a deep agents source path import', () => {
-    // A deep source path like /core/client.js is a deep subpath NOT in
-    // PUBLIC_SUBPATHS_BY_PACKAGE and is forbidden.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/deepsource.ts',
-        "import { AgentClient } from '@vybestack/llxprt-code-agents/core/client.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
+    it('allows imports from the providers runtime.js public barrel without an allowlist entry', () => {
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ui/commands/clearCommand.ts',
+          "import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 0);
+      });
+      expect(stdout).toContain('CLI import boundary check PASSED.');
+      expect(code).toBe(0);
     });
-    expect(code).toBe(1);
-    expect(stdout).toContain('deepsource.ts');
-    // Assert the exact offending specifier literal.
-    expect(stdout).toContain('@vybestack/llxprt-code-agents/core/client.js');
-    expect(stdout).toContain('static-import');
-  });
 
-  it('fails when packages/cli/src contains no TypeScript files (empty scan guard)', () => {
-    // An empty fixture root has no packages/cli/src at all — walkDir returns 0
-    // files, and the guard must fail loudly rather than silently passing.
-    const { code, stdout } = withCliFixture(({ root }) => runScript(root, 1));
-    expect(code).toBe(1);
-    expect(stdout).toContain('no TypeScript source files found');
-  });
-
-  // ── self-pruning allowlist guard (#2204) ────────────────────────────────
-  //
-  // The allowlist must stay fresh: every allowlisted file must exist in
-  // production source, and every allowlisted specifier/symbol must still be
-  // imported. These tests run against the REAL repo (not synthetic fixtures)
-  // because the allowlist entries reference real production files.
-
-  it('the real CLI allowlist has no stale specifier entries', () => {
-    // The self-pruning guard runs as part of the normal boundary check against
-    // the real repo. Invoke the script WITHOUT the CLI_BOUNDARY_ROOT override
-    // (useRealRepo) so it anchors to its own location (the real repo) and runs
-    // the freshness guard that is skipped under synthetic fixtures. If any
-    // allowlisted specifier is no longer imported, the check fails with a
-    // "stale allowlist" message. `dir` is null because useRealRepo ignores it.
-    const { code, stdout } = runScript(null, 0, { useRealRepo: true });
-    expect(stdout).toContain('allowlist is fresh');
-    expect(code).toBe(0);
-  });
-
-  // ── public subpath treatment (#2204 burn-down) ──────────────────────────
-  //
-  // auth.js and composition.js are declared package.json `exports` entrypoints
-  // of the providers package with their own barrel index.ts. They are NOT deep
-  // internal imports and must be allowed without an allowlist entry.
-
-  it('allows imports from the providers auth.js public subpath without an allowlist entry', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ui/commands/authCommand.ts',
-        "import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 0);
+    it('still flags deep providers/runtime/* paths that are NOT the public barrel', () => {
+      // runtime.js is public, but runtime/runtimeSettings.js is a deep internal
+      // path that must still be flagged.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/rogue.ts',
+          "import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('rogue.ts');
+      expect(stdout).toContain('runtimeSettings.js');
     });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
 
-  it('allows imports from the providers composition.js public subpath without an allowlist entry', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ui/commands/providerCommand.ts',
-        "import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 0);
+    // ── shrunk ALLOWLIST guard (#2204) ──────────────────────────────────────
+    //
+    // The ALLOWLIST must NOT contain broad UI/hooks/commands/contexts/components/
+    // layouts/utils deep-import entries. These were the prime burn-down targets
+    // and have been eliminated. This synthetic-fixture test guards the boundary
+    // check logic; the real-repo ALLOWLIST freshness is exercised by the tests
+    // in the self-pruning section above.
+
+    it('a synthetic ui/hooks file with a deep providers/runtime/* import is not exempt from the boundary check', () => {
+      // Synthetic file guard: a file under ui/hooks importing a deep
+      // providers/runtime/* path must fail. This does NOT exercise the real
+      // repo ALLOWLIST — see the real-repo tests above for that.
+      const { code, stdout } = withCliFixture(({ root, write }) => {
+        write(
+          'packages/cli/src/ui/hooks/someHook.ts',
+          "import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';\n",
+        );
+        write(...thinIndex());
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).toContain('someHook.ts');
+      expect(stdout).toContain('runtimeSettings.js');
     });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
-
-  it('allows imports from the providers runtime.js public barrel without an allowlist entry', () => {
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ui/commands/clearCommand.ts',
-        "import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 0);
-    });
-    expect(stdout).toContain('CLI import boundary check PASSED.');
-    expect(code).toBe(0);
-  });
-
-  it('still flags deep providers/runtime/* paths that are NOT the public barrel', () => {
-    // runtime.js is public, but runtime/runtimeSettings.js is a deep internal
-    // path that must still be flagged.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/rogue.ts',
-        "import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    expect(stdout).toContain('rogue.ts');
-    expect(stdout).toContain('runtimeSettings.js');
-  });
-
-  // ── shrunk ALLOWLIST guard (#2204) ──────────────────────────────────────
-  //
-  // The ALLOWLIST must NOT contain broad UI/hooks/commands/contexts/components/
-  // layouts/utils deep-import entries. These were the prime burn-down targets
-  // and have been eliminated. This synthetic-fixture test guards the boundary
-  // check logic; the real-repo ALLOWLIST freshness is exercised by the tests
-  // in the self-pruning section above.
-
-  it('a synthetic ui/hooks file with a deep providers/runtime/* import is not exempt from the boundary check', () => {
-    // Synthetic file guard: a file under ui/hooks importing a deep
-    // providers/runtime/* path must fail. This does NOT exercise the real
-    // repo ALLOWLIST — see the real-repo tests above for that.
-    const { code, stdout } = withCliFixture(({ root, write }) => {
-      write(
-        'packages/cli/src/ui/hooks/someHook.ts',
-        "import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeSettings.js';\n",
-      );
-      write(...thinIndex());
-      return runScript(root, 1);
-    });
-    expect(code).toBe(1);
-    expect(stdout).toContain('someHook.ts');
-    expect(stdout).toContain('runtimeSettings.js');
-  });
-});
+  },
+);

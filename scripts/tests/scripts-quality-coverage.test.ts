@@ -63,9 +63,9 @@ const CONFIG_TIMEOUT = 30_000;
 
 describe('Issue #2282: scripts strict code-quality coverage', () => {
   it(
-    'applies maintainability/complexity rules to a .js script',
+    'applies maintainability/complexity rules to a converted .ts script',
     () => {
-      const rules = effectiveRulesFor('scripts/start.js');
+      const rules = effectiveRulesFor('scripts/start.ts');
       expect(severity(rules['complexity'])).toBe(2);
       expect(severity(rules['max-lines'])).toBe(2);
       expect(severity(rules['max-lines-per-function'])).toBe(2);
@@ -114,7 +114,7 @@ describe('Issue #2282: scripts strict code-quality coverage', () => {
   it(
     'does not enable no-console for scripts (legitimate build/dev output)',
     () => {
-      const rules = effectiveRulesFor('scripts/start.js');
+      const rules = effectiveRulesFor('scripts/start.ts');
       // no-console is deliberately not promoted to error for scripts because
       // build/dev tooling legitimately writes to stdout/stderr.
       expect(severity(rules['no-console'])).not.toBe(2);
@@ -165,10 +165,10 @@ describe('Issue #2282: scripts strict code-quality coverage', () => {
   it(
     'applies full structural quality rules to the decomposed guard modules',
     () => {
-      // check-eslint-guard.js was decomposed from a ~5000-line monolith into
+      // check-eslint-guard.ts was decomposed from a ~5000-line monolith into
       // 13 modules under scripts/eslint-guard/. No structural carve-out
       // remains — every module receives the full quality rule set.
-      const entryRules = effectiveRulesFor('scripts/check-eslint-guard.js');
+      const entryRules = effectiveRulesFor('scripts/check-eslint-guard.ts');
       expect(severity(entryRules['complexity'])).toBe(2);
       expect(severity(entryRules['sonarjs/cognitive-complexity'])).toBe(2);
       expect(severity(entryRules['sonarjs/nested-control-flow'])).toBe(2);

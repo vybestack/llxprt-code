@@ -1296,7 +1296,7 @@ explicit next-release work rather than hidden runtime coupling.
 2. Drive task execution through `agent.stream()` / `agent.chat()` and consume
    the typed `AgentEvent` stream, instead of the bespoke executor loop.
 3. Add an A2A-specific import-boundary guard analogous to
-   `scripts/check-cli-import-boundary.mjs` once the A2A server is migrated.
+   `scripts/check-cli-import-boundary.ts` once the A2A server is migrated.
 
 The import-boundary choices in #2204 (public root + `app-service.js` allowed;
 deep runtime construction forbidden for CLI clients) do **not** block future

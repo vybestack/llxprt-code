@@ -6,7 +6,7 @@
     "scrollbackLines": 20000,
     "initialWaitMs": 8000
   },
-  "startCommand": ["node", "scripts/start.js", "--profile-load", "gptfirst"],
+  "startCommand": ["bun", "scripts/start.ts", "--profile-load", "gptfirst"],
   "yolo": true,
   "steps": [
     {

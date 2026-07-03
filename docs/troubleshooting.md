@@ -206,7 +206,7 @@ Another process is using that port. Stop it or configure a different port in you
 
 **`Command not found`**
 
-LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `node scripts/start.js` (the dev launcher) or run `bun install` then `bun run start`.
+LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `node scripts/start.ts` (the dev launcher) or run `bun install` then `bun run start`.
 
 **`MODULE_NOT_FOUND`**
 
@@ -265,7 +265,7 @@ LLXPRT_DEBUG='*' llxprt --sandbox "your prompt"
 
 - **npm (global install):** `npm install -g @vybestack/llxprt-code@latest`
 - **Homebrew:** `brew upgrade llxprt-code`
-- **From source:** Pull the latest source, run `bun install`, then `bun run start` (or `node scripts/start.js` for the dev launcher).
+- **From source:** Pull the latest source, run `bun install`, then `bun run start` (or `node scripts/start.ts` for the dev launcher).
 
 **Where are config files stored?**
 
@@ -277,7 +277,7 @@ Cache metrics only appear when the provider supports and reports them. OAuth use
 
 ## Building from Source
 
-The CLI's run path uses the [Bun](https://bun.sh) runtime to execute the TypeScript (`.ts`) entry point directly — no pre-compiled `dist/` artifact is required for the CLI to run. The published npm package still ships `dist/` (produced by `tsc`) for Node.js compatibility and type-checking uses `tsc --noEmit`. The retired `bundle/llxprt.js` artifact is no longer produced.
+The CLI's run path starts with the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), which resolves [Bun](https://bun.sh) and executes the TypeScript entrypoint (`packages/cli/index.ts`) directly. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run.
 
 To build from source:
 
@@ -291,7 +291,7 @@ bun run start
 For development, use the dev launcher:
 
 ```bash
-node scripts/start.js
+node scripts/start.ts
 ```
 
 Type checking uses `tsc --noEmit` (no JavaScript output is produced):
