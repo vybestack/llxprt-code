@@ -15,21 +15,13 @@ import {
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { isErrnoException, messageOf } from './utils/error-guards.ts';
+import { NON_NPM_RELEASE_PACKAGES } from './utils/release-packages.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_LOCKFILE_TIMEOUT_MS = 300_000;
 const MIN_LOCKFILE_TIMEOUT_MS = 10_000;
 const MAX_LOCKFILE_TIMEOUT_MS = 1_800_000;
 const BACKUP_SUFFIX = '.bind-backup';
-
-const NON_NPM_RELEASE_PACKAGES = new Set([
-  // Keep private workspace packages explicit so their release-binding behavior is
-  // covered even if their package metadata changes before publish wiring exists.
-  '@vybestack/llxprt-code-test-utils',
-  '@vybestack/llxprt-code-a2a-server',
-  // Published as a VSIX, not an NPM package.
-  'llxprt-code-vscode-ide-companion',
-]);
 
 const DEP_FIELDS = [
   'dependencies',

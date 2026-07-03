@@ -9,6 +9,9 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { accessSync, constants as fsConstants } from 'node:fs';
 
+// Both fixtures intentionally point at the test runner's own executable: the
+// harness only needs *a* real, spawnable path — the node-vs-bun distinction
+// under test is which env var the harness reads, not the binary itself.
 const TEST_NODE_EXECUTABLE = process.execPath;
 const TEST_BUN_EXECUTABLE = process.execPath;
 

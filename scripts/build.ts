@@ -37,20 +37,22 @@ execSync('npm run build --workspaces', { stdio: 'inherit', cwd: root });
 
 // also build container image if sandboxing is enabled
 // skip (-s) npm install + build since we did that above
-let sandboxAvailable = true;
-try {
-  execSync('bun scripts/sandbox_command.ts -q', {
-    stdio: 'inherit',
-    cwd: root,
-  });
-} catch {
-  sandboxAvailable = false;
+const buildSandboxRequested =
+  process.env.BUILD_SANDBOX === '1' || process.env.BUILD_SANDBOX === 'true';
+
+function sandboxAvailable(): boolean {
+  try {
+    execSync('bun scripts/sandbox_command.ts -q', {
+      stdio: 'inherit',
+      cwd: root,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-if (
-  sandboxAvailable &&
-  (process.env.BUILD_SANDBOX === '1' || process.env.BUILD_SANDBOX === 'true')
-) {
+if (buildSandboxRequested && sandboxAvailable()) {
   try {
     execSync('bun scripts/build_sandbox.ts -s', {
       stdio: 'inherit',

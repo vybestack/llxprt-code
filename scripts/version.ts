@@ -7,6 +7,10 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  NON_NPM_RELEASE_PACKAGES,
+  VS_CODE_EXTENSION_PACKAGE,
+} from './utils/release-packages.ts';
 
 // A script to handle versioning and ensure all related changes are in a single, atomic commit.
 
@@ -19,13 +23,6 @@ type PackageJson = Record<string, unknown> & {
     sandboxImageUri?: string;
   };
 };
-
-const NON_NPM_RELEASE_PACKAGES = new Set([
-  '@vybestack/llxprt-code-test-utils',
-  '@vybestack/llxprt-code-a2a-server',
-  'llxprt-code-vscode-ide-companion',
-]);
-const VS_CODE_EXTENSION_PACKAGE = 'llxprt-code-vscode-ide-companion';
 
 function npmBin(): string {
   return process.platform === 'win32' ? 'npm.cmd' : 'npm';

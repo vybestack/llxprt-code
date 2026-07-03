@@ -38,6 +38,9 @@ jobs:
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
+          # Disable Bun binary caching in this write-permission job to close
+          # the cache-poisoning path flagged by zizmor.
+          no-cache: true
       - name: 'Install Dependencies'
         run: 'npm ci'
       # No build step: the checked-in launcher resolves packages/cli/index.ts

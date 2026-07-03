@@ -208,7 +208,10 @@ jobs:
           node-version-file: '.nvmrc'
 
       # S6 (#2243): Bun is the package manager for this job. Node remains
-      # required because the lint/typecheck/format/build scripts execute under it.
+      # required because the lint/typecheck/format/build scripts execute under
+      # it. Several npm scripts invoked below (check:lockfile,
+      # lint:eslint-guard, build, bundle) are backed by bun scripts/*.ts and
+      # require the Bun runtime to be on PATH.
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
@@ -220,14 +223,6 @@ jobs:
           path: |
             ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-
-      - name: 'Setup Bun'
-        # Several npm scripts invoked below (check:lockfile, lint:eslint-guard,
-        # build, bundle) are backed by bun scripts/*.ts and require the Bun
-        # runtime to be on PATH.
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
 
       - name: 'Run lockfile check'
         run: |-

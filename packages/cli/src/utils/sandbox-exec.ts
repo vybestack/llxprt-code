@@ -52,20 +52,6 @@ import {
 } from './sandbox-env.js';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
 
-function stderrOf(error: unknown): string {
-  if (typeof error !== 'object' || error === null || !('stderr' in error)) {
-    return '';
-  }
-  const stderr = (error as { stderr?: unknown }).stderr;
-  if (typeof stderr === 'string') {
-    return stderr.trim();
-  }
-  if (Buffer.isBuffer(stderr)) {
-    return stderr.toString('utf8').trim();
-  }
-  return '';
-}
-
 /** Validates image and builds initial container run args. */
 async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   image: string;
@@ -394,9 +380,10 @@ function buildSandboxImage(
         `Bun runtime was not found or could not be executed: ${error.message}. Install Bun from https://bun.sh and ensure it is on PATH.`,
       );
     }
-    const stderr = stderrOf(error);
+    // stdio: 'inherit' streams build output directly to the terminal, so the
+    // child's stderr is already visible; error.stderr is never populated.
     throw new FatalSandboxError(
-      `Sandbox image build failed: ${getErrorMessage(error)}${stderr.length > 0 ? `\n${stderr}` : ''}`,
+      `Sandbox image build failed: ${getErrorMessage(error)}`,
     );
   }
 }

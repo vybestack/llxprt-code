@@ -49,23 +49,30 @@ for (const file of vsixFiles) {
   copyFileSync(join(root, file), join(bundleDir, basename(file)));
 }
 
-// Copy tiktoken WASM file
+// Copy tiktoken WASM file. Missing critical runtime assets must fail the
+// bundle step loudly rather than producing a bundle that breaks at runtime.
 const tiktokenWasmPath = join(
   root,
   'node_modules/@dqbd/tiktoken/tiktoken_bg.wasm',
 );
-if (existsSync(tiktokenWasmPath)) {
-  copyFileSync(tiktokenWasmPath, join(bundleDir, 'tiktoken_bg.wasm'));
+if (!existsSync(tiktokenWasmPath)) {
+  throw new Error(
+    `Missing critical runtime asset: ${tiktokenWasmPath}. Run npm install first.`,
+  );
 }
+copyFileSync(tiktokenWasmPath, join(bundleDir, 'tiktoken_bg.wasm'));
 
 // Copy tree-sitter WASM file for web-tree-sitter runtime
 const treeSitterWasmPath = join(
   root,
   'node_modules/web-tree-sitter/tree-sitter.wasm',
 );
-if (existsSync(treeSitterWasmPath)) {
-  copyFileSync(treeSitterWasmPath, join(bundleDir, 'tree-sitter.wasm'));
+if (!existsSync(treeSitterWasmPath)) {
+  throw new Error(
+    `Missing critical runtime asset: ${treeSitterWasmPath}. Run npm install first.`,
+  );
 }
+copyFileSync(treeSitterWasmPath, join(bundleDir, 'tree-sitter.wasm'));
 
 // Copy the tree-sitter bash grammar WASM. shell-parser.ts loads this from disk
 // via require.resolve at runtime (the esbuild ?binary embedding plugin was
