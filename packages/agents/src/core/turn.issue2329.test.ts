@@ -203,4 +203,34 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     expect(finished).toBeDefined();
     expect(finished?.value.stopReason).toBeUndefined();
   });
+
+  it('omits stopReason from Finished when finishMessage is an empty string', async () => {
+    const mockResponseStream = (async function* () {
+      yield {
+        type: StreamEventType.CHUNK,
+        value: {
+          candidates: [
+            {
+              content: { parts: [{ text: 'answer' }] },
+              finishReason: 'STOP',
+              finishMessage: '',
+            },
+          ],
+        } as GenerateContentResponse,
+      };
+    })();
+    mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+    const events = [];
+    for await (const event of turn.run(
+      [{ text: 'hi' }],
+      new AbortController().signal,
+    )) {
+      events.push(event);
+    }
+
+    const finished = findFinishedEvent(events);
+    expect(finished).toBeDefined();
+    expect(finished?.value).not.toHaveProperty('stopReason');
+  });
 });

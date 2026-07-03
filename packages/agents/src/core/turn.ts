@@ -271,9 +271,12 @@ export class Turn {
           hadThinking: outcome.hasThinking,
           hadToolCalls: outcome.hasToolCalls,
         },
-        // @issue:2329 — only include stopReason when defined, matching
-        // existing optional-field style so consumers can detect refusals.
-        ...(stopReason !== undefined ? { stopReason } : {}),
+        // @issue:2329 — only include stopReason when it carries a value,
+        // matching existing optional-field style so consumers can detect
+        // refusals without receiving a vacuous empty field.
+        ...(stopReason !== undefined && stopReason !== ''
+          ? { stopReason }
+          : {}),
       },
     };
   }
