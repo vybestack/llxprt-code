@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/blocks/ThinkingBlock.js';
 import { ChatSession } from './chatSession.js';
+import { getProviderStopReason } from './providerStopReason.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -245,9 +246,10 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
     });
 
     // @issue:2329 — refusal maps to STOP (coarse reason unchanged); the raw
-    // provider stop reason is preserved on candidate.finishMessage so consumers
-    // can distinguish a safety-classifier refusal from a normal completion.
-    it('should map refusal to STOP and preserve finishMessage @issue:2329', () => {
+    // provider stop reason is preserved on the repo-owned providerStopReason
+    // carrier so consumers can distinguish a safety-classifier refusal from a
+    // normal completion.
+    it('should map refusal to STOP and preserve providerStopReason @issue:2329', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'refused' }],
@@ -256,7 +258,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
 
       const response = chatSession.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('STOP');
-      expect(response.candidates[0].finishMessage).toBe('refusal');
+      expect(getProviderStopReason(response.candidates[0])).toBe('refusal');
     });
 
     it('should not set finishReason for unknown stop reasons', () => {

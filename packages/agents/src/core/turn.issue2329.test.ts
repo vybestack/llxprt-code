@@ -6,7 +6,7 @@
 
 /**
  * Behavioral tests for issue #2329: the agents Turn must thread the raw
- * provider stop reason (candidate.finishMessage) into the Finished event as
+ * provider stop reason (repo-owned candidate providerStopReason carrier) into the Finished event as
  * `value.stopReason` so the CLI can show a refusal-specific notice.
  *
  * Follows the patterns in turn.test.ts: drives the Turn class with fake stream
@@ -117,7 +117,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     vi.restoreAllMocks();
   });
 
-  it('threads finishMessage "refusal" into Finished.value.stopReason', async () => {
+  it('threads providerStopReason "refusal" into Finished.value.stopReason', async () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
@@ -126,7 +126,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
             {
               content: { parts: [{ text: 'I decline to answer.' }] },
               finishReason: 'STOP',
-              finishMessage: 'refusal',
+              providerStopReason: 'refusal',
             },
           ],
         } as GenerateContentResponse,
@@ -150,7 +150,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     expect(finished?.value.stopReason).toBe('refusal');
   });
 
-  it('threads finishMessage "end_turn" into Finished.value.stopReason for normal completions', async () => {
+  it('threads providerStopReason "end_turn" into Finished.value.stopReason for normal completions', async () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
@@ -159,7 +159,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
             {
               content: { parts: [{ text: 'Normal answer.' }] },
               finishReason: 'STOP',
-              finishMessage: 'end_turn',
+              providerStopReason: 'end_turn',
             },
           ],
         } as GenerateContentResponse,
@@ -181,7 +181,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     expect(finished?.value.stopReason).toBe('end_turn');
   });
 
-  it('omits stopReason from Finished when candidate has no finishMessage', async () => {
+  it('omits stopReason from Finished when candidate has no providerStopReason', async () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
@@ -210,7 +210,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     expect(finished?.value.stopReason).toBeUndefined();
   });
 
-  it('omits stopReason from Finished when finishMessage is an empty string', async () => {
+  it('omits stopReason from Finished when providerStopReason is an empty string', async () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
@@ -219,7 +219,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
             {
               content: { parts: [{ text: 'answer' }] },
               finishReason: 'STOP',
-              finishMessage: '',
+              providerStopReason: '',
             },
           ],
         } as GenerateContentResponse,
@@ -240,7 +240,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     expect(finished?.value).not.toHaveProperty('stopReason');
   });
 
-  it('threads finishMessage "refusal" from a content-less trailing metadata chunk', async () => {
+  it('threads providerStopReason "refusal" from a content-less trailing metadata chunk', async () => {
     // Models the real streaming shape: Anthropic delivers visible text on an
     // initial chunk with no finishReason, then emits a SEPARATE trailing
     // metadata-only chunk carrying the terminal stop reason/message
@@ -264,7 +264,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
             {
               content: { parts: [] },
               finishReason: 'STOP',
-              finishMessage: 'refusal',
+              providerStopReason: 'refusal',
             },
           ],
         } as GenerateContentResponse,
@@ -285,5 +285,40 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     expect(finished?.type).toBe(GeminiEventType.Finished);
     expect(finished?.value.reason).toBe('STOP');
     expect(finished?.value.stopReason).toBe('refusal');
+  });
+
+  it('does not leak the SDK finishMessage description into Finished.value.stopReason', async () => {
+    // The SDK's native Candidate.finishMessage is a human-readable finish
+    // description. A native Gemini response may populate it with descriptive
+    // text; that text must never be misinterpreted as a machine stop-reason
+    // signal. Only the repo-owned providerStopReason carrier feeds stopReason.
+    const mockResponseStream = (async function* () {
+      yield {
+        type: StreamEventType.CHUNK,
+        value: {
+          candidates: [
+            {
+              content: { parts: [{ text: 'A normal answer.' }] },
+              finishReason: 'STOP',
+              finishMessage: 'The model completed successfully.',
+            },
+          ],
+        } as GenerateContentResponse,
+      };
+    })();
+    mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+    const events = [];
+    for await (const event of turn.run(
+      [{ text: 'hi' }],
+      new AbortController().signal,
+    )) {
+      events.push(event);
+    }
+
+    const finished = findFinishedEvent(events);
+    expect(finished).toBeDefined();
+    expect(finished?.value.reason).toBe('STOP');
+    expect(finished?.value).not.toHaveProperty('stopReason');
   });
 });

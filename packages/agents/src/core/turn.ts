@@ -34,6 +34,7 @@ import {
   getHookRestrictedAllowedToolsForFunctionCall,
   mergeHookRestrictedFunctionCalls,
 } from './hookToolRestrictions.js';
+import { getProviderStopReason } from './providerStopReason.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import {
   getErrorMessage,
@@ -350,10 +351,12 @@ export class Turn {
     }
 
     const finishReason = resp.candidates?.[0]?.finishReason;
-    // @issue:2329 — thread the raw provider stop reason from the candidate's
-    // finishMessage into the Finished event so consumers can surface a
-    // refusal-specific notice.
-    const finishMessage = resp.candidates?.[0]?.finishMessage;
+    // @issue:2329 — thread the raw provider stop reason (repo-owned
+    // providerStopReason field, set by MessageConverter) into the Finished
+    // event so consumers can surface a refusal-specific notice. Native SDK
+    // responses never carry this field, so descriptive finishMessage text
+    // can never leak into the stop-reason signal.
+    const providerStopReason = getProviderStopReason(resp.candidates?.[0]);
     const text = allowedParts
       .filter((part) => !isThoughtPart(part))
       .map((part) => part.text)
@@ -402,7 +405,7 @@ export class Turn {
         usageMetadata: resp.usageMetadata,
         traceId,
         cumulativeOutcome,
-        stopReason: finishMessage,
+        stopReason: providerStopReason,
       });
     } else {
       this.logNoFinishReason(
