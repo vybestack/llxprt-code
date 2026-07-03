@@ -21,7 +21,7 @@ import { AgentClient } from './client.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import {
   getEnabledToolNamesForPrompt,
@@ -742,7 +742,7 @@ sub memory
 
       for (let i = 0; i < 5; i++) {
         svc.recordModelActivity({
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'intermediate',
         });
       }
@@ -752,7 +752,7 @@ sub memory
 
       for (let i = 0; i < 4; i++) {
         svc.recordModelActivity({
-          type: GeminiEventType.ToolCallResponse,
+          type: AgentEventType.ToolCallResponse,
           value: {
             callId: `call-${i}`,
             responseParts: [] as Part[],

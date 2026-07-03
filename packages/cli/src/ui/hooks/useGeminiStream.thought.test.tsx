@@ -31,7 +31,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import {
   ApprovalMode,
-  GeminiEventType as ServerGeminiEventType,
+  AgentEventType as ServerEventType,
 } from '@vybestack/llxprt-code-core';
 import { StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -218,18 +218,18 @@ describe('useGeminiStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Thought,
+            type: ServerEventType.Thought,
             value: {
               subject: 'Previous thought',
               description: 'Old description',
             },
           };
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'Some response content',
           };
           yield {
-            type: ServerGeminiEventType.Finished,
+            type: ServerEventType.Finished,
             value: { reason: 'STOP', usageMetadata: undefined },
           };
         })(),
@@ -277,11 +277,11 @@ describe('useGeminiStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'New response content',
           };
           yield {
-            type: ServerGeminiEventType.Finished,
+            type: ServerEventType.Finished,
             value: { reason: 'STOP', usageMetadata: undefined },
           };
         })(),
@@ -446,10 +446,10 @@ describe('useGeminiStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Thought,
+            type: ServerEventType.Thought,
             value: { subject: 'Some thought', description: 'Description' },
           };
-          yield { type: ServerGeminiEventType.UserCancelled };
+          yield { type: ServerEventType.UserCancelled };
         })(),
       );
 
@@ -500,11 +500,11 @@ describe('useGeminiStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Thought,
+            type: ServerEventType.Thought,
             value: { subject: 'Some thought', description: 'Description' },
           };
           yield {
-            type: ServerGeminiEventType.Error,
+            type: ServerEventType.Error,
             value: { error: { message: 'Test error' } },
           };
         })(),

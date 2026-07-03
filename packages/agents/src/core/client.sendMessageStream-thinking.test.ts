@@ -14,7 +14,7 @@ import type { Part, PartListUnion } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
@@ -218,25 +218,25 @@ describe('Gemini Client (client.ts)', () => {
         if (callCount === 1) {
           return (async function* () {
             yield {
-              type: GeminiEventType.Thought,
+              type: AgentEventType.Thought,
               value: {
                 subject: 'Planning',
                 description: 'I will do something',
               },
             };
             yield {
-              type: GeminiEventType.Finished,
+              type: AgentEventType.Finished,
               value: { reason: 'STOP' },
             };
           })();
         }
         return (async function* () {
           yield {
-            type: GeminiEventType.Content,
+            type: AgentEventType.Content,
             value: 'Here is the result',
           };
           yield {
-            type: GeminiEventType.Finished,
+            type: AgentEventType.Finished,
             value: { reason: 'STOP' },
           };
         })();
@@ -278,11 +278,11 @@ describe('Gemini Client (client.ts)', () => {
       );
       expect(continuationPart).toBeDefined();
 
-      expect(events.some((e) => e.type === GeminiEventType.Thought)).toBe(true);
+      expect(events.some((e) => e.type === AgentEventType.Thought)).toBe(true);
       expect(
         events.some(
           (e) =>
-            e.type === GeminiEventType.Content &&
+            e.type === AgentEventType.Content &&
             e.value === 'Here is the result',
         ),
       ).toBe(true);
@@ -293,15 +293,15 @@ describe('Gemini Client (client.ts)', () => {
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
           yield {
-            type: GeminiEventType.Thought,
+            type: AgentEventType.Thought,
             value: { subject: 'Planning', description: 'I will do something' },
           };
           yield {
-            type: GeminiEventType.Content,
+            type: AgentEventType.Content,
             value: 'Here is the result',
           };
           yield {
-            type: GeminiEventType.Finished,
+            type: AgentEventType.Finished,
             value: { reason: 'STOP' },
           };
         })(),
@@ -338,18 +338,18 @@ describe('Gemini Client (client.ts)', () => {
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
           yield {
-            type: GeminiEventType.Thought,
+            type: AgentEventType.Thought,
             value: { subject: 'Planning', description: 'I will do something' },
           };
           yield {
-            type: GeminiEventType.ToolCallRequest,
+            type: AgentEventType.ToolCallRequest,
             value: {
               name: 'some_tool',
               args: {},
             },
           };
           yield {
-            type: GeminiEventType.Finished,
+            type: AgentEventType.Finished,
             value: { reason: 'STOP' },
           };
         })(),
@@ -386,11 +386,11 @@ describe('Gemini Client (client.ts)', () => {
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
           yield {
-            type: GeminiEventType.Thought,
+            type: AgentEventType.Thought,
             value: { subject: 'Planning', description: 'Still thinking' },
           };
           yield {
-            type: GeminiEventType.Finished,
+            type: AgentEventType.Finished,
             value: { reason: 'STOP' },
           };
         })(),
@@ -422,9 +422,7 @@ describe('Gemini Client (client.ts)', () => {
       // MAX_RETRIES is 3, so: initial call + 2 retries = 3 calls
       expect(mockTurnRunFn).toHaveBeenCalledTimes(3);
       // Should eventually return with Finished event
-      expect(events.some((e) => e.type === GeminiEventType.Finished)).toBe(
-        true,
-      );
+      expect(events.some((e) => e.type === AgentEventType.Finished)).toBe(true);
     });
   });
 });

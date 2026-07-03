@@ -45,7 +45,7 @@ import type {
   Config,
   EditorType,
   OutputUpdateHandler,
-  ServerGeminiStreamEvent,
+  ServerAgentStreamEvent,
   ToolCall,
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core';
@@ -68,9 +68,9 @@ export interface DisplayCallbacks {
   onEditorClose?: () => void;
 }
 
-/** Streams a single ServerGeminiStreamEvent into React state. */
+/** Streams a single ServerAgentStreamEvent into React state. */
 export type StreamEventRouter = (
-  event: ServerGeminiStreamEvent,
+  event: ServerAgentStreamEvent,
   userMessageTimestamp: number,
 ) => void;
 

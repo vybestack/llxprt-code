@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ServerGeminiStreamEvent } from './turn.js';
-import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
+import type { ServerAgentStreamEvent } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { GenerateContentResponse, Part } from '@google/genai';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
@@ -139,7 +139,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Hi' }],
           new AbortController().signal,
@@ -174,7 +174,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Think about it' }],
           new AbortController().signal,
@@ -216,7 +216,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Read a file' }],
           new AbortController().signal,
@@ -250,7 +250,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Hi' }],
           new AbortController().signal,
@@ -290,7 +290,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Think about it' }],
           new AbortController().signal,
@@ -337,7 +337,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Read a file' }],
           new AbortController().signal,
@@ -386,7 +386,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Think about it' }],
           new AbortController().signal,
@@ -419,7 +419,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         })();
         mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Hi' }],
           new AbortController().signal,
@@ -428,7 +428,7 @@ describe('Turn - debug responses and finished event outcome', () => {
         }
 
         expect(events).toContainEqual({
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: '   ',
           traceId: undefined,
         });

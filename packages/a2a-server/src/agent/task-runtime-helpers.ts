@@ -8,7 +8,7 @@ import {
   isNodeError,
   EDIT_TOOL_NAMES,
   processRestorableToolCalls,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
   type Config,
   type ToolSchedulerContract,
   type AgentClientContract,
@@ -53,7 +53,7 @@ export type SchedulerConfig = Config & {
  * Extracts the optional trace id from a server gemini stream event.
  */
 export function getEventTraceId(
-  event: ServerGeminiStreamEvent,
+  event: ServerAgentStreamEvent,
 ): string | undefined {
   return 'traceId' in event && typeof event.traceId === 'string'
     ? event.traceId

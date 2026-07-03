@@ -21,10 +21,10 @@ import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { CoreToolScheduler } from '@vybestack/llxprt-code-agents/internals.js';
 import {
-  GeminiEventType,
+  AgentEventType,
   DEFAULT_AGENT_ID,
   type ToolCallRequestInfo,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
   type AgentClientContract,
   type Config,
 } from '@vybestack/llxprt-code-core';
@@ -40,7 +40,7 @@ function toParts(req: PartListUnion): Part[] {
 }
 
 function createScriptedAgentClient(
-  scripts: ServerGeminiStreamEvent[][],
+  scripts: ServerAgentStreamEvent[][],
 ): AgentClientContract {
   const scriptQueue = [...scripts];
   const history: Content[] = [];
@@ -88,7 +88,7 @@ function createScriptedAgentClient(
       req: PartListUnion,
       signal: AbortSignal,
       _promptId: string,
-    ): AsyncGenerator<ServerGeminiStreamEvent> {
+    ): AsyncGenerator<ServerAgentStreamEvent> {
       history.push({ role: 'user', parts: toParts(req) });
       const script = scriptQueue.shift();
       if (!script) return;
@@ -107,7 +107,7 @@ function toolCallRequestEvent(
   callId: string,
   agentId = DEFAULT_AGENT_ID,
   reason = 'blocked',
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   const value: ToolCallRequestInfo = {
     callId,
     name,
@@ -116,12 +116,12 @@ function toolCallRequestEvent(
     prompt_id: callId,
     agentId,
   };
-  return { type: GeminiEventType.ToolCallRequest, value };
+  return { type: AgentEventType.ToolCallRequest, value };
 }
 
-function finishedEvent(): ServerGeminiStreamEvent {
+function finishedEvent(): ServerAgentStreamEvent {
   return {
-    type: GeminiEventType.Finished,
+    type: AgentEventType.Finished,
     value: { reason: FinishReason.STOP },
   };
 }

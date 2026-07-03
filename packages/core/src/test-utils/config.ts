@@ -13,7 +13,7 @@ import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import {
   PerformCompressionResult,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
 } from '../core/turn.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { MessageBus as MessageBusType } from '../confirmation-bus/message-bus.js';
@@ -30,11 +30,11 @@ async function* fromAsyncArray<T>(items: T[]): AsyncGenerator<T, void> {
   }
 }
 
-function emptyServerGeminiStream(): AsyncGenerator<
-  ServerGeminiStreamEvent,
+function emptyServerAgentStream(): AsyncGenerator<
+  ServerAgentStreamEvent,
   unknown
 > {
-  return fromAsyncArray<ServerGeminiStreamEvent>([]);
+  return fromAsyncArray<ServerAgentStreamEvent>([]);
 }
 
 function emptyChatStream(): AsyncGenerator<never> {
@@ -81,7 +81,7 @@ function createTestAgentClient(): AgentClientContract {
     generateJson: async () => ({}),
     generateContent: async () => ({}) as never,
     generateEmbedding: async (texts: string[]) => texts.map(() => []),
-    sendMessageStream: () => emptyServerGeminiStream(),
+    sendMessageStream: () => emptyServerAgentStream(),
     getUserTier: () => undefined,
     getCurrentSequenceModel: () => null,
   };

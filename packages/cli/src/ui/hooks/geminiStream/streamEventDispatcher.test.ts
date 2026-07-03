@@ -8,14 +8,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { FinishReason } from '@google/genai';
 import type React from 'react';
 import {
-  GeminiEventType,
-  type ServerGeminiStreamEvent,
+  AgentEventType,
+  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import type { StreamEventDeps } from './streamEventDispatcher.js';
 import { dispatchStreamEvent } from './streamEventDispatcher.js';
 import type { HistoryItemWithoutId } from '../../types.js';
 
-type GeminiEvent = ServerGeminiStreamEvent;
+type GeminiEvent = ServerAgentStreamEvent;
 
 function createDeps(overrides: Partial<StreamEventDeps> = {}): StreamEventDeps {
   return {
@@ -62,7 +62,7 @@ function createModelInfoEvent(
   } = {},
 ): GeminiEvent {
   return {
-    type: GeminiEventType.ModelInfo,
+    type: AgentEventType.ModelInfo,
     value: {
       model,
       providerName: extras.providerName,
@@ -390,15 +390,15 @@ describe('dispatchStreamEvent - ModelInfo inline notification', () => {
 
 describe('dispatchStreamEvent - stream buffer lifecycle', () => {
   it.each([
-    GeminiEventType.Finished,
-    GeminiEventType.Error,
-    GeminiEventType.StreamIdleTimeout,
-    GeminiEventType.UserCancelled,
-    GeminiEventType.LoopDetected,
-    GeminiEventType.MaxSessionTurns,
-    GeminiEventType.ContextWindowWillOverflow,
-    GeminiEventType.AgentExecutionStopped,
-    GeminiEventType.AgentExecutionBlocked,
+    AgentEventType.Finished,
+    AgentEventType.Error,
+    AgentEventType.StreamIdleTimeout,
+    AgentEventType.UserCancelled,
+    AgentEventType.LoopDetected,
+    AgentEventType.MaxSessionTurns,
+    AgentEventType.ContextWindowWillOverflow,
+    AgentEventType.AgentExecutionStopped,
+    AgentEventType.AgentExecutionBlocked,
   ])('clears accumulated content buffer after %s', (eventType) => {
     const deps = createDeps();
     const event = createTerminalEvent(eventType);
@@ -420,19 +420,19 @@ describe('dispatchStreamEvent - stream buffer lifecycle', () => {
     const deps = createDeps({ handleContentEvent });
 
     const first = dispatchStreamEvent(
-      { type: GeminiEventType.Content, value: 'first' },
+      { type: AgentEventType.Content, value: 'first' },
       deps,
       '',
       1000,
     );
     const finished = dispatchStreamEvent(
-      { type: GeminiEventType.Finished, value: { reason: FinishReason.STOP } },
+      { type: AgentEventType.Finished, value: { reason: FinishReason.STOP } },
       deps,
       first.geminiMessageBuffer,
       1000,
     );
     const next = dispatchStreamEvent(
-      { type: GeminiEventType.Content, value: 'second' },
+      { type: AgentEventType.Content, value: 'second' },
       deps,
       finished.geminiMessageBuffer,
       1001,
@@ -458,7 +458,7 @@ describe('dispatchStreamEvent - stream buffer lifecycle', () => {
     });
 
     const result = dispatchStreamEvent(
-      { type: GeminiEventType.Finished, value: { reason: FinishReason.STOP } },
+      { type: AgentEventType.Finished, value: { reason: FinishReason.STOP } },
       deps,
       'first',
       1000,
@@ -470,30 +470,30 @@ describe('dispatchStreamEvent - stream buffer lifecycle', () => {
   });
 });
 
-function createTerminalEvent(eventType: GeminiEventType): GeminiEvent {
+function createTerminalEvent(eventType: AgentEventType): GeminiEvent {
   switch (eventType) {
-    case GeminiEventType.Finished:
+    case AgentEventType.Finished:
       return {
         type: eventType,
         value: { reason: FinishReason.STOP },
       } as GeminiEvent;
-    case GeminiEventType.Error:
+    case AgentEventType.Error:
       return {
         type: eventType,
         value: { error: { message: 'failed' } },
       } as GeminiEvent;
-    case GeminiEventType.StreamIdleTimeout:
+    case AgentEventType.StreamIdleTimeout:
       return {
         type: eventType,
         value: { error: { message: 'idle' } },
       } as GeminiEvent;
-    case GeminiEventType.ContextWindowWillOverflow:
+    case AgentEventType.ContextWindowWillOverflow:
       return {
         type: eventType,
         value: { estimatedRequestTokenCount: 100, remainingTokenCount: 1 },
       } as GeminiEvent;
-    case GeminiEventType.AgentExecutionStopped:
-    case GeminiEventType.AgentExecutionBlocked:
+    case AgentEventType.AgentExecutionStopped:
+    case AgentEventType.AgentExecutionBlocked:
       return {
         type: eventType,
         reason: 'hook',

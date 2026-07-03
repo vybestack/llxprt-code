@@ -15,7 +15,7 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import {
   type ApprovalHandler,
-  GeminiEventType,
+  AgentEventType,
   createScriptedAgentClient,
   createTestConfig,
   createToolRegistryForTest,
@@ -122,7 +122,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
 
     const lastStream = events.filter(isStream).at(-1);
     expect(lastStream).toBeDefined();
-    expect(lastStream.event.type).toBe(GeminiEventType.Finished);
+    expect(lastStream.event.type).toBe(AgentEventType.Finished);
 
     expect(turnMessages).toHaveLength(2);
     const turn2Parts = partListUnionToParts(turnMessages[1]);

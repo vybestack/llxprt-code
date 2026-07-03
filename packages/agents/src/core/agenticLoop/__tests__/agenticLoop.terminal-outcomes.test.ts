@@ -13,10 +13,10 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { ServerGeminiStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   type ApprovalHandler,
-  GeminiEventType,
+  AgentEventType,
   createScriptedAgentClient,
   createTestConfig,
   createToolRegistryForTest,
@@ -42,28 +42,28 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
     [
       'Error',
       {
-        type: GeminiEventType.Error,
+        type: AgentEventType.Error,
         value: { error: { message: 'provider failed' } },
-      } satisfies ServerGeminiStreamEvent,
+      } satisfies ServerAgentStreamEvent,
     ],
     [
       'StreamIdleTimeout',
       {
-        type: GeminiEventType.StreamIdleTimeout,
+        type: AgentEventType.StreamIdleTimeout,
         value: { error: { message: 'stream idle timeout' } },
-      } satisfies ServerGeminiStreamEvent,
+      } satisfies ServerAgentStreamEvent,
     ],
     [
       'UserCancelled',
       {
-        type: GeminiEventType.UserCancelled,
-      } satisfies ServerGeminiStreamEvent,
+        type: AgentEventType.UserCancelled,
+      } satisfies ServerAgentStreamEvent,
     ],
     [
       'LoopDetected',
       {
-        type: GeminiEventType.LoopDetected,
-      } satisfies ServerGeminiStreamEvent,
+        type: AgentEventType.LoopDetected,
+      } satisfies ServerAgentStreamEvent,
     ],
   ])(
     'does not execute collected tools after %s',

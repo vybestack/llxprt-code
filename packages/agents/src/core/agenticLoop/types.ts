@@ -11,7 +11,7 @@
  */
 
 import type { PartListUnion } from '@google/genai';
-import type { ServerGeminiStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
   ToolCall,
   OutputUpdateHandler,
@@ -35,7 +35,7 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
  * consumers observe the full turn lifecycle without re-implementing it.
  */
 export type AgenticLoopEvent =
-  | { kind: 'stream'; event: ServerGeminiStreamEvent }
+  | { kind: 'stream'; event: ServerAgentStreamEvent }
   | { kind: 'tool_update'; toolCalls: ToolCall[] }
   | { kind: 'tool_output'; callId: string; chunk: string }
   | { kind: 'tools_complete'; completed: CompletedToolCall[] }

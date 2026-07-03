@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ServerGeminiStreamEvent } from './turn.js';
-import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
+import type { ServerAgentStreamEvent } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { GenerateContentResponse, Part } from '@google/genai';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
@@ -132,11 +132,11 @@ describe('Turn run - abort and idle timeout', () => {
     }
     expect(events).toStrictEqual([
       {
-        type: GeminiEventType.Content,
+        type: AgentEventType.Content,
         value: 'First part',
         traceId: undefined,
       },
-      { type: GeminiEventType.UserCancelled },
+      { type: AgentEventType.UserCancelled },
     ]);
     expect(turn.getDebugResponses().length).toBe(1);
   });
@@ -207,14 +207,14 @@ describe('Turn run - abort and idle timeout', () => {
 
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-      const events: ServerGeminiStreamEvent[] = [];
+      const events: ServerAgentStreamEvent[] = [];
       const runPromise = (async () => {
         for await (const event of turn.run(
           [{ text: 'Test iterator cleanup' }],
           abortController.signal,
         )) {
           events.push(event);
-          if (event.type === GeminiEventType.Content) {
+          if (event.type === AgentEventType.Content) {
             abortController.abort();
           }
         }
@@ -224,7 +224,7 @@ describe('Turn run - abort and idle timeout', () => {
       await runPromise;
 
       expect(returnSpy).toHaveBeenCalled();
-      expect(events).toContainEqual({ type: GeminiEventType.UserCancelled });
+      expect(events).toContainEqual({ type: AgentEventType.UserCancelled });
     } finally {
       vi.useRealTimers();
     }
@@ -268,7 +268,7 @@ describe('Turn run - abort and idle timeout', () => {
       return createMockStream(callCount === 1);
     });
 
-    const events1: ServerGeminiStreamEvent[] = [];
+    const events1: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       [{ text: 'First call' }],
       abortController.signal,
@@ -276,11 +276,11 @@ describe('Turn run - abort and idle timeout', () => {
       events1.push(event);
     }
 
-    expect(events1).toContainEqual({ type: GeminiEventType.UserCancelled });
+    expect(events1).toContainEqual({ type: AgentEventType.UserCancelled });
     expect(callCount).toBe(1);
 
     const freshController = new AbortController();
-    const events2: ServerGeminiStreamEvent[] = [];
+    const events2: ServerAgentStreamEvent[] = [];
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -307,7 +307,7 @@ describe('Turn run - abort and idle timeout', () => {
 
     expect(callCount).toBe(2);
     expect(events2).toContainEqual({
-      type: GeminiEventType.Content,
+      type: AgentEventType.Content,
       value: 'Second call success',
     });
   });
@@ -333,7 +333,7 @@ describe('Turn run - abort and idle timeout', () => {
       events.push(event);
     }
 
-    expect(events).toStrictEqual([{ type: GeminiEventType.UserCancelled }]);
+    expect(events).toStrictEqual([{ type: AgentEventType.UserCancelled }]);
 
     expect(reportError).not.toHaveBeenCalled();
   });
@@ -384,7 +384,7 @@ describe('Turn run - abort and idle timeout', () => {
       });
 
       const eventsPromise = (async () => {
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Test idle timeout' }],
           new AbortController().signal,
@@ -399,12 +399,12 @@ describe('Turn run - abort and idle timeout', () => {
 
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'First part',
           traceId: undefined,
         },
         {
-          type: GeminiEventType.StreamIdleTimeout,
+          type: AgentEventType.StreamIdleTimeout,
           value: {
             error: {
               message:
@@ -478,7 +478,7 @@ describe('Turn run - abort and idle timeout', () => {
       });
 
       const events1Promise = (async () => {
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'First call (will timeout)' }],
           new AbortController().signal,
@@ -492,12 +492,12 @@ describe('Turn run - abort and idle timeout', () => {
       const events1 = await events1Promise;
 
       expect(events1).toContainEqual(
-        expect.objectContaining({ type: GeminiEventType.StreamIdleTimeout }),
+        expect.objectContaining({ type: AgentEventType.StreamIdleTimeout }),
       );
       expect(callCount).toBe(1);
 
       const events2Promise = (async () => {
-        const events: ServerGeminiStreamEvent[] = [];
+        const events: ServerAgentStreamEvent[] = [];
         for await (const event of turn.run(
           [{ text: 'Second call (should work)' }],
           new AbortController().signal,
@@ -512,7 +512,7 @@ describe('Turn run - abort and idle timeout', () => {
 
       expect(callCount).toBe(2);
       expect(events2).toContainEqual({
-        type: GeminiEventType.Content,
+        type: AgentEventType.Content,
         value: 'OK',
       });
     } finally {

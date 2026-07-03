@@ -18,8 +18,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Content, PartListUnion } from '@google/genai';
-import type { ServerGeminiStreamEvent, ModelInfo } from './turn.js';
-import { GeminiEventType } from './turn.js';
+import type { ServerAgentStreamEvent, ModelInfo } from './turn.js';
+import { AgentEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -66,7 +66,7 @@ interface HarnessState {
 
 interface BuildOptions extends Partial<HarnessState> {
   /** Override the stream produced by Turn.run */
-  turnStream?: AsyncGenerator<ServerGeminiStreamEvent>;
+  turnStream?: AsyncGenerator<ServerAgentStreamEvent>;
 }
 
 function buildOrchestrator(options: BuildOptions = {}): {
@@ -120,10 +120,10 @@ function buildOrchestrator(options: BuildOptions = {}): {
 
   const stream =
     options.turnStream ??
-    (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
-      yield { type: GeminiEventType.Content, value: 'hello' };
+    (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
+      yield { type: AgentEventType.Content, value: 'hello' };
       yield {
-        type: GeminiEventType.Finished,
+        type: AgentEventType.Finished,
         value: { outcome: { hadVisibleOutput: true } },
       };
     })();
@@ -223,7 +223,7 @@ async function collectModelInfos(
   orchestrator: InstanceType<typeof MessageStreamOrchestrator>,
   promptId: string,
 ): Promise<ModelInfo[]> {
-  const events: ServerGeminiStreamEvent[] = [];
+  const events: ServerAgentStreamEvent[] = [];
   for await (const event of orchestrator.execute(
     [{ text: 'test' }] as PartListUnion,
     new AbortController().signal,
@@ -235,8 +235,8 @@ async function collectModelInfos(
   }
   return events
     .filter(
-      (e): e is { type: typeof GeminiEventType.ModelInfo; value: ModelInfo } =>
-        e.type === GeminiEventType.ModelInfo,
+      (e): e is { type: typeof AgentEventType.ModelInfo; value: ModelInfo } =>
+        e.type === AgentEventType.ModelInfo,
     )
     .map((e) => e.value);
 }

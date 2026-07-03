@@ -21,6 +21,7 @@ const CORE_DIR = resolve(PACKAGES_DIR, 'core');
 const CLI_DIR = resolve(PACKAGES_DIR, 'cli');
 const A2A_DIR = resolve(PACKAGES_DIR, 'a2a-server');
 const PROVIDERS_DIR = resolve(PACKAGES_DIR, 'providers');
+const AGENTS_DIR = resolve(PACKAGES_DIR, 'agents');
 
 // Paths to exclude from scans (generated, build artifacts, test output, etc.)
 const EXCLUDE_TOKENS = [
@@ -43,13 +44,15 @@ const ALLOWED_GEMINI_PATTERNS: ReadonlyArray<{
   // Provider-specific auth and config
   { pattern: 'gemini-oauth-provider', reason: 'Gemini OAuth provider' },
   { pattern: 'gemini.config', reason: 'Gemini provider config alias' },
-  // Provider implementation and request handling
-  { pattern: 'geminiRequest', reason: 'Gemini provider request module' },
-  { pattern: 'GeminiEventType', reason: 'Gemini stream event type enum' },
-  { pattern: 'ServerGeminiStreamEvent', reason: 'Gemini stream event type' },
+  // Provider implementation and request handling (real Gemini provider module)
   {
-    pattern: 'ServerGeminiChatCompressedEvent',
-    reason: 'Gemini stream event type',
+    pattern: 'geminiRequestBuilding',
+    reason: 'Gemini provider request-building module',
+  },
+  // Deprecated compat aliases live in a single file for external consumers.
+  {
+    pattern: 'geminiLegacyAliases',
+    reason: 'Backward-compat alias module for renamed exports',
   },
   // Gemini model names (not code identifiers)
   { pattern: 'gemini-1', reason: 'Gemini model name string literal' },
@@ -250,7 +253,10 @@ describe('Provider-Agnostic Naming Regression', () => {
   const cliFiles = collectSourceFiles(CLI_DIR);
   const a2aFiles = collectSourceFiles(A2A_DIR);
   const providersFiles = collectSourceFiles(PROVIDERS_DIR);
+  const agentsFiles = collectSourceFiles(AGENTS_DIR);
   const allFiles = [...coreFiles, ...cliFiles, ...a2aFiles, ...providersFiles];
+  // The event-type grep gate scans all packages including agents.
+  const allFilesIncludingAgents = [...allFiles, ...agentsFiles];
 
   describe('Old source files must not exist after rename', () => {
     const oldFiles = [
@@ -492,6 +498,44 @@ describe('Provider-Agnostic Naming Regression', () => {
       const codeOnly = stripCommentsAndStrings(content);
       expect(codeOnly.includes('getGeminiClient')).toBe(false);
       expect(codeOnly.includes('geminiClient')).toBe(false);
+    });
+  });
+
+  describe('Provider-agnostic event types must not carry Gemini names', () => {
+    // After the rename (issue #2344), no source file may reference the old
+    // Server* / AgentEventType tokens EXCEPT the deprecated compat
+    // module and its test.
+    const FORBIDDEN_EVENT_TOKENS = ['ServerGemini', 'GeminiEventType'];
+
+    for (const token of FORBIDDEN_EVENT_TOKENS) {
+      it(`must not contain "${token}" outside geminiLegacyAliases`, () => {
+        const hits = searchTokenInFiles(allFilesIncludingAgents, token);
+        const violations = hits.filter((h) => {
+          // The deprecated compat module and its test are the ONLY allowed
+          // locations for these old names.
+          if (
+            h.file.includes('geminiLegacyAliases.ts') ||
+            h.file.includes('geminiLegacyAliases.test.ts')
+          ) {
+            return false;
+          }
+          return !isAllowedGeminiName(h.text, h.file);
+        });
+        expect(violations).toStrictEqual([]);
+      });
+    }
+  });
+
+  describe('geminiRequest.ts must be retired', () => {
+    it('packages/core/src/core/geminiRequest.ts must not exist', () => {
+      const filePath = resolve(CORE_DIR, 'src/core/geminiRequest.ts');
+      expect(existsSync(filePath)).toBe(false);
+    });
+
+    it('packages/core/src/index.ts must not export ./core/geminiRequest.js', () => {
+      const indexPath = resolve(CORE_DIR, 'src/index.ts');
+      const content = readFileSync(indexPath, 'utf-8');
+      expect(content.includes("from './core/geminiRequest.js'")).toBe(false);
     });
   });
 });

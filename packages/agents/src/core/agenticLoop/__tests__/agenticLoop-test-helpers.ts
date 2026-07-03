@@ -11,7 +11,7 @@
  *
  * The loop, CoreToolScheduler, and ConfirmationCoordinator are REAL. The only
  * mock boundary is the provider stream (an AgentClientContract whose
- * sendMessageStream yields scripted ServerGeminiStreamEvents) — this mirrors
+ * sendMessageStream yields scripted ServerAgentStreamEvents) — this mirrors
  * mocking the LLM provider, which is infrastructure. Tool implementations use
  * the real MockTool infra (the actual tool the scheduler invokes).
  */
@@ -31,11 +31,11 @@ import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.j
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
-  GeminiEventType,
+  AgentEventType,
   DEFAULT_AGENT_ID,
   PerformCompressionResult,
   type ToolCallRequestInfo,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
   AgentChatContract,
@@ -46,10 +46,10 @@ import type { Content, Part, PartListUnion } from '@google/genai';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 /**
- * A single model turn script: a list of ServerGeminiStreamEvents the fake
+ * A single model turn script: a list of ServerAgentStreamEvents the fake
  * provider emits for that turn.
  */
-export type TurnScript = ServerGeminiStreamEvent[];
+export type TurnScript = ServerAgentStreamEvent[];
 
 /** Converts a PartListUnion into a Part[] (string → [{text}]). */
 export function partListUnionToParts(req: PartListUnion): Part[] {
@@ -140,7 +140,7 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
       req: PartListUnion,
       signal: AbortSignal,
       promptId: string,
-    ): AsyncGenerator<ServerGeminiStreamEvent> {
+    ): AsyncGenerator<ServerAgentStreamEvent> {
       turnMessages.push(req);
       promptIds.push(promptId);
       history.push({ role: 'user', parts: partListUnionToParts(req) });
@@ -196,7 +196,7 @@ export function toolCallRequestEvent(
   callId: string,
   args: Record<string, unknown> = {},
   overrides: Partial<ToolCallRequestInfo> = {},
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   const value: ToolCallRequestInfo = {
     callId,
     name,
@@ -206,18 +206,18 @@ export function toolCallRequestEvent(
     agentId: DEFAULT_AGENT_ID,
     ...overrides,
   };
-  return { type: GeminiEventType.ToolCallRequest, value };
+  return { type: AgentEventType.ToolCallRequest, value };
 }
 
 /** Builds a Content stream event. */
-export function contentEvent(text: string): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.Content, value: text };
+export function contentEvent(text: string): ServerAgentStreamEvent {
+  return { type: AgentEventType.Content, value: text };
 }
 
 /** Builds a Finished stream event. */
-export function finishedEvent(): ServerGeminiStreamEvent {
+export function finishedEvent(): ServerAgentStreamEvent {
   return {
-    type: GeminiEventType.Finished,
+    type: AgentEventType.Finished,
     value: { reason: FinishReason.STOP },
   };
 }
@@ -412,7 +412,7 @@ export type {
   ToolRegistry,
   CompletedToolCall,
   ToolCallRequestInfo,
-  ServerGeminiStreamEvent,
+  ServerAgentStreamEvent,
 };
 
-export { GeminiEventType, DEFAULT_AGENT_ID, vi };
+export { AgentEventType, DEFAULT_AGENT_ID, vi };

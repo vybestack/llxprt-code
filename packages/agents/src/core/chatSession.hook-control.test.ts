@@ -12,7 +12,7 @@ import {
   AfterModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -368,7 +368,7 @@ describe('ChatSession hook execution control', () => {
     }
 
     expect(
-      events.some((event) => event.type === GeminiEventType.ToolCallRequest),
+      events.some((event) => event.type === AgentEventType.ToolCallRequest),
     ).toBe(false);
     const chunk = events.find((event) => event.type === StreamEventType.CHUNK);
     expect(JSON.stringify(chunk)).toContain('read_file');

@@ -17,7 +17,7 @@
  *
  * The AgenticLoop, CoreToolScheduler, ConfirmationCoordinator, MessageBus and
  * MockTool are REAL. The only mock boundary is the provider stream
- * (AgentClient.sendMessageStream yields scripted ServerGeminiStreamEvents) —
+ * (AgentClient.sendMessageStream yields scripted ServerAgentStreamEvents) —
  * mirroring the LLM-provider mock used by the engine's own integration tests.
  */
 
@@ -38,10 +38,10 @@ import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { CoreToolScheduler } from '@vybestack/llxprt-code-agents/internals.js';
 import {
-  GeminiEventType,
+  AgentEventType,
   DEFAULT_AGENT_ID,
   type ToolCallRequestInfo,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
   type AgentClientContract,
   type Config,
   type ToolCall,
@@ -52,7 +52,7 @@ import type { HistoryItem, HistoryItemWithoutId } from '../../../types.js';
 
 // ─── Scripted AgentClient (LLM-provider boundary mock) ─────────────────────
 
-type TurnScript = ServerGeminiStreamEvent[];
+type TurnScript = ServerAgentStreamEvent[];
 
 function toParts(req: PartListUnion): Part[] {
   if (typeof req === 'string') return [{ text: req }];
@@ -117,7 +117,7 @@ function createScriptedAgentClient(
       req: PartListUnion,
       signal: AbortSignal,
       _promptId: string,
-    ): AsyncGenerator<ServerGeminiStreamEvent> {
+    ): AsyncGenerator<ServerAgentStreamEvent> {
       turnMessages.push(req);
       history.push({ role: 'user', parts: toParts(req) });
       const script = scriptQueue.shift();
@@ -137,7 +137,7 @@ function toolCallRequestEvent(
   name: string,
   callId: string,
   args: Record<string, unknown> = {},
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   const value: ToolCallRequestInfo = {
     callId,
     name,
@@ -146,16 +146,16 @@ function toolCallRequestEvent(
     prompt_id: callId,
     agentId: DEFAULT_AGENT_ID,
   };
-  return { type: GeminiEventType.ToolCallRequest, value };
+  return { type: AgentEventType.ToolCallRequest, value };
 }
 
-function contentEvent(text: string): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.Content, value: text };
+function contentEvent(text: string): ServerAgentStreamEvent {
+  return { type: AgentEventType.Content, value: text };
 }
 
-function finishedEvent(): ServerGeminiStreamEvent {
+function finishedEvent(): ServerAgentStreamEvent {
   return {
-    type: GeminiEventType.Finished,
+    type: AgentEventType.Finished,
     value: { reason: FinishReason.STOP },
   };
 }
@@ -301,11 +301,11 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     };
     const displayToolCalls: ToolCall[][] = [];
     let streamedContent = '';
-    const processStreamEventFn = (event: ServerGeminiStreamEvent) => {
-      if (event.type === GeminiEventType.Content) {
+    const processStreamEventFn = (event: ServerAgentStreamEvent) => {
+      if (event.type === AgentEventType.Content) {
         streamedContent += event.value;
       }
-      if (event.type === GeminiEventType.Finished && streamedContent) {
+      if (event.type === AgentEventType.Finished && streamedContent) {
         addedItems.push({ type: 'gemini', text: streamedContent });
         streamedContent = '';
       }
@@ -508,8 +508,8 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     // Capture streamed content so we can prove the second run actually
     // executed its model turn (not merely that it failed to throw).
     let streamedContent = '';
-    const processStreamEventFn = (event: ServerGeminiStreamEvent) => {
-      if (event.type === GeminiEventType.Content) {
+    const processStreamEventFn = (event: ServerAgentStreamEvent) => {
+      if (event.type === AgentEventType.Content) {
         streamedContent += event.value;
       }
     };
@@ -599,7 +599,7 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
 
     const { client } = createScriptedAgentClient([
       [
-        { type: GeminiEventType.ToolCallRequest, value: externalRequest },
+        { type: AgentEventType.ToolCallRequest, value: externalRequest },
         finishedEvent(),
       ],
       [contentEvent('after-subagent'), finishedEvent()],
@@ -787,8 +787,8 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
         _req: PartListUnion,
         signal: AbortSignal,
         _promptId: string,
-      ): AsyncGenerator<ServerGeminiStreamEvent> {
-        yield { type: GeminiEventType.Content, value: 'A-content' };
+      ): AsyncGenerator<ServerAgentStreamEvent> {
+        yield { type: AgentEventType.Content, value: 'A-content' };
         // Park until aborted, then emit the engine's trailing UserCancelled.
         await Promise.race([
           aGate,
@@ -800,7 +800,7 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
             signal.addEventListener('abort', () => resolve(), { once: true });
           }),
         ]);
-        yield { type: GeminiEventType.UserCancelled };
+        yield { type: AgentEventType.UserCancelled };
       },
       getUserTier: () => undefined,
       getCurrentSequenceModel: () => 'test-model',
@@ -821,7 +821,7 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
         onEditorClose: () => {},
         onTodoPause: () => {},
         processStreamEventRef: {
-          current: (event: ServerGeminiStreamEvent) => {
+          current: (event: ServerAgentStreamEvent) => {
             routedTypes.push(event.type);
           },
         },
@@ -846,7 +846,7 @@ describe('useAgenticLoop — engine-owned loop drives CLI state', () => {
     // A's pre-abort Content WAS routed (legitimate), but the stale trailing
     // UserCancelled was NOT routed — proving the duplicate-message symptom is
     // suppressed at iteration time.
-    expect(routedTypes).toContain(GeminiEventType.Content);
-    expect(routedTypes).not.toContain(GeminiEventType.UserCancelled);
+    expect(routedTypes).toContain(AgentEventType.Content);
+    expect(routedTypes).not.toContain(AgentEventType.UserCancelled);
   });
 });

@@ -10,7 +10,7 @@ import {
   PostTurnAction,
   type PostTurnContext,
 } from './TodoContinuationService.js';
-import { GeminiEventType, type ToolCallResponseInfo } from './turn.js';
+import { AgentEventType, type ToolCallResponseInfo } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ToolErrorType, type Todo } from '@vybestack/llxprt-code-tools';
@@ -175,7 +175,7 @@ describe('TodoContinuationService', () => {
     it('returns true for Content events', () => {
       expect(
         service.shouldDeferStreamEvent({
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'text',
         }),
       ).toBe(true);
@@ -184,7 +184,7 @@ describe('TodoContinuationService', () => {
     it('returns true for Finished events', () => {
       expect(
         service.shouldDeferStreamEvent({
-          type: GeminiEventType.Finished,
+          type: AgentEventType.Finished,
           value: { reason: 'STOP' },
         }),
       ).toBe(true);
@@ -193,7 +193,7 @@ describe('TodoContinuationService', () => {
     it('returns true for Citation events', () => {
       expect(
         service.shouldDeferStreamEvent({
-          type: GeminiEventType.Citation,
+          type: AgentEventType.Citation,
           value: {},
         }),
       ).toBe(true);
@@ -202,7 +202,7 @@ describe('TodoContinuationService', () => {
     it('returns false for Error events', () => {
       expect(
         service.shouldDeferStreamEvent({
-          type: GeminiEventType.Error,
+          type: AgentEventType.Error,
           value: { error: new Error('oops') },
         }),
       ).toBe(false);
@@ -211,7 +211,7 @@ describe('TodoContinuationService', () => {
     it('returns false for ToolCallRequest events', () => {
       expect(
         service.shouldDeferStreamEvent({
-          type: GeminiEventType.ToolCallRequest,
+          type: AgentEventType.ToolCallRequest,
           value: { name: 'some_tool', args: {}, callId: 'c1' },
         }),
       ).toBe(false);

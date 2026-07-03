@@ -13,7 +13,7 @@ import {
   type MessageBus,
   type RecordingIntegration,
   type ToolCall,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
@@ -128,7 +128,7 @@ export function useGeminiStreamOrchestration(
   // creates useStreamEventHandlers → processStreamEvent) and useAgenticLoop
   // (which provides runLoop). Each is populated synchronously during render.
   const processStreamEventRef = useRef<
-    ((event: ServerGeminiStreamEvent, ts: number) => void) | null
+    ((event: ServerAgentStreamEvent, ts: number) => void) | null
   >(null);
   const runLoopRef = useRef<
     | ((
@@ -256,7 +256,7 @@ function useLoopForStream(
   st: ReturnType<typeof useStreamState>,
   scheduler: ToolSchedulerState,
   processStreamEventRef: React.MutableRefObject<
-    ((event: ServerGeminiStreamEvent, ts: number) => void) | null
+    ((event: ServerAgentStreamEvent, ts: number) => void) | null
   >,
 ) {
   return useAgenticLoop({

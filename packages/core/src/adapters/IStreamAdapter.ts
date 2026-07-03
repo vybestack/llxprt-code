@@ -5,7 +5,7 @@
  */
 
 import { type IContent } from '../services/history/IContent.js';
-import { type ServerGeminiStreamEvent } from '../core/turn.js';
+import { type ServerAgentStreamEvent } from '../core/turn.js';
 
 /**
  * Interface for adapting provider-specific streams to Gemini event format
@@ -18,5 +18,5 @@ export interface IStreamAdapter {
    */
   adaptStream(
     providerStream: AsyncIterableIterator<IContent>,
-  ): AsyncIterableIterator<ServerGeminiStreamEvent>;
+  ): AsyncIterableIterator<ServerAgentStreamEvent>;
 }

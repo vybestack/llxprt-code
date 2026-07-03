@@ -35,7 +35,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PartListUnion } from '@google/genai';
 import {
-  GeminiEventType,
+  AgentEventType,
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
@@ -73,12 +73,12 @@ function deduplicateToolCallRequests(
   });
 }
 
-function isTerminalStreamOutcome(type: GeminiEventType): boolean {
+function isTerminalStreamOutcome(type: AgentEventType): boolean {
   return (
-    type === GeminiEventType.Error ||
-    type === GeminiEventType.StreamIdleTimeout ||
-    type === GeminiEventType.UserCancelled ||
-    type === GeminiEventType.LoopDetected
+    type === AgentEventType.Error ||
+    type === AgentEventType.StreamIdleTimeout ||
+    type === AgentEventType.UserCancelled ||
+    type === AgentEventType.LoopDetected
   );
 }
 
@@ -419,7 +419,7 @@ export class AgenticLoop {
     let shouldScheduleTools = true;
     for await (const event of stream) {
       yield { kind: 'stream', event };
-      if (event.type === GeminiEventType.ToolCallRequest) {
+      if (event.type === AgentEventType.ToolCallRequest) {
         toolCallRequests.push(event.value);
         continue;
       }

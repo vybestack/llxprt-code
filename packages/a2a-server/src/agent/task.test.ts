@@ -10,7 +10,7 @@ import {
   type Config,
   type ToolCallRequestInfo,
   type CompletedToolCall,
-  GeminiEventType,
+  AgentEventType,
   ApprovalMode,
   ToolConfirmationOutcome,
   type ToolSchedulerContract,
@@ -124,7 +124,7 @@ describe('Task', () => {
       );
 
       const event = {
-        type: GeminiEventType.Content,
+        type: AgentEventType.Content,
         value: 'test',
         traceId: 'test-trace-id',
       } as const;
@@ -155,7 +155,7 @@ describe('Task', () => {
       const publishSpy = vi.spyOn(task, 'setTaskStateAndPublishUpdate');
 
       await task.acceptAgentMessage({
-        type: GeminiEventType.UserCancelled,
+        type: AgentEventType.UserCancelled,
       });
 
       expect(cancelPendingToolsSpy).toHaveBeenCalledWith(
@@ -187,7 +187,7 @@ describe('Task', () => {
       const publishSpy = vi.spyOn(task, 'setTaskStateAndPublishUpdate');
 
       await task.acceptAgentMessage({
-        type: GeminiEventType.StreamIdleTimeout,
+        type: AgentEventType.StreamIdleTimeout,
         value: {
           error: {
             message:
@@ -234,7 +234,7 @@ describe('Task', () => {
       );
 
       const event = {
-        type: GeminiEventType.ModelInfo,
+        type: AgentEventType.ModelInfo,
         value: {
           model: 'gemini-2.0-flash-exp',
         },
@@ -261,7 +261,7 @@ describe('Task', () => {
 
       // Set modelInfo via event
       const event = {
-        type: GeminiEventType.ModelInfo,
+        type: AgentEventType.ModelInfo,
         value: {
           model: 'gemini-2.0-flash-exp',
         },
@@ -286,7 +286,7 @@ describe('Task', () => {
 
       // Set modelInfo
       const event = {
-        type: GeminiEventType.ModelInfo,
+        type: AgentEventType.ModelInfo,
         value: {
           model: 'gemini-2.0-flash-exp',
         },
@@ -336,7 +336,7 @@ describe('Task', () => {
 
       // First ModelInfo event
       const event1 = {
-        type: GeminiEventType.ModelInfo,
+        type: AgentEventType.ModelInfo,
         value: {
           model: 'gemini-1.5-pro',
         },
@@ -345,7 +345,7 @@ describe('Task', () => {
 
       // Second ModelInfo event
       const event2 = {
-        type: GeminiEventType.ModelInfo,
+        type: AgentEventType.ModelInfo,
         value: {
           model: 'gemini-2.0-flash-exp',
         },

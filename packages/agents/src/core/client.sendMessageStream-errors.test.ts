@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AgentClient } from './client.js';
 import type { ChatSession } from './chatSession.js';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
@@ -213,14 +213,14 @@ describe('Gemini Client (client.ts)', () => {
       // Arrange: first stream yields a 413 error, second yields content
       const mockStream1 = (async function* () {
         yield {
-          type: GeminiEventType.Error,
+          type: AgentEventType.Error,
           value: {
             error: { message: 'Payload too large', status: 413 },
           },
         };
       })();
       const mockStream2 = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'Retried content' };
+        yield { type: AgentEventType.Content, value: 'Retried content' };
       })();
 
       mockTurnRunFn
@@ -260,7 +260,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert: model_info, then error event and retried content
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.ModelInfo,
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -269,12 +269,12 @@ describe('Gemini Client (client.ts)', () => {
           },
         },
         {
-          type: GeminiEventType.Error,
+          type: AgentEventType.Error,
           value: {
             error: { message: 'Payload too large', status: 413 },
           },
         },
-        { type: GeminiEventType.Content, value: 'Retried content' },
+        { type: AgentEventType.Content, value: 'Retried content' },
       ]);
 
       // turn.run should be called twice
@@ -299,7 +299,7 @@ describe('Gemini Client (client.ts)', () => {
       // Arrange
       const mockStream1 = (async function* () {
         yield {
-          type: GeminiEventType.Error,
+          type: AgentEventType.Error,
           value: {
             error: { message: 'Payload too large', status: 413 },
           },
@@ -326,7 +326,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert: model_info, then only the error event, no retry
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.ModelInfo,
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -335,7 +335,7 @@ describe('Gemini Client (client.ts)', () => {
           },
         },
         {
-          type: GeminiEventType.Error,
+          type: AgentEventType.Error,
           value: {
             error: { message: 'Payload too large', status: 413 },
           },
@@ -354,7 +354,7 @@ describe('Gemini Client (client.ts)', () => {
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
           yield {
-            type: GeminiEventType.Error,
+            type: AgentEventType.Error,
             value: {
               error: { message: 'Payload too large', status: 413 },
             },
@@ -379,13 +379,13 @@ describe('Gemini Client (client.ts)', () => {
 
       // Assert: 1 ModelInfo + exactly 2 Error events (original + 1 retry), no infinite loop
       expect(events.length).toBe(3);
-      expect(events[0]?.type).toBe(GeminiEventType.ModelInfo);
+      expect(events[0]?.type).toBe(AgentEventType.ModelInfo);
       expect(
         events
           .slice(1)
           .every(
             (e) =>
-              e.type === GeminiEventType.Error &&
+              e.type === AgentEventType.Error &&
               (e.value as { error: { status?: number } }).error.status === 413,
           ),
       ).toBe(true);

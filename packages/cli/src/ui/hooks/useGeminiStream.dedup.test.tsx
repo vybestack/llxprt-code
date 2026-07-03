@@ -23,7 +23,7 @@ import type {
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import {
-  GeminiEventType,
+  AgentEventType,
   ApprovalMode,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
@@ -185,19 +185,19 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
 
       // First emission
       yield {
-        type: GeminiEventType.ToolCallRequest,
+        type: AgentEventType.ToolCallRequest,
         value: duplicateToolCallRequest,
       };
 
       // Second emission of the SAME callId (this is the bug)
       yield {
-        type: GeminiEventType.ToolCallRequest,
+        type: AgentEventType.ToolCallRequest,
         value: duplicateToolCallRequest,
       };
 
       // Stream finished
       yield {
-        type: GeminiEventType.Finished,
+        type: AgentEventType.Finished,
         value: { reason: 'STOP' },
       };
     };
@@ -281,7 +281,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
     // Override the mock to emit two DIFFERENT tool calls
     const createTwoDifferentToolCallsStream = async function* () {
       yield {
-        type: GeminiEventType.ToolCallRequest,
+        type: AgentEventType.ToolCallRequest,
         value: {
           callId: 'call-1',
           name: 'run_shell_command',
@@ -293,7 +293,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       };
 
       yield {
-        type: GeminiEventType.ToolCallRequest,
+        type: AgentEventType.ToolCallRequest,
         value: {
           callId: 'call-2',
           name: 'run_shell_command',
@@ -305,7 +305,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       };
 
       yield {
-        type: GeminiEventType.Finished,
+        type: AgentEventType.Finished,
         value: { reason: 'STOP' },
       };
     };

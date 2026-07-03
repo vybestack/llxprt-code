@@ -23,7 +23,7 @@ import {
   mapLoopStream as mapLoopStreamStatic,
   mapStreamEvent as mapStreamEventStatic,
 } from '@vybestack/llxprt-code-agents';
-import type { ServerGeminiStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { AgenticLoopEvent } from '../../../core/agenticLoop/types.js';
 import type { AgentEvent } from '../../event-types.js';
 
@@ -50,7 +50,7 @@ export async function runAdapterStatic(
 
 /**
  * Drives the REAL mapStreamEvent generator directly (static import) over a
- * single ServerGeminiStreamEvent with a fresh adapter state, returning ONLY
+ * single ServerAgentStreamEvent with a fresh adapter state, returning ONLY
  * the events that variant yields in isolation. mapStreamEvent's second
  * parameter is the module-private AdapterState; helpers (excluded from the
  * boundary scan) supply a structurally-faithful mirror. Use this to assert
@@ -58,7 +58,7 @@ export async function runAdapterStatic(
  * done synthesis that mapLoopStream adds.
  */
 export function driveSingleStreamEvent(
-  event: ServerGeminiStreamEvent,
+  event: ServerAgentStreamEvent,
 ): readonly AgentEvent[] {
   const state = {
     emittedDone: false,

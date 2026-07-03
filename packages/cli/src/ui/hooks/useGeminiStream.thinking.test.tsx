@@ -28,7 +28,7 @@ import type {
   EditorType,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
-import { GeminiEventType as ServerGeminiEventType } from '@vybestack/llxprt-code-core';
+import { AgentEventType as ServerEventType } from '@vybestack/llxprt-code-core';
 import { FinishReason } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { HistoryItemGemini } from '../types.js';
@@ -380,7 +380,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
         yield {
-          type: ServerGeminiEventType.Thought,
+          type: ServerEventType.Thought,
           value: {
             subject: 'First',
             description: 'thought',
@@ -390,18 +390,18 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           resolvers.push(resolve);
         });
         yield {
-          type: ServerGeminiEventType.Thought,
+          type: ServerEventType.Thought,
           value: {
             subject: 'Second',
             description: 'thought',
           },
         };
         yield {
-          type: ServerGeminiEventType.Content,
+          type: ServerEventType.Content,
           value: 'Response',
         };
         yield {
-          type: ServerGeminiEventType.Finished,
+          type: ServerEventType.Finished,
           value: { reason: FinishReason.STOP },
         };
       })(),
@@ -436,18 +436,18 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
         yield {
-          type: ServerGeminiEventType.Thought,
+          type: ServerEventType.Thought,
           value: {
             subject: 'Analyzing request',
             description: 'First thought process',
           },
         };
         yield {
-          type: ServerGeminiEventType.Content,
+          type: ServerEventType.Content,
           value: 'Response text',
         };
         yield {
-          type: ServerGeminiEventType.Finished,
+          type: ServerEventType.Finished,
           value: { reason: FinishReason.STOP },
         };
       })(),
@@ -486,7 +486,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
         yield {
-          type: ServerGeminiEventType.Thought,
+          type: ServerEventType.Thought,
           value: {
             subject: 'Streaming thought',
             description: 'before content',
@@ -496,11 +496,11 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           resolvers.push(resolve);
         });
         yield {
-          type: ServerGeminiEventType.Content,
+          type: ServerEventType.Content,
           value: 'Now content',
         };
         yield {
-          type: ServerGeminiEventType.Finished,
+          type: ServerEventType.Finished,
           value: { reason: FinishReason.STOP },
         };
       })(),
@@ -525,25 +525,25 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
         yield {
-          type: ServerGeminiEventType.Thought,
+          type: ServerEventType.Thought,
           value: {
             subject: 'First subject',
             description: 'First description',
           },
         };
         yield {
-          type: ServerGeminiEventType.Thought,
+          type: ServerEventType.Thought,
           value: {
             subject: 'Second subject',
             description: 'Second description',
           },
         };
         yield {
-          type: ServerGeminiEventType.Content,
+          type: ServerEventType.Content,
           value: 'Response text',
         };
         yield {
-          type: ServerGeminiEventType.Finished,
+          type: ServerEventType.Finished,
           value: { reason: FinishReason.STOP },
         };
       })(),
@@ -586,18 +586,18 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
         yield {
-          type: ServerGeminiEventType.Thought,
+          type: ServerEventType.Thought,
           value: {
             subject: 'Test subject',
             description: 'Test description',
           },
         };
         yield {
-          type: ServerGeminiEventType.Content,
+          type: ServerEventType.Content,
           value: 'Response',
         };
         yield {
-          type: ServerGeminiEventType.Finished,
+          type: ServerEventType.Finished,
           value: { reason: FinishReason.STOP },
         };
       })(),
@@ -642,18 +642,18 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
         yield {
-          type: ServerGeminiEventType.Thought,
+          type: ServerEventType.Thought,
           value: {
             subject: 'With reasoning enabled',
             description: 'This should be included',
           },
         };
         yield {
-          type: ServerGeminiEventType.Content,
+          type: ServerEventType.Content,
           value: 'Response',
         };
         yield {
-          type: ServerGeminiEventType.Finished,
+          type: ServerEventType.Finished,
           value: { reason: FinishReason.STOP },
         };
       })(),
@@ -707,10 +707,10 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
             streamResolvers.push(resolve);
           });
           yield {
-            type: ServerGeminiEventType.Finished,
+            type: ServerEventType.Finished,
             value: { reason: FinishReason.STOP },
           } as unknown as {
-            type: ServerGeminiEventType;
+            type: ServerEventType;
             value: { reason: FinishReason };
           };
         })(),

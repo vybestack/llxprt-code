@@ -14,7 +14,7 @@ import type { Part, PartListUnion } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { GeminiEventType, Turn } from './turn.js';
+import { AgentEventType, Turn } from './turn.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
@@ -246,11 +246,11 @@ describe('Gemini Client (client.ts)', () => {
         forwardedRequests.push(req as Part[]);
         return (async function* () {
           yield {
-            type: GeminiEventType.Content,
+            type: AgentEventType.Content,
             value: 'Just thinking about it',
           };
           yield {
-            type: GeminiEventType.Finished,
+            type: AgentEventType.Finished,
             value: { reason: 'STOP' },
           };
         })();
@@ -308,11 +308,11 @@ describe('Gemini Client (client.ts)', () => {
         forwardedRequests.push(req as Part[]);
         return (async function* () {
           yield {
-            type: GeminiEventType.Content,
+            type: AgentEventType.Content,
             value: 'Waiting for user input',
           };
           yield {
-            type: GeminiEventType.Finished,
+            type: AgentEventType.Finished,
             value: { reason: 'STOP' },
           };
         })();
@@ -350,11 +350,11 @@ describe('Gemini Client (client.ts)', () => {
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
           yield {
-            type: GeminiEventType.Content,
+            type: AgentEventType.Content,
             value: 'Started new work',
           };
           yield {
-            type: GeminiEventType.Finished,
+            type: AgentEventType.Finished,
             value: { reason: 'STOP' },
           };
         })(),
@@ -413,14 +413,14 @@ describe('Gemini Client (client.ts)', () => {
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
           yield {
-            type: GeminiEventType.ToolCallRequest,
+            type: AgentEventType.ToolCallRequest,
             value: {
               name: 'todo_pause',
               args: { reason: 'Need more information' },
             },
           };
           yield {
-            type: GeminiEventType.ToolCallResponse,
+            type: AgentEventType.ToolCallResponse,
             value: {
               callId: 'pause-1',
               responseParts: [
@@ -438,11 +438,11 @@ describe('Gemini Client (client.ts)', () => {
             },
           };
           yield {
-            type: GeminiEventType.Content,
+            type: AgentEventType.Content,
             value: 'I need more info',
           };
           yield {
-            type: GeminiEventType.Finished,
+            type: AgentEventType.Finished,
             value: { reason: 'STOP' },
           };
         })(),
@@ -470,10 +470,8 @@ describe('Gemini Client (client.ts)', () => {
       const events = await fromAsync(stream);
 
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
-      expect(events.some((e) => e.type === GeminiEventType.Content)).toBe(true);
-      expect(events.some((e) => e.type === GeminiEventType.Finished)).toBe(
-        true,
-      );
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
+      expect(events.some((e) => e.type === AgentEventType.Finished)).toBe(true);
     });
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {
@@ -631,7 +629,7 @@ describe('Gemini Client (client.ts)', () => {
       // Verify that the max session turns limit was respected
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.ModelInfo,
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -639,7 +637,7 @@ describe('Gemini Client (client.ts)', () => {
             displayLabel: 'test-model',
           },
         },
-        { type: GeminiEventType.MaxSessionTurns },
+        { type: AgentEventType.MaxSessionTurns },
       ]);
     });
   });

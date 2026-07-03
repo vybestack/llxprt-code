@@ -5,7 +5,7 @@
  */
 
 import {
-  GeminiEventType,
+  AgentEventType,
   ToolConfirmationOutcome,
   ApprovalMode,
   createAgentRuntimeState,
@@ -16,7 +16,7 @@ import type {
   CompletedToolCall,
   ToolCall,
   ToolCallRequestInfo,
-  ServerGeminiStreamEvent,
+  ServerAgentStreamEvent,
   ToolCallConfirmationDetails,
   SerializableConfirmationDetails,
   Config,
@@ -518,7 +518,7 @@ export class Task {
     await this.scheduler.schedule(updatedRequests, abortSignal);
   }
 
-  async acceptAgentMessage(event: ServerGeminiStreamEvent): Promise<void> {
+  async acceptAgentMessage(event: ServerAgentStreamEvent): Promise<void> {
     // Handle informational/log-only events early to reduce branching complexity.
     // Type guard narrows event to informational types; early return ensures
     // the main switch only handles state-changing events.
@@ -536,7 +536,7 @@ export class Task {
   }
 
   private handleStateChangingAgentEvent(
-    event: ServerGeminiStreamEvent,
+    event: ServerAgentStreamEvent,
     traceId: string | undefined,
   ): void {
     const stateChange: StateChange = {
@@ -544,17 +544,17 @@ export class Task {
     };
 
     switch (event.type) {
-      case GeminiEventType.Content:
+      case AgentEventType.Content:
         logger.info('[Task] Sending agent message content...');
         this._sendTextContent(event.value, traceId);
         break;
-      case GeminiEventType.ToolCallConfirmation:
+      case AgentEventType.ToolCallConfirmation:
         this.handleToolCallConfirmationEvent(event);
         break;
-      case GeminiEventType.UserCancelled:
+      case AgentEventType.UserCancelled:
         handleUserCancelled(this.createStreamContext(), stateChange, traceId);
         break;
-      case GeminiEventType.StreamIdleTimeout:
+      case AgentEventType.StreamIdleTimeout:
         handleStreamIdleTimeout(
           event,
           this.createStreamContext(),
@@ -562,18 +562,18 @@ export class Task {
           traceId,
         );
         break;
-      case GeminiEventType.Thought:
+      case AgentEventType.Thought:
         logger.info('[Task] Sending agent thought...');
         this._sendThought(event.value, traceId);
         break;
-      case GeminiEventType.ModelInfo:
+      case AgentEventType.ModelInfo:
         logger.info('[Task] Received model info event:', event.value);
         this.modelInfo = event.value;
         break;
-      case GeminiEventType.InvalidStream:
+      case AgentEventType.InvalidStream:
         handleInvalidStream(this.createStreamContext(), stateChange, traceId);
         break;
-      case GeminiEventType.Error:
+      case AgentEventType.Error:
         handleStreamError(
           event,
           this.createStreamContext(),
@@ -600,8 +600,8 @@ export class Task {
 
   private handleToolCallConfirmationEvent(
     event: Extract<
-      ServerGeminiStreamEvent,
-      { type: typeof GeminiEventType.ToolCallConfirmation }
+      ServerAgentStreamEvent,
+      { type: typeof AgentEventType.ToolCallConfirmation }
     >,
   ): void {
     logger.info(
@@ -640,7 +640,7 @@ export class Task {
   async *sendCompletedToolsToLlm(
     completedToolCalls: CompletedToolCall[],
     aborted: AbortSignal,
-  ): AsyncGenerator<ServerGeminiStreamEvent> {
+  ): AsyncGenerator<ServerAgentStreamEvent> {
     if (completedToolCalls.length === 0) {
       yield* (async function* () {})(); // Yield nothing
       return;
@@ -672,7 +672,7 @@ export class Task {
   async *acceptUserMessage(
     requestContext: RequestContext,
     aborted: AbortSignal,
-  ): AsyncGenerator<ServerGeminiStreamEvent> {
+  ): AsyncGenerator<ServerAgentStreamEvent> {
     const userMessage = requestContext.userMessage;
     const llmParts: PartUnion[] = [];
     let anyConfirmationHandled = false;

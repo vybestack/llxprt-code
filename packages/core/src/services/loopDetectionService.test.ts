@@ -7,11 +7,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../config/config.js';
 import type {
-  ServerGeminiContentEvent,
-  ServerGeminiStreamEvent,
-  ServerGeminiToolCallRequestEvent,
+  ServerContentEvent,
+  ServerAgentStreamEvent,
+  ServerToolCallRequestEvent,
 } from '../core/turn.js';
-import { GeminiEventType } from '../core/turn.js';
+import { AgentEventType } from '../core/turn.js';
 import * as loggers from '../telemetry/loggers.js';
 import { LoopType } from '../telemetry/types.js';
 import { LoopDetectionService } from './loopDetectionService.js';
@@ -40,8 +40,8 @@ describe('LoopDetectionService', () => {
   const createToolCallRequestEvent = (
     name: string,
     args: Record<string, unknown>,
-  ): ServerGeminiToolCallRequestEvent => ({
-    type: GeminiEventType.ToolCallRequest,
+  ): ServerToolCallRequestEvent => ({
+    type: AgentEventType.ToolCallRequest,
     value: {
       name,
       args,
@@ -51,8 +51,8 @@ describe('LoopDetectionService', () => {
     },
   });
 
-  const createContentEvent = (content: string): ServerGeminiContentEvent => ({
-    type: GeminiEventType.Content,
+  const createContentEvent = (content: string): ServerContentEvent => ({
+    type: AgentEventType.Content,
     value: content,
   });
 
@@ -116,7 +116,7 @@ describe('LoopDetectionService', () => {
       });
       const otherEvent = {
         type: 'thought',
-      } as unknown as ServerGeminiStreamEvent;
+      } as unknown as ServerAgentStreamEvent;
 
       // Send events just below the threshold
       for (let i = 0; i < DEFAULT_TOOL_CALL_LOOP_THRESHOLD - 1; i++) {
@@ -701,7 +701,7 @@ describe('LoopDetectionService', () => {
     it('should return false for unhandled event types', () => {
       const otherEvent = {
         type: 'unhandled_event',
-      } as unknown as ServerGeminiStreamEvent;
+      } as unknown as ServerAgentStreamEvent;
       expect(service.addAndCheck(otherEvent)).toBe(false);
       expect(service.addAndCheck(otherEvent)).toBe(false);
     });
@@ -810,7 +810,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
     const toolCall = { name: 'test_tool', args: { param: 'value' } };
     for (let i = 0; i < DEFAULT_TOOL_CALL_LOOP_THRESHOLD; i++) {
       service.addAndCheck({
-        type: GeminiEventType.ToolCallRequest,
+        type: AgentEventType.ToolCallRequest,
         value: toolCall,
       });
     }

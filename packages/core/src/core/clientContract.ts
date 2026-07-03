@@ -36,7 +36,7 @@ import type { IContent } from '../services/history/IContent.js';
 import type { CompletedToolCall } from '../scheduler/types.js';
 import type {
   PerformCompressionResult,
-  ServerGeminiStreamEvent,
+  ServerAgentStreamEvent,
 } from './turn.js';
 import type { StreamEvent } from './chatSessionTypes.js';
 import type { Config } from '../config/config.js';
@@ -115,7 +115,7 @@ export interface AgentClientContract {
     turns?: number,
     isInvalidStreamRetry?: boolean,
     is413Retry?: boolean,
-  ): AsyncGenerator<ServerGeminiStreamEvent, unknown>;
+  ): AsyncGenerator<ServerAgentStreamEvent, unknown>;
   getUserTier(): UserTierId | undefined;
   getCurrentSequenceModel(): string | null;
 }

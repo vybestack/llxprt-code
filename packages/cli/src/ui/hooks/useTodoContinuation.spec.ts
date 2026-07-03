@@ -23,8 +23,8 @@ import {
   ApprovalMode,
   type Todo,
   type AgentClientContract,
-  GeminiEventType,
-  type ServerGeminiStreamEvent,
+  AgentEventType,
+  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import { AgentClient as AgentClientClass } from '@vybestack/llxprt-code-agents/internals.js';
 import { testRegex } from '../../test-utils/regex.js';
@@ -61,9 +61,9 @@ interface MockAgentClient {
 }
 
 const createEmptyStream =
-  async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+  async function* (): AsyncGenerator<ServerAgentStreamEvent> {
     yield {
-      type: GeminiEventType.Finished,
+      type: AgentEventType.Finished,
       value: { reason: FinishReason.STOP },
     };
   };

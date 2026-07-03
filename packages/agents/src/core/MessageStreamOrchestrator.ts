@@ -7,10 +7,10 @@
 import { type PartListUnion, type Part, type Content } from '@google/genai';
 import {
   Turn,
-  type ServerGeminiStreamEvent,
-  GeminiEventType,
+  type ServerAgentStreamEvent,
+  AgentEventType,
   DEFAULT_AGENT_ID,
-  type ServerGeminiFinishedOutcome,
+  type ServerFinishedOutcome,
   type ModelInfo,
 } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -59,7 +59,7 @@ export interface MessageStreamDeps {
     turns?: number,
     isInvalidStreamRetry?: boolean,
     is413Retry?: boolean,
-  ) => AsyncGenerator<ServerGeminiStreamEvent, Turn>;
+  ) => AsyncGenerator<ServerAgentStreamEvent, Turn>;
 }
 
 export interface StreamContext {
@@ -78,8 +78,8 @@ export interface IterationResult {
   todoPauseSeen: boolean;
   hadThinking: boolean;
   hadContent: boolean;
-  deferredEvents: ServerGeminiStreamEvent[];
-  outcome?: ServerGeminiFinishedOutcome;
+  deferredEvents: ServerAgentStreamEvent[];
+  outcome?: ServerFinishedOutcome;
 }
 
 interface PostTurnResult {
@@ -116,7 +116,7 @@ export class MessageStreamOrchestrator {
     turns: number,
     isInvalidStreamRetry: boolean,
     is413Retry: boolean = false,
-  ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
+  ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
     this.deps.logger.debug(() => 'DEBUG: AgentClient.sendMessageStream called');
 
     await this.deps.lazyInitialize();
@@ -162,7 +162,7 @@ export class MessageStreamOrchestrator {
   private async *_preflight(
     initialRequest: PartListUnion,
     ctx: StreamContext,
-  ): AsyncGenerator<ServerGeminiStreamEvent, PartListUnion | Turn> {
+  ): AsyncGenerator<ServerAgentStreamEvent, PartListUnion | Turn> {
     const {
       agentHookManager,
       loopDetector,
@@ -199,7 +199,7 @@ export class MessageStreamOrchestrator {
         hookOutput?.shouldStopExecution() === true
       ) {
         yield {
-          type: GeminiEventType.Error,
+          type: AgentEventType.Error,
           value: {
             error: new Error(
               `BeforeAgent hook blocked processing: ${hookOutput.getEffectiveReason()}`,
@@ -236,7 +236,7 @@ export class MessageStreamOrchestrator {
   private async *_checkSessionLimits(
     initialRequest: PartListUnion,
     ctx: StreamContext,
-  ): AsyncGenerator<ServerGeminiStreamEvent, Turn | undefined> {
+  ): AsyncGenerator<ServerAgentStreamEvent, Turn | undefined> {
     const { config, getChat, getSessionTurnCount, getEffectiveModel } =
       this.deps;
 
@@ -244,7 +244,7 @@ export class MessageStreamOrchestrator {
       config.getMaxSessionTurns() > 0 &&
       getSessionTurnCount() > config.getMaxSessionTurns()
     ) {
-      yield { type: GeminiEventType.MaxSessionTurns };
+      yield { type: AgentEventType.MaxSessionTurns };
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
@@ -301,7 +301,7 @@ export class MessageStreamOrchestrator {
 
     if (estimatedRequestTokenCount > remainingTokenCount * 0.95) {
       yield {
-        type: GeminiEventType.ContextWindowWillOverflow,
+        type: AgentEventType.ContextWindowWillOverflow,
         value: { estimatedRequestTokenCount, remainingTokenCount },
       };
       yield* this._fireAfterHookAndEmitClearContext(ctx);
@@ -344,7 +344,7 @@ export class MessageStreamOrchestrator {
     initialRequest: PartListUnion,
     signal: AbortSignal,
     ctx: StreamContext,
-  ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
+  ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
     const { todoContinuationService, complexityAnalyzer, getSessionTurnCount } =
       this.deps;
 
@@ -419,13 +419,13 @@ export class MessageStreamOrchestrator {
     ctx: StreamContext,
     hadToolCallsPrior: boolean,
     initialRequest: PartListUnion,
-  ): AsyncGenerator<ServerGeminiStreamEvent, IterationResult> {
+  ): AsyncGenerator<ServerAgentStreamEvent, IterationResult> {
     const { loopDetector, todoContinuationService, updateTelemetryTokenCount } =
       this.deps;
 
     const loopDetected = await loopDetector.turnStarted(signal);
     if (loopDetected) {
-      yield { type: GeminiEventType.LoopDetected };
+      yield { type: AgentEventType.LoopDetected };
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(hadToolCallsPrior);
     }
@@ -434,12 +434,12 @@ export class MessageStreamOrchestrator {
     let hadThinking = false;
     let hadContent = false;
     let hadToolCallsThisTurn = hadToolCallsPrior;
-    const deferredEvents: ServerGeminiStreamEvent[] = [];
-    let finishedOutcome: ServerGeminiFinishedOutcome | undefined;
+    const deferredEvents: ServerAgentStreamEvent[] = [];
+    let finishedOutcome: ServerFinishedOutcome | undefined;
 
     for await (const event of turn.run(iterRequest, signal)) {
       if (loopDetector.addAndCheck(event)) {
-        yield { type: GeminiEventType.LoopDetected };
+        yield { type: AgentEventType.LoopDetected };
         yield* this._fireAfterHookAndEmitClearContext(ctx);
         return this._earlyIterResult(hadToolCallsThisTurn, {
           todoPauseSeen,
@@ -451,19 +451,19 @@ export class MessageStreamOrchestrator {
       }
 
       todoContinuationService.recordModelActivity(event);
-      if (event.type === GeminiEventType.ToolCallRequest)
+      if (event.type === AgentEventType.ToolCallRequest)
         hadToolCallsThisTurn = true;
       if (
-        event.type === GeminiEventType.ToolCallResponse &&
+        event.type === AgentEventType.ToolCallResponse &&
         todoContinuationService.isSuccessfulTodoPauseResponse(event.value)
       )
         todoPauseSeen = true;
-      if (event.type === GeminiEventType.Thought) hadThinking = true;
-      if (event.type === GeminiEventType.Content) hadContent = true;
-      if (event.type === GeminiEventType.Finished && event.value.outcome)
+      if (event.type === AgentEventType.Thought) hadThinking = true;
+      if (event.type === AgentEventType.Content) hadContent = true;
+      if (event.type === AgentEventType.Finished && event.value.outcome)
         finishedOutcome = event.value.outcome;
       this._handleTodoToolCall(event, todoContinuationService);
-      if (event.type === GeminiEventType.Content && event.value)
+      if (event.type === AgentEventType.Content && event.value)
         ctx.responseChunks.push(event.value);
 
       if (todoContinuationService.shouldDeferStreamEvent(event)) {
@@ -518,7 +518,7 @@ export class MessageStreamOrchestrator {
     baseRequest: PartListUnion,
     retryCount: number,
     ctx: StreamContext,
-  ): AsyncGenerator<ServerGeminiStreamEvent, PostTurnResult> {
+  ): AsyncGenerator<ServerAgentStreamEvent, PostTurnResult> {
     if (iter.todoPauseSeen) {
       return yield* this._evaluateTodoContinuation(
         iter,
@@ -552,8 +552,8 @@ export class MessageStreamOrchestrator {
       }
       for (const d of iter.deferredEvents) {
         if (
-          d.type === GeminiEventType.Content ||
-          d.type === GeminiEventType.Citation
+          d.type === AgentEventType.Content ||
+          d.type === AgentEventType.Citation
         )
           yield d;
       }
@@ -581,7 +581,7 @@ export class MessageStreamOrchestrator {
     baseRequest: PartListUnion,
     retryCount: number,
     ctx: StreamContext,
-  ): AsyncGenerator<ServerGeminiStreamEvent, PostTurnResult> {
+  ): AsyncGenerator<ServerAgentStreamEvent, PostTurnResult> {
     const { todoContinuationService, sendMessageStream } = this.deps;
     const getBoundedTurns = () => Math.min(ctx.turns, MAX_TURNS);
 
@@ -647,9 +647,9 @@ export class MessageStreamOrchestrator {
   }
 
   private async *_finishWithToolCalls(
-    deferredEvents: ServerGeminiStreamEvent[],
+    deferredEvents: ServerAgentStreamEvent[],
     ctx: StreamContext,
-  ): AsyncGenerator<ServerGeminiStreamEvent, PostTurnResult> {
+  ): AsyncGenerator<ServerAgentStreamEvent, PostTurnResult> {
     const { todoContinuationService, sendMessageStream } = this.deps;
     const getBoundedTurns = () => Math.min(ctx.turns, MAX_TURNS);
 
@@ -688,7 +688,7 @@ export class MessageStreamOrchestrator {
     latestSnapshot: Todo[],
     activeTodos: Todo[],
     baseRequest: PartListUnion,
-    _deferredEvents: ServerGeminiStreamEvent[],
+    _deferredEvents: ServerAgentStreamEvent[],
     _ctx: StreamContext,
   ): Promise<PartListUnion | undefined> {
     const previousSnapshot = todoContinuationService.lastTodoSnapshot ?? [];
@@ -768,15 +768,15 @@ export class MessageStreamOrchestrator {
   }
 
   private _handleTodoToolCall(
-    event: ServerGeminiStreamEvent,
+    event: ServerAgentStreamEvent,
     todoContinuationService: TodoContinuationService,
   ): void {
     const rawEvent = event as unknown as {
-      type: GeminiEventType;
+      type: AgentEventType;
       value?: { name?: string; args?: { todos?: unknown } };
     };
     if (
-      rawEvent.type !== GeminiEventType.ToolCallRequest ||
+      rawEvent.type !== AgentEventType.ToolCallRequest ||
       !todoContinuationService.isTodoToolCall(rawEvent.value?.name)
     )
       return;
@@ -843,12 +843,12 @@ export class MessageStreamOrchestrator {
   }
 
   private async *_emitModelInfoForNewSequence(): AsyncGenerator<
-    ServerGeminiStreamEvent,
+    ServerAgentStreamEvent,
     void
   > {
     const info = this._buildModelInfo();
     this.#lastModelIdentity = this._modelIdentityKey(info);
-    yield { type: GeminiEventType.ModelInfo, value: info };
+    yield { type: AgentEventType.ModelInfo, value: info };
   }
 
   /**
@@ -857,14 +857,14 @@ export class MessageStreamOrchestrator {
    * Suppresses duplicates for the same identity.
    */
   private async *_emitModelInfoIfChanged(): AsyncGenerator<
-    ServerGeminiStreamEvent,
+    ServerAgentStreamEvent,
     void
   > {
     const info = this._buildModelInfo();
     const key = this._modelIdentityKey(info);
     if (key === this.#lastModelIdentity) return;
     this.#lastModelIdentity = key;
-    yield { type: GeminiEventType.ModelInfo, value: info };
+    yield { type: AgentEventType.ModelInfo, value: info };
   }
 
   private _getProfileName(): string | null {
@@ -918,11 +918,11 @@ export class MessageStreamOrchestrator {
    */
   private async *_fireAfterHookAndEmitClearContext(
     ctx: StreamContext,
-  ): AsyncGenerator<ServerGeminiStreamEvent, AfterAgentHookOutput | undefined> {
+  ): AsyncGenerator<ServerAgentStreamEvent, AfterAgentHookOutput | undefined> {
     const afterOut = await this._fireAfterHook(ctx);
     if (afterOut?.shouldClearContext() === true) {
       yield {
-        type: GeminiEventType.AgentExecutionStopped,
+        type: AgentEventType.AgentExecutionStopped,
         reason:
           afterOut.getEffectiveReason() || 'Context cleared by AfterAgent hook',
         contextCleared: true,

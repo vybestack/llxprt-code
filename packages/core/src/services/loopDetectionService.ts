@@ -5,7 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { GeminiEventType, type ServerGeminiStreamEvent } from '../core/turn.js';
+import { AgentEventType, type ServerAgentStreamEvent } from '../core/turn.js';
 import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import type { Config } from '../config/config.js';
@@ -184,7 +184,7 @@ export class LoopDetectionService {
    * @param event - The stream event to process
    * @returns true if a loop is detected, false otherwise
    */
-  addAndCheck(event: ServerGeminiStreamEvent): boolean {
+  addAndCheck(event: ServerAgentStreamEvent): boolean {
     // Check if loop detection is disabled
     const loopDetectionEnabled =
       (this.config.getEphemeralSetting('loopDetectionEnabled') as
@@ -199,13 +199,13 @@ export class LoopDetectionService {
     }
 
     switch (event.type) {
-      case GeminiEventType.ToolCallRequest:
+      case AgentEventType.ToolCallRequest:
         // content chanting only happens in one single stream, reset if there
         // is a tool call in between
         this.resetContentTracking();
         this.loopDetected = this.checkToolCallLoop(event.value);
         break;
-      case GeminiEventType.Content:
+      case AgentEventType.Content:
         this.loopDetected = this.checkContentLoop(event.value);
         break;
       default:

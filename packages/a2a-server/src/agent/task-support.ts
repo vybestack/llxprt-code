@@ -10,11 +10,11 @@
  */
 
 import {
-  GeminiEventType,
+  AgentEventType,
   ToolConfirmationOutcome,
   parseAndFormatApiError,
   DEFAULT_AGENT_ID,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
   type ToolConfirmationPayload,
   type ToolCallRequestInfo,
   type ToolCallConfirmationDetails,
@@ -115,30 +115,30 @@ export function createToolStatusMessage(
 }
 
 // Informational event type Sets (module-level to avoid rebuilding on each call)
-const LOG_WARN_TYPES: ReadonlySet<GeminiEventType> = new Set([
-  GeminiEventType.ToolCallRequest,
-  GeminiEventType.MaxSessionTurns,
-  GeminiEventType.LoopDetected,
-  GeminiEventType.ContextWindowWillOverflow,
+const LOG_WARN_TYPES: ReadonlySet<AgentEventType> = new Set([
+  AgentEventType.ToolCallRequest,
+  AgentEventType.MaxSessionTurns,
+  AgentEventType.LoopDetected,
+  AgentEventType.ContextWindowWillOverflow,
 ]);
 
-const LOG_INFO_TYPES: ReadonlySet<GeminiEventType> = new Set([
-  GeminiEventType.ToolCallResponse,
-  GeminiEventType.Finished,
-  GeminiEventType.Retry,
-  GeminiEventType.SystemNotice,
-  GeminiEventType.AgentExecutionStopped,
-  GeminiEventType.AgentExecutionBlocked,
+const LOG_INFO_TYPES: ReadonlySet<AgentEventType> = new Set([
+  AgentEventType.ToolCallResponse,
+  AgentEventType.Finished,
+  AgentEventType.Retry,
+  AgentEventType.SystemNotice,
+  AgentEventType.AgentExecutionStopped,
+  AgentEventType.AgentExecutionBlocked,
 ]);
 
-const SILENT_TYPES: ReadonlySet<GeminiEventType> = new Set([
-  GeminiEventType.ChatCompressed,
-  GeminiEventType.UsageMetadata,
-  GeminiEventType.Citation,
+const SILENT_TYPES: ReadonlySet<AgentEventType> = new Set([
+  AgentEventType.ChatCompressed,
+  AgentEventType.UsageMetadata,
+  AgentEventType.Citation,
 ]);
 
 // Union of all informational event types for type narrowing
-const INFORMATIONAL_TYPES: ReadonlySet<GeminiEventType> = new Set([
+const INFORMATIONAL_TYPES: ReadonlySet<AgentEventType> = new Set([
   ...LOG_WARN_TYPES,
   ...LOG_INFO_TYPES,
   ...SILENT_TYPES,
@@ -148,23 +148,23 @@ const INFORMATIONAL_TYPES: ReadonlySet<GeminiEventType> = new Set([
  * Type alias for informational/log-only events that don't affect task state.
  * These events are logged (or silent) and should be handled early to reduce complexity.
  */
-export type InformationalGeminiStreamEvent = Extract<
-  ServerGeminiStreamEvent,
+export type InformationalStreamEvent = Extract<
+  ServerAgentStreamEvent,
   {
     type:
-      | GeminiEventType.ToolCallRequest
-      | GeminiEventType.MaxSessionTurns
-      | GeminiEventType.LoopDetected
-      | GeminiEventType.ContextWindowWillOverflow
-      | GeminiEventType.ToolCallResponse
-      | GeminiEventType.Finished
-      | GeminiEventType.Retry
-      | GeminiEventType.SystemNotice
-      | GeminiEventType.AgentExecutionStopped
-      | GeminiEventType.AgentExecutionBlocked
-      | GeminiEventType.ChatCompressed
-      | GeminiEventType.UsageMetadata
-      | GeminiEventType.Citation;
+      | AgentEventType.ToolCallRequest
+      | AgentEventType.MaxSessionTurns
+      | AgentEventType.LoopDetected
+      | AgentEventType.ContextWindowWillOverflow
+      | AgentEventType.ToolCallResponse
+      | AgentEventType.Finished
+      | AgentEventType.Retry
+      | AgentEventType.SystemNotice
+      | AgentEventType.AgentExecutionStopped
+      | AgentEventType.AgentExecutionBlocked
+      | AgentEventType.ChatCompressed
+      | AgentEventType.UsageMetadata
+      | AgentEventType.Citation;
   }
 >;
 
@@ -173,60 +173,60 @@ export type InformationalGeminiStreamEvent = Extract<
  * These events don't affect task state and are handled early to reduce branching complexity.
  */
 export function isInformationalAgentEvent(
-  event: ServerGeminiStreamEvent,
-): event is InformationalGeminiStreamEvent {
+  event: ServerAgentStreamEvent,
+): event is InformationalStreamEvent {
   return INFORMATIONAL_TYPES.has(event.type);
 }
 
 /**
  * Returns the set of event types that should be logged at warn level.
  */
-export function getLogWarnTypes(): ReadonlySet<GeminiEventType> {
+export function getLogWarnTypes(): ReadonlySet<AgentEventType> {
   return LOG_WARN_TYPES;
 }
 
 /**
  * Returns the set of event types that should be logged at info level.
  */
-export function getLogInfoTypes(): ReadonlySet<GeminiEventType> {
+export function getLogInfoTypes(): ReadonlySet<AgentEventType> {
   return LOG_INFO_TYPES;
 }
 
 // Flat dispatch for informational events: logs and returns whether handled
 export function logInformationalEvent(
-  type: GeminiEventType,
-  event: InformationalGeminiStreamEvent,
+  type: AgentEventType,
+  event: InformationalStreamEvent,
   taskId: string,
 ): void {
-  if (type === GeminiEventType.ToolCallRequest) {
+  if (type === AgentEventType.ToolCallRequest) {
     logger.warn(
       '[Task] A single tool call request was passed to acceptAgentMessage. This should be handled in a batch by the agent. Ignoring.',
     );
-  } else if (type === GeminiEventType.MaxSessionTurns) {
+  } else if (type === AgentEventType.MaxSessionTurns) {
     logger.warn('[Task] Max session turns reached.');
-  } else if (type === GeminiEventType.LoopDetected) {
+  } else if (type === AgentEventType.LoopDetected) {
     logger.warn('[Task] Loop detected in agent execution.');
-  } else if (type === GeminiEventType.ContextWindowWillOverflow) {
+  } else if (type === AgentEventType.ContextWindowWillOverflow) {
     logger.warn('[Task] Context window will overflow event received.');
-  } else if (type === GeminiEventType.ToolCallResponse) {
+  } else if (type === AgentEventType.ToolCallResponse) {
     // Type narrow to ToolCallResponse event which has the value property
     const responseEvent = event as Extract<
-      InformationalGeminiStreamEvent,
-      { type: GeminiEventType.ToolCallResponse }
+      InformationalStreamEvent,
+      { type: AgentEventType.ToolCallResponse }
     >;
     logger.info(
       '[Task] Received tool call response from LLM (part of generation):',
       responseEvent.value,
     );
-  } else if (type === GeminiEventType.Finished) {
+  } else if (type === AgentEventType.Finished) {
     logger.info(`[Task ${taskId}] Agent finished its turn.`);
-  } else if (type === GeminiEventType.Retry) {
+  } else if (type === AgentEventType.Retry) {
     logger.info('[Task] Retry event received from LLM stream.');
-  } else if (type === GeminiEventType.SystemNotice) {
+  } else if (type === AgentEventType.SystemNotice) {
     logger.info('[Task] System notice received from LLM stream.');
-  } else if (type === GeminiEventType.AgentExecutionStopped) {
+  } else if (type === AgentEventType.AgentExecutionStopped) {
     logger.info('[Task] Agent execution stopped event received.');
-  } else if (type === GeminiEventType.AgentExecutionBlocked) {
+  } else if (type === AgentEventType.AgentExecutionBlocked) {
     logger.info('[Task] Agent execution blocked event received.');
   }
   // ChatCompressed, UsageMetadata, Citation are silent - no logging
@@ -546,8 +546,8 @@ function getErrorFallbackModel(context: TaskStreamContext): string | undefined {
  * and publishing an input-required state update.
  */
 export function handleStreamIdleTimeout(
-  event: ServerGeminiStreamEvent & {
-    type: typeof GeminiEventType.StreamIdleTimeout;
+  event: ServerAgentStreamEvent & {
+    type: typeof AgentEventType.StreamIdleTimeout;
   },
   context: TaskStreamContext,
 
@@ -623,7 +623,7 @@ function resolveStreamErrorMessage(
  * and publishing an error status update.
  */
 export function handleStreamError(
-  event: ServerGeminiStreamEvent & { type: typeof GeminiEventType.Error },
+  event: ServerAgentStreamEvent & { type: typeof AgentEventType.Error },
   context: TaskStreamContext,
   stateChange: StateChange,
   traceId?: string,

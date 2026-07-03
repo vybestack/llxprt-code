@@ -15,10 +15,10 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js'
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { ToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ServerGeminiStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   type ApprovalHandler,
-  GeminiEventType,
+  AgentEventType,
   createScriptedAgentClient,
   createTestConfig,
   createToolRegistryForTest,
@@ -192,11 +192,11 @@ describe('AgenticLoop with caller display callbacks', () => {
     expect(turn2Parts.some((p) => 'functionResponse' in p)).toBe(true);
     const streamContents = events
       .filter(isStream)
-      .filter((e) => e.event.type === GeminiEventType.Content)
+      .filter((e) => e.event.type === AgentEventType.Content)
       .map((e) => {
         const ev = e.event as Extract<
-          ServerGeminiStreamEvent,
-          { type: typeof GeminiEventType.Content }
+          ServerAgentStreamEvent,
+          { type: typeof AgentEventType.Content }
         >;
         return ev.value;
       });

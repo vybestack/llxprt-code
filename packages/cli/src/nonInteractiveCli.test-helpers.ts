@@ -5,7 +5,7 @@
  */
 
 import type {
-  ServerGeminiStreamEvent,
+  ServerAgentStreamEvent,
   ToolErrorType,
 } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
@@ -42,8 +42,8 @@ export function createCompletedToolCallResponse(params: {
 }
 
 export async function* createStreamFromEvents(
-  events: ServerGeminiStreamEvent[],
-): AsyncGenerator<ServerGeminiStreamEvent> {
+  events: ServerAgentStreamEvent[],
+): AsyncGenerator<ServerAgentStreamEvent> {
   for (const event of events) {
     yield event;
   }

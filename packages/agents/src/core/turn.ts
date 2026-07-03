@@ -6,7 +6,7 @@
 
 /**
  * Turn class — extracted from core/turn.ts as part of issue #1592.
- * Protocol types (GeminiEventType, ServerGeminiStreamEvent, etc.) remain in core.
+ * Protocol types (AgentEventType, ServerAgentStreamEvent, etc.) remain in core.
  */
 
 import { createHash } from 'node:crypto';
@@ -58,10 +58,10 @@ import {
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import {
   DEFAULT_AGENT_ID,
-  GeminiEventType,
+  AgentEventType,
   type ToolCallRequestInfo,
-  type ServerGeminiStreamEvent,
-  type ServerGeminiCitationEvent,
+  type ServerAgentStreamEvent,
+  type ServerCitationEvent,
   type StructuredError,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 
@@ -123,38 +123,38 @@ function safeJsonStringify(value: unknown, space?: number): string {
 // Re-export types that consumers need from this module
 export {
   DEFAULT_AGENT_ID,
-  GeminiEventType,
+  AgentEventType,
   CompressionStatus,
   PerformCompressionResult,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 export type {
   ToolCallRequestInfo,
   ToolCallResponseInfo,
-  ServerGeminiStreamEvent,
-  ServerGeminiContentEvent,
-  ServerGeminiThoughtEvent,
-  ServerGeminiToolCallRequestEvent,
-  ServerGeminiToolCallResponseEvent,
-  ServerGeminiToolCallConfirmationEvent,
-  ServerGeminiUserCancelledEvent,
-  ServerGeminiStreamIdleTimeoutEvent,
-  ServerGeminiErrorEvent,
-  ServerGeminiChatCompressedEvent,
-  ServerGeminiUsageMetadataEvent,
-  ServerGeminiMaxSessionTurnsEvent,
-  ServerGeminiFinishedEvent,
-  ServerGeminiLoopDetectedEvent,
-  ServerGeminiCitationEvent,
-  ServerGeminiRetryEvent,
-  ServerGeminiInvalidStreamEvent,
-  ServerGeminiAgentExecutionStoppedEvent,
-  ServerGeminiAgentExecutionBlockedEvent,
-  ServerGeminiContextWindowWillOverflowEvent,
-  ServerGeminiModelInfoEvent,
+  ServerAgentStreamEvent,
+  ServerContentEvent,
+  ServerThoughtEvent,
+  ServerToolCallRequestEvent,
+  ServerToolCallResponseEvent,
+  ServerToolCallConfirmationEvent,
+  ServerUserCancelledEvent,
+  ServerStreamIdleTimeoutEvent,
+  ServerErrorEvent,
+  ServerChatCompressedEvent,
+  ServerUsageMetadataEvent,
+  ServerMaxSessionTurnsEvent,
+  ServerFinishedEvent,
+  ServerLoopDetectedEvent,
+  ServerCitationEvent,
+  ServerRetryEvent,
+  ServerInvalidStreamEvent,
+  ServerAgentExecutionStoppedEvent,
+  ServerAgentExecutionBlockedEvent,
+  ServerContextWindowWillOverflowEvent,
+  ServerModelInfoEvent,
   ServerToolCallConfirmationDetails,
   ChatCompressionInfo,
   ModelInfo,
-  ServerGeminiFinishedOutcome,
+  ServerFinishedOutcome,
   StructuredError,
   ServerTool,
 } from '@vybestack/llxprt-code-core/core/turn.js';
@@ -210,13 +210,13 @@ export class Turn {
    * Emits a citation event with the given text.
    * This integrates with llxprt's provider abstraction to work across all providers.
    */
-  private emitCitation(text: string): ServerGeminiCitationEvent | null {
+  private emitCitation(text: string): ServerCitationEvent | null {
     if (!this.shouldShowCitations()) {
       return null;
     }
 
     return {
-      type: GeminiEventType.Citation,
+      type: AgentEventType.Citation,
       value: text,
     };
   }
@@ -228,7 +228,7 @@ export class Turn {
     usageMetadata: GenerateContentResponseUsageMetadata | undefined,
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
-  ): Generator<ServerGeminiStreamEvent> {
+  ): Generator<ServerAgentStreamEvent> {
     const outcome = cumulativeOutcome;
     this.logger.debug(() => `[stream:turn] emitting Finished event`, {
       finishReason,
@@ -241,7 +241,7 @@ export class Turn {
     });
     this.finishReason = finishReason;
     yield {
-      type: GeminiEventType.Finished,
+      type: AgentEventType.Finished,
       value: {
         reason: finishReason,
         usageMetadata,
@@ -298,7 +298,7 @@ export class Turn {
     resp: GenerateContentResponse,
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
-  ): Generator<ServerGeminiStreamEvent> {
+  ): Generator<ServerAgentStreamEvent> {
     // Check ALL parts for thinking, not just parts[0]
     // Bug fix: Previously only checked parts[0], missing thoughts in other positions
     // @plan PLAN-20251202-THINKING.P16
@@ -315,7 +315,7 @@ export class Turn {
           (part as unknown as { text?: string }).text ?? '',
         );
         yield {
-          type: GeminiEventType.Thought,
+          type: AgentEventType.Thought,
           value: thought,
           traceId,
         };
@@ -329,7 +329,7 @@ export class Turn {
       .filter((partText): partText is string => typeof partText === 'string')
       .join('');
     if (text !== '') {
-      yield { type: GeminiEventType.Content, value: text, traceId };
+      yield { type: AgentEventType.Content, value: text, traceId };
 
       if (text.trim() !== '') {
         // Emit citation event if conditions are met
@@ -398,7 +398,7 @@ export class Turn {
     signal: AbortSignal,
     effectiveTimeoutMs: number,
     idleFlag: { timedOut: boolean },
-  ): AsyncGenerator<ServerGeminiStreamEvent> {
+  ): AsyncGenerator<ServerAgentStreamEvent> {
     let cumulativeOutcome = this.createEmptyResponseOutcome();
     for (;;) {
       // Use watchdog if timeout > 0, otherwise call iterator.next() directly
@@ -428,7 +428,7 @@ export class Turn {
 
       const streamEvent = result.value;
       if (isAbortSignalActive(signal)) {
-        yield { type: GeminiEventType.UserCancelled };
+        yield { type: AgentEventType.UserCancelled };
         return;
       }
 
@@ -459,7 +459,7 @@ export class Turn {
     streamEvent: StreamEvent,
     cumulativeOutcome: ResponseOutcome,
   ): AsyncGenerator<
-    ServerGeminiStreamEvent,
+    ServerAgentStreamEvent,
     {
       action: 'continue' | 'process' | 'return';
       outcome: ResponseOutcome;
@@ -469,14 +469,14 @@ export class Turn {
     // Handle the RETRY event
     if (streamEvent.type === StreamEventType.RETRY) {
       const outcome = this.createEmptyResponseOutcome();
-      yield { type: GeminiEventType.Retry };
+      yield { type: AgentEventType.Retry };
       return { action: 'continue', outcome, resp: null };
     }
 
     // Handle AGENT_EXECUTION_STOPPED event
     if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
       yield {
-        type: GeminiEventType.AgentExecutionStopped,
+        type: AgentEventType.AgentExecutionStopped,
         reason: streamEvent.reason,
         systemMessage: streamEvent.systemMessage,
         contextCleared: streamEvent.contextCleared,
@@ -487,7 +487,7 @@ export class Turn {
     // Handle AGENT_EXECUTION_BLOCKED event
     if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
       yield {
-        type: GeminiEventType.AgentExecutionBlocked,
+        type: AgentEventType.AgentExecutionBlocked,
         reason: streamEvent.reason,
         systemMessage: streamEvent.systemMessage,
         contextCleared: streamEvent.contextCleared,
@@ -549,15 +549,15 @@ export class Turn {
     req: PartListUnion,
     signal: AbortSignal,
     idleFlag: { timedOut: boolean },
-  ): AsyncGenerator<ServerGeminiStreamEvent> {
+  ): AsyncGenerator<ServerAgentStreamEvent> {
     if (signal.aborted) {
-      yield { type: GeminiEventType.UserCancelled };
+      yield { type: AgentEventType.UserCancelled };
       return;
     }
 
     if (idleFlag.timedOut) {
       yield {
-        type: GeminiEventType.StreamIdleTimeout,
+        type: AgentEventType.StreamIdleTimeout,
         value: {
           error: {
             message: TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE,
@@ -569,7 +569,7 @@ export class Turn {
     }
 
     if (e instanceof InvalidStreamError) {
-      yield { type: GeminiEventType.InvalidStream };
+      yield { type: AgentEventType.InvalidStream };
       return;
     }
 
@@ -590,14 +590,14 @@ export class Turn {
       message: getErrorMessage(error),
       status,
     };
-    yield { type: GeminiEventType.Error, value: { error: structuredError } };
+    yield { type: AgentEventType.Error, value: { error: structuredError } };
   }
 
   // The run method yields simpler events suitable for server logic
   async *run(
     req: PartListUnion,
     signal: AbortSignal,
-  ): AsyncGenerator<ServerGeminiStreamEvent> {
+  ): AsyncGenerator<ServerAgentStreamEvent> {
     const idleFlag: { timedOut: boolean } = { timedOut: false };
     this.logger.debug('Turn.run called', {
       req: safeJsonStringify(req, 2),
@@ -607,7 +607,7 @@ export class Turn {
 
     try {
       if (signal.aborted) {
-        yield { type: GeminiEventType.UserCancelled };
+        yield { type: AgentEventType.UserCancelled };
         return;
       }
 
@@ -654,7 +654,7 @@ export class Turn {
   private handlePendingFunctionCall(
     fnCall: FunctionCall,
     functionCallIndex: number,
-  ): ServerGeminiStreamEvent | null {
+  ): ServerAgentStreamEvent | null {
     const callId =
       fnCall.id ??
       this.createSyntheticFunctionCallId(fnCall, functionCallIndex);
@@ -693,7 +693,7 @@ export class Turn {
     this.pendingToolCalls.push(toolCallRequest);
 
     // Yield a request for the tool call, not the pending/confirming status
-    return { type: GeminiEventType.ToolCallRequest, value: toolCallRequest };
+    return { type: AgentEventType.ToolCallRequest, value: toolCallRequest };
   }
 
   private createSyntheticFunctionCallId(

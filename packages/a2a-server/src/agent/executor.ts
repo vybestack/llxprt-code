@@ -16,9 +16,9 @@ import type {
   ToolCallRequestInfo,
   CompletedToolCall,
   Config,
-  ServerGeminiStreamEvent,
+  ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
-import { GeminiEventType } from '@vybestack/llxprt-code-core';
+import { AgentEventType } from '@vybestack/llxprt-code-core';
 import { v4 as uuidv4 } from 'uuid';
 
 import { logger } from '../utils/logger.js';
@@ -442,7 +442,7 @@ export class CoderAgentExecutor implements AgentExecutor {
   ): Promise<void> {
     let agentTurnActive = true;
     logger.info(`[CoderAgentExecutor] Task ${task.id}: Processing user turn.`);
-    let agentEvents: AsyncGenerator<ServerGeminiStreamEvent, void, unknown> =
+    let agentEvents: AsyncGenerator<ServerAgentStreamEvent, void, unknown> =
       task.acceptUserMessage(requestContext, abortSignal);
 
     while (agentTurnActive) {
@@ -457,7 +457,7 @@ export class CoderAgentExecutor implements AgentExecutor {
           );
           throw new Error('Execution aborted');
         }
-        if (event.type === GeminiEventType.ToolCallRequest) {
+        if (event.type === AgentEventType.ToolCallRequest) {
           toolCallRequests.push(event.value);
           continue;
         }
@@ -521,7 +521,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     task: Task,
     completedTools: CompletedToolCall[],
     abortSignal: AbortSignal,
-  ): Promise<AsyncGenerator<ServerGeminiStreamEvent, void, unknown> | false> {
+  ): Promise<AsyncGenerator<ServerAgentStreamEvent, void, unknown> | false> {
     if (completedTools.every((tool) => tool.status === 'cancelled')) {
       logger.info(
         `[CoderAgentExecutor] Task ${task.id}: All tool calls were cancelled. Updating history and ending agent turn.`,

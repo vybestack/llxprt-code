@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ServerGeminiStreamEvent } from './turn.js';
-import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
+import type { ServerAgentStreamEvent } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type {
   GenerateContentResponse,
   Part,
@@ -112,14 +112,14 @@ describe('Turn - hook execution control events', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];
-    const events: GeminiEventType[] = [];
+    const events: AgentEventType[] = [];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
     )) {
       events.push(event.type);
     }
-    expect(events).toStrictEqual([GeminiEventType.AgentExecutionStopped]);
+    expect(events).toStrictEqual([AgentEventType.AgentExecutionStopped]);
   });
 
   it('should yield AgentExecutionBlocked event and continue processing', async () => {
@@ -140,16 +140,16 @@ describe('Turn - hook execution control events', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];
-    const events: GeminiEventType[] = [];
+    const events: AgentEventType[] = [];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
     )) {
       events.push(event.type);
     }
-    expect(events).toContain(GeminiEventType.AgentExecutionBlocked);
-    expect(events).toContain(GeminiEventType.Content);
-    expect(events).toContain(GeminiEventType.Finished);
+    expect(events).toContain(AgentEventType.AgentExecutionBlocked);
+    expect(events).toContain(AgentEventType.Content);
+    expect(events).toContain(AgentEventType.Finished);
   });
 
   it('should include reason in AgentExecutionStopped event', async () => {
@@ -161,7 +161,7 @@ describe('Turn - hook execution control events', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
@@ -169,7 +169,7 @@ describe('Turn - hook execution control events', () => {
       events.push(event);
     }
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(GeminiEventType.AgentExecutionStopped);
+    expect(events[0].type).toBe(AgentEventType.AgentExecutionStopped);
     expect((events[0] as { reason: string }).reason).toBe('Custom stop reason');
   });
 
@@ -182,7 +182,7 @@ describe('Turn - hook execution control events', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
@@ -191,7 +191,7 @@ describe('Turn - hook execution control events', () => {
     }
     expect(events.length).toBeGreaterThan(0);
     const blockedEvent = events.find(
-      (e) => e.type === GeminiEventType.AgentExecutionBlocked,
+      (e) => e.type === AgentEventType.AgentExecutionBlocked,
     );
     expect(blockedEvent).toBeDefined();
     expect((blockedEvent as { reason: string }).reason).toBe(
@@ -209,7 +209,7 @@ describe('Turn - hook execution control events', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
@@ -222,7 +222,7 @@ describe('Turn - hook execution control events', () => {
       reason: string;
       contextCleared?: boolean;
     };
-    expect(stoppedEvent.type).toBe(GeminiEventType.AgentExecutionStopped);
+    expect(stoppedEvent.type).toBe(AgentEventType.AgentExecutionStopped);
     expect(stoppedEvent.reason).toBe('Hook stopped execution');
     expect(stoppedEvent.contextCleared).toBe(true);
   });
@@ -246,7 +246,7 @@ describe('Turn - hook execution control events', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
@@ -254,7 +254,7 @@ describe('Turn - hook execution control events', () => {
       events.push(event);
     }
     const blockedEvent = events.find(
-      (e) => e.type === GeminiEventType.AgentExecutionBlocked,
+      (e) => e.type === AgentEventType.AgentExecutionBlocked,
     ) as {
       type: string;
       reason: string;
@@ -274,7 +274,7 @@ describe('Turn - hook execution control events', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       reqParts,
       new AbortController().signal,
@@ -286,7 +286,7 @@ describe('Turn - hook execution control events', () => {
       reason: string;
       contextCleared?: boolean;
     };
-    expect(stoppedEvent.type).toBe(GeminiEventType.AgentExecutionStopped);
+    expect(stoppedEvent.type).toBe(AgentEventType.AgentExecutionStopped);
     expect(stoppedEvent.contextCleared).toBeUndefined();
   });
 });

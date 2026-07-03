@@ -6,7 +6,7 @@
 
 import process from 'node:process';
 import {
-  setLlxprtMdFilename as setServerGeminiMdFilename,
+  setLlxprtMdFilename as setServerMdFilename,
   getCurrentLlxprtMdFilename,
   DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
@@ -125,9 +125,9 @@ function resolveFiltering(
   // Set the context filename BEFORE loading memory
   const contextFileName = profileMergedSettings.ui?.contextFileName;
   if (contextFileName !== undefined && contextFileName !== '') {
-    setServerGeminiMdFilename(contextFileName);
+    setServerMdFilename(contextFileName);
   } else {
-    setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
+    setServerMdFilename(getCurrentLlxprtMdFilename());
   }
 
   const fileService = new FileDiscoveryService(cwd);
