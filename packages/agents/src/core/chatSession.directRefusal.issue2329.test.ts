@@ -159,6 +159,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
     );
 
     expect(response.text).toBe('Declined.');
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
     expect(getProviderStopReason(response.candidates?.[0])).toBe('refusal');
   });
 });
