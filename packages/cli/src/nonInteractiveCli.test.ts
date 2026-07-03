@@ -15,6 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
+import { REFUSAL_NOTICE_MESSAGE } from './ui/hooks/geminiStream/streamUtils.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
@@ -498,7 +499,7 @@ describe('processAgentStream', () => {
     );
 
     expect(processStderrSpy).toHaveBeenCalledWith(
-      'WARNING: Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.\n',
+      `WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`,
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('partial response');
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');
@@ -529,9 +530,7 @@ describe('processAgentStream', () => {
         event.type === JsonStreamEventType.ERROR &&
         event.severity === 'warning',
     );
-    expect(warning?.message).toBe(
-      'Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.',
-    );
+    expect(warning?.message).toBe(REFUSAL_NOTICE_MESSAGE);
     const result = jsonEvents.find(
       (event) => event.type === JsonStreamEventType.RESULT,
     );

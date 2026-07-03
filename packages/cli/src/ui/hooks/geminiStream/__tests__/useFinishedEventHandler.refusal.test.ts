@@ -146,4 +146,15 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
 
     expect(mockAddItem).not.toHaveBeenCalled();
   });
+
+  it('adds no item for a STOP completion without any stopReason', () => {
+    const result = renderHandlers();
+
+    result.current.handleFinishedEvent(
+      makeFinishedEvent(FinishReason.STOP),
+      4000,
+    );
+
+    expect(mockAddItem).not.toHaveBeenCalled();
+  });
 });

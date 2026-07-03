@@ -83,4 +83,17 @@ describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
     expect(response.candidates[0].finishReason).toBeUndefined();
     expect(response.candidates[0].finishMessage).toBeUndefined();
   });
+
+  it('leaves finishReason and finishMessage unset for an unknown stopReason', () => {
+    const icontent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'text' }],
+      metadata: { stopReason: 'some_future_reason' },
+    };
+
+    const response = convertIContentToResponse(icontent);
+
+    expect(response.candidates[0].finishReason).toBeUndefined();
+    expect(response.candidates[0].finishMessage).toBeUndefined();
+  });
 });
