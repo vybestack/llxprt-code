@@ -49,11 +49,6 @@ const ALLOWED_GEMINI_PATTERNS: ReadonlyArray<{
     pattern: 'geminiRequestBuilding',
     reason: 'Gemini provider request-building module',
   },
-  // Deprecated compat aliases live in a single file for external consumers.
-  {
-    pattern: 'geminiLegacyAliases',
-    reason: 'Backward-compat alias module for renamed exports',
-  },
   // Gemini model names (not code identifiers)
   { pattern: 'gemini-1', reason: 'Gemini model name string literal' },
   { pattern: 'gemini-embedding', reason: 'Gemini embedding model name' },
@@ -235,12 +230,25 @@ function searchTokenInFiles(
 }
 
 /**
- * Filter hits to only include real violations (not allowed Gemini names).
+ * The deprecated backward-compat alias module (and its test) is the ONLY
+ * location where old Gemini-prefixed tokens may legitimately appear. This
+ * file-scoped exclusion is tighter than a substring allowance (which would
+ * also match line text), so all old-name gates use it.
  */
-function filterViolations(
+function isLegacyAliasFile(filePath: string): boolean {
+  return (
+    filePath.includes('geminiLegacyAliases.ts') ||
+    filePath.includes('geminiLegacyAliases.test.ts')
+  );
+}
+
+/**
+ * Filter hits, excluding the legacy alias module/test by file path.
+ */
+function filterViolationsExcludingLegacyAliases(
   hits: Array<{ file: string; line: number; text: string }>,
 ): Array<{ file: string; line: number; text: string }> {
-  return hits.filter((h) => !isAllowedGeminiName(h.text, h.file));
+  return hits.filter((h) => !isLegacyAliasFile(h.file));
 }
 
 // ---- Test Suite ----
@@ -349,7 +357,9 @@ describe('Provider-Agnostic Naming Regression', () => {
     for (const { token, description } of oldClassChecks) {
       it(`must not contain ${description}`, () => {
         const hits = searchTokenInFiles(allFiles, token);
-        const violations = filterViolations(hits);
+        // Exclude the legacy alias module by file path —
+        // ServerGeminiChatCompressedEvent legitimately contains "GeminiChat".
+        const violations = filterViolationsExcludingLegacyAliases(hits);
         expect(violations).toStrictEqual([]);
       });
     }
@@ -502,25 +512,19 @@ describe('Provider-Agnostic Naming Regression', () => {
   });
 
   describe('Provider-agnostic event types must not carry Gemini names', () => {
-    // After the rename (issue #2344), no source file may reference the old
-    // Server* / AgentEventType tokens EXCEPT the deprecated compat
-    // module and its test.
+    // After the rename (issue #2344), no source file may reference the
+    // deprecated ServerGemini* or GeminiEventType tokens EXCEPT the
+    // legacy alias module and its test.
     const FORBIDDEN_EVENT_TOKENS = ['ServerGemini', 'GeminiEventType'];
 
     for (const token of FORBIDDEN_EVENT_TOKENS) {
       it(`must not contain "${token}" outside geminiLegacyAliases`, () => {
         const hits = searchTokenInFiles(allFilesIncludingAgents, token);
-        const violations = hits.filter((h) => {
-          // The deprecated compat module and its test are the ONLY allowed
-          // locations for these old names.
-          if (
-            h.file.includes('geminiLegacyAliases.ts') ||
-            h.file.includes('geminiLegacyAliases.test.ts')
-          ) {
-            return false;
-          }
-          return !isAllowedGeminiName(h.text, h.file);
-        });
+        // Exclude the deprecated compat module and its test by file path,
+        // then apply the standard allowed-pattern filter.
+        const violations = hits
+          .filter((h) => !isLegacyAliasFile(h.file))
+          .filter((h) => !isAllowedGeminiName(h.text, h.file));
         expect(violations).toStrictEqual([]);
       });
     }
