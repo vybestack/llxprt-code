@@ -21,7 +21,6 @@ import {
   type RuntimeTokenizerFactory,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
-import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
@@ -316,6 +315,7 @@ function resolveOpenaiBaseUrl(
 }
 
 function resolveAuthOnlyFlag(
+  settingsService: RuntimeContextShape['settingsService'],
   config?: Config,
   userSettings?: UserSettingsView,
 ): boolean {
@@ -339,30 +339,17 @@ function resolveAuthOnlyFlag(
     }
   }
 
-  const settingsServiceAuthOnly = tryGetSettingsServiceAuthOnly();
-  if (settingsServiceAuthOnly !== undefined) {
-    return settingsServiceAuthOnly;
+  // Read from the runtime context's OWN settings service — never ambient
+  // global state (issue #2300).
+  const serviceValue = settingsService.get('authOnly');
+  if (serviceValue !== undefined) {
+    const coerced = coerceAuthOnly(serviceValue);
+    if (typeof coerced === 'boolean') {
+      return coerced;
+    }
   }
 
   return false;
-}
-
-/**
- * Attempts to get authOnly from SettingsService, returning undefined on failure.
- */
-function tryGetSettingsServiceAuthOnly(): boolean | undefined {
-  try {
-    const settingsService = getRuntimeSettingsService();
-    const serviceValue = settingsService.get('authOnly');
-    if (serviceValue === undefined) {
-      return undefined;
-    }
-    const coerced = coerceAuthOnly(serviceValue);
-    return typeof coerced === 'boolean' ? coerced : undefined;
-  } catch {
-    // Ignore SettingsService lookup failures and fall back to default
-    return undefined;
-  }
 }
 
 /** Registers OAuth providers for authentication support. */
@@ -524,7 +511,11 @@ export function createProviderManager(
     configureProviderRuntimeFactories(config, manager);
   }
 
-  const authOnlyEnabled = resolveAuthOnlyFlag(config, userSettings);
+  const authOnlyEnabled = resolveAuthOnlyFlag(
+    context.settingsService,
+    config,
+    userSettings,
+  );
   const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
     resolveOpenaiSettings(
       config,

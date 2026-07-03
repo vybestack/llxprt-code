@@ -115,8 +115,11 @@ describe('Ephemeral Settings Integration Tests', () => {
 
   describe('Custom Headers Application', () => {
     it('should make custom headers available for API requests', async () => {
-      // Create a ProviderManager
-      const providerManager = new ProviderManager();
+      // Create a ProviderManager bound to this config's runtime
+      const providerManager = new ProviderManager({
+        settingsService: config.getSettingsService(),
+        config,
+      });
       config.setProviderManager(providerManager);
 
       // Set custom headers via ephemeral settings
@@ -146,8 +149,11 @@ describe('Ephemeral Settings Integration Tests', () => {
 
   describe('Streaming Settings Application', () => {
     it('should default to streaming enabled when not set', async () => {
-      // Create a ProviderManager to test streaming behavior
-      const providerManager = new ProviderManager();
+      // Create a ProviderManager bound to this config's runtime
+      const providerManager = new ProviderManager({
+        settingsService: config.getSettingsService(),
+        config,
+      });
       config.setProviderManager(providerManager);
 
       // Get ephemeral settings - streaming should not be set initially

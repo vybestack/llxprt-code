@@ -167,7 +167,11 @@ describe('explicit runtimeId at composition boundaries (issue #2300)', () => {
           },
         );
 
-        expect(() => getCliOAuthManager()).toThrow(/No active runtime/);
+        // The active ALS scope ('als-different') is not registered, so
+        // resolution fails hard rather than borrowing the explicit runtime.
+        expect(() => getCliOAuthManager()).toThrow(
+          /scope 'als-different' is not registered/,
+        );
       });
 
       expect(runtimeRegistry.has(explicitRuntimeId)).toBe(true);
@@ -183,7 +187,7 @@ describe('explicit runtimeId at composition boundaries (issue #2300)', () => {
       expect(getDefaultCliRuntimeId()).toBe(runtimeId);
     });
 
-    it('allows getCliOAuthManager to resolve the registered manager via default pointer', () => {
+    it('a leaked unregistered ALS scope throws even when a valid default pointer exists (issue #2300)', () => {
       const runtimeId = 'cli-default-2';
       setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
 
@@ -196,13 +200,21 @@ describe('explicit runtimeId at composition boundaries (issue #2300)', () => {
         },
       );
 
+      // A stale/leaked isolated scope must NOT be rescued by the CLI default
+      // pointer — that fall-through would let a torn-down runtime borrow the
+      // foreground OAuth manager.
       runWithRuntimeScope(
         { runtimeId: 'unregistered-default-fallback', metadata: {} },
         () => {
-          const oauth = getCliOAuthManager();
-          expect(oauth).toBe(mockOAuthManager);
+          expect(() => getCliOAuthManager()).toThrow(
+            /scope 'unregistered-default-fallback' is not registered/,
+          );
         },
       );
+
+      // Outside the leaked scope, the registered default resolves normally.
+      resetRuntimeScopeForTesting();
+      expect(getCliOAuthManager()).toBe(mockOAuthManager);
     });
 
     it('resolves getCliOAuthManager via default pointer with no ALS scope at all', () => {
@@ -235,13 +247,11 @@ describe('explicit runtimeId at composition boundaries (issue #2300)', () => {
 
       setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
 
-      runWithRuntimeScope(
-        { runtimeId: 'unregistered-prepare-fallback', metadata: {} },
-        () => {
-          const oauth = getCliOAuthManager();
-          expect(oauth).toBe(mockOAuthManager);
-        },
-      );
+      // No ALS scope active: resolution is driven purely by the default
+      // pointer that setCliRuntimeContext claimed for this runtime.
+      resetRuntimeScopeForTesting();
+      const oauth = getCliOAuthManager();
+      expect(oauth).toBe(mockOAuthManager);
     });
   });
 

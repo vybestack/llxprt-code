@@ -28,6 +28,7 @@ import {
 import { applyProfileToRuntime } from './profileRuntimeApplication.js';
 import {
   createBootstrapResult,
+  resolveForegroundRuntimeId,
   type BootstrapRuntimeState,
   type BootstrapProfileArgs,
 } from './profileBootstrap.js';
@@ -193,7 +194,7 @@ async function setupRuntimeContext(
   const settingsService = getSettingsService(input);
 
   const bootstrapRuntimeId =
-    runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';
+    runtimeState.runtime.runtimeId ?? resolveForegroundRuntimeId();
   const baseBootstrapMetadata = {
     ...(runtimeState.runtime.metadata ?? {}),
     stage: 'post-config',

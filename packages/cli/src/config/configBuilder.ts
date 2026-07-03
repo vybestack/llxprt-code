@@ -21,6 +21,7 @@ import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { loadSettings } from './settings.js';
 import { appEvents } from '../utils/events.js';
 import type { Settings } from './settings.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
@@ -41,6 +42,12 @@ registerAgentRuntimeFactories(agentRuntimeFactoryBindings);
 export interface ConfigBuildInput {
   readonly sessionId: string;
   readonly cwd: string;
+  /**
+   * The bootstrap runtime's SettingsService. Passed explicitly because Config
+   * construction never adopts ambient runtime state (issue #2300) — the CLI
+   * composition boundary owns which settings instance the session uses.
+   */
+  readonly settingsService: SettingsService;
   readonly argv: CliArgs;
   readonly profileSettingsWithTools: Settings;
   readonly context: ContextResolutionResult;
@@ -174,6 +181,7 @@ function buildSessionBaseArgs(
   const {
     sessionId,
     cwd,
+    settingsService,
     argv,
     profileSettingsWithTools,
     context,
@@ -191,6 +199,7 @@ function buildSessionBaseArgs(
   } = input;
   return {
     sessionId,
+    settingsService,
     embeddingModel: undefined,
     sandbox: sandboxConfig,
     targetDir: cwd,

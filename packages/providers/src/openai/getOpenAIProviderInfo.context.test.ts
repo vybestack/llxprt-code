@@ -1,11 +1,6 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import {
-  createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { ConversationCache } from './ConversationCache.js';
 import {
   getOpenAIProviderInfo,
@@ -22,25 +17,7 @@ const createProviderManagerStub = (
 });
 
 describe('getOpenAIProviderInfo runtime integration', () => {
-  let originalContext: ReturnType<
-    typeof getActiveProviderRuntimeContext
-  > | null;
-
-  beforeEach(() => {
-    try {
-      originalContext = getActiveProviderRuntimeContext();
-    } catch {
-      originalContext = null;
-    }
-  });
-
-  afterEach(() => {
-    if (originalContext) {
-      setActiveProviderRuntimeContext(originalContext);
-    }
-  });
-
-  it('derives model and responses mode from SettingsService', () => {
+  it('derives model and responses mode from the explicit runtime SettingsService', () => {
     const settingsService = new SettingsService();
     settingsService.set('model', 'settings-model');
     settingsService.setProviderSetting('openai', 'apiMode', 'responses');
@@ -59,13 +36,10 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       getModel: () => 'config-model',
     });
 
-    const runtimeContext = createProviderRuntimeContext({
-      settingsService,
-      config,
-    });
-    setActiveProviderRuntimeContext(runtimeContext);
-
-    const info = getOpenAIProviderInfo(providerManager);
+    const info = getOpenAIProviderInfo(
+      { settingsService, config },
+      providerManager,
+    );
     expect(info.currentModel).toBe('settings-model');
     expect(info.isResponsesAPI).toBe(true);
     expect(info.conversationCache).toBe(conversationCache);
@@ -80,13 +54,7 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       getModel: () => 'config-model',
     });
 
-    const runtimeContext = createProviderRuntimeContext({
-      settingsService,
-      config,
-    });
-    setActiveProviderRuntimeContext(runtimeContext);
-
-    const info = getOpenAIProviderInfo();
+    const info = getOpenAIProviderInfo({ settingsService, config });
     expect(info.currentModel).toBe('config-model');
     expect(info.provider).toBeNull();
   });
@@ -104,13 +72,10 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       getProviderManager: () => providerManager,
     });
 
-    const runtimeContext = createProviderRuntimeContext({
-      settingsService,
-      config,
-    });
-    setActiveProviderRuntimeContext(runtimeContext);
-
-    const info = getOpenAIProviderInfo(providerManager);
+    const info = getOpenAIProviderInfo(
+      { settingsService, config },
+      providerManager,
+    );
     expect(info.currentModel).toBeNull();
     expect(info.provider).toBeNull();
     expect(info.isResponsesAPI).toBe(false);
@@ -135,13 +100,10 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       getModel: () => 'gpt-4o',
     });
 
-    const runtimeContext = createProviderRuntimeContext({
-      settingsService,
-      config,
-    });
-    setActiveProviderRuntimeContext(runtimeContext);
-
-    const info = getOpenAIProviderInfo(providerManager);
+    const info = getOpenAIProviderInfo(
+      { settingsService, config },
+      providerManager,
+    );
     expect(info.provider).not.toBeNull();
     expect(info.conversationCache).toBe(conversationCache);
   });
@@ -162,13 +124,10 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       getModel: () => 'custom-model',
     });
 
-    const runtimeContext = createProviderRuntimeContext({
-      settingsService,
-      config,
-    });
-    setActiveProviderRuntimeContext(runtimeContext);
-
-    const info = getOpenAIProviderInfo(providerManager);
+    const info = getOpenAIProviderInfo(
+      { settingsService, config },
+      providerManager,
+    );
     expect(info.isResponsesAPI).toBe(true);
     expect(providerStub.shouldUseResponses).toHaveBeenCalledWith(
       'custom-model',
@@ -190,13 +149,10 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       getModel: () => 'gpt-5.4-mini',
     });
 
-    const runtimeContext = createProviderRuntimeContext({
-      settingsService,
-      config,
-    });
-    setActiveProviderRuntimeContext(runtimeContext);
-
-    const info = getOpenAIProviderInfo(providerManager);
+    const info = getOpenAIProviderInfo(
+      { settingsService, config },
+      providerManager,
+    );
     expect(info.currentModel).toBe('gpt-5.4-mini');
     expect(info.isResponsesAPI).toBe(true);
   });

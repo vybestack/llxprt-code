@@ -12,6 +12,7 @@
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
+  getDefaultCliRuntimeId,
   resetCliRuntimeRegistryForTesting,
   runtimeRegistry,
 } from './runtimeRegistry.js';
@@ -159,16 +160,55 @@ describe('runtimeLifecycle', () => {
     });
 
     it('should support multiple runtimes with different IDs', () => {
+      // The first runtime claims the foreground default; additional runtimes
+      // are background/isolated and MUST opt out of the default pointer
+      // (setAsDefault: false) so they never overwrite it (issue #2300).
       setCliRuntimeContext(mockSettingsService, mockConfig, {
         runtimeId: 'runtime-A',
       });
       setCliRuntimeContext(mockSettingsService, mockConfig, {
         runtimeId: 'runtime-B',
+        setAsDefault: false,
       });
 
       expect(runtimeRegistry.size).toBe(2);
       expect(runtimeRegistry.has('runtime-A')).toBe(true);
       expect(runtimeRegistry.has('runtime-B')).toBe(true);
+    });
+
+    it('should throw when a second runtime overwrites the default without a hand-off (issue #2300)', () => {
+      setCliRuntimeContext(mockSettingsService, mockConfig, {
+        runtimeId: 'runtime-A',
+      });
+      expect(() =>
+        setCliRuntimeContext(mockSettingsService, mockConfig, {
+          runtimeId: 'runtime-B',
+        }),
+      ).toThrow(/Refusing to overwrite the default CLI runtime pointer/);
+      expect(getDefaultCliRuntimeId()).toBe('runtime-A');
+    });
+
+    it('should allow a deliberate foreground hand-off via allowDefaultHandoff', () => {
+      setCliRuntimeContext(mockSettingsService, mockConfig, {
+        runtimeId: 'runtime-A',
+      });
+      setCliRuntimeContext(mockSettingsService, mockConfig, {
+        runtimeId: 'runtime-B',
+        allowDefaultHandoff: true,
+      });
+      expect(getDefaultCliRuntimeId()).toBe('runtime-B');
+    });
+
+    it('should be idempotent when re-affirming the same default id', () => {
+      setCliRuntimeContext(mockSettingsService, mockConfig, {
+        runtimeId: 'runtime-A',
+      });
+      expect(() =>
+        setCliRuntimeContext(mockSettingsService, mockConfig, {
+          runtimeId: 'runtime-A',
+        }),
+      ).not.toThrow();
+      expect(getDefaultCliRuntimeId()).toBe('runtime-A');
     });
 
     it('should update existing entry when called with same ID', () => {

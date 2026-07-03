@@ -105,7 +105,10 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
-    const activeContext: Record<string, unknown> = { scope: 'test' };
+    const activeContext = {
+      settingsService: mockSettingsService,
+      metadata: { scope: 'test' },
+    };
     class MockProvider {}
     mockProviderModules({
       openai: MockProvider,
@@ -156,7 +159,10 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
-    const activeContext: Record<string, unknown> = { scope: 'test' };
+    const activeContext = {
+      settingsService: mockSettingsService,
+      metadata: { scope: 'test' },
+    };
     mockProviderModules({
       openai: openaiCtor,
       openaiResponses: openaiResponsesCtor,
@@ -214,7 +220,10 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
-    const activeContext: Record<string, unknown> = { scope: 'test' };
+    const activeContext = {
+      settingsService: mockSettingsService,
+      metadata: { scope: 'test' },
+    };
     mockProviderModules({
       openai: openaiCtor,
       openaiResponses: openaiResponsesCtor,

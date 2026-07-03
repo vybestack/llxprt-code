@@ -55,7 +55,7 @@ describe('OpenAIVercelProvider Registry Integration', () => {
     registerSettingsService(settingsService);
 
     // Create ProviderManager instance
-    providerManager = new ProviderManager();
+    providerManager = new ProviderManager({ settingsService });
 
     // Register OpenAIVercelProvider (simulating what CLI does)
     providerManager.registerProvider(
@@ -214,7 +214,7 @@ describe('OpenAIVercelProvider Registry Integration', () => {
      * This is useful for testing and for CLI setup
      */
     it('should accept manual registration of OpenAIVercelProvider', () => {
-      const freshManager = new ProviderManager();
+      const freshManager = new ProviderManager({ settingsService });
       const provider = new OpenAIVercelProvider();
 
       // Should not throw
@@ -232,7 +232,7 @@ describe('OpenAIVercelProvider Registry Integration', () => {
      * Tests that manually registered provider can be activated
      */
     it('should allow activation of manually registered provider', () => {
-      const freshManager = new ProviderManager();
+      const freshManager = new ProviderManager({ settingsService });
       const provider = new OpenAIVercelProvider();
 
       freshManager.registerProvider(provider);

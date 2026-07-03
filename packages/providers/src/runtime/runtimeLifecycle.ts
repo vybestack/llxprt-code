@@ -192,12 +192,16 @@ export function resetCliProviderInfrastructure(runtimeId?: string): void {
  * Register or update the active CLI runtime context. `runtimeId` is REQUIRED
  * — callers must supply an explicit, deterministic runtime identity so that
  * resolution never falls back to process-derived or ambient state. When
- * `setAsDefault` is `true` (the default), it also sets the default CLI
- * runtime pointer so identity resolution is deterministic even outside an
- * AsyncLocalStorage scope.
+ * `setAsDefault` is `true` (the default), it also claims the process-wide
+ * default CLI runtime pointer so identity resolution is deterministic even
+ * outside an AsyncLocalStorage scope.
  *
- * Isolated runtime activation MUST pass `setAsDefault: false` so it never
- * overwrites or clears the CLI default pointer (issue #2300).
+ * The default pointer is set once at bootstrap: re-affirming the same id is a
+ * no-op, but claiming the default over a DIFFERENT existing default throws
+ * unless the caller sets `allowDefaultHandoff` (a deliberate foreground
+ * hand-off, e.g. the Zed integration). Isolated runtime activation MUST pass
+ * `setAsDefault: false` so it never touches the CLI default pointer (issue
+ * #2300).
  */
 export function setCliRuntimeContext(
   settingsService: SettingsService,
@@ -207,6 +211,7 @@ export function setCliRuntimeContext(
     metadata?: Record<string, unknown>;
     profileManager?: ProfileManager;
     setAsDefault?: boolean;
+    allowDefaultHandoff?: boolean;
     runtimeKind?: RuntimeKind;
   },
 ): void {
@@ -241,12 +246,15 @@ export function setCliRuntimeContext(
     profileManager: options.profileManager,
   });
 
-  // Set the default CLI runtime pointer so consumers outside an ALS scope
-  // (e.g. the UI bridge) resolve THIS runtime deterministically.
-  // Isolated runtimes opt out via setAsDefault: false so they never mutate
-  // the CLI default pointer.
+  // Claim the default CLI runtime pointer so consumers outside an ALS scope
+  // (e.g. the UI bridge) resolve THIS runtime deterministically. Isolated
+  // runtimes opt out via setAsDefault: false so they never mutate the CLI
+  // default pointer. A deliberate foreground hand-off opts in via
+  // allowDefaultHandoff so the write-once guard permits the replacement.
   if (options.setAsDefault !== false) {
-    setDefaultCliRuntimeId(runtimeId);
+    setDefaultCliRuntimeId(runtimeId, {
+      allowReplace: options.allowDefaultHandoff === true,
+    });
   }
 
   // Register the OAuth runtime accessors so the providers-owned auth cluster

@@ -80,7 +80,7 @@ describe('Multi-Provider Integration Tests', () => {
     settingsService = runtime.settingsService;
     runtimeConfig = runtime.config;
     settingsService.set('activeProvider', '');
-    manager = new ProviderManager();
+    manager = new ProviderManager(runtime);
   });
 
   afterEach(() => {

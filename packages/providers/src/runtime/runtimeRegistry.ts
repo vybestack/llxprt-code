@@ -49,25 +49,18 @@ import {
 } from './messages.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
 
+/**
+ * Diagnostic classification of a runtime's provenance. Recorded on each
+ * registry entry and surfaced in debug logs and error metadata so failures
+ * are traceable to the runtime that produced them. It intentionally carries
+ * no authorization semantics: every runtime kind is a first-class participant
+ * in identity resolution and OAuth infrastructure.
+ */
 export type RuntimeKind =
   | 'cli-bootstrap'
   | 'cli-interactive'
   | 'agent'
   | 'subagent';
-
-export const RUNTIME_KINDS: readonly RuntimeKind[] = [
-  'cli-bootstrap',
-  'cli-interactive',
-  'agent',
-  'subagent',
-] as const;
-
-export function isRuntimeKind(value: unknown): value is RuntimeKind {
-  return (
-    typeof value === 'string' &&
-    (RUNTIME_KINDS as readonly string[]).includes(value)
-  );
-}
 
 type RuntimeIdentity = RuntimeScopeValue;
 
@@ -110,21 +103,41 @@ function hasPartialProviderInfrastructure(
 export const runtimeRegistry = new Map<string, RuntimeRegistryEntry>();
 
 /**
- * The explicit default CLI runtime id. Set by setCliRuntimeContext() (the CLI
- * composition boundary) and used as a fallback when no AsyncLocalStorage scope
- * is registered. Resolution still requires the default to be registered.
+ * The explicit default CLI runtime id: the process-wide foreground runtime used
+ * to resolve identity when no AsyncLocalStorage scope is active. Set by the CLI
+ * composition boundary (setCliRuntimeContext). Resolution still requires the
+ * default to be registered.
  */
 let defaultCliRuntimeId: string | undefined;
 
 /**
  * @plan PLAN-20260630-ISSUE2300
- * Set the explicit default CLI runtime id after validating it is a non-empty,
- * non-whitespace string. Set by setCliRuntimeContext() (the CLI composition
- * boundary) and used as a fallback when no AsyncLocalStorage scope is
- * registered. Resolution still requires the default to be registered.
+ * Establish the process-wide default (foreground) CLI runtime id.
+ *
+ * The default pointer is write-once with respect to a given foreground runtime:
+ * re-affirming the SAME id is an idempotent no-op, but binding a DIFFERENT id
+ * over an existing default throws — a background/isolated runtime can never
+ * silently become the foreground default (issue #2300). A deliberate foreground
+ * hand-off (e.g. the Zed integration replacing the bootstrap runtime) must opt
+ * in explicitly via `allowReplace`.
  */
-export function setDefaultCliRuntimeId(runtimeId: string): void {
+export function setDefaultCliRuntimeId(
+  runtimeId: string,
+  options: { allowReplace?: boolean } = {},
+): void {
   validateRuntimeId(runtimeId);
+  if (defaultCliRuntimeId === runtimeId) {
+    return;
+  }
+  if (defaultCliRuntimeId !== undefined && options.allowReplace !== true) {
+    throw new Error(
+      `[cli-runtime] Refusing to overwrite the default CLI runtime pointer ` +
+        `'${defaultCliRuntimeId}' with '${runtimeId}'. The foreground CLI ` +
+        `runtime is set once at bootstrap; only an explicit hand-off may ` +
+        `replace it. This guards against a background or isolated runtime ` +
+        `implicitly becoming the default (issue #2300).`,
+    );
+  }
   defaultCliRuntimeId = runtimeId;
 }
 
@@ -149,15 +162,29 @@ export function resetDefaultCliRuntimeIdForTesting(): void {
 
 export function resolveActiveRuntimeIdentity(): RuntimeIdentity {
   const alsScope = getCurrentRuntimeScope();
-  if (alsScope && runtimeRegistry.has(alsScope.runtimeId)) {
-    return alsScope;
-  }
-
-  if (alsScope && !runtimeRegistry.has(alsScope.runtimeId)) {
-    logger.debug(
-      () =>
-        `[resolveActiveRuntimeIdentity] ALS scope runtimeId=${alsScope.runtimeId} exists but is not registered; checking explicit default CLI runtime pointer.`,
-    );
+  if (alsScope) {
+    // An active ALS scope is an explicit, deliberate claim of identity. If its
+    // runtime is registered, it wins. If it is NOT registered, the scope is
+    // stale or leaked — we fail hard rather than silently routing to the CLI
+    // default, which would let a torn-down isolated runtime borrow foreground
+    // credentials (issue #2300).
+    const entry = runtimeRegistry.get(alsScope.runtimeId);
+    if (entry) {
+      return alsScope;
+    }
+    throw new MissingProviderRuntimeError({
+      providerKey: 'provider-runtime',
+      missingFields: ['active runtime'],
+      message:
+        `Active runtime scope '${alsScope.runtimeId}' is not registered. ` +
+        `A stale or torn-down AsyncLocalStorage scope must not fall back to ` +
+        `the default CLI runtime (issue #2300). ` +
+        formatMissingRuntimeMessage({
+          runtimeId: alsScope.runtimeId,
+          missingFields: ['active runtime'],
+          hint: 'Register the scoped runtime before use, or exit the scope so the default CLI runtime resolves.',
+        }),
+    });
   }
 
   const defaultId = defaultCliRuntimeId;
@@ -181,7 +208,7 @@ export function resolveActiveRuntimeIdentity(): RuntimeIdentity {
     message:
       `No active runtime. Ensure enterRuntimeScope() or setCliRuntimeContext() was called before consuming CLI runtime helpers. ` +
       formatMissingRuntimeMessage({
-        runtimeId: alsScope?.runtimeId ?? defaultId ?? 'unknown',
+        runtimeId: defaultId ?? 'unknown',
         missingFields: ['active runtime'],
         hint: 'Identity is resolved from a registered AsyncLocalStorage scope or an explicit default CLI runtime id set via setCliRuntimeContext().',
       }),

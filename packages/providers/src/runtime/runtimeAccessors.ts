@@ -40,7 +40,6 @@ import { type OAuthManager } from '../auth/index.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
 import {
-  RUNTIME_KINDS,
   runtimeRegistry,
   resolveActiveRuntimeIdentity,
   requireRuntimeEntry,
@@ -317,11 +316,6 @@ function validateOAuthRuntimeEntry(
   if (!entry.settingsService) missingFields.push('SettingsService');
   if (!entry.providerManager) missingFields.push('ProviderManager');
   if (!entry.oauthManager) missingFields.push('OAuthManager');
-
-  const oauthCapableRuntimeKinds = new Set(RUNTIME_KINDS);
-  if (!oauthCapableRuntimeKinds.has(entry.runtimeKind)) {
-    missingFields.push(`supported runtime kind (${entry.runtimeKind})`);
-  }
 
   const oauthManager = entry.oauthManager;
   if (missingFields.length > 0 || oauthManager == null) {

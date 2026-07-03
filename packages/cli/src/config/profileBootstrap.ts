@@ -29,6 +29,18 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 export const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
 
+/**
+ * @plan PLAN-20260630-ISSUE2300
+ * Single source of truth for the foreground CLI runtime id. Every bootstrap
+ * phase (pre-config seeding, profile bootstrap, post-config re-seeding) MUST
+ * resolve the same id so the write-once default pointer is claimed idempotently
+ * rather than surfacing a split-brain identity. Honors LLXPRT_RUNTIME_ID for
+ * callers that pin an explicit id (e.g. sandbox re-launch), else the default.
+ */
+export function resolveForegroundRuntimeId(): string {
+  return process.env.LLXPRT_RUNTIME_ID ?? DEFAULT_RUNTIME_ID;
+}
+
 const logger = new DebugLogger('llxprt:bootstrap');
 
 export interface BootstrapProfileArgs {
@@ -129,7 +141,7 @@ function createEmptyBootstrapArgs(): BootstrapProfileArgs {
 
 function createRuntimeMetadata(argv: string[]): RuntimeBootstrapMetadata {
   return {
-    runtimeId: process.env.LLXPRT_RUNTIME_ID ?? DEFAULT_RUNTIME_ID,
+    runtimeId: resolveForegroundRuntimeId(),
     metadata: {
       source: 'cli.bootstrap',
       argv: argv.slice(),

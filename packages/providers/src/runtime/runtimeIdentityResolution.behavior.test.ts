@@ -99,21 +99,28 @@ describe('strict runtime identity resolution (issue #2300)', () => {
       });
     });
 
-    it('unregistered ALS does not fall back to Map insertion; returns default if set', () => {
+    it('unregistered ALS scope throws instead of silently borrowing the default (issue #2300)', () => {
       const firstInserted = 'first-inserted';
       const defaultRuntime = 'default-cli-2';
       upsertRuntimeEntry(firstInserted, {});
       upsertRuntimeEntry(defaultRuntime, { metadata: { source: 'default' } });
       setDefaultCliRuntimeId(defaultRuntime);
 
+      // A stale/leaked isolated scope must NOT fall through to the CLI default
+      // — that would let a torn-down runtime borrow foreground credentials.
       runWithRuntimeScope(
         { runtimeId: 'unregistered-als', metadata: { source: 'stale-als' } },
         () => {
-          const identity = resolveActiveRuntimeIdentity();
-          expect(identity.runtimeId).toBe(defaultRuntime);
-          expect(identity.metadata).toStrictEqual({ source: 'default' });
+          expect(() => resolveActiveRuntimeIdentity()).toThrow(
+            /scope 'unregistered-als' is not registered/,
+          );
         },
       );
+
+      // Outside the stale scope, the registered default still resolves.
+      const identity = resolveActiveRuntimeIdentity();
+      expect(identity.runtimeId).toBe(defaultRuntime);
+      expect(identity.metadata).toStrictEqual({ source: 'default' });
     });
 
     it('unregistered ALS with no default throws', () => {
@@ -124,7 +131,7 @@ describe('strict runtime identity resolution (issue #2300)', () => {
         { runtimeId: 'unregistered-als-2', metadata: {} },
         () => {
           expect(() => resolveActiveRuntimeIdentity()).toThrow(
-            /No active runtime/,
+            /not registered/,
           );
         },
       );
@@ -152,6 +159,35 @@ describe('strict runtime identity resolution (issue #2300)', () => {
     it('setDefaultCliRuntimeId sets the pointer', () => {
       setDefaultCliRuntimeId('ptr-1');
       expect(getDefaultCliRuntimeId()).toBe('ptr-1');
+    });
+
+    it('re-affirming the same default id is an idempotent no-op', () => {
+      setDefaultCliRuntimeId('ptr-same');
+      expect(() => setDefaultCliRuntimeId('ptr-same')).not.toThrow();
+      expect(getDefaultCliRuntimeId()).toBe('ptr-same');
+    });
+
+    it('rejects overwriting the default with a different id (write-once, issue #2300)', () => {
+      setDefaultCliRuntimeId('ptr-first');
+      expect(() => setDefaultCliRuntimeId('ptr-second')).toThrow(
+        /Refusing to overwrite the default CLI runtime pointer/,
+      );
+      // The original foreground default is preserved.
+      expect(getDefaultCliRuntimeId()).toBe('ptr-first');
+    });
+
+    it('allows an explicit hand-off to replace the default id', () => {
+      setDefaultCliRuntimeId('ptr-bootstrap');
+      expect(() =>
+        setDefaultCliRuntimeId('ptr-handoff', { allowReplace: true }),
+      ).not.toThrow();
+      expect(getDefaultCliRuntimeId()).toBe('ptr-handoff');
+    });
+
+    it('claims the default when none is set even without allowReplace', () => {
+      expect(getDefaultCliRuntimeId()).toBeUndefined();
+      setDefaultCliRuntimeId('ptr-initial');
+      expect(getDefaultCliRuntimeId()).toBe('ptr-initial');
     });
 
     it('resetDefaultCliRuntimeIdForTesting clears any pointer', () => {

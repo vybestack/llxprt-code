@@ -19,6 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 vi.unmock('./providerAliases.js');
 
@@ -86,7 +87,10 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
     setFileSystem(new MockFileSystem());
     resetProviderManager();
 
-    const activeContext: Record<string, unknown> = { scope: 'test' };
+    const activeContext = {
+      settingsService: new SettingsService(),
+      metadata: { scope: 'test' },
+    };
     createProviderManager(activeContext, {
       config: undefined,
       allowBrowserEnvironment: false,
@@ -125,7 +129,10 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
     setFileSystem(fs);
     resetProviderManager();
 
-    const activeContext: Record<string, unknown> = { scope: 'test' };
+    const activeContext = {
+      settingsService: new SettingsService(),
+      metadata: { scope: 'test' },
+    };
     createProviderManager(activeContext, {
       config: undefined,
       allowBrowserEnvironment: false,

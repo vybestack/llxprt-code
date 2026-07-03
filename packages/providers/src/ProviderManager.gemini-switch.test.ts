@@ -21,13 +21,12 @@ describe('ProviderManager - Gemini switching', () => {
 
   beforeEach(() => {
     // Set up runtime context for ProviderManager
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'test-runtime',
-      }),
-    );
-    manager = new ProviderManager();
+    const runtime = createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+      runtimeId: 'test-runtime',
+    });
+    setActiveProviderRuntimeContext(runtime);
+    manager = new ProviderManager(runtime);
     mockProvider = {
       name: 'openai',
       async getModels() {

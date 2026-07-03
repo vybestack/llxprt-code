@@ -199,15 +199,50 @@ async function resolveConfigBuildPieces(
   };
 }
 
+/**
+ * Narrow the bootstrap runtime's structural settings state to the
+ * SettingsService surface Config consumes (profileBootstrap resolves it via
+ * resolveRuntimeSettingsService). Fails fast with a clear message instead of
+ * letting a malformed runtime surface as an opaque error inside buildConfig.
+ */
+function isSettingsServiceLike(
+  value: unknown,
+): value is { get: unknown; set: unknown } {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { get?: unknown; set?: unknown };
+  return (
+    typeof candidate.get === 'function' && typeof candidate.set === 'function'
+  );
+}
+
+function requireBootstrapSettingsService(
+  runtimeState: BootstrapRuntimeState,
+): SettingsService {
+  // The runtime is assembled upstream via type assertions, so the static type
+  // cannot be trusted here — validate the value structurally as unknown.
+  const settingsService: unknown = runtimeState.runtime.settingsService;
+  if (!isSettingsServiceLike(settingsService)) {
+    throw new Error(
+      '[config] Bootstrap runtime is missing its SettingsService. ' +
+        'prepareRuntimeForProfile() must run before loadCliConfig() (issue #2300).',
+    );
+  }
+  return settingsService as SettingsService;
+}
+
 function buildLoadedConfig(
   sessionId: string,
   cwd: string,
   argv: CliArgs,
   pieces: ConfigBuildPieces,
+  settingsService: SettingsService,
 ): Config {
   return buildConfig({
     sessionId,
     cwd,
+    settingsService,
     argv,
     profileSettingsWithTools: pieces.profileSettingsWithTools,
     context: pieces.context,
@@ -263,7 +298,15 @@ export async function loadCliConfig(
     extensions,
     extensionEnablementManager,
   );
-  const config = buildLoadedConfig(sessionId, cwd, argv, pieces);
+  // The Config must bind to the SAME SettingsService the bootstrap runtime
+  // registered — Config construction never adopts ambient state (issue #2300).
+  const config = buildLoadedConfig(
+    sessionId,
+    cwd,
+    argv,
+    pieces,
+    requireBootstrapSettingsService(runtimeState),
+  );
 
   return finalizeConfig({
     config,
