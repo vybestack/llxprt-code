@@ -182,6 +182,11 @@ jobs:
   #
   # Lint: Javascript
   #
+  # Stays on npm (not Bun) for S6 (#2243): the type-aware ESLint config
+  # (`projectService` in eslint.config.js) deterministically degrades under
+  # Bun's hoisted node_modules on the CI runner (Linux + Node 24), emitting
+  # hundreds of spurious `any` errors that do not reproduce locally or under
+  # npm. Revisit once the Bun hoisting/type-resolution interaction is resolved.
   lint_javascript:
     name: 'Lint (Javascript)'
     runs-on: 'ubuntu-latest'
@@ -195,7 +200,7 @@ jobs:
           fetch-depth: 0
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4.4.0
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -248,6 +253,10 @@ jobs:
         run: |-
           npm run lint:cli-boundary
 
+      - name: 'Run agents API-surface guard'
+        run: |-
+          npm run lint:agents-api-surface
+
       - name: 'Run linter'
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
@@ -270,9 +279,6 @@ jobs:
       - name: 'Build project'
         run: |-
           npm run build
-
-      - name: Create bundle
-        run: npm run bundle
 
       - name: 'Run type check'
         run: |-
@@ -397,6 +403,9 @@ jobs:
       - 'lint_javascript'
       - 'lint_shell'
       - 'lint_yaml'
+      # Gates the expensive test matrix behind a cheap npm build+smoke so a
+      # broken build fails fast on ubuntu instead of on every matrix leg.
+      - 'node_consumer_smoke'
     runs-on: 'ubuntu-latest'
     steps:
       - run: |-
@@ -472,7 +481,7 @@ jobs:
           persist-credentials: false
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4.4.0
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -491,8 +500,79 @@ jobs:
           bun scripts/bun-native-modules-smoke.mjs
 
   #
+  # Node consumer smoke (issue 2243, S6)
+  #
+  # Guards published-package Node compatibility on an npm install plus Node CLI
+  # entry path, representing an external Node consumer: install with npm, build,
+  # then run the compiled CLI entry under `node` (Node -> launcher -> Bun). Bun
+  # is set up because lifecycle/build scripts and the launcher require it, but
+  # dependency installation intentionally stays on npm. Wired into the `lint`
+  # aggregator so the expensive test matrix waits for this fast build+smoke
+  # check first.
+  node_consumer_smoke:
+    name: 'Node Consumer Smoke'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 15
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # This job runs npm ci (executing third-party install scripts) and only
+    # needs to read the repo, so scope permissions to contents:read and drop
+    # credential persistence (matches bun_native_modules_smoke hardening).
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: 'Setup Bun'
+        # Must run before npm ci because lifecycle hooks and npm run build are
+        # Bun-backed after issue 2242, even though dependencies stay npm-based.
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Install dependencies'
+        run: |-
+          npm ci
+
+      - name: 'Fix rollup platform dependency'
+        run: |-
+          # Explicitly install the platform-specific rollup package
+          # This is a workaround for https://github.com/npm/cli/issues/4828
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          fi
+        shell: 'bash'
+
+      - name: 'Build project'
+        run: |-
+          npm run build
+
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
+
+  #
   # Test: Node (Linux and macOS - always run)
   #
+  # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
+  # deterministically materializes incomplete copies of third-party packages
+  # (e.g. uuid, yargs, ajv) whose package.json entry points at files that the
+  # copy is missing, breaking vitest's import resolution (and the now-retired
+  # esbuild bundle). The workspace-shadow subset is dedupe-able, but
+  # version-conflict copies (e.g. ajv@8.18.0 vs root 8.20.0) cannot be safely
+  # removed. Revisit once Bun's hoisted linker materializes complete packages.
   test:
     name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'
@@ -521,7 +601,7 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '${{ matrix.node-version }}'
           cache: 'npm'
@@ -538,10 +618,6 @@ jobs:
         run: |-
           npm run build
 
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
-
       - name: 'Fix rollup platform dependency'
         run: |-
           # Explicitly install the platform-specific rollup package
@@ -552,6 +628,10 @@ jobs:
             npm install @rollup/rollup-win32-x64-msvc --no-save || true
           fi
         shell: 'bash'
+
+      - name: 'Run agents API-surface guard'
+        run: |-
+          npm run lint:agents-api-surface
 
       - name: 'Limit Vitest forks on Windows'
         if: runner.os == 'Windows'
@@ -587,8 +667,8 @@ jobs:
           CI: true
         run: npm run test:scripts
 
-      - name: 'Smoke test bundle'
-        run: 'node ./bundle/llxprt.js --version'
+      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
+        run: 'node ./packages/cli/dist/index.js --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'

@@ -4,7 +4,7 @@ This guide walks you through your first session — from installation to your fi
 
 ## Prerequisites
 
-- **Node.js 20+** installed on your system
+- **Node.js 24+** installed on your system
 - A terminal/command line
 
 ## Install LLxprt Code

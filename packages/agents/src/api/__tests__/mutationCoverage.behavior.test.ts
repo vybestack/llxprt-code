@@ -46,6 +46,7 @@ import {
   isToolCallEvent,
   isToolResultEvent,
   internalConfig,
+  ASYNC_PROPERTY_TIMEOUT_MS,
 } from './helpers/agentHarness.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
@@ -260,165 +261,194 @@ describe('mutation P23 — target 5: provider-switch model-change guard (agentIm
 // ─── Property-based cases (>=30% property ratio) ────────────────────────────
 
 describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @requirement:REQ-001,REQ-002', () => {
-  it('PROP target-1: for any non-empty prompt, a successful build drives exactly one done + >=1 text (post-auth guard holds) (REQ-001)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 60 }).map((s) => s.trim()),
-        async (prompt) => {
-          if (prompt.length === 0) return true;
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            const events: AgentEvent[] = await drain(agent.stream(prompt));
-            return (
-              countType(events, 'done') === 1 &&
-              events.filter(isTextEvent).length >= 1 &&
-              agent.getProvider() === 'fake' &&
-              agent.getModel() === 'fake-model'
-            );
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+  it(
+    'PROP target-1: for any non-empty prompt, a successful build drives exactly one done + >=1 text (post-auth guard holds) (REQ-001)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 60 }).map((s) => s.trim()),
+          async (prompt) => {
+            if (prompt.length === 0) return true;
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              const events: AgentEvent[] = await drain(agent.stream(prompt));
+              return (
+                countType(events, 'done') === 1 &&
+                events.filter(isTextEvent).length >= 1 &&
+                agent.getProvider() === 'fake' &&
+                agent.getModel() === 'fake-model'
+              );
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 
-  it('PROP target-4: for any non-empty keyName string, getProviderStatus surfaces it and reports authenticated (keyName guard) (REQ-002)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (keyName) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-            auth: { keyName },
+  it(
+    'PROP target-4: for any non-empty keyName string, getProviderStatus surfaces it and reports authenticated (keyName guard) (REQ-002)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 40 }),
+          async (keyName) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+              auth: { keyName },
+            });
+            try {
+              const status = agent.getProviderStatus();
+              return (
+                status.authStatus === 'authenticated' &&
+                status.keyName === keyName
+              );
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
+
+  it(
+    'PROP target-5: for any model string differing from the current, setProvider reflects the new model (change guard) (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc
+            .string({ minLength: 1, maxLength: 40 })
+            .filter((m) => m !== 'fake-model'),
+          async (model) => {
+            const { agent, cleanup } = await buildAgent(
+              'provider-switch-two-turn.jsonl',
+            );
+            try {
+              await agent.setProvider('p', model);
+              return agent.getModel() === model && agent.getProvider() === 'p';
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
+
+  it(
+    'PROP target-4b: for any non-empty apiKey, getProviderStatus reports authenticated and does NOT surface keyName (inline guard) (REQ-002)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 40 }),
+          async (apiKey) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+              auth: { apiKey },
+            });
+            try {
+              const status = agent.getProviderStatus();
+              return (
+                status.authStatus === 'authenticated' &&
+                status.keyName === undefined
+              );
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
+
+  it(
+    'PROP target-2: handler presence diverges — WITH onApproval yields tool-results, WITHOUT yields none (REQ-002)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(fc.integer({ min: 1, max: 5 }), async (seed) => {
+          // The WITH-handler agent drives a tool fixture to a real result.
+          const withHandler = await buildAgent('tool-call-then-answer.jsonl', {
+            onApproval: () => ToolConfirmationOutcome.ProceedOnce,
           });
           try {
-            const status = agent.getProviderStatus();
-            return (
-              status.authStatus === 'authenticated' &&
-              status.keyName === keyName
+            const withEvents: AgentEvent[] = await drain(
+              withHandler.agent.stream(`seed-${seed}`),
             );
+            const withResults =
+              withEvents.filter(isToolResultEvent).length >= 1;
+            // The WITHOUT-handler agent on a plain fixture yields no tools.
+            const without = await buildAgent('plain-text.jsonl');
+            try {
+              const withoutEvents: AgentEvent[] = await drain(
+                without.agent.stream(`seed-${seed}`),
+              );
+              const withoutTools =
+                withoutEvents.filter(isToolCallEvent).length === 0;
+              // The two branches diverge observably — kills always-include/omit.
+              return withResults && withoutTools;
+            } finally {
+              await without.cleanup();
+            }
           } finally {
-            await cleanup();
+            await withHandler.cleanup();
           }
-        },
-      ),
-    );
-  }, 30000);
+        }),
+        { numRuns: 8 },
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 
-  it('PROP target-5: for any model string differing from the current, setProvider reflects the new model (change guard) (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc
-          .string({ minLength: 1, maxLength: 40 })
-          .filter((m) => m !== 'fake-model'),
-        async (model) => {
-          const { agent, cleanup } = await buildAgent(
-            'provider-switch-two-turn.jsonl',
-          );
-          try {
-            await agent.setProvider('p', model);
-            return agent.getModel() === model && agent.getProvider() === 'p';
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+  it(
+    'setProvider without a model preserves the current model (kills 1139 ConditionalExpression true) (REQ-005)',
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      try {
+        const beforeModel = agent.getModel();
+        await agent.setProvider('openai');
+        expect(agent.getModel()).toBe(beforeModel);
+      } finally {
+        await cleanup();
+      }
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 
-  it('PROP target-4b: for any non-empty apiKey, getProviderStatus reports authenticated and does NOT surface keyName (inline guard) (REQ-002)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (apiKey) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-            auth: { apiKey },
-          });
-          try {
-            const status = agent.getProviderStatus();
-            return (
-              status.authStatus === 'authenticated' &&
-              status.keyName === undefined
-            );
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
-
-  it('PROP target-2: handler presence diverges — WITH onApproval yields tool-results, WITHOUT yields none (REQ-002)', async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.integer({ min: 1, max: 5 }), async (seed) => {
-        // The WITH-handler agent drives a tool fixture to a real result.
-        const withHandler = await buildAgent('tool-call-then-answer.jsonl', {
-          onApproval: () => ToolConfirmationOutcome.ProceedOnce,
-        });
-        try {
-          const withEvents: AgentEvent[] = await drain(
-            withHandler.agent.stream(`seed-${seed}`),
-          );
-          const withResults = withEvents.filter(isToolResultEvent).length >= 1;
-          // The WITHOUT-handler agent on a plain fixture yields no tools.
-          const without = await buildAgent('plain-text.jsonl');
-          try {
-            const withoutEvents: AgentEvent[] = await drain(
-              without.agent.stream(`seed-${seed}`),
-            );
-            const withoutTools =
-              withoutEvents.filter(isToolCallEvent).length === 0;
-            // The two branches diverge observably — kills always-include/omit.
-            return withResults && withoutTools;
-          } finally {
-            await without.cleanup();
-          }
-        } finally {
-          await withHandler.cleanup();
-        }
-      }),
-      { numRuns: 8 },
-    );
-  }, 30000);
-
-  it('setProvider without a model preserves the current model (kills 1139 ConditionalExpression true) (REQ-005)', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      const beforeModel = agent.getModel();
-      await agent.setProvider('openai');
-      expect(agent.getModel()).toBe(beforeModel);
-    } finally {
-      await cleanup();
-    }
-  }, 30000);
-
-  it('PROP setProvider model preservation: for any provider switch name under the fake seam, setProvider without model preserves the current model (REQ-005)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        // Under the fake seam only 'fake' is registered, so any other name
-        // triggers the provider-not-found path in applyProviderSwitch (which
-        // is suppressed as a no-op when the fake seam is active). Constrain to
-        // realistic provider names — this exercises the same code path as the
-        // sibling concrete test above across multiple distinct values without
-        // relying on arbitrary strings that widen the env-var race window.
-        fc.constantFrom('openai', 'anthropic', 'gemini', 'ollama', 'fake'),
-        async (providerName) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            const beforeModel = agent.getModel();
-            await agent.setProvider(providerName);
-            return (
-              agent.getModel() === beforeModel &&
-              agent.getProvider() === providerName
-            );
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-      { numRuns: 10 },
-    );
-  }, 60000);
+  it(
+    'PROP setProvider model preservation: for any provider switch name under the fake seam, setProvider without model preserves the current model (REQ-005)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          // Under the fake seam only 'fake' is registered, so any other name
+          // triggers the provider-not-found path in applyProviderSwitch (which
+          // is suppressed as a no-op when the fake seam is active). Constrain to
+          // realistic provider names — this exercises the same code path as the
+          // sibling concrete test above across multiple distinct values without
+          // relying on arbitrary strings that widen the env-var race window.
+          fc.constantFrom('openai', 'anthropic', 'gemini', 'ollama', 'fake'),
+          async (providerName) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              const beforeModel = agent.getModel();
+              await agent.setProvider(providerName);
+              return (
+                agent.getModel() === beforeModel &&
+                agent.getProvider() === providerName
+              );
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+        { numRuns: 10 },
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 });
 
 // ─── Target 7: agentImpl.ts:1192-1193 rebuild approvalHandler propagation ──
@@ -472,83 +502,99 @@ ${t4}
 }
 
 describe('mutation P23 — target 7: rebuild propagates approvalHandler (agentImpl.ts:1192-1193) @plan:PLAN-20260621-COREAPIREMED.P23', () => {
-  it('onApproval survives setProvider: tool auto-approves on turn 2 after rebuild (REQ-006)', async () => {
-    const { agent, cleanup } = await buildAgentFromContent(
-      twoToolFourTurnFixture(),
-      {
-        onApproval: () => ToolConfirmationOutcome.ProceedOnce,
-      },
-    );
-    try {
-      await drain(agent.stream('turn1'));
-      await agent.setProvider('openai');
-      const events = await drain(agent.stream('turn2'));
-      const results = events.filter(isToolResultEvent);
-      const done = events.filter(isDoneEvent);
-      expect(results.length).toBeGreaterThanOrEqual(1);
-      expect(done).toHaveLength(1);
-    } finally {
-      await cleanup();
-    }
-  }, 30000);
-
-  it('onApproval survives setModel: tool auto-approves on turn 2 after rebuild (REQ-006)', async () => {
-    const { agent, cleanup } = await buildAgentFromContent(
-      twoToolFourTurnFixture(),
-      {
-        onApproval: () => ToolConfirmationOutcome.ProceedOnce,
-      },
-    );
-    try {
-      await drain(agent.stream('turn1'));
-      await agent.setModel('alternate-model');
-      const events = await drain(agent.stream('turn2'));
-      const results = events.filter(isToolResultEvent);
-      const done = events.filter(isDoneEvent);
-      expect(results.length).toBeGreaterThanOrEqual(1);
-      expect(done).toHaveLength(1);
-    } finally {
-      await cleanup();
-    }
-  }, 30000);
-
-  it('double dispose is idempotent — second dispose does not throw (kills 1251 idempotency guard BlockStatement) (REQ-016)', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      await drain(agent.stream('one turn'));
-      await agent.dispose();
-      let threw = false;
-      try {
-        await agent.dispose();
-      } catch {
-        threw = true;
-      }
-      expect(threw).toBe(false);
-    } finally {
-      await cleanup();
-    }
-  }, 30000);
-
-  it('PROP double dispose idempotency: for any prompt text, the second dispose never throws (REQ-016)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ minLength: 1, maxLength: 20 }),
-        async (prompt) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            await drain(agent.stream(prompt));
-            await agent.dispose();
-            try {
-              await agent.dispose();
-            } catch {
-              return false;
-            }
-            return true;
-          } finally {
-            await cleanup();
-          }
+  it(
+    'onApproval survives setProvider: tool auto-approves on turn 2 after rebuild (REQ-006)',
+    async () => {
+      const { agent, cleanup } = await buildAgentFromContent(
+        twoToolFourTurnFixture(),
+        {
+          onApproval: () => ToolConfirmationOutcome.ProceedOnce,
         },
-      ),
-    );
-  }, 30000);
+      );
+      try {
+        await drain(agent.stream('turn1'));
+        await agent.setProvider('openai');
+        const events = await drain(agent.stream('turn2'));
+        const results = events.filter(isToolResultEvent);
+        const done = events.filter(isDoneEvent);
+        expect(results.length).toBeGreaterThanOrEqual(1);
+        expect(done).toHaveLength(1);
+      } finally {
+        await cleanup();
+      }
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
+
+  it(
+    'onApproval survives setModel: tool auto-approves on turn 2 after rebuild (REQ-006)',
+    async () => {
+      const { agent, cleanup } = await buildAgentFromContent(
+        twoToolFourTurnFixture(),
+        {
+          onApproval: () => ToolConfirmationOutcome.ProceedOnce,
+        },
+      );
+      try {
+        await drain(agent.stream('turn1'));
+        await agent.setModel('alternate-model');
+        const events = await drain(agent.stream('turn2'));
+        const results = events.filter(isToolResultEvent);
+        const done = events.filter(isDoneEvent);
+        expect(results.length).toBeGreaterThanOrEqual(1);
+        expect(done).toHaveLength(1);
+      } finally {
+        await cleanup();
+      }
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
+
+  it(
+    'double dispose is idempotent — second dispose does not throw (kills 1251 idempotency guard BlockStatement) (REQ-016)',
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      try {
+        await drain(agent.stream('one turn'));
+        await agent.dispose();
+        let threw = false;
+        try {
+          await agent.dispose();
+        } catch {
+          threw = true;
+        }
+        expect(threw).toBe(false);
+      } finally {
+        await cleanup();
+      }
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
+
+  it(
+    'PROP double dispose idempotency: for any prompt text, the second dispose never throws (REQ-016)',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 20 }),
+          async (prompt) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              await drain(agent.stream(prompt));
+              await agent.dispose();
+              try {
+                await agent.dispose();
+              } catch {
+                return false;
+              }
+              return true;
+            } finally {
+              await cleanup();
+            }
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 });

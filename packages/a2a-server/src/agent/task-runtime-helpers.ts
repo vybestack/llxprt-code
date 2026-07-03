@@ -11,6 +11,7 @@ import {
   type ServerGeminiStreamEvent,
   type Config,
   type ToolSchedulerContract,
+  type AgentClientContract,
   type CompletedToolCall,
   type ToolCall,
   type ToolCallRequestInfo,
@@ -21,7 +22,6 @@ import {
 } from '@vybestack/llxprt-code-mcp';
 import type { MessageBus } from '@vybestack/llxprt-code-core';
 import type { DEFAULT_GUI_EDITOR } from '@vybestack/llxprt-code-core';
-import type { AgentClient } from '@vybestack/llxprt-code-agents';
 import type { PartUnion, Part as genAiPart } from '@google/genai';
 import * as fs from 'node:fs';
 import { logger } from '../utils/logger.js';
@@ -153,7 +153,7 @@ export function buildLlmPartsFromToolCalls(
 export async function createCheckpointsForRestorableTools(
   config: Config,
   updatedRequests: ToolCallRequestInfo[],
-  agentClient: AgentClient,
+  agentClient: AgentClientContract,
 ): Promise<void> {
   if (!config.getCheckpointingEnabled()) {
     return;

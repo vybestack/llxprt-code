@@ -70,7 +70,7 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -97,9 +97,6 @@ jobs:
       - name: 'Build project'
         run: 'npm run build'
 
-      - name: 'Create bundle'
-        run: 'npm run bundle'
-
       - name: 'Validate interactive UI runtime'
         env:
           NODE_OPTIONS: ''
@@ -112,6 +109,14 @@ jobs:
           head -n 5 /tmp/llxprt-cli-help.txt
 
       - name: 'Run interactive UI tests'
+        # CI is set to 'true' on purpose. The CLI used to be shipped as an
+        # esbuild/bun bundle whose build plugin stubbed `is-in-ci` to false so
+        # ink used its full interactive render path under CI. The bundle is now
+        # retired and the CLI runs from source/dist, so the real `is-in-ci`
+        # resolves (transitively via ink) and returns true here. This job is the
+        # validation that the unbundled runtime still renders correctly under
+        # CI; keeping it green is the replacement for the removed build-time
+        # stub. End users on developer machines resolve is-in-ci=false naturally.
         env:
           CI: 'true'
           NO_COLOR: 'true'

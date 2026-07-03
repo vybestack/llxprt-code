@@ -21,7 +21,6 @@ interface WorkspacePackageJson {
 
 // remove npm install/build artifacts
 rmSync(join(root, 'node_modules'), RMRF_OPTIONS);
-rmSync(join(root, 'bundle'), RMRF_OPTIONS);
 rmSync(join(root, 'packages/cli/src/generated/'), RMRF_OPTIONS);
 rmSync(join(root, '.stryker-tmp'), RMRF_OPTIONS);
 

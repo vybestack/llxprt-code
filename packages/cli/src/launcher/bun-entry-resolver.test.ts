@@ -21,38 +21,7 @@ describe('resolveBunEntry', () => {
     expect(result).toBe('/repo/packages/cli/index.ts');
   });
 
-  it('falls back to bundle/llxprt.js when source entry is not readable', async () => {
-    const pathChecker = vi.fn(
-      async (target: string) => target === '/repo/bundle/llxprt.js',
-    );
-
-    const result = await resolveBunEntry({
-      moduleDir: '/repo/packages/cli/src/launcher',
-      pathChecker,
-    });
-
-    expect(result).toBe('/repo/bundle/llxprt.js');
-  });
-
-  it('climbs ancestors to find bundle/llxprt.js in installed layout', async () => {
-    const pathChecker = vi.fn(
-      async (target: string) =>
-        target ===
-        '/usr/lib/node_modules/@vybestack/llxprt-code/bundle/llxprt.js',
-    );
-
-    const result = await resolveBunEntry({
-      moduleDir:
-        '/usr/lib/node_modules/@vybestack/llxprt-code/packages/cli/src/launcher',
-      pathChecker,
-    });
-
-    expect(result).toBe(
-      '/usr/lib/node_modules/@vybestack/llxprt-code/bundle/llxprt.js',
-    );
-  });
-
-  it('returns null when neither source nor bundle entry is readable', async () => {
+  it('returns null when source entry is not readable and the dist/src/launcher layout is absent', async () => {
     const pathChecker = vi.fn(async () => false);
 
     const result = await resolveBunEntry({
@@ -87,7 +56,7 @@ describe('resolveBunEntry', () => {
     expect(result).toBeNull();
   });
 
-  it('prefers source entry over bundle even when both readable', async () => {
+  it('prefers the source entry when it is readable', async () => {
     const pathChecker = vi.fn(async () => true);
 
     const result = await resolveBunEntry({
@@ -142,33 +111,17 @@ describe('resolveBunEntry', () => {
       );
     });
 
-    it('falls back to bundle when dist/index.js is absent in installed layout', async () => {
-      const pathChecker = vi.fn(
-        async (target: string) =>
-          target === '/inst/@vybestack/llxprt-code/bundle/llxprt.js',
-      );
+    it('returns null when dist/index.js is absent in installed layout', async () => {
+      const pathChecker = vi.fn(async () => false);
 
       const result = await resolveBunEntry({
         moduleDir: '/inst/@vybestack/llxprt-code/dist/src/launcher',
         pathChecker,
       });
 
-      expect(result).toBe('/inst/@vybestack/llxprt-code/bundle/llxprt.js');
+      expect(result).toBeNull();
     });
 
-    it('falls back from packages/cli dist layout to the repo-root bundle', async () => {
-      const pathChecker = vi.fn(
-        async (target: string) => target === '/repo/bundle/llxprt.js',
-      );
-
-      const result = await resolveBunEntry({
-        moduleDir: '/repo/packages/cli/dist/src/launcher',
-        pathChecker,
-      });
-
-      expect(result).toBe('/repo/bundle/llxprt.js');
-      expect(pathChecker).toHaveBeenCalledWith('/repo/bundle/llxprt.js');
-    });
     it('returns null when no entry is readable from a dist/src/launcher layout', async () => {
       const pathChecker = vi.fn(async () => false);
 
@@ -178,21 +131,6 @@ describe('resolveBunEntry', () => {
       });
 
       expect(result).toBeNull();
-    });
-
-    it('prefers dist/index.js over bundle when both are readable', async () => {
-      const pathChecker = vi.fn(
-        async (target: string) =>
-          target === '/repo/packages/cli/dist/index.js' ||
-          target === '/repo/packages/cli/bundle/llxprt.js',
-      );
-
-      const result = await resolveBunEntry({
-        moduleDir: '/repo/packages/cli/dist/src/launcher',
-        pathChecker,
-      });
-
-      expect(result).toBe('/repo/packages/cli/dist/index.js');
     });
 
     it('does not resolve a stray dist/index.js when moduleDir has a dist ancestor but not the dist/src/launcher layout', async () => {
@@ -238,20 +176,6 @@ describe('resolveBunEntry', () => {
       expect(result).toBeNull();
     });
 
-    it('resolves the project-root bundle without climbing above it', async () => {
-      const pathChecker = vi.fn(
-        async (target: string) =>
-          target === '/repo/bundle/llxprt.js' || target === '/bundle/llxprt.js',
-      );
-
-      const result = await resolveBunEntry({
-        moduleDir: '/repo/packages/cli/src/launcher',
-        pathChecker,
-      });
-
-      expect(result).toBe('/repo/bundle/llxprt.js');
-      expect(pathChecker).not.toHaveBeenCalledWith('/bundle/llxprt.js');
-    });
     it('terminates ancestor climbing at filesystem root when no entry is readable', async () => {
       const pathChecker = vi.fn(async () => false);
 
@@ -261,21 +185,6 @@ describe('resolveBunEntry', () => {
       });
 
       expect(result).toBeNull();
-    });
-
-    it('picks the nearest bundle/llxprt.js when multiple ancestors contain it', async () => {
-      const inner = '/repo/packages/cli/node_modules/pkg/bundle/llxprt.js';
-      const outer = '/repo/bundle/llxprt.js';
-      const pathChecker = vi.fn(
-        async (target: string) => target === inner || target === outer,
-      );
-
-      const result = await resolveBunEntry({
-        moduleDir: '/repo/packages/cli/node_modules/pkg/src/launcher',
-        pathChecker,
-      });
-
-      expect(result).toBe(inner);
     });
 
     it('resolves dist/index.js only when the moduleDir is exactly under dist/src/launcher', async () => {

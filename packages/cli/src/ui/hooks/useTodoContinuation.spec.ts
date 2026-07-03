@@ -26,7 +26,7 @@ import {
   GeminiEventType,
   type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
-import { AgentClient as AgentClientClass } from '@vybestack/llxprt-code-agents';
+import { AgentClient as AgentClientClass } from '@vybestack/llxprt-code-agents/internals.js';
 import { testRegex } from '../../test-utils/regex.js';
 
 // Mock dependencies
@@ -39,7 +39,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-agents', () => ({
+vi.mock('@vybestack/llxprt-code-agents/internals.js', () => ({
   AgentClient: vi.fn(),
 }));
 

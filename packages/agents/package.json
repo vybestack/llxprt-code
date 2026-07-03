@@ -28,6 +28,7 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
+    "pretest": "node ../../scripts/check-agents-api-surface.mjs",
     "test": "vitest run",
     "test:ci": "vitest run",
     "test:mutation:api": "stryker run stryker.conf.json",
@@ -61,6 +62,6 @@
     "vitest": "^3.2.6"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

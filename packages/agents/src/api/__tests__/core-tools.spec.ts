@@ -48,6 +48,7 @@ import {
   isToolStatusEvent,
   respondToFirstConfirmation,
   ToolConfirmationOutcome,
+  ASYNC_PROPERTY_TIMEOUT_MS,
 } from './helpers/agentHarness.js';
 import { ToolControl, ToolControlError } from '../control/toolControl.js';
 import {
@@ -344,47 +345,51 @@ describe('Core tools @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006 @requi
 
   // ─── Property-based: tool-arg projection stability ───────────────────────
 
-  it('T2p property: generated tool args project stably through a scripted tool call @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.dictionary(fc.string({ minLength: 1 }), fc.jsonValue()),
-        async (args) => {
-          // Inject the generated args as the scripted tool_call parameters, then
-          // assert the public AgentToolCall.args round-trips the SAME keys when
-          // surfaced as a tool-call event. This is a real causal round-trip
-          // (fixture parameters → FakeProvider → turn → eventAdapter.projectToolCall
-          // echoes request args before validation), mirroring the inject-then-assert
-          // shape of the switch-context property tests (T4dp/T5p).
-          const { agent, cleanup } = await buildAgentFromContent(
-            scriptToolCallFixture('read_file', args),
-          );
-          try {
-            const responder = respondToFirstConfirmation(
-              agent,
-              ToolConfirmationOutcome.ProceedOnce,
+  it(
+    'T2p property: generated tool args project stably through a scripted tool call @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006',
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.dictionary(fc.string({ minLength: 1 }), fc.jsonValue()),
+          async (args) => {
+            // Inject the generated args as the scripted tool_call parameters, then
+            // assert the public AgentToolCall.args round-trips the SAME keys when
+            // surfaced as a tool-call event. This is a real causal round-trip
+            // (fixture parameters → FakeProvider → turn → eventAdapter.projectToolCall
+            // echoes request args before validation), mirroring the inject-then-assert
+            // shape of the switch-context property tests (T4dp/T5p).
+            const { agent, cleanup } = await buildAgentFromContent(
+              scriptToolCallFixture('read_file', args),
             );
             try {
-              const events = await drain(agent.stream('property run'));
-              const calls = events.filter(isToolCallEvent);
-              expect(calls.length).toBeGreaterThanOrEqual(1);
-              // The scripted call surfaces args structurally — every generated
-              // key round-trips by name into the public args Record.
-              const surfacedKeys = Object.keys(calls[0].call.args);
-              const generatedKeys = Object.keys(args);
-              for (const key of generatedKeys) {
-                expect(surfacedKeys).toContain(key);
+              const responder = respondToFirstConfirmation(
+                agent,
+                ToolConfirmationOutcome.ProceedOnce,
+              );
+              try {
+                const events = await drain(agent.stream('property run'));
+                const calls = events.filter(isToolCallEvent);
+                expect(calls.length).toBeGreaterThanOrEqual(1);
+                // The scripted call surfaces args structurally — every generated
+                // key round-trips by name into the public args Record.
+                const surfacedKeys = Object.keys(calls[0].call.args);
+                const generatedKeys = Object.keys(args);
+                for (const key of generatedKeys) {
+                  expect(surfacedKeys).toContain(key);
+                }
+                expect(countType(events, 'done')).toBe(1);
+              } finally {
+                responder.unsubscribe();
               }
-              expect(countType(events, 'done')).toBe(1);
             } finally {
-              responder.unsubscribe();
+              await cleanup();
             }
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
-    );
-  }, 30000);
+          },
+        ),
+      );
+    },
+    ASYNC_PROPERTY_TIMEOUT_MS,
+  );
 });
 
 /**

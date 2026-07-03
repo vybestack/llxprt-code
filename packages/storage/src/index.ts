@@ -20,6 +20,14 @@ export type {
   FilterReport,
 } from './services/fileDiscoveryService.js';
 
+// Ignore parsing (shared with core via re-export)
+export { GitIgnoreParser } from './utils/gitIgnoreParser.js';
+export type {
+  GitIgnoreFilter,
+  GitIgnoreParserOptions,
+  IgnoreMatchState,
+} from './utils/gitIgnoreParser.js';
+
 // Secure storage
 export {
   SecureStore,

@@ -249,17 +249,8 @@ export class AuthCommandExecutor {
       };
     }
 
-    const normalizedAction =
-      parts.length > 1 ? rawAction.toLowerCase() : undefined;
-    const action =
-      normalizedAction === 'logout' || normalizedAction === 'signout'
-        ? rawAction
-        : normalizedAction;
-    const usesStrictLogoutProvider =
-      action === 'logout' || action === 'signout';
-    const provider = usesStrictLogoutProvider
-      ? rawProvider
-      : rawProvider.toLowerCase();
+    const action = parts.length > 1 ? rawAction.toLowerCase() : undefined;
+    const provider = rawProvider.toLowerCase();
 
     // Check if provider is supported before processing actions
     const supportedProviders = this.oauthManager.getSupportedProviders();

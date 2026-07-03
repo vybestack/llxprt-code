@@ -5,7 +5,7 @@
  */
 
 import { randomBytes, createHash } from 'crypto';
-import type { IDebugLogger } from '../interfaces/debug-logger.js';
+import type { IDebugLogger } from '../interfaces/index.js';
 import {
   CodexOAuthTokenSchema,
   CodexTokenResponseSchema,

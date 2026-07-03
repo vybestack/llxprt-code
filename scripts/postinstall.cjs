@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * Postinstall script to build the bundle when installing from GitHub
- * This enables `npx github:vybestack/llxprt-code` to work properly
+ * Postinstall script to build the CLI when installing from GitHub.
+ * This enables `npx github:vybestack/llxprt-code` to work properly.
+ *
+ * The published npm package (@vybestack/llxprt-code, i.e. packages/cli) already
+ * ships a built `dist/`, so this bootstrap only runs for GitHub-source installs
+ * of the repository root, which arrive without compiled output.
  */
 
 /* eslint-env node */
@@ -65,23 +69,34 @@ if (process.env.LLXPRT_POSTINSTALL_RUNNING === 'true') {
   process.exit(0);
 }
 
-// Check if bundle already exists (npm packages include it)
-const bundlePath = path.join(__dirname, '..', 'bundle', 'llxprt.js');
-const hasBundle = fs.existsSync(bundlePath);
+// The published CLI package ships a built `dist/`; GitHub-source installs of
+// the repository root do not. Detect an already-built CLI so we skip the
+// (expensive) build for normal npm installs. The entry alone is not enough:
+// npm force-includes the `bin` target in a packed install, so `dist/index.js`
+// can exist without the sibling modules it imports. Require both the entry and
+// a key imported module (the launcher) before treating the build as complete.
+const cliDistDir = path.join(__dirname, '..', 'packages', 'cli', 'dist');
+const cliEntryPath = path.join(cliDistDir, 'index.js');
+const cliLauncherPath = path.join(
+  cliDistDir,
+  'src',
+  'launcher',
+  'bun-launcher.js',
+);
+const hasBuild = fs.existsSync(cliEntryPath) && fs.existsSync(cliLauncherPath);
 
-// Early exit if bundle exists - this handles npm installs
-if (hasBundle) {
-  // Bundle already exists - this is an npm package or already built
-  // Exit silently to not clutter npm install output
+// Early exit if the CLI is already built - handles published npm packages and
+// rebuilds. Exit silently to not clutter npm install output.
+if (hasBuild) {
   process.exit(0);
 }
 
 // Check if this is a GitHub installation with source files
 const hasSourceFiles = fs.existsSync(path.join(__dirname, '..', 'packages'));
 
-// Only build if we have source files but no bundle (GitHub installation)
-if (hasSourceFiles && !hasBundle) {
-  console.log('Building llxprt bundle for GitHub installation...');
+// Only build if we have source files but no built CLI (GitHub installation)
+if (hasSourceFiles && !hasBuild) {
+  console.log('Building LLxprt Code for GitHub installation...');
 
   try {
     // Set env var to prevent recursion
@@ -98,7 +113,8 @@ if (hasSourceFiles && !hasBundle) {
     // Strip peer flags again after workspace install (npm may have added them back)
     stripPeerFlagsFromLockfile();
 
-    // Build the packages
+    // Build the packages (produces packages/cli/dist/index.js, the launcher
+    // entry that the root `bin` resolves to).
     console.log('Building packages...');
     execSync('npm run build', {
       stdio: 'inherit',
@@ -106,20 +122,10 @@ if (hasSourceFiles && !hasBundle) {
       env: { ...process.env, LLXPRT_POSTINSTALL_RUNNING: 'true' },
     });
 
-    // Create the bundle
-    console.log('Creating bundle...');
-    execSync('npm run bundle', {
-      stdio: 'inherit',
-      cwd: path.join(__dirname, '..'),
-      env: { ...process.env, LLXPRT_POSTINSTALL_RUNNING: 'true' },
-    });
-
-    console.log('✓ LLxprt Code bundle built successfully!');
+    console.log('[OK] LLxprt Code built successfully!');
   } catch (error) {
-    console.error('Failed to build llxprt bundle:', error.message);
-    console.error(
-      'You may need to build manually with: npm run build && npm run bundle',
-    );
+    console.error('Failed to build LLxprt Code:', error.message);
+    console.error('You may need to build manually with: npm run build');
     process.exit(1);
   }
 } else {

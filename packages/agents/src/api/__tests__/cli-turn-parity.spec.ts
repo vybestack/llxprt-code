@@ -35,11 +35,11 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   fromConfig,
-  AgenticLoop,
+  createAgenticLoop,
   mapLoopStream,
   type AgentEvent,
   type Agent,
-  type ApprovalHandler,
+  type AgenticLoopApprovalHandler,
 } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
@@ -63,10 +63,10 @@ async function driveReferenceLoop(
   messageBus: MessageBus,
   input: string,
 ): Promise<readonly AgentEvent[]> {
-  const approvalHandler: ApprovalHandler = async () => ({
+  const approvalHandler: AgenticLoopApprovalHandler = async () => ({
     outcome: ToolConfirmationOutcome.ProceedOnce,
   });
-  const loop = new AgenticLoop({
+  const loop = createAgenticLoop({
     agentClient: config.getAgentClient(),
     config,
     messageBus,

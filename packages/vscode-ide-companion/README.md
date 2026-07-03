@@ -43,7 +43,7 @@ Start a new LLxprt Code session from the Command Palette (`Cmd+Shift+P` or `Ctrl
 
 - VS Code version 1.99.0 or newer
 - LLxprt Code (installed separately)
-- Node.js 20.0 or newer
+- Node.js 24.0 or newer
 
 ## Commands
 

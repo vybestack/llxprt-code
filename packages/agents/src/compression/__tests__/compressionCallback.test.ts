@@ -99,7 +99,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     };
 
     await chat['compressionHandler'].enforceProviderContents(
-      historyService.getCuratedForProvider(),
+      { contents: historyService.getCuratedForProvider(), pendingContents: [] },
       'test-prompt',
       providerWithCallback as unknown as IProvider,
     );
@@ -138,7 +138,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
     await expect(
       chat['compressionHandler'].enforceProviderContents(
-        historyService.getCuratedForProvider(),
+        {
+          contents: historyService.getCuratedForProvider(),
+          pendingContents: [],
+        },
         'test-prompt',
         providerWithThrowingSetter as unknown as IProvider,
       ),
@@ -169,7 +172,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     const expectedContents = historyService.getCuratedForProvider();
     await expect(
       chat['compressionHandler'].enforceProviderContents(
-        expectedContents,
+        { contents: expectedContents, pendingContents: [] },
         'test-prompt',
         providerWithoutCallback as unknown as IProvider,
       ),
@@ -195,7 +198,7 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     const expectedContents = historyService.getCuratedForProvider();
     await expect(
       chat['compressionHandler'].enforceProviderContents(
-        expectedContents,
+        { contents: expectedContents, pendingContents: [] },
         'test-prompt',
         providerWithNonCallableCallback as unknown as IProvider,
       ),
@@ -227,7 +230,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     };
 
     await chat['compressionHandler'].enforceProviderContents(
-      historyService.getCuratedForProvider(),
+      {
+        contents: historyService.getCuratedForProvider(),
+        pendingContents: [],
+      },
       'test-prompt',
       providerWithCallback as unknown as IProvider,
     );
@@ -295,7 +301,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     };
 
     await chat['compressionHandler'].enforceProviderContents(
-      historyService.getCuratedForProvider(),
+      {
+        contents: historyService.getCuratedForProvider([pending]),
+        pendingContents: [pending],
+      },
       'test-prompt',
       providerWithCallback as unknown as IProvider,
     );
@@ -324,7 +333,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     const pending = makeUserMessage('threshold crossing request '.repeat(50));
 
     await compressionHandler.enforceProviderContents(
-      historyService.getCuratedForProvider([pending]),
+      {
+        contents: historyService.getCuratedForProvider([pending]),
+        pendingContents: [pending],
+      },
       'test-prompt',
       { name: 'fake', generateChatCompletion: vi.fn() } as unknown as IProvider,
     );
@@ -380,7 +392,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     };
 
     await chat['compressionHandler'].enforceProviderContents(
-      historyService.getCuratedForProvider(),
+      {
+        contents: historyService.getCuratedForProvider([pendingToolResult]),
+        pendingContents: [pendingToolResult],
+      },
       'test-prompt',
       providerWithCallback as unknown as IProvider,
     );
