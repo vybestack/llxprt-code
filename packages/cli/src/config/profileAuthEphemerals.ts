@@ -37,7 +37,7 @@ export function snapshotProfileAuthEphemerals(
 export function hasProfileAuthEphemerals(
   snapshot: ProfileAuthEphemeralSnapshot,
 ): boolean {
-  return Object.values(snapshot).some(isPresentEphemeral);
+  return Object.keys(snapshot).length > 0;
 }
 
 export function reapplyProfileAuthEphemerals(
