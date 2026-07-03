@@ -141,7 +141,7 @@ jobs:
           echo "should_create_branch=pending" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # ratchet:actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -214,9 +214,6 @@ jobs:
           LLXPRT_AUTH_TYPE: none
           LLXPRT_SKIP_IMAGE_HARNESS: 'true' # Avoid libspng flake on Linux runners (issue #816)
 
-      - name: Build Bundle for Integration Tests
-        run: npm run bundle
-
       - name: Run Integration Tests
         if: github.event.inputs.force_skip_tests != 'true'
         run: |
@@ -278,7 +275,6 @@ jobs:
         run: |
           rm -rf packages/*/dist
           npm run build:packages
-          npm run bundle
           npm run prepare:package
 
       - name: Sync VS Code extension version

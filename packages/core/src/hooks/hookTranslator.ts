@@ -11,6 +11,7 @@ import type {
   FinishReason,
   FunctionCallingConfig,
 } from '@google/genai';
+import { z } from 'zod';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { getResponseText } from '../utils/partUtils.js';
 
@@ -68,6 +69,35 @@ export interface LLMResponse {
 export interface HookToolConfig {
   mode?: 'AUTO' | 'ANY' | 'NONE';
   allowedFunctionNames?: string[];
+}
+
+/**
+ * Optional boundary metadata that a BeforeModel hook may return alongside a
+ * full-replacement llm_request. This lets compression recover the pending
+ * region when differential analysis cannot (e.g. the hook rewrote the whole
+ * conversation). The pending region MUST be a suffix of the modified contents
+ * because recomposition appends pending after curated history.
+ *
+ * METADATA CONTRACT (issue #2306, intentional design): the boundary declares
+ * a verbatim-preserved pending SUFFIX — everything from
+ * pendingMessageStartIndex onward is sent to the provider unchanged through
+ * compression. Everything BEFORE that index is declared history-semantics:
+ * when compression runs, recomposition (buildProviderContent over
+ * HistoryService.getCurated() [compressed] + pendingContents) REPLACES that
+ * prefix with the compressed real history from HistoryService. This is an
+ * explicit opt-in — hooks that rewrite/redact history-side content and then
+ * supply boundary metadata accept that compression supersedes their prefix
+ * with compressed real history. Hooks that need their history-side rewrites
+ * to survive compression must NOT rely on metadata for that: they should
+ * instead accept skip-compression (omit the metadata entirely), under which
+ * their modifications always survive the non-compressed path (contents are
+ * sent as-is under the limit; a clear error is thrown over the limit).
+ */
+export interface HookLLMRequestBoundary {
+  version?: 1;
+  pendingMessageStartIndex: number;
+  pendingMessageCount?: number;
+  onInvalidBoundary?: 'skip-compression' | 'throw';
 }
 
 /**
@@ -238,28 +268,57 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
 
   /**
    * Convert stable LLMRequest to genai SDK GenerateContentParameters
+   *
+   * H2 defensive guard: when the hook supplied an llm_request without a
+   * messages array (e.g. only model/config overrides), the contents are NOT
+   * rebuilt from messages — the baseRequest contents are preserved. This
+   * prevents a crash (messages.map on undefined) and avoids destroying tool
+   * calls/ids/metadata that a text-only round-trip would strip.
    */
   fromHookLLMRequest(
     hookRequest: LLMRequest,
     baseRequest?: GenerateContentParameters,
   ): GenerateContentParameters {
-    // Convert hook messages back to SDK Content format
-    const contents = hookRequest.messages.map((message) => ({
-      role: message.role === 'model' ? 'model' : message.role,
-      parts: [
-        {
-          text:
-            typeof message.content === 'string'
-              ? message.content
-              : String(message.content),
-        },
-      ],
-    }));
+    // When the hook did not supply messages, preserve the base contents.
+    // Only rebuild contents from messages when the hook actually provided them.
+    // Shallow-copy the base contents array (when present and an array) so that
+    // downstream in-place mutation of the result cannot corrupt baseRequest.
+    const hookMessages = hookRequest.messages;
+    const baseContents = baseRequest?.contents;
+    let contents: GenerateContentParameters['contents'];
+    if (Array.isArray(hookMessages)) {
+      contents = hookMessages.map((message) => ({
+        role: message.role === 'model' ? 'model' : message.role,
+        parts: [
+          {
+            text:
+              typeof message.content === 'string'
+                ? message.content
+                : String(message.content),
+          },
+        ],
+      }));
+    } else if (Array.isArray(baseContents)) {
+      // Shallow copy: a new array protects baseRequest from array-level
+      // mutation (push/splice on the result), but the Content objects/parts
+      // within are SHARED by reference. Downstream code must not mutate
+      // nested objects/parts in place.
+      contents = baseContents.slice();
+    } else {
+      contents = baseContents ?? [];
+    }
 
-    // Build the result with proper typing
+    // Build the result with proper typing.
+    // model must be defined: a config-only hook llm_request may omit model
+    // (hooks send arbitrary JSON), and an explicit `model: undefined` here
+    // would clobber the target's model when spread in applyLLMRequestModifications.
+    // hookRequest is typed LLMRequest but arrives as Partial at runtime, so
+    // read model defensively as an optional string before coalescing.
+    const hookModel =
+      typeof hookRequest.model === 'string' ? hookRequest.model : undefined;
     const result: GenerateContentParameters = {
       ...baseRequest,
-      model: hookRequest.model,
+      model: hookModel ?? baseRequest?.model ?? DEFAULT_GEMINI_FLASH_MODEL,
       contents,
     };
 
@@ -376,3 +435,118 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
  * Default translator instance for current GenAI SDK version
  */
 export const defaultHookTranslator = new HookTranslatorGenAIv1();
+
+/**
+ * Zod schema for the optional llm_request_boundary metadata a BeforeModel hook
+ * may return. Fail-open at the parse level means malformed metadata is rejected
+ * structurally (wrong types, bad enum values); the caller decides policy when
+ * boundary indices do not fit the contents positionally (resolution level).
+ *
+ * Two validation layers (see R4/R6):
+ *  - STRUCTURAL (parse level, this schema): field types, enum values, version
+ *    literal. Failure here → discriminated result status 'malformed'.
+ *  - POSITIONAL (resolution level, streamRequestHelpers): the pending region
+ *    described by valid indices must be a suffix of the modified contents.
+ *    Failure there → invalid boundary honored per onInvalidBoundary.
+ */
+const hookLLMRequestBoundarySchema = z.object({
+  version: z.literal(1).optional(),
+  pendingMessageStartIndex: z.number().int().nonnegative(),
+  pendingMessageCount: z.number().int().nonnegative().optional(),
+  onInvalidBoundary: z.enum(['skip-compression', 'throw']).optional(),
+});
+
+/**
+ * Discriminated parse result distinguishing three outcomes so the resolution
+ * layer can apply different policies (R4):
+ *  - 'absent': no boundary metadata key — fall back to differential analysis.
+ *  - 'valid': structurally well-formed boundary — proceed to positional checks.
+ *  - 'malformed': key present but structurally invalid — treat as INVALID
+ *    boundary (honor onInvalidBoundary); do NOT fall back to differential
+ *    analysis, because the hook explicitly attempted to control the boundary.
+ */
+export type HookLLMRequestBoundaryParseResult =
+  | { status: 'absent' }
+  | { status: 'valid'; boundary: HookLLMRequestBoundary }
+  | { status: 'malformed'; onInvalidBoundary: 'skip-compression' | 'throw' };
+
+/**
+ * Read the onInvalidBoundary policy from an untyped raw value. Returns
+ * 'throw' only when the value is exactly the string 'throw'; otherwise
+ * defaults to 'skip-compression'.
+ */
+function readOnInvalidBoundaryPolicy(
+  raw: unknown,
+): 'skip-compression' | 'throw' {
+  return raw === 'throw' ? 'throw' : 'skip-compression';
+}
+
+/**
+ * Parse and validate llm_request_boundary metadata from an untyped hook
+ * payload. Returns undefined for absent or malformed values (fail-open).
+ *
+ * @deprecated This function conflates 'absent' and 'malformed' into a single
+ * `undefined` return, so callers cannot honor `onInvalidBoundary` for
+ * malformed metadata and would wrongly fall back to differential analysis.
+ * Use {@link parseHookLLMRequestBoundaryResult} instead, which returns a
+ * discriminated result distinguishing absent from malformed.
+ *
+ * Kept for backward compatibility. Callers with key context
+ * (BeforeModelHookOutput.getLLMRequestBoundaryResult) perform the presence
+ * check themselves via hasOwnProperty.
+ */
+export function parseHookLLMRequestBoundary(
+  value: unknown,
+): HookLLMRequestBoundary | undefined {
+  if (value === undefined) return undefined;
+  const parsed = hookLLMRequestBoundarySchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  return parsed.data;
+}
+
+/**
+ * Parse llm_request_boundary metadata into a discriminated result that
+ * distinguishes "absent" from "present-but-malformed" (R4). A hook that
+ * ATTEMPTED to provide boundary metadata (key present but malformed)
+ * explicitly signaled that it wants to control the boundary; the resolution
+ * layer must NOT fall back to differential analysis in that case.
+ *
+ * G2: absence is decided by KEY PRESENCE, not truthiness. The caller
+ * (BeforeModelHookOutput.getLLMRequestBoundaryResult, which has access to the
+ * hookSpecificOutput object and can use hasOwnProperty) passes `present: true`
+ * when the key exists in the output. A present-but-falsy value (null, false,
+ * 0, '') is MALFORMED, not absent — the hook attempted to control the boundary.
+ *
+ * `present` defaults to checking `value !== undefined` for backward
+ * compatibility with direct callers that do not have key context: a present
+ * value of `undefined` signals "not provided" in JS conventions and is
+ * indistinguishable from absent after JSON parsing.
+ */
+export function parseHookLLMRequestBoundaryResult(
+  value: unknown,
+  // Default: `value !== undefined`. After a JSON round-trip, `undefined` is
+  // indistinguishable from an absent key (JSON cannot encode undefined), so
+  // it defaults to absent. All other values (including null, false, 0, '')
+  // are treated as present — the hook attempted to control the boundary.
+  // Callers with key context (hasOwnProperty) pass `present` explicitly.
+  present: boolean = value !== undefined,
+): HookLLMRequestBoundaryParseResult {
+  if (!present) return { status: 'absent' };
+  const parsed = hookLLMRequestBoundarySchema.safeParse(value);
+  if (!parsed.success) {
+    return {
+      status: 'malformed',
+      onInvalidBoundary: readOnInvalidBoundaryPolicy(
+        isNonNullObjectRecord(value) ? value['onInvalidBoundary'] : undefined,
+      ),
+    };
+  }
+  return { status: 'valid', boundary: parsed.data };
+}
+
+/** True when `value` is a non-null object record (local helper to avoid import cycles). */
+function isNonNullObjectRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}

@@ -22,12 +22,10 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { parseBootstrapArgs } from '../packages/cli/dist/src/config/profileBootstrap.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
-const bootstrapSnapshot = parseBootstrapArgs();
 
 /**
  * Prepare NODE_OPTIONS for child processes in DEV mode.
@@ -107,12 +105,6 @@ function prepareNodeOptionsForDev(nodeOptions) {
   return sanitized ? `${sanitized} ${localStorageFlag}` : localStorageFlag;
 }
 
-// check build status, write warnings to file for app to display if needed
-execSync('node ./scripts/check-build-status.js', {
-  stdio: 'inherit',
-  cwd: root,
-});
-
 const nodeArgs = [];
 let sandboxCommand = undefined;
 try {
@@ -170,8 +162,8 @@ if (experimentalUi) {
     process.exit(code);
   });
 } else {
-  // Standard CLI path
-  nodeArgs.push('./packages/cli');
+  // Standard CLI path: checked-in Node launcher re-execs Bun on TypeScript source.
+  nodeArgs.push('./packages/cli/bin/llxprt.cjs');
   nodeArgs.push(...args);
 
   const env = {
@@ -183,14 +175,6 @@ if (experimentalUi) {
 
   if (!env.LLXPRT_DEBUG_SESSION_ID && env.LLXPRT_DEBUG) {
     env.LLXPRT_DEBUG_SESSION_ID = `${process.pid}`;
-  }
-
-  if (bootstrapSnapshot.bootstrapArgs.profileName) {
-    env.LLXPRT_BOOTSTRAP_PROFILE = bootstrapSnapshot.bootstrapArgs.profileName;
-  }
-  if (bootstrapSnapshot.bootstrapArgs.providerOverride) {
-    env.LLXPRT_BOOTSTRAP_PROVIDER =
-      bootstrapSnapshot.bootstrapArgs.providerOverride;
   }
 
   if (isInDebugMode) {

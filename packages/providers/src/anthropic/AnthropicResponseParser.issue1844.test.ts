@@ -114,4 +114,25 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
     expect(result.metadata!.usage!.completionTokens).toBe(5);
     expect(result.metadata!.stopReason).toBe('end_turn');
   });
+
+  // Fable 5 returns refusals as a successful HTTP 200 with stop_reason:
+  // 'refusal' (not an error). This only verifies the parser propagates the
+  // value into metadata.stopReason without throwing — it does NOT verify any
+  // user-visible refusal notice. Surfacing a notice (and optional fallback) is
+  // tracked separately in #2329.
+  it('should propagate stopReason "refusal" without throwing @issue:2329', () => {
+    const message = createMockMessage('refusal');
+    const options = {
+      isOAuth: false,
+      tools: undefined,
+      unprefixToolName: (name: string) => name,
+      findToolSchema: () => undefined,
+      cacheLogger: { debug: () => {} },
+    };
+
+    const result = parseAnthropicResponse(message, options);
+
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata!.stopReason).toBe('refusal');
+  });
 });

@@ -15,10 +15,10 @@
 import { describe, it, expect } from 'vitest';
 import { KeyringTokenStore } from '../keyring-token-store.js';
 import type {
+  IDebugLogger,
   ISecureStore,
   ISecureStoreError,
-} from '../interfaces/secure-store.js';
-import type { IDebugLogger } from '../interfaces/debug-logger.js';
+} from '../interfaces/index.js';
 import type { OAuthToken } from '../types.js';
 
 // ─── Test doubles ────────────────────────────────────────────────────────────

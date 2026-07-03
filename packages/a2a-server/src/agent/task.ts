@@ -24,8 +24,9 @@ import type {
   ModelInfo,
   AnsiOutput,
   ToolSchedulerContract,
+  AgentClientContract,
 } from '@vybestack/llxprt-code-core';
-import { AgentClient } from '@vybestack/llxprt-code-agents';
+import { createAgentClient } from '@vybestack/llxprt-code-agents';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
 import type {
@@ -81,7 +82,7 @@ export class Task {
   contextId: string;
   scheduler: ToolSchedulerContract | null;
   config: Config;
-  agentClient: AgentClient;
+  agentClient: AgentClientContract;
   pendingToolConfirmationDetails: Map<
     string,
     ToolCallConfirmationDetails | SerializableConfirmationDetails
@@ -130,7 +131,7 @@ export class Task {
       proxyUrl: this.config.getProxy(),
       sessionId: this.config.getSessionId(),
     });
-    this.agentClient = new AgentClient(this.config, runtimeState);
+    this.agentClient = createAgentClient(this.config, runtimeState);
     this.pendingToolConfirmationDetails = new Map();
     this.taskState = 'submitted';
     this.eventBus = eventBus;

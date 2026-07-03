@@ -13,6 +13,7 @@
   "exports": {
     ".": {
       "types": "./dist/mcp/index.d.ts",
+      "bun": "./index.ts",
       "import": "./dist/mcp/index.js"
     }
   },
@@ -26,6 +27,14 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "index.ts",
+    "src",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
     "dist"
   ],
   "dependencies": {
@@ -47,6 +56,6 @@
     "vitest": "^3.2.6"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

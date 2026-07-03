@@ -23,7 +23,6 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import {
   afterAll,
-  afterEach,
   beforeEach,
   beforeAll,
   describe,
@@ -99,15 +98,19 @@ vi.mock('../config/config.js', async () => {
 
 // Mock the AgentClient to avoid actual API calls
 const sendMessageStreamSpy = vi.fn();
+const mockAgentClientInstance = {
+  sendMessageStream: sendMessageStreamSpy,
+  getUserTier: vi.fn().mockReturnValue('free'),
+  initialize: vi.fn(),
+};
 vi.mock('@vybestack/llxprt-code-agents', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-agents');
   return {
     ...actual,
-    AgentClient: vi.fn().mockImplementation(() => ({
-      sendMessageStream: sendMessageStreamSpy,
-      getUserTier: vi.fn().mockReturnValue('free'),
-      initialize: vi.fn(),
-    })),
+    AgentClient: vi.fn().mockImplementation(() => mockAgentClientInstance),
+    createAgentClient: vi
+      .fn()
+      .mockImplementation(() => mockAgentClientInstance),
   };
 });
 vi.mock('@vybestack/llxprt-code-core', async () => {
@@ -129,7 +132,14 @@ describe('E2E Tests', () => {
   });
 
   beforeEach(() => {
+    sendMessageStreamSpy.mockReset();
+    mockAgentClientInstance.getUserTier.mockReset();
+    mockAgentClientInstance.getUserTier.mockReturnValue('free');
+    mockAgentClientInstance.initialize.mockReset();
+    getToolRegistrySpy.mockReset();
+    getApprovalModeSpy.mockReset();
     getApprovalModeSpy.mockReturnValue(ApprovalMode.DEFAULT);
+    getExtensionsSpy.mockReset();
   });
 
   afterAll(
@@ -140,10 +150,6 @@ describe('E2E Tests', () => {
         });
       }),
   );
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
 
   it('should create a new task and stream status updates (text-content) via POST /', async () => {
     sendMessageStreamSpy.mockImplementation(async function* () {
@@ -754,10 +760,6 @@ describe('E2E Tests', () => {
 
     beforeEach(() => {
       getExtensionsSpy.mockReturnValue(mockExtensions);
-    });
-
-    afterEach(() => {
-      getExtensionsSpy.mockClear();
     });
 
     it('should return extensions for valid command', async () => {

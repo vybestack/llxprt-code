@@ -75,12 +75,20 @@ export class ProviderContentEnforcer {
     }
 
     if (envelope.pendingContents === undefined) {
+      // marginAdjustedLimit (limit minus TOKEN_SAFETY_MARGIN) is this enforcer's
+      // effective hard limit — the same acceptance criterion used for compressed
+      // contents later in enforce() — so the unrecoverable-boundary policy
+      // ("send as-is under the hard limit / throw over it", issue #2306)
+      // intentionally uses it for consistency and to protect against
+      // token-estimate error.
       if (initialProjected <= marginAdjustedLimit) {
         return envelope.contents;
       }
       throw new Error(
-        'Context overflow requires compression, but the pending-content boundary is unknown ' +
-          '(contents were modified by a BeforeModel hook). This is tracked in #2306. ' +
+        'Context overflow requires compression, but the pending-content boundary is unrecoverable: ' +
+          'a BeforeModel hook replaced or restructured the conversation contents, and no usable ' +
+          'llm_request_boundary metadata was available, so compression cannot safely recompose the pending region. ' +
+          'Consider reducing the context size, or have the hook supply valid llm_request_boundary metadata. ' +
           `Projected ${initialProjected} exceeds safety-adjusted limit ${marginAdjustedLimit}.`,
       );
     }

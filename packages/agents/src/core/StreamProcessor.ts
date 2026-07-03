@@ -64,6 +64,12 @@ import {
   type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
 import {
+  resolvePendingBoundaryFromHook,
+  snapshotContents,
+  type ProjectionSnapshot,
+} from './boundaryRecovery.js';
+import { enforceBeforeModelHookDecision } from './beforeModelHookDecision.js';
+import {
   createStreamAccumulator,
   accumulateChunkMetadata,
   consolidateTextParts,
@@ -91,6 +97,13 @@ function extractAllowedFunctionNames(
   if (!('allowedFunctionNames' in toolConfig)) return undefined;
   if (!Array.isArray(toolConfig.allowedFunctionNames)) return undefined;
   return toolConfig.allowedFunctionNames;
+}
+
+/** Result of firing the BeforeModel hook (contents + metadata + pre-hook snapshot). */
+interface BeforeModelHookFireResult {
+  contents: IContent[];
+  hookOutput: BeforeModelHookOutput | undefined;
+  snapshot: ProjectionSnapshot | undefined;
 }
 
 export class StreamProcessor {
@@ -252,24 +265,30 @@ export class StreamProcessor {
 
     try {
       const originalContents = requestPayload.contents;
-      const finalContents = await this._fireBeforeModelHook(
+      const {
+        contents: finalContents,
+        hookOutput,
+        snapshot,
+      } = await this._fireBeforeModelHook(
         configForHooks,
         originalContents,
         tools as ProviderToolset | undefined,
         toolSelection.allowedFunctionNames,
       );
-      // Reference equality detects when _fireBeforeModelHook produces a new
-      // array (formal hook modifications via llm_request_modifier). In-place
-      // mutation by hooks that return the same reference is an edge case
-      // deferred to #2306 (differential analysis).
-      const hookModifiedContents = finalContents !== originalContents;
+      const pendingContents = resolvePendingBoundaryFromHook(
+        originalContents,
+        finalContents,
+        pendingUserIContents,
+        hookOutput,
+        (msg) => this.logger.debug(() => msg),
+        snapshot,
+      );
+
       requestPayload.contents =
         await this.compressionHandler.enforceProviderContents(
           {
             contents: finalContents,
-            pendingContents: hookModifiedContents
-              ? undefined
-              : pendingUserIContents,
+            pendingContents,
           },
           promptId,
           provider,
@@ -304,82 +323,56 @@ export class StreamProcessor {
   }
 
   /**
-   * Fire BeforeModel hook and return possibly-modified requestContents.
-   * Throws if the hook requests execution stop or blocking.
+   * Fire BeforeModel hook; return contents, hook output, and a pre-hook
+   * snapshot (captured only when hooks fire — G1). Throws on stop/block.
    */
   private async _fireBeforeModelHook(
     configForHooks: AgentRuntimeContext['providerRuntime']['config'],
     requestContents: IContent[],
     tools: ProviderToolset | undefined,
     hookRestrictedAllowedTools: string[] | undefined,
-  ): Promise<IContent[]> {
+  ): Promise<BeforeModelHookFireResult> {
+    // Zero-overhead early return when hooks disabled / no hook system: no
+    // snapshot (differential recovery falls back to reference equality).
+    const passthrough = (): BeforeModelHookFireResult => ({
+      contents: requestContents,
+      hookOutput: undefined,
+      snapshot: undefined,
+    });
     if (
       configForHooks === undefined ||
       typeof configForHooks.getEnableHooks !== 'function' ||
       configForHooks.getEnableHooks() !== true
     ) {
-      return requestContents;
+      return passthrough();
     }
-
     const hookSystem =
       typeof configForHooks.getHookSystem === 'function'
         ? configForHooks.getHookSystem()
         : undefined;
-    if (hookSystem === undefined) return requestContents;
+    if (hookSystem === undefined) return passthrough();
 
     await hookSystem.initialize();
+    // Capture a projection snapshot BEFORE firing the hook so in-place
+    // mutations (hooks that mutate the live array/elements and return no
+    // llm_request) are detected by differential recovery (G1, issue #2306).
+    const snapshot = snapshotContents(requestContents);
     const beforeModelResult = await hookSystem.fireBeforeModelEvent({
       contents: requestContents,
       tools,
     });
 
-    if (beforeModelResult?.shouldStopExecution() === true) {
-      const reason = beforeModelResult.getEffectiveReason() as
-        | string
-        | null
-        | undefined;
-      throw new AgentExecutionStoppedError(
-        reason !== undefined && reason !== null && reason !== ''
-          ? reason
-          : 'Execution stopped by BeforeModel hook',
-        beforeModelResult.systemMessage,
-      );
-    }
+    enforceBeforeModelHookDecision(
+      beforeModelResult,
+      hookRestrictedAllowedTools,
+      (resp, candidate) => this._patchMissingFinishReason(resp, candidate),
+    );
 
-    if (beforeModelResult?.isBlockingDecision() === true) {
-      let syntheticResponse = beforeModelResult.getSyntheticResponse();
-      if (syntheticResponse) {
-        const candidate = syntheticResponse.candidates?.[0];
-        const candidateFinishReason = candidate?.finishReason as
-          | FinishReason
-          | ''
-          | null
-          | undefined;
-        if (candidate && isMissingFinishReason(candidateFinishReason)) {
-          syntheticResponse = this._patchMissingFinishReason(
-            syntheticResponse,
-            candidate,
-          );
-        }
-      }
-      const reason = beforeModelResult.getEffectiveReason() as
-        | string
-        | null
-        | undefined;
-      throw new AgentExecutionBlockedError(
-        reason !== undefined && reason !== null && reason !== ''
-          ? reason
-          : 'Request blocked by BeforeModel hook',
-        syntheticResponse === undefined
-          ? undefined
-          : attachHookRestrictedAllowedTools(
-              syntheticResponse,
-              hookRestrictedAllowedTools,
-            ),
-      );
-    }
-
-    return this._applyRequestModifications(beforeModelResult, requestContents);
+    const contents = this._applyRequestModifications(
+      beforeModelResult,
+      requestContents,
+    );
+    return { contents, hookOutput: beforeModelResult ?? undefined, snapshot };
   }
 
   private _patchMissingFinishReason(

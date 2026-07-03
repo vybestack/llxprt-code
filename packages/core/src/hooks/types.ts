@@ -14,8 +14,14 @@ import type {
   LLMRequest,
   LLMResponse,
   HookToolConfig,
+  HookLLMRequestBoundary,
+  HookLLMRequestBoundaryParseResult,
 } from './hookTranslator.js';
-import { defaultHookTranslator } from './hookTranslator.js';
+import {
+  defaultHookTranslator,
+  parseHookLLMRequestBoundary,
+  parseHookLLMRequestBoundaryResult,
+} from './hookTranslator.js';
 import type { ConfigSource } from './hookRegistry.js';
 
 /**
@@ -354,6 +360,70 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
       };
     }
     return target;
+  }
+
+  /**
+   * Get optional explicit boundary metadata supplied by the hook for
+   * full-replacement llm_request payloads. Returns undefined when absent or
+   * malformed (fail-open parse; the caller enforces policy on invalid indices).
+   *
+   * @deprecated This method conflates 'absent' and 'malformed' into a single
+   * `undefined` return, so callers cannot honor `onInvalidBoundary` for
+   * malformed metadata and would wrongly fall back to differential analysis.
+   * Use {@link getLLMRequestBoundaryResult} instead, which returns a
+   * discriminated result distinguishing absent from malformed.
+   *
+   * G2: uses key presence (hasOwnProperty) to decide absence, consistent with
+   * getLLMRequestBoundaryResult.
+   */
+  getLLMRequestBoundary(): HookLLMRequestBoundary | undefined {
+    if (!this.hookSpecificOutput || !this.hasBoundaryValue()) return undefined;
+    return parseHookLLMRequestBoundary(
+      this.hookSpecificOutput['llm_request_boundary'],
+    );
+  }
+
+  /**
+   * Get a discriminated boundary-parse result that distinguishes "absent"
+   * from "present-but-malformed" (R4). Used by the resolution layer to decide
+   * whether to fall back to differential analysis:
+   *  - absent → differential analysis is allowed.
+   *  - valid → proceed to positional (suffix-fit) validation.
+   *  - malformed → treat as INVALID boundary (honor onInvalidBoundary); do
+   *    NOT fall back to differential analysis.
+   *
+   * G2: absence is decided by KEY PRESENCE (hasOwnProperty), NOT truthiness.
+   * A hook that explicitly sets `llm_request_boundary: null` (or false/0/'')
+   * attempted to control the boundary; such a value is MALFORMED, not absent.
+   * Only an absent key (or explicit `undefined`, which signals "not provided"
+   * in JS conventions and is indistinguishable from absent after JSON
+   * parsing) is treated as absent. Note: a key present with value `undefined`
+   * is treated as absent because hook outputs arrive via JSON, which cannot
+   * encode `undefined` — an in-process `undefined` is indistinguishable from
+   * "not provided".
+   */
+  getLLMRequestBoundaryResult(): HookLLMRequestBoundaryParseResult {
+    if (!this.hookSpecificOutput) return { status: 'absent' };
+    return parseHookLLMRequestBoundaryResult(
+      this.hookSpecificOutput['llm_request_boundary'],
+      this.hasBoundaryValue(),
+    );
+  }
+
+  /**
+   * Shared presence check for the llm_request_boundary key. Returns true when
+   * hookSpecificOutput is present, the key exists (hasOwnProperty), and the
+   * value is not undefined (explicit undefined is indistinguishable from
+   * absent after JSON parsing).
+   */
+  private hasBoundaryValue(): boolean {
+    if (!this.hookSpecificOutput) return false;
+    return (
+      Object.prototype.hasOwnProperty.call(
+        this.hookSpecificOutput,
+        'llm_request_boundary',
+      ) && this.hookSpecificOutput['llm_request_boundary'] !== undefined
+    );
   }
 }
 
@@ -705,6 +775,13 @@ export interface BeforeModelInput extends HookInput {
 }
 
 /**
+ * Re-exported boundary types (defined in hookTranslator.ts to keep all
+ * decoupled hook data shapes together and avoid circular imports).
+ */
+export type { HookLLMRequestBoundary } from './hookTranslator.js';
+export type { HookLLMRequestBoundaryParseResult } from './hookTranslator.js';
+
+/**
  * BeforeModel hook output
  */
 export interface BeforeModelOutput extends HookOutput {
@@ -712,6 +789,7 @@ export interface BeforeModelOutput extends HookOutput {
     hookEventName: 'BeforeModel';
     llm_request?: Partial<LLMRequest>;
     llm_response?: LLMResponse;
+    llm_request_boundary?: HookLLMRequestBoundary;
   };
 }
 

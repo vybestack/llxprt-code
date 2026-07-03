@@ -159,7 +159,7 @@ async function resolveRequiredEntry(
     return entry;
   }
   throw new FatalError(
-    'Could not locate the LLxprt Code entry point (packages/cli/index.ts, dist/index.js, or bundle/llxprt.js). Your installation may be corrupt; reinstall @vybestack/llxprt-code.',
+    'Could not locate the LLxprt Code entry point (packages/cli/index.ts or dist/index.js). Your installation may be corrupt; reinstall @vybestack/llxprt-code.',
     43,
   );
 }

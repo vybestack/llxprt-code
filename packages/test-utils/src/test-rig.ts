@@ -67,7 +67,15 @@ export {
 } from './util.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const BUNDLE_PATH = join(__dirname, '..', '..', '..', 'bundle/llxprt.js');
+// Entry is the checked-in Node launcher: it re-execs Bun against TypeScript
+// source, so integration tests exercise the no-compile runtime path.
+const CLI_ENTRY_PATH = join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  'packages/cli/bin/llxprt.cjs',
+);
 
 interface RunMethodOptions {
   args?: string | string[];
@@ -147,13 +155,14 @@ export class TestRig {
 
   /**
    * The command and args to use to invoke LLxprt CLI. Allows switching between
-   * the bundled llxprt.js and the installed 'llxprt'.
+   * the checked-in Node launcher (which re-execs Bun on the TypeScript source)
+   * and the installed 'llxprt' binary.
    */
   private _getCommandAndArgs(extraInitialArgs: string[] = []): {
     command: string;
     initialArgs: string[];
   } {
-    return getCommandAndArgs(BUNDLE_PATH, extraInitialArgs);
+    return getCommandAndArgs(CLI_ENTRY_PATH, extraInitialArgs);
   }
 
   async run(options: RunMethodOptions): Promise<string> {

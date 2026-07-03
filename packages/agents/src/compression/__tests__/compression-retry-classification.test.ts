@@ -18,10 +18,12 @@ import * as fc from 'fast-check';
 import {
   isTransientCompressionError,
   shouldRetryCompressionError,
+  isFallbackEligibleCompressionError,
   CompressionExecutionError,
   CompressionStrategyError,
   UnknownStrategyError,
   PromptResolutionError,
+  EmptySummaryError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   makeHttpError,
@@ -372,6 +374,142 @@ describe('Property-based: error classification @plan PLAN-20260218-COMPRESSION-R
         },
       ),
       { numRuns: 50 },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isFallbackEligibleCompressionError (Issue #2333)
+// ---------------------------------------------------------------------------
+
+describe('isFallbackEligibleCompressionError @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
+  /**
+   * Issue #2333: EmptySummaryError is fallback-eligible so that an empty
+   * LLM summary degrades gracefully to truncation instead of aborting the turn.
+   */
+  it('returns true for EmptySummaryError', () => {
+    expect(
+      isFallbackEligibleCompressionError(new EmptySummaryError('middle-out')),
+    ).toBe(true);
+  });
+
+  it('returns true for HTTP 429 rate limit error', () => {
+    expect(isFallbackEligibleCompressionError(makeHttpError(429))).toBe(true);
+  });
+
+  it('returns true for HTTP 500 server error', () => {
+    expect(isFallbackEligibleCompressionError(makeHttpError(500))).toBe(true);
+  });
+
+  it('returns true for ECONNRESET network error', () => {
+    expect(
+      isFallbackEligibleCompressionError(makeNetworkError('ECONNRESET')),
+    ).toBe(true);
+  });
+
+  it('returns true for Anthropic overloaded_error', () => {
+    expect(
+      isFallbackEligibleCompressionError(
+        makeAnthropicOverloadError('overloaded_error'),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns true for Anthropic SDK-wrapped overloaded_error (issue #2053 shape)', () => {
+    expect(
+      isFallbackEligibleCompressionError(
+        makeAnthropicSdkWrappedError('overloaded_error'),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false for CompressionExecutionError default (non-transient)', () => {
+    expect(
+      isFallbackEligibleCompressionError(
+        new CompressionExecutionError('middle-out', 'permanent failure'),
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false for PromptResolutionError', () => {
+    expect(
+      isFallbackEligibleCompressionError(
+        new PromptResolutionError('prompt-id'),
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false for UnknownStrategyError', () => {
+    expect(
+      isFallbackEligibleCompressionError(
+        new UnknownStrategyError('bad-strategy'),
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false for plain CompressionStrategyError', () => {
+    expect(
+      isFallbackEligibleCompressionError(
+        new CompressionStrategyError('msg', 'EXECUTION_FAILED'),
+      ),
+    ).toBe(false);
+  });
+
+  it('returns true for CompressionExecutionError with isTransient: true', () => {
+    const err = new CompressionExecutionError('middle-out', 'rate limited', {
+      isTransient: true,
+    });
+    expect(isFallbackEligibleCompressionError(err)).toBe(true);
+  });
+
+  it('returns false for HTTP 400', () => {
+    expect(isFallbackEligibleCompressionError(makeHttpError(400))).toBe(false);
+  });
+
+  it('returns false for HTTP 401', () => {
+    expect(isFallbackEligibleCompressionError(makeHttpError(401))).toBe(false);
+  });
+
+  it('returns false for generic programming error (permanent)', () => {
+    const err = new TypeError('Cannot read property of undefined');
+    expect(isFallbackEligibleCompressionError(err)).toBe(false);
+  });
+
+  it('returns false for null', () => {
+    expect(isFallbackEligibleCompressionError(null)).toBe(false);
+  });
+
+  it('returns false for string error', () => {
+    expect(isFallbackEligibleCompressionError('some error message')).toBe(
+      false,
+    );
+  });
+
+  /**
+   * Verify EmptySummaryError transience classification is unchanged — it must
+   * stay non-transient / non-retryable; only fallback-eligibility changes.
+   */
+  it('EmptySummaryError remains non-transient (shouldRetry is false)', () => {
+    expect(
+      isTransientCompressionError(new EmptySummaryError('middle-out')),
+    ).toBe(false);
+    expect(
+      shouldRetryCompressionError(new EmptySummaryError('middle-out')),
+    ).toBe(false);
+  });
+
+  /**
+   * Property: fallback-eligibility mirrors transience for HTTP errors.
+   */
+  it('isFallbackEligibleCompressionError matches isTransientCompressionError for all HTTP statuses', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 400, max: 599 }), (status) => {
+        const err = makeHttpError(status);
+        expect(isFallbackEligibleCompressionError(err)).toBe(
+          isTransientCompressionError(err),
+        );
+      }),
+      { numRuns: 200 },
     );
   });
 });

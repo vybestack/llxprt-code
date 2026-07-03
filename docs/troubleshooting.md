@@ -206,11 +206,11 @@ Another process is using that port. Stop it or configure a different port in you
 
 **`Command not found`**
 
-LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `node packages/cli/dist/index.js`.
+LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `node scripts/start.js` (the dev launcher) or run `bun install` then `bun run start`.
 
 **`MODULE_NOT_FOUND`**
 
-Run `npm install` then `npm run build`.
+Run `bun install` to restore dependencies. If the error references a `dist/` file, run `bun run build` (or `npm run build`) to recompile the TypeScript sources.
 
 **`Operation not permitted`**
 
@@ -263,7 +263,9 @@ LLXPRT_DEBUG='*' llxprt --sandbox "your prompt"
 
 **How do I update LLxprt Code?**
 
-`npm install -g @vybestack/llxprt-code@latest` (global install) or pull and `npm run build` (from source).
+- **npm (global install):** `npm install -g @vybestack/llxprt-code@latest`
+- **Homebrew:** `brew upgrade llxprt-code`
+- **From source:** Pull the latest source, run `bun install`, then `bun run start` (or `node scripts/start.js` for the dev launcher).
 
 **Where are config files stored?**
 
@@ -272,6 +274,37 @@ LLXPRT_DEBUG='*' llxprt --sandbox "your prompt"
 **Why don't I see cached token counts in /stats?**
 
 Cache metrics only appear when the provider supports and reports them. OAuth users may not see cache stats if the backend doesn't support cached content creation.
+
+## Building from Source
+
+The CLI's run path uses the [Bun](https://bun.sh) runtime to execute the TypeScript (`.ts`) entry point directly — no pre-compiled `dist/` artifact is required for the CLI to run. The published npm package still ships `dist/` (produced by `tsc`) for Node.js compatibility and type-checking uses `tsc --noEmit`. The retired `bundle/llxprt.js` artifact is no longer produced.
+
+To build from source:
+
+```bash
+git clone https://github.com/vybestack/llxprt-code.git
+cd llxprt-code
+bun install
+bun run start
+```
+
+For development, use the dev launcher:
+
+```bash
+node scripts/start.js
+```
+
+Type checking uses `tsc --noEmit` (no JavaScript output is produced):
+
+```bash
+bun run typecheck
+```
+
+## Platform Caveats
+
+### Windows pty Behavior
+
+On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level and uses `@lydell/node-pty` (with `node-pty` as fallback) — **not** the Bun adapter. The `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is POSIX-only and is not used on Windows. If you encounter terminal sizing or resize issues on Windows, ensure you are using a recent Bun version and a compatible terminal emulator.
 
 ## See Also
 

@@ -15,7 +15,7 @@ import type {
   AnthropicMessage,
   AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
-import { supportsAdaptiveThinking } from './AnthropicModelData.js';
+import { isFable5, supportsAdaptiveThinking } from './AnthropicModelData.js';
 
 /**
  * A content block with cache_control attached.
@@ -216,10 +216,45 @@ export function attachPromptCaching(
   }
 }
 
+type AnthropicThinkingConfig = {
+  thinking?: {
+    type: 'adaptive' | 'enabled';
+    budget_tokens?: number;
+    display?: 'summarized' | 'omitted';
+  };
+  output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
+};
+
+/**
+ * Build the adaptive-thinking config shared by Fable 5 and other
+ * adaptive-capable models. Centralizes the `{ type: 'adaptive' }` literal and
+ * the `effort` mapping so future thinking-field changes have one source.
+ *
+ * `display` is only relevant to Fable 5, which never returns raw
+ * chain-of-thought; other adaptive models pass nothing and keep API defaults.
+ */
+function buildAdaptiveConfig(
+  thinkingEffort?: 'low' | 'medium' | 'high' | 'max',
+  display?: 'summarized' | 'omitted',
+): AnthropicThinkingConfig {
+  const thinking: NonNullable<AnthropicThinkingConfig['thinking']> = {
+    type: 'adaptive' as const,
+  };
+  if (display) {
+    thinking.display = display;
+  }
+  const config: AnthropicThinkingConfig = { thinking };
+  if (thinkingEffort) {
+    config.output_config = { effort: thinkingEffort };
+  }
+  return config;
+}
+
 /**
  * Build thinking configuration for Anthropic API
  * @issue #1307: Correct adaptive thinking support for Opus 4.6
  * @issue #2289: Extended to Sonnet 5 (also supports adaptive thinking)
+ * @issue #2328: Fable 5 is adaptive-only (never budgeted 'enabled' or 'disabled')
  */
 export function buildThinkingConfig(options: {
   reasoningEnabled: boolean;
@@ -227,12 +262,19 @@ export function buildThinkingConfig(options: {
   adaptiveThinking?: boolean;
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max';
   model: string;
-}): {
-  thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
-  output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
-} {
+}): AnthropicThinkingConfig {
   if (!options.reasoningEnabled) {
     return {};
+  }
+
+  // Claude Fable 5: adaptive thinking is the only mode and is always on — it
+  // cannot be disabled or switched to legacy budgeted 'enabled' thinking.
+  // Depth is controlled exclusively via `effort`, so ignore any
+  // reasoningBudgetTokens / adaptiveThinking override for Fable 5. Fable 5
+  // never returns raw thinking, so request `display: 'summarized'` to get
+  // readable summaries instead of empty thinking blocks.
+  if (isFable5(options.model)) {
+    return buildAdaptiveConfig(options.thinkingEffort, 'summarized');
   }
 
   const adaptiveCapable = supportsAdaptiveThinking(options.model);
@@ -242,24 +284,10 @@ export function buildThinkingConfig(options: {
     options.reasoningBudgetTokens == null &&
     options.adaptiveThinking !== false
   ) {
-    const config: {
-      thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
-      output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
-    } = {
-      thinking: { type: 'adaptive' as const },
-    };
-
-    if (options.thinkingEffort) {
-      config.output_config = { effort: options.thinkingEffort };
-    }
-
-    return config;
+    return buildAdaptiveConfig(options.thinkingEffort);
   }
 
-  const config: {
-    thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
-    output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
-  } = {
+  const config: AnthropicThinkingConfig = {
     thinking: {
       type: 'enabled' as const,
       budget_tokens: options.reasoningBudgetTokens ?? 10000,
@@ -302,7 +330,11 @@ export function buildAnthropicRequestBody(options: {
   maxTokens: number;
   streamingEnabled: boolean;
   modelParams: Record<string, unknown>;
-  thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
+  thinking?: {
+    type: 'adaptive' | 'enabled';
+    budget_tokens?: number;
+    display?: 'summarized' | 'omitted';
+  };
   outputConfig?: { effort: 'low' | 'medium' | 'high' | 'max' };
 }): Record<string, unknown> {
   const requestBody: Record<string, unknown> = {

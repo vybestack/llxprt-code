@@ -95,6 +95,21 @@ describe('tokenLimit', () => {
       expect(tokenLimit('claude-sonnet-5-20260630')).toBe(200_000);
     });
 
+    // Claude Fable 5 defaults to the Claude Code / subscription 200K context
+    // window. The advertised 1M window is API-only and plan-gated; override
+    // via /set or a profile (context-limit).
+    it('should return 200K (auth default) limit for claude-fable-5', () => {
+      expect(tokenLimit('claude-fable-5')).toBe(200_000);
+    });
+
+    it('should return 200K limit for the claude-fable-5-latest alias', () => {
+      expect(tokenLimit('claude-fable-5-latest')).toBe(200_000);
+    });
+
+    it('should return 200K limit for a claude-fable-5 dated snapshot', () => {
+      expect(tokenLimit('claude-fable-5-20260701')).toBe(200_000);
+    });
+
     it('honors a user-supplied context limit override (e.g. /set or profile)', () => {
       expect(tokenLimit('claude-opus-4-8', 1_000_000)).toBe(1_000_000);
     });
