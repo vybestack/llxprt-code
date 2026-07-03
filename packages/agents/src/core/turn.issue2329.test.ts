@@ -119,7 +119,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
           candidates: [
             {
               content: { parts: [{ text: 'I decline to answer.' }] },
-              finishReason: 'SAFETY',
+              finishReason: 'STOP',
               finishMessage: 'refusal',
             },
           ],
@@ -140,7 +140,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
     const finished = findFinishedEvent(events);
     expect(finished).toBeDefined();
     expect(finished?.type).toBe(GeminiEventType.Finished);
-    expect(finished?.value.reason).toBe('SAFETY');
+    expect(finished?.value.reason).toBe('STOP');
     expect(finished?.value.stopReason).toBe('refusal');
   });
 

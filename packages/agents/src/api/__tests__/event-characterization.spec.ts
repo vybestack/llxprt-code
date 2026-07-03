@@ -230,13 +230,13 @@ describe('Event characterization — adapter-characterization @plan:PLAN-2026061
 
   it('Finished with stopReason refusal → done{refusal} preserving finished.stopReason @issue:2329', async () => {
     const events = await runAdapterStatic([
-      wrapStream(streamFinished(FinishReason.SAFETY, 'refusal')),
+      wrapStream(streamFinished(FinishReason.STOP, 'refusal')),
     ]);
     const done = doneEvents(events);
     expect(done).toHaveLength(1);
     expect(done[0].reason).toBe('refusal');
     expect(done[0].finished?.stopReason).toBe('refusal');
-    expect(done[0].finished?.reason).toBe(FinishReason.SAFETY);
+    expect(done[0].finished?.reason).toBe(FinishReason.STOP);
   });
 
   it('Finished with a non-refusal stopReason → done{stop} @issue:2329', async () => {

@@ -244,10 +244,10 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
-    // @issue:2329 — refusal now maps to SAFETY so consumers can distinguish a
-    // safety-classifier refusal from a normal completion, and the raw provider
-    // stop reason is preserved on candidate.finishMessage.
-    it('should map refusal to SAFETY @issue:2329', () => {
+    // @issue:2329 — refusal maps to STOP (coarse reason unchanged); the raw
+    // provider stop reason is preserved on candidate.finishMessage so consumers
+    // can distinguish a safety-classifier refusal from a normal completion.
+    it('should map refusal to STOP and preserve finishMessage @issue:2329', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'refused' }],
@@ -255,7 +255,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       };
 
       const response = chatSession.convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('SAFETY');
+      expect(response.candidates[0].finishReason).toBe('STOP');
       expect(response.candidates[0].finishMessage).toBe('refusal');
     });
 

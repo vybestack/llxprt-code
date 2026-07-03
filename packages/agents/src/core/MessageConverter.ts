@@ -559,9 +559,7 @@ function applyFinishReasonMapping(
       stop_sequence: FinishReason.STOP,
       tool_use: FinishReason.STOP,
       pause_turn: FinishReason.STOP,
-      // @issue:2329 — refusal maps to SAFETY so downstream consumers can
-      // distinguish a safety-classifier refusal from a normal completion.
-      refusal: FinishReason.SAFETY,
+      refusal: FinishReason.STOP,
       model_context_window_exceeded: FinishReason.MAX_TOKENS,
       // OpenAI Chat Completions-style values
       stop: FinishReason.STOP,

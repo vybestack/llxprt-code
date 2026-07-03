@@ -315,7 +315,7 @@ describe('useGeminiStream', () => {
           yield {
             type: ServerGeminiEventType.Finished,
             value: {
-              reason: 'SAFETY',
+              reason: 'STOP',
               stopReason: 'refusal',
               usageMetadata: undefined,
             },

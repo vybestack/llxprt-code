@@ -98,7 +98,7 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
     const result = renderHandlers();
 
     result.current.handleFinishedEvent(
-      makeFinishedEvent(FinishReason.SAFETY, 'refusal'),
+      makeFinishedEvent(FinishReason.STOP, 'refusal'),
       1000,
     );
 

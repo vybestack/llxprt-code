@@ -9,7 +9,7 @@
  * refusals as a distinguishable finish reason.
  *
  * Tests through the public convertIContentToResponse() entry point — no mock
- * theater. A refusal IContent must produce a response with finishReason SAFETY
+ * theater. A refusal IContent must produce a response with finishReason STOP
  * and the raw provider stop reason preserved on candidate.finishMessage.
  */
 
@@ -19,7 +19,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { convertIContentToResponse } from './MessageConverter.js';
 
 describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
-  it('maps refusal metadata.stopReason to FinishReason.SAFETY', () => {
+  it('maps refusal metadata.stopReason to FinishReason.STOP', () => {
     const icontent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'I cannot help with that.' }],
@@ -30,7 +30,7 @@ describe('Issue 2329: refusal finish-reason mapping @issue:2329', () => {
 
     expect(response.candidates).toBeDefined();
     expect(response.candidates).toHaveLength(1);
-    expect(response.candidates[0].finishReason).toBe(FinishReason.SAFETY);
+    expect(response.candidates[0].finishReason).toBe(FinishReason.STOP);
   });
 
   it('preserves the raw provider stop reason on candidate.finishMessage for refusal', () => {

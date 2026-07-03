@@ -486,7 +486,7 @@ describe('processAgentStream', () => {
       {
         type: 'done',
         reason: 'refusal',
-        finished: { reason: 'SAFETY', stopReason: 'refusal' },
+        finished: { reason: 'STOP', stopReason: 'refusal' },
       },
     ];
 
@@ -512,7 +512,7 @@ describe('processAgentStream', () => {
       {
         type: 'done',
         reason: 'refusal',
-        finished: { reason: 'SAFETY', stopReason: 'refusal' },
+        finished: { reason: 'STOP', stopReason: 'refusal' },
       },
     ];
 
@@ -545,7 +545,7 @@ describe('processAgentStream', () => {
       {
         type: 'done',
         reason: 'refusal',
-        finished: { reason: 'SAFETY', stopReason: 'refusal' },
+        finished: { reason: 'STOP', stopReason: 'refusal' },
       },
     ];
 

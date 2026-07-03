@@ -266,13 +266,13 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     const parsed = AgentEventSchema.parse({
       type: 'done',
       reason: 'refusal',
-      finished: { reason: 'SAFETY', stopReason: 'refusal' },
+      finished: { reason: 'STOP', stopReason: 'refusal' },
     });
     expect(parsed.type).toBe('done');
     expect(parsed).toStrictEqual({
       type: 'done',
       reason: 'refusal',
-      finished: { reason: 'SAFETY', stopReason: 'refusal' },
+      finished: { reason: 'STOP', stopReason: 'refusal' },
     });
   });
 
@@ -462,11 +462,11 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
 
   it('FinishedValueSchema accepts and preserves stopReason @issue:2329', () => {
     const parsed = FinishedValueSchema.parse({
-      reason: 'SAFETY',
+      reason: 'STOP',
       stopReason: 'refusal',
     });
     expect(parsed).toStrictEqual({
-      reason: 'SAFETY',
+      reason: 'STOP',
       stopReason: 'refusal',
     });
   });
