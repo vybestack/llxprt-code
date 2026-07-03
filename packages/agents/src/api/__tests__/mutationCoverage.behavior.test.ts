@@ -293,23 +293,20 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
     'PROP target-4: for any non-empty keyName string, getProviderStatus surfaces it and reports authenticated (keyName guard) (REQ-002)',
     async () => {
       await fc.assert(
-        fc.asyncProperty(
-          nonBlankStringArbitrary,
-          async (keyName) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-              auth: { keyName },
-            });
-            try {
-              const status = agent.getProviderStatus();
-              return (
-                status.authStatus === 'authenticated' &&
-                status.keyName === keyName
-              );
-            } finally {
-              await cleanup();
-            }
-          },
-        ),
+        fc.asyncProperty(nonBlankStringArbitrary, async (keyName) => {
+          const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+            auth: { keyName },
+          });
+          try {
+            const status = agent.getProviderStatus();
+            return (
+              status.authStatus === 'authenticated' &&
+              status.keyName === keyName
+            );
+          } finally {
+            await cleanup();
+          }
+        }),
       );
     },
     ASYNC_PROPERTY_TIMEOUT_MS,
@@ -344,23 +341,20 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
     'PROP target-4b: for any non-empty apiKey, getProviderStatus reports authenticated and does NOT surface keyName (inline guard) (REQ-002)',
     async () => {
       await fc.assert(
-        fc.asyncProperty(
-          nonBlankStringArbitrary,
-          async (apiKey) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-              auth: { apiKey },
-            });
-            try {
-              const status = agent.getProviderStatus();
-              return (
-                status.authStatus === 'authenticated' &&
-                status.keyName === undefined
-              );
-            } finally {
-              await cleanup();
-            }
-          },
-        ),
+        fc.asyncProperty(nonBlankStringArbitrary, async (apiKey) => {
+          const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+            auth: { apiKey },
+          });
+          try {
+            const status = agent.getProviderStatus();
+            return (
+              status.authStatus === 'authenticated' &&
+              status.keyName === undefined
+            );
+          } finally {
+            await cleanup();
+          }
+        }),
       );
     },
     ASYNC_PROPERTY_TIMEOUT_MS,
