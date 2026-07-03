@@ -46,9 +46,7 @@ if [[ -f "${CONFIG_FILE}" ]] && grep -Eq '^[[:space:]]*alias[[:space:]]+llxprt='
         fi
         TMP_CONFIG=$(mktemp "${CONFIG_FILE}.tmp.XXXXXX") || { echo "Error: failed to create temp file." >&2; exit 1; }
         trap 'rm -f "${TMP_CONFIG}"' EXIT
-        export ALIAS_COMMAND
-        if ! awk '
-            BEGIN { alias_line = ENVIRON["ALIAS_COMMAND"] }
+        if ! awk -v alias_line="${ALIAS_COMMAND}" '
             /^[[:space:]]*alias[[:space:]]+llxprt=.*start\.js/ {
                 if (!replaced) { print alias_line; replaced = 1 }
                 else { printf "Removed duplicate stale llxprt alias: %s\n", $0 > "/dev/stderr" }
