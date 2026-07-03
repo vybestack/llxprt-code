@@ -46,17 +46,18 @@ import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
 } from '../../../utils/apiErrorFormatting.js';
+import { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
 
 // ─── Re-exported constant ────────────────────────────────────────────────────
 
 export const SYSTEM_NOTICE_EVENT = 'system_notice' as const;
 
 /**
- * @issue:2329 — Single source of truth for the safety-classifier refusal
- * notice text shared by the interactive and non-interactive CLI surfaces.
+ * @issue:2329 — Re-export of the shared safety-classifier refusal notice text.
+ * Kept for back-compat with existing imports (e.g. test files). The canonical
+ * definition lives in utils/refusalNotice.ts (sourced from core).
  */
-export const REFUSAL_NOTICE_MESSAGE =
-  'Request declined: the model\u2019s safety classifier refused to answer this request. Try rephrasing, or switch to a different model.';
+export { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
 
 // ─── Pure utility functions ───────────────────────────────────────────────────
 

@@ -15,7 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
-import { REFUSAL_NOTICE_MESSAGE } from './ui/hooks/geminiStream/streamUtils.js';
+import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 

@@ -20,7 +20,7 @@ import type {
   StructuredError,
 } from '@vybestack/llxprt-code-agents';
 import { MAX_TURNS_MESSAGE } from './utils/errors.js';
-import { REFUSAL_NOTICE_MESSAGE } from './ui/hooks/geminiStream/streamUtils.js';
+import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
 type StreamConsumerContext = {
   config: Config;

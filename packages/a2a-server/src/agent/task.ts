@@ -6,6 +6,7 @@
 
 import {
   GeminiEventType,
+  REFUSAL_NOTICE_MESSAGE,
   ToolConfirmationOutcome,
   ApprovalMode,
   createAgentRuntimeState,
@@ -526,6 +527,21 @@ export class Task {
       const type = event.type;
       if (getLogWarnTypes().has(type) || getLogInfoTypes().has(type)) {
         logInformationalEvent(type, event, this.id);
+      }
+      // @issue:2329 — a Finished event whose raw provider stop reason is
+      // 'refusal' indicates the model's safety classifier declined the request.
+      // The Finished event is informational (logged above), but the a2a client
+      // would otherwise see only the (possibly empty) answer text with no
+      // indication that a refusal occurred. Surface an explicit notice to the
+      // client using the same text-content path as ordinary Content events.
+      // Type narrowing is supplied by InformationalGeminiStreamEvent (which
+      // includes the Finished variant with its value.stopReason field), so no
+      // assertion is required.
+      if (
+        event.type === GeminiEventType.Finished &&
+        event.value.stopReason === 'refusal'
+      ) {
+        this._sendTextContent(`\n\n[safety notice] ${REFUSAL_NOTICE_MESSAGE}`);
       }
       // Silent types (ChatCompressed, UsageMetadata, Citation) require no action
       return;
