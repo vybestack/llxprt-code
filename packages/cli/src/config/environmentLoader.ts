@@ -113,7 +113,7 @@ export async function resolveMemoryContent(
 // It's kept in the CLI for now as App.tsx directly calls it for memory refresh.
 export async function loadHierarchicalLlxprtMemory(
   currentWorkingDirectory: string,
-  includeDirectoriesToReadGemini: readonly string[] = [],
+  includeDirectoriesToReadLlxprt: readonly string[] = [],
   debugMode: boolean,
   fileService: FileDiscoveryService,
   settings: Settings,
@@ -148,7 +148,7 @@ export async function loadHierarchicalLlxprtMemory(
   // Directly call the server function with the corrected path.
   return loadServerHierarchicalMemory(
     effectiveCwd,
-    includeDirectoriesToReadGemini,
+    includeDirectoriesToReadLlxprt,
     debugMode,
     fileService,
     extensions,
