@@ -299,7 +299,7 @@ describe('useGeminiStream', () => {
         expect(mockAddItem).toHaveBeenCalledWith(
           {
             type: 'info',
-            text: '⚠️  Response truncated due to token limits.',
+            text: 'WARNING:  Response truncated due to token limits.',
           },
           expect.any(Number),
         );
@@ -488,44 +488,44 @@ describe('useGeminiStream', () => {
       },
       {
         reason: 'SAFETY',
-        message: '⚠️  Response stopped due to safety reasons.',
+        message: 'WARNING:  Response stopped due to safety reasons.',
       },
       {
         reason: 'RECITATION',
-        message: '⚠️  Response stopped due to recitation policy.',
+        message: 'WARNING:  Response stopped due to recitation policy.',
       },
       {
         reason: 'LANGUAGE',
-        message: '⚠️  Response stopped due to unsupported language.',
+        message: 'WARNING:  Response stopped due to unsupported language.',
       },
       {
         reason: 'BLOCKLIST',
-        message: '⚠️  Response stopped due to forbidden terms.',
+        message: 'WARNING:  Response stopped due to forbidden terms.',
       },
       {
         reason: 'PROHIBITED_CONTENT',
-        message: '⚠️  Response stopped due to prohibited content.',
+        message: 'WARNING:  Response stopped due to prohibited content.',
       },
       {
         reason: 'SPII',
         message:
-          '⚠️  Response stopped due to sensitive personally identifiable information.',
+          'WARNING:  Response stopped due to sensitive personally identifiable information.',
       },
       {
         reason: 'OTHER',
-        message: '⚠️  Response stopped for other reasons.',
+        message: 'WARNING:  Response stopped for other reasons.',
       },
       {
         reason: 'MALFORMED_FUNCTION_CALL',
-        message: '⚠️  Response stopped due to malformed function call.',
+        message: 'WARNING:  Response stopped due to malformed function call.',
       },
       {
         reason: 'IMAGE_SAFETY',
-        message: '⚠️  Response stopped due to image safety violations.',
+        message: 'WARNING:  Response stopped due to image safety violations.',
       },
       {
         reason: 'UNEXPECTED_TOOL_CALL',
-        message: '⚠️  Response stopped due to unexpected tool call.',
+        message: 'WARNING:  Response stopped due to unexpected tool call.',
       },
     ])(
       'should handle $reason finish reason correctly',
