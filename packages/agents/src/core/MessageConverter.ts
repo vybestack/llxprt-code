@@ -576,13 +576,14 @@ function applyFinishReasonMapping(
       finishReasonByTerminationReason,
       terminationReason,
     );
+    // @issue:2329 — always preserve the raw provider stop reason on the
+    // candidate (even when it has no coarse FinishReason mapping) so
+    // downstream consumers (agent loop, CLI) can distinguish e.g. a
+    // safety-classifier refusal from a generic stop.
+    response.candidates[0].finishMessage = terminationReason;
     if (hasMapping) {
       const mappedReason = finishReasonByTerminationReason[terminationReason];
       response.candidates[0].finishReason = mappedReason;
-      // @issue:2329 — preserve the raw provider stop reason on the candidate
-      // so downstream consumers (agent loop, CLI) can distinguish e.g. a
-      // safety-classifier refusal from a generic SAFETY stop.
-      response.candidates[0].finishMessage = terminationReason;
       logger.debug(
         () => `[stream:message-converter] applied terminal metadata`,
         {
