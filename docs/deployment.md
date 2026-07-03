@@ -78,10 +78,12 @@ Contributors to the project will want to run the CLI directly from the source co
 
 - **Development Mode:**
   This method provides hot-reloading and is useful for active development.
+
   ```bash
   # From the root of the repository
   bun run start
   ```
+
 - **Production-like mode (Linked package):**
   This method simulates a global installation by linking your local package. It's useful for testing a local build in a production workflow.
 

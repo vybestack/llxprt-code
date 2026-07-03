@@ -271,4 +271,4 @@ This tells NPM that any folder inside the `packages` directory is a separate pac
 
 - **Simplified Dependency Management**: Running `bun install` from the root of the project will install all dependencies for all packages in the workspace and link them together. This means you don't need to run `bun install` in each package's directory.
 - **Automatic Linking**: Packages within the workspace can depend on each other. When you run `bun install`, Bun will automatically create symlinks between the packages. This means that when you make changes to one package, the changes are immediately available to other packages that depend on it.
-- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `bun run build --workspace @vybestack/llxprt-code`.
+- **Simplified Script Execution**: You can run scripts in any package from the root of the project using Bun's `--filter` flag. For example, to run the `build` script in the `cli` package, you can run `bun run --filter '@vybestack/llxprt-code' build`.
