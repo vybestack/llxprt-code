@@ -292,15 +292,17 @@ async function activateProviderAndProfile(
     }
   }
 
-  try {
-    await switchActiveProvider(finalProvider);
-  } catch (error) {
-    logger.warn(
-      () =>
-        `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
+  if (!profileApplicationResult.appliedFromLoadedProfile) {
+    try {
+      await switchActiveProvider(finalProvider);
+    } catch (error) {
+      logger.warn(
+        () =>
+          `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
   }
 
   return finalProvider;
