@@ -100,3 +100,11 @@ export function getResponseText(
   }
   return null;
 }
+
+/**
+ * Convert a PartListUnion to a verbose string representation.
+ * This is the canonical replacement for the retired geminiRequest.partListUnionToString.
+ */
+export function partListUnionToString(value: PartListUnion): string {
+  return partToString(value, { verbose: true });
+}

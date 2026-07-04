@@ -6,7 +6,7 @@
 
 import { listExtensions } from '@vybestack/llxprt-code-core';
 import type { ExtensionUpdateInfo } from '../../config/extension.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { getErrorMessage } from '../../utils/errors.js';
 import { MessageType, type HistoryItemExtensionsList } from '../types.js';
 import {
@@ -228,19 +228,19 @@ function filterExtensionsToRestart(
   >,
   names: string[] | null,
   context: CommandContext,
-): GeminiCLIExtension[] {
+): LlxprtExtension[] {
   let extensionsToRestart = extensionLoader
     .getExtensions()
-    .filter((extension: GeminiCLIExtension) => extension.isActive);
+    .filter((extension: LlxprtExtension) => extension.isActive);
   if (names) {
     extensionsToRestart = extensionsToRestart.filter(
-      (extension: GeminiCLIExtension) => names.includes(extension.name),
+      (extension: LlxprtExtension) => names.includes(extension.name),
     );
     if (names.length !== extensionsToRestart.length) {
       const notFound = names.filter(
         (name) =>
           !extensionsToRestart.some(
-            (extension: GeminiCLIExtension) => extension.name === name,
+            (extension: LlxprtExtension) => extension.name === name,
           ),
       );
       if (notFound.length > 0) {
@@ -263,7 +263,7 @@ async function performRestart(
       NonNullable<CommandContext['services']['config']>['getExtensionLoader']
     >
   >,
-  extensionsToRestart: GeminiCLIExtension[],
+  extensionsToRestart: LlxprtExtension[],
   context: CommandContext,
 ): Promise<void> {
   const s = extensionsToRestart.length > 1 ? 's' : '';
@@ -274,7 +274,7 @@ async function performRestart(
   });
 
   const results = await Promise.allSettled(
-    extensionsToRestart.map(async (extension: GeminiCLIExtension) => {
+    extensionsToRestart.map(async (extension: LlxprtExtension) => {
       if (extension.isActive) {
         await extensionLoader.restartExtension(extension);
         context.ui.dispatchExtensionStateUpdate({

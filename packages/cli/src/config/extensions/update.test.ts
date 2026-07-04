@@ -18,7 +18,7 @@ import {
   loadExtension,
 } from '../extension.js';
 import { checkForAllExtensionUpdates, updateExtension } from './update.js';
-import { GEMINI_DIR } from '@vybestack/llxprt-code-core';
+import { LLXPRT_CONFIG_DIR } from '@vybestack/llxprt-code-core';
 import { isWorkspaceTrusted } from '../trustedFolders.js';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import { createExtension } from '../../test-utils/createExtension.js';
@@ -88,7 +88,7 @@ describe('update tests', () => {
       path.join(tempHomeDir, 'gemini-cli-test-workspace-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-    userExtensionsDir = path.join(tempHomeDir, GEMINI_DIR, 'extensions');
+    userExtensionsDir = path.join(tempHomeDir, LLXPRT_CONFIG_DIR, 'extensions');
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });

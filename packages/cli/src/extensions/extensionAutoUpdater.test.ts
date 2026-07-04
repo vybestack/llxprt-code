@@ -12,9 +12,9 @@ import {
   type ExtensionUpdateHistoryEntry,
 } from './extensionAutoUpdater.js';
 import { ExtensionUpdateState } from '../ui/state/extensions.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
-function createExtension(name: string): GeminiCLIExtension {
+function createExtension(name: string): LlxprtExtension {
   return {
     name,
     version: '1.0.0',

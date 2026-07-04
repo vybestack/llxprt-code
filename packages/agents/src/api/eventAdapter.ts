@@ -9,8 +9,8 @@
  */
 
 import {
-  GeminiEventType,
-  type ServerGeminiStreamEvent,
+  AgentEventType,
+  type ServerAgentStreamEvent,
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   type ServerToolCallConfirmationDetails,
@@ -183,11 +183,11 @@ function projectConfirmationFromDetails(
 }
 
 type StopEvent = Extract<
-  ServerGeminiStreamEvent,
+  ServerAgentStreamEvent,
   {
     type:
-      | GeminiEventType.AgentExecutionStopped
-      | GeminiEventType.AgentExecutionBlocked;
+      | AgentEventType.AgentExecutionStopped
+      | AgentEventType.AgentExecutionBlocked;
   }
 >;
 
@@ -237,55 +237,55 @@ function makeDone(state: AdapterState, reason: DoneReason): AgentEvent {
 
 /** Yields the informational events for value-bearing stream variants. */
 function* mapValueEvent(
-  e: Extract<ServerGeminiStreamEvent, { value: unknown }>,
+  e: Extract<ServerAgentStreamEvent, { value: unknown }>,
   state: AdapterState,
 ): Iterable<AgentEvent> {
   switch (e.type) {
     // @pseudocode event-adapter.md step 212: Content
-    case GeminiEventType.Content:
+    case AgentEventType.Content:
       yield { type: 'text', text: e.value };
       return;
     // @pseudocode event-adapter.md step 213: Thought
-    case GeminiEventType.Thought:
+    case AgentEventType.Thought:
       yield { type: 'thinking', thought: e.value };
       return;
     // @pseudocode event-adapter.md step 214: ToolCallRequest
-    case GeminiEventType.ToolCallRequest:
+    case AgentEventType.ToolCallRequest:
       yield { type: 'tool-call', call: projectToolCall(e.value) };
       return;
     // @pseudocode event-adapter.md step 215: ToolCallResponse
-    case GeminiEventType.ToolCallResponse:
+    case AgentEventType.ToolCallResponse:
       yield { type: 'tool-result', result: projectToolResult(e.value) };
       return;
     // @pseudocode event-adapter.md step 216: ToolCallConfirmation
-    case GeminiEventType.ToolCallConfirmation:
+    case AgentEventType.ToolCallConfirmation:
       yield {
         type: 'tool-confirmation',
         confirmation: projectConfirmationFromDetails(e.value),
       };
       return;
     // @pseudocode event-adapter.md step 217: UsageMetadata
-    case GeminiEventType.UsageMetadata:
+    case AgentEventType.UsageMetadata:
       yield { type: 'usage', usage: e.value };
       return;
     // @pseudocode event-adapter.md step 218: ModelInfo
-    case GeminiEventType.ModelInfo:
+    case AgentEventType.ModelInfo:
       yield { type: 'model-info', info: e.value };
       return;
     // @pseudocode event-adapter.md step 219: SystemNotice
-    case GeminiEventType.SystemNotice:
+    case AgentEventType.SystemNotice:
       yield { type: 'notice', message: e.value };
       return;
     // @pseudocode event-adapter.md step 220: ChatCompressed
-    case GeminiEventType.ChatCompressed:
+    case AgentEventType.ChatCompressed:
       yield { type: 'compression', info: e.value };
       return;
     // @pseudocode event-adapter.md step 221: Citation
-    case GeminiEventType.Citation:
+    case AgentEventType.Citation:
       yield { type: 'citation', citation: e.value };
       return;
     // @pseudocode event-adapter.md steps 232-233: StreamIdleTimeout
-    case GeminiEventType.StreamIdleTimeout: {
+    case AgentEventType.StreamIdleTimeout: {
       const error: StructuredError = (e.value as { error: StructuredError })
         .error;
       yield { type: 'idle-timeout', error };
@@ -293,7 +293,7 @@ function* mapValueEvent(
       return;
     }
     // @pseudocode event-adapter.md steps 236-237: Error
-    case GeminiEventType.Error: {
+    case AgentEventType.Error: {
       const error: StructuredError = (e.value as { error: StructuredError })
         .error;
       yield { type: 'error', error };
@@ -301,7 +301,7 @@ function* mapValueEvent(
       return;
     }
     // @pseudocode event-adapter.md steps 224-228: ContextWindowWillOverflow
-    case GeminiEventType.ContextWindowWillOverflow: {
+    case AgentEventType.ContextWindowWillOverflow: {
       const v = e.value as {
         estimatedRequestTokenCount: number;
         remainingTokenCount: number;
@@ -315,7 +315,7 @@ function* mapValueEvent(
       return;
     }
     // @pseudocode event-adapter.md steps 243-244: Finished
-    case GeminiEventType.Finished: {
+    case AgentEventType.Finished: {
       const v = e.value as { reason: string; stopReason?: string };
       state.lastFinished = v;
       yield makeDone(state, mapFinishReason(v.stopReason));
@@ -329,49 +329,49 @@ function* mapValueEvent(
 
 /**
  * The 21-variant stream-event mapping table. Returns the public events
- * emitted for a single inner ServerGeminiStreamEvent and mutates `state`
+ * emitted for a single inner ServerAgentStreamEvent and mutates `state`
  * for terminal tracking (emittedDone / pendingDoneReason / lastFinished /
  * lastStop).
  * @pseudocode event-adapter.md steps 210-246: mapStreamEvent
  */
 function* mapStreamEvent(
-  e: ServerGeminiStreamEvent,
+  e: ServerAgentStreamEvent,
   state: AdapterState,
 ): Iterable<AgentEvent> {
   // @pseudocode event-adapter.md step 222: Retry
-  if (e.type === GeminiEventType.Retry) {
+  if (e.type === AgentEventType.Retry) {
     yield { type: 'retry' };
     return;
   }
   // @pseudocode event-adapter.md step 223: InvalidStream
-  if (e.type === GeminiEventType.InvalidStream) {
+  if (e.type === AgentEventType.InvalidStream) {
     yield { type: 'invalid-stream' };
     return;
   }
   // @pseudocode event-adapter.md steps 229-230: LoopDetected
-  if (e.type === GeminiEventType.LoopDetected) {
+  if (e.type === AgentEventType.LoopDetected) {
     yield { type: 'loop-detected' };
     state.pendingDoneReason = 'loop-detected';
     return;
   }
   // @pseudocode event-adapter.md step 231: MaxSessionTurns
-  if (e.type === GeminiEventType.MaxSessionTurns) {
+  if (e.type === AgentEventType.MaxSessionTurns) {
     state.pendingDoneReason = 'max-turns';
     return;
   }
   // @pseudocode event-adapter.md steps 238-239: UserCancelled
-  if (e.type === GeminiEventType.UserCancelled) {
+  if (e.type === AgentEventType.UserCancelled) {
     yield makeDone(state, 'aborted');
     state.emittedDone = true;
     return;
   }
   // @pseudocode event-adapter.md step 240: AgentExecutionBlocked (NON-terminal)
-  if (e.type === GeminiEventType.AgentExecutionBlocked) {
+  if (e.type === AgentEventType.AgentExecutionBlocked) {
     yield { type: 'hook-blocked', info: toStopInfo(e) };
     return;
   }
   // @pseudocode event-adapter.md steps 241-242: AgentExecutionStopped
-  if (e.type === GeminiEventType.AgentExecutionStopped) {
+  if (e.type === AgentEventType.AgentExecutionStopped) {
     state.lastStop = toStopInfo(e);
     yield makeDone(state, 'hook-stopped');
     state.emittedDone = true;
@@ -404,7 +404,7 @@ export async function* mapLoopStream(
     // @pseudocode event-adapter.md steps 30a-30g: sawActivity gate
     const isStandaloneBlocked =
       ev.kind === 'stream' &&
-      ev.event.type === GeminiEventType.AgentExecutionBlocked;
+      ev.event.type === AgentEventType.AgentExecutionBlocked;
     if (!isStandaloneBlocked) {
       state.sawActivity = true;
     }

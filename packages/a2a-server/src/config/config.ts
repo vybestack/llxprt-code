@@ -18,10 +18,10 @@ import {
   ApprovalMode,
   MessageBus,
   loadServerHierarchicalMemory,
-  LLXPRT_CONFIG_DIR as GEMINI_CONFIG_DIR,
+  LLXPRT_CONFIG_DIR,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_GEMINI_MODEL,
-  type GeminiCLIExtension,
+  type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import {
   createAgentClient,
@@ -35,7 +35,7 @@ import { type AgentSettings, CoderAgentEvent } from '../types.js';
 
 export async function loadConfig(
   settings: Settings,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   taskId: string,
 ): Promise<Config> {
   const workspaceDir = process.cwd();
@@ -53,7 +53,7 @@ export async function loadConfig(
 
 async function createConfigParameters(
   settings: Settings,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   taskId: string,
   workspaceDir: string,
 ): Promise<ConfigParameters> {
@@ -71,7 +71,7 @@ async function createConfigParameters(
 
 function createBaseConfigParameters(
   settings: Settings,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   taskId: string,
   workspaceDir: string,
 ): ConfigParameters {
@@ -113,7 +113,8 @@ function createBaseConfigParameters(
 }
 
 function getApprovalMode(): ApprovalMode {
-  return process.env['GEMINI_YOLO_MODE'] === 'true'
+  return process.env['LLXPRT_YOLO_MODE'] === 'true' ||
+    process.env['GEMINI_YOLO_MODE'] === 'true'
     ? ApprovalMode.YOLO
     : ApprovalMode.DEFAULT;
 }
@@ -133,7 +134,7 @@ function createTelemetrySettings(
 
 async function loadWorkspaceMemory(
   workspaceDir: string,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
 ): Promise<{ memoryContent: string; fileCount: number }> {
   const fileService = new FileDiscoveryService(workspaceDir);
   return loadServerHierarchicalMemory(
@@ -209,7 +210,7 @@ function hasVertexCredentials(): boolean {
 
 export function mergeMcpServers(
   settings: Settings,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
 ) {
   const mcpServers = { ...(settings.mcpServers ?? {}) };
   for (const extension of extensions) {
@@ -269,10 +270,10 @@ function findEnvFile(startDir: string): string | null {
   // before testing whether parentDir === currentDir.
   do {
     currentDir = parentDir;
-    // prefer gemini-specific .env under GEMINI_DIR
-    const geminiEnvPath = path.join(currentDir, GEMINI_CONFIG_DIR, '.env');
-    if (fs.existsSync(geminiEnvPath)) {
-      return geminiEnvPath;
+    // prefer llxprt-specific .env under LLXPRT_CONFIG_DIR
+    const llxprtEnvPath = path.join(currentDir, LLXPRT_CONFIG_DIR, '.env');
+    if (fs.existsSync(llxprtEnvPath)) {
+      return llxprtEnvPath;
     }
     const envPath = path.join(currentDir, '.env');
     if (fs.existsSync(envPath)) {
@@ -280,10 +281,10 @@ function findEnvFile(startDir: string): string | null {
     }
     parentDir = path.dirname(currentDir);
   } while (parentDir !== currentDir && parentDir !== '');
-  // check .env under home as fallback, again preferring gemini-specific .env
-  const homeGeminiEnvPath = path.join(process.cwd(), GEMINI_CONFIG_DIR, '.env');
-  if (fs.existsSync(homeGeminiEnvPath)) {
-    return homeGeminiEnvPath;
+  // check .env under home as fallback, again preferring llxprt-specific .env
+  const homeLlxprtEnvPath = path.join(homedir(), LLXPRT_CONFIG_DIR, '.env');
+  if (fs.existsSync(homeLlxprtEnvPath)) {
+    return homeLlxprtEnvPath;
   }
   const homeEnvPath = path.join(homedir(), '.env');
   if (fs.existsSync(homeEnvPath)) {

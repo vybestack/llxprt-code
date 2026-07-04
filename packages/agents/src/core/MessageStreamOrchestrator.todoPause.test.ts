@@ -30,11 +30,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PartListUnion } from '@google/genai';
 import type {
-  ServerGeminiStreamEvent,
+  ServerAgentStreamEvent,
   ToolCallResponseInfo,
   ToolCallRequestInfo,
 } from './turn.js';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -106,7 +106,7 @@ function makePauseResponse(success: boolean): ToolCallResponseInfo {
 }
 
 interface BuildOptions {
-  turnStream?: AsyncGenerator<ServerGeminiStreamEvent>;
+  turnStream?: AsyncGenerator<ServerAgentStreamEvent>;
   activeTodos?: Todo[];
   blockingAfterHook?: boolean;
   isSuccessfulTodoPauseResponse?: (
@@ -154,10 +154,10 @@ function buildOrchestrator(options: BuildOptions = {}): {
 
   const stream =
     options.turnStream ??
-    (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
-      yield { type: GeminiEventType.Content, value: 'hello' };
+    (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
+      yield { type: AgentEventType.Content, value: 'hello' };
       yield {
-        type: GeminiEventType.Finished,
+        type: AgentEventType.Finished,
         value: { outcome: { hadVisibleOutput: true } },
       };
     })();
@@ -257,7 +257,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     resetCurrentSequenceModel: vi.fn(),
     updateTelemetryTokenCount: vi.fn(),
     sendMessageStream: vi.fn(
-      async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+      async function* (): AsyncGenerator<ServerAgentStreamEvent> {
         // Empty — only its invocation (via _finishWithToolCalls) matters.
       },
     ),
@@ -271,8 +271,8 @@ function buildOrchestrator(options: BuildOptions = {}): {
 
 async function collectEvents(
   orchestrator: InstanceType<typeof MessageStreamOrchestrator>,
-): Promise<ServerGeminiStreamEvent[]> {
-  const events: ServerGeminiStreamEvent[] = [];
+): Promise<ServerAgentStreamEvent[]> {
+  const events: ServerAgentStreamEvent[] = [];
   for await (const event of orchestrator.execute(
     [{ text: 'test' }] as PartListUnion,
     new AbortController().signal,
@@ -287,18 +287,18 @@ async function collectEvents(
 
 function toolCallTurnStream(
   response: ToolCallResponseInfo,
-): AsyncGenerator<ServerGeminiStreamEvent> {
-  return (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+): AsyncGenerator<ServerAgentStreamEvent> {
+  return (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
     yield {
-      type: GeminiEventType.ToolCallRequest,
+      type: AgentEventType.ToolCallRequest,
       value: makePauseRequest(),
     };
     yield {
-      type: GeminiEventType.ToolCallResponse,
+      type: AgentEventType.ToolCallResponse,
       value: response,
     };
     yield {
-      type: GeminiEventType.Finished,
+      type: AgentEventType.Finished,
       value: { outcome: { hadVisibleOutput: true } },
     };
   })();
@@ -306,16 +306,16 @@ function toolCallTurnStream(
 
 function pauseTurnStream(
   success: boolean,
-): AsyncGenerator<ServerGeminiStreamEvent> {
+): AsyncGenerator<ServerAgentStreamEvent> {
   return toolCallTurnStream(makePauseResponse(success));
 }
 
-function expectPauseToolEvents(events: ServerGeminiStreamEvent[]): void {
+function expectPauseToolEvents(events: ServerAgentStreamEvent[]): void {
   expect(
-    events.some((event) => event.type === GeminiEventType.ToolCallRequest),
+    events.some((event) => event.type === AgentEventType.ToolCallRequest),
   ).toBe(true);
   expect(
-    events.some((event) => event.type === GeminiEventType.ToolCallResponse),
+    events.some((event) => event.type === AgentEventType.ToolCallResponse),
   ).toBe(true);
 }
 

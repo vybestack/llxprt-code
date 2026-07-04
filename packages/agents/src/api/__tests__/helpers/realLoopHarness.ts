@@ -23,7 +23,7 @@ import { type Content, type Part, type PartListUnion } from '@google/genai';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import {
   PerformCompressionResult,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { AgenticLoopEvent } from '../../../core/agenticLoop/types.js';
 import { AgenticLoop } from '../../../core/agenticLoop/AgenticLoop.js';
@@ -57,7 +57,7 @@ import {
 
 /**
  * Uses a REAL FakeProvider to read the JSONL fixture, consumes its IContent
- * stream, and maps text blocks to Content ServerGeminiStreamEvents wrapped as
+ * stream, and maps text blocks to Content ServerAgentStreamEvents wrapped as
  * stream-kind AgenticLoopEvents. This proves the Content→text projection
  * originates from real provider fixture data, not a hand-crafted event.
  */
@@ -92,7 +92,7 @@ function partListUnionToParts(req: PartListUnion): Part[] {
   return [req];
 }
 
-type TurnScript = ServerGeminiStreamEvent[];
+type TurnScript = ServerAgentStreamEvent[];
 
 interface ScriptedClient {
   readonly client: AgentClientContract;
@@ -158,7 +158,7 @@ function createScriptedAgentClient(scripts: TurnScript[]): ScriptedClient {
     async *sendMessageStream(
       req: PartListUnion,
       signal: AbortSignal,
-    ): AsyncGenerator<ServerGeminiStreamEvent> {
+    ): AsyncGenerator<ServerAgentStreamEvent> {
       history.push({ role: 'user', parts: partListUnionToParts(req) });
       const script = scriptQueue.shift();
       if (!script) {

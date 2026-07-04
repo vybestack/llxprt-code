@@ -20,7 +20,7 @@ import {
   loadExtensions,
 } from './extension.js';
 import {
-  GEMINI_DIR,
+  LLXPRT_CONFIG_DIR,
   ExtensionUninstallEvent,
   ExtensionDisableEvent,
   ExtensionEnableEvent,
@@ -107,7 +107,7 @@ vi.mock('./settings.js', () => ({
   },
 }));
 
-const EXTENSIONS_DIRECTORY_NAME = path.join(GEMINI_DIR, 'extensions');
+const EXTENSIONS_DIRECTORY_NAME = path.join(LLXPRT_CONFIG_DIR, 'extensions');
 
 describe('extension tests', () => {
   let tempHomeDir: string;

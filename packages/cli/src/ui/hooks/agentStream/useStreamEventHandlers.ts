@@ -16,16 +16,16 @@ import type React from 'react';
 import { useCallback, useMemo, useRef } from 'react';
 import {
   type Config,
-  type ServerGeminiStreamEvent as GeminiEvent,
-  type ServerGeminiErrorEvent as ErrorEvent,
-  type ServerGeminiChatCompressedEvent,
-  type ServerGeminiFinishedEvent,
+  type ServerAgentStreamEvent as GeminiEvent,
+  type ServerErrorEvent as ErrorEvent,
+  type ServerChatCompressedEvent,
+  type ServerFinishedEvent,
   type MessageSenderType,
   type ToolCallRequestInfo,
   parseAndFormatApiError,
   type ThinkingBlock,
   type ThoughtSummary,
-  type ServerGeminiContentEvent,
+  type ServerContentEvent,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
@@ -77,8 +77,8 @@ import {
 import { getTokenLimitForConfiguredContext } from './contextLimit.js';
 interface StreamEventHandlersResult {
   handleContentEvent: (
-    eventValue: ServerGeminiContentEvent['value'],
-    currentAiMessageBuffer: string,
+    eventValue: ServerContentEvent['value'],
+    currentAgentMessageBuffer: string,
     userMessageTimestamp: number,
   ) => string;
   handleUserCancelledEvent: (userMessageTimestamp: number) => void;
@@ -89,11 +89,11 @@ interface StreamEventHandlersResult {
   ) => void;
   handleCitationEvent: (text: string, userMessageTimestamp: number) => void;
   handleFinishedEvent: (
-    event: ServerGeminiFinishedEvent,
+    event: ServerFinishedEvent,
     userMessageTimestamp: number,
   ) => void;
   handleChatCompressionEvent: (
-    eventValue: ServerGeminiChatCompressedEvent['value'],
+    eventValue: ServerChatCompressedEvent['value'],
     userMessageTimestamp: number,
   ) => void;
   handleMaxSessionTurnsEvent: () => void;
@@ -210,13 +210,13 @@ function useContentEventHandler(deps: StreamEventHandlerDeps) {
   const contentEventDeps = useContentEventDeps(deps);
   return useCallback(
     (
-      eventValue: ServerGeminiContentEvent['value'],
-      currentAiMessageBuffer: string,
+      eventValue: ServerContentEvent['value'],
+      currentAgentMessageBuffer: string,
       userMessageTimestamp: number,
     ): string =>
       processContentEvent(
         eventValue,
-        currentAiMessageBuffer,
+        currentAgentMessageBuffer,
         userMessageTimestamp,
         contentEventDeps,
       ),
@@ -227,8 +227,8 @@ function useContentEventHandler(deps: StreamEventHandlerDeps) {
 function useStreamHandlers(
   deps: StreamEventHandlerDeps,
   handleContentEvent: (
-    eventValue: ServerGeminiContentEvent['value'],
-    currentAiMessageBuffer: string,
+    eventValue: ServerContentEvent['value'],
+    currentAgentMessageBuffer: string,
     userMessageTimestamp: number,
   ) => string,
   handleLoopDetectedEvent: () => void,
@@ -383,7 +383,7 @@ function useCitationEventHandler(deps: StreamEventHandlerDeps) {
 function useFinishedEventHandler(deps: StreamEventHandlerDeps) {
   const { addItem } = deps;
   return useCallback(
-    (event: ServerGeminiFinishedEvent, userMessageTimestamp: number) => {
+    (event: ServerFinishedEvent, userMessageTimestamp: number) => {
       // @issue:2329 — prefer a refusal-specific notice when the raw provider
       // stop reason indicates a safety-classifier refusal; otherwise fall back
       // to the generic finish-reason message.
@@ -405,7 +405,7 @@ function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
     deps;
   return useCallback(
     (
-      eventValue: ServerGeminiChatCompressedEvent['value'],
+      eventValue: ServerChatCompressedEvent['value'],
       userMessageTimestamp: number,
     ) => {
       if (pendingHistoryItemRef.current) {
@@ -564,7 +564,7 @@ type HandlerMap = Pick<
 /**
  * Processes a SINGLE stream event into React state without scheduling tools
  * or triggering continuation. The AgenticLoop's stream-event router calls this
- * per event. A ref-backed buffer accumulates AI content across events
+ * per event. A ref-backed buffer accumulates gemini content across events
  * within a turn.
  */
 function useProcessStreamEvent(

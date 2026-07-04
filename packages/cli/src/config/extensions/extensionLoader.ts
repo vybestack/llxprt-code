@@ -1,5 +1,5 @@
 import {
-  type GeminiCLIExtension,
+  type LlxprtExtension,
   getErrorMessage,
   type MCPServerConfig,
   type SkillDefinition,
@@ -203,7 +203,7 @@ function loadExtensionSkills(
 export function loadExtensionFromDir(
   context: LoadExtensionContext,
   deps: LoadExtensionDeps,
-): GeminiCLIExtension | null {
+): LlxprtExtension | null {
   const { extensionDir, workspaceDir } = context;
   if (!fs.statSync(extensionDir).isDirectory()) {
     deps.reportError(

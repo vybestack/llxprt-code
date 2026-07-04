@@ -6,18 +6,18 @@
 
 /**
  * Stream event dispatch logic: the switch/case event dispatcher that maps a
- * single ServerGeminiStreamEvent to the appropriate React state update. Used by
+ * single ServerAgentStreamEvent to the appropriate React state update. Used by
  * the single-event router (processStreamEvent) that the AgenticLoop drives.
  * None of these functions call React hooks.
  */
 
 import {
-  GeminiEventType as ServerGeminiEventType,
-  type ServerGeminiStreamEvent as GeminiEvent,
-  type ServerGeminiContentEvent as ContentEvent,
-  type ServerGeminiChatCompressedEvent,
-  type ServerGeminiFinishedEvent,
-  type ServerGeminiErrorEvent as ErrorEvent,
+  AgentEventType as ServerEventType,
+  type ServerAgentStreamEvent as GeminiEvent,
+  type ServerContentEvent as ContentEvent,
+  type ServerChatCompressedEvent,
+  type ServerFinishedEvent,
+  type ServerErrorEvent as ErrorEvent,
   type ToolCallRequestInfo,
   type ThoughtSummary,
   type ThinkingBlock,
@@ -71,13 +71,10 @@ export interface StreamEventDeps {
     options?: { clearQueue?: boolean },
   ) => void;
   handleChatCompressionEvent: (
-    eventValue: ServerGeminiChatCompressedEvent['value'],
+    eventValue: ServerChatCompressedEvent['value'],
     timestamp: number,
   ) => void;
-  handleFinishedEvent: (
-    event: ServerGeminiFinishedEvent,
-    timestamp: number,
-  ) => void;
+  handleFinishedEvent: (event: ServerFinishedEvent, timestamp: number) => void;
   handleMaxSessionTurnsEvent: () => void;
   handleContextWindowWillOverflowEvent: (
     estimatedRequestTokenCount: number,
@@ -160,7 +157,7 @@ function flushPendingAiContentForContextClear(
 
 function handleEarlyReturnEvent(
   event: GeminiEvent,
-  eventType: ServerGeminiEventType,
+  eventType: ServerEventType,
   deps: StreamEventDeps,
   userMessageTimestamp: number,
   agentMessageBuffer: string,
@@ -168,17 +165,17 @@ function handleEarlyReturnEvent(
   agentMessageBuffer: string;
   processingResult: StreamProcessingStatus;
 } | null {
-  if (eventType === ServerGeminiEventType.UserCancelled) {
+  if (eventType === ServerEventType.UserCancelled) {
     deps.handleUserCancelledEvent(userMessageTimestamp);
     return {
       agentMessageBuffer,
       processingResult: StreamProcessingStatus.UserCancelled,
     };
   }
-  if (eventType === ServerGeminiEventType.StreamIdleTimeout) {
+  if (eventType === ServerEventType.StreamIdleTimeout) {
     const errorEvent = event as Extract<
       GeminiEvent,
-      { type: typeof ServerGeminiEventType.StreamIdleTimeout }
+      { type: typeof ServerEventType.StreamIdleTimeout }
     >;
     deps.handleErrorEvent(errorEvent.value, userMessageTimestamp, {
       clearQueue: false,
@@ -188,10 +185,10 @@ function handleEarlyReturnEvent(
       processingResult: StreamProcessingStatus.Error,
     };
   }
-  if (eventType === ServerGeminiEventType.Error) {
+  if (eventType === ServerEventType.Error) {
     const errorEvent = event as Extract<
       GeminiEvent,
-      { type: typeof ServerGeminiEventType.Error }
+      { type: typeof ServerEventType.Error }
     >;
     deps.handleErrorEvent(errorEvent.value, userMessageTimestamp);
     return {
@@ -238,7 +235,7 @@ export function dispatchStreamEvent(
 }
 
 function resetBufferAfterTerminal(
-  eventType: ServerGeminiEventType,
+  eventType: ServerEventType,
   result: DispatchResult,
 ): DispatchResult {
   if (!shouldResetAiMessageBuffer(eventType)) {
@@ -247,19 +244,19 @@ function resetBufferAfterTerminal(
   return { ...result, agentMessageBuffer: '' };
 }
 
-const BUFFER_RESET_EVENTS = new Set<ServerGeminiEventType>([
-  ServerGeminiEventType.Finished,
-  ServerGeminiEventType.Error,
-  ServerGeminiEventType.StreamIdleTimeout,
-  ServerGeminiEventType.UserCancelled,
-  ServerGeminiEventType.LoopDetected,
-  ServerGeminiEventType.MaxSessionTurns,
-  ServerGeminiEventType.ContextWindowWillOverflow,
-  ServerGeminiEventType.AgentExecutionStopped,
-  ServerGeminiEventType.AgentExecutionBlocked,
+const BUFFER_RESET_EVENTS = new Set<ServerEventType>([
+  ServerEventType.Finished,
+  ServerEventType.Error,
+  ServerEventType.StreamIdleTimeout,
+  ServerEventType.UserCancelled,
+  ServerEventType.LoopDetected,
+  ServerEventType.MaxSessionTurns,
+  ServerEventType.ContextWindowWillOverflow,
+  ServerEventType.AgentExecutionStopped,
+  ServerEventType.AgentExecutionBlocked,
 ]);
 
-function shouldResetAiMessageBuffer(eventType: ServerGeminiEventType): boolean {
+function shouldResetAiMessageBuffer(eventType: ServerEventType): boolean {
   return BUFFER_RESET_EVENTS.has(eventType);
 }
 
@@ -270,12 +267,12 @@ function handleCoreStreamEvent(
   agentMessageBuffer: string,
 ): DispatchResult | null {
   switch (event.type) {
-    case ServerGeminiEventType.ToolCallRequest:
+    case ServerEventType.ToolCallRequest:
       return { agentMessageBuffer };
-    case ServerGeminiEventType.LoopDetected:
+    case ServerEventType.LoopDetected:
       deps.loopDetectedRef.current = true;
       return { agentMessageBuffer };
-    case ServerGeminiEventType.AgentExecutionStopped:
+    case ServerEventType.AgentExecutionStopped:
       return dispatchAgentExecutionEvent(
         event as AgentExecEvent,
         'Execution stopped by hook: ',
@@ -283,7 +280,7 @@ function handleCoreStreamEvent(
         agentMessageBuffer,
         userMessageTimestamp,
       );
-    case ServerGeminiEventType.AgentExecutionBlocked:
+    case ServerEventType.AgentExecutionBlocked:
       return dispatchAgentExecutionEvent(
         event as AgentExecEvent,
         'Execution blocked by hook: ',
@@ -302,32 +299,32 @@ function handleNotificationStreamEvent(
   userMessageTimestamp: number,
 ): boolean {
   switch (event.type) {
-    case ServerGeminiEventType.ChatCompressed:
+    case ServerEventType.ChatCompressed:
       deps.handleChatCompressionEvent(event.value, userMessageTimestamp);
       return true;
-    case ServerGeminiEventType.MaxSessionTurns:
+    case ServerEventType.MaxSessionTurns:
       deps.handleMaxSessionTurnsEvent();
       return true;
-    case ServerGeminiEventType.ContextWindowWillOverflow:
+    case ServerEventType.ContextWindowWillOverflow:
       deps.handleContextWindowWillOverflowEvent(
         event.value.estimatedRequestTokenCount,
         event.value.remainingTokenCount,
       );
       return true;
-    case ServerGeminiEventType.Finished:
+    case ServerEventType.Finished:
       flushPendingAiContent(deps, userMessageTimestamp);
       deps.handleFinishedEvent(event, userMessageTimestamp);
       return true;
-    case ServerGeminiEventType.Citation:
+    case ServerEventType.Citation:
       deps.handleCitationEvent(event.value, userMessageTimestamp);
       return true;
-    case ServerGeminiEventType.UsageMetadata:
+    case ServerEventType.UsageMetadata:
       if (event.value.promptTokenCount !== undefined)
         uiTelemetryService.setLastPromptTokenCount(
           event.value.promptTokenCount,
         );
       return true;
-    case ServerGeminiEventType.ModelInfo:
+    case ServerEventType.ModelInfo:
       handleModelInfoEvent(deps, event.value, userMessageTimestamp);
       return true;
     default:
@@ -390,7 +387,7 @@ function handleContentLikeStreamEvent(
   userMessageTimestamp: number,
 ): DispatchResult {
   switch (event.type) {
-    case ServerGeminiEventType.Thought:
+    case ServerEventType.Thought:
       applyThoughtToState(
         event.value,
         deps.sanitizeContent,
@@ -401,7 +398,7 @@ function handleContentLikeStreamEvent(
         deps.setPendingHistoryItem,
       );
       return { agentMessageBuffer };
-    case ServerGeminiEventType.Content:
+    case ServerEventType.Content:
       deps.setLastAgentActivityTime(Date.now());
       return {
         agentMessageBuffer: deps.handleContentEvent(

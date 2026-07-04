@@ -13,7 +13,7 @@ import {
   todoEvents,
   createRuntimeStateFromConfig,
   type TodoUpdateEvent,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import {
   AgentClient,
@@ -261,7 +261,7 @@ describe('Task-list Continuation Integration Tests', () => {
         prompt_id: string,
         turns?: number,
         isInvalidStreamRetry?: boolean,
-      ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
+      ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
         capturedMessage =
           typeof request === 'string' ? request : JSON.stringify(request);
         capturedOptions = { signal, prompt_id, turns, isInvalidStreamRetry };
@@ -269,7 +269,7 @@ describe('Task-list Continuation Integration Tests', () => {
         yield {
           type: 'content',
           value: 'test',
-        } as ServerGeminiStreamEvent;
+        } as ServerAgentStreamEvent;
         // Create a mock Turn object
         const mockTurn = {} as Turn;
         return mockTurn;

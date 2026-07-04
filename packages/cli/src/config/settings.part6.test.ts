@@ -483,12 +483,12 @@ describe('Settings Loading and Merging', () => {
       isWorkspaceTrustedValue = true,
     }) {
       delete process.env['TESTTEST']; // reset
-      const geminiEnvPath = path.resolve(path.join(LLXPRT_DIR, '.env'));
+      const llxprtEnvPath = path.resolve(path.join(LLXPRT_DIR, '.env'));
 
       vi.mocked(isWorkspaceTrusted).mockReturnValue(isWorkspaceTrustedValue);
       vi.mocked(isFolderTrustEnabled).mockReturnValue(folderTrustEnabledValue);
       (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
-        [USER_SETTINGS_PATH, geminiEnvPath].includes(p.toString()),
+        [USER_SETTINGS_PATH, llxprtEnvPath].includes(p.toString()),
       );
       const userSettingsContent = {
         theme: 'dark',
@@ -500,7 +500,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
-          if (p === geminiEnvPath) return 'TESTTEST=1234';
+          if (p === llxprtEnvPath) return 'TESTTEST=1234';
           return '{}';
         },
       );

@@ -9,11 +9,8 @@
  * turn.test.ts so no file-level max-lines disable is needed.
  */
 
-import type {
-  ServerGeminiStreamEvent,
-  ServerGeminiFinishedEvent,
-} from './turn.js';
-import { GeminiEventType } from './turn.js';
+import type { ServerAgentStreamEvent, ServerFinishedEvent } from './turn.js';
+import { AgentEventType } from './turn.js';
 import type { GenerateContentResponse, Part } from '@google/genai';
 import type { Mock } from 'vitest';
 
@@ -26,11 +23,11 @@ export type MockedChatInstance = {
 };
 
 export function findFinishedEvent(
-  events: ServerGeminiStreamEvent[],
-): ServerGeminiFinishedEvent | undefined {
+  events: ServerAgentStreamEvent[],
+): ServerFinishedEvent | undefined {
   return events.find(
-    (event): event is ServerGeminiFinishedEvent =>
-      event.type === GeminiEventType.Finished,
+    (event): event is ServerFinishedEvent =>
+      event.type === AgentEventType.Finished,
   );
 }
 

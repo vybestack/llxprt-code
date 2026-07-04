@@ -12,12 +12,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HookSystem } from '../hookSystem.js';
 import type { Config } from '../../config/config.js';
-import type { GeminiCLIExtension } from '../../config/config.js';
+import type { LlxprtExtension } from '../../config/config.js';
 import { HookEventName } from '../types.js';
 
 describe('Hook Re-Initialization (126c32ac)', () => {
   let mockConfig: Config;
-  let mockExtensions: GeminiCLIExtension[];
+  let mockExtensions: LlxprtExtension[];
 
   beforeEach(() => {
     mockExtensions = [];

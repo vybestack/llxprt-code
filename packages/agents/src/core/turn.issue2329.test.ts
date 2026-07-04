@@ -11,12 +11,12 @@
  *
  * Follows the patterns in turn.test.ts: drives the Turn class with fake stream
  * events (StreamEventType.CHUNK with a GenerateContentResponse) and collects
- * emitted ServerGeminiStreamEvent values.
+ * emitted ServerAgentStreamEvent values.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { GenerateContentResponse, Part } from '@google/genai';
-import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import {
@@ -145,7 +145,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
 
     const finished = findFinishedEvent(events);
     expect(finished).toBeDefined();
-    expect(finished?.type).toBe(GeminiEventType.Finished);
+    expect(finished?.type).toBe(AgentEventType.Finished);
     expect(finished?.value.reason).toBe('STOP');
     expect(finished?.value.stopReason).toBe('refusal');
   });
@@ -282,7 +282,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
 
     const finished = findFinishedEvent(events);
     expect(finished).toBeDefined();
-    expect(finished?.type).toBe(GeminiEventType.Finished);
+    expect(finished?.type).toBe(AgentEventType.Finished);
     expect(finished?.value.reason).toBe('STOP');
     expect(finished?.value.stopReason).toBe('refusal');
   });

@@ -267,7 +267,7 @@ function emitFinalResult(
 /**
  * Rebuilds an Error from a public StructuredError so the caller's catch
  * (parseAndFormatApiError) receives an Error instance, matching the legacy
- * GeminiEventType.Error throw path. The optional HTTP status is preserved as a
+ * AgentEventType.Error throw path. The optional HTTP status is preserved as a
  * property without a type assertion.
  */
 function reconstructError(structured: StructuredError): Error {

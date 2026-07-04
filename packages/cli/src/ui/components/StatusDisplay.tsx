@@ -12,7 +12,7 @@ import type { IdeContext, MCPServerConfig } from '@vybestack/llxprt-code-core';
 
 interface StatusDisplayProps {
   activeHooks: ActiveHook[];
-  geminiMdFileCount?: number;
+  llxprtMdFileCount?: number;
   coreMemoryFileCount?: number;
   contextFileNames?: string[];
   mcpServers?: Record<string, MCPServerConfig>;
@@ -31,7 +31,7 @@ interface StatusDisplayProps {
  */
 export const StatusDisplay: React.FC<StatusDisplayProps> = ({
   activeHooks,
-  geminiMdFileCount = 0,
+  llxprtMdFileCount = 0,
   coreMemoryFileCount = 0,
   contextFileNames = [],
   mcpServers,
@@ -47,7 +47,7 @@ export const StatusDisplay: React.FC<StatusDisplayProps> = ({
   // Priority 2: Context summary
   return (
     <ContextSummaryDisplay
-      geminiMdFileCount={geminiMdFileCount}
+      llxprtMdFileCount={llxprtMdFileCount}
       coreMemoryFileCount={coreMemoryFileCount}
       contextFileNames={contextFileNames}
       mcpServers={mcpServers}

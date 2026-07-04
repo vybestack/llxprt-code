@@ -8,7 +8,7 @@ import { simpleGit } from 'simple-git';
 import { getErrorMessage } from '../../utils/errors.js';
 import type {
   ExtensionInstallMetadata,
-  GeminiCLIExtension,
+  LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import * as os from 'node:os';
@@ -208,7 +208,7 @@ async function fetchReleaseFromGithub(
 type ExtensionUpdateSetter = (updateState: ExtensionUpdateState) => void;
 
 async function handleLocalExtensionUpdate(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   installMetadata: ExtensionInstallMetadata,
   setExtensionUpdateState: ExtensionUpdateSetter,
   cwd: string,
@@ -250,7 +250,7 @@ function isRemoteUpdateMetadata(
 }
 
 async function checkGitExtensionUpdate(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   installMetadata: ExtensionInstallMetadata,
   setExtensionUpdateState: ExtensionUpdateSetter,
 ): Promise<void> {
@@ -316,7 +316,7 @@ async function checkGitHubReleaseExtensionUpdate(
 }
 
 export async function checkForExtensionUpdate(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   setExtensionUpdateState: ExtensionUpdateSetter,
   cwd: string = process.cwd(),
 ): Promise<void> {

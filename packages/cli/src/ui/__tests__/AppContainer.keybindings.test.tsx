@@ -260,7 +260,7 @@ vi.mock('../hooks/useExtensionUpdates.js', () => ({
 vi.mock('../hooks/useWorkspaceMigration.js', () => ({
   useWorkspaceMigration: vi.fn(() => ({
     showWorkspaceMigrationDialog: false,
-    workspaceGeminiCLIExtensions: [],
+    workspaceLlxprtExtensions: [],
     onWorkspaceMigrationDialogOpen: vi.fn(),
     onWorkspaceMigrationDialogClose: vi.fn(),
   })),

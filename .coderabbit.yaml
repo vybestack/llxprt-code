@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+#
+# Recommended CodeRabbit config for vybestack/llxprt-code
+# Goal: keep full review quality on real code (packages/**, scripts/** source,
+# .github/workflows/**) while cutting review volume that counts against
+# per-developer rate limits.
+# Save as `.coderabbit.yaml` in the repository root.
+
+reviews:
+  profile: chill
+
+  # Diagrams add per-review work; walkthrough + summary already cover the changes.
+  sequence_diagrams: false
+
+  # Biggest lever: don't spend review capacity on planning notes, fixtures,
+  # and lockfiles. On PR #2317 this excludes 75 of 141 files (53%); on
+  # PR #2336, 24 of 111. Nothing under packages/ is affected.
+  path_filters:
+    - '!project-plans/**' # planning/tracking notes, not shipped code
+    - '!dev-docs/**' # internal runbooks
+    - '!**/*.lock' # bun.lock
+    - '!package-lock.json'
+    - '!scripts/tmux-script.*.json' # recorded tmux test fixtures
+    - '!junit-integration.xml' # checked-in CI artifact
+    - '!**/__snapshots__/**' # test snapshots
+
+  auto_review:
+    enabled: true
+    # Draft PRs are skipped (this is the default, stated here because the
+    # recommended workflow relies on it: open as draft, mark ready when green).
+    drafts: false
+    # Review once when the PR is opened/marked ready, not on every push.
+    # Multi-commit PRs (e.g. #2334 had 10 commits) otherwise consume one
+    # incremental review per push. Trigger follow-up reviews on demand by
+    # commenting `@coderabbitai review` after pushing fixes.
+    auto_incremental_review: false

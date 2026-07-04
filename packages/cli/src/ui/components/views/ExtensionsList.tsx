@@ -9,10 +9,10 @@ import { Box, Text } from 'ink';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { Colors } from '../../colors.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 interface ExtensionsListProps {
-  extensions: readonly GeminiCLIExtension[];
+  extensions: readonly LlxprtExtension[];
 }
 
 export const ExtensionsList: React.FC<ExtensionsListProps> = ({

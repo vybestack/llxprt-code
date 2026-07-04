@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ServerGeminiStreamEvent } from './turn.js';
-import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
+import type { ServerAgentStreamEvent } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { GenerateContentResponse, Part } from '@google/genai';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
@@ -141,7 +141,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     const reqParts: Part[] = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
 
@@ -163,7 +163,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     await runPromise;
 
     const timeoutEvent = events.find(
-      (e) => e.type === GeminiEventType.StreamIdleTimeout,
+      (e) => e.type === AgentEventType.StreamIdleTimeout,
     );
     expect(timeoutEvent).toBeDefined();
     expect(mockGetConfig).toHaveBeenCalled();
@@ -204,7 +204,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     const reqParts: Part[] = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
 
@@ -213,7 +213,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     }
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(GeminiEventType.Content);
+    expect(events[0].type).toBe(AgentEventType.Content);
     expect((events[0] as { value: string }).value).toBe('Fast response');
   });
 
@@ -257,7 +257,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     const reqParts: Part[] = [{ text: 'Hi' }];
     const abortController = new AbortController();
 
@@ -271,7 +271,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     await Promise.resolve();
 
     expect(
-      events.find((e) => e.type === GeminiEventType.StreamIdleTimeout),
+      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeUndefined();
 
     resolveIterator!();
@@ -279,7 +279,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     await runPromise;
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(GeminiEventType.Content);
+    expect(events[0].type).toBe(AgentEventType.Content);
   });
 
   it('env var precedence: env var overrides config setting', async () => {
@@ -322,7 +322,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     const reqParts: Part[] = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
 
@@ -339,7 +339,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     await runPromise;
 
     const timeoutEvent = events.find(
-      (e) => e.type === GeminiEventType.StreamIdleTimeout,
+      (e) => e.type === AgentEventType.StreamIdleTimeout,
     );
     expect(timeoutEvent).toBeDefined();
   });
@@ -386,7 +386,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     const reqParts: Part[] = [{ text: 'Hi' }];
     const abortController = new AbortController();
 
@@ -400,7 +400,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     await Promise.resolve();
 
     expect(
-      events.find((e) => e.type === GeminiEventType.StreamIdleTimeout),
+      events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeUndefined();
 
     expect(vi.getTimerCount()).toBe(0);
@@ -410,6 +410,6 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     await runPromise;
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe(GeminiEventType.Content);
+    expect(events[0].type).toBe(AgentEventType.Content);
   });
 });

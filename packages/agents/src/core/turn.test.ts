@@ -5,11 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type {
-  ServerGeminiToolCallRequestEvent,
-  ServerGeminiErrorEvent,
-} from './turn.js';
-import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
+import type { ServerToolCallRequestEvent, ServerErrorEvent } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { GenerateContentResponse, Part, Content } from '@google/genai';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
@@ -146,8 +143,8 @@ describe('Turn', () => {
       );
 
       expect(events).toStrictEqual([
-        { type: GeminiEventType.Content, value: 'Hello', traceId: undefined },
-        { type: GeminiEventType.Content, value: ' world', traceId: undefined },
+        { type: AgentEventType.Content, value: 'Hello', traceId: undefined },
+        { type: AgentEventType.Content, value: ' world', traceId: undefined },
       ]);
       expect(turn.getDebugResponses().length).toBe(2);
     });
@@ -190,13 +187,13 @@ describe('Turn', () => {
 
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'LLXPRT2208_ALPHA',
           traceId: undefined,
         },
-        { type: GeminiEventType.Content, value: '\n\n', traceId: undefined },
+        { type: AgentEventType.Content, value: '\n\n', traceId: undefined },
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'Alpha paragraph one.',
           traceId: undefined,
         },
@@ -232,9 +229,9 @@ describe('Turn', () => {
       }
 
       expect(events).toStrictEqual([
-        { type: GeminiEventType.Content, value: '\n\n', traceId: undefined },
+        { type: AgentEventType.Content, value: '\n\n', traceId: undefined },
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'LLXPRT2208_ALPHA',
           traceId: undefined,
         },
@@ -281,8 +278,8 @@ describe('Turn', () => {
       }
 
       expect(events.length).toBe(2);
-      const event1 = events[0] as ServerGeminiToolCallRequestEvent;
-      expect(event1.type).toBe(GeminiEventType.ToolCallRequest);
+      const event1 = events[0] as ServerToolCallRequestEvent;
+      expect(event1.type).toBe(AgentEventType.ToolCallRequest);
       expect(event1.value).toStrictEqual(
         expect.objectContaining({
           callId: 'fc1',
@@ -293,8 +290,8 @@ describe('Turn', () => {
       );
       expect(turn.pendingToolCalls[0]).toStrictEqual(event1.value);
 
-      const event2 = events[1] as ServerGeminiToolCallRequestEvent;
-      expect(event2.type).toBe(GeminiEventType.ToolCallRequest);
+      const event2 = events[1] as ServerToolCallRequestEvent;
+      expect(event2.type).toBe(AgentEventType.ToolCallRequest);
       expect(event2.value).toStrictEqual(
         expect.objectContaining({
           name: 'tool2',
@@ -323,7 +320,7 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toStrictEqual([{ type: GeminiEventType.InvalidStream }]);
+      expect(events).toStrictEqual([{ type: AgentEventType.InvalidStream }]);
       expect(turn.getDebugResponses().length).toBe(0);
       expect(reportError).not.toHaveBeenCalled();
     });
@@ -346,8 +343,8 @@ describe('Turn', () => {
       }
 
       expect(events.length).toBe(1);
-      const errorEvent = events[0] as ServerGeminiErrorEvent;
-      expect(errorEvent.type).toBe(GeminiEventType.Error);
+      const errorEvent = events[0] as ServerErrorEvent;
+      expect(errorEvent.type).toBe(AgentEventType.Error);
       expect(errorEvent.value).toStrictEqual({
         error: { message: 'API Error', status: undefined },
       });
@@ -409,21 +406,21 @@ describe('Turn', () => {
 
       expect(events.length).toBe(3);
 
-      const event1 = events[0] as ServerGeminiToolCallRequestEvent;
+      const event1 = events[0] as ServerToolCallRequestEvent;
       expect(event1.value).toMatchObject({
         callId: 'fc1',
         name: 'undefined_tool_name',
         args: { arg1: 'val1' },
       });
 
-      const event2 = events[1] as ServerGeminiToolCallRequestEvent;
+      const event2 = events[1] as ServerToolCallRequestEvent;
       expect(event2.value).toMatchObject({
         callId: 'fc2',
         name: 'tool2',
         args: {},
       });
 
-      const event3 = events[2] as ServerGeminiToolCallRequestEvent;
+      const event3 = events[2] as ServerToolCallRequestEvent;
       expect(event3.value).toMatchObject({
         callId: 'fc3',
         name: 'undefined_tool_name',
@@ -464,12 +461,12 @@ describe('Turn', () => {
 
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'Partial response',
           traceId: undefined,
         },
         {
-          type: GeminiEventType.Finished,
+          type: AgentEventType.Finished,
           value: {
             reason: 'STOP',
             usageMetadata: {
@@ -520,12 +517,12 @@ describe('Turn', () => {
 
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'This is a long response that was cut off...',
           traceId: undefined,
         },
         {
-          type: GeminiEventType.Finished,
+          type: AgentEventType.Finished,
           value: {
             reason: 'MAX_TOKENS',
             usageMetadata: undefined,
@@ -566,12 +563,12 @@ describe('Turn', () => {
 
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'Content blocked',
           traceId: undefined,
         },
         {
-          type: GeminiEventType.Finished,
+          type: AgentEventType.Finished,
           value: {
             reason: 'SAFETY',
             usageMetadata: undefined,
@@ -613,7 +610,7 @@ describe('Turn', () => {
 
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'Response without finish reason',
           traceId: undefined,
         },
@@ -657,17 +654,17 @@ describe('Turn', () => {
 
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'First part',
           traceId: undefined,
         },
         {
-          type: GeminiEventType.Content,
+          type: AgentEventType.Content,
           value: 'Second part',
           traceId: undefined,
         },
         {
-          type: GeminiEventType.Finished,
+          type: AgentEventType.Finished,
           value: {
             reason: 'OTHER',
             usageMetadata: undefined,
@@ -699,8 +696,8 @@ describe('Turn', () => {
       }
 
       expect(events).toStrictEqual([
-        { type: GeminiEventType.Retry },
-        { type: GeminiEventType.Content, value: 'Success', traceId: undefined },
+        { type: AgentEventType.Retry },
+        { type: AgentEventType.Content, value: 'Success', traceId: undefined },
       ]);
     });
 
@@ -725,7 +722,7 @@ describe('Turn', () => {
       }
 
       expect(events).toStrictEqual([
-        { type: GeminiEventType.Content, value: 'Hello', traceId: 'trace-123' },
+        { type: AgentEventType.Content, value: 'Hello', traceId: 'trace-123' },
       ]);
     });
 
@@ -757,7 +754,7 @@ describe('Turn', () => {
 
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.Thought,
+          type: AgentEventType.Thought,
           value: { subject: '', description: '[Thought: thinking]' },
           traceId: 'trace-456',
         },

@@ -6,7 +6,7 @@
 
 import {
   type CompressionStatus,
-  type GeminiCLIExtension,
+  type LlxprtExtension,
   type ToolCallConfirmationDetails,
   type ToolResultDisplay,
   type ThinkingBlock,
@@ -31,6 +31,13 @@ export enum StreamingState {
   Idle = 'idle',
   Responding = 'responding',
   WaitingForConfirmation = 'waiting_for_confirmation',
+}
+
+// Copied from server/src/core/turn.ts for CLI usage
+export enum AgentEventType {
+  Content = 'content',
+  ToolCallRequest = 'tool_call_request',
+  // Add other event types if the UI hook needs to handle them
 }
 
 export enum ToolCallStatus {
@@ -192,7 +199,7 @@ export type HistoryItemCompression = HistoryItemBase & {
 
 export type HistoryItemExtensionsList = HistoryItemBase & {
   type: 'extensions_list';
-  extensions: GeminiCLIExtension[];
+  extensions: LlxprtExtension[];
 };
 
 export type HistoryItemHooksList = HistoryItemBase & {

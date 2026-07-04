@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { partToString } from './partUtils.js';
+import { partToString, partListUnionToString } from './partUtils.js';
 import { getResponseText } from './generateContentResponseUtilities.js';
 import type { GenerateContentResponse, Part } from '@google/genai';
 
@@ -158,6 +158,25 @@ describe('partUtils', () => {
     it('should return undefined when candidate has no parts', () => {
       const result = mockResponse([]);
       expect(getResponseText(result)).toBeUndefined();
+    });
+  });
+
+  describe('partListUnionToString (verbose mode)', () => {
+    it('stringifies a plain string', () => {
+      expect(partListUnionToString('hello world')).toBe('hello world');
+    });
+
+    it('stringifies a single Part with text', () => {
+      const part: Part = { text: 'part text' };
+      expect(partListUnionToString(part)).toBe('part text');
+    });
+
+    it('stringifies an array of Parts', () => {
+      const parts: Part[] = [{ text: 'a' }, { text: 'b' }];
+      const result = partListUnionToString(parts);
+      // verbose mode concatenates text from all parts
+      expect(result).toContain('a');
+      expect(result).toContain('b');
     });
   });
 });

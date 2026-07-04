@@ -11,7 +11,7 @@ import {
   SHELL_TOOL_NAMES,
   type ApprovalMode,
   ApprovalMode as ApprovalModeEnum,
-  type GeminiCLIExtension,
+  type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
@@ -118,7 +118,7 @@ export function createToolExclusionFilter(
 
 export function mergeExcludeTools(
   settings: Settings,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   extraExcludes?: string[] | undefined,
 ): string[] {
   const allExcludeTools = new Set([

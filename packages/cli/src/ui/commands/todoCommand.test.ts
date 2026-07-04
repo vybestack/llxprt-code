@@ -49,7 +49,6 @@ function createMockContext(initialTodos: Todo[] = []): CommandContext {
       toggleCorgiMode: vi.fn(),
       toggleDebugProfiler: vi.fn(),
       toggleVimEnabled: vi.fn(),
-      setGeminiMdFileCount: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
       updateHistoryTokenCount: vi.fn(),
       reloadCommands: vi.fn(),

@@ -19,7 +19,7 @@
  * Anti-mock-theater: the sendMessageStream assertion drives the REAL
  * client.sendMessageStream method (through the real orchestrator and Turn)
  * with a stub injected at the model-response seam (the ChatSession), then
- * observes the ACTUAL emitted ServerGeminiStreamEvent content matching the
+ * observes the ACTUAL emitted ServerAgentStreamEvent content matching the
  * stub reply. It does not stub sendMessageStream itself or assert mock
  * call counts.
  */
@@ -39,10 +39,10 @@ import {
 import { createAgentClient } from '@vybestack/llxprt-code-agents';
 import { createToolScheduler } from '@vybestack/llxprt-code-agents';
 import {
-  GeminiEventType,
+  AgentEventType,
   type AgentClientContract,
   type ToolSchedulerContract,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
@@ -116,7 +116,7 @@ function injectStubModelResponse(
 
   // A stub ChatSession whose sendMessageStream yields one CHUNK carrying the
   // stub reply, then completes. The Turn pipeline translates this CHUNK into
-  // a ServerGeminiStreamEvent of type Content with the reply text. getConfig
+  // a ServerAgentStreamEvent of type Content with the reply text. getConfig
   // returns undefined to disable the idle-timeout watchdog (0 ms = off).
   internal.chat = {
     getConfig: () => undefined,
@@ -205,7 +205,7 @@ describe('config factory migration — public factories produce real clients/sch
     injectStubModelResponse(client, STUB_MODEL_REPLY);
 
     // Drive the REAL dispatch method. Collect every emitted event.
-    const collectedEvents: ServerGeminiStreamEvent[] = [];
+    const collectedEvents: ServerAgentStreamEvent[] = [];
     const stream = client.sendMessageStream(
       [{ text: 'factory-migration-probe' }],
       new AbortController().signal,
@@ -226,7 +226,7 @@ describe('config factory migration — public factories produce real clients/sch
     // factory-produced client is a real, working client — not a mock that
     // merely has the method name.
     const contentEvents = collectedEvents.filter(
-      (e) => e.type === GeminiEventType.Content,
+      (e) => e.type === AgentEventType.Content,
     );
     expect(contentEvents.length).toBeGreaterThan(0);
     const emittedText = contentEvents

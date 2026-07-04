@@ -78,10 +78,12 @@ Contributors to the project will want to run the CLI directly from the source co
 
 - **Development Mode:**
   This method provides hot-reloading and is useful for active development.
+
   ```bash
   # From the root of the repository
   bun run start
   ```
+
 - **Production-like mode (Linked package):**
   This method simulates a global installation by linking your local package. It's useful for testing a local build in a production workflow.
 
@@ -139,6 +141,6 @@ docker run --rm -it ghcr.io/vybestack/llxprt-code/sandbox:0.7.0
 
 The release process is automated through GitHub Actions. The release workflow performs the following actions:
 
-1.  Build the NPM packages (TypeScript compiled to `dist/` by `tsc`; the Bun launcher executes the `.ts` source at runtime).
+1.  Validate type-checking and tests (`tsc --noEmit`, vitest); no compilation to `dist/` is required — the Bun launcher runs `.ts` source directly.
 2.  Publish the NPM packages to the artifact registry.
 3.  Create GitHub releases with bundled assets.

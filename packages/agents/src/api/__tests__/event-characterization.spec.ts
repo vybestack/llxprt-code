@@ -104,7 +104,7 @@ describe('Event characterization — fake-provider @plan:PLAN-20260617-COREAPI.P
 
 // ─── Source category: adapter-characterization ─────────────────────────────
 // Variants with no higher executable emission seam; driven via explicit
-// ServerGeminiStreamEvent builders through the adapter iterable.
+// ServerAgentStreamEvent builders through the adapter iterable.
 
 describe('Event characterization — adapter-characterization @plan:PLAN-20260617-COREAPI.P10 @requirement:REQ-003', () => {
   it('Thought → thinking [adapter-characterization] @plan:PLAN-20260617-COREAPI.P10 @requirement:REQ-003', async () => {

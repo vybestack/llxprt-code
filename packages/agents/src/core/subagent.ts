@@ -11,7 +11,7 @@
  */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
+import { type ToolCallRequestInfo, AgentEventType, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { type Content, type Part } from '@google/genai';
@@ -96,11 +96,11 @@ function providerNameOrDefault(provider: string | null | undefined): string {
  * Extracted from runInteractiveTurn to keep nesting within limits.
  */
 function processInteractiveStreamEvent(
-  event: { type: GeminiEventType; value?: unknown },
+  event: { type: AgentEventType; value?: unknown },
   execCtx: ExecutionLoopContext,
 ): string {
   if (
-    event.type === GeminiEventType.Content &&
+    event.type === AgentEventType.Content &&
     typeof event.value === 'string'
   ) {
     const value = event.value;
@@ -114,7 +114,7 @@ function processInteractiveStreamEvent(
     }
     return value;
   }
-  if (event.type === GeminiEventType.Error) {
+  if (event.type === AgentEventType.Error) {
     const eventError = (event.value as { error?: Error | null } | undefined)
       ?.error;
     if (eventError != null) {

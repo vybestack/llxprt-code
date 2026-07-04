@@ -15,8 +15,8 @@ import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import {
-  GeminiEventType,
-  type ServerGeminiStreamEvent,
+  AgentEventType,
+  type ServerAgentStreamEvent,
   type ModelInfo,
 } from './turn.js';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
@@ -286,7 +286,7 @@ describe('Gemini Client (client.ts)', () => {
             displayLabel: 'opusthinking',
           });
           expect(client.hasChatInitialized()).toBe(true);
-          yield { type: GeminiEventType.Content, value: 'done' };
+          yield { type: AgentEventType.Content, value: 'done' };
           return {} as Turn;
         });
 
@@ -398,17 +398,17 @@ describe('Gemini Client (client.ts)', () => {
      * Helper: collect only ModelInfo events from a stream.
      */
     async function collectModelInfos(
-      stream: AsyncIterable<ServerGeminiStreamEvent>,
+      stream: AsyncIterable<ServerAgentStreamEvent>,
     ): Promise<ModelInfo[]> {
       const events = await fromAsync(stream);
       return events
         .filter(
           (
             e,
-          ): e is ServerGeminiStreamEvent & {
-            type: typeof GeminiEventType.ModelInfo;
+          ): e is ServerAgentStreamEvent & {
+            type: typeof AgentEventType.ModelInfo;
             value: ModelInfo;
-          } => e.type === GeminiEventType.ModelInfo,
+          } => e.type === AgentEventType.ModelInfo,
         )
         .map((e) => e.value);
     }
@@ -416,8 +416,8 @@ describe('Gemini Client (client.ts)', () => {
     it('emits exactly one additional ModelInfo when model changes during InvalidStream continuation', async () => {
       // Stream 2: continuation succeeds
       const mockStream2 = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'Continued' };
-        yield { type: GeminiEventType.Finished, value: { reason: 'STOP' } };
+        yield { type: AgentEventType.Content, value: 'Continued' };
+        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
       })();
 
       getModelSpy.mockReturnValue('test-model');
@@ -431,7 +431,7 @@ describe('Gemini Client (client.ts)', () => {
         callCount++;
         if (callCount === 1) {
           const stream = (async function* () {
-            yield { type: GeminiEventType.InvalidStream };
+            yield { type: AgentEventType.InvalidStream };
           })();
           // Simulate model change before continuation
           getModelSpy.mockReturnValue('changed-model');
@@ -464,11 +464,11 @@ describe('Gemini Client (client.ts)', () => {
 
     it('does not emit additional ModelInfo when identity is unchanged during continuation', async () => {
       const mockStream1 = (async function* () {
-        yield { type: GeminiEventType.InvalidStream };
+        yield { type: AgentEventType.InvalidStream };
       })();
       const mockStream2 = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'Continued' };
-        yield { type: GeminiEventType.Finished, value: { reason: 'STOP' } };
+        yield { type: AgentEventType.Content, value: 'Continued' };
+        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
       })();
 
       getModelSpy.mockReturnValue('test-model');
@@ -492,8 +492,8 @@ describe('Gemini Client (client.ts)', () => {
 
     it('emits exactly one additional ModelInfo when provider changes during continuation', async () => {
       const mockStream2 = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'ok' };
-        yield { type: GeminiEventType.Finished, value: { reason: 'STOP' } };
+        yield { type: AgentEventType.Content, value: 'ok' };
+        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
       })();
 
       getModelSpy.mockReturnValue('test-model');
@@ -518,7 +518,7 @@ describe('Gemini Client (client.ts)', () => {
         callCount++;
         if (callCount === 1) {
           const stream = (async function* () {
-            yield { type: GeminiEventType.InvalidStream };
+            yield { type: AgentEventType.InvalidStream };
           })();
           // Simulate provider change before continuation: now the config
           // returns a providerManager with a different active provider.

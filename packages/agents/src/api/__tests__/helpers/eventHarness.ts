@@ -9,7 +9,7 @@
  * @requirement:REQ-003
  *
  * Event-characterization harness (T16). Builds authentic AgenticLoopEvent
- * streams that exercise every GeminiEventType variant at its real emission
+ * streams that exercise every AgentEventType variant at its real emission
  * site, then drives the (not-yet-implemented) mapLoopStream adapter via a
  * variable-specifier dynamic import so the spec fails NATURALLY at RED.
  *
@@ -19,9 +19,9 @@
 
 import { FinishReason, type Part } from '@google/genai';
 import {
-  GeminiEventType,
+  AgentEventType,
   DEFAULT_AGENT_ID,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   type ServerToolCallConfirmationDetails,
@@ -83,20 +83,18 @@ async function* asyncIterOf<T>(items: readonly T[]): AsyncIterable<T> {
 // keep this file under the max-lines budget).
 export { runAdapterStatic, driveSingleStreamEvent };
 
-// ─── ServerGeminiStreamEvent builders (REAL GeminiEventType + value shapes) ─
+// ─── ServerAgentStreamEvent builders (REAL AgentEventType + value shapes) ─
 
-export function streamContent(text: string): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.Content, value: text };
+export function streamContent(text: string): ServerAgentStreamEvent {
+  return { type: AgentEventType.Content, value: text };
 }
 
-export function streamThought(
-  thought: ThoughtSummary,
-): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.Thought, value: thought };
+export function streamThought(thought: ThoughtSummary): ServerAgentStreamEvent {
+  return { type: AgentEventType.Thought, value: thought };
 }
 
-export function streamCitation(citation: string): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.Citation, value: citation };
+export function streamCitation(citation: string): ServerAgentStreamEvent {
+  return { type: AgentEventType.Citation, value: citation };
 }
 
 export function streamUsage(usage: {
@@ -104,82 +102,82 @@ export function streamUsage(usage: {
   candidatesTokenCount?: number;
   totalTokenCount?: number;
   cachedContentTokenCount?: number;
-}): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.UsageMetadata, value: usage };
+}): ServerAgentStreamEvent {
+  return { type: AgentEventType.UsageMetadata, value: usage };
 }
 
-export function streamModelInfo(info: ModelInfo): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.ModelInfo, value: info };
+export function streamModelInfo(info: ModelInfo): ServerAgentStreamEvent {
+  return { type: AgentEventType.ModelInfo, value: info };
 }
 
-export function streamNotice(message: string): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.SystemNotice, value: message };
+export function streamNotice(message: string): ServerAgentStreamEvent {
+  return { type: AgentEventType.SystemNotice, value: message };
 }
 
 export function streamCompressed(
   info: ChatCompressionInfo | null,
-): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.ChatCompressed, value: info };
+): ServerAgentStreamEvent {
+  return { type: AgentEventType.ChatCompressed, value: info };
 }
 
-export function streamRetry(): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.Retry };
+export function streamRetry(): ServerAgentStreamEvent {
+  return { type: AgentEventType.Retry };
 }
 
-export function streamInvalid(): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.InvalidStream };
+export function streamInvalid(): ServerAgentStreamEvent {
+  return { type: AgentEventType.InvalidStream };
 }
 
 export function streamIdleTimeout(
   error: StructuredError,
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   return {
-    type: GeminiEventType.StreamIdleTimeout,
+    type: AgentEventType.StreamIdleTimeout,
     value: { error },
   };
 }
 
-export function streamError(error: StructuredError): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.Error, value: { error } };
+export function streamError(error: StructuredError): ServerAgentStreamEvent {
+  return { type: AgentEventType.Error, value: { error } };
 }
 
-export function streamLoopDetected(): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.LoopDetected };
+export function streamLoopDetected(): ServerAgentStreamEvent {
+  return { type: AgentEventType.LoopDetected };
 }
 
 export function streamContextOverflow(
   estimatedRequestTokenCount: number,
   remainingTokenCount: number,
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   return {
-    type: GeminiEventType.ContextWindowWillOverflow,
+    type: AgentEventType.ContextWindowWillOverflow,
     value: { estimatedRequestTokenCount, remainingTokenCount },
   };
 }
 
-export function streamMaxTurns(): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.MaxSessionTurns };
+export function streamMaxTurns(): ServerAgentStreamEvent {
+  return { type: AgentEventType.MaxSessionTurns };
 }
 
 export function streamFinished(
   reason: FinishReason = FinishReason.STOP,
   stopReason?: string,
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   return {
-    type: GeminiEventType.Finished,
+    type: AgentEventType.Finished,
     value: { reason, ...(stopReason !== undefined ? { stopReason } : {}) },
   };
 }
 
-export function streamUserCancelled(): ServerGeminiStreamEvent {
-  return { type: GeminiEventType.UserCancelled };
+export function streamUserCancelled(): ServerAgentStreamEvent {
+  return { type: AgentEventType.UserCancelled };
 }
 
 export function streamToolCallRequest(
   callId: string,
   name: string,
   args: Record<string, unknown> = {},
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   const value: ToolCallRequestInfo = {
     callId,
     name,
@@ -188,14 +186,14 @@ export function streamToolCallRequest(
     prompt_id: callId,
     agentId: DEFAULT_AGENT_ID,
   };
-  return { type: GeminiEventType.ToolCallRequest, value };
+  return { type: AgentEventType.ToolCallRequest, value };
 }
 
 export function streamToolCallResponse(
   callId: string,
   responseParts: Part[],
   overrides: Partial<ToolCallResponseInfo> = {},
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   const value: ToolCallResponseInfo = {
     callId,
     responseParts,
@@ -204,15 +202,15 @@ export function streamToolCallResponse(
     errorType: undefined,
     ...overrides,
   };
-  return { type: GeminiEventType.ToolCallResponse, value };
+  return { type: AgentEventType.ToolCallResponse, value };
 }
 
 export function streamToolCallConfirmation(
   request: ToolCallRequestInfo,
   details: ServerToolCallConfirmationDetails['details'],
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   const value: ServerToolCallConfirmationDetails = { request, details };
-  return { type: GeminiEventType.ToolCallConfirmation, value };
+  return { type: AgentEventType.ToolCallConfirmation, value };
 }
 
 /**
@@ -239,9 +237,9 @@ export function streamStopped(
   reason: string,
   systemMessage?: string,
   contextCleared: boolean | undefined = undefined,
-): ServerGeminiStreamEvent {
-  const e: ServerGeminiStreamEvent = {
-    type: GeminiEventType.AgentExecutionStopped,
+): ServerAgentStreamEvent {
+  const e: ServerAgentStreamEvent = {
+    type: AgentEventType.AgentExecutionStopped,
     reason,
   };
   if (systemMessage !== undefined) {
@@ -258,9 +256,9 @@ export function streamBlocked(
   reason: string,
   systemMessage?: string,
   contextCleared: boolean | undefined = undefined,
-): ServerGeminiStreamEvent {
-  const e: ServerGeminiStreamEvent = {
-    type: GeminiEventType.AgentExecutionBlocked,
+): ServerAgentStreamEvent {
+  const e: ServerAgentStreamEvent = {
+    type: AgentEventType.AgentExecutionBlocked,
     reason,
   };
   if (systemMessage !== undefined) {
@@ -274,13 +272,13 @@ export function streamBlocked(
 
 // ─── AgenticLoopEvent wrappers ──────────────────────────────────────────────
 
-export function wrapStream(e: ServerGeminiStreamEvent): AgenticLoopEvent {
+export function wrapStream(e: ServerAgentStreamEvent): AgenticLoopEvent {
   return { kind: 'stream', event: e };
 }
 
 /** Builds a sequence of stream-wrapped loop events. */
 export function loopStream(
-  ...events: readonly ServerGeminiStreamEvent[]
+  ...events: readonly ServerAgentStreamEvent[]
 ): AgenticLoopEvent[] {
   return events.map((e) => wrapStream(e));
 }
@@ -708,7 +706,7 @@ export function streamToolCallConfirmationCorrelated(
   callId: string,
   name: string,
   correlationId: string,
-): ServerGeminiStreamEvent {
+): ServerAgentStreamEvent {
   const request: ToolCallRequestInfo = {
     callId,
     name,
@@ -727,7 +725,7 @@ export function streamToolCallConfirmationCorrelated(
     onConfirm: async () => {},
   } as unknown as ServerToolCallConfirmationDetails['details'];
   const value: ServerToolCallConfirmationDetails = { request, details };
-  return { type: GeminiEventType.ToolCallConfirmation, value };
+  return { type: AgentEventType.ToolCallConfirmation, value };
 }
 
 // ─── ToolCall / CompletedToolCall construction helpers ──────────────────────

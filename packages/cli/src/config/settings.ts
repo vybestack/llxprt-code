@@ -331,10 +331,10 @@ export class LoadedSettings {
 function findEnvFile(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
   for (;;) {
-    // prefer gemini-specific .env under LLXPRT_DIR
-    const geminiEnvPath = path.join(currentDir, LLXPRT_DIR, '.env');
-    if (fs.existsSync(geminiEnvPath)) {
-      return geminiEnvPath;
+    // prefer llxprt-specific .env under LLXPRT_DIR
+    const llxprtEnvPath = path.join(currentDir, LLXPRT_DIR, '.env');
+    if (fs.existsSync(llxprtEnvPath)) {
+      return llxprtEnvPath;
     }
     const envPath = path.join(currentDir, '.env');
     if (fs.existsSync(envPath)) {
@@ -342,10 +342,10 @@ function findEnvFile(startDir: string): string | null {
     }
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) {
-      // check .env under home as fallback, again preferring gemini-specific .env
-      const homeGeminiEnvPath = path.join(Storage.getGlobalConfigDir(), '.env');
-      if (fs.existsSync(homeGeminiEnvPath)) {
-        return homeGeminiEnvPath;
+      // check .env under home as fallback, again preferring llxprt-specific .env
+      const homeLlxprtEnvPath = path.join(Storage.getGlobalConfigDir(), '.env');
+      if (fs.existsSync(homeLlxprtEnvPath)) {
+        return homeLlxprtEnvPath;
       }
       const homeEnvPath = path.join(homedir(), '.env');
       if (fs.existsSync(homeEnvPath)) {

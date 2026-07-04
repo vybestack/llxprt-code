@@ -26,7 +26,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import {
   ApprovalMode,
-  GeminiEventType as ServerGeminiEventType,
+  AgentEventType as ServerEventType,
   tokenLimit,
 } from '@vybestack/llxprt-code-core';
 import { StreamingState } from '../types.js';
@@ -139,7 +139,7 @@ describe('useAgentStream', () => {
       mcpServers: undefined,
       userAgent: 'test-agent',
       userMemory: '',
-      geminiMdFileCount: 0,
+      llxprtMdFileCount: 0,
       alwaysSkipModificationConfirmation: false,
       vertexai: false,
       showMemoryUsage: false,
@@ -257,11 +257,11 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'This is a truncated response...',
           };
           yield {
-            type: ServerGeminiEventType.Finished,
+            type: ServerEventType.Finished,
             value: { reason: 'MAX_TOKENS', usageMetadata: undefined },
           };
         })(),
@@ -309,11 +309,11 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'I cannot help with that.',
           };
           yield {
-            type: ServerGeminiEventType.Finished,
+            type: ServerEventType.Finished,
             value: {
               reason: 'STOP',
               stopReason: 'refusal',
@@ -344,11 +344,11 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'Here is the answer.',
           };
           yield {
-            type: ServerGeminiEventType.Finished,
+            type: ServerEventType.Finished,
             value: { reason: 'STOP', usageMetadata: undefined },
           };
         })(),
@@ -401,7 +401,7 @@ describe('useAgentStream', () => {
           mockSendMessageStream.mockReturnValue(
             (async function* () {
               yield {
-                type: ServerGeminiEventType.ContextWindowWillOverflow,
+                type: ServerEventType.ContextWindowWillOverflow,
                 value: {
                   estimatedRequestTokenCount: requestTokens,
                   remainingTokenCount: remainingTokens,
@@ -435,7 +435,7 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.ContextWindowWillOverflow,
+            type: ServerEventType.ContextWindowWillOverflow,
             value: {
               estimatedRequestTokenCount: 100,
               remainingTokenCount: 50,
@@ -533,11 +533,11 @@ describe('useAgentStream', () => {
         mockSendMessageStream.mockReturnValue(
           (async function* () {
             yield {
-              type: ServerGeminiEventType.Content,
+              type: ServerEventType.Content,
               value: `Response for ${reason}`,
             };
             yield {
-              type: ServerGeminiEventType.Finished,
+              type: ServerEventType.Finished,
               value: { reason, usageMetadata: undefined },
             };
           })(),
@@ -646,11 +646,11 @@ describe('useAgentStream', () => {
 
     const mockStream = (async function* () {
       yield {
-        type: ServerGeminiEventType.Content,
+        type: ServerEventType.Content,
         value: 'Rationale rationale.',
       };
       yield {
-        type: ServerGeminiEventType.ToolCallRequest,
+        type: ServerEventType.ToolCallRequest,
         value: { callId: '1', name: 'test_tool', args: {} },
       };
     })();

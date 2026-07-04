@@ -10,7 +10,7 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { bfsFileSearch } from './bfsFileSearch.js';
 import {
-  getAllLlxprtMdFilenames as getAllGeminiMdFilenames,
+  getAllLlxprtMdFilenames,
   getGlobalCoreMemoryFilePath,
   getProjectCoreMemoryFilePath,
 } from '@vybestack/llxprt-code-tools';
@@ -18,8 +18,8 @@ import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { processImports } from './memoryImportProcessor.js';
 import type { FileFilteringOptions } from '../config/constants.js';
 import { DEFAULT_MEMORY_FILE_FILTERING_OPTIONS } from '../config/constants.js';
-import { LLXPRT_DIR as GEMINI_DIR } from './paths.js';
-import type { GeminiCLIExtension } from '../config/config.js';
+import { LLXPRT_DIR } from './paths.js';
+import type { LlxprtExtension } from '../config/config.js';
 import { debugLogger } from './debugLogger.js';
 
 // Simple console logger, similar to the one previously in CLI's config.ts
@@ -33,7 +33,7 @@ const logger = {
     debugLogger.error('[ERROR] [MemoryDiscovery]', ...args),
 };
 
-interface GeminiFileContent {
+interface LlxprtFileContent {
   filePath: string;
   content: string | null;
 }
@@ -75,9 +75,9 @@ async function findProjectRoot(startDir: string): Promise<string | null> {
   }
 }
 
-async function getGeminiMdFilePathsInternal(
+async function getLlxprtMdFilePathsInternal(
   currentWorkingDirectory: string,
-  includeDirectoriesToReadGemini: readonly string[],
+  includeDirectoriesToReadLlxprt: readonly string[],
   userHomePath: string,
   debugMode: boolean,
   fileService: FileDiscoveryService,
@@ -87,7 +87,7 @@ async function getGeminiMdFilePathsInternal(
   maxDepth?: number,
 ): Promise<string[]> {
   const dirs = new Set<string>([
-    ...includeDirectoriesToReadGemini,
+    ...includeDirectoriesToReadLlxprt,
     currentWorkingDirectory,
   ]);
 
@@ -99,7 +99,7 @@ async function getGeminiMdFilePathsInternal(
   for (let i = 0; i < dirsArray.length; i += CONCURRENT_LIMIT) {
     const batch = dirsArray.slice(i, i + CONCURRENT_LIMIT);
     const batchPromises = batch.map((dir) =>
-      getGeminiMdFilePathsInternalForEachDir(
+      getLlxprtMdFilePathsInternalForEachDir(
         dir,
         userHomePath,
         debugMode,
@@ -129,8 +129,8 @@ async function getGeminiMdFilePathsInternal(
   return Array.from(new Set<string>(paths));
 }
 
-async function searchUpwardForGeminiMd(
-  geminiMdFilename: string,
+async function searchUpwardForLlxprtMd(
+  llxprtMdFilename: string,
   resolvedCwd: string,
   globalMemoryPath: string,
   resolvedHome: string,
@@ -149,9 +149,9 @@ async function searchUpwardForGeminiMd(
   while (
     currentDir &&
     currentDir !== path.dirname(currentDir) &&
-    currentDir !== path.join(resolvedHome, GEMINI_DIR)
+    currentDir !== path.join(resolvedHome, LLXPRT_DIR)
   ) {
-    const potentialPath = path.join(currentDir, geminiMdFilename);
+    const potentialPath = path.join(currentDir, llxprtMdFilename);
     try {
       await fs.access(potentialPath, fsSync.constants.R_OK);
       if (potentialPath !== globalMemoryPath) {
@@ -161,7 +161,7 @@ async function searchUpwardForGeminiMd(
       // Not found, continue.
     }
 
-    const llxprtDirPath = path.join(currentDir, GEMINI_DIR, geminiMdFilename);
+    const llxprtDirPath = path.join(currentDir, LLXPRT_DIR, llxprtMdFilename);
     try {
       await fs.access(llxprtDirPath, fsSync.constants.R_OK);
       if (llxprtDirPath !== globalMemoryPath) {
@@ -181,7 +181,7 @@ async function searchUpwardForGeminiMd(
 }
 
 async function findGlobalAndWorkspacePaths(
-  geminiMdFilename: string,
+  llxprtMdFilename: string,
   dir: string,
   userHomePath: string,
   debugMode: boolean,
@@ -195,8 +195,8 @@ async function findGlobalAndWorkspacePaths(
   const resolvedHome = path.resolve(userHomePath);
   const globalMemoryPath = path.join(
     resolvedHome,
-    GEMINI_DIR,
-    geminiMdFilename,
+    LLXPRT_DIR,
+    llxprtMdFilename,
   );
 
   try {
@@ -204,7 +204,7 @@ async function findGlobalAndWorkspacePaths(
     allPaths.add(globalMemoryPath);
     if (debugMode)
       logger.debug(
-        `Found readable global ${geminiMdFilename}: ${globalMemoryPath}`,
+        `Found readable global ${llxprtMdFilename}: ${globalMemoryPath}`,
       );
   } catch {
     // It's okay if it's not found.
@@ -214,11 +214,11 @@ async function findGlobalAndWorkspacePaths(
     const resolvedCwd = path.resolve(dir);
     if (debugMode)
       logger.debug(
-        `Searching for ${geminiMdFilename} starting from CWD: ${resolvedCwd}`,
+        `Searching for ${llxprtMdFilename} starting from CWD: ${resolvedCwd}`,
       );
 
-    const upwardPaths = await searchUpwardForGeminiMd(
-      geminiMdFilename,
+    const upwardPaths = await searchUpwardForLlxprtMd(
+      llxprtMdFilename,
       resolvedCwd,
       globalMemoryPath,
       resolvedHome,
@@ -232,7 +232,7 @@ async function findGlobalAndWorkspacePaths(
     };
 
     const downwardPaths = await bfsFileSearch(resolvedCwd, {
-      fileName: geminiMdFilename,
+      fileName: llxprtMdFilename,
       maxDirs,
       maxDepth,
       debug: debugMode,
@@ -247,7 +247,7 @@ async function findGlobalAndWorkspacePaths(
   return allPaths;
 }
 
-async function getGeminiMdFilePathsInternalForEachDir(
+async function getLlxprtMdFilePathsInternalForEachDir(
   dir: string,
   userHomePath: string,
   debugMode: boolean,
@@ -258,11 +258,11 @@ async function getGeminiMdFilePathsInternalForEachDir(
   maxDepth?: number,
 ): Promise<string[]> {
   const allPaths = new Set<string>();
-  const geminiMdFilenames = getAllGeminiMdFilenames();
+  const llxprtMdFilenames = getAllLlxprtMdFilenames();
 
-  for (const geminiMdFilename of geminiMdFilenames) {
+  for (const llxprtMdFilename of llxprtMdFilenames) {
     const pathSet = await findGlobalAndWorkspacePaths(
-      geminiMdFilename,
+      llxprtMdFilename,
       dir,
       userHomePath,
       debugMode,
@@ -279,26 +279,26 @@ async function getGeminiMdFilePathsInternalForEachDir(
 
   if (debugMode)
     logger.debug(
-      `Final ordered ${getAllGeminiMdFilenames()} paths to read: ${JSON.stringify(
+      `Final ordered ${getAllLlxprtMdFilenames()} paths to read: ${JSON.stringify(
         finalPaths,
       )}`,
     );
   return finalPaths;
 }
 
-async function readGeminiMdFiles(
+async function readLlxprtMdFiles(
   filePaths: string[],
   debugMode: boolean,
   importFormat: 'flat' | 'tree' = 'tree',
-): Promise<GeminiFileContent[]> {
+): Promise<LlxprtFileContent[]> {
   // Process files in parallel with concurrency limit to prevent EMFILE errors
   const CONCURRENT_LIMIT = 20; // Higher limit for file reads as they're typically faster
-  const results: GeminiFileContent[] = [];
+  const results: LlxprtFileContent[] = [];
 
   for (let i = 0; i < filePaths.length; i += CONCURRENT_LIMIT) {
     const batch = filePaths.slice(i, i + CONCURRENT_LIMIT);
     const batchPromises = batch.map(
-      async (filePath): Promise<GeminiFileContent> => {
+      async (filePath): Promise<LlxprtFileContent> => {
         try {
           const content = await fs.readFile(filePath, 'utf-8');
 
@@ -325,7 +325,7 @@ async function readGeminiMdFiles(
             const message =
               error instanceof Error ? error.message : String(error);
             logger.warn(
-              `Warning: Could not read ${getAllGeminiMdFilenames()} file at ${filePath}. Error: ${message}`,
+              `Warning: Could not read ${getAllLlxprtMdFilenames()} file at ${filePath}. Error: ${message}`,
             );
           }
           if (debugMode) logger.debug(`Failed to read: ${filePath}`);
@@ -353,7 +353,7 @@ async function readGeminiMdFiles(
 }
 
 export function concatenateInstructions(
-  instructionContents: GeminiFileContent[],
+  instructionContents: LlxprtFileContent[],
   // CWD is needed to resolve relative paths for display markers
   currentWorkingDirectoryForDisplay: string,
 ): string {
@@ -381,10 +381,10 @@ export async function loadGlobalMemory(
   debugMode: boolean = false,
 ): Promise<MemoryLoadResult> {
   const userHome = homedir();
-  const geminiMdFilenames = getAllGeminiMdFilenames();
+  const llxprtMdFilenames = getAllLlxprtMdFilenames();
 
-  const accessChecks = geminiMdFilenames.map(async (filename) => {
-    const globalPath = path.join(userHome, GEMINI_DIR, filename);
+  const accessChecks = llxprtMdFilenames.map(async (filename) => {
+    const globalPath = path.join(userHome, LLXPRT_DIR, filename);
     try {
       await fs.access(globalPath, fsSync.constants.R_OK);
       if (debugMode) {
@@ -401,7 +401,7 @@ export async function loadGlobalMemory(
     (p): p is string => p !== null,
   );
 
-  const contents = await readGeminiMdFiles(foundPaths, debugMode, 'tree');
+  const contents = await readLlxprtMdFiles(foundPaths, debugMode, 'tree');
 
   return {
     files: contents
@@ -414,12 +414,12 @@ export async function loadGlobalMemory(
 }
 
 /**
- * Traverses upward from startDir to stopDir, finding all GEMINI.md variants.
+ * Traverses upward from startDir to stopDir, finding all LLXPRT.md variants.
  *
  * Files are ordered by directory level (root to leaf), with all filename
  * variants grouped together per directory.
  */
-async function findUpwardGeminiFiles(
+async function findUpwardLlxprtFiles(
   startDir: string,
   stopDir: string,
   debugMode: boolean,
@@ -427,8 +427,8 @@ async function findUpwardGeminiFiles(
   const upwardPaths: string[] = [];
   let currentDir = path.resolve(startDir);
   const resolvedStopDir = path.resolve(stopDir);
-  const geminiMdFilenames = getAllGeminiMdFilenames();
-  const globalGeminiDir = path.resolve(path.join(homedir(), GEMINI_DIR));
+  const llxprtMdFilenames = getAllLlxprtMdFilenames();
+  const globalLlxprtDir = path.resolve(path.join(homedir(), LLXPRT_DIR));
 
   if (debugMode) {
     logger.debug(
@@ -437,8 +437,8 @@ async function findUpwardGeminiFiles(
   }
 
   let done = false;
-  while (!done && currentDir !== globalGeminiDir) {
-    const accessChecks = geminiMdFilenames.map(async (filename) => {
+  while (!done && currentDir !== globalLlxprtDir) {
+    const accessChecks = llxprtMdFilenames.map(async (filename) => {
       const checks: Array<Promise<string | null>> = [];
 
       const directPath = path.join(currentDir, filename);
@@ -453,12 +453,12 @@ async function findUpwardGeminiFiles(
         })(),
       );
 
-      const llxprtDirPath = path.join(currentDir, GEMINI_DIR, filename);
+      const llxprtDirPath = path.join(currentDir, LLXPRT_DIR, filename);
       checks.push(
         (async () => {
           try {
             await fs.access(llxprtDirPath, fsSync.constants.R_OK);
-            if (llxprtDirPath !== path.join(globalGeminiDir, filename)) {
+            if (llxprtDirPath !== path.join(globalLlxprtDir, filename)) {
               return llxprtDirPath;
             }
             return null;
@@ -491,7 +491,7 @@ async function findUpwardGeminiFiles(
 }
 
 interface ExtensionLoader {
-  getExtensions(): GeminiCLIExtension[];
+  getExtensions(): LlxprtExtension[];
 }
 
 export async function loadEnvironmentMemory(
@@ -509,7 +509,7 @@ export async function loadEnvironmentMemory(
         `Loading environment memory for trusted root: ${resolvedRoot} (Stopping exactly here)`,
       );
     }
-    return findUpwardGeminiFiles(resolvedRoot, resolvedRoot, debugMode);
+    return findUpwardLlxprtFiles(resolvedRoot, resolvedRoot, debugMode);
   });
 
   const pathArrays = await Promise.all(traversalPromises);
@@ -518,12 +518,12 @@ export async function loadEnvironmentMemory(
   // Extensions
   const extensionPaths = extensionLoader
     .getExtensions()
-    .filter((ext: GeminiCLIExtension) => ext.isActive)
-    .flatMap((ext: GeminiCLIExtension) => ext.contextFiles);
+    .filter((ext: LlxprtExtension) => ext.isActive)
+    .flatMap((ext: LlxprtExtension) => ext.contextFiles);
   extensionPaths.forEach((p: string) => allPaths.add(p));
 
   const sortedPaths = Array.from(allPaths).sort();
-  const contents = await readGeminiMdFiles(sortedPaths, debugMode, 'tree');
+  const contents = await readLlxprtMdFiles(sortedPaths, debugMode, 'tree');
 
   return {
     files: contents
@@ -609,15 +609,15 @@ export interface LoadServerHierarchicalMemoryResponse {
 }
 
 /**
- * Loads hierarchical GEMINI.md files and concatenates their content.
+ * Loads hierarchical LLXPRT.md files and concatenates their content.
  * This function is intended for use by the server.
  */
 export async function loadServerHierarchicalMemory(
   currentWorkingDirectory: string,
-  includeDirectoriesToReadGemini: readonly string[],
+  includeDirectoriesToReadLlxprt: readonly string[],
   debugMode: boolean,
   fileService: FileDiscoveryService,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   folderTrust: boolean,
   importFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
@@ -632,9 +632,9 @@ export async function loadServerHierarchicalMemory(
   // For the server, homedir() refers to the server process's home.
   // This is consistent with how MemoryTool already finds the global path.
   const userHomePath = homedir();
-  const filePaths = await getGeminiMdFilePathsInternal(
+  const filePaths = await getLlxprtMdFilePathsInternal(
     currentWorkingDirectory,
-    includeDirectoriesToReadGemini,
+    includeDirectoriesToReadLlxprt,
     userHomePath,
     debugMode,
     fileService,
@@ -653,10 +653,10 @@ export async function loadServerHierarchicalMemory(
 
   if (filePaths.length === 0) {
     if (debugMode)
-      logger.debug('No GEMINI.md files found in hierarchy of the workspace.');
+      logger.debug('No LLXPRT.md files found in hierarchy of the workspace.');
     return { memoryContent: '', fileCount: 0, filePaths: [] };
   }
-  const contentsWithPaths = await readGeminiMdFiles(
+  const contentsWithPaths = await readLlxprtMdFiles(
     filePaths,
     debugMode,
     importFormat,
@@ -725,7 +725,7 @@ export async function loadJitSubdirectoryMemory(
   }
 
   // Traverse from target up to the trusted root
-  const potentialPaths = await findUpwardGeminiFiles(
+  const potentialPaths = await findUpwardLlxprtFiles(
     resolvedTarget,
     bestRoot,
     debugMode,
@@ -742,7 +742,7 @@ export async function loadJitSubdirectoryMemory(
     logger.debug(`Found new JIT memory files: ${JSON.stringify(newPaths)}`);
   }
 
-  const contents = await readGeminiMdFiles(newPaths, debugMode, 'tree');
+  const contents = await readLlxprtMdFiles(newPaths, debugMode, 'tree');
 
   return {
     files: contents

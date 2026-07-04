@@ -16,8 +16,8 @@ import type React from 'react';
 import { FinishReason } from '@google/genai';
 import type {
   Config,
-  ServerGeminiFinishedEvent,
-  GeminiEventType,
+  ServerFinishedEvent,
+  AgentEventType,
 } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
@@ -84,9 +84,9 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
   function makeFinishedEvent(
     reason: FinishReason,
     stopReason?: string,
-  ): ServerGeminiFinishedEvent {
+  ): ServerFinishedEvent {
     return {
-      type: 'finished' as GeminiEventType.Finished,
+      type: 'finished' as AgentEventType.Finished,
       value: {
         reason,
         ...(stopReason !== undefined ? { stopReason } : {}),

@@ -45,7 +45,7 @@ export interface ServerTool {
   ): Promise<ToolCallConfirmationDetails | false>;
 }
 
-export enum GeminiEventType {
+export enum AgentEventType {
   Content = 'content',
   ToolCallRequest = 'tool_call_request',
   ToolCallResponse = 'tool_call_response',
@@ -69,16 +69,16 @@ export enum GeminiEventType {
   AgentExecutionBlocked = 'agent_execution_blocked',
 }
 
-export type ServerGeminiRetryEvent = {
-  type: GeminiEventType.Retry;
+export type ServerRetryEvent = {
+  type: AgentEventType.Retry;
 };
 
-export type ServerGeminiInvalidStreamEvent = {
-  type: GeminiEventType.InvalidStream;
+export type ServerInvalidStreamEvent = {
+  type: AgentEventType.InvalidStream;
 };
 
-export type ServerGeminiContextWindowWillOverflowEvent = {
-  type: GeminiEventType.ContextWindowWillOverflow;
+export type ServerContextWindowWillOverflowEvent = {
+  type: AgentEventType.ContextWindowWillOverflow;
   value: {
     estimatedRequestTokenCount: number;
     remainingTokenCount: number;
@@ -90,7 +90,7 @@ export interface StructuredError {
   status?: number;
 }
 
-export interface GeminiErrorEventValue {
+export interface AgentErrorEventValue {
   error: StructuredError;
 }
 
@@ -125,50 +125,50 @@ export interface ServerToolCallConfirmationDetails {
   details: ToolCallConfirmationDetails;
 }
 
-export type ServerGeminiContentEvent = {
-  type: GeminiEventType.Content;
+export type ServerContentEvent = {
+  type: AgentEventType.Content;
   value: string;
   traceId?: string;
 };
 
-export type ServerGeminiSystemNoticeEvent = {
-  type: GeminiEventType.SystemNotice;
+export type ServerSystemNoticeEvent = {
+  type: AgentEventType.SystemNotice;
   value: string;
 };
 
-export type ServerGeminiThoughtEvent = {
-  type: GeminiEventType.Thought;
+export type ServerThoughtEvent = {
+  type: AgentEventType.Thought;
   value: ThoughtSummary;
   traceId?: string;
 };
 
-export type ServerGeminiToolCallRequestEvent = {
-  type: GeminiEventType.ToolCallRequest;
+export type ServerToolCallRequestEvent = {
+  type: AgentEventType.ToolCallRequest;
   value: ToolCallRequestInfo;
 };
 
-export type ServerGeminiToolCallResponseEvent = {
-  type: GeminiEventType.ToolCallResponse;
+export type ServerToolCallResponseEvent = {
+  type: AgentEventType.ToolCallResponse;
   value: ToolCallResponseInfo;
 };
 
-export type ServerGeminiToolCallConfirmationEvent = {
-  type: GeminiEventType.ToolCallConfirmation;
+export type ServerToolCallConfirmationEvent = {
+  type: AgentEventType.ToolCallConfirmation;
   value: ServerToolCallConfirmationDetails;
 };
 
-export type ServerGeminiUserCancelledEvent = {
-  type: GeminiEventType.UserCancelled;
+export type ServerUserCancelledEvent = {
+  type: AgentEventType.UserCancelled;
 };
 
-export type ServerGeminiStreamIdleTimeoutEvent = {
-  type: GeminiEventType.StreamIdleTimeout;
-  value: GeminiErrorEventValue;
+export type ServerStreamIdleTimeoutEvent = {
+  type: AgentEventType.StreamIdleTimeout;
+  value: AgentErrorEventValue;
 };
 
-export type ServerGeminiErrorEvent = {
-  type: GeminiEventType.Error;
-  value: GeminiErrorEventValue;
+export type ServerErrorEvent = {
+  type: AgentEventType.Error;
+  value: AgentErrorEventValue;
 };
 
 export enum CompressionStatus {
@@ -216,13 +216,13 @@ export interface ChatCompressionInfo {
   compressionStatus: CompressionStatus;
 }
 
-export type ServerGeminiChatCompressedEvent = {
-  type: GeminiEventType.ChatCompressed;
+export type ServerChatCompressedEvent = {
+  type: AgentEventType.ChatCompressed;
   value: ChatCompressionInfo | null;
 };
 
-export type ServerGeminiUsageMetadataEvent = {
-  type: GeminiEventType.UsageMetadata;
+export type ServerUsageMetadataEvent = {
+  type: AgentEventType.UsageMetadata;
   value: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
@@ -231,22 +231,22 @@ export type ServerGeminiUsageMetadataEvent = {
   };
 };
 
-export type ServerGeminiMaxSessionTurnsEvent = {
-  type: GeminiEventType.MaxSessionTurns;
+export type ServerMaxSessionTurnsEvent = {
+  type: AgentEventType.MaxSessionTurns;
 };
 
-export type ServerGeminiFinishedOutcome = {
+export type ServerFinishedOutcome = {
   hadVisibleOutput: boolean;
   hadThinking: boolean;
   hadToolCalls: boolean;
 };
 
-export type ServerGeminiFinishedEvent = {
-  type: GeminiEventType.Finished;
+export type ServerFinishedEvent = {
+  type: AgentEventType.Finished;
   value: {
     reason: FinishReason;
     usageMetadata?: GenerateContentResponseUsageMetadata;
-    outcome?: ServerGeminiFinishedOutcome;
+    outcome?: ServerFinishedOutcome;
     // @issue:2329 — the raw provider stop reason (e.g. 'refusal', 'end_turn')
     // threaded from the repo-owned candidate providerStopReason carrier, so
     // consumers can surface a refusal-specific notice distinct from a normal
@@ -255,12 +255,12 @@ export type ServerGeminiFinishedEvent = {
   };
 };
 
-export type ServerGeminiLoopDetectedEvent = {
-  type: GeminiEventType.LoopDetected;
+export type ServerLoopDetectedEvent = {
+  type: AgentEventType.LoopDetected;
 };
 
-export type ServerGeminiCitationEvent = {
-  type: GeminiEventType.Citation;
+export type ServerCitationEvent = {
+  type: AgentEventType.Citation;
   value: string;
 };
 
@@ -271,45 +271,45 @@ export interface ModelInfo {
   displayLabel?: string;
 }
 
-export type ServerGeminiModelInfoEvent = {
-  type: GeminiEventType.ModelInfo;
+export type ServerModelInfoEvent = {
+  type: AgentEventType.ModelInfo;
   value: ModelInfo;
 };
 
-export type ServerGeminiAgentExecutionStoppedEvent = {
-  type: GeminiEventType.AgentExecutionStopped;
+export type ServerAgentExecutionStoppedEvent = {
+  type: AgentEventType.AgentExecutionStopped;
   reason: string;
   systemMessage?: string;
   contextCleared?: boolean;
 };
 
-export type ServerGeminiAgentExecutionBlockedEvent = {
-  type: GeminiEventType.AgentExecutionBlocked;
+export type ServerAgentExecutionBlockedEvent = {
+  type: AgentEventType.AgentExecutionBlocked;
   reason: string;
   systemMessage?: string;
   contextCleared?: boolean;
 };
 
 // The original union type, now composed of the individual types
-export type ServerGeminiStreamEvent =
-  | ServerGeminiContentEvent
-  | ServerGeminiSystemNoticeEvent
-  | ServerGeminiToolCallRequestEvent
-  | ServerGeminiToolCallResponseEvent
-  | ServerGeminiToolCallConfirmationEvent
-  | ServerGeminiUserCancelledEvent
-  | ServerGeminiStreamIdleTimeoutEvent
-  | ServerGeminiErrorEvent
-  | ServerGeminiChatCompressedEvent
-  | ServerGeminiThoughtEvent
-  | ServerGeminiUsageMetadataEvent
-  | ServerGeminiMaxSessionTurnsEvent
-  | ServerGeminiFinishedEvent
-  | ServerGeminiLoopDetectedEvent
-  | ServerGeminiCitationEvent
-  | ServerGeminiRetryEvent
-  | ServerGeminiInvalidStreamEvent
-  | ServerGeminiAgentExecutionStoppedEvent
-  | ServerGeminiAgentExecutionBlockedEvent
-  | ServerGeminiContextWindowWillOverflowEvent
-  | ServerGeminiModelInfoEvent;
+export type ServerAgentStreamEvent =
+  | ServerContentEvent
+  | ServerSystemNoticeEvent
+  | ServerToolCallRequestEvent
+  | ServerToolCallResponseEvent
+  | ServerToolCallConfirmationEvent
+  | ServerUserCancelledEvent
+  | ServerStreamIdleTimeoutEvent
+  | ServerErrorEvent
+  | ServerChatCompressedEvent
+  | ServerThoughtEvent
+  | ServerUsageMetadataEvent
+  | ServerMaxSessionTurnsEvent
+  | ServerFinishedEvent
+  | ServerLoopDetectedEvent
+  | ServerCitationEvent
+  | ServerRetryEvent
+  | ServerInvalidStreamEvent
+  | ServerAgentExecutionStoppedEvent
+  | ServerAgentExecutionBlockedEvent
+  | ServerContextWindowWillOverflowEvent
+  | ServerModelInfoEvent;

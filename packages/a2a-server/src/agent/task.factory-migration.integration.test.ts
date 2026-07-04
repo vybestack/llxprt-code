@@ -37,8 +37,8 @@ import {
   Config,
   type ConfigParameters,
   ApprovalMode,
-  GeminiEventType,
-  type ServerGeminiStreamEvent,
+  AgentEventType,
+  type ServerAgentStreamEvent,
   type AgentClientContract,
   clearAllSchedulers,
 } from '@vybestack/llxprt-code-core';
@@ -116,7 +116,7 @@ function createRecordingEventBus(): ExecutionEventBus & {
  * Injects a stub at the model-response seam (the ChatSession), NOT at
  * sendMessageStream. The real client.sendMessageStream → orchestrator → Turn
  * pipeline executes against this seam and emits the stub reply as a Content
- * ServerGeminiStreamEvent.
+ * ServerAgentStreamEvent.
  */
 function injectStubModelResponse(
   client: AgentClientContract,
@@ -231,7 +231,7 @@ describe('Task factory migration — Task.create produces a task with a real age
     // Drive the REAL acceptUserMessage path, which calls the REAL
     // agentClient.sendMessageStream (not a stub of it). Collect the emitted
     // stream events.
-    const collectedEvents: ServerGeminiStreamEvent[] = [];
+    const collectedEvents: ServerAgentStreamEvent[] = [];
     for await (const event of task.acceptUserMessage(
       requestContext,
       abortController.signal,
@@ -243,7 +243,7 @@ describe('Task factory migration — Task.create produces a task with a real age
     // whose value equals the stub model reply (real end-to-end behavior
     // through the Task's dispatch path).
     const contentEvents = collectedEvents.filter(
-      (e) => e.type === GeminiEventType.Content,
+      (e) => e.type === AgentEventType.Content,
     );
     expect(contentEvents.length).toBeGreaterThan(0);
     const emittedText = contentEvents

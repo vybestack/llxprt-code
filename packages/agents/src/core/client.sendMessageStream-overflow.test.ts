@@ -14,7 +14,7 @@ import type { Part, PartListUnion } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
@@ -254,7 +254,7 @@ describe('Gemini Client (client.ts)', () => {
 
       // Assert
       expect(events).toContainEqual({
-        type: GeminiEventType.ContextWindowWillOverflow,
+        type: AgentEventType.ContextWindowWillOverflow,
         value: {
           estimatedRequestTokenCount,
           remainingTokenCount,
@@ -299,7 +299,7 @@ describe('Gemini Client (client.ts)', () => {
       const request: Part[] = [{ text: 'continue' }];
 
       const mockStream = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'ok' };
+        yield { type: AgentEventType.Content, value: 'ok' };
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
@@ -314,7 +314,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert — no bogus overflow; the turn proceeds.
       expect(events).not.toContainEqual(
         expect.objectContaining({
-          type: GeminiEventType.ContextWindowWillOverflow,
+          type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
       expect(mockTurnRunFn).toHaveBeenCalled();
@@ -360,7 +360,7 @@ describe('Gemini Client (client.ts)', () => {
       ];
 
       const mockStream = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'ok' };
+        yield { type: AgentEventType.Content, value: 'ok' };
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
@@ -375,7 +375,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert — the 0-token guard must not block the continuation.
       expect(events).not.toContainEqual(
         expect.objectContaining({
-          type: GeminiEventType.ContextWindowWillOverflow,
+          type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
       expect(mockTurnRunFn).toHaveBeenCalled();
@@ -406,7 +406,7 @@ describe('Gemini Client (client.ts)', () => {
       client['chat'] = mockChat as ChatSession;
 
       const mockStream = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'ok' };
+        yield { type: AgentEventType.Content, value: 'ok' };
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
@@ -452,7 +452,7 @@ describe('Gemini Client (client.ts)', () => {
       client['chat'] = mockChat as ChatSession;
 
       const mockStream = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'ok' };
+        yield { type: AgentEventType.Content, value: 'ok' };
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
@@ -469,7 +469,7 @@ describe('Gemini Client (client.ts)', () => {
       expect(estimateSpy).not.toHaveBeenCalled();
       expect(events).not.toContainEqual(
         expect.objectContaining({
-          type: GeminiEventType.ContextWindowWillOverflow,
+          type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
       expect(mockTurnRunFn).toHaveBeenCalled();
@@ -494,7 +494,7 @@ describe('Gemini Client (client.ts)', () => {
       client['chat'] = mockChat as ChatSession;
 
       const mockStream = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'ok' };
+        yield { type: AgentEventType.Content, value: 'ok' };
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
@@ -521,7 +521,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert — the payload is counted (would be 0 under the old text-only
       // estimate), so the guard correctly fires.
       const overflow = events.find(
-        (e) => e.type === GeminiEventType.ContextWindowWillOverflow,
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
       expect(overflow).toBeDefined();
       // JSON of the functionResponse is well over 4000 chars → > 950 tokens.
@@ -572,7 +572,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert — fallback counted the functionResponse payload and emitted the
       // same preflight overflow event rather than throwing.
       const overflow = events.find(
-        (e) => e.type === GeminiEventType.ContextWindowWillOverflow,
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
       expect(overflow).toBeDefined();
       expect(mockTurnRunFn).not.toHaveBeenCalled();
@@ -595,7 +595,7 @@ describe('Gemini Client (client.ts)', () => {
       client['chat'] = mockChat as ChatSession;
 
       const mockStream = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'ok' };
+        yield { type: AgentEventType.Content, value: 'ok' };
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
@@ -620,7 +620,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert — no overflow despite the huge (ignored) inlineData payload.
       expect(events).not.toContainEqual(
         expect.objectContaining({
-          type: GeminiEventType.ContextWindowWillOverflow,
+          type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
       expect(mockTurnRunFn).toHaveBeenCalled();
@@ -680,7 +680,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert
       // Should overflow based on the sticky model's limit
       expect(events).toContainEqual({
-        type: GeminiEventType.ContextWindowWillOverflow,
+        type: AgentEventType.ContextWindowWillOverflow,
         value: {
           estimatedRequestTokenCount,
           remainingTokenCount,
@@ -735,7 +735,7 @@ describe('Gemini Client (client.ts)', () => {
       // Should NOT contain overflow warning
       expect(events).not.toContainEqual(
         expect.objectContaining({
-          type: GeminiEventType.ContextWindowWillOverflow,
+          type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
 
@@ -749,10 +749,10 @@ describe('Gemini Client (client.ts)', () => {
       );
       // Arrange
       const mockStream1 = (async function* () {
-        yield { type: GeminiEventType.InvalidStream };
+        yield { type: AgentEventType.InvalidStream };
       })();
       const mockStream2 = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'Continued content' };
+        yield { type: AgentEventType.Content, value: 'Continued content' };
       })();
 
       mockTurnRunFn
@@ -777,7 +777,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.ModelInfo,
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -785,8 +785,8 @@ describe('Gemini Client (client.ts)', () => {
             displayLabel: 'test-model',
           },
         },
-        { type: GeminiEventType.InvalidStream },
-        { type: GeminiEventType.Content, value: 'Continued content' },
+        { type: AgentEventType.InvalidStream },
+        { type: AgentEventType.Content, value: 'Continued content' },
       ]);
 
       // Verify that turn.run was called twice
@@ -813,7 +813,7 @@ describe('Gemini Client (client.ts)', () => {
       );
       // Arrange
       const mockStream1 = (async function* () {
-        yield { type: GeminiEventType.InvalidStream };
+        yield { type: AgentEventType.InvalidStream };
       })();
 
       mockTurnRunFn.mockReturnValueOnce(mockStream1);
@@ -836,7 +836,7 @@ describe('Gemini Client (client.ts)', () => {
       // Assert
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.ModelInfo,
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -844,7 +844,7 @@ describe('Gemini Client (client.ts)', () => {
             displayLabel: 'test-model',
           },
         },
-        { type: GeminiEventType.InvalidStream },
+        { type: AgentEventType.InvalidStream },
       ]);
 
       // Verify that turn.run was called only once
@@ -861,13 +861,13 @@ describe('Gemini Client (client.ts)', () => {
         forwardedRequests.push(req as Part[]);
         return (async function* () {
           yield {
-            type: GeminiEventType.Thought,
+            type: AgentEventType.Thought,
             value: {
               subject: 'Planning',
               description: 'I will do something',
             },
           };
-          yield { type: GeminiEventType.InvalidStream };
+          yield { type: AgentEventType.InvalidStream };
         })();
       });
 
@@ -909,7 +909,7 @@ describe('Gemini Client (client.ts)', () => {
       ).toBe(false);
       expect(events).toStrictEqual([
         {
-          type: GeminiEventType.ModelInfo,
+          type: AgentEventType.ModelInfo,
           value: {
             model: 'test-model',
             providerName: 'backend',
@@ -918,13 +918,13 @@ describe('Gemini Client (client.ts)', () => {
           },
         },
         {
-          type: GeminiEventType.Thought,
+          type: AgentEventType.Thought,
           value: {
             subject: 'Planning',
             description: 'I will do something',
           },
         },
-        { type: GeminiEventType.InvalidStream },
+        { type: AgentEventType.InvalidStream },
       ]);
     });
 
@@ -936,7 +936,7 @@ describe('Gemini Client (client.ts)', () => {
       // Always return a new invalid stream
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
-          yield { type: GeminiEventType.InvalidStream };
+          yield { type: AgentEventType.InvalidStream };
         })(),
       );
 
@@ -958,9 +958,9 @@ describe('Gemini Client (client.ts)', () => {
       // Assert
       // We expect 1 ModelInfo + 2 InvalidStream events (original + 1 retry)
       expect(events.length).toBe(3);
-      expect(events[0]?.type).toBe(GeminiEventType.ModelInfo);
+      expect(events[0]?.type).toBe(AgentEventType.ModelInfo);
       expect(
-        events.slice(1).every((e) => e.type === GeminiEventType.InvalidStream),
+        events.slice(1).every((e) => e.type === AgentEventType.InvalidStream),
       ).toBe(true);
 
       // Verify that turn.run was called twice

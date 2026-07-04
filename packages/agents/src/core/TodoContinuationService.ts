@@ -5,8 +5,8 @@
  */
 
 import { type PartListUnion, type Part } from '@google/genai';
-import { GeminiEventType } from './turn.js';
-import type { ServerGeminiStreamEvent, ToolCallResponseInfo } from './turn.js';
+import { AgentEventType } from './turn.js';
+import type { ServerAgentStreamEvent, ToolCallResponseInfo } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DEFAULT_AGENT_ID } from './turn.js';
 
@@ -230,11 +230,11 @@ export class TodoContinuationService {
     return parts;
   }
 
-  recordModelActivity(event: ServerGeminiStreamEvent): void {
+  recordModelActivity(event: ServerAgentStreamEvent): void {
     if (!this.todoToolsAvailable) {
       return;
     }
-    if (event.type !== GeminiEventType.ToolCallResponse) {
+    if (event.type !== AgentEventType.ToolCallResponse) {
       return;
     }
 
@@ -350,11 +350,11 @@ export class TodoContinuationService {
     return parts;
   }
 
-  shouldDeferStreamEvent(event: ServerGeminiStreamEvent): boolean {
+  shouldDeferStreamEvent(event: ServerAgentStreamEvent): boolean {
     return (
-      event.type === GeminiEventType.Content ||
-      event.type === GeminiEventType.Finished ||
-      event.type === GeminiEventType.Citation
+      event.type === AgentEventType.Content ||
+      event.type === AgentEventType.Finished ||
+      event.type === AgentEventType.Citation
     );
   }
 

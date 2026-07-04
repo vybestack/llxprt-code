@@ -15,7 +15,7 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
-import type { GeminiCLIExtension } from '../config/config.js';
+import type { LlxprtExtension } from '../config/config.js';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
@@ -598,7 +598,7 @@ My code memory
     );
 
     // Create extension object with contextFiles array (refactored signature)
-    const extension: GeminiCLIExtension = {
+    const extension: LlxprtExtension = {
       name: 'ext1',
       path: path.join(testRootDir, 'extensions/ext1'),
       version: '1.0.0',

@@ -17,7 +17,7 @@ import {
   getEnvironmentContext,
 } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import type { Turn } from './turn.js';
-import { type ServerGeminiStreamEvent } from './turn.js';
+import { type ServerAgentStreamEvent } from './turn.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
@@ -716,7 +716,7 @@ export class AgentClient implements AgentClientContract {
     turns: number = this.MAX_TURNS,
     isInvalidStreamRetry: boolean = false,
     is413Retry: boolean = false,
-  ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
+  ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
     this.activeStreamCount++;
     try {
       return yield* this.messageStreamOrchestrator.execute(

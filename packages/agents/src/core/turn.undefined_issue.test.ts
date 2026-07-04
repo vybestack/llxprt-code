@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Turn } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import type { FunctionCall } from '@google/genai';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 
 describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => {
   let mockChatSession: ChatSession;
@@ -59,8 +59,8 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
 
     it('should have proper event types for GitHub #305 scenarios', () => {
       // Verify that the required event types exist
-      expect(GeminiEventType.ToolCallRequest).toBe('tool_call_request');
-      expect(GeminiEventType.Error).toBe('error');
+      expect(AgentEventType.ToolCallRequest).toBe('tool_call_request');
+      expect(AgentEventType.Error).toBe('error');
     });
   });
 

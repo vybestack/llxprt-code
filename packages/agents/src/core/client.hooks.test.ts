@@ -14,7 +14,7 @@ import type { PartListUnion } from '@google/genai';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 import { fromAsync, setupGeminiClient } from './client-test-helpers.js';
 
 // Mock prompts module before imports
@@ -226,7 +226,7 @@ describe('Gemini Client (client.ts)', () => {
 
       // Setup minimal mocks for client
       const mockStream = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'Should not reach here' };
+        yield { type: AgentEventType.Content, value: 'Should not reach here' };
       })();
       mockTurnRunFn.mockReturnValue(mockStream);
 
@@ -252,7 +252,7 @@ describe('Gemini Client (client.ts)', () => {
 
       // Assert
       // Should yield an Error event with the blocking reason
-      const errorEvent = events.find((e) => e.type === GeminiEventType.Error);
+      const errorEvent = events.find((e) => e.type === AgentEventType.Error);
       expect(errorEvent).toBeDefined();
       expect(errorEvent?.value.error.message).toContain(
         'BeforeAgent hook blocked',
@@ -293,8 +293,8 @@ describe('Gemini Client (client.ts)', () => {
       // Track what request was passed to turn.run
       const capturedRequests: PartListUnion[] = [];
       const mockStream = (async function* () {
-        yield { type: GeminiEventType.Content, value: 'Response' };
-        yield { type: GeminiEventType.Finished, value: { reason: 'STOP' } };
+        yield { type: AgentEventType.Content, value: 'Response' };
+        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
       })();
       mockTurnRunFn.mockImplementation((req: PartListUnion) => {
         capturedRequests.push(req);

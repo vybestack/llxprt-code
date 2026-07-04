@@ -502,7 +502,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
         {},
         [],
       );
-      const { Turn, GeminiEventType } = await import('./turn.js');
+      const { Turn, AgentEventType } = await import('./turn.js');
       const turn = new Turn(chat, 'prompt-123');
 
       const events = [] as Array<{ type: string; value?: unknown }>;
@@ -517,13 +517,13 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       }
 
       const contentEvents = events.filter(
-        (event) => event.type === GeminiEventType.Content,
+        (event) => event.type === AgentEventType.Content,
       );
       expect(contentEvents).toHaveLength(1);
       expect(contentEvents[0].value).toBe('first chunk');
 
       const finishedEvents = events.filter(
-        (event) => event.type === GeminiEventType.Finished,
+        (event) => event.type === AgentEventType.Finished,
       );
       expect(finishedEvents).toHaveLength(1);
       expect(finishedEvents[0].value).toMatchObject({ reason: 'STOP' });

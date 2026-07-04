@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TodoContinuationService } from './TodoContinuationService.js';
-import { GeminiEventType } from './turn.js';
+import { AgentEventType } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
@@ -203,7 +203,7 @@ describe('TodoContinuationService', () => {
       ]);
       for (let i = 0; i < 5; i++) {
         service.recordModelActivity({
-          type: GeminiEventType.ToolCallResponse,
+          type: AgentEventType.ToolCallResponse,
           value: {
             callId: `call-${i}`,
             responseParts: [],

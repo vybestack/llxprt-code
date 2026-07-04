@@ -12,7 +12,7 @@
 
 import type React from 'react';
 import {
-  type ServerGeminiContentEvent as ContentEvent,
+  type ServerContentEvent as ContentEvent,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
 import {

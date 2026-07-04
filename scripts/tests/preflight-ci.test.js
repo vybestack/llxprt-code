@@ -47,6 +47,21 @@ describe('Issue #2323: preflight-ci step ordering', () => {
     expect(typecheckIndex).toBeGreaterThan(buildIndex);
     expect(testIndex).toBeGreaterThan(typecheckIndex);
   });
+
+  /**
+   * Issue #2339: Build must precede lint:ci so type-aware ESLint rules can
+   * resolve cross-workspace imports against compiled dist/*.d.ts declarations.
+   * Before this fix, postinstall.cjs (rewritten in #2305 to be symlink-only)
+   * no longer built dist/ during npm ci, so lint:ci ran against unbuilt source
+   * and emitted 317 phantom "unexpected any" errors, failing the nightly
+   * release.
+   */
+  it('runs build before lint:ci for type-aware ESLint resolution (issue #2339)', () => {
+    const buildIndex = commands.indexOf('npm run build');
+    const lintIndex = commands.indexOf('npm run lint:ci');
+    expect(buildIndex).toBeGreaterThan(-1);
+    expect(lintIndex).toBeGreaterThan(buildIndex);
+  });
 });
 
 describe('Issue #2323: root package.json preflight script', () => {
@@ -170,10 +185,12 @@ describe('Issue #2323: runPreflight aborts on failure', () => {
 
     // Verify steps before build ran before the failure
     expect(executedCommands).toContain('npm run format');
-    expect(executedCommands).toContain('npm run lint:ci');
 
+    // lint:ci, typecheck, lint:agents-api-surface, and test:ci all run after
+    // build and must not execute when build fails (issue #2339 ordering).
     const commandsAfterBuild = executedCommands.slice(buildIndex + 1);
     const notAfterFailure = [
+      'npm run lint:ci',
       'npm run typecheck',
       'npm run lint:agents-api-surface',
       'npm run test:ci',

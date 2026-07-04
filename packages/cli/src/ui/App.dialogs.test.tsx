@@ -44,7 +44,7 @@ interface MockServerConfig {
   mcpServers?: Record<string, MCPServerConfig>; // Use imported MCPServerConfig
   userAgent: string;
   userMemory: string;
-  geminiMdFileCount: number;
+  llxprtMdFileCount: number;
   coreMemoryFileCount: number;
   approvalMode: ApprovalMode;
   vertexai?: boolean;
@@ -73,10 +73,9 @@ interface MockServerConfig {
   getUserAgent: Mock<() => string>;
   getUserMemory: Mock<() => string>;
   setUserMemory: Mock<(newUserMemory: string) => void>;
-  getGeminiMdFileCount: Mock<() => number>;
   getLlxprtMdFileCount: Mock<() => number>;
   getCoreMemoryFileCount: Mock<() => number>;
-  setGeminiMdFileCount: Mock<(count: number) => void>;
+  setLlxprtMdFileCount: Mock<(count: number) => void>;
   getApprovalMode: Mock<() => ApprovalMode>;
   setApprovalMode: Mock<(skip: ApprovalMode) => void>;
   getVertexAI: Mock<() => boolean | undefined>;
@@ -126,7 +125,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
           opts.userMemory != null && opts.userMemory !== ''
             ? opts.userMemory
             : '',
-        geminiMdFileCount: opts.geminiMdFileCount ?? 0,
+        llxprtMdFileCount: opts.llxprtMdFileCount ?? 0,
         coreMemoryFileCount: opts.coreMemoryFileCount ?? 0,
         approvalMode: opts.approvalMode ?? ApprovalMode.DEFAULT,
         vertexai: opts.vertexai,
@@ -173,10 +172,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
             : '',
         ),
         setUserMemory: vi.fn(),
-        getGeminiMdFileCount: vi.fn(() => opts.geminiMdFileCount ?? 0),
-        getLlxprtMdFileCount: vi.fn(() => opts.geminiMdFileCount ?? 0),
+        getLlxprtMdFileCount: vi.fn(() => opts.llxprtMdFileCount ?? 0),
         getCoreMemoryFileCount: vi.fn(() => opts.coreMemoryFileCount ?? 0),
-        setGeminiMdFileCount: vi.fn(),
+        setLlxprtMdFileCount: vi.fn(),
         getApprovalMode: vi.fn(() => opts.approvalMode ?? ApprovalMode.DEFAULT),
         setApprovalMode: vi.fn(),
         getVertexAI: vi.fn(() => opts.vertexai),
@@ -407,7 +405,7 @@ describe('App UI', () => {
       targetDir: '/test/dir',
       debugMode: false,
       userMemory: '',
-      geminiMdFileCount: 0,
+      llxprtMdFileCount: 0,
       showMemoryUsage: false,
       sessionId: 'test-session-id',
       cwd: '/tmp',

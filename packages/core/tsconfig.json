@@ -33,6 +33,7 @@
     "node_modules",
     "dist",
     "**/*.test.ts",
+    "**/*.test-d.ts",
     "**/*.spec.ts",
     "../settings/src/**/*.test.ts",
     "../settings/src/**/*.spec.ts",

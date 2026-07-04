@@ -21,7 +21,7 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
-import type { GeminiCLIExtension } from '../config/config.js';
+import type { LlxprtExtension } from '../config/config.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 vi.mock('os', async (importOriginal) => {
@@ -34,7 +34,7 @@ vi.mock('os', async (importOriginal) => {
 
 // Simple extension loader for testing
 class SimpleExtensionLoader {
-  constructor(private extensions: GeminiCLIExtension[]) {}
+  constructor(private extensions: LlxprtExtension[]) {}
   getExtensions() {
     return this.extensions;
   }
@@ -208,7 +208,7 @@ describe('memoryDiscovery subfunctions', () => {
         {
           isActive: true,
           contextFiles: [extFile],
-        } as GeminiCLIExtension,
+        } as LlxprtExtension,
       ]);
 
       const result = await loadEnvironmentMemory([], mockExtensionLoader);

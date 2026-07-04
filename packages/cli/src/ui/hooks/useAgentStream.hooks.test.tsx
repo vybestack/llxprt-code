@@ -22,7 +22,7 @@ import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type { Config, ToolRegistry } from '@vybestack/llxprt-code-core';
 import {
   ApprovalMode,
-  GeminiEventType as ServerGeminiEventType,
+  AgentEventType as ServerEventType,
 } from '@vybestack/llxprt-code-core';
 import { MessageType, StreamingState } from '../types.js';
 
@@ -131,7 +131,7 @@ describe('useAgentStream', () => {
       mcpServers: undefined,
       userAgent: 'test-agent',
       userMemory: '',
-      geminiMdFileCount: 0,
+      llxprtMdFileCount: 0,
       alwaysSkipModificationConfirmation: false,
       vertexai: false,
       showMemoryUsage: false,
@@ -199,7 +199,7 @@ describe('useAgentStream', () => {
         mockTurnRun.mockReturnValue(
           (async function* () {
             yield {
-              type: ServerGeminiEventType.AgentExecutionStopped,
+              type: ServerEventType.AgentExecutionStopped,
               reason: 'Test stop reason',
             };
           })(),
@@ -227,7 +227,7 @@ describe('useAgentStream', () => {
         mockTurnRun.mockReturnValue(
           (async function* () {
             yield {
-              type: ServerGeminiEventType.AgentExecutionBlocked,
+              type: ServerEventType.AgentExecutionBlocked,
               reason: 'Test block reason',
             };
           })(),
@@ -255,7 +255,7 @@ describe('useAgentStream', () => {
         mockTurnRun.mockReturnValue(
           (async function* () {
             yield {
-              type: ServerGeminiEventType.AgentExecutionStopped,
+              type: ServerEventType.AgentExecutionStopped,
               reason: 'Hook stopped execution',
             };
           })(),
@@ -278,7 +278,7 @@ describe('useAgentStream', () => {
         mockTurnRun.mockReturnValue(
           (async function* () {
             yield {
-              type: ServerGeminiEventType.AgentExecutionBlocked,
+              type: ServerEventType.AgentExecutionBlocked,
               reason: 'Hook blocked execution',
             };
           })(),

@@ -11,7 +11,7 @@ import {
   type MessageStreamDeps,
   type StreamContext,
 } from './MessageStreamOrchestrator.js';
-import { GeminiEventType, type ServerGeminiStreamEvent } from './turn.js';
+import { AgentEventType, type ServerAgentStreamEvent } from './turn.js';
 
 interface TerminalState {
   hadToolCallsThisTurn: boolean;
@@ -50,11 +50,11 @@ async function fireAfterHook(deps: MessageStreamDeps, ctx: StreamContext) {
 async function* fireAfterHookAndEmitClearContext(
   deps: MessageStreamDeps,
   ctx: StreamContext,
-): AsyncGenerator<ServerGeminiStreamEvent, void> {
+): AsyncGenerator<ServerAgentStreamEvent, void> {
   const afterOut = await fireAfterHook(deps, ctx);
   if (afterOut?.shouldClearContext() === true) {
     yield {
-      type: GeminiEventType.AgentExecutionStopped,
+      type: AgentEventType.AgentExecutionStopped,
       reason:
         afterOut.getEffectiveReason() || 'Context cleared by AfterAgent hook',
       contextCleared: true,
@@ -85,12 +85,12 @@ function extractToolNamesFromRequest(request: PartListUnion): string[] {
 async function* handle413Error(
   deps: MessageStreamDeps,
   ctx: StreamContext,
-  deferredEvents: ServerGeminiStreamEvent[],
+  deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
   initialRequest: PartListUnion,
   signal: AbortSignal,
   boundedTurns: number,
-): AsyncGenerator<ServerGeminiStreamEvent, IterationResult | undefined> {
+): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
   if (ctx.is413Retry) {
     deps.logger.warn(
       () =>
@@ -137,7 +137,7 @@ async function* handle413Error(
   });
 }
 
-function getErrorStatus(event: ServerGeminiStreamEvent): number | undefined {
+function getErrorStatus(event: ServerAgentStreamEvent): number | undefined {
   if (!('value' in event)) {
     return undefined;
   }
@@ -156,13 +156,13 @@ function getErrorStatus(event: ServerGeminiStreamEvent): number | undefined {
 
 async function* handleErrorEvent(
   deps: MessageStreamDeps,
-  event: ServerGeminiStreamEvent,
+  event: ServerAgentStreamEvent,
   signal: AbortSignal,
   ctx: StreamContext,
-  deferredEvents: ServerGeminiStreamEvent[],
+  deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
   initialRequest: PartListUnion,
-): AsyncGenerator<ServerGeminiStreamEvent, IterationResult | undefined> {
+): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
   const errorStatus = getErrorStatus(event);
   const { config } = deps;
   const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
@@ -211,9 +211,9 @@ async function* handleInvalidStreamEvent(
   deps: MessageStreamDeps,
   signal: AbortSignal,
   ctx: StreamContext,
-  deferredEvents: ServerGeminiStreamEvent[],
+  deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
-): AsyncGenerator<ServerGeminiStreamEvent, IterationResult> {
+): AsyncGenerator<ServerAgentStreamEvent, IterationResult> {
   const { config } = deps;
   const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
   deps.logger.warn(() => `[stream:orchestrator] handling InvalidStream event`, {
@@ -252,14 +252,14 @@ async function* handleInvalidStreamEvent(
 
 export async function* handleTerminalEvent(
   deps: MessageStreamDeps,
-  event: ServerGeminiStreamEvent,
+  event: ServerAgentStreamEvent,
   signal: AbortSignal,
   ctx: StreamContext,
-  deferredEvents: ServerGeminiStreamEvent[],
+  deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
   initialRequest: PartListUnion,
-): AsyncGenerator<ServerGeminiStreamEvent, IterationResult | undefined> {
-  if (event.type === GeminiEventType.Error) {
+): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
+  if (event.type === AgentEventType.Error) {
     return yield* handleErrorEvent(
       deps,
       event,
@@ -271,7 +271,7 @@ export async function* handleTerminalEvent(
     );
   }
 
-  if (event.type === GeminiEventType.InvalidStream) {
+  if (event.type === AgentEventType.InvalidStream) {
     return yield* handleInvalidStreamEvent(
       deps,
       signal,

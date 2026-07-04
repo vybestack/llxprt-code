@@ -9,7 +9,7 @@ import type {
   ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-core';
 import {
-  GeminiEventType,
+  AgentEventType,
   ApprovalMode,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
@@ -193,7 +193,7 @@ describe('E2E Tests', () => {
     sendMessageStreamSpy.mockImplementationOnce(async function* () {
       yield* [
         {
-          type: GeminiEventType.ToolCallRequest,
+          type: AgentEventType.ToolCallRequest,
           value: {
             callId: 'test-call-id',
             name: 'test-tool',
@@ -277,7 +277,7 @@ describe('E2E Tests', () => {
     sendMessageStreamSpy.mockImplementationOnce(async function* () {
       yield* [
         {
-          type: GeminiEventType.ToolCallRequest,
+          type: AgentEventType.ToolCallRequest,
           value: {
             callId: 'test-call-id-1',
             name: 'test-tool-1',
@@ -285,7 +285,7 @@ describe('E2E Tests', () => {
           },
         },
         {
-          type: GeminiEventType.ToolCallRequest,
+          type: AgentEventType.ToolCallRequest,
           value: {
             callId: 'test-call-id-2',
             name: 'test-tool-2',
@@ -401,7 +401,7 @@ describe('E2E Tests', () => {
     sendMessageStreamSpy.mockImplementationOnce(async function* () {
       yield* [
         {
-          type: GeminiEventType.ToolCallRequest,
+          type: AgentEventType.ToolCallRequest,
           value: {
             callId: 'test-call-id-no-approval',
             name: 'test-tool-no-approval',
@@ -515,7 +515,7 @@ describe('E2E Tests', () => {
     sendMessageStreamSpy.mockImplementationOnce(async function* () {
       yield* [
         {
-          type: GeminiEventType.ToolCallRequest,
+          type: AgentEventType.ToolCallRequest,
           value: {
             callId: 'test-call-id-yolo',
             name: 'test-tool-yolo',

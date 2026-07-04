@@ -6,10 +6,10 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type {
-  ServerGeminiToolCallRequestEvent,
-  ServerGeminiStreamEvent,
+  ServerToolCallRequestEvent,
+  ServerAgentStreamEvent,
 } from './turn.js';
-import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type {
   GenerateContentResponse,
   Part,
@@ -155,8 +155,8 @@ describe('Turn run - hook tool restrictions', () => {
     }
 
     const toolEvents = events.filter(
-      (event): event is ServerGeminiToolCallRequestEvent =>
-        event.type === GeminiEventType.ToolCallRequest,
+      (event): event is ServerToolCallRequestEvent =>
+        event.type === AgentEventType.ToolCallRequest,
     );
     expect(toolEvents).toHaveLength(1);
     expect(toolEvents[0].value).toStrictEqual(
@@ -208,7 +208,7 @@ describe('Turn run - hook tool restrictions', () => {
     }
 
     expect(
-      events.some((event) => event.type === GeminiEventType.ToolCallRequest),
+      events.some((event) => event.type === AgentEventType.ToolCallRequest),
     ).toBe(false);
     expect(turn.pendingToolCalls).toStrictEqual([]);
   });
@@ -242,7 +242,7 @@ describe('Turn run - hook tool restrictions', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       [{ text: 'Use a blocked tool' }],
       new AbortController().signal,
@@ -251,7 +251,7 @@ describe('Turn run - hook tool restrictions', () => {
     }
 
     expect(
-      events.some((event) => event.type === GeminiEventType.ToolCallRequest),
+      events.some((event) => event.type === AgentEventType.ToolCallRequest),
     ).toBe(false);
     const finishedEvent = findFinishedEvent(events);
     expect(finishedEvent).toBeDefined();
@@ -296,7 +296,7 @@ describe('Turn run - hook tool restrictions', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       [{ text: 'Use allowed tools' }],
       new AbortController().signal,
@@ -305,8 +305,8 @@ describe('Turn run - hook tool restrictions', () => {
     }
 
     const toolEvents = events.filter(
-      (event): event is ServerGeminiToolCallRequestEvent =>
-        event.type === GeminiEventType.ToolCallRequest,
+      (event): event is ServerToolCallRequestEvent =>
+        event.type === AgentEventType.ToolCallRequest,
     );
     expect(toolEvents.map((event) => event.value.name)).toStrictEqual([
       'read_file',
@@ -366,7 +366,7 @@ describe('Turn run - hook tool restrictions', () => {
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
-    const events: ServerGeminiStreamEvent[] = [];
+    const events: ServerAgentStreamEvent[] = [];
     for await (const event of turn.run(
       [{ text: 'Use tools' }],
       new AbortController().signal,
@@ -375,8 +375,8 @@ describe('Turn run - hook tool restrictions', () => {
     }
 
     const toolEvents = events.filter(
-      (event): event is ServerGeminiToolCallRequestEvent =>
-        event.type === GeminiEventType.ToolCallRequest,
+      (event): event is ServerToolCallRequestEvent =>
+        event.type === AgentEventType.ToolCallRequest,
     );
     expect(toolEvents).toHaveLength(1);
     expect(toolEvents[0].value).toStrictEqual(

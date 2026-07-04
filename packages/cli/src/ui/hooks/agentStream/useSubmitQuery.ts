@@ -18,7 +18,7 @@ import {
   type AgentClientContract,
   type MessageSenderType,
   type RecordingIntegration,
-  type ServerGeminiStreamEvent,
+  type ServerAgentStreamEvent,
   type ThinkingBlock,
   type ThoughtSummary,
   type ToolCallRequestInfo,
@@ -121,7 +121,7 @@ export interface UseSubmitQueryReturn {
   scheduleNextQueuedSubmission: () => void;
   /** Processes a single stream event (for the AgenticLoop router). */
   processStreamEvent: (
-    event: ServerGeminiStreamEvent,
+    event: ServerAgentStreamEvent,
     userMessageTimestamp: number,
   ) => void;
   displayUserMessage: (

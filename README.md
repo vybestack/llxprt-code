@@ -122,7 +122,7 @@ To resolve this:
 - **Homebrew users:** Run `brew upgrade llxprt-code` to get the latest formula, or `brew reinstall llxprt-code` to restore a broken installation.
 - **All users:** Install Bun directly from [https://bun.sh](https://bun.sh) and ensure it is on your `PATH`.
 
-**Windows pty caveat:** On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level. On POSIX systems under Bun, a dedicated `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is used instead of `node-pty` to work around a Bun hang. Windows uses `@lydell/node-pty` (with `node-pty` as fallback), not the Bun adapter. If you encounter terminal sizing issues on Windows, ensure you are using a recent Bun version and a compatible terminal emulator.
+**Windows pty caveat:** On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level. On POSIX systems under Bun, a dedicated `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is used instead of `node-pty` to work around a Bun hang. Windows uses `@lydell/node-pty` (with `node-pty` as fallback), not the Bun adapter. If you encounter terminal sizing issues on Windows, use a compatible terminal emulator; the resize race is in `node-pty` itself, not the Bun runtime.
 
 **First session example:**
 

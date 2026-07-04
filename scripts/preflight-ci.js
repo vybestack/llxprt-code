@@ -17,6 +17,14 @@ import { resolve } from 'node:path';
 /**
  * The ordered preflight step sequence.
  *
+ * `build` must run before `lint:ci` because the type-aware ESLint rules
+ * (typescript-eslint `projectService` / tsserver) require compiled `dist/*.d.ts`
+ * declarations on disk to resolve cross-workspace imports. Without them, every
+ * cross-package import silently resolves to `any`, producing hundreds of
+ * phantom `strict-boolean-expressions` and `no-unnecessary-type-assertion`
+ * errors. This mirrors the build-before-lint ordering in ci.yml. See issue
+ * #2339.
+ *
  * `lint:agents-api-surface` must run before `test:ci` because the agents
  * package API-surface guard test fails closed when the surface report
  * (`node_modules/.cache/agents-api-surface/report.json`) is absent. `clean`
@@ -28,8 +36,8 @@ import { resolve } from 'node:path';
 export function preflightSteps() {
   return [
     { command: 'npm run format' },
-    { command: 'npm run lint:ci' },
     { command: 'npm run build' },
+    { command: 'npm run lint:ci' },
     { command: 'npm run typecheck' },
     { command: 'npm run lint:agents-api-surface' },
     { command: 'npm run test:ci' },

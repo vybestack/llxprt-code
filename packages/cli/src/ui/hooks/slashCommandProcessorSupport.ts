@@ -226,7 +226,6 @@ function buildCommandContextUi(
     toggleCorgiMode: inputs.actions.toggleCorgiMode,
     toggleDebugProfiler: inputs.actions.toggleDebugProfiler,
     toggleVimEnabled: inputs.toggleVimEnabled,
-    setGeminiMdFileCount: inputs.setLlxprtMdFileCount,
     setLlxprtMdFileCount: inputs.setLlxprtMdFileCount,
     updateHistoryTokenCount: inputs.stats.updateHistoryTokenCount,
     reloadCommands: inputs.reloadCommands,

@@ -6,8 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { AfterAgentHookOutput, DefaultHookOutput } from '../../hooks/types.js';
-import { GeminiEventType } from '../turn.js';
-import type { ServerGeminiStreamEvent } from '../turn.js';
+import { AgentEventType } from '../turn.js';
+import type { ServerAgentStreamEvent } from '../turn.js';
 
 /**
  * These tests validate the clearContext behavior at the unit level
@@ -40,22 +40,22 @@ describe('clearContext end-to-end contract', () => {
 
   describe('AgentExecutionStopped event structure with contextCleared', () => {
     it('has contextCleared field in type definition', () => {
-      const event: ServerGeminiStreamEvent = {
-        type: GeminiEventType.AgentExecutionStopped,
+      const event: ServerAgentStreamEvent = {
+        type: AgentEventType.AgentExecutionStopped,
         reason: 'test',
         contextCleared: true,
       };
-      expect(event.type).toBe(GeminiEventType.AgentExecutionStopped);
+      expect(event.type).toBe(AgentEventType.AgentExecutionStopped);
       expect((event as { contextCleared: boolean }).contextCleared).toBe(true);
     });
 
     it('has contextCleared field on AgentExecutionBlocked events', () => {
-      const event: ServerGeminiStreamEvent = {
-        type: GeminiEventType.AgentExecutionBlocked,
+      const event: ServerAgentStreamEvent = {
+        type: AgentEventType.AgentExecutionBlocked,
         reason: 'test',
         contextCleared: true,
       };
-      expect(event.type).toBe(GeminiEventType.AgentExecutionBlocked);
+      expect(event.type).toBe(AgentEventType.AgentExecutionBlocked);
       expect((event as { contextCleared: boolean }).contextCleared).toBe(true);
     });
   });
@@ -100,11 +100,11 @@ describe('clearContext end-to-end contract', () => {
       // When the orchestrator emits AgentExecutionStopped with contextCleared,
       // the UI should display the clear context notification. The event
       // should arrive after any content events in the same stream.
-      const events: ServerGeminiStreamEvent[] = [
-        { type: GeminiEventType.Content, value: 'response text' },
-        { type: GeminiEventType.Finished, value: { reason: 'STOP' as const } },
+      const events: ServerAgentStreamEvent[] = [
+        { type: AgentEventType.Content, value: 'response text' },
+        { type: AgentEventType.Finished, value: { reason: 'STOP' as const } },
         {
-          type: GeminiEventType.AgentExecutionStopped,
+          type: AgentEventType.AgentExecutionStopped,
           reason: 'Context cleared by AfterAgent hook',
           contextCleared: true,
         },
@@ -112,14 +112,14 @@ describe('clearContext end-to-end contract', () => {
 
       const clearEvent = events.find(
         (e) =>
-          e.type === GeminiEventType.AgentExecutionStopped &&
+          e.type === AgentEventType.AgentExecutionStopped &&
           'contextCleared' in e &&
           (e as { contextCleared?: boolean }).contextCleared === true,
       );
 
       // Content should come before clearContext event
       const contentIndex = events.findIndex(
-        (e) => e.type === GeminiEventType.Content,
+        (e) => e.type === AgentEventType.Content,
       );
       const clearIndex = events.indexOf(clearEvent!);
       expect(contentIndex).toBeLessThan(clearIndex);
@@ -127,8 +127,8 @@ describe('clearContext end-to-end contract', () => {
     });
 
     it('contextCleared is not present on normal Finished events', () => {
-      const event: ServerGeminiStreamEvent = {
-        type: GeminiEventType.Finished,
+      const event: ServerAgentStreamEvent = {
+        type: AgentEventType.Finished,
         value: { reason: 'STOP' as const },
       };
       expect('contextCleared' in event).toBe(false);

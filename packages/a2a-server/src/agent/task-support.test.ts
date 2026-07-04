@@ -6,8 +6,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import {
-  GeminiEventType,
-  type ServerGeminiStreamEvent,
+  AgentEventType,
+  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import {
   applyReplacement,
@@ -125,10 +125,10 @@ describe('handleStreamError', () => {
     const stateChange: StateChange = {
       kind: CoderAgentEvent.StateChangeEvent,
     };
-    const event: ServerGeminiStreamEvent & {
-      type: typeof GeminiEventType.Error;
+    const event: ServerAgentStreamEvent & {
+      type: typeof AgentEventType.Error;
     } = {
-      type: GeminiEventType.Error,
+      type: AgentEventType.Error,
       value: {
         error: {
           message: 'Rate limit exceeded',

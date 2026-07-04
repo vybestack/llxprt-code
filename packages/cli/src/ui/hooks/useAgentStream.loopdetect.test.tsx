@@ -30,7 +30,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import {
   ApprovalMode,
-  GeminiEventType as ServerGeminiEventType,
+  AgentEventType as ServerEventType,
 } from '@vybestack/llxprt-code-core';
 import type { PartListUnion } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -144,7 +144,7 @@ describe('useAgentStream', () => {
       mcpServers: undefined,
       userAgent: 'test-agent',
       userMemory: '',
-      geminiMdFileCount: 0,
+      llxprtMdFileCount: 0,
       alwaysSkipModificationConfirmation: false,
       vertexai: false,
       showMemoryUsage: false,
@@ -324,11 +324,11 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'Some content',
           };
           yield {
-            type: ServerGeminiEventType.LoopDetected,
+            type: ServerEventType.LoopDetected,
           };
         })(),
       );
@@ -361,7 +361,7 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValueOnce(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.LoopDetected,
+            type: ServerEventType.LoopDetected,
           };
         })(),
       );
@@ -370,11 +370,11 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValueOnce(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'Retry successful',
           };
           yield {
-            type: ServerGeminiEventType.Finished,
+            type: ServerEventType.Finished,
             value: { reason: 'STOP' },
           };
         })(),
@@ -440,7 +440,7 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.LoopDetected,
+            type: ServerEventType.LoopDetected,
           };
         })(),
       );
@@ -489,7 +489,7 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValueOnce(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.LoopDetected,
+            type: ServerEventType.LoopDetected,
           };
         })(),
       );
@@ -525,7 +525,7 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValueOnce(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.LoopDetected,
+            type: ServerEventType.LoopDetected,
           };
         })(),
       );
@@ -534,11 +534,11 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValueOnce(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'Retry successful',
           };
           yield {
-            type: ServerGeminiEventType.Finished,
+            type: ServerEventType.Finished,
             value: { reason: 'STOP' },
           };
         })(),
@@ -587,11 +587,11 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
-            type: ServerGeminiEventType.Content,
+            type: ServerEventType.Content,
             value: 'Some response content',
           };
           yield {
-            type: ServerGeminiEventType.LoopDetected,
+            type: ServerEventType.LoopDetected,
           };
         })(),
       );

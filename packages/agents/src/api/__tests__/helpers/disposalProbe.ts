@@ -422,8 +422,8 @@ export function aggregateMessage(e: unknown): string {
 // call-count substituted for behavior.
 
 /**
- * Minimal structural view of a GeminiCLIExtension as needed for teardown
- * observation. Mirrors core configTypes.GeminiCLIExtension's teardown-relevant
+ * Minimal structural view of a LlxprtExtension as needed for teardown
+ * observation. Mirrors core configTypes.LlxprtExtension's teardown-relevant
  * fields (name + isActive); the loader only reads these during unload.
  */
 export interface FakeExtension {
