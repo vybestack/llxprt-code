@@ -7,7 +7,7 @@
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type {
   MCPServerConfig,
-  GeminiCLIExtension,
+  LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
@@ -16,7 +16,7 @@ const logger = new DebugLogger('llxprt:config:mcpServerConfig');
 
 export function mergeMcpServers(
   settings: Settings,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
 ): Record<string, MCPServerConfig> {
   const mcpServers = { ...(settings.mcpServers ?? {}) };
   for (const extension of extensions) {

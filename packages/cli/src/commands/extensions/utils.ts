@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import {
   loadExtensionByName,
   loadExtensionConfig,
@@ -27,7 +27,7 @@ interface ExtensionConfig {
  * @returns Object with extension and extensionConfig, or nulls if not found
  */
 export async function getExtensionAndConfig(name: string): Promise<{
-  extension: GeminiCLIExtension | null;
+  extension: LlxprtExtension | null;
   extensionConfig: ExtensionConfig | null;
 }> {
   const extension = loadExtensionByName(name, process.cwd());

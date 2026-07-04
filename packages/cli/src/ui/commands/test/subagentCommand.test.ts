@@ -172,7 +172,6 @@ const createTestContext = ({
       toggleCorgiMode: vi.fn(),
       toggleDebugProfiler: vi.fn(),
       toggleVimEnabled: vi.fn().mockResolvedValue(true),
-      setGeminiMdFileCount: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
       updateHistoryTokenCount: vi.fn(),
       reloadCommands: vi.fn(),

@@ -22,7 +22,7 @@ import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import * as tar from 'tar';
 import * as archiver from 'archiver';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const mockPlatform = vi.hoisted(() => vi.fn());
@@ -166,7 +166,7 @@ describe('git extension helpers', () => {
     });
 
     it('should return NOT_UPDATABLE for non-git extensions', async () => {
-      const extension: GeminiCLIExtension = {
+      const extension: LlxprtExtension = {
         name: 'test',
         path: '/ext',
         version: '1.0.0',
@@ -186,7 +186,7 @@ describe('git extension helpers', () => {
     });
 
     it('should return ERROR if no remotes found', async () => {
-      const extension: GeminiCLIExtension = {
+      const extension: LlxprtExtension = {
         name: 'test',
         path: '/ext',
         version: '1.0.0',
@@ -207,7 +207,7 @@ describe('git extension helpers', () => {
     });
 
     it('should return UPDATE_AVAILABLE when remote hash is different', async () => {
-      const extension: GeminiCLIExtension = {
+      const extension: LlxprtExtension = {
         name: 'test',
         path: '/ext',
         version: '1.0.0',
@@ -233,7 +233,7 @@ describe('git extension helpers', () => {
     });
 
     it('should return UP_TO_DATE when remote and local hashes are the same', async () => {
-      const extension: GeminiCLIExtension = {
+      const extension: LlxprtExtension = {
         name: 'test',
         path: '/ext',
         version: '1.0.0',
@@ -259,7 +259,7 @@ describe('git extension helpers', () => {
     });
 
     it('should return ERROR on git error', async () => {
-      const extension: GeminiCLIExtension = {
+      const extension: LlxprtExtension = {
         name: 'test',
         path: '/ext',
         version: '1.0.0',
@@ -281,7 +281,7 @@ describe('git extension helpers', () => {
     });
 
     it('should return NOT_UPDATABLE and use globalThis.console.warn when loadExtension returns null for local extension', async () => {
-      const extension: GeminiCLIExtension = {
+      const extension: LlxprtExtension = {
         name: 'local-test',
         path: '/ext',
         version: '1.0.0',

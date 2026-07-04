@@ -5,7 +5,7 @@
  */
 
 import {
-  type GeminiCLIExtension,
+  type LlxprtExtension,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -71,7 +71,7 @@ export interface ResolvedExtensionSetting {
  * This should *not* be referenced outside of the logic for reading files.
  * If information is required for manipulating extensions (load, unload, update)
  * outside of the loading process that data needs to be stored on the
- * GeminiCLIExtension class defined in Core.
+ * LlxprtExtension class defined in Core.
  */
 export interface ExtensionConfig {
   name: string;
@@ -148,7 +148,7 @@ export class ExtensionStorage {
 
 export function getWorkspaceExtensions(
   workspaceDir: string,
-): GeminiCLIExtension[] {
+): LlxprtExtension[] {
   // If the workspace dir is the user extensions dir, there are no workspace extensions.
   if (path.resolve(workspaceDir) === path.resolve(os.homedir())) {
     return [];
@@ -164,7 +164,7 @@ export async function copyExtension(
 }
 
 export async function performWorkspaceExtensionMigration(
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   requestConsent: (consent: string) => Promise<boolean>,
 ): Promise<string[]> {
   const failedInstallNames: string[] = [];
@@ -185,7 +185,7 @@ export async function performWorkspaceExtensionMigration(
 export function loadExtensions(
   extensionEnablementManager: ExtensionEnablementManager,
   workspaceDir: string = process.cwd(),
-): GeminiCLIExtension[] {
+): LlxprtExtension[] {
   const settings = loadSettings(workspaceDir).merged;
 
   // Admin-level extension disable enforcement
@@ -202,7 +202,7 @@ export function loadExtensions(
     allExtensions.push(...getWorkspaceExtensions(workspaceDir));
   }
 
-  const uniqueExtensions = new Map<string, GeminiCLIExtension>();
+  const uniqueExtensions = new Map<string, LlxprtExtension>();
 
   for (const extension of allExtensions) {
     if (
@@ -216,10 +216,10 @@ export function loadExtensions(
   return Array.from(uniqueExtensions.values());
 }
 
-export function loadUserExtensions(): GeminiCLIExtension[] {
+export function loadUserExtensions(): LlxprtExtension[] {
   const userExtensions = loadExtensionsFromDir(os.homedir());
 
-  const uniqueExtensions = new Map<string, GeminiCLIExtension>();
+  const uniqueExtensions = new Map<string, LlxprtExtension>();
   for (const extension of userExtensions) {
     if (!uniqueExtensions.has(extension.name)) {
       uniqueExtensions.set(extension.name, extension);
@@ -232,14 +232,14 @@ export function loadUserExtensions(): GeminiCLIExtension[] {
 export function loadExtensionsFromDir(
   dir: string,
   workspaceDir: string = dir,
-): GeminiCLIExtension[] {
+): LlxprtExtension[] {
   const storage = new Storage(dir);
   const extensionsDir = storage.getExtensionsDir();
   if (!fs.existsSync(extensionsDir)) {
     return [];
   }
 
-  const extensions: GeminiCLIExtension[] = [];
+  const extensions: LlxprtExtension[] = [];
   for (const subdir of fs.readdirSync(extensionsDir)) {
     const extensionDir = path.join(extensionsDir, subdir);
 
@@ -263,7 +263,7 @@ const extensionLoaderDeps = {
 
 export function loadExtension(
   context: LoadExtensionContext,
-): GeminiCLIExtension | null {
+): LlxprtExtension | null {
   return loadExtensionFromDir(context, extensionLoaderDeps);
 }
 
@@ -339,7 +339,7 @@ export async function resolveExtensionSettingsWithSource(
 export function loadExtensionByName(
   name: string,
   workspaceDir: string = process.cwd(),
-): GeminiCLIExtension | null {
+): LlxprtExtension | null {
   const userExtensionsDir = ExtensionStorage.getUserExtensionsDir();
   if (!fs.existsSync(userExtensionsDir)) {
     return null;
@@ -366,10 +366,10 @@ export function loadInstallMetadata(
 }
 
 export function annotateActiveExtensions(
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   workspaceDir: string,
   manager: ExtensionEnablementManager,
-): GeminiCLIExtension[] {
+): LlxprtExtension[] {
   manager.validateExtensionOverrides(extensions);
   return extensions.map((extension) => ({
     ...extension,
@@ -861,7 +861,7 @@ export async function uninstallExtension(
 }
 
 export function toOutputString(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   workspaceDir: string,
 ): string {
   const manager = new ExtensionEnablementManager(

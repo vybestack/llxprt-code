@@ -295,7 +295,7 @@ export const memoryCommand: SlashCommand = {
               // Best-effort: memory is already stored; instruction update
               // can fail before the chat is initialized.
             }
-            context.ui.setGeminiMdFileCount(fileCount);
+            context.ui.setLlxprtMdFileCount(fileCount);
 
             const successMessage =
               memoryContent.length > 0

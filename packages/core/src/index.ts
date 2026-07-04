@@ -642,8 +642,12 @@ export {
   type ExtensionEvents,
   type ExtensionsStartingEvent,
   type ExtensionsStoppingEvent,
-  type GeminiCLIExtension,
 } from './utils/extensionLoader.js';
+
+// Explicit exports resolve star-export ambiguity between config.js and extensionLoader.js.
+export type { LlxprtExtension } from './config/configTypes.js';
+// Deprecated alias — kept for one release cycle for external consumers.
+export type { GeminiCLIExtension } from './config/configTypes.js';
 
 // Export MCP Client Manager — re-exported from @vybestack/llxprt-code-mcp (also available above)
 

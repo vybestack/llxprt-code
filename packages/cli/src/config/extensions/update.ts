@@ -19,7 +19,7 @@ import {
   type ExtensionInstallMetadata,
 } from '../extension.js';
 import { checkForExtensionUpdate } from './github.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import { getErrorMessage } from '../../utils/errors.js';
 import { debugLogger } from '@vybestack/llxprt-code-core';
@@ -30,7 +30,7 @@ export interface ExtensionUpdateInfo {
   updatedVersion: string;
 }
 function setExtensionUpdateState(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   state: ExtensionUpdateState,
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
 ): void {
@@ -41,7 +41,7 @@ function setExtensionUpdateState(
 }
 
 function validateInstallMetadata(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   installMetadata: ExtensionInstallMetadata | undefined,
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
 ): ExtensionInstallMetadata {
@@ -67,7 +67,7 @@ function validateInstallMetadata(
 }
 
 function setExtensionUpdatedState(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   enableExtensionReloading: boolean | undefined,
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
 ): void {
@@ -81,10 +81,10 @@ function setExtensionUpdatedState(
 }
 
 function getUpdatedExtension(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   cwd: string,
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
-): GeminiCLIExtension {
+): LlxprtExtension {
   const updatedExtensionStorage = new ExtensionStorage(extension.name);
   const updatedExtension = loadExtension({
     extensionDir: updatedExtensionStorage.getExtensionDir(),
@@ -102,7 +102,7 @@ function getUpdatedExtension(
 }
 
 export async function updateExtension(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   cwd: string = process.cwd(),
   requestConsent: (consent: string) => Promise<boolean>,
   currentState: ExtensionUpdateState,
@@ -173,7 +173,7 @@ export async function updateExtension(
 export async function updateAllUpdatableExtensions(
   cwd: string = process.cwd(),
   requestConsent: (consent: string) => Promise<boolean>,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   extensionsState: Map<string, ExtensionUpdateStatus>,
   dispatch: (action: ExtensionUpdateAction) => void,
   enableExtensionReloading?: boolean,
@@ -206,7 +206,7 @@ export interface ExtensionUpdateCheckResult {
 }
 
 export async function checkForAllExtensionUpdates(
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   dispatch: (action: ExtensionUpdateAction) => void,
   _cwd: string = process.cwd(),
 ): Promise<void> {

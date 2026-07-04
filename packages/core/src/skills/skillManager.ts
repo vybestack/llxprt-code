@@ -16,7 +16,7 @@ import {
   loadSkillsFromDir,
   getBuiltinSkillsDir,
 } from './skillLoader.js';
-import type { GeminiCLIExtension } from '../config/config.js';
+import type { LlxprtExtension } from '../config/config.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { coreEvents } from '../utils/events.js';
 
@@ -112,7 +112,7 @@ export class SkillManager {
    */
   async discoverSkills(
     storage: Storage,
-    extensions: GeminiCLIExtension[] = [],
+    extensions: LlxprtExtension[] = [],
   ): Promise<void> {
     this.clearSkills();
 

@@ -20,7 +20,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SkillDefinition } from '@vybestack/llxprt-code-core/skills/skillManager.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core/config/config.js';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/config.js';
 
 /**
  * The kind a CLI touchpoint is mapped to in the command→API map.
@@ -183,7 +183,7 @@ export interface ManageExtensionsInput {
 
 /** Minimal ExtensionLoader surface this app-service depends on. */
 export interface ManageExtensionsLoader {
-  getExtensions(): GeminiCLIExtension[];
+  getExtensions(): LlxprtExtension[];
 }
 
 export interface ManageExtensionsExtension {

@@ -21,7 +21,7 @@ import type {
   ThoughtSummary,
   IdeInfo,
   Config,
-  GeminiCLIExtension,
+  LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import type { SlashCommand, CommandContext } from '../../../commands/types.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
@@ -91,7 +91,7 @@ export interface UIStateParams {
   toolsDialogAction: 'enable' | 'disable';
   toolsDialogTools: AnyDeclarativeTool[];
   toolsDialogDisabledTools: string[];
-  workspaceGeminiCLIExtensions: GeminiCLIExtension[];
+  workspaceLlxprtExtensions: LlxprtExtension[];
   loggingDialogData: { entries: unknown[] };
   subagentDialogInitialView?: SubagentView;
   subagentDialogInitialName?: string;
@@ -129,7 +129,7 @@ export interface UIStateParams {
     prompt: React.ReactNode;
     onConfirm: (value: boolean) => void;
   } | null;
-  confirmUpdateGeminiCLIExtensionRequests: ConfirmationRequest[];
+  confirmUpdateLlxprtExtensionRequests: ConfirmationRequest[];
 
   // Exit/warning states
   ctrlCPressedOnce: boolean;
@@ -293,7 +293,7 @@ function buildDialogData(p: UIStateParams) {
     toolsDialogAction: p.toolsDialogAction,
     toolsDialogTools: p.toolsDialogTools,
     toolsDialogDisabledTools: p.toolsDialogDisabledTools,
-    workspaceGeminiCLIExtensions: p.workspaceGeminiCLIExtensions,
+    workspaceLlxprtExtensions: p.workspaceLlxprtExtensions,
     loggingDialogData: p.loggingDialogData,
     subagentDialogInitialView: p.subagentDialogInitialView,
     subagentDialogInitialName: p.subagentDialogInitialName,
@@ -311,8 +311,8 @@ function buildDialogData(p: UIStateParams) {
 function buildConfirmationAndExit(p: UIStateParams) {
   return {
     confirmationRequest: p.confirmationRequest,
-    confirmUpdateGeminiCLIExtensionRequests:
-      p.confirmUpdateGeminiCLIExtensionRequests,
+    confirmUpdateLlxprtExtensionRequests:
+      p.confirmUpdateLlxprtExtensionRequests,
     ctrlCPressedOnce: p.ctrlCPressedOnce,
     ctrlDPressedOnce: p.ctrlDPressedOnce,
     showEscapePrompt: p.showEscapePrompt,

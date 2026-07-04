@@ -16,8 +16,8 @@ import {
 import { createExtension } from '../../test-utils/createExtension.js';
 import { useExtensionUpdates } from './useExtensionUpdates.js';
 import {
-  GEMINI_DIR,
-  type GeminiCLIExtension,
+  LLXPRT_CONFIG_DIR,
+  type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { MessageType } from '../types.js';
@@ -50,7 +50,7 @@ describe('useExtensionUpdates', () => {
       path.join(os.tmpdir(), 'gemini-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-    userExtensionsDir = path.join(tempHomeDir, GEMINI_DIR, 'extensions');
+    userExtensionsDir = path.join(tempHomeDir, LLXPRT_CONFIG_DIR, 'extensions');
     fs.mkdirSync(userExtensionsDir, { recursive: true });
     vi.mocked(checkForAllExtensionUpdates).mockReset();
     vi.mocked(updateExtension).mockReset();
@@ -92,7 +92,7 @@ describe('useExtensionUpdates', () => {
     );
 
     renderHook(() =>
-      useExtensionUpdates(extensions as GeminiCLIExtension[], addItem, cwd),
+      useExtensionUpdates(extensions as LlxprtExtension[], addItem, cwd),
     );
 
     await waitFor(() => {

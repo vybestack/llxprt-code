@@ -74,7 +74,6 @@ describe('Continue command integration #2', () => {
         toggleCorgiMode: () => {},
         toggleDebugProfiler: () => {},
         toggleVimEnabled: async () => false,
-        setGeminiMdFileCount: () => {},
         setLlxprtMdFileCount: () => {},
         updateHistoryTokenCount: () => {},
         reloadCommands: () => {},

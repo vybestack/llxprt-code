@@ -384,7 +384,7 @@ describe('memoryCommand', () => {
           } as LoadedSettings,
         },
         ui: {
-          setGeminiMdFileCount: vi.fn(),
+          setLlxprtMdFileCount: vi.fn(),
         },
       });
       mockLoadHierarchicalLlxprtMemory.mockClear();
@@ -418,7 +418,7 @@ describe('memoryCommand', () => {
       expect(mockSetLlxprtMdFilePaths).toHaveBeenCalledWith(
         refreshResult.filePaths,
       );
-      expect(mockContext.ui.setGeminiMdFileCount).toHaveBeenCalledWith(
+      expect(mockContext.ui.setLlxprtMdFileCount).toHaveBeenCalledWith(
         refreshResult.fileCount,
       );
 
@@ -515,7 +515,7 @@ describe('memoryCommand', () => {
           } as LoadedSettings,
         },
         ui: {
-          setGeminiMdFileCount: vi.fn(),
+          setLlxprtMdFileCount: vi.fn(),
         },
       });
 
@@ -523,7 +523,7 @@ describe('memoryCommand', () => {
 
       expect(mockRefresh).toHaveBeenCalledExactlyOnceWith();
       expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
-      expect(jitContext.ui.setGeminiMdFileCount).toHaveBeenCalledWith(3);
+      expect(jitContext.ui.setLlxprtMdFileCount).toHaveBeenCalledWith(3);
       expect(jitContext.ui.addItem).toHaveBeenCalledWith(
         {
           type: MessageType.INFO,

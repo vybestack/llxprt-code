@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { getErrorMessage } from '../../utils/errors.js';
 import {
   ExtensionUpdateState,
@@ -51,7 +51,7 @@ function confirmationRequestsReducer(
 }
 
 function shouldDoUpdate(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   scheduledUpdate?: ScheduledUpdate | null,
 ): boolean {
   if (scheduledUpdate !== undefined && scheduledUpdate !== null) {
@@ -64,7 +64,7 @@ function shouldDoUpdate(
 }
 
 function processExtensionUpdate(
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
   cwd: string,
   addConfirmUpdateExtensionRequest: (request: ConfirmationRequest) => void,
   currentState: { status: ExtensionUpdateState; notified?: boolean },
@@ -149,7 +149,7 @@ interface ProcessedUpdates {
 }
 
 function processExtensions(
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   extensionStatuses: Map<
     string,
     { status: ExtensionUpdateState; notified?: boolean }
@@ -197,7 +197,7 @@ function processExtensions(
 }
 
 function useCheckForUpdates(
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   extensionStatuses: Map<
     string,
     { status: ExtensionUpdateState; notified?: boolean }
@@ -221,7 +221,7 @@ function useCheckForUpdates(
 }
 
 function useProcessUpdates(
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   batchChecksInProgress: number,
   extensionStatuses: Map<
     string,
@@ -272,7 +272,7 @@ function useProcessUpdates(
 }
 
 export const useExtensionUpdates = (
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   addItem: UseHistoryManagerReturn['addItem'],
   cwd: string,
 ) => {

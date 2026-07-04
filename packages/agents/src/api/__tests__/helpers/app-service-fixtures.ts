@@ -24,10 +24,10 @@ import path from 'node:path';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 import { SkillManager } from '@vybestack/llxprt-code-core/skills/skillManager.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core/config/config.js';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
-export type { MCPServerConfig, GeminiCLIExtension, Profile };
+export type { MCPServerConfig, LlxprtExtension, Profile };
 
 export function createSettingsService(): SettingsService {
   return new SettingsService();
@@ -50,7 +50,7 @@ export function makeProfile(model: string): Profile {
   };
 }
 
-export function makeExtensions(): GeminiCLIExtension[] {
+export function makeExtensions(): LlxprtExtension[] {
   return [
     {
       name: 'ext-a',

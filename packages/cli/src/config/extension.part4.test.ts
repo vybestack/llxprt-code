@@ -21,8 +21,8 @@ import {
   performWorkspaceExtensionMigration,
 } from './extension.js';
 import {
-  GEMINI_DIR,
-  type GeminiCLIExtension,
+  LLXPRT_CONFIG_DIR,
+  type LlxprtExtension,
   ExtensionUninstallEvent,
   ExtensionDisableEvent,
   ExtensionEnableEvent,
@@ -109,7 +109,7 @@ vi.mock('./settings.js', () => ({
   },
 }));
 
-const EXTENSIONS_DIRECTORY_NAME = path.join(GEMINI_DIR, 'extensions');
+const EXTENSIONS_DIRECTORY_NAME = path.join(LLXPRT_CONFIG_DIR, 'extensions');
 
 describe('extension tests', () => {
   let tempHomeDir: string;
@@ -216,7 +216,7 @@ describe('extension tests', () => {
 
         const userExtensionsDir = path.join(
           tempHomeDir,
-          GEMINI_DIR,
+          LLXPRT_CONFIG_DIR,
           'extensions',
         );
         expect(fs.readdirSync(userExtensionsDir).length).toBe(0);
@@ -282,7 +282,7 @@ describe('extension tests', () => {
         name: 'ext2',
         version: '1.0.0',
       });
-      const extensionsToMigrate: GeminiCLIExtension[] = [
+      const extensionsToMigrate: LlxprtExtension[] = [
         loadExtension({
           extensionDir: ext1Path,
           workspaceDir: tempWorkspaceDir,
@@ -301,7 +301,7 @@ describe('extension tests', () => {
 
       const userExtensionsDir = path.join(
         tempHomeDir,
-        GEMINI_DIR,
+        LLXPRT_CONFIG_DIR,
         'extensions',
       );
       const userExt1Path = path.join(userExtensionsDir, 'ext1');
@@ -326,7 +326,7 @@ describe('extension tests', () => {
         version: '1.0.0',
       });
 
-      const extensions: GeminiCLIExtension[] = [
+      const extensions: LlxprtExtension[] = [
         loadExtension({
           extensionDir: ext1Path,
           workspaceDir: tempWorkspaceDir,
@@ -437,7 +437,7 @@ describe('extension tests', () => {
       vi.restoreAllMocks();
     });
 
-    const getActiveExtensions = (): GeminiCLIExtension[] => {
+    const getActiveExtensions = (): LlxprtExtension[] => {
       const manager = new ExtensionEnablementManager(
         ExtensionStorage.getUserExtensionsDir(),
       );

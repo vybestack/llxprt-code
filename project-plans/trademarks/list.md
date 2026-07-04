@@ -6,7 +6,7 @@ This list identifies files that require modifications to remove "Google" and "Ge
 
 These files are highly likely to contain branding that needs to be replaced or removed.
 
-- `.gcp/Dockerfile.gemini-code-builder` (References `Google Cloud SDK`, `cloud.google.com`, `google-cloud-cli`)
+- `.gcp/Dockerfile.llxprt-code-builder` (References `Google Cloud SDK`, `cloud.google.com`, `google-cloud-cli`)
 - `.gcp/release-docker.yaml` (References `gemini-code-dev`, `gemini-code-containers`, `LLXPRT_SANDBOX_IMAGE_TAG`)
 - `.github/CODEOWNERS` (References `@google-gemini/gemini-cli-askmode-approvers`)
 - `.github/ISSUE_TEMPLATE/bug_report.yml` (References `Gemini CLI`, `google-gemini/gemini-cli`, `Google Account`)

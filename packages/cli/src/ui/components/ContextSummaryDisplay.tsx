@@ -16,6 +16,7 @@ import { isNarrowWidth } from '../utils/isNarrowWidth.js';
 
 interface ContextSummaryDisplayProps {
   llxprtMdFileCount?: number;
+  /** @deprecated Use llxprtMdFileCount instead. Will be removed in a future release. */
   geminiMdFileCount?: number;
   coreMemoryFileCount?: number;
   contextFileNames: string[];
@@ -62,7 +63,7 @@ function buildCoreMemoryText(effectiveCoreCount: number): string {
   return `${effectiveCoreCount} .LLXPRT_SYSTEM file${suffix}`;
 }
 
-function buildGeminiMdText(
+function buildContextFileText(
   effectiveMdFileCount: number,
   contextFileNames: string[],
 ): string {
@@ -139,7 +140,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
 
   const openFilesText = buildOpenFilesText(openFileCount);
   const coreMemoryText = buildCoreMemoryText(effectiveCoreCount);
-  const geminiMdText = buildGeminiMdText(
+  const contextFileText = buildContextFileText(
     effectiveMdFileCount,
     contextFileNames,
   );
@@ -149,7 +150,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   const summaryParts = [
     openFilesText,
     coreMemoryText,
-    geminiMdText,
+    contextFileText,
     mcpText,
     skillText,
   ].filter(Boolean);

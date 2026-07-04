@@ -8,7 +8,7 @@ import { describe, it, expect, vi, type MockInstance, type Mock } from 'vitest';
 
 import { handleInstall, installCommand } from './install.js';
 import yargs from 'yargs';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import type * as extensionModule from '../../config/extension.js';
 import type * as fs from 'node:fs/promises';
 import type { Stats } from 'node:fs';
@@ -102,7 +102,7 @@ describe('handleInstall', () => {
     mockInstallOrUpdateExtension.mockResolvedValue(name);
     mockLoadExtensionByName.mockReturnValue({
       name,
-    } as unknown as GeminiCLIExtension);
+    } as unknown as LlxprtExtension);
 
     await handleInstall({ source });
 

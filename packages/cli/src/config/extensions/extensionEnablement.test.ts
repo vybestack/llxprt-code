@@ -9,10 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExtensionEnablementManager, Override } from './extensionEnablement.js';
-import {
-  coreEvents,
-  type GeminiCLIExtension,
-} from '@vybestack/llxprt-code-core';
+import { coreEvents, type LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../settings.js';
 
 // Helper to create a temporary directory for testing
@@ -295,7 +292,7 @@ describe('ExtensionEnablementManager', () => {
       const extensions = [
         { name: 'ext-one' },
         { name: 'ext-two' },
-      ] as GeminiCLIExtension[];
+      ] as LlxprtExtension[];
       manager.validateExtensionOverrides(extensions);
       expect(coreEventsEmitSpy).not.toHaveBeenCalled();
     });
@@ -309,7 +306,7 @@ describe('ExtensionEnablementManager', () => {
       const extensions = [
         { name: 'ext-one' },
         { name: 'ext-two' },
-      ] as GeminiCLIExtension[];
+      ] as LlxprtExtension[];
       manager.validateExtensionOverrides(extensions);
       expect(coreEventsEmitSpy).toHaveBeenCalledTimes(2);
       expect(coreEventsEmitSpy).toHaveBeenCalledWith(

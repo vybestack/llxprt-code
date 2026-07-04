@@ -14,7 +14,7 @@ import {
   DebugLogger,
   loadServerHierarchicalMemory,
   type FileFilteringOptions,
-  type GeminiCLIExtension,
+  type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
@@ -33,10 +33,10 @@ export const LLXPRT_DIR = '.llxprt';
 function findEnvFile(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
   for (;;) {
-    // prefer gemini-specific .env under LLXPRT_DIR
-    const geminiEnvPath = path.join(currentDir, LLXPRT_DIR, '.env');
-    if (fs.existsSync(geminiEnvPath)) {
-      return geminiEnvPath;
+    // prefer llxprt-specific .env under LLXPRT_DIR
+    const llxprtEnvPath = path.join(currentDir, LLXPRT_DIR, '.env');
+    if (fs.existsSync(llxprtEnvPath)) {
+      return llxprtEnvPath;
     }
     const envPath = path.join(currentDir, '.env');
     if (fs.existsSync(envPath)) {
@@ -113,11 +113,11 @@ export async function resolveMemoryContent(
 // It's kept in the CLI for now as App.tsx directly calls it for memory refresh.
 export async function loadHierarchicalLlxprtMemory(
   currentWorkingDirectory: string,
-  includeDirectoriesToReadGemini: readonly string[] = [],
+  includeDirectoriesToReadLlxprt: readonly string[] = [],
   debugMode: boolean,
   fileService: FileDiscoveryService,
   settings: Settings,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   folderTrust: boolean,
   memoryImportFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
@@ -148,7 +148,7 @@ export async function loadHierarchicalLlxprtMemory(
   // Directly call the server function with the corrected path.
   return loadServerHierarchicalMemory(
     effectiveCwd,
-    includeDirectoriesToReadGemini,
+    includeDirectoriesToReadLlxprt,
     debugMode,
     fileService,
     extensions,

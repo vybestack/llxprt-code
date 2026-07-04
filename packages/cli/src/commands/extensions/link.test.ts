@@ -16,7 +16,7 @@ import {
 } from 'vitest';
 import { handleLink } from './link.js';
 import type * as extensionModule from '../../config/extension.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockInstallOrUpdateExtension: Mock<
   typeof extensionModule.installOrUpdateExtension
@@ -77,7 +77,7 @@ describe('handleLink', () => {
     mockInstallOrUpdateExtension.mockResolvedValue(extensionName);
     mockLoadExtensionByName.mockReturnValue({
       name: extensionName,
-    } as GeminiCLIExtension);
+    } as LlxprtExtension);
 
     await handleLink({ path: extensionPath });
 
@@ -157,7 +157,7 @@ describe('handleLink', () => {
     mockInstallOrUpdateExtension.mockResolvedValue('test-ext');
     mockLoadExtensionByName.mockReturnValue({
       name: 'test-ext',
-    } as GeminiCLIExtension);
+    } as LlxprtExtension);
 
     await handleLink({ path: '/custom/path' });
 

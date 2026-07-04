@@ -22,7 +22,7 @@ Run the presubmit check from the repository root before opening a pull request:
 bun run presubmit
 ```
 
-This formats the repository and then runs linting, the build, type checking, and tests. (The build runs before type checking and tests because packages type-check and test against each other's built output.) Note: several root scripts including `presubmit`, `preflight`, and `build:all` still chain to `npm run ...` internally during the Bun migration transition — `bun run presubmit` delegates to npm under the covers. If your PR is large or you run into problems that are hard to reproduce locally, you may also want to run the heavier CI-style preflight check:
+This formats the repository and then runs linting, the build, type checking, and tests. (The build runs before type checking and tests because packages type-check and test against each other's built output.) Note: several root scripts including `presubmit`, `preflight`, and `build:all` still chain to `npm run ...` internally during the Bun migration transition — `bun run presubmit` delegates to npm under the covers. If your PR is large or you run into problems that are difficult to reproduce locally, you may also want to run the heavier CI-style preflight check:
 
 ```bash
 bun run preflight
@@ -145,7 +145,7 @@ To skip building the sandbox container, you can use `bun run build` instead.
 
 ### Running
 
-To start LLxprt Code from the source code (after building), run the following command from the root directory:
+To start LLxprt Code from the source code, run the following command from the root directory (no build step is required — the launcher runs Bun on the TypeScript sources directly):
 
 ```bash
 bun run start
@@ -154,12 +154,12 @@ bun run start
 Alternatively, the dev launcher (`scripts/start.ts`) starts the checked-in launcher under Node; that launcher then resolves Bun and re-execs `packages/cli/index.ts`. In debug mode (`DEBUG=1`), Node starts with the inspector before handing off to the launcher:
 
 ```bash
-node scripts/start.ts
+bun scripts/start.ts
 ```
 
 The production launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun by climbing ancestor directories for `node_modules/.bin/bun`, falling back to `node_modules/bun/bin/bun.exe`, then `PATH` (`which`/`where`). If Bun is absent, the launcher prints guidance to install Bun and exits. See the [Bun Runtime and Install Fallback](./README.md#bun-runtime-and-install-fallback) section in the README.
 
-If you'd like to run the source build outside of the llxprt-code folder you can utilize `npm link path/to/llxprt-code/packages/cli` (see: [docs](https://docs.npmjs.com/cli/v9/commands/npm-link)) or `alias llxprt="bun path/to/llxprt-code/packages/cli"` to run with `llxprt`
+If you'd like to run the source build outside the llxprt-code folder you can utilize `npm link path/to/llxprt-code/packages/cli` (see: [docs](https://docs.npmjs.com/cli/v9/commands/npm-link)) or `alias llxprt="bun path/to/llxprt-code/packages/cli"` to run with `llxprt`
 
 ### Running Tests
 
@@ -270,10 +270,13 @@ For more detailed architecture, see `docs/architecture.md`.
 
 0.  Run the CLI to interactively debug in VS Code with `F5`
 1.  Start the CLI in debug mode from the root directory:
+
     ```bash
     bun run debug
     ```
+
     This launches the checked-in Node launcher (via `scripts/start.ts`) with the inspector, pausing execution until a debugger attaches before the launcher resolves Bun and executes `packages/cli/index.ts`. You can then open `chrome://inspect` in your Chrome browser to connect to the debugger.
+
 2.  In VS Code, use the "Attach" launch configuration (found in `.vscode/launch.json`).
 
 Alternatively, you can use the "Launch Program" configuration in VS Code if you prefer to launch the currently open file directly, but 'F5' is generally recommended.

@@ -64,7 +64,7 @@ const makeParams = (): UIStateParams => ({
   toolsDialogAction: 'enable',
   toolsDialogTools: [],
   toolsDialogDisabledTools: [],
-  workspaceGeminiCLIExtensions: [],
+  workspaceLlxprtExtensions: [],
   loggingDialogData: { entries: [] },
 
   // Profile management dialog data
@@ -78,7 +78,7 @@ const makeParams = (): UIStateParams => ({
 
   // Confirmation requests
   confirmationRequest: null,
-  confirmUpdateGeminiCLIExtensionRequests: [],
+  confirmUpdateLlxprtExtensionRequests: [],
 
   // Exit/warning states
   ctrlCPressedOnce: false,

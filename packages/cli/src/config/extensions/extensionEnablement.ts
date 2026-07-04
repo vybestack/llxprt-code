@@ -6,10 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  coreEvents,
-  type GeminiCLIExtension,
-} from '@vybestack/llxprt-code-core';
+import { coreEvents, type LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../settings.js';
 
 export interface ExtensionEnablementConfig {
@@ -142,7 +139,7 @@ export class ExtensionEnablementManager {
       enabledExtensionNames?.map((name) => name.toLowerCase()) ?? [];
   }
 
-  validateExtensionOverrides(extensions: GeminiCLIExtension[]) {
+  validateExtensionOverrides(extensions: LlxprtExtension[]) {
     for (const name of this.enabledExtensionNamesOverride) {
       if (name === 'none') continue;
       if (

@@ -73,7 +73,7 @@ import {
   type OutputSettings,
   type IntrospectionAgentSettings,
   type TelemetrySettings,
-  type GeminiCLIExtension,
+  type LlxprtExtension,
   type SandboxConfig,
   type ActiveExtension,
   type BucketFailoverHandler,
@@ -624,7 +624,7 @@ export abstract class ConfigBaseCore {
   getExtensionLoader(): ExtensionLoader {
     return this._extensionLoader;
   }
-  getExtensions(): GeminiCLIExtension[] {
+  getExtensions(): LlxprtExtension[] {
     return this._extensionLoader.getExtensions();
   }
   getActiveExtensions(): ActiveExtension[] {
