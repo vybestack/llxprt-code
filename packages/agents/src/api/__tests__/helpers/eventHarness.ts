@@ -161,8 +161,12 @@ export function streamMaxTurns(): ServerAgentStreamEvent {
 
 export function streamFinished(
   reason: FinishReason = FinishReason.STOP,
+  stopReason?: string,
 ): ServerAgentStreamEvent {
-  return { type: AgentEventType.Finished, value: { reason } };
+  return {
+    type: AgentEventType.Finished,
+    value: { reason, ...(stopReason !== undefined ? { stopReason } : {}) },
+  };
 }
 
 export function streamUserCancelled(): ServerAgentStreamEvent {

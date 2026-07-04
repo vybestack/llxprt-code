@@ -247,6 +247,11 @@ export type ServerFinishedEvent = {
     reason: FinishReason;
     usageMetadata?: GenerateContentResponseUsageMetadata;
     outcome?: ServerFinishedOutcome;
+    // @issue:2329 — the raw provider stop reason (e.g. 'refusal', 'end_turn')
+    // threaded from the repo-owned candidate providerStopReason carrier, so
+    // consumers can surface a refusal-specific notice distinct from a normal
+    // completion.
+    stopReason?: string;
   };
 };
 

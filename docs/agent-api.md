@@ -763,6 +763,12 @@ variants, discriminated by `type`. See
 | `error`             | `error: StructuredError`                            | No (precedes done) |
 | `done`              | `reason: DoneReason`, `finished?`, `stop?`          | **Yes**            |
 
+`finished` is a `FinishedValue` carrying `reason: string` (the mapped
+`FinishReason`), optional `usageMetadata`, and an optional `stopReason?: string`
+— the raw provider stop reason (e.g. Anthropic `stop_reason: 'refusal'`,
+`'end_turn'`). When `stopReason` is `'refusal'`, the done's `reason` is
+`'refusal'` (see below).
+
 > Several non-terminal events _signal_ an upcoming termination by setting the
 > pending done reason (e.g. `error` → `done{reason:'error'}`, `loop-detected`
 > → `done{reason:'loop-detected'}`, `context-warning` →
@@ -779,11 +785,12 @@ export type DoneReason =
   | 'context-overflow'
   | 'loop-detected'
   | 'error'
-  | 'hook-stopped';
+  | 'hook-stopped'
+  | 'refusal';
 ```
 
 **Invariant:** every `stream()`/`chat()` turn yields/returns **exactly one**
-terminal `AgentDoneEvent` carrying one of these seven reasons. Errors surface as
+terminal `AgentDoneEvent` carrying one of these reasons. Errors surface as
 an `AgentErrorEvent` **followed by exactly one** `done{reason:'error'}` — the
 error event is informational; the `done` is the terminator.
 
@@ -792,6 +799,11 @@ error event is informational; the `done` is the terminator.
 
 - `aborted` — the turn was cancelled (e.g. via an `AbortSignal`).
 - `error` — the turn failed.
+- `refusal` — the model's safety classifier declined the request (Anthropic
+  `stop_reason: 'refusal'`, e.g. Claude Fable 5). The `finished` payload
+  carries `stopReason: 'refusal'` (the raw provider stop reason). The turn
+  completed (HTTP 200) but produced no actionable answer; surface a
+  user-visible notice rather than treating it as a hard error.
 
 > **Idle-timeout is terminal.** A stream idle-timeout emits an `idle-timeout`
 > event and then terminates the turn with `done{reason:'error'}`.

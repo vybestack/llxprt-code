@@ -46,10 +46,18 @@ import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
 } from '../../../utils/apiErrorFormatting.js';
+import { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
 
 // ─── Re-exported constant ────────────────────────────────────────────────────
 
 export const SYSTEM_NOTICE_EVENT = 'system_notice' as const;
+
+/**
+ * @issue:2329 — Re-export of the shared safety-classifier refusal notice text.
+ * Kept for back-compat with existing imports (e.g. test files). The canonical
+ * definition lives in utils/refusalNotice.ts (sourced from core).
+ */
+export { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
 
 // ─── Pure utility functions ───────────────────────────────────────────────────
 
@@ -188,6 +196,21 @@ export function buildFinishReasonMessage(
     [FinishReason.NO_IMAGE]: 'Response stopped due to no image.',
   };
   return finishReasonMessages[reason];
+}
+
+/**
+ * @issue:2329 — Returns a refusal-specific notice when the raw provider stop
+ * reason indicates the model's safety classifier refused the request.
+ * Returns undefined for all other stop reasons, allowing callers to fall back
+ * to the generic {@link buildFinishReasonMessage}.
+ */
+export function buildRefusalNoticeMessage(
+  stopReason: string | undefined,
+): string | undefined {
+  if (stopReason === 'refusal') {
+    return REFUSAL_NOTICE_MESSAGE;
+  }
+  return undefined;
 }
 
 /**

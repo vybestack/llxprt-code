@@ -15,6 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
+import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
@@ -478,6 +479,132 @@ describe('processAgentStream', () => {
       (event) => event.type === JsonStreamEventType.RESULT,
     );
     expect(result).toBeDefined();
+  });
+
+  it('writes a refusal warning to stderr and still emits the final text on done{refusal} @issue:2329', async () => {
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'partial response' },
+      {
+        type: 'done',
+        reason: 'refusal',
+        finished: { reason: 'STOP', stopReason: 'refusal' },
+      },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext(),
+      Date.now(),
+      () => uiTelemetryService.getMetrics(),
+    );
+
+    expect(processStderrSpy).toHaveBeenCalledWith(
+      `WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`,
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('partial response');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('emits a stream-json warning and RESULT on done{refusal} @issue:2329', async () => {
+    const streamFormatter = new StreamJsonFormatter();
+    const metrics = uiTelemetryService.getMetrics();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'partial' },
+      {
+        type: 'done',
+        reason: 'refusal',
+        finished: { reason: 'STOP', stopReason: 'refusal' },
+      },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({ streamFormatter }),
+      1000,
+      () => metrics,
+    );
+
+    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+    const warning = jsonEvents.find(
+      (event) =>
+        event.type === JsonStreamEventType.ERROR &&
+        event.severity === 'warning',
+    );
+    expect(warning?.message).toBe(REFUSAL_NOTICE_MESSAGE);
+    const result = jsonEvents.find(
+      (event) => event.type === JsonStreamEventType.RESULT,
+    );
+    expect(result).toBeDefined();
+    // Stream-json mode relies on the structured warning event, not raw stderr.
+    const stderrWrites = processStderrSpy.mock.calls
+      .map(([value]) => String(value))
+      .join('');
+    expect(stderrWrites).not.toContain('WARNING:');
+  });
+
+  it('includes finish_reason:"refusal" in plain jsonOutput on done{refusal} @issue:2329', async () => {
+    const metrics = uiTelemetryService.getMetrics();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'partial response' },
+      {
+        type: 'done',
+        reason: 'refusal',
+        finished: { reason: 'STOP', stopReason: 'refusal' },
+      },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({
+        jsonOutput: true,
+        config: createMockConfig({ sessionId: 'refusal-session' }),
+      }),
+      Date.now(),
+      () => metrics,
+    );
+
+    const jsonLine = processStdoutSpy.mock.calls
+      .map(([value]) => String(value).trimEnd())
+      .filter((value) => value.startsWith('{'))
+      .join('');
+    const parsed = JSON.parse(jsonLine) as Record<string, unknown>;
+    expect(parsed).toHaveProperty('session_id', 'refusal-session');
+    expect(parsed).toHaveProperty('response', 'partial response');
+    expect(parsed).toHaveProperty('stats');
+    expect(parsed).toHaveProperty('finish_reason', 'refusal');
+    // Plain-JSON mode carries the signal via finish_reason; no raw stderr.
+    const stderrWrites = processStderrSpy.mock.calls
+      .map(([value]) => String(value))
+      .join('');
+    expect(stderrWrites).not.toContain('WARNING:');
+  });
+
+  it('does not include finish_reason in plain jsonOutput on a normal done{stop} @issue:2329', async () => {
+    const metrics = uiTelemetryService.getMetrics();
+    const events: AgentEvent[] = [
+      { type: 'text', text: 'The capital is Paris.' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await processAgentStream(
+      streamFromEvents(events),
+      createContext({
+        jsonOutput: true,
+        config: createMockConfig({ sessionId: 'normal-session' }),
+      }),
+      Date.now(),
+      () => metrics,
+    );
+
+    const jsonLine = processStdoutSpy.mock.calls
+      .map(([value]) => String(value).trimEnd())
+      .filter((value) => value.startsWith('{'))
+      .join('');
+    const parsed = JSON.parse(jsonLine) as Record<string, unknown>;
+    expect(parsed).toHaveProperty('session_id', 'normal-session');
+    expect(parsed).toHaveProperty('response', 'The capital is Paris.');
+    expect(parsed).toHaveProperty('stats');
+    expect(parsed).not.toHaveProperty('finish_reason');
   });
 
   it('writes a warning to stderr and continues on a hook-blocked event', async () => {
