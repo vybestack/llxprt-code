@@ -154,7 +154,7 @@ bun run start
 Alternatively, the dev launcher (`scripts/start.ts`) starts the checked-in launcher under Node; that launcher then resolves Bun and re-execs `packages/cli/index.ts`. In debug mode (`DEBUG=1`), Node starts with the inspector before handing off to the launcher:
 
 ```bash
-node scripts/start.ts
+bun scripts/start.ts
 ```
 
 The production launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun by climbing ancestor directories for `node_modules/.bin/bun`, falling back to `node_modules/bun/bin/bun.exe`, then `PATH` (`which`/`where`). If Bun is absent, the launcher prints guidance to install Bun and exits. See the [Bun Runtime and Install Fallback](./README.md#bun-runtime-and-install-fallback) section in the README.

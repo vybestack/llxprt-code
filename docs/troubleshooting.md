@@ -206,7 +206,7 @@ Another process is using that port. Stop it or configure a different port in you
 
 **`Command not found`**
 
-LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `node scripts/start.ts` (the dev launcher) or run `bun install` then `bun run start`.
+LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `bun scripts/start.ts` (the dev launcher) or run `bun install` then `bun run start`.
 
 **`MODULE_NOT_FOUND`**
 
@@ -265,7 +265,7 @@ LLXPRT_DEBUG='*' llxprt --sandbox "your prompt"
 
 - **npm (global install):** `npm install -g @vybestack/llxprt-code@latest`
 - **Homebrew:** `brew upgrade llxprt-code`
-- **From source:** Pull the latest source, run `bun install`, then `bun run start` (or `node scripts/start.ts` for the dev launcher).
+- **From source:** Pull the latest source, run `bun install`, then `bun run start` (or `bun scripts/start.ts` for the dev launcher).
 
 **Where are config files stored?**
 
@@ -291,7 +291,7 @@ bun run start
 For development, use the dev launcher:
 
 ```bash
-node scripts/start.ts
+bun scripts/start.ts
 ```
 
 Type checking uses `tsc --noEmit` (no JavaScript output is produced):
