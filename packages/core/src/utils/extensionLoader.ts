@@ -5,9 +5,9 @@
  */
 
 import type { EventEmitter } from 'node:events';
-import type { Config, GeminiCLIExtension } from '../config/config.js';
+import type { Config, LlxprtExtension } from '../config/config.js';
 
-export type { GeminiCLIExtension } from '../config/config.js';
+export type { LlxprtExtension } from '../config/config.js';
 
 export abstract class ExtensionLoader {
   // Assigned in `start`.
@@ -28,7 +28,7 @@ export abstract class ExtensionLoader {
   /**
    * All currently known extensions, both active and inactive.
    */
-  abstract getExtensions(): GeminiCLIExtension[];
+  abstract getExtensions(): LlxprtExtension[];
 
   /**
    * Fully initializes all active extensions.
@@ -63,7 +63,7 @@ export abstract class ExtensionLoader {
    * go through `maybeStartExtension` which will only start the extension if
    * extension reloading is enabled and the `config` object is initialized.
    */
-  protected async startExtension(extension: GeminiCLIExtension) {
+  protected async startExtension(extension: LlxprtExtension) {
     if (!this.config) {
       throw new Error('Cannot call `startExtension` prior to calling `start`.');
     }
@@ -113,7 +113,7 @@ export abstract class ExtensionLoader {
    * program.
    */
   protected maybeStartExtension(
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
   ): Promise<void> | undefined {
     if (this.config?.getEnableExtensionReloading() === true) {
       return this.startExtension(extension);
@@ -126,7 +126,7 @@ export abstract class ExtensionLoader {
    * any excludeTools settings.
    */
   private async maybeRefreshGeminiTools(
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
   ): Promise<void> {
     if (extension.excludeTools && extension.excludeTools.length > 0) {
       const agentClient = this.config?.getAgentClient();
@@ -165,7 +165,7 @@ export abstract class ExtensionLoader {
    * extension if extension reloading is enabled and the `config` object is
    * initialized.
    */
-  protected async stopExtension(extension: GeminiCLIExtension) {
+  protected async stopExtension(extension: LlxprtExtension) {
     if (!this.config) {
       throw new Error('Cannot call `stopExtension` prior to calling `start`.');
     }
@@ -208,7 +208,7 @@ export abstract class ExtensionLoader {
    * features from the rest of the system.
    */
   protected maybeStopExtension(
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
   ): Promise<void> | undefined {
     if (this.config?.getEnableExtensionReloading() === true) {
       return this.stopExtension(extension);
@@ -220,7 +220,7 @@ export abstract class ExtensionLoader {
    * Restarts an extension by stopping and then starting it.
    * This is a public method available for runtime extension management.
    */
-  async restartExtension(extension: GeminiCLIExtension): Promise<void> {
+  async restartExtension(extension: LlxprtExtension): Promise<void> {
     if (!this.config) {
       throw new Error('Cannot restart extension prior to calling `start`.');
     }
@@ -249,13 +249,13 @@ export interface ExtensionsStoppingEvent {
 
 export class SimpleExtensionLoader extends ExtensionLoader {
   constructor(
-    protected readonly extensions: GeminiCLIExtension[],
+    protected readonly extensions: LlxprtExtension[],
     eventEmitter?: EventEmitter<ExtensionEvents>,
   ) {
     super(eventEmitter);
   }
 
-  getExtensions(): GeminiCLIExtension[] {
+  getExtensions(): LlxprtExtension[] {
     return this.extensions;
   }
 
@@ -263,7 +263,7 @@ export class SimpleExtensionLoader extends ExtensionLoader {
   /// `maybeStartExtension`.
   ///
   /// This is intended for dynamic loading of extensions after calling `start`.
-  async loadExtension(extension: GeminiCLIExtension) {
+  async loadExtension(extension: LlxprtExtension) {
     this.extensions.push(extension);
     await this.maybeStartExtension(extension);
   }
@@ -272,7 +272,7 @@ export class SimpleExtensionLoader extends ExtensionLoader {
   // `maybeStopExtension` if it was found.
   ///
   /// This is intended for dynamic unloading of extensions after calling `start`.
-  async unloadExtension(extension: GeminiCLIExtension) {
+  async unloadExtension(extension: LlxprtExtension) {
     const index = this.extensions.indexOf(extension);
     if (index === -1) return;
     this.extensions.splice(index, 1);

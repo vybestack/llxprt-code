@@ -361,6 +361,7 @@ export const DONE_REASONS: readonly DoneReason[] = [
   'loop-detected',
   'error',
   'hook-stopped',
+  'refusal',
 ];
 
 // ─── HistoryService identity (T4d/T4e) ──────────────────────────────────────

@@ -93,7 +93,7 @@ Do NOT use this tool:
 `;
 
 export const LLXPRT_CONFIG_DIR = '.llxprt';
-// Alias for backward compatibility with gemini-cli code
+/** @deprecated Use LLXPRT_CONFIG_DIR instead. Will be removed in a future release. */
 export const GEMINI_DIR = LLXPRT_CONFIG_DIR;
 export const DEFAULT_CONTEXT_FILENAME = 'LLXPRT.md';
 export const CORE_MEMORY_FILENAME = '.LLXPRT_SYSTEM';

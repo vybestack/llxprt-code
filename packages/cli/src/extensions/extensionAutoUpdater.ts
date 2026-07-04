@@ -13,7 +13,7 @@ import {
 } from '../config/extensions/update.js';
 import {
   getErrorMessage,
-  type GeminiCLIExtension,
+  type LlxprtExtension,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -153,15 +153,15 @@ interface ExtensionAutoUpdaterOptions {
   workspaceDir?: string;
   notify?: (message: string, level: 'info' | 'warn' | 'error') => void;
   stateStore?: ExtensionAutoUpdateStateStore;
-  extensionLoader?: () => Promise<GeminiCLIExtension[]>;
+  extensionLoader?: () => Promise<LlxprtExtension[]>;
   updateExecutor?: (
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
     cwd: string,
     currentState: ExtensionUpdateState,
     setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
   ) => Promise<ExtensionUpdateInfo | undefined>;
   updateChecker?: (
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
     setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
   ) => Promise<void>;
   now?: () => number;
@@ -179,15 +179,15 @@ export class ExtensionAutoUpdater {
   private readonly workspaceDir: string;
   private readonly notify?: ExtensionAutoUpdaterOptions['notify'];
   private readonly stateStore: ExtensionAutoUpdateStateStore;
-  private readonly extensionLoader: () => Promise<GeminiCLIExtension[]>;
+  private readonly extensionLoader: () => Promise<LlxprtExtension[]>;
   private readonly updateExecutor: (
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
     cwd: string,
     currentState: ExtensionUpdateState,
     setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
   ) => Promise<ExtensionUpdateInfo | undefined>;
   private readonly updateChecker: (
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
     setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
   ) => Promise<void>;
   private readonly now: () => number;
@@ -293,7 +293,7 @@ export class ExtensionAutoUpdater {
 
   private async applyPendingInstalls(
     state: ExtensionUpdateStateFile,
-    extensionsByName: Map<string, GeminiCLIExtension>,
+    extensionsByName: Map<string, LlxprtExtension>,
   ): Promise<void> {
     const pendingEntries = Object.entries(state).filter(
       ([, entry]) => entry.pendingInstall === true,
@@ -313,7 +313,7 @@ export class ExtensionAutoUpdater {
   }
 
   private async processExtension(
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
     state: ExtensionUpdateStateFile,
   ): Promise<void> {
     if (extension.installMetadata === undefined) {
@@ -339,8 +339,8 @@ export class ExtensionAutoUpdater {
     entry.state = ExtensionUpdateState.CHECKING_FOR_UPDATES;
 
     try {
-      // Convert Extension to GeminiCLIExtension for the updateChecker
-      const geminiExtension: GeminiCLIExtension = {
+      // Convert Extension to LlxprtExtension for the updateChecker
+      const llxprtExtension: LlxprtExtension = {
         name: extension.name,
         version: extension.version,
         isActive: true,
@@ -352,7 +352,7 @@ export class ExtensionAutoUpdater {
       // Call the update checker which will update entry.state via callback
       // Initialize with explicit type to prevent narrowing
       let resultState: ExtensionUpdateState | undefined;
-      await this.updateChecker(geminiExtension, (updateState) => {
+      await this.updateChecker(llxprtExtension, (updateState) => {
         resultState = updateState;
         entry.state = updateState;
       });
@@ -380,7 +380,7 @@ export class ExtensionAutoUpdater {
   }
 
   private async handleUpdateAvailable(
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
     entry: ExtensionUpdateHistoryEntry,
     settings: EffectivePerExtensionSettings,
   ): Promise<void> {
@@ -408,15 +408,15 @@ export class ExtensionAutoUpdater {
   }
 
   private async performUpdate(
-    extension: GeminiCLIExtension,
+    extension: LlxprtExtension,
     entry: ExtensionUpdateHistoryEntry,
     settings: EffectivePerExtensionSettings,
   ): Promise<void> {
     try {
       entry.state = ExtensionUpdateState.UPDATING;
 
-      // Convert Extension to GeminiCLIExtension for the updateExecutor
-      const geminiExtension: GeminiCLIExtension = {
+      // Convert Extension to LlxprtExtension for the updateExecutor
+      const llxprtExtension: LlxprtExtension = {
         name: extension.name,
         version: extension.version,
         isActive: true,
@@ -426,7 +426,7 @@ export class ExtensionAutoUpdater {
       };
 
       const info = await this.updateExecutor(
-        geminiExtension,
+        llxprtExtension,
         this.workspaceDir,
         entry.state,
         (updateState) => {

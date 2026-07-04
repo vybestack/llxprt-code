@@ -11,7 +11,7 @@ import type {
   ApprovalMode,
   PolicyEngineConfig,
   Config,
-  GeminiCLIExtension,
+  LlxprtExtension,
   SandboxConfig,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
@@ -148,7 +148,7 @@ async function resolveConfigBuildPieces(
   profileResult: ProfileLoadResult,
   runtimeState: BootstrapRuntimeState,
   cwd: string,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   extensionEnablementManager: ExtensionEnablementManager,
 ): Promise<ConfigBuildPieces> {
   const context = resolveContextAndEnvironment({
@@ -276,7 +276,7 @@ function buildLoadedConfig(
  */
 export async function loadCliConfig(
   settings: Settings,
-  extensions: GeminiCLIExtension[],
+  extensions: LlxprtExtension[],
   extensionEnablementManager: ExtensionEnablementManager,
   sessionId: string,
   argv: CliArgs,

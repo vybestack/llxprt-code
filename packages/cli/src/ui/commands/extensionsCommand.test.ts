@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { extensionsCommand } from './extensionsCommand.js';
@@ -265,7 +265,7 @@ describe('extensionsCommand', () => {
 
       assertDefined(updateCompletion);
 
-      const extensionOne: GeminiCLIExtension = {
+      const extensionOne: LlxprtExtension = {
         name: 'ext-one',
         version: '1.0.0',
         isActive: true,
@@ -276,7 +276,7 @@ describe('extensionsCommand', () => {
           source: 'https://github.com/some/extension.git',
         },
       };
-      const extensionTwo: GeminiCLIExtension = {
+      const extensionTwo: LlxprtExtension = {
         name: 'another-ext',
         version: '1.0.0',
         isActive: true,
@@ -287,7 +287,7 @@ describe('extensionsCommand', () => {
           source: 'https://github.com/some/extension.git',
         },
       };
-      const allExt: GeminiCLIExtension = {
+      const allExt: LlxprtExtension = {
         name: 'all-ext',
         version: '1.0.0',
         isActive: true,

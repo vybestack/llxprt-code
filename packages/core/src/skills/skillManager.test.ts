@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { SkillManager } from './skillManager.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { type GeminiCLIExtension } from '../config/config.js';
+import { type LlxprtExtension } from '../config/config.js';
 import {
   loadSkillsFromDir,
   getBuiltinSkillsDir,
@@ -65,7 +65,7 @@ description: project-desc
 `,
     );
 
-    const mockExtension: GeminiCLIExtension = {
+    const mockExtension: LlxprtExtension = {
       name: 'test-ext',
       version: '1.0.0',
       isActive: true,
@@ -122,7 +122,7 @@ description: project-desc
 `,
     );
 
-    const mockExtension: GeminiCLIExtension = {
+    const mockExtension: LlxprtExtension = {
       name: 'test-ext',
       version: '1.0.0',
       isActive: true,
@@ -406,7 +406,7 @@ description: User desc
         .mockImplementation(() => {});
 
       // Extension skill loaded first, then user skill with same name/different location overrides it
-      const mockExtension: GeminiCLIExtension = {
+      const mockExtension: LlxprtExtension = {
         name: 'test-ext',
         version: '1.0.0',
         isActive: true,

@@ -13,6 +13,8 @@ export const DoneReasonSchema = z.enum([
   'loop-detected',
   'error',
   'hook-stopped',
+  // @issue:2329 — safety-classifier refusal (Anthropic stop_reason: 'refusal').
+  'refusal',
 ]);
 
 export const StructuredErrorSchema = z.object({
@@ -35,6 +37,9 @@ export const UsageMetadataValueSchema = z.object({
 export const FinishedValueSchema = z.object({
   reason: z.string(),
   usageMetadata: UsageMetadataValueSchema.optional(),
+  // @issue:2329 — the raw provider stop reason (e.g. 'refusal') so consumers
+  // can surface a refusal-specific notice distinct from a normal completion.
+  stopReason: z.string().optional(),
 });
 
 export const AgentStopInfoSchema = z.object({

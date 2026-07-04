@@ -26,7 +26,7 @@ const PAID_TIER_THANKS =
 const PAID_TIER_AUTH_HINT = `consider using /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
 
 // Provider-neutral rate limit message (used when no Google-specific quota detector matches)
-const GEMINI_RATE_LIMIT_MESSAGE =
+const GENERIC_RATE_LIMIT_MESSAGE =
   '\nRate limit exceeded. Please wait a moment and retry, or use /model to switch to a different model.';
 
 const getRateLimitErrorMessageAnthropicFree = () =>
@@ -209,7 +209,7 @@ function getRateLimitMessage(
       : getRateLimitErrorMessageGoogleGenericQuotaFree();
   }
 
-  return GEMINI_RATE_LIMIT_MESSAGE;
+  return GENERIC_RATE_LIMIT_MESSAGE;
 }
 
 function formatStreamInterruptedError(error: unknown): string {

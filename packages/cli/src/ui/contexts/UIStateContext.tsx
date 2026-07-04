@@ -23,7 +23,7 @@ import type {
   ThoughtSummary,
   IdeInfo,
   Config,
-  GeminiCLIExtension,
+  LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
 
@@ -94,7 +94,7 @@ export interface UIState {
   toolsDialogAction: 'enable' | 'disable';
   toolsDialogTools: AnyDeclarativeTool[];
   toolsDialogDisabledTools: string[];
-  workspaceGeminiCLIExtensions: GeminiCLIExtension[];
+  workspaceLlxprtExtensions: LlxprtExtension[];
   loggingDialogData: { entries: unknown[] };
   subagentDialogInitialView?: SubagentView;
   subagentDialogInitialName?: string;
@@ -134,7 +134,7 @@ export interface UIState {
     prompt: React.ReactNode;
     onConfirm: (value: boolean) => void;
   } | null;
-  confirmUpdateGeminiCLIExtensionRequests: ConfirmationRequest[];
+  confirmUpdateLlxprtExtensionRequests: ConfirmationRequest[];
 
   // Exit/warning states
   ctrlCPressedOnce: boolean;

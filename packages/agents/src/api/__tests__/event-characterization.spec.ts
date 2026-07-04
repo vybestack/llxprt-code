@@ -19,6 +19,7 @@ import * as fc from 'fast-check';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
+import { FinishReason } from '@google/genai';
 import {
   runAdapterStatic,
   wrapStream,
@@ -225,6 +226,27 @@ describe('Event characterization — adapter-characterization @plan:PLAN-2026061
     const done = doneEvents(events);
     expect(done).toHaveLength(1);
     expect(done[0].reason).toBe('stop');
+  });
+
+  it('Finished with stopReason refusal → done{refusal} preserving finished.stopReason @issue:2329', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(streamFinished(FinishReason.STOP, 'refusal')),
+    ]);
+    const done = doneEvents(events);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('refusal');
+    expect(done[0].finished?.stopReason).toBe('refusal');
+    expect(done[0].finished?.reason).toBe(FinishReason.STOP);
+  });
+
+  it('Finished with a non-refusal stopReason → done{stop} @issue:2329', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(streamFinished(FinishReason.STOP, 'end_turn')),
+    ]);
+    const done = doneEvents(events);
+    expect(done).toHaveLength(1);
+    expect(done[0].reason).toBe('stop');
+    expect(done[0].finished?.stopReason).toBe('end_turn');
   });
 });
 

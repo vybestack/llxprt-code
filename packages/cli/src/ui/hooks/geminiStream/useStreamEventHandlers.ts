@@ -41,6 +41,7 @@ import {
   showCitations,
   getCurrentProfileName,
   buildFinishReasonMessage,
+  buildRefusalNoticeMessage,
 } from './streamUtils.js';
 import {
   getActiveProviderNameForApiError,
@@ -383,7 +384,12 @@ function useFinishedEventHandler(deps: StreamEventHandlerDeps) {
   const { addItem } = deps;
   return useCallback(
     (event: ServerGeminiFinishedEvent, userMessageTimestamp: number) => {
-      const message = buildFinishReasonMessage(event.value.reason);
+      // @issue:2329 — prefer a refusal-specific notice when the raw provider
+      // stop reason indicates a safety-classifier refusal; otherwise fall back
+      // to the generic finish-reason message.
+      const message =
+        buildRefusalNoticeMessage(event.value.stopReason) ??
+        buildFinishReasonMessage(event.value.reason);
       if (message)
         addItem(
           { type: 'info', text: `WARNING:  ${message}` },

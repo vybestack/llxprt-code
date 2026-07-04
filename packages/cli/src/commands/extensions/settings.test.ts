@@ -10,7 +10,7 @@ import { setCommand, listCommand } from './settings.js';
 import yargs from 'yargs';
 import type * as settingsIntegrationModule from '../../config/extensions/settingsIntegration.js';
 import type * as utilsModule from './utils.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 const mockUpdateSetting: Mock<typeof settingsIntegrationModule.updateSetting> =
   vi.hoisted(() => vi.fn());
@@ -61,7 +61,7 @@ describe('extensions settings set command', () => {
       extension: {
         name: 'myext',
         path: '/path/to/extension',
-      } as GeminiCLIExtension,
+      } as LlxprtExtension,
       extensionConfig: {
         name: 'myext',
         version: '1.0.0',
@@ -129,7 +129,7 @@ describe('extensions settings set command', () => {
       extension: {
         name: 'myext',
         path: '/path/to/extension',
-      } as GeminiCLIExtension,
+      } as LlxprtExtension,
       extensionConfig: null,
     });
 
@@ -159,7 +159,7 @@ describe('extensions settings list command', () => {
       extension: {
         name: 'myext',
         path: '/path/to/extension',
-      } as GeminiCLIExtension,
+      } as LlxprtExtension,
       extensionConfig: {
         name: 'myext',
         version: '1.0.0',
@@ -237,7 +237,7 @@ describe('extensions settings list command', () => {
       extension: {
         name: 'myext',
         path: '/path/to/extension',
-      } as GeminiCLIExtension,
+      } as LlxprtExtension,
       extensionConfig: null,
     });
 
@@ -367,7 +367,7 @@ describe('extensionConfig gate (settings)', () => {
       extension: {
         name: 'myext',
         path: '/path/to/extension',
-      } as GeminiCLIExtension,
+      } as LlxprtExtension,
       extensionConfig: {
         name: 'myext',
         version: '1.0.0',
@@ -395,7 +395,7 @@ describe('extensionConfig gate (settings)', () => {
       extension: {
         name: 'myext',
         path: '/path/to/extension',
-      } as GeminiCLIExtension,
+      } as LlxprtExtension,
       extensionConfig: {
         name: 'myext',
         version: '1.0.0',

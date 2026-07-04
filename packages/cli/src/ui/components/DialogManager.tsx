@@ -224,7 +224,7 @@ function renderEarlyDialogs(
   if (uiState.showWorkspaceMigrationDialog) {
     return (
       <WorkspaceMigrationDialog
-        workspaceExtensions={uiState.workspaceGeminiCLIExtensions}
+        workspaceExtensions={uiState.workspaceLlxprtExtensions}
         onOpen={uiActions.onWorkspaceMigrationDialogOpen}
         onClose={uiActions.onWorkspaceMigrationDialogClose}
       />
@@ -266,8 +266,8 @@ function renderEarlyDialogs(
       />
     );
   }
-  if (uiState.confirmUpdateGeminiCLIExtensionRequests.length > 0) {
-    const request = uiState.confirmUpdateGeminiCLIExtensionRequests[0];
+  if (uiState.confirmUpdateLlxprtExtensionRequests.length > 0) {
+    const request = uiState.confirmUpdateLlxprtExtensionRequests[0];
     return (
       <ConsentPrompt
         prompt={request.prompt}

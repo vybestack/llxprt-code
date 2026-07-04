@@ -13,7 +13,7 @@
 
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -1479,8 +1479,8 @@ async function disposeOAuthManager(manager: OAuthManager): Promise<void> {
  * @requirement:REQ-016
  */
 interface ExtensionTeardownSurface {
-  getExtensions?: () => GeminiCLIExtension[];
-  unloadExtension?: (extension: GeminiCLIExtension) => Promise<void> | void;
+  getExtensions?: () => LlxprtExtension[];
+  unloadExtension?: (extension: LlxprtExtension) => Promise<void> | void;
 }
 
 /**
@@ -1492,7 +1492,7 @@ interface ExtensionTeardownSurface {
  * @requirement:REQ-016
  * @pseudocode dispose.md 80
  */
-function collectActiveExtensions(loader: unknown): GeminiCLIExtension[] {
+function collectActiveExtensions(loader: unknown): LlxprtExtension[] {
   const surface = loader as ExtensionTeardownSurface;
   if (typeof surface.getExtensions !== 'function') {
     return [];
@@ -1512,7 +1512,7 @@ function collectActiveExtensions(loader: unknown): GeminiCLIExtension[] {
  */
 async function unloadExtensionSafely(
   loader: unknown,
-  extension: GeminiCLIExtension,
+  extension: LlxprtExtension,
 ): Promise<void> {
   const surface = loader as ExtensionTeardownSurface;
   if (typeof surface.unloadExtension === 'function') {

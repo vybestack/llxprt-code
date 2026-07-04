@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { getWorkspaceExtensions } from '../../config/extension.js';
 import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import process from 'node:process';
@@ -15,7 +15,7 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
   const [showWorkspaceMigrationDialog, setShowWorkspaceMigrationDialog] =
     useState(false);
   const [workspaceExtensions, setWorkspaceExtensions] = useState<
-    GeminiCLIExtension[]
+    LlxprtExtension[]
   >([]);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
   return useMemo(
     () => ({
       showWorkspaceMigrationDialog,
-      workspaceGeminiCLIExtensions: workspaceExtensions,
+      workspaceLlxprtExtensions: workspaceExtensions,
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
     }),
