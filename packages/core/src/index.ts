@@ -524,6 +524,15 @@ export { sessionId } from './utils/session.js';
 // Export content interfaces
 export * from './services/history/IContent.js';
 
+// @plan PLAN-20260702-LLMTYPES.P04
+// @requirement REQ-013.1
+// Export neutral llm-types layer. The barrel re-exports IContent types
+// type-only, so there is no runtime symbol collision with the IContent
+// export * above. Named exports for the new llm-types-only symbols would
+// be redundant with the barrel; `export *` is safe here because the only
+// overlapping symbols are the type-only IContent re-exports.
+export * from './llm-types/index.js';
+
 // @plan:PLAN-20260603-ISSUE1584.P11
 // @requirement:REQ-SHIM-001
 // Provider implementations and provider public APIs live outside core.

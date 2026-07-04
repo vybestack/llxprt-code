@@ -25,7 +25,9 @@ describe('toolDeclarationsFromLegacyToolset', () => {
         ],
       },
     ];
-    expect(toolDeclarationsFromLegacyToolset(input)).toStrictEqual<ToolDeclaration[]>([
+    expect(toolDeclarationsFromLegacyToolset(input)).toStrictEqual<
+      ToolDeclaration[]
+    >([
       {
         name: 'getWeather',
         description: 'Get weather',
@@ -40,7 +42,10 @@ describe('toolDeclarationsFromLegacyToolset', () => {
         functionDeclarations: [
           {
             name: 'searchWeb',
-            parameters: { type: 'object', properties: { q: { type: 'string' } } },
+            parameters: {
+              type: 'object',
+              properties: { q: { type: 'string' } },
+            },
           },
         ],
       },
@@ -48,7 +53,10 @@ describe('toolDeclarationsFromLegacyToolset', () => {
     expect(toolDeclarationsFromLegacyToolset(input)).toStrictEqual([
       {
         name: 'searchWeb',
-        parametersJsonSchema: { type: 'object', properties: { q: { type: 'string' } } },
+        parametersJsonSchema: {
+          type: 'object',
+          properties: { q: { type: 'string' } },
+        },
       },
     ]);
   });
@@ -139,7 +147,9 @@ describe('toolDeclarationsFromLegacyToolset', () => {
   });
 
   it('handles group with empty functionDeclarations', () => {
-    expect(toolDeclarationsFromLegacyToolset([{ functionDeclarations: [] }])).toStrictEqual([]);
+    expect(
+      toolDeclarationsFromLegacyToolset([{ functionDeclarations: [] }]),
+    ).toStrictEqual([]);
   });
 
   it('omits description key entirely when undefined', () => {
@@ -151,7 +161,10 @@ describe('toolDeclarationsFromLegacyToolset', () => {
     const result = toolDeclarationsFromLegacyToolset(input);
     expect(result).toHaveLength(1);
     expect(result[0]).not.toHaveProperty('description');
-    expect(result[0]).toStrictEqual({ name: 'tool', parametersJsonSchema: false });
+    expect(result[0]).toStrictEqual({
+      name: 'tool',
+      parametersJsonSchema: false,
+    });
   });
 });
 
@@ -163,7 +176,10 @@ describe('ToolChoice orthogonality', () => {
   });
 
   it('required mode with allowedToolNames', () => {
-    const choice: ToolChoice = { mode: 'required', allowedToolNames: ['a', 'b'] };
+    const choice: ToolChoice = {
+      mode: 'required',
+      allowedToolNames: ['a', 'b'],
+    };
     expect(choice.mode).toBe('required');
     expect(choice.allowedToolNames).toStrictEqual(['a', 'b']);
   });
@@ -189,7 +205,11 @@ describe('toolDeclaration property-based', () => {
     'preserves parametersJsonSchema byte-identically when present and valid',
     ({ name, description, schema }) => {
       const toolset = [
-        { functionDeclarations: [{ name, description, parametersJsonSchema: schema }] },
+        {
+          functionDeclarations: [
+            { name, description, parametersJsonSchema: schema },
+          ],
+        },
       ];
       const result = toolDeclarationsFromLegacyToolset(toolset);
       if (result.length !== 1) return false;
@@ -246,10 +266,10 @@ describe('toolDeclaration property-based', () => {
   );
 
   it.prop([
-    fc.array(
-      fc.record({ name: fc.string({ minLength: 1 }) }),
-      { minLength: 1, maxLength: 10 },
-    ),
+    fc.array(fc.record({ name: fc.string({ minLength: 1 }) }), {
+      minLength: 1,
+      maxLength: 10,
+    }),
   ])(
     'every declaration without schema gets empty object {} as parametersJsonSchema',
     (decls) => {
@@ -273,13 +293,14 @@ describe('toolDeclaration property-based', () => {
     'boolean schema is preserved as parametersJsonSchema',
     ({ name, description, schema }) => {
       const toolset = [
-        { functionDeclarations: [{ name, description, parametersJsonSchema: schema }] },
+        {
+          functionDeclarations: [
+            { name, description, parametersJsonSchema: schema },
+          ],
+        },
       ];
       const result = toolDeclarationsFromLegacyToolset(toolset);
-      return (
-        result.length === 1 &&
-        result[0].parametersJsonSchema === schema
-      );
+      return result.length === 1 && result[0].parametersJsonSchema === schema;
     },
   );
 });

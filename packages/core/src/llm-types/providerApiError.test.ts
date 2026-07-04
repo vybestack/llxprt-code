@@ -6,7 +6,10 @@
 import { describe, expect } from 'vitest';
 import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
-import { isProviderApiError, type ProviderApiError } from './providerApiError.js';
+import {
+  isProviderApiError,
+  type ProviderApiError,
+} from './providerApiError.js';
 
 describe('isProviderApiError', () => {
   it('accepts a minimal valid error with only message', () => {
@@ -29,7 +32,9 @@ describe('isProviderApiError', () => {
   });
 
   it('accepts error with optional string code', () => {
-    expect(isProviderApiError({ code: 'NOT_FOUND', message: 'err' })).toBe(true);
+    expect(isProviderApiError({ code: 'NOT_FOUND', message: 'err' })).toBe(
+      true,
+    );
   });
 
   it('accepts error with optional number status', () => {
@@ -37,7 +42,9 @@ describe('isProviderApiError', () => {
   });
 
   it('accepts error with optional string provider', () => {
-    expect(isProviderApiError({ provider: 'openai', message: 'err' })).toBe(true);
+    expect(isProviderApiError({ provider: 'openai', message: 'err' })).toBe(
+      true,
+    );
   });
 
   it('rejects null', () => {
@@ -118,7 +125,13 @@ describe('providerApiError property-based', () => {
   );
 
   it.prop([
-    fc.oneof(fc.integer(), fc.string(), fc.boolean(), fc.constant(null), fc.constant(undefined)),
+    fc.oneof(
+      fc.integer(),
+      fc.string(),
+      fc.boolean(),
+      fc.constant(null),
+      fc.constant(undefined),
+    ),
   ])(
     'primitives and null are never ProviderApiError',
     (v: unknown) => isProviderApiError(v) === false,

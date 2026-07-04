@@ -6,7 +6,11 @@
 import { describe, expect } from 'vitest';
 import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
-import { isJsonSchema, type JsonSchema, type JsonSchemaObject } from './jsonSchema.js';
+import {
+  isJsonSchema,
+  type JsonSchema,
+  type JsonSchemaObject,
+} from './jsonSchema.js';
 
 describe('isJsonSchema', () => {
   it('accepts boolean true', () => {
@@ -34,7 +38,9 @@ describe('isJsonSchema', () => {
   });
 
   it('accepts object with anyOf/oneOf/allOf/not', () => {
-    expect(isJsonSchema({ anyOf: [], oneOf: [], allOf: [], not: false })).toBe(true);
+    expect(isJsonSchema({ anyOf: [], oneOf: [], allOf: [], not: false })).toBe(
+      true,
+    );
   });
 
   it('accepts object with additionalProperties boolean', () => {
@@ -127,7 +133,10 @@ describe('jsonSchema property-based', () => {
   );
 
   it.prop([
-    fc.record({ type: fc.constant('object'), properties: fc.object({ maxDepth: 2 }) }),
+    fc.record({
+      type: fc.constant('object'),
+      properties: fc.object({ maxDepth: 2 }),
+    }),
   ])(
     'schema with type and properties is recognized as JsonSchema and round-trips',
     (schema) => {
@@ -137,9 +146,7 @@ describe('jsonSchema property-based', () => {
     },
   );
 
-  it.prop([
-    fc.record({ $ref: fc.string({ minLength: 1, maxLength: 30 }) }),
-  ])(
+  it.prop([fc.record({ $ref: fc.string({ minLength: 1, maxLength: 30 }) })])(
     'schema with $ref keyword is recognized as JsonSchema',
     (schema) => isJsonSchema(schema) === true,
   );

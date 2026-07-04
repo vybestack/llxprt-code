@@ -85,9 +85,7 @@ export function toolResultContentFromLegacyPartListUnion(
   return { ok: true, value: [r.value] };
 }
 
-function convertArray(
-  input: unknown[],
-): ConversionResult<ToolResultContent> {
+function convertArray(input: unknown[]): ConversionResult<ToolResultContent> {
   const blocks: ContentBlock[] = [];
   for (const item of input) {
     if (typeof item === 'string') {
@@ -110,7 +108,10 @@ function convertArray(
  */
 function partLikeToBlock(item: unknown): ConversionResult<ContentBlock> {
   if (!isRecord(item)) {
-    return { ok: false, error: `unsupported tool result part: ${describeValue(item)}` };
+    return {
+      ok: false,
+      error: `unsupported tool result part: ${describeValue(item)}`,
+    };
   }
 
   if ('text' in item && typeof item['text'] === 'string') {

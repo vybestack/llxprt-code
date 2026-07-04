@@ -46,9 +46,7 @@ export interface ProviderApiError {
  * @requirement REQ-007.2
  * @pseudocode lines 82-84
  */
-export function isProviderApiError(
-  value: unknown,
-): value is ProviderApiError {
+export function isProviderApiError(value: unknown): value is ProviderApiError {
   if (!isRecord(value)) {
     return false;
   }

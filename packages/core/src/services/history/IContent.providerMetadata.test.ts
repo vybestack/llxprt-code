@@ -246,9 +246,7 @@ describe('IContent providerMetadata property-based', () => {
       const serialized = JSON.stringify(content);
       const parsed: IContent = JSON.parse(serialized);
       const verdict = ContentValidation.hasContent(parsed);
-      const expectedVerdict = blocks.some(
-        (b) => b.text.trim().length > 0,
-      );
+      const expectedVerdict = blocks.some((b) => b.text.trim().length > 0);
       return verdict === expectedVerdict;
     },
   );
@@ -310,7 +308,8 @@ describe('IContent providerMetadata property-based', () => {
         completionTokens: stats.completionTokens,
         totalTokens: stats.totalTokens,
       };
-      if (stats.reasoningTokens !== null) cleaned.reasoningTokens = stats.reasoningTokens;
+      if (stats.reasoningTokens !== null)
+        cleaned.reasoningTokens = stats.reasoningTokens;
       if (stats.toolTokens !== null) cleaned.toolTokens = stats.toolTokens;
       const roundTripped: UsageStats = JSON.parse(JSON.stringify(cleaned));
       return JSON.stringify(roundTripped) === JSON.stringify(cleaned);

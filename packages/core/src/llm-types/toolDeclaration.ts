@@ -99,10 +99,7 @@ export function toolDeclarationsFromLegacyToolset(
   return result;
 }
 
-function resolveSchema(
-  primary: unknown,
-  fallback: unknown,
-): JsonSchema {
+function resolveSchema(primary: unknown, fallback: unknown): JsonSchema {
   if (isJsonSchema(primary)) {
     return primary;
   }

@@ -29,7 +29,9 @@ describe('toolResultContentFromLegacyPartListUnion - string input', () => {
 
 describe('toolResultContentFromLegacyPartListUnion - single part object', () => {
   it('converts {text} to TextBlock', () => {
-    const result = toolResultContentFromLegacyPartListUnion({ text: 'hello world' });
+    const result = toolResultContentFromLegacyPartListUnion({
+      text: 'hello world',
+    });
     expect(result).toStrictEqual({
       ok: true,
       value: [{ type: 'text', text: 'hello world' }],
@@ -55,7 +57,10 @@ describe('toolResultContentFromLegacyPartListUnion - single part object', () => 
 
   it('converts {fileData} to MediaBlock url', () => {
     const result = toolResultContentFromLegacyPartListUnion({
-      fileData: { mimeType: 'image/jpeg', fileUri: 'https://example.com/img.jpg' },
+      fileData: {
+        mimeType: 'image/jpeg',
+        fileUri: 'https://example.com/img.jpg',
+      },
     });
     expect(result).toStrictEqual({
       ok: true,
@@ -164,7 +169,12 @@ describe('toolResultContentFromLegacyPartListUnion - array input', () => {
       ok: true,
       value: [
         { type: 'text', text: 'desc' },
-        { type: 'media', mimeType: 'image/png', data: 'abc', encoding: 'base64' },
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'abc',
+          encoding: 'base64',
+        },
       ],
     });
   });
@@ -341,21 +351,18 @@ describe('toolCall property-based', () => {
         mimeType: fc.option(fc.string({ minLength: 1, maxLength: 30 })),
       }),
     }),
-  ])(
-    'fileData always yields MediaBlock url with correct mimeType',
-    (input) => {
-      const result = toolResultContentFromLegacyPartListUnion(input);
-      if (!result.ok || !Array.isArray(result.value)) return false;
-      const block = result.value[0];
-      const expectedMime = input.fileData.mimeType ?? 'application/octet-stream';
-      return (
-        block.type === 'media' &&
-        block.encoding === 'url' &&
-        block.mimeType === expectedMime &&
-        block.data === input.fileData.fileUri
-      );
-    },
-  );
+  ])('fileData always yields MediaBlock url with correct mimeType', (input) => {
+    const result = toolResultContentFromLegacyPartListUnion(input);
+    if (!result.ok || !Array.isArray(result.value)) return false;
+    const block = result.value[0];
+    const expectedMime = input.fileData.mimeType ?? 'application/octet-stream';
+    return (
+      block.type === 'media' &&
+      block.encoding === 'url' &&
+      block.mimeType === expectedMime &&
+      block.data === input.fileData.fileUri
+    );
+  });
 
   it.prop([
     fc.record({

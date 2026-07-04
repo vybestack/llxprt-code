@@ -17,9 +17,7 @@ import type { IContent } from '../services/history/IContent.js';
 describe('CountTokensRequest / Result', () => {
   it('constructs a count tokens request with contents', () => {
     const req: CountTokensRequest = {
-      contents: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
-      ],
+      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
     };
     expect(req.contents).toHaveLength(1);
   });
@@ -83,7 +81,9 @@ describe('tokensAndEmbeddings property-based', () => {
     'CountTokensResult totalTokens round-trips through JSON unchanged',
     (totalTokens: number) => {
       const result: CountTokensResult = { totalTokens };
-      const roundTripped: CountTokensResult = JSON.parse(JSON.stringify(result));
+      const roundTripped: CountTokensResult = JSON.parse(
+        JSON.stringify(result),
+      );
       return roundTripped.totalTokens === totalTokens;
     },
   );
@@ -106,15 +106,20 @@ describe('tokensAndEmbeddings property-based', () => {
   );
 
   it.prop([
-    fc.array(fc.array(fc.float({ min: -1, max: 1, noNaN: true }), {
-      minLength: 1,
-      maxLength: 10,
-    }), { minLength: 0, maxLength: 5 }),
+    fc.array(
+      fc.array(fc.float({ min: -1, max: 1, noNaN: true }), {
+        minLength: 1,
+        maxLength: 10,
+      }),
+      { minLength: 0, maxLength: 5 },
+    ),
   ])(
     'EmbedContentResult embeddings preserve dimensions through JSON round-trip',
     (embeddings: number[][]) => {
       const result: EmbedContentResult = { embeddings };
-      const roundTripped: EmbedContentResult = JSON.parse(JSON.stringify(result));
+      const roundTripped: EmbedContentResult = JSON.parse(
+        JSON.stringify(result),
+      );
       return (
         roundTripped.embeddings.length === embeddings.length &&
         roundTripped.embeddings.every(

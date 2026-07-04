@@ -59,8 +59,6 @@ export function isJsonSchema(value: unknown): value is JsonSchema {
  * Shared structural guard for a plain record object (non-null, non-array).
  * Used by the llm-types narrowing flows so that no type assertion is needed.
  */
-export function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

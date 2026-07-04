@@ -99,23 +99,29 @@ describe('grounding property-based', () => {
       const roundTripped: GroundingInfo = JSON.parse(JSON.stringify(info));
       return (
         roundTripped.sources.length === cleanedSources.length &&
-        roundTripped.sources.every((src, i) => (
+        roundTripped.sources.every(
+          (src, i) =>
             src.title === cleanedSources[i].title &&
             src.url === cleanedSources[i].url &&
-            src.snippet === cleanedSources[i].snippet
-          ))
+            src.snippet === cleanedSources[i].snippet,
+        )
       );
     },
   );
 
   it.prop([
-    fc.record({ url: fc.webUrl(), status: fc.string({ minLength: 1, maxLength: 20 }) }),
+    fc.record({
+      url: fc.webUrl(),
+      status: fc.string({ minLength: 1, maxLength: 20 }),
+    }),
   ])(
     'UrlAccessInfo preserves url and status through JSON round-trip',
     (input) => {
       const info: UrlAccessInfo = { url: input.url, status: input.status };
       const roundTripped: UrlAccessInfo = JSON.parse(JSON.stringify(info));
-      return roundTripped.url === info.url && roundTripped.status === info.status;
+      return (
+        roundTripped.url === info.url && roundTripped.status === info.status
+      );
     },
   );
 
@@ -140,7 +146,9 @@ describe('grounding property-based', () => {
         if (s.sourceIndices !== null) out.sourceIndices = s.sourceIndices;
         return out;
       });
-      const roundTripped: GroundingSegment[] = JSON.parse(JSON.stringify(cleaned));
+      const roundTripped: GroundingSegment[] = JSON.parse(
+        JSON.stringify(cleaned),
+      );
       return JSON.stringify(roundTripped) === JSON.stringify(cleaned);
     },
   );

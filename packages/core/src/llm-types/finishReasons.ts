@@ -54,36 +54,38 @@ const CANONICAL_SET: ReadonlySet<string> = new Set<CanonicalFinishReason>([
  * @requirement REQ-001.2
  * @pseudocode lines 12-16
  */
-export const GEMINI_FINISH_MAP: Readonly<Record<string, CanonicalFinishReason>> =
-  {
-    STOP: 'stop',
-    MAX_TOKENS: 'max_tokens',
-    SAFETY: 'safety',
-    IMAGE_SAFETY: 'safety',
-    RECITATION: 'safety',
-    LANGUAGE: 'other',
-    BLOCKLIST: 'safety',
-    PROHIBITED_CONTENT: 'safety',
-    SPII: 'safety',
-    MALFORMED_FUNCTION_CALL: 'error',
-    UNEXPECTED_TOOL_CALL: 'error',
-    OTHER: 'other',
-    FINISH_REASON_UNSPECIFIED: 'other',
-  };
+export const GEMINI_FINISH_MAP: Readonly<
+  Record<string, CanonicalFinishReason>
+> = {
+  STOP: 'stop',
+  MAX_TOKENS: 'max_tokens',
+  SAFETY: 'safety',
+  IMAGE_SAFETY: 'safety',
+  RECITATION: 'safety',
+  LANGUAGE: 'other',
+  BLOCKLIST: 'safety',
+  PROHIBITED_CONTENT: 'safety',
+  SPII: 'safety',
+  MALFORMED_FUNCTION_CALL: 'error',
+  UNEXPECTED_TOOL_CALL: 'error',
+  OTHER: 'other',
+  FINISH_REASON_UNSPECIFIED: 'other',
+};
 
 /**
  * @plan PLAN-20260702-LLMTYPES.P03
  * @requirement REQ-001.3
  * @pseudocode lines 19-20
  */
-export const OPENAI_FINISH_MAP: Readonly<Record<string, CanonicalFinishReason>> =
-  {
-    stop: 'stop',
-    length: 'max_tokens',
-    tool_calls: 'tool_calls',
-    function_call: 'tool_calls',
-    content_filter: 'safety',
-  };
+export const OPENAI_FINISH_MAP: Readonly<
+  Record<string, CanonicalFinishReason>
+> = {
+  stop: 'stop',
+  length: 'max_tokens',
+  tool_calls: 'tool_calls',
+  function_call: 'tool_calls',
+  content_filter: 'safety',
+};
 
 /**
  * @plan PLAN-20260702-LLMTYPES.P03
