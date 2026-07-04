@@ -5,9 +5,18 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { resolve, join, sep } from 'node:path';
+import {
+  readFileSync,
+  readdirSync,
+  statSync,
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+} from 'node:fs';
+import { resolve, join, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -590,3 +599,186 @@ describe('Issue #2242: active surfaces do not reference deleted migrated scripts
     expect(offenders, message).toEqual([]);
   }, 15_000);
 });
+
+describe('Issue #2368: Bun startup does not run the compiled-script build warning', () => {
+  const startTsPath = resolve(repoRoot, 'scripts', 'start.ts');
+  const startSource = readFileSync(startTsPath, 'utf-8');
+
+  const OBSOLETE_STARTUP_REFERENCES = [
+    'check-build-status',
+    'llxprt-code-warnings',
+    '.last_build',
+  ] as const;
+
+  it.each(OBSOLETE_STARTUP_REFERENCES)(
+    'scripts/start.ts does not reference %s',
+    (obsolete) => {
+      expect(startSource).not.toContain(obsolete);
+    },
+  );
+
+  it('scripts/start.ts does not import execSync (only used by the removed check)', () => {
+    expect(startSource).not.toMatch(/\bexecSync\b/);
+  });
+
+  it('scripts/start.ts still discovers the sandbox command (unrelated behavior preserved)', () => {
+    expect(startSource).toContain('sandbox_command');
+  });
+});
+
+function findBunExecutableForRuntimeTest(): string {
+  if (process.platform === 'win32') {
+    return '';
+  }
+  const result = spawnSync('sh', ['-c', 'command -v bun'], {
+    encoding: 'utf-8',
+  });
+  if (result.error || result.status !== 0) {
+    return '';
+  }
+  return result.stdout.trim();
+}
+
+const realBunForRuntimeTest = findBunExecutableForRuntimeTest();
+if (!realBunForRuntimeTest && process.platform !== 'win32') {
+  console.warn(
+    '[bun-script-migration.test.ts] Bun executable not found; runtime integration tests for start.ts will be skipped.',
+  );
+}
+const runtimeDescribe = realBunForRuntimeTest ? describe : describe.skip;
+
+runtimeDescribe(
+  'Issue #2368: start.ts orchestrates child processes correctly at runtime',
+  () => {
+    const startTsPath = resolve(repoRoot, 'scripts', 'start.ts');
+    const NEWLINE = '\n';
+
+    function setupFakeBinDir(): {
+      binDir: string;
+      bunLogPath: string;
+      nodeLogPath: string;
+    } {
+      const binDir = mkdtempSync(join(tmpdir(), 'issue2368-fake-bin-'));
+      const bunLogPath = join(binDir, 'bun-invocations.log');
+      const nodeLogPath = join(binDir, 'node-invocations.log');
+
+      const fakeBunLines = [
+        '#!/bin/sh',
+        `echo "$@" >> "${bunLogPath}"`,
+        'for arg in "$@"; do',
+        '  case "$arg" in',
+        '    *check-build-status*)',
+        '      echo "HARD FAIL: check-build-status was invoked" >&2',
+        '      exit 99',
+        '      ;;',
+        '    *sandbox_command*)',
+        '      exit 1',
+        '      ;;',
+        '  esac',
+        'done',
+        'exit 0',
+      ];
+      const fakeBun = fakeBunLines.join(NEWLINE) + NEWLINE;
+
+      const fakeNodeLines = [
+        '#!/bin/sh',
+        `printf '%s\\n' "$@" >> "${nodeLogPath}"`,
+        'exit 0',
+      ];
+      const fakeNode = fakeNodeLines.join(NEWLINE) + NEWLINE;
+
+      writeFileSync(join(binDir, 'bun'), fakeBun, { mode: 0o755 });
+      writeFileSync(join(binDir, 'node'), fakeNode, { mode: 0o755 });
+
+      return { binDir, bunLogPath, nodeLogPath };
+    }
+
+    function runStartWithFakeBin(
+      binDir: string,
+      userArgs: string[],
+    ): { status: number; stdout: string; stderr: string } {
+      const existingPath = process.env.PATH ?? '';
+      const fakePath = binDir + delimiter + existingPath;
+      const env: NodeJS.ProcessEnv = {
+        PATH: fakePath,
+        SANDBOX: '',
+        SEATBELT_PROFILE: 'none',
+        DEBUG: '',
+        ...(process.env.HOME !== undefined ? { HOME: process.env.HOME } : {}),
+        ...(process.env.USER !== undefined ? { USER: process.env.USER } : {}),
+        ...(process.env.TMPDIR !== undefined
+          ? { TMPDIR: process.env.TMPDIR }
+          : {}),
+      };
+      const result = spawnSync(
+        realBunForRuntimeTest,
+        ['run', startTsPath, ...userArgs],
+        {
+          cwd: repoRoot,
+          env,
+          timeout: 30_000,
+          encoding: 'utf-8',
+        },
+      );
+      if (result.error) {
+        const timeoutMessage = 'start.ts did not exit within 30s';
+        const failureMessage = result.error.message.includes('ETIMEDOUT')
+          ? timeoutMessage
+          : `Failed to spawn start.ts via bun: ${result.error.message}`;
+        throw new Error(failureMessage);
+      }
+      if (result.status === null) {
+        throw new Error(
+          `start.ts was killed by signal: ${result.signal ?? 'unknown'}. stderr: ${result.stderr ?? ''}`,
+        );
+      }
+      return {
+        status: result.status,
+        stdout: result.stdout ?? '',
+        stderr: result.stderr ?? '',
+      };
+    }
+
+    it('spawns node with the CLI launcher and forwards user args', () => {
+      const { binDir, nodeLogPath } = setupFakeBinDir();
+      try {
+        const { status } = runStartWithFakeBin(binDir, ['--version']);
+        expect(status).toBe(0);
+        const nodeArgs = readFileSync(nodeLogPath, 'utf-8')
+          .trim()
+          .split(NEWLINE);
+        expect(nodeArgs[0]).toBe('./packages/cli/bin/llxprt.cjs');
+        expect(nodeArgs).toContain('--version');
+      } finally {
+        rmSync(binDir, { recursive: true, force: true });
+      }
+    });
+
+    it('attempts sandbox command discovery via bun', () => {
+      const { binDir, bunLogPath } = setupFakeBinDir();
+      try {
+        const { status } = runStartWithFakeBin(binDir, []);
+        expect(status).toBe(0);
+        const bunLog = readFileSync(bunLogPath, 'utf-8');
+        const sandboxAttempted = bunLog
+          .split(NEWLINE)
+          .some((line) => line.includes('sandbox_command'));
+        expect(sandboxAttempted).toBe(true);
+      } finally {
+        rmSync(binDir, { recursive: true, force: true });
+      }
+    });
+
+    it('never invokes check-build-status', () => {
+      const { binDir, bunLogPath } = setupFakeBinDir();
+      try {
+        const { status } = runStartWithFakeBin(binDir, []);
+        expect(status).toBe(0);
+        const bunLog = readFileSync(bunLogPath, 'utf-8');
+        expect(bunLog).not.toContain('check-build-status');
+      } finally {
+        rmSync(binDir, { recursive: true, force: true });
+      }
+    });
+  },
+);

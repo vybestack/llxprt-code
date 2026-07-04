@@ -17,7 +17,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { spawn, execFileSync, execSync } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
@@ -114,32 +114,6 @@ function prepareNodeOptionsForDev(nodeOptions: string | undefined): string {
   const localStorageFlag = `--localstorage-file=${localStoragePath}`;
 
   return sanitized ? `${sanitized} ${localStorageFlag}` : localStorageFlag;
-}
-
-// check build status, write warnings to file for app to display if needed
-try {
-  execSync('bun ./scripts/check-build-status.ts', {
-    stdio: 'inherit',
-    cwd: root,
-  });
-} catch (error) {
-  const status = propertyValue(error, 'status');
-  if (isErrnoException(error, 'ENOENT') || status === 127) {
-    console.error(
-      'Bun runtime was not found or failed to start. Install Bun (>=1.3.0) and ensure it is on PATH.',
-    );
-    process.exit(1);
-  }
-  if (typeof status === 'number' && Number.isInteger(status)) {
-    process.exit(status & 0xff);
-  }
-  const signal = propertyValue(error, 'signal');
-  if (typeof signal === 'string' && signal.length > 0) {
-    process.exit(128);
-  }
-  throw new Error(`Failed to run build-status check: ${messageOf(error)}`, {
-    cause: error,
-  });
 }
 
 const nodeArgs: string[] = [];
