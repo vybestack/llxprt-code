@@ -9,6 +9,11 @@ import { parseArguments } from './config/cliArgParser.js';
 import { parseBootstrapArgs } from './config/profileBootstrap.js';
 import { coerceDebugFlag } from './config/yargsOptions.js';
 import {
+  hasProfileAuthEphemerals,
+  reapplyProfileAuthEphemerals,
+  snapshotProfileAuthEphemerals,
+} from './config/profileAuthEphemerals.js';
+import {
   dynamicSettingsRegistry,
   generateDynamicToolSettings,
 } from './utils/dynamicSettings.js';
@@ -225,11 +230,26 @@ export async function activateConfiguredProvider(
       configWithBootstrapArgs._bootstrapArgs,
     );
 
-    await switchActiveProvider(configProvider);
-    await config.refreshAuth();
+    const cliModelOverride = (config as Config & { _cliModelOverride?: string })
+      ._cliModelOverride;
+    const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
+    const alreadyActive =
+      providerManager.getActiveProviderName() === configProvider;
+    if (!alreadyActive) {
+      await switchActiveProvider(configProvider);
+      if (hasProfileAuthEphemerals(profileAuthEphemerals)) {
+        reapplyProfileAuthEphemerals(config, profileAuthEphemerals);
+      }
+      await config.refreshAuth();
+    } else if (!hasProfileAuthEphemerals(profileAuthEphemerals)) {
+      await config.refreshAuth();
+    }
 
     const activeProvider = providerManager.getActiveProvider();
-    const configModel = resolveProviderModel(config, activeProvider);
+    const configModel =
+      typeof cliModelOverride === 'string' && cliModelOverride.trim().length > 0
+        ? cliModelOverride.trim()
+        : resolveProviderModel(config, activeProvider);
     if (configModel && configModel !== 'placeholder-model') {
       await setActiveModel(configModel);
     }

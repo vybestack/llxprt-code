@@ -39,13 +39,22 @@ interface FakeAgent {
 }
 
 function makeConfig(
-  overrides: { provider?: string | undefined; model?: string } = {},
+  overrides: {
+    provider?: string | undefined;
+    model?: string;
+    ephemerals?: Record<string, unknown>;
+  } = {},
 ): Config {
+  const ephemerals = { ...(overrides.ephemerals ?? {}) };
   return {
     getPolicyEngine: () => null,
     getDebugMode: () => false,
     getProvider: () => overrides.provider,
     getModel: () => overrides.model ?? 'gemini-2.5-pro',
+    getEphemeralSetting: (key: string) => ephemerals[key],
+    setEphemeralSetting: (key: string, value: unknown) => {
+      ephemerals[key] = value;
+    },
   } as unknown as Config;
 }
 
@@ -170,6 +179,22 @@ describe('createForegroundAgent', () => {
     // re-activates the profile-loaded provider so the status bar is correct.
     expect(switchActiveProviderMock).toHaveBeenCalledWith('glm');
     expect(setActiveModelMock).toHaveBeenCalledWith('glm-4');
+  });
+
+  it('skips switchActiveProvider when profile auth ephemerals are present but still sets the model', async () => {
+    config = makeConfig({
+      provider: 'anthropic',
+      model: 'glm-5.2',
+      ephemerals: {
+        'auth-keyfile': '/Users/example/.keys/glm.key',
+        'base-url': 'https://api.z.ai/api/anthropic',
+      },
+    });
+
+    await createForegroundAgent({ config, sessionMessageBus });
+
+    expect(switchActiveProviderMock).not.toHaveBeenCalled();
+    expect(setActiveModelMock).toHaveBeenCalledWith('glm-5.2');
   });
 
   it('does not call setActiveModel when model is placeholder-model', async () => {
