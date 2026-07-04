@@ -17,7 +17,9 @@ import {
   type WaitingToolCall,
   type AnyDeclarativeTool,
   type AnyToolInvocation,
+  REFUSAL_NOTICE_MESSAGE,
 } from '@vybestack/llxprt-code-core';
+import { FinishReason } from '@google/genai';
 import { createMockConfig } from '../utils/testing_utils.js';
 import { CoderAgentEvent } from '../types.js';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
@@ -218,6 +220,99 @@ describe('Task', () => {
         undefined,
         undefined,
       );
+    });
+  });
+
+  describe('acceptAgentMessage refusal surfacing @issue:2329', () => {
+    it('publishes the refusal notice text when Finished has stopReason "refusal"', async () => {
+      const mockConfig = createMockConfig();
+      const mockEventBus = createMockEventBus();
+
+      const task = await Task.create(
+        'task-id',
+        'context-id',
+        mockConfig as Config,
+        mockEventBus,
+      );
+      // Spy on the same text-content path used for ordinary Content events.
+      const sendTextSpy = vi.spyOn(task, '_sendTextContent');
+
+      await task.acceptAgentMessage({
+        type: GeminiEventType.Finished,
+        value: {
+          reason: FinishReason.STOP,
+          stopReason: 'refusal',
+        },
+      });
+
+      // The exact notice (with its safety-notice prefix) must reach the client.
+      expect(sendTextSpy).toHaveBeenCalledWith(
+        `\n\n[safety notice] ${REFUSAL_NOTICE_MESSAGE}`,
+      );
+      // ...and it must be published onto the event bus as agent text content.
+      expect(mockEventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'status-update',
+          taskId: 'task-id',
+          contextId: 'context-id',
+          status: expect.objectContaining({
+            message: expect.objectContaining({
+              role: 'agent',
+              parts: [
+                expect.objectContaining({
+                  kind: 'text',
+                  text: `\n\n[safety notice] ${REFUSAL_NOTICE_MESSAGE}`,
+                }),
+              ],
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('does not publish a refusal notice when Finished has no stopReason', async () => {
+      const mockConfig = createMockConfig();
+      const mockEventBus = createMockEventBus();
+
+      const task = await Task.create(
+        'task-id',
+        'context-id',
+        mockConfig as Config,
+        mockEventBus,
+      );
+      const sendTextSpy = vi.spyOn(task, '_sendTextContent');
+
+      await task.acceptAgentMessage({
+        type: GeminiEventType.Finished,
+        value: {
+          reason: FinishReason.STOP,
+        },
+      });
+
+      expect(sendTextSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not publish a refusal notice when stopReason is "end_turn"', async () => {
+      const mockConfig = createMockConfig();
+      const mockEventBus = createMockEventBus();
+
+      const task = await Task.create(
+        'task-id',
+        'context-id',
+        mockConfig as Config,
+        mockEventBus,
+      );
+      const sendTextSpy = vi.spyOn(task, '_sendTextContent');
+
+      await task.acceptAgentMessage({
+        type: GeminiEventType.Finished,
+        value: {
+          reason: FinishReason.STOP,
+          stopReason: 'end_turn',
+        },
+      });
+
+      expect(sendTextSpy).not.toHaveBeenCalled();
     });
   });
 

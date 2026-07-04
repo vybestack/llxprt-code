@@ -31,6 +31,7 @@ import {
   type UsageMetadataWithCache,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { getResponseTextFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import { setProviderStopReason } from './providerStopReason.js';
 
 const logger = new DebugLogger('llxprt:core:message-converter');
 
@@ -576,6 +577,13 @@ function applyFinishReasonMapping(
       finishReasonByTerminationReason,
       terminationReason,
     );
+    // @issue:2329 — always preserve the raw provider stop reason on the
+    // candidate (even when it has no coarse FinishReason mapping) so
+    // downstream consumers (agent loop, CLI) can distinguish e.g. a
+    // safety-classifier refusal from a generic stop. Stored on the
+    // repo-owned providerStopReason field — NOT the SDK's finishMessage,
+    // which is a human-readable description that native responses may set.
+    setProviderStopReason(response.candidates[0], terminationReason);
     if (hasMapping) {
       const mappedReason = finishReasonByTerminationReason[terminationReason];
       response.candidates[0].finishReason = mappedReason;

@@ -6,6 +6,7 @@
 
 import {
   type Config,
+  type JsonOutput,
   JsonStreamEventType,
   type StreamJsonFormatter,
   type EmojiFilter,
@@ -19,6 +20,7 @@ import type {
   StructuredError,
 } from '@vybestack/llxprt-code-agents';
 import { MAX_TURNS_MESSAGE } from './utils/errors.js';
+import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
 type StreamConsumerContext = {
   config: Config;
@@ -235,6 +237,7 @@ function emitFinalResult(
   jsonResponseText: string,
   startTime: number,
   metrics: SessionMetrics,
+  finishReason?: 'refusal',
 ): void {
   if (context.streamFormatter) {
     context.streamFormatter.emitEvent({
@@ -247,17 +250,15 @@ function emitFinalResult(
       ),
     });
   } else if (context.jsonOutput) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          session_id: context.config.getSessionId(),
-          response: jsonResponseText.trimEnd(),
-          stats: metrics,
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    const payload: JsonOutput = {
+      session_id: context.config.getSessionId(),
+      response: jsonResponseText.trimEnd(),
+      stats: metrics,
+    };
+    if (finishReason !== undefined) {
+      payload.finish_reason = finishReason;
+    }
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   } else {
     process.stdout.write('\n');
   }
@@ -290,6 +291,34 @@ function handleDone(
     case 'context-overflow':
       emitFinalResult(context, jsonResponseText, startTime, getMetrics());
       return;
+    case 'refusal': {
+      // @issue:2329 — surface the safety-classifier refusal as a user-visible
+      // warning while still emitting the final result so stdout/json output
+      // is preserved. DoneReason is authoritative here, so the shared notice
+      // constant is used directly. Plain-JSON consumers get a finish_reason
+      // field; stream-json already carried the warning event below.
+      //
+      // The unstructured stderr warning is emitted only in pure text mode
+      // (no streamFormatter and no jsonOutput). In stream-json mode the
+      // structured warning event carries the signal; in plain-JSON mode the
+      // finish_reason field carries it.
+      if (!context.jsonOutput && context.streamFormatter === null) {
+        process.stderr.write(`WARNING: ${REFUSAL_NOTICE_MESSAGE}\n`);
+      }
+      emitStreamError(
+        context.streamFormatter,
+        'warning',
+        REFUSAL_NOTICE_MESSAGE,
+      );
+      emitFinalResult(
+        context,
+        jsonResponseText,
+        startTime,
+        getMetrics(),
+        'refusal',
+      );
+      return;
+    }
     case 'hook-stopped': {
       const stop = event.stop;
       const stopMessage = `Agent execution stopped: ${
