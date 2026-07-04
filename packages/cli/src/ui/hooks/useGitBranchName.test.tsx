@@ -25,11 +25,50 @@ vi.mock('node:fs/promises');
 const CWD = process.platform === 'win32' ? '\\test\\project' : '/test/project';
 const GIT_LOGS_HEAD_PATH = path.join(CWD, '.git', 'logs', 'HEAD');
 
+type WatchFileCallback = (curr: fs.Stats, prev: fs.Stats) => void;
+
+function createWatchFileCapture() {
+  let callback: WatchFileCallback | null = null;
+  const spy = vi.mocked(fs.watchFile).mockImplementation(((
+    _filename: fs.PathLike,
+    optionsOrListener: unknown,
+    maybeListener?: WatchFileCallback,
+  ): fs.StatWatcher => {
+    const listener =
+      typeof optionsOrListener === 'function'
+        ? (optionsOrListener as WatchFileCallback)
+        : maybeListener;
+    if (listener) {
+      callback = listener;
+    }
+    return {} as unknown as fs.StatWatcher;
+  }) as typeof fs.watchFile);
+  return {
+    spy,
+    getCallback: (): WatchFileCallback => {
+      if (!callback) throw new Error('watchFile callback not captured yet');
+      return callback;
+    },
+    getListener: (): WatchFileCallback | null => callback,
+  };
+}
+
+function mockExecReturn(...values: string[]) {
+  let callCount = 0;
+  (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
+    (_command, _options, callback) => {
+      const value = values[Math.min(callCount, values.length - 1)];
+      callCount++;
+      callback?.(null, value, '');
+      return new EventEmitter() as ChildProcess;
+    },
+  );
+  return () => callCount;
+}
+
 describe('useGitBranchName', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Mock fsPromises.access to always succeed
     vi.mocked(fsPromises.access).mockResolvedValue(undefined);
   });
 
@@ -38,17 +77,12 @@ describe('useGitBranchName', () => {
   });
 
   it('should return branch name', async () => {
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-      (_command, _options, callback) => {
-        callback?.(null, 'main\n', '');
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+    mockExecReturn('main\n');
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
 
     await act(async () => {
-      rerender(); // Rerender to get the updated state
+      rerender();
     });
 
     expect(result.current).toBe('main');
@@ -109,33 +143,9 @@ describe('useGitBranchName', () => {
     expect(result.current).toBeUndefined();
   });
 
-  it('should update branch name when .git/HEAD changes', async () => {
-    // Create a mock watcher
-    const mockWatcher = {
-      close: vi.fn(),
-    };
-
-    let watchCallback: ((eventType: string) => void) | null = null;
-    const watchSpy = vi
-      .mocked(fs.watch)
-      .mockImplementation((path, callback) => {
-        watchCallback = callback as (eventType: string) => void;
-        return mockWatcher as unknown as fs.FSWatcher;
-      });
-
-    let callCount = 0;
-    // Mock exec to return different values on each call
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-      (_command, _options, callback) => {
-        if (callCount === 0) {
-          callCount++;
-          callback?.(null, 'main\n', '');
-        } else {
-          callback?.(null, 'develop\n', '');
-        }
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+  it('should update branch name when .git/logs/HEAD changes', async () => {
+    const capture = createWatchFileCapture();
+    mockExecReturn('main\n', 'develop\n');
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
 
@@ -144,34 +154,29 @@ describe('useGitBranchName', () => {
     });
     expect(result.current).toBe('main');
 
-    // Wait for watcher to be set up
     await waitFor(() => {
-      expect(watchSpy).toHaveBeenCalled();
+      expect(capture.spy).toHaveBeenCalled();
     });
 
-    // Simulate file change event
     await act(async () => {
-      watchCallback!('change');
+      capture.getCallback()(
+        { mtimeMs: 2000 } as fs.Stats,
+        { mtimeMs: 1000 } as fs.Stats,
+      );
       rerender();
     });
 
     expect(result.current).toBe('develop');
-    expect(fs.watch).toHaveBeenCalledWith(
+    expect(fs.watchFile).toHaveBeenCalledWith(
       GIT_LOGS_HEAD_PATH,
+      { interval: 3000 },
       expect.any(Function),
     );
   });
 
   it('should handle watcher setup error silently', async () => {
-    // Make fsPromises.access reject to simulate file not existing
     vi.mocked(fsPromises.access).mockRejectedValue(new Error('ENOENT'));
-
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-      (_command, _options, callback) => {
-        callback?.(null, 'main\n', '');
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+    mockExecReturn('main\n');
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
 
@@ -179,30 +184,13 @@ describe('useGitBranchName', () => {
       rerender();
     });
 
-    expect(result.current).toBe('main'); // Branch name should still be fetched initially
-
-    // Verify that fs.watch was never called since access check failed
-    expect(fs.watch).not.toHaveBeenCalled();
+    expect(result.current).toBe('main');
+    expect(fs.watchFile).not.toHaveBeenCalled();
   });
 
-  it('should cleanup watcher on unmount', async () => {
-    const closeMock = vi.fn();
-    const watcherEmitter = new EventEmitter();
-    const mockWatcher = {
-      close: closeMock,
-      ...watcherEmitter,
-    };
-
-    const watchMock = vi
-      .mocked(fs.watch)
-      .mockReturnValue(mockWatcher as unknown as fs.FSWatcher);
-
-    (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
-      (_command, _options, callback) => {
-        callback?.(null, 'main\n', '');
-        return new EventEmitter() as ChildProcess;
-      },
-    );
+  it('should cleanup watcher on unmount with the same listener reference', async () => {
+    const capture = createWatchFileCapture();
+    mockExecReturn('main\n');
 
     const { unmount, rerender } = renderHook(() => useGitBranchName(CWD));
 
@@ -210,15 +198,126 @@ describe('useGitBranchName', () => {
       rerender();
     });
 
-    // Wait for watcher to be set up BEFORE unmounting
     await waitFor(() => {
-      expect(watchMock).toHaveBeenCalledWith(
+      expect(capture.spy).toHaveBeenCalledWith(
         GIT_LOGS_HEAD_PATH,
+        { interval: 3000 },
         expect.any(Function),
       );
     });
 
     unmount();
-    expect(closeMock).toHaveBeenCalled();
+
+    expect(fs.unwatchFile).toHaveBeenCalledWith(
+      GIT_LOGS_HEAD_PATH,
+      capture.getListener(),
+    );
+  });
+
+  it('should not refetch when mtimeMs and size are unchanged', async () => {
+    const capture = createWatchFileCapture();
+    const getCallCount = mockExecReturn('main\n');
+
+    const { result, rerender } = renderHook(() => useGitBranchName(CWD));
+
+    await act(async () => {
+      rerender();
+    });
+    expect(result.current).toBe('main');
+
+    await waitFor(() => {
+      expect(capture.spy).toHaveBeenCalled();
+    });
+
+    const callsBeforePoll = getCallCount();
+
+    await act(async () => {
+      capture.getCallback()(
+        { mtimeMs: 1000, size: 42 } as fs.Stats,
+        { mtimeMs: 1000, size: 42 } as fs.Stats,
+      );
+      rerender();
+    });
+
+    expect(getCallCount()).toBe(callsBeforePoll);
+    expect(result.current).toBe('main');
+  });
+
+  it('should refetch when only size changes', async () => {
+    const capture = createWatchFileCapture();
+    mockExecReturn('main\n', 'develop\n');
+
+    const { result, rerender } = renderHook(() => useGitBranchName(CWD));
+
+    await act(async () => {
+      rerender();
+    });
+    expect(result.current).toBe('main');
+
+    await waitFor(() => {
+      expect(capture.spy).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      capture.getCallback()(
+        { mtimeMs: 1000, size: 99 } as fs.Stats,
+        { mtimeMs: 1000, size: 42 } as fs.Stats,
+      );
+      rerender();
+    });
+
+    expect(result.current).toBe('develop');
+  });
+
+  it('should refetch when only mtimeMs changes', async () => {
+    const capture = createWatchFileCapture();
+    mockExecReturn('main\n', 'develop\n');
+
+    const { result, rerender } = renderHook(() => useGitBranchName(CWD));
+
+    await act(async () => {
+      rerender();
+    });
+    expect(result.current).toBe('main');
+
+    await waitFor(() => {
+      expect(capture.spy).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      capture.getCallback()(
+        { mtimeMs: 2000, size: 42 } as fs.Stats,
+        { mtimeMs: 1000, size: 42 } as fs.Stats,
+      );
+      rerender();
+    });
+
+    expect(result.current).toBe('develop');
+  });
+
+  it('should not register watchFile if unmounted before access resolves', async () => {
+    let resolveAccess: () => void = () => {};
+    vi.mocked(fsPromises.access).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveAccess = resolve;
+        }),
+    );
+
+    mockExecReturn('main\n');
+
+    const { unmount, rerender } = renderHook(() => useGitBranchName(CWD));
+
+    await act(async () => {
+      rerender();
+    });
+
+    unmount();
+
+    await act(async () => {
+      resolveAccess();
+    });
+
+    expect(fs.watchFile).not.toHaveBeenCalled();
   });
 });
