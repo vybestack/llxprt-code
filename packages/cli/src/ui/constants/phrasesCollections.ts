@@ -69,10 +69,10 @@ export const LLXPRT_PHRASES = [
 ];
 
 /**
- * Gemini-CLI phrases (migrated from original gemini-cli)
+ * Legacy CLI phrases (migrated from original gemini-cli project)
  * Source: https://github.com/e2720pjk/gemini-cli/blob/main/packages/cli/src/ui/constants/wittyPhrases.ts
  */
-export const GEMINI_CLI_PHRASES = [
+export const LEGACY_CLI_PHRASES = [
   "I'm Feeling Lucky",
   'Shipping awesomeness... ',
   'Painting the serifs back on...',
@@ -228,7 +228,7 @@ export function getPhraseCollection(
     case 'llxprt':
       return LLXPRT_PHRASES;
     case 'gemini-cli':
-      return GEMINI_CLI_PHRASES;
+      return LEGACY_CLI_PHRASES;
     case 'whimsical':
       return COMMUNITY_PHRASES;
     case 'custom':

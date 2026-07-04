@@ -15,7 +15,7 @@ import {
 } from './usePhraseCycler.js';
 import {
   LLXPRT_PHRASES,
-  GEMINI_CLI_PHRASES,
+  LEGACY_CLI_PHRASES,
   COMMUNITY_PHRASES,
 } from '../constants/phrasesCollections.js';
 
@@ -210,7 +210,7 @@ describe('usePhraseCycler', () => {
       const { result } = renderHook(() =>
         usePhraseCycler(true, false, 'gemini-cli'),
       );
-      expect(GEMINI_CLI_PHRASES).toContain(result.current);
+      expect(LEGACY_CLI_PHRASES).toContain(result.current);
     });
 
     it('should use Community phrases for "whimsical" style', () => {

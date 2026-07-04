@@ -55,19 +55,6 @@ const ALLOWED_GEMINI_PATTERNS: ReadonlyArray<{
   { pattern: 'gemini-1', reason: 'Gemini model name string literal' },
   { pattern: 'gemini-embedding', reason: 'Gemini embedding model name' },
   { pattern: 'gemini-2', reason: 'Gemini model name string literal' },
-  // Directory and hook names that stay
-  {
-    pattern: 'geminiStream/',
-    reason: 'Directory name preserved per plan scope decision',
-  },
-  {
-    pattern: 'useGeminiStream',
-    reason: 'Hook name preserved as directory-level scope',
-  },
-  {
-    pattern: 'geminiStreamLogger',
-    reason: 'Directory-scoped logger inside geminiStream/',
-  },
   // Provider-specific test references
   {
     pattern: 'provider-gemini-switching',
@@ -420,35 +407,34 @@ describe('Provider-Agnostic Naming Regression', () => {
     }
   });
 
-  describe('GeminiClient/geminiClient inside geminiStream directory must not remain', () => {
-    // Even though geminiStream/ directory name is preserved,
-    // provider-agnostic client symbols inside must be renamed.
-    const geminiStreamFiles = collectSourceFiles(
-      resolve(CLI_DIR, 'src/ui/hooks/geminiStream'),
+  describe('GeminiClient/geminiClient inside agentStream directory must not remain', () => {
+    // Provider-agnostic client symbols inside agentStream/ must be renamed.
+    const agentStreamFiles = collectSourceFiles(
+      resolve(CLI_DIR, 'src/ui/hooks/agentStream'),
     );
 
-    it('must not contain GeminiClient type references inside geminiStream/', () => {
-      const hits = searchTokenInFiles(geminiStreamFiles, 'GeminiClient');
+    it('must not contain GeminiClient type references inside agentStream/', () => {
+      const hits = searchTokenInFiles(agentStreamFiles, 'GeminiClient');
       expect(hits).toStrictEqual([]);
     });
 
-    it('must not contain geminiClient field/param references inside geminiStream/', () => {
-      const hits = searchTokenInFiles(geminiStreamFiles, 'geminiClient');
+    it('must not contain geminiClient field/param references inside agentStream/', () => {
+      const hits = searchTokenInFiles(agentStreamFiles, 'geminiClient');
       expect(hits).toStrictEqual([]);
     });
 
-    it('must not contain getGeminiClient accessor inside geminiStream/', () => {
-      const hits = searchTokenInFiles(geminiStreamFiles, 'getGeminiClient');
+    it('must not contain getGeminiClient accessor inside agentStream/', () => {
+      const hits = searchTokenInFiles(agentStreamFiles, 'getGeminiClient');
       expect(hits).toStrictEqual([]);
     });
 
-    it('must not contain mockGeminiClient inside geminiStream/', () => {
-      const hits = searchTokenInFiles(geminiStreamFiles, 'mockGeminiClient');
+    it('must not contain mockGeminiClient inside agentStream/', () => {
+      const hits = searchTokenInFiles(agentStreamFiles, 'mockGeminiClient');
       expect(hits).toStrictEqual([]);
     });
 
-    it('must not contain makeGeminiClient inside geminiStream/', () => {
-      const hits = searchTokenInFiles(geminiStreamFiles, 'makeGeminiClient');
+    it('must not contain makeGeminiClient inside agentStream/', () => {
+      const hits = searchTokenInFiles(agentStreamFiles, 'makeGeminiClient');
       expect(hits).toStrictEqual([]);
     });
   });

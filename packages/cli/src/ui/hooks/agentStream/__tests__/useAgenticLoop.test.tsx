@@ -21,7 +21,7 @@
  * mirroring the LLM-provider mock used by the engine's own integration tests.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FinishReason } from '@google/genai';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
