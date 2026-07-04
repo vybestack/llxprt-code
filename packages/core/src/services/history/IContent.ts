@@ -94,6 +94,20 @@ export interface UsageStats {
 
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
+
+  /**
+   * @plan PLAN-20260702-LLMTYPES.P03
+   * @requirement REQ-009.2
+   * @pseudocode line 91
+   */
+  reasoningTokens?: number;
+
+  /**
+   * @plan PLAN-20260702-LLMTYPES.P03
+   * @requirement REQ-009.2
+   * @pseudocode line 91
+   */
+  toolTokens?: number;
 }
 
 /**
@@ -113,6 +127,13 @@ export type ContentBlock =
 export interface TextBlock {
   type: 'text';
   text: string;
+
+  /**
+   * @plan PLAN-20260702-LLMTYPES.P03
+   * @requirement REQ-009.1
+   * @pseudocode line 90
+   */
+  providerMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -132,6 +153,13 @@ export interface ToolCallBlock {
 
   /** Optional description of what this tool call is intended to do */
   description?: string;
+
+  /**
+   * @plan PLAN-20260702-LLMTYPES.P03
+   * @requirement REQ-009.1
+   * @pseudocode line 90
+   */
+  providerMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -154,6 +182,13 @@ export interface ToolResponseBlock {
 
   /** Whether this response completes the tool call */
   isComplete?: boolean;
+
+  /**
+   * @plan PLAN-20260702-LLMTYPES.P03
+   * @requirement REQ-009.1
+   * @pseudocode line 90
+   */
+  providerMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -176,6 +211,13 @@ export interface MediaBlock {
 
   /** Original filename if applicable */
   filename?: string;
+
+  /**
+   * @plan PLAN-20260702-LLMTYPES.P03
+   * @requirement REQ-009.1
+   * @pseudocode line 90
+   */
+  providerMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -200,6 +242,13 @@ export interface ThinkingBlock {
 
   /** Base64-encoded reasoning content (for OpenAI Codex/Responses API) */
   encryptedContent?: string;
+
+  /**
+   * @plan PLAN-20260702-LLMTYPES.P03
+   * @requirement REQ-009.1
+   * @pseudocode line 90
+   */
+  providerMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -213,6 +262,13 @@ export interface CodeBlock {
 
   /** Programming language for syntax highlighting */
   language?: string;
+
+  /**
+   * @plan PLAN-20260702-LLMTYPES.P03
+   * @requirement REQ-009.1
+   * @pseudocode line 90
+   */
+  providerMetadata?: Record<string, unknown>;
 }
 
 /**

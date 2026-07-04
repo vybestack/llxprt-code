@@ -1,0 +1,403 @@
+/**
+ * @plan PLAN-20260702-LLMTYPES.P03
+ * @requirement REQ-004.1, REQ-004.2, REQ-004.3
+ * @pseudocode lines 60-78
+ */
+import { describe, expect } from 'vitest';
+import { it } from '@fast-check/vitest';
+import * as fc from 'fast-check';
+import {
+  toolResultContentFromLegacyPartListUnion,
+  type ToolCallRequest,
+} from './toolCall.js';
+
+describe('toolResultContentFromLegacyPartListUnion - string input', () => {
+  it('returns string directly for string input', () => {
+    expect(toolResultContentFromLegacyPartListUnion('hello')).toStrictEqual({
+      ok: true,
+      value: 'hello',
+    });
+  });
+
+  it('returns empty string for empty string input', () => {
+    expect(toolResultContentFromLegacyPartListUnion('')).toStrictEqual({
+      ok: true,
+      value: '',
+    });
+  });
+});
+
+describe('toolResultContentFromLegacyPartListUnion - single part object', () => {
+  it('converts {text} to TextBlock', () => {
+    const result = toolResultContentFromLegacyPartListUnion({ text: 'hello world' });
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [{ type: 'text', text: 'hello world' }],
+    });
+  });
+
+  it('converts {inlineData} to MediaBlock base64', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      inlineData: { mimeType: 'image/png', data: 'base64data==' },
+    });
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'base64data==',
+          encoding: 'base64',
+        },
+      ],
+    });
+  });
+
+  it('converts {fileData} to MediaBlock url', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      fileData: { mimeType: 'image/jpeg', fileUri: 'https://example.com/img.jpg' },
+    });
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        {
+          type: 'media',
+          mimeType: 'image/jpeg',
+          data: 'https://example.com/img.jpg',
+          encoding: 'url',
+        },
+      ],
+    });
+  });
+
+  it('converts {fileData} without mimeType to application/octet-stream', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      fileData: { fileUri: 'https://example.com/file.bin' },
+    });
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        {
+          type: 'media',
+          mimeType: 'application/octet-stream',
+          data: 'https://example.com/file.bin',
+          encoding: 'url',
+        },
+      ],
+    });
+  });
+
+  it('converts {functionResponse} to ToolResponseBlock', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      functionResponse: {
+        name: 'searchWeb',
+        response: { results: ['a', 'b'] },
+      },
+    });
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        {
+          type: 'tool_response',
+          callId: '',
+          toolName: 'searchWeb',
+          result: { results: ['a', 'b'] },
+        },
+      ],
+    });
+  });
+
+  it('converts {functionResponse} with id to ToolResponseBlock preserving callId', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      functionResponse: {
+        id: 'call-123',
+        name: 'searchWeb',
+        response: 'done',
+      },
+    });
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        {
+          type: 'tool_response',
+          callId: 'call-123',
+          toolName: 'searchWeb',
+          result: 'done',
+        },
+      ],
+    });
+  });
+});
+
+describe('toolResultContentFromLegacyPartListUnion - array input', () => {
+  it('converts array of mixed parts element-wise', () => {
+    const result = toolResultContentFromLegacyPartListUnion([
+      { text: 'hello' },
+      { text: 'world' },
+    ]);
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        { type: 'text', text: 'hello' },
+        { type: 'text', text: 'world' },
+      ],
+    });
+  });
+
+  it('handles array with string elements', () => {
+    const result = toolResultContentFromLegacyPartListUnion(['a', 'b']);
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        { type: 'text', text: 'a' },
+        { type: 'text', text: 'b' },
+      ],
+    });
+  });
+
+  it('handles array with mixed text and inlineData', () => {
+    const result = toolResultContentFromLegacyPartListUnion([
+      { text: 'desc' },
+      { inlineData: { mimeType: 'image/png', data: 'abc' } },
+    ]);
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        { type: 'text', text: 'desc' },
+        { type: 'media', mimeType: 'image/png', data: 'abc', encoding: 'base64' },
+      ],
+    });
+  });
+
+  it('handles empty array', () => {
+    const result = toolResultContentFromLegacyPartListUnion([]);
+    expect(result).toStrictEqual({ ok: true, value: [] });
+  });
+
+  it('propagates error from unsupported element without dropping it', () => {
+    const result = toolResultContentFromLegacyPartListUnion([
+      { text: 'ok' },
+      { executableCode: { code: 'print(1)' } },
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => {
+  it('rejects null with descriptive error', () => {
+    const result = toolResultContentFromLegacyPartListUnion(null);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('rejects number with descriptive error', () => {
+    const result = toolResultContentFromLegacyPartListUnion(42);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('rejects unsupported object shape (executableCode)', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      executableCode: { language: 'PYTHON', code: 'print(1)' },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('rejects empty object', () => {
+    const result = toolResultContentFromLegacyPartListUnion({});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('rejects inlineData with missing data field', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      inlineData: { mimeType: 'image/png' },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects functionResponse with missing name', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      functionResponse: { response: 'ok' },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('never silently stringifies or drops unsupported shapes', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      mysteryField: 42,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // The error should mention "unsupported" — the shape was NOT stringified
+      expect(result.error.toLowerCase()).toContain('unsupported');
+    }
+  });
+});
+
+describe('ToolCallRequest type usage', () => {
+  it('constructs without optional id', () => {
+    const req: ToolCallRequest = { name: 'search', args: { q: 'hello' } };
+    expect(req.name).toBe('search');
+    expect(req.args).toStrictEqual({ q: 'hello' });
+    expect(req.id).toBeUndefined();
+  });
+
+  it('constructs with optional id', () => {
+    const req: ToolCallRequest = { id: 'call-1', name: 'search', args: {} };
+    expect(req.id).toBe('call-1');
+  });
+});
+
+// ============================================================================
+// Property-based tests
+// ============================================================================
+
+describe('toolCall property-based', () => {
+  it.prop([
+    fc.array(fc.record({ text: fc.string({ maxLength: 50 }) }), {
+      minLength: 0,
+      maxLength: 10,
+    }),
+  ])(
+    'array of {text: string} yields TextBlocks preserving order and content',
+    (parts) => {
+      const result = toolResultContentFromLegacyPartListUnion(parts);
+      if (!result.ok) return false;
+      if (!Array.isArray(result.value)) return false;
+      return (
+        result.value.length === parts.length &&
+        parts.every((p, i) => {
+          const block = result.value[i];
+          return block.type === 'text' && block.text === p.text;
+        })
+      );
+    },
+  );
+
+  it.prop([fc.string({ maxLength: 100 })])(
+    'any string input yields ok with value === input',
+    (s: string) => {
+      const result = toolResultContentFromLegacyPartListUnion(s);
+      return result.ok && result.value === s;
+    },
+  );
+
+  it.prop([
+    fc.oneof(
+      fc.constant(null),
+      fc.constant(undefined),
+      fc.integer(),
+      fc.constant({}),
+      fc.constant({ mystery: 42 }),
+      fc.record({ executableCode: fc.record({ code: fc.string() }) }),
+    ),
+  ])(
+    'unsupported shape always returns {ok:false} with non-empty error string',
+    (input: unknown) => {
+      const result = toolResultContentFromLegacyPartListUnion(input);
+      return !result.ok && result.error.length > 0;
+    },
+  );
+
+  it.prop([
+    fc.record({
+      inlineData: fc.record({
+        mimeType: fc.string({ minLength: 1, maxLength: 30 }),
+        data: fc.string({ minLength: 1, maxLength: 50 }),
+      }),
+    }),
+  ])(
+    'inlineData with string mimeType+data always yields MediaBlock base64',
+    (input) => {
+      const result = toolResultContentFromLegacyPartListUnion(input);
+      if (!result.ok || !Array.isArray(result.value)) return false;
+      const block = result.value[0];
+      return (
+        block.type === 'media' &&
+        block.encoding === 'base64' &&
+        block.mimeType === input.inlineData.mimeType &&
+        block.data === input.inlineData.data
+      );
+    },
+  );
+
+  it.prop([
+    fc.record({
+      fileData: fc.record({
+        fileUri: fc.string({ minLength: 1, maxLength: 50 }),
+        mimeType: fc.option(fc.string({ minLength: 1, maxLength: 30 })),
+      }),
+    }),
+  ])(
+    'fileData always yields MediaBlock url with correct mimeType',
+    (input) => {
+      const result = toolResultContentFromLegacyPartListUnion(input);
+      if (!result.ok || !Array.isArray(result.value)) return false;
+      const block = result.value[0];
+      const expectedMime = input.fileData.mimeType ?? 'application/octet-stream';
+      return (
+        block.type === 'media' &&
+        block.encoding === 'url' &&
+        block.mimeType === expectedMime &&
+        block.data === input.fileData.fileUri
+      );
+    },
+  );
+
+  it.prop([
+    fc.record({
+      functionResponse: fc.record({
+        name: fc.string({ minLength: 1, maxLength: 20 }),
+        id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
+        response: fc.string({ maxLength: 30 }),
+      }),
+    }),
+  ])(
+    'functionResponse always yields ToolResponseBlock with correct fields',
+    (input) => {
+      const result = toolResultContentFromLegacyPartListUnion(input);
+      if (!result.ok || !Array.isArray(result.value)) return false;
+      const block = result.value[0];
+      if (block.type !== 'tool_response') return false;
+      if (block.toolName !== input.functionResponse.name) return false;
+      const expectedCallId = input.functionResponse.id ?? '';
+      return (
+        block.callId === expectedCallId &&
+        block.result === input.functionResponse.response
+      );
+    },
+  );
+
+  it.prop([
+    fc.array(
+      fc.oneof(
+        fc.record({ text: fc.string({ maxLength: 20 }) }),
+        fc.string({ maxLength: 15 }),
+      ),
+      { minLength: 0, maxLength: 5 },
+    ),
+  ])(
+    'array of text parts and strings always yields ok with TextBlocks',
+    (parts) => {
+      const result = toolResultContentFromLegacyPartListUnion(parts);
+      if (!result.ok || !Array.isArray(result.value)) return false;
+      return (
+        result.value.length === parts.length &&
+        result.value.every((b) => b.type === 'text')
+      );
+    },
+  );
+});
