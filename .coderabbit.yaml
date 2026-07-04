@@ -16,13 +16,13 @@ reviews:
   # and lockfiles. On PR #2317 this excludes 75 of 141 files (53%); on
   # PR #2336, 24 of 111. Nothing under packages/ is affected.
   path_filters:
-    - "!project-plans/**"          # planning/tracking notes, not shipped code
-    - "!dev-docs/**"               # internal runbooks
-    - "!**/*.lock"                 # bun.lock
-    - "!package-lock.json"
-    - "!scripts/tmux-script.*.json" # recorded tmux test fixtures
-    - "!junit-integration.xml"     # checked-in CI artifact
-    - "!**/__snapshots__/**"       # test snapshots
+    - '!project-plans/**' # planning/tracking notes, not shipped code
+    - '!dev-docs/**' # internal runbooks
+    - '!**/*.lock' # bun.lock
+    - '!package-lock.json'
+    - '!scripts/tmux-script.*.json' # recorded tmux test fixtures
+    - '!junit-integration.xml' # checked-in CI artifact
+    - '!**/__snapshots__/**' # test snapshots
 
   auto_review:
     enabled: true
