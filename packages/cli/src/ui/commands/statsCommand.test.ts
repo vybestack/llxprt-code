@@ -18,7 +18,7 @@ const getCliProviderManagerMock = vi.fn();
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
-    getCliOAuthManager: getCliOAuthManagerMock,
+    maybeGetCliOAuthManager: getCliOAuthManagerMock,
     getEphemeralSetting: getEphemeralSettingMock,
     getActiveProviderName: getActiveProviderNameMock,
     getCliProviderManager: getCliProviderManagerMock,

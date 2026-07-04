@@ -11,10 +11,15 @@
  */
 
 /**
- * @plan PLAN-20251018-STATELESSPROVIDER2.P15
- * @requirement REQ-SP2-003
- * @pseudocode cli-runtime-isolation.md lines 1-3
+ * @plan PLAN-20260630-ISSUE2300
  * Runtime registry that scopes Config/SettingsService/RuntimeProviderManager instances per runtimeId.
+ *
+ * Identity resolution is now explicit and deterministic (issue #2300):
+ * - A registered AsyncLocalStorage runtime scope wins.
+ * - Otherwise an explicit default CLI runtime id, if set and registered.
+ * - Otherwise resolution fails with a clear error.
+ *
+ * No legacy-singleton phantom fallback and no first-registered guessing.
  */
 
 import {
@@ -30,20 +35,40 @@ import type {
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 import { type OAuthManager } from '../auth/index.js';
-import { resetProviderManager } from '../composition/index.js';
-import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
-import { formatMissingRuntimeMessage } from './messages.js';
 import {
-  resolveFromActiveContext,
-  resolveFromAsyncLocalStorage,
-  resolveFromFirstRegistered,
-  type RuntimeIdentity,
-} from './runtimeIdentityResolution.js';
+  registerProviderManagerSingleton,
+  resetProviderManager,
+} from '../composition/index.js';
+import {
+  getCurrentRuntimeScope,
+  type RuntimeScopeValue,
+} from './runtimeContextFactory.js';
+import {
+  formatMissingRuntimeMessage,
+  MissingProviderRuntimeError,
+} from './messages.js';
+import { validateRuntimeId } from './runtimeIdValidation.js';
+
+/**
+ * Diagnostic classification of a runtime's provenance. Recorded on each
+ * registry entry and surfaced in debug logs and error metadata so failures
+ * are traceable to the runtime that produced them. It intentionally carries
+ * no authorization semantics: every runtime kind is a first-class participant
+ * in identity resolution and OAuth infrastructure.
+ */
+export type RuntimeKind =
+  | 'cli-bootstrap'
+  | 'cli-interactive'
+  | 'agent'
+  | 'subagent';
+
+type RuntimeIdentity = RuntimeScopeValue;
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
 export interface RuntimeRegistryEntry {
   runtimeId: string;
+  runtimeKind: RuntimeKind;
   settingsService: SettingsService | null;
   config: Config | null;
   providerManager: RuntimeProviderManager | null;
@@ -52,18 +77,142 @@ export interface RuntimeRegistryEntry {
   metadata: Record<string, unknown>;
 }
 
+interface RuntimeRegistryEntryWithInfrastructure extends RuntimeRegistryEntry {
+  providerManager: RuntimeProviderManager;
+  oauthManager: OAuthManager;
+}
+
+function hasProviderInfrastructure(
+  entry: RuntimeRegistryEntry | undefined,
+): entry is RuntimeRegistryEntryWithInfrastructure {
+  if (!entry) {
+    return false;
+  }
+  return Boolean(entry.providerManager && entry.oauthManager);
+}
+
+function hasPartialProviderInfrastructure(
+  entry: RuntimeRegistryEntry | undefined,
+): boolean {
+  if (!entry || hasProviderInfrastructure(entry)) {
+    return false;
+  }
+  return Boolean(entry.providerManager ?? entry.oauthManager);
+}
+
 export const runtimeRegistry = new Map<string, RuntimeRegistryEntry>();
-export const LEGACY_RUNTIME_ID = 'legacy-singleton';
+
+/**
+ * The explicit default CLI runtime id: the process-wide foreground runtime used
+ * to resolve identity when no AsyncLocalStorage scope is active. Set by the CLI
+ * composition boundary (setCliRuntimeContext). Resolution still requires the
+ * default to be registered.
+ */
+let defaultCliRuntimeId: string | undefined;
+
+/**
+ * @plan PLAN-20260630-ISSUE2300
+ * Establish the process-wide default (foreground) CLI runtime id.
+ *
+ * The default pointer is write-once with respect to a given foreground runtime:
+ * re-affirming the SAME id is an idempotent no-op, but binding a DIFFERENT id
+ * over an existing default throws — a background/isolated runtime can never
+ * silently become the foreground default (issue #2300). A deliberate foreground
+ * hand-off (e.g. the Zed integration replacing the bootstrap runtime) must opt
+ * in explicitly via `allowReplace`.
+ */
+export function setDefaultCliRuntimeId(
+  runtimeId: string,
+  options: { allowReplace?: boolean } = {},
+): void {
+  validateRuntimeId(runtimeId);
+  if (defaultCliRuntimeId === runtimeId) {
+    return;
+  }
+  if (defaultCliRuntimeId !== undefined && options.allowReplace !== true) {
+    throw new Error(
+      `[cli-runtime] Refusing to overwrite the default CLI runtime pointer ` +
+        `'${defaultCliRuntimeId}' with '${runtimeId}'. The foreground CLI ` +
+        `runtime is set once at bootstrap; only an explicit hand-off may ` +
+        `replace it. This guards against a background or isolated runtime ` +
+        `implicitly becoming the default (issue #2300).`,
+    );
+  }
+  defaultCliRuntimeId = runtimeId;
+}
+
+export function getDefaultCliRuntimeId(): string | undefined {
+  return defaultCliRuntimeId;
+}
+
+/**
+ * Clear the default CLI runtime pointer only when the given runtimeId matches
+ * the current default, preventing a racing runtime from clearing another's
+ * default pointer.
+ */
+export function clearDefaultCliRuntimeId(runtimeId: string): void {
+  if (runtimeId === defaultCliRuntimeId) {
+    defaultCliRuntimeId = undefined;
+  }
+}
+
+export function resetDefaultCliRuntimeIdForTesting(): void {
+  defaultCliRuntimeId = undefined;
+}
 
 export function resolveActiveRuntimeIdentity(): RuntimeIdentity {
-  return (
-    resolveFromAsyncLocalStorage(getCurrentRuntimeScope()) ??
-    resolveFromActiveContext(runtimeRegistry, LEGACY_RUNTIME_ID) ??
-    resolveFromFirstRegistered(runtimeRegistry) ?? {
-      runtimeId: LEGACY_RUNTIME_ID,
-      metadata: {},
+  const alsScope = getCurrentRuntimeScope();
+  if (alsScope) {
+    // An active ALS scope is an explicit, deliberate claim of identity. If its
+    // runtime is registered, it wins. If it is NOT registered, the scope is
+    // stale or leaked — we fail hard rather than silently routing to the CLI
+    // default, which would let a torn-down isolated runtime borrow foreground
+    // credentials (issue #2300).
+    const entry = runtimeRegistry.get(alsScope.runtimeId);
+    if (entry) {
+      return alsScope;
     }
-  );
+    throw new MissingProviderRuntimeError({
+      providerKey: 'provider-runtime',
+      missingFields: ['active runtime'],
+      message:
+        `Active runtime scope '${alsScope.runtimeId}' is not registered. ` +
+        `A stale or torn-down AsyncLocalStorage scope must not fall back to ` +
+        `the default CLI runtime (issue #2300). ` +
+        formatMissingRuntimeMessage({
+          runtimeId: alsScope.runtimeId,
+          missingFields: ['active runtime'],
+          hint: 'Register the scoped runtime before use, or exit the scope so the default CLI runtime resolves.',
+        }),
+    });
+  }
+
+  const defaultId = defaultCliRuntimeId;
+  if (defaultId) {
+    const entry = runtimeRegistry.get(defaultId);
+    if (entry) {
+      return {
+        runtimeId: defaultId,
+        metadata: entry.metadata,
+      };
+    }
+    logger.debug(
+      () =>
+        `[resolveActiveRuntimeIdentity] default CLI runtimeId=${defaultId} is set but not registered; cannot resolve identity.`,
+    );
+  }
+
+  throw new MissingProviderRuntimeError({
+    providerKey: 'provider-runtime',
+    missingFields: ['active runtime'],
+    message:
+      `No active runtime. Ensure enterRuntimeScope() or setCliRuntimeContext() was called before consuming CLI runtime helpers. ` +
+      formatMissingRuntimeMessage({
+        runtimeId: defaultId ?? 'unknown',
+        missingFields: ['active runtime'],
+        hint: 'Identity is resolved from a registered AsyncLocalStorage scope or an explicit default CLI runtime id set via setCliRuntimeContext().',
+      }),
+  });
 }
 
 export function upsertRuntimeEntry(
@@ -73,6 +222,8 @@ export function upsertRuntimeEntry(
   const current = runtimeRegistry.get(runtimeId);
   const next: RuntimeRegistryEntry = {
     runtimeId,
+    runtimeKind:
+      update.runtimeKind ?? current?.runtimeKind ?? 'cli-interactive',
     settingsService: resolveFieldUpdate(
       update,
       'settingsService',
@@ -140,13 +291,15 @@ export function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
   const hint =
     'Ensure setCliRuntimeContext() was called before consuming CLI helpers.';
 
-  throw new Error(
-    formatMissingRuntimeMessage({
+  throw new MissingProviderRuntimeError({
+    providerKey: 'provider-runtime',
+    missingFields: ['runtime registration'],
+    message: formatMissingRuntimeMessage({
       runtimeId,
       missingFields: ['runtime registration'],
       hint,
     }),
-  );
+  });
 }
 
 export function disposeCliRuntime(
@@ -160,6 +313,7 @@ export function disposeCliRuntime(
     );
   }
 
+  const removedEntry = runtimeRegistry.get(runtimeId);
   runtimeRegistry.delete(runtimeId);
 
   const activeContext = peekActiveProviderRuntimeContext();
@@ -167,11 +321,34 @@ export function disposeCliRuntime(
     clearSettingsProviderRuntimeContext();
   }
 
-  resetProviderManager();
+  const defaultEntry = defaultCliRuntimeId
+    ? runtimeRegistry.get(defaultCliRuntimeId)
+    : undefined;
+
+  clearDefaultCliRuntimeId(runtimeId);
+  const replacementEntry = hasProviderInfrastructure(defaultEntry)
+    ? defaultEntry
+    : undefined;
+  if (defaultEntry && hasPartialProviderInfrastructure(defaultEntry)) {
+    logger.debug(
+      () =>
+        `[disposeCliRuntime] Default runtime ${defaultEntry.runtimeId} has partial provider infrastructure; provider singleton will be reset if the disposed runtime owned it.`,
+    );
+  }
+
+  if (replacementEntry) {
+    registerProviderManagerSingleton(
+      replacementEntry.providerManager as never,
+      replacementEntry.oauthManager,
+    );
+  } else if (removedEntry?.providerManager || removedEntry?.oauthManager) {
+    resetProviderManager();
+  }
 }
 
 export function resetCliRuntimeRegistryForTesting(): void {
   runtimeRegistry.clear();
+  resetDefaultCliRuntimeIdForTesting();
   clearSettingsProviderRuntimeContext();
   resetProviderManager();
 }

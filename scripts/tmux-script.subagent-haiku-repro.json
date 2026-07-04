@@ -6,7 +6,7 @@
     "scrollbackLines": 10000,
     "initialWaitMs": 8000
   },
-  "startCommand": ["node", "scripts/start.js", "--profile-load", "ollamakimi"],
+  "startCommand": ["bun", "scripts/start.ts", "--profile-load", "ollamakimi"],
   "yolo": true,
   "steps": [
     {

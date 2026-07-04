@@ -31,6 +31,7 @@ import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.j
 import { promises as fsPromises } from 'fs';
 import { join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
+import { resolveForegroundRuntimeId } from './config/profileBootstrap.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 
 /** Format a single recorded-session summary line for --list-sessions output. */
@@ -113,9 +114,14 @@ export async function bootstrapRuntimeAndConfig(
   argv: ParsedCliArgs,
   workspaceRoot: string,
 ): Promise<RuntimeConfigBootstrap> {
+  // Single source of truth for the foreground runtime id — the same id
+  // prepareRuntimeForProfile() uses inside loadCliConfig — so the write-once
+  // default pointer is claimed idempotently across every bootstrap phase
+  // (issue #2300).
+  const runtimeId = resolveForegroundRuntimeId();
   const runtimeSettingsService = new SettingsService();
   setCliRuntimeContext(runtimeSettingsService, undefined, {
-    runtimeId: 'cli.runtime.bootstrap',
+    runtimeId,
     metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
   });
 
@@ -140,7 +146,7 @@ export async function bootstrapRuntimeAndConfig(
   );
   const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeSettingsService, config, {
-    runtimeId: 'cli.runtime.bootstrap',
+    runtimeId,
     metadata: { source: 'cli-bootstrap', stage: 'post-config' },
     profileManager,
   });

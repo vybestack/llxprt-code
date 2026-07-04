@@ -21,6 +21,7 @@ import type {
   ThinkingBlock,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
 import { isThoughtPart } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
@@ -199,12 +200,23 @@ export class ConversationManager {
       automaticFunctionCallingHistory &&
       automaticFunctionCallingHistory.length > 0
     ) {
-      // AFC branch: extract curated history
+      // AFC branch: extract curated history. The curated AFC history mixes
+      // freshly generated model turns with user turns; stamp the generating
+      // model on AI entries (stampAiTurnModel no-ops on non-AI turns) to stay
+      // consistent with TurnProcessor._recordAfcHistory's stamping.
       const curatedAfc = extractCuratedHistory(automaticFunctionCallingHistory);
       for (const content of curatedAfc) {
         const turnKey = this.historyService.generateTurnKey();
         newHistoryEntries.push(
-          ContentConverters.toIContent(content, undefined, undefined, turnKey),
+          stampAiTurnModel(
+            ContentConverters.toIContent(
+              content,
+              undefined,
+              undefined,
+              turnKey,
+            ),
+            this.model,
+          ),
         );
       }
     } else {
@@ -368,7 +380,11 @@ export class ConversationManager {
         };
       }
 
-      newHistoryEntries.push(iContent);
+      // Stamp the generating model so downstream consumers can detect
+      // cross-model turns (issue #2335). this.model is the model that produced
+      // this output; on a model switch the ChatSession/ConversationManager is
+      // rebuilt with the new model while HistoryService is reused.
+      newHistoryEntries.push(stampAiTurnModel(iContent, this.model));
     }
 
     // If we have thinking blocks but nowhere to attach them, create standalone entry
@@ -385,7 +401,7 @@ export class ConversationManager {
           usage: usageMetadata,
         };
       }
-      newHistoryEntries.push(iContent);
+      newHistoryEntries.push(stampAiTurnModel(iContent, this.model));
     }
   }
 

@@ -48,7 +48,7 @@
     }
   },
   "scripts": {
-    "build": "node ../../scripts/build_package.js",
+    "build": "bun ../../scripts/build_package.ts",
     "test": "vitest run",
     "test:ci": "vitest run",
     "typecheck": "tsc --noEmit",

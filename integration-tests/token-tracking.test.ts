@@ -54,7 +54,7 @@ describe('Token Tracking Integration Tests', () => {
     const runtimeId = `token-tracking.integration.${Math.random()
       .toString(36)
       .slice(2, 10)}`;
-    initializeTestProviderRuntime({
+    const { runtime: testRuntime } = initializeTestProviderRuntime({
       runtimeId,
       metadata: { suite: 'token-tracking-integration', runtimeId },
     });
@@ -65,7 +65,7 @@ describe('Token Tracking Integration Tests', () => {
       call: vi.fn(),
     };
 
-    providerManager = new ProviderManager();
+    providerManager = new ProviderManager(testRuntime);
     tracker = new ProviderPerformanceTracker(mockProvider.id);
     mockConfig = new MockConfig();
     new LoggingProviderWrapper(mockProvider, mockConfig);

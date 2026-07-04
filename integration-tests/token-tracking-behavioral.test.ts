@@ -44,7 +44,7 @@ describe('Token Tracking Behavioral Tests', () => {
     const runtimeId = `token-tracking.behavioral.${Math.random()
       .toString(36)
       .slice(2, 10)}`;
-    initializeTestProviderRuntime({
+    const { runtime: testRuntime } = initializeTestProviderRuntime({
       runtimeId,
       metadata: { suite: 'token-tracking-behavioral', runtimeId },
     });
@@ -64,7 +64,7 @@ describe('Token Tracking Behavioral Tests', () => {
       oauthManager: undefined,
     });
 
-    providerManager = new ProviderManager();
+    providerManager = new ProviderManager(testRuntime);
     providerManager.setConfig(config);
     config.setProviderManager(providerManager);
   });

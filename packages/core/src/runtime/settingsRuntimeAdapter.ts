@@ -37,6 +37,16 @@ export interface SettingsProviderRuntimeContextInit
   config?: Config;
 }
 
+/**
+ * Resolve a settings service for a caller that may have one supplied
+ * explicitly. The active provider runtime context consulted here is the
+ * CALL-SCOPED carrier established by BaseProvider around each provider
+ * invocation (set/restore) — it is never an identity authority. Runtime
+ * identity is resolved exclusively through the providers runtime registry
+ * (resolveActiveRuntimeIdentity), and composition boundaries (Config
+ * construction, ProviderManager construction) require explicit services
+ * (issue #2300).
+ */
 export function resolveRuntimeSettingsService(
   settingsService?: SettingsService | null,
 ): SettingsService {
@@ -58,6 +68,13 @@ export function resolveRuntimeSettingsService(
   return createRuntimeSettingsService();
 }
 
+/**
+ * Read the settings service for the CURRENT INVOCATION. Inside a provider
+ * call this returns the call-scoped service that BaseProvider swapped in;
+ * outside one it returns the registered settings singleton. See
+ * resolveRuntimeSettingsService for the carrier-vs-authority distinction
+ * (issue #2300).
+ */
 export function getRuntimeSettingsService(): SettingsService {
   const activeContext = peekActiveProviderRuntimeContext();
   if (activeContext?.settingsService) {

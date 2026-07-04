@@ -27,6 +27,11 @@ echo "Debug directory: ${DEBUG_DIR}"
 echo "Profile directory: ${PROFILE_DIR}"
 echo ""
 
+if ! command -v bun >/dev/null 2>&1; then
+    echo "Error: bun is required but not installed." >&2
+    exit 1
+fi
+
 # Step 1: Create the profile by writing JSON file directly
 echo "Step 1: Creating test profile..."
 mkdir -p "${PROFILE_DIR}"
@@ -72,13 +77,13 @@ echo ""
 
 # Step 4: Run the CLI with load balancer profile
 echo "Step 4: Running CLI with load balancer profile..."
-echo "Command: node scripts/start.js --profile-load ${PROFILE_NAME} --prompt \"...\""
+echo "Command: bun scripts/start.ts --profile-load ${PROFILE_NAME} --prompt \"...\""
 echo ""
 
 cd "${PROJECT_DIR}"
 
 # Run with a simple prompt to avoid subagents
-if node scripts/start.js \
+if bun scripts/start.ts \
     --profile-load "${PROFILE_NAME}" \
     --prompt "review this codebase and tell me what it does, don't use a subagent" \
     2>&1 | tee "${TEST_OUTPUT}"; then

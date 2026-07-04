@@ -249,7 +249,7 @@ Load it interactively or at startup:
 
 ```bash
 /profile load llamacpp         # inside a session
-node scripts/start.js --profile-load llamacpp   # from a dev checkout
+bun scripts/start.ts --profile-load llamacpp   # from a dev checkout
 llxprt --profile-load llamacpp # installed CLI
 ```
 
@@ -259,7 +259,7 @@ Run a one-shot prompt through the profile to confirm the full chain works end to
 
 ```bash
 unset OPENAI_API_KEY
-node scripts/start.js \
+bun scripts/start.ts \
   --profile-load llamacpp \
   "Reply with exactly: llxprt local profile ok"
 ```
@@ -321,7 +321,7 @@ Save a profile for it (`~/.llxprt/profiles/gemma4-llamacpp.json`):
 Then validate non-interactively:
 
 ```bash
-env OPENAI_API_KEY= node scripts/start.js \
+env OPENAI_API_KEY= bun scripts/start.ts \
   --profile-load gemma4-llamacpp \
   "Reply with exactly: llxprt local profile ok"
 ```

@@ -19,11 +19,29 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
-import { registerCliProviderInfrastructure } from '@vybestack/llxprt-code-providers/runtime.js';
+import {
+  disposeCliRuntime,
+  registerCliProviderInfrastructure,
+  setCliRuntimeContext,
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
+export const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
+
+/**
+ * @plan PLAN-20260630-ISSUE2300
+ * Single source of truth for the foreground CLI runtime id. Every bootstrap
+ * phase (pre-config seeding, profile bootstrap, post-config re-seeding) MUST
+ * resolve the same id so the write-once default pointer is claimed idempotently
+ * rather than surfacing a split-brain identity. Honors LLXPRT_RUNTIME_ID for
+ * callers that pin an explicit id (e.g. sandbox re-launch), else the default.
+ */
+export function resolveForegroundRuntimeId(): string {
+  return process.env.LLXPRT_RUNTIME_ID ?? DEFAULT_RUNTIME_ID;
+}
+
+const logger = new DebugLogger('llxprt:bootstrap');
 
 export interface BootstrapProfileArgs {
   profileName: string | null;
@@ -123,7 +141,7 @@ function createEmptyBootstrapArgs(): BootstrapProfileArgs {
 
 function createRuntimeMetadata(argv: string[]): RuntimeBootstrapMetadata {
   return {
-    runtimeId: process.env.LLXPRT_RUNTIME_ID ?? DEFAULT_RUNTIME_ID,
+    runtimeId: resolveForegroundRuntimeId(),
     metadata: {
       source: 'cli.bootstrap',
       argv: argv.slice(),
@@ -329,7 +347,6 @@ function parseProcessBootstrapArgs(argv: string[]): ParsedBootstrapArgs {
     profileUsed: false,
   };
   const runtimeMetadata = createRuntimeMetadata(argv);
-  const logger = new DebugLogger('llxprt:bootstrap');
   logger.debug(
     () => `parseBootstrapArgs called with argv: ${JSON.stringify(argv)}`,
   );
@@ -395,40 +412,63 @@ export async function prepareRuntimeForProfile(
   // Both createProviderManager and registerCliProviderInfrastructure
   // already guard against undefined config.
   const runtimeConfig = runtimeInit.config;
-  const runtime = {
-    settingsService,
-    config: runtimeConfig,
-    runtimeId,
-    metadata,
-  } as ProviderRuntimeContext;
-  const runtimeMessageBus =
-    runtimeInit.messageBus ??
-    (runtimeConfig
-      ? new MessageBus(
-          runtimeConfig.getPolicyEngine(),
-          runtimeConfig.getDebugMode(),
-        )
-      : new MessageBus());
 
-  const { manager: providerManager, oauthManager } = createProviderManager(
-    runtime,
-    {
-      config: runtime.config,
+  try {
+    // Bind the CLI runtime identity BEFORE creating/registering infrastructure
+    // so resolution is deterministic (issue #2300).
+    setCliRuntimeContext(settingsService, runtimeConfig, {
+      runtimeId,
+      metadata,
+    });
+
+    const runtime = {
+      settingsService,
+      config: runtimeConfig,
+      runtimeId,
+      metadata,
+    } as ProviderRuntimeContext;
+    const runtimeMessageBus =
+      runtimeInit.messageBus ??
+      (runtimeConfig
+        ? new MessageBus(
+            runtimeConfig.getPolicyEngine(),
+            runtimeConfig.getDebugMode(),
+          )
+        : new MessageBus());
+
+    const { manager: providerManager, oauthManager } = createProviderManager(
+      runtime,
+      {
+        config: runtime.config,
+        runtimeMessageBus,
+        oauthSettings: createOAuthSettingsAdapter(),
+      },
+    );
+
+    registerCliProviderInfrastructure(providerManager, oauthManager, {
+      messageBus: runtimeMessageBus,
+      runtimeId,
+      metadata,
+    });
+
+    return {
+      runtime,
       runtimeMessageBus,
-      oauthSettings: createOAuthSettingsAdapter(),
-    },
-  );
-
-  registerCliProviderInfrastructure(providerManager, oauthManager, {
-    messageBus: runtimeMessageBus,
-  });
-
-  return {
-    runtime,
-    runtimeMessageBus,
-    providerManager,
-    oauthManager,
-  };
+      providerManager,
+      oauthManager,
+    };
+  } catch (error) {
+    try {
+      disposeCliRuntime(runtimeId);
+    } catch (cleanupError) {
+      // Preserve the original bootstrap failure; cleanup errors are secondary.
+      logger.debug(
+        () =>
+          `[profileBootstrap] disposeCliRuntime('${runtimeId}') failed during error recovery: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+      );
+    }
+    throw error;
+  }
 }
 
 function isProfileValidationResult(

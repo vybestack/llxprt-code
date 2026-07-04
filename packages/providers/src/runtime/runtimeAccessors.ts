@@ -43,11 +43,14 @@ import {
   runtimeRegistry,
   resolveActiveRuntimeIdentity,
   requireRuntimeEntry,
+  type RuntimeRegistryEntry,
 } from './runtimeRegistry.js';
+import { isMissingRuntimeError } from './runtimeLifecycle.js';
 import { isStatelessProviderIntegrationEnabled } from './statelessHardening.js';
 import {
   formatMissingRuntimeMessage,
   formatNormalizationFailureMessage,
+  MissingProviderRuntimeError,
 } from './messages.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
@@ -211,13 +214,26 @@ export function isCliRuntimeStatelessReady(): boolean {
   if (!isStatelessProviderIntegrationEnabled()) {
     return true;
   }
-  const { runtimeId } = resolveActiveRuntimeIdentity();
+
+  let runtimeId: string;
+  try {
+    runtimeId = resolveActiveRuntimeIdentity().runtimeId;
+  } catch (error) {
+    if (isMissingRuntimeError(error)) {
+      return false;
+    }
+    throw error;
+  }
+
   const entry = runtimeRegistry.get(runtimeId);
   if (!entry) {
     return false;
   }
   return Boolean(
-    entry.settingsService && entry.config && entry.providerManager,
+    entry.settingsService &&
+      entry.config &&
+      entry.providerManager &&
+      entry.oauthManager,
   );
 }
 
@@ -291,10 +307,60 @@ export function ensureStatelessProviderReady(): void {
 
   runtimeProviderManager.prepareStatelessProviderInvocation(runtimeContext);
 }
+function validateOAuthRuntimeEntry(
+  runtimeId: string,
+  entry: RuntimeRegistryEntry,
+): OAuthManager {
+  const missingFields: string[] = [];
+  if (!entry.config) missingFields.push('Config');
+  if (!entry.settingsService) missingFields.push('SettingsService');
+  if (!entry.providerManager) missingFields.push('ProviderManager');
+  if (!entry.oauthManager) missingFields.push('OAuthManager');
 
-export function getCliOAuthManager(): OAuthManager | null {
+  const oauthManager = entry.oauthManager;
+  if (missingFields.length > 0 || oauthManager == null) {
+    throw new MissingProviderRuntimeError({
+      providerKey: 'CliOAuthManager',
+      missingFields,
+      stage: 'getCliOAuthManager',
+      metadata: { runtimeId, runtimeKind: entry.runtimeKind },
+      message: formatMissingRuntimeMessage({
+        runtimeId,
+        missingFields,
+        hint: 'Register complete runtime OAuth infrastructure before invoking OAuth helpers.',
+      }),
+    });
+  }
+
+  return oauthManager;
+}
+
+export function getCliOAuthManager(): OAuthManager {
   const { runtimeId } = resolveActiveRuntimeIdentity();
-  return runtimeRegistry.get(runtimeId)?.oauthManager ?? null;
+  const entry = requireRuntimeEntry(runtimeId);
+  const oauthManager = validateOAuthRuntimeEntry(runtimeId, entry);
+  logger.debug(
+    () =>
+      `[getCliOAuthManager] resolved runtimeId=${runtimeId}, runtimeKind=${entry.runtimeKind}, registeredRuntimeCount=${runtimeRegistry.size}, hasOAuthManager=true`,
+  );
+  return oauthManager;
+}
+
+export function maybeGetCliOAuthManager(): OAuthManager | null {
+  try {
+    return getCliOAuthManager();
+  } catch (error) {
+    if (isMissingRuntimeError(error)) {
+      logger.debug(
+        () =>
+          `[maybeGetCliOAuthManager] OAuth runtime infrastructure unavailable: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+      return null;
+    }
+    throw error;
+  }
 }
 
 const RESERVED_PROVIDER_SETTING_KEYS = new Set(getProviderConfigKeys());

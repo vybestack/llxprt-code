@@ -230,7 +230,7 @@ Goal: turn the decisions into an executable, deterministic batch schedule.
   npm run test
   npm run format
   npm run build
-  node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
+  bun scripts/start.ts --profile-load ollamakimi "write me a haiku and nothing else"
   ```
 
 Formatting rule:
@@ -284,8 +284,10 @@ The PLAN.md must define how to use subagents for autonomous execution:
 Pattern:
 
 ```
+
 Execute (cherrypicker) -> Review (reviewer) -> PASS? continue : Remediate (cherrypicker) -> Review again
 Loop remediation up to 5 times, then escalate to human if still failing.
+
 ```
 
 ### Review Requirements (Mechanical + Qualitative)
@@ -377,7 +379,6 @@ If you're reading this because someone said "DO @project-plans/gmerge-VERSION/PL
 git branch --show-current  # Should be gmerge/VERSION
 git status                 # Check for uncommitted changes
 ```
-````
 
 ### Step 2: Check or create the todo list
 
@@ -405,12 +406,12 @@ For each batch, you MUST use the `task` tool to invoke subagents:
 
 - Call `todo_pause()` with the specific reason
 - Wait for human intervention
-
 ````
 
 ### Context Recovery Section (Required at end of PLAN.md)
 
 Every PLAN.md must end with a "Context Recovery" section that explains:
+
 - How to check git state
 - How to read the todo list
 - Where to resume based on todo state
@@ -474,6 +475,6 @@ Open a PR against `main` that:
 - If `npm run typecheck` fails in a workspace due to stale `@vybestack/llxprt-code-core` types after core changes, run:
   ```bash
   npm run build --workspace @vybestack/llxprt-code-core
-````
+  ```
 
 Then rerun `npm run typecheck`.

@@ -203,7 +203,12 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       providerManager: getProviderManager(),
     })),
     getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => runtimeSettingsState.oauthManager ?? null),
+    getCliOAuthManager: vi.fn(() => {
+      if (runtimeSettingsState.oauthManager == null) {
+        throw new Error('OAuthManager missing from runtime registration');
+      }
+      return runtimeSettingsState.oauthManager;
+    }),
     getActiveProviderStatus: vi.fn(() => ({ name: null })),
     listProviders: vi.fn(() => getProviderManager().listProviders()),
     getActiveProviderName: vi.fn(() => null),

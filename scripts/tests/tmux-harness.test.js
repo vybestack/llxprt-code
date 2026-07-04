@@ -6,7 +6,18 @@
  * without changing behavior, so these tests guard against regressions.
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { accessSync, constants as fsConstants } from 'node:fs';
+
+// Both fixtures intentionally point at the test runner's own executable: the
+// harness only needs *a* real, spawnable path — the node-vs-bun distinction
+// under test is which env var the harness reads, not the binary itself.
+const TEST_NODE_EXECUTABLE = process.execPath;
+const TEST_BUN_EXECUTABLE = process.execPath;
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 async function importHarness() {
   return import('../tmux-harness.js');
@@ -154,28 +165,28 @@ describe('parseArgs', () => {
 describe('buildStartArgs', () => {
   it('returns the default command when no script command is provided', async () => {
     const { buildStartArgs } = await importHarness();
-    expect(buildStartArgs(null, false)).toEqual(['node', 'scripts/start.js']);
+    expect(buildStartArgs(null, false)).toEqual(['bun', 'scripts/start.ts']);
   });
 
   it('appends --yolo to a copied script start command without mutating the script', async () => {
     const { buildStartArgs } = await importHarness();
-    const script = { startCommand: ['node', 'scripts/start.js'] };
+    const script = { startCommand: ['bun', 'scripts/start.ts'] };
 
     expect(buildStartArgs(script, true)).toEqual([
-      'node',
-      'scripts/start.js',
+      'bun',
+      'scripts/start.ts',
       '--yolo',
     ]);
-    expect(script.startCommand).toEqual(['node', 'scripts/start.js']);
+    expect(script.startCommand).toEqual(['bun', 'scripts/start.ts']);
   });
 
   it('does not duplicate --yolo when already present', async () => {
     const { buildStartArgs } = await importHarness();
-    const script = { startCommand: ['node', 'scripts/start.js', '--yolo'] };
+    const script = { startCommand: ['bun', 'scripts/start.ts', '--yolo'] };
 
     expect(buildStartArgs(script, true)).toEqual([
-      'node',
-      'scripts/start.js',
+      'bun',
+      'scripts/start.ts',
       '--yolo',
     ]);
   });
@@ -199,20 +210,53 @@ describe('buildStartArgs', () => {
 // resolveStartArgsForTmux
 // ---------------------------------------------------------------------------
 describe('resolveStartArgsForTmux', () => {
-  it('replaces exact node argv and embedded node placeholders with the current executable', async () => {
+  it('replaces exact node argv and embedded node placeholders with the configured executable', async () => {
+    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { resolveStartArgsForTmux } = await importHarness();
 
     expect(
       resolveStartArgsForTmux([
         'node',
-        'scripts/start.js',
+        'scripts/start.ts',
         'NODE_OPTIONS= ${node} packages/cli/bin/llxprt.cjs',
       ]),
     ).toEqual([
-      process.execPath,
-      'scripts/start.js',
-      `NODE_OPTIONS= ${process.execPath} packages/cli/bin/llxprt.cjs`,
+      TEST_NODE_EXECUTABLE,
+      'scripts/start.ts',
+      `NODE_OPTIONS= ${TEST_NODE_EXECUTABLE} packages/cli/bin/llxprt.cjs`,
     ]);
+  });
+
+  it('replaces exact bun argv and embedded bun placeholders with the resolved bun executable', async () => {
+    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
+    const { resolveStartArgsForTmux } = await importHarness();
+
+    expect(
+      resolveStartArgsForTmux([
+        'bun',
+        'scripts/start.ts',
+        '${bun} packages/cli/bin/llxprt.cjs',
+      ]),
+    ).toEqual([
+      TEST_BUN_EXECUTABLE,
+      'scripts/start.ts',
+      `${TEST_BUN_EXECUTABLE} packages/cli/bin/llxprt.cjs`,
+    ]);
+  });
+
+  it('falls back to a bun executable when BUN_EXECUTABLE_PATH is not set', async () => {
+    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    vi.stubEnv('BUN_EXECUTABLE_PATH', '');
+    const { resolveStartArgsForTmux } = await importHarness();
+
+    const [resolvedBun] = resolveStartArgsForTmux(['bun']);
+
+    expect(resolvedBun.length).toBeGreaterThan(0);
+    if (resolvedBun !== 'bun') {
+      expect(() => accessSync(resolvedBun, fsConstants.X_OK)).not.toThrow();
+    }
   });
 });
 
@@ -221,30 +265,36 @@ describe('resolveStartArgsForTmux', () => {
 // ---------------------------------------------------------------------------
 describe('buildTmuxStartCommand', () => {
   it('returns one-string commands unchanged after placeholder expansion', async () => {
+    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { buildTmuxStartCommand } = await importHarness();
 
     expect(
       buildTmuxStartCommand([
         'NODE_OPTIONS= ${node} packages/cli/bin/llxprt.cjs',
       ]),
-    ).toBe(`NODE_OPTIONS= ${process.execPath} packages/cli/bin/llxprt.cjs`);
+    ).toBe(`NODE_OPTIONS= ${TEST_NODE_EXECUTABLE} packages/cli/bin/llxprt.cjs`);
   });
 
   it('shell-quotes multi-argument commands after resolving node', async () => {
+    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { buildTmuxStartCommand } = await importHarness();
 
-    expect(buildTmuxStartCommand(['node', 'scripts/start.js'])).toBe(
-      `${process.execPath} scripts/start.js`,
+    expect(buildTmuxStartCommand(['node', 'scripts/start.ts'])).toBe(
+      `${TEST_NODE_EXECUTABLE} scripts/start.ts`,
     );
   });
 
   it('prefixes artifact directory env when provided', async () => {
+    vi.stubEnv('NODE_EXECUTABLE_PATH', TEST_NODE_EXECUTABLE);
+    vi.stubEnv('BUN_EXECUTABLE_PATH', TEST_BUN_EXECUTABLE);
     const { buildTmuxStartCommand } = await importHarness();
 
     expect(
-      buildTmuxStartCommand(['node', 'scripts/start.js'], '/tmp/artifacts'),
+      buildTmuxStartCommand(['node', 'scripts/start.ts'], '/tmp/artifacts'),
     ).toBe(
-      `LLXPRT_TMUX_ARTIFACT_DIR=/tmp/artifacts ${process.execPath} scripts/start.js`,
+      `LLXPRT_TMUX_ARTIFACT_DIR=/tmp/artifacts ${TEST_NODE_EXECUTABLE} scripts/start.ts`,
     );
   });
 });

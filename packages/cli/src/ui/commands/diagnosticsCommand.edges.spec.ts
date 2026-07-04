@@ -65,7 +65,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -102,7 +102,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -139,7 +139,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -176,7 +176,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -204,7 +204,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => null),
+        maybeGetCliOAuthManager: vi.fn(() => null),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -238,7 +238,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -294,7 +294,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => mockOAuthManager),
+        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -320,7 +320,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => {
+        maybeGetCliOAuthManager: vi.fn(() => {
           throw new Error('OAuth manager error');
         }),
       });
@@ -356,7 +356,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getCliProviderManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        getCliOAuthManager: vi.fn(() => null),
+        maybeGetCliOAuthManager: vi.fn(() => null),
       });
     }
 

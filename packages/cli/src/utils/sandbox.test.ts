@@ -14,6 +14,7 @@ import {
   isSandboxDebugModeEnabled,
   shouldAllocateSandboxTty,
 } from './sandbox.js';
+import { buildSandboxCommandArgs } from './sandbox-exec.js';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -290,6 +291,61 @@ describe('container environment variables - GIT_DISCOVERY', () => {
       'utf-8',
     );
     expect(sandboxSource).toContain('GIT_DISCOVERY_ACROSS_FILESYSTEM=1');
+  });
+});
+
+// --- Issue #2242: sandbox rebuild invokes the converted Bun .ts script ---
+
+describe('sandbox rebuild uses Bun + scripts/build_sandbox.ts', () => {
+  it('returns only the converted TypeScript entrypoint and sandbox flag for default sandbox builds', () => {
+    expect(
+      buildSandboxCommandArgs(false, '.llxprt/sandbox.Dockerfile', 'image'),
+    ).toStrictEqual(['scripts/build_sandbox.ts', '-s']);
+  });
+
+  it('returns default args when custom sandbox is disabled with empty Dockerfile settings', () => {
+    expect(buildSandboxCommandArgs(false, '', '')).toStrictEqual([
+      'scripts/build_sandbox.ts',
+      '-s',
+    ]);
+  });
+
+  it('passes custom sandbox Dockerfile args after the converted entrypoint', () => {
+    const resolvedDockerfile = path.resolve('.llxprt/sandbox.Dockerfile');
+    const args = buildSandboxCommandArgs(
+      true,
+      resolvedDockerfile,
+      'custom-image',
+    );
+
+    expect(args).toStrictEqual([
+      'scripts/build_sandbox.ts',
+      '-s',
+      '-f',
+      resolvedDockerfile,
+      '-i',
+      'custom-image',
+    ]);
+  });
+
+  it('rejects custom sandbox Dockerfile without an image', () => {
+    const resolvedDockerfile = path.resolve('.llxprt/sandbox.Dockerfile');
+
+    expect(() => buildSandboxCommandArgs(true, resolvedDockerfile, '')).toThrow(
+      'Custom sandbox requires both a Dockerfile and image.',
+    );
+  });
+
+  it('rejects custom sandbox image without a Dockerfile', () => {
+    expect(() => buildSandboxCommandArgs(true, '', 'custom-image')).toThrow(
+      'Custom sandbox requires both a Dockerfile and image.',
+    );
+  });
+
+  it('rejects custom sandbox when both Dockerfile and image are empty', () => {
+    expect(() => buildSandboxCommandArgs(true, '', '')).toThrow(
+      'Custom sandbox requires both a Dockerfile and image.',
+    );
   });
 });
 

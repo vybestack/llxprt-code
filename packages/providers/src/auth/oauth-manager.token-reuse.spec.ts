@@ -269,9 +269,9 @@ describe('OAuth Token Reuse (Issues #1262 and #1195)', () => {
     /**
      * @requirement Issue #1195
      * @scenario Multiple --profile-load runs with same profile
-     * @given User runs: node scripts/start.js --profile-load opusthinking "prompt1"
+     * @given User runs: bun scripts/start.ts --profile-load opusthinking "prompt1"
      * @and Token was saved from that run
-     * @when User runs: node scripts/start.js --profile-load opusthinking "prompt2"
+     * @when User runs: bun scripts/start.ts --profile-load opusthinking "prompt2"
      * @then Should reuse the token from the first run, not re-authenticate
      */
     it('should reuse token from previous --profile-load run', async () => {

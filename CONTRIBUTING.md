@@ -129,7 +129,7 @@ To build the entire project (all packages):
 bun run build
 ```
 
-TypeScript source (`.ts`) is shipped directly — the published npm package ships `.ts` sources and a checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), not a pre-compiled `dist/`. The CLI's run path uses the [Bun](https://bun.sh) runtime to execute the `.ts` entry point directly — no compilation step is needed for the CLI to run. Type checking uses `tsc --noEmit` (no JavaScript output is produced). The retired `bundle/llxprt.js` artifact is no longer produced. Refer to `scripts/build.js`, `scripts/build_package.js`, and `package.json` scripts for more details on what happens during the build.
+TypeScript source (`.ts`) is shipped directly. The CLI's run path starts from the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), which resolves Bun and re-execs `packages/cli/index.ts` directly — no pre-compiled CLI `dist/` artifact or `bundle/llxprt.js` artifact is required for the CLI to run. Type checking uses `tsc --noEmit`, and package builds still produce `dist/` artifacts for workspace/library packaging. Refer to `scripts/build.ts`, `scripts/build_package.ts`, and `package.json` scripts for more details on what happens during the build.
 
 ### Enabling Sandboxing
 
@@ -151,13 +151,13 @@ To start LLxprt Code from the source code, run the following command from the ro
 bun run start
 ```
 
-Alternatively, the dev launcher (`scripts/start.js`) spawns the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), which resolves Bun and re-execs the CLI under it to execute the TypeScript (`.ts`) entry point directly. In debug mode (`DEBUG=1`), the dev launcher sets `LLXPRT_CODE_NO_RELAUNCH='true'`, which disables the production Bun relaunch so the CLI runs under Node with the inspector attached:
+Alternatively, the dev launcher (`scripts/start.ts`) starts the checked-in launcher under Node; that launcher then resolves Bun and re-execs `packages/cli/index.ts`. In debug mode (`DEBUG=1`), Node starts with the inspector before handing off to the launcher:
 
 ```bash
-node scripts/start.js
+node scripts/start.ts
 ```
 
-The production launcher (`packages/cli/src/launcher/bun-launcher.ts`) resolves Bun by climbing ancestor directories for `node_modules/.bin/bun`, falling back to `node_modules/bun/bin/bun.exe`, then `PATH` (`which`/`where`). If Bun is absent, the launcher prints guidance to install Bun and exits. See the [Bun Runtime and Install Fallback](./README.md#bun-runtime-and-install-fallback) section in the README.
+The production launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun by climbing ancestor directories for `node_modules/.bin/bun`, falling back to `node_modules/bun/bin/bun.exe`, then `PATH` (`which`/`where`). If Bun is absent, the launcher prints guidance to install Bun and exits. See the [Bun Runtime and Install Fallback](./README.md#bun-runtime-and-install-fallback) section in the README.
 
 If you'd like to run the source build outside the llxprt-code folder you can utilize `npm link path/to/llxprt-code/packages/cli` (see: [docs](https://docs.npmjs.com/cli/v9/commands/npm-link)) or `alias llxprt="bun path/to/llxprt-code/packages/cli"` to run with `llxprt`
 
@@ -275,7 +275,7 @@ For more detailed architecture, see `docs/architecture.md`.
     bun run debug
     ```
 
-    This launches the CLI under Node (via the dev launcher `scripts/start.js`) with the inspector, pausing execution until a debugger attaches. The dev launcher sets `LLXPRT_CODE_NO_RELAUNCH='true'` in debug mode, which disables the production Bun relaunch so the CLI runs under Node. You can then open `chrome://inspect` in your Chrome browser to connect to the debugger.
+    This launches the checked-in Node launcher (via `scripts/start.ts`) with the inspector, pausing execution until a debugger attaches before the launcher resolves Bun and executes `packages/cli/index.ts`. You can then open `chrome://inspect` in your Chrome browser to connect to the debugger.
 
 2.  In VS Code, use the "Attach" launch configuration (found in `.vscode/launch.json`).
 
@@ -289,7 +289,7 @@ DEBUG=1 llxprt
 
 **Note:** If you have `DEBUG=true` in a project's `.env` file, it won't affect llxprt-code due to automatic exclusion. Use `.llxprt/.env` files for llxprt-code specific debug settings.
 
-**Note:** In debug mode (`DEBUG=1`), the dev launcher sets `LLXPRT_CODE_NO_RELAUNCH='true'`, which disables the Bun relaunch so the CLI runs under Node with the inspector attached (Node 24+ native TypeScript support is used). The production run path (the `llxprt` binary or `bun run start`) uses the Bun launcher to execute the `.ts` source directly.
+**Note:** Debugging via the dev launcher (`scripts/start.ts`) still uses the same checked-in launcher as the published `llxprt` binary (`packages/cli/bin/llxprt.cjs`). That launcher resolves Bun and executes the `.ts` source entrypoint (`packages/cli/index.ts`) directly.
 
 ### React DevTools
 

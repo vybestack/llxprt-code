@@ -20,6 +20,7 @@ import {
   runtimeRegistry,
   resolveActiveRuntimeIdentity,
 } from './runtimeRegistry.js';
+import { isMissingRuntimeError } from './runtimeLifecycle.js';
 
 const STATELESS_METADATA_KEYS = [
   'statelessHardening',
@@ -90,9 +91,20 @@ export function resolveStatelessHardeningPreference(): StatelessHardeningPrefere
     return scopePreference;
   }
 
-  const { runtimeId } = resolveActiveRuntimeIdentity();
-  const entry = runtimeRegistry.get(runtimeId);
-  const entryPreference = readStatelessPreferenceFromMetadata(entry?.metadata);
+  // Preference resolution is best-effort: if no runtime is active yet (e.g.
+  // during early bootstrap or in tests), fall through to the override/default
+  // rather than failing identity resolution.
+  let entryPreference: StatelessHardeningPreference | null = null;
+  try {
+    const { runtimeId } = resolveActiveRuntimeIdentity();
+    const entry = runtimeRegistry.get(runtimeId);
+    entryPreference = readStatelessPreferenceFromMetadata(entry?.metadata);
+  } catch (error) {
+    if (!isMissingRuntimeError(error)) {
+      throw error;
+    }
+    // No active runtime; continue to override/default below.
+  }
   if (entryPreference) {
     return entryPreference;
   }

@@ -16,13 +16,8 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import {
-  OAuthManager,
-  createTokenStore,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import { registerStandardOAuthProviders } from '@vybestack/llxprt-code-providers/composition.js';
-import { LoadedSettingsOAuthAdapter } from '../../auth/oauth-settings-adapter.js';
-import { DebugLogger, MessageBus } from '@vybestack/llxprt-code-core';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   type CommandArgumentSchema,
@@ -37,17 +32,14 @@ const logger = new DebugLogger('llxprt:ui:auth-command');
  * @plan:PLAN-20250214-CREDPROXY.P33
  */
 function getOAuthManager(): OAuthManager {
-  const runtime = getRuntimeApi();
-  const oauthManager = runtime.getCliOAuthManager();
-
-  if (oauthManager) {
-    return oauthManager;
+  try {
+    return getRuntimeApi().getCliOAuthManager();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Auth command requires registered OAuth runtime infrastructure: ${message}`,
+    );
   }
-
-  const tokenStore = createTokenStore();
-  const fallback = new OAuthManager(tokenStore);
-  registerStandardOAuthProviders(fallback, tokenStore);
-  return fallback;
 }
 
 /**
@@ -237,29 +229,28 @@ export class AuthCommandExecutor {
     // Parse args while preserving original parts for error messages
     const trimmedArgs = args?.trim() ?? '';
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0);
-    const provider = parts[0]?.toLowerCase();
-    const action = parts[1]?.toLowerCase();
+    const rawProvider = parts[0];
+    const rawAction = parts[1];
     const param = parts[2];
 
-    const originalProvider = parts[0] || '';
-
     // If no provider specified, show the auth dialog
-    if (!provider) {
+    if (!rawProvider) {
       return {
         type: 'dialog',
         dialog: 'auth',
       };
     }
 
+    const action = parts.length > 1 ? rawAction.toLowerCase() : undefined;
+    const provider = rawProvider.toLowerCase();
+
     // Check if provider is supported before processing actions
     const supportedProviders = this.oauthManager.getSupportedProviders();
     if (!supportedProviders.includes(provider)) {
-      // Use the original provider string from args for the error message
-      // This preserves whatever the user actually typed (including spaces)
       return {
         type: 'message',
         messageType: 'error',
-        content: `Unknown provider: ${originalProvider}. Supported providers: ${supportedProviders.join(', ')}`,
+        content: `Unknown provider: ${rawProvider}. Supported providers: ${supportedProviders.join(', ')}`,
       };
     }
 
@@ -673,41 +664,7 @@ export const authCommand: SlashCommand = {
   autoExecute: true,
   schema: authCommandSchema,
   action: async (context, args) => {
-    const runtime = getRuntimeApi();
-    // Ensure provider manager is initialized (throws if bootstrap skipped registration)
-    const providerManager = runtime.getCliProviderManager();
-
-    // Get the shared OAuth manager instance
-    let oauthManager = runtime.getCliOAuthManager();
-
-    // If for some reason it doesn't exist yet, create it
-    // @plan:PLAN-20250214-CREDPROXY.P33
-    if (!oauthManager) {
-      // This should rarely happen, but handle it as a fallback
-      const tokenStore = createTokenStore();
-      const config = context.services.config;
-      if (!config) {
-        throw new Error('Auth command requires an initialized Config service.');
-      }
-      const runtimeMessageBus = new MessageBus(
-        config.getPolicyEngine(),
-        config.getDebugMode(),
-      );
-      oauthManager = new OAuthManager(
-        tokenStore,
-        new LoadedSettingsOAuthAdapter(context.services.settings),
-        {
-          messageBus: runtimeMessageBus,
-          config,
-        },
-      );
-
-      registerStandardOAuthProviders(oauthManager, tokenStore);
-
-      runtime.registerCliProviderInfrastructure(providerManager, oauthManager, {
-        messageBus: runtimeMessageBus,
-      });
-    }
+    const oauthManager = getOAuthManager();
 
     const executor = new AuthCommandExecutor(oauthManager);
     return executor.execute(context, args);

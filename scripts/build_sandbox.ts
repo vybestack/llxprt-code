@@ -1,0 +1,459 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { execSync } from 'node:child_process';
+import {
+  chmodSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { join } from 'node:path';
+import os from 'node:os';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+import cliPkgJson from '../packages/cli/package.json' with { type: 'json' };
+
+const argv = yargs(hideBin(process.argv))
+  .option('s', {
+    alias: 'skip-npm-install-build',
+    type: 'boolean',
+    default: false,
+    description: 'skip npm install + npm run build',
+  })
+  .option('f', {
+    alias: 'dockerfile',
+    type: 'string',
+    description: 'use <dockerfile> for custom image',
+  })
+  .option('i', {
+    alias: 'image',
+    type: 'string',
+    description: 'use <image> name for custom image',
+  })
+  .option('output-file', {
+    type: 'string',
+    description:
+      'Path to write the final image URI. Used for CI/CD pipeline integration.',
+  })
+  .parseSync();
+
+let sandboxCommand = '';
+try {
+  sandboxCommand = execSync('bun scripts/sandbox_command.ts').toString().trim();
+} catch (e) {
+  console.warn('ERROR: could not detect sandbox container command');
+  console.error(e);
+  process.exit(process.env.CI ? 1 : 0);
+}
+
+if (sandboxCommand === 'sandbox-exec') {
+  console.warn(
+    'WARNING: container-based sandboxing is disabled (see README.md#sandboxing)',
+  );
+  process.exit(0);
+}
+
+console.log(`using ${sandboxCommand} for sandboxing`);
+
+const baseImage = (cliPkgJson as { config?: { sandboxImageUri?: string } })
+  .config?.sandboxImageUri;
+const customImage = argv.i;
+const baseDockerfile = 'Dockerfile';
+const customDockerfile = argv.f;
+
+if (!baseImage?.length) {
+  console.warn(
+    'No default image tag specified in llxprt-code/packages/cli/package.json',
+  );
+}
+
+if (!argv.s) {
+  execSync('npm install', { stdio: 'inherit' });
+  execSync('npm run build --workspaces', { stdio: 'inherit' });
+}
+
+const toolsPackageDir = join('packages', 'tools');
+const cliPackageDir = join('packages', 'cli');
+const authPackageDir = join('packages', 'auth');
+const settingsPackageDir = join('packages', 'settings');
+const storagePackageDir = join('packages', 'storage');
+const corePackageDir = join('packages', 'core');
+const mcpPackageDir = join('packages', 'mcp');
+const ideIntegrationPackageDir = join('packages', 'ide-integration');
+const providersPackageDir = join('packages', 'providers');
+const agentsPackageDir = join('packages', 'agents');
+const telemetryPackageDir = join('packages', 'telemetry');
+const policyPackageDir = join('packages', 'policy');
+
+function reportRestoreFailure(
+  restoreError: unknown,
+  precedingError: unknown,
+): void {
+  console.error('Failed to restore workspace dependencies after sandbox pack.');
+  console.error(
+    restoreError instanceof Error
+      ? (restoreError.stack ?? restoreError.message)
+      : String(restoreError),
+  );
+  console.error(
+    'CRITICAL: workspace dependencies may still be bound to release versions. ' +
+      'Run `bun scripts/bind-release-deps.ts --restore` manually to fix.',
+  );
+  if (precedingError) {
+    console.error('Restore failed after an earlier sandbox packaging error:');
+    console.error(
+      precedingError instanceof Error
+        ? (precedingError.stack ?? precedingError.message)
+        : String(precedingError),
+    );
+  }
+}
+
+let releaseDepsBound = false;
+let mainError: unknown = null;
+let restoreFailed = false;
+
+try {
+  // Rewrite workspace file: dependencies to release versions so packed tarballs
+  // have publish-ready metadata instead of file:../ references.
+  console.log('Binding release dependencies for sandbox tarballs...');
+  execSync('bun scripts/bind-release-deps.ts --backup', { stdio: 'inherit' });
+  releaseDepsBound = true;
+
+  console.log('packing @vybestack/llxprt-code-tools ...');
+  rmSync(join(toolsPackageDir, 'dist', 'vybestack-llxprt-code-tools-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-storage ...');
+  rmSync(
+    join(storagePackageDir, 'dist', 'vybestack-llxprt-code-storage-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-storage --pack-destination ./packages/storage/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-auth ...');
+  rmSync(join(authPackageDir, 'dist', 'vybestack-llxprt-code-auth-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-auth --pack-destination ./packages/auth/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-settings ...');
+  rmSync(
+    join(settingsPackageDir, 'dist', 'vybestack-llxprt-code-settings-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-telemetry ...');
+  rmSync(
+    join(telemetryPackageDir, 'dist', 'vybestack-llxprt-code-telemetry-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-ide-integration ...');
+  rmSync(
+    join(
+      ideIntegrationPackageDir,
+      'dist',
+      'vybestack-llxprt-code-ide-integration-*.tgz',
+    ),
+    {
+      force: true,
+    },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-ide-integration --pack-destination ./packages/ide-integration/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-policy ...');
+  rmSync(join(policyPackageDir, 'dist', 'vybestack-llxprt-code-policy-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-policy --pack-destination ./packages/policy/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-mcp ...');
+  rmSync(join(mcpPackageDir, 'dist', 'vybestack-llxprt-code-mcp-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-core ...');
+  rmSync(join(corePackageDir, 'dist', 'vybestack-llxprt-code-core-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-providers ...');
+  rmSync(
+    join(providersPackageDir, 'dist', 'vybestack-llxprt-code-providers-*.tgz'),
+    { force: true },
+  );
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist`,
+    { stdio: 'ignore' },
+  );
+
+  console.log('packing @vybestack/llxprt-code-agents ...');
+  rmSync(join(agentsPackageDir, 'dist', 'vybestack-llxprt-code-agents-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist`,
+    { stdio: 'ignore' },
+  );
+  console.log('packing @vybestack/llxprt-code ...');
+  rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), {
+    force: true,
+  });
+  execSync(
+    `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
+    {
+      stdio: 'ignore',
+    },
+  );
+} catch (error) {
+  mainError = error;
+} finally {
+  if (!releaseDepsBound) {
+    console.log(
+      'Skipping workspace dependency restore because binding did not complete.',
+    );
+  } else {
+    // Restore workspace file: dependencies so local development is unaffected.
+    console.log('Restoring workspace dependencies after sandbox pack...');
+    try {
+      execSync('bun scripts/bind-release-deps.ts --restore', {
+        stdio: 'inherit',
+      });
+    } catch (restoreError) {
+      reportRestoreFailure(restoreError, mainError);
+      restoreFailed = true;
+    }
+  }
+}
+if (restoreFailed) {
+  process.exit(1);
+}
+
+if (mainError !== null) {
+  throw mainError;
+}
+const rootPackageJson = JSON.parse(
+  readFileSync(join(process.cwd(), 'package.json'), 'utf-8'),
+) as { version?: unknown };
+const packageVersion = rootPackageJson.version;
+if (typeof packageVersion !== 'string') {
+  throw new Error('Missing or invalid version in root package.json');
+}
+
+chmodSync(
+  join(
+    toolsPackageDir,
+    'dist',
+    `vybestack-llxprt-code-tools-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    settingsPackageDir,
+    'dist',
+    `vybestack-llxprt-code-settings-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    storagePackageDir,
+    'dist',
+    `vybestack-llxprt-code-storage-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    authPackageDir,
+    'dist',
+    `vybestack-llxprt-code-auth-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    telemetryPackageDir,
+    'dist',
+    `vybestack-llxprt-code-telemetry-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+
+chmodSync(
+  join(
+    ideIntegrationPackageDir,
+    'dist',
+    `vybestack-llxprt-code-ide-integration-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    policyPackageDir,
+    'dist',
+    `vybestack-llxprt-code-policy-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    mcpPackageDir,
+    'dist',
+    `vybestack-llxprt-code-mcp-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    corePackageDir,
+    'dist',
+    `vybestack-llxprt-code-core-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    providersPackageDir,
+    'dist',
+    `vybestack-llxprt-code-providers-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(
+    agentsPackageDir,
+    'dist',
+    `vybestack-llxprt-code-agents-${packageVersion}.tgz`,
+  ),
+  0o755,
+);
+chmodSync(
+  join(cliPackageDir, 'dist', `vybestack-llxprt-code-${packageVersion}.tgz`),
+  0o755,
+);
+
+const buildStdout = 'inherit'; // Always show output to debug CI failures
+
+// Determine the appropriate shell based on OS
+const isWindows = os.platform() === 'win32';
+const shellToUse = isWindows ? 'powershell.exe' : '/bin/bash';
+
+function buildImage(imageName: string, dockerfile: string): void {
+  console.log(`building ${imageName} ... (can be slow first time)`);
+
+  let buildCommandArgs = '';
+  let tempAuthFile = '';
+
+  if (sandboxCommand === 'podman') {
+    if (isWindows) {
+      // PowerShell doesn't support <() process substitution.
+      // Create a temporary auth file that we will clean up after.
+      tempAuthFile = join(os.tmpdir(), `llxprt-auth-${Date.now()}.json`);
+      writeFileSync(tempAuthFile, '{}');
+      buildCommandArgs = `--authfile="${tempAuthFile}"`;
+    } else {
+      // Use bash-specific syntax for Linux/macOS
+      buildCommandArgs = `--authfile=<(echo '{}')`;
+    }
+  }
+
+  const npmPackageVersion = packageVersion;
+
+  const imageTag =
+    process.env.LLXPRT_SANDBOX_IMAGE_TAG || imageName.split(':')[1];
+  const finalImageName = `${imageName.split(':')[0]}:${imageTag}`;
+
+  try {
+    execSync(
+      `${sandboxCommand} build ${buildCommandArgs} ${
+        process.env.BUILD_SANDBOX_FLAGS || ''
+      } --build-arg CLI_VERSION_ARG=${npmPackageVersion} -f "${dockerfile}" -t "${finalImageName}" .`,
+      { stdio: buildStdout, shell: shellToUse },
+    );
+    console.log(`built ${finalImageName}`);
+
+    // If an output file path was provided via command-line, write the final image URI to it.
+    if (argv.outputFile) {
+      console.log(
+        `Writing final image URI for CI artifact to: ${argv.outputFile}`,
+      );
+      // The publish step only supports one image. If we build multiple, only the last one
+      // will be published. Throw an error to make this failure explicit if the file already exists.
+      if (existsSync(argv.outputFile)) {
+        throw new Error(
+          `CI artifact file ${argv.outputFile} already exists. Refusing to overwrite.`,
+        );
+      }
+      writeFileSync(argv.outputFile, finalImageName);
+    }
+  } finally {
+    // If we created a temp file, delete it now.
+    if (tempAuthFile) {
+      rmSync(tempAuthFile, { force: true });
+    }
+  }
+}
+
+if (baseImage && baseDockerfile) {
+  buildImage(baseImage, baseDockerfile);
+}
+
+if (customDockerfile && customImage) {
+  buildImage(customImage, customDockerfile);
+}
+
+execSync(`${sandboxCommand} image prune -f`, { stdio: 'ignore' });

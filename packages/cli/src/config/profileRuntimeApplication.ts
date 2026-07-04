@@ -36,6 +36,7 @@ export interface ProfileRuntimeApplicationResult {
   readonly resolvedBaseUrlAfterProfile: string | undefined;
   readonly resolvedFinalProvider: string;
   readonly profileWarnings: readonly string[];
+  readonly appliedFromLoadedProfile: boolean;
 }
 
 interface SnapshotLocalState {
@@ -43,6 +44,7 @@ interface SnapshotLocalState {
   resolvedProviderAfterProfile: string | undefined;
   resolvedModelAfterProfile: string | undefined;
   resolvedBaseUrlAfterProfile: string | undefined;
+  appliedFromLoadedProfile: boolean;
 }
 
 /** Builds a synthetic Profile from CLI auth overrides (e.g. --key, --baseurl). */
@@ -84,6 +86,7 @@ async function applyProfileSnapshotAndCollect(
   profileName: string,
   mutableWarnings: string[],
   finalProvider: string,
+  appliedFromLoadedProfile: boolean,
 ): Promise<SnapshotLocalState & { resolvedFinalProvider: string }> {
   const snapshotResult = await applyProfileSnapshot(profile, {
     profileName,
@@ -101,6 +104,7 @@ async function applyProfileSnapshotAndCollect(
     resolvedProviderAfterProfile: snapshotResult.providerName,
     resolvedModelAfterProfile: snapshotResult.modelName,
     resolvedBaseUrlAfterProfile: snapshotResult.baseUrl,
+    appliedFromLoadedProfile,
   };
   const resolvedFinalProvider =
     base.resolvedProviderAfterProfile &&
@@ -135,6 +139,7 @@ async function resolveAndApplyProfile(
       'cli-args',
       mutableWarnings,
       finalProvider,
+      false,
     );
   }
 
@@ -148,6 +153,7 @@ async function resolveAndApplyProfile(
       profileToLoad ?? 'inline-profile',
       mutableWarnings,
       finalProvider,
+      true,
     );
   }
 
@@ -155,6 +161,7 @@ async function resolveAndApplyProfile(
     appliedResult: null,
     resolvedProviderAfterProfile: undefined,
     resolvedModelAfterProfile: undefined,
+    appliedFromLoadedProfile: false,
     resolvedBaseUrlAfterProfile: undefined,
     resolvedFinalProvider: finalProvider,
   };
@@ -182,6 +189,7 @@ export async function applyProfileToRuntime(
     appliedResult: result.appliedResult,
     resolvedProviderAfterProfile: result.resolvedProviderAfterProfile,
     resolvedModelAfterProfile: result.resolvedModelAfterProfile,
+    appliedFromLoadedProfile: result.appliedFromLoadedProfile,
     resolvedBaseUrlAfterProfile: result.resolvedBaseUrlAfterProfile,
     resolvedFinalProvider: result.resolvedFinalProvider,
     profileWarnings: mutableWarnings,

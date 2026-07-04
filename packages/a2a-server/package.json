@@ -15,7 +15,7 @@
   },
   "scripts": {
     "start": "node dist/src/http/server.js",
-    "build": "node ../../scripts/build_package.js",
+    "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",

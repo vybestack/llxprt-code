@@ -104,7 +104,7 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 
 ### Bun Runtime and Install Fallback
 
-LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, a checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun and re-execs the CLI under it, executing the TypeScript (`.ts`) entry point directly. No compilation to JavaScript happens at install or run time, and no pre-compiled `dist/` artifact is shipped or required. Type checking during development uses `tsc --noEmit` separately (no JavaScript output is produced). The retired `bundle/llxprt.js` artifact is no longer part of the run path or release pipeline.
+LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun and re-execs the TypeScript entrypoint (`packages/cli/index.ts`) under it. The CLI's run path does not require a pre-compiled CLI `dist/` artifact or the retired `bundle/llxprt.js` artifact.
 
 **Bun resolution order (production launcher):**
 

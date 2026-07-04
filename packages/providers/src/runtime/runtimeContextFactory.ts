@@ -22,6 +22,7 @@ import {
   type KeyringTokenStore,
   MessageBus,
   flushRuntimeAuthScope,
+  peekActiveProviderRuntimeContext,
   type RuntimeAuthScopeFlushResult,
   SubagentManager,
   type RuntimeProviderManager,
@@ -36,6 +37,8 @@ import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
+import { validateRuntimeId } from './runtimeIdValidation.js';
+import type { RuntimeKind } from './runtimeRegistry.js';
 import { createFileOAuthSettingsProvider } from '../auth/file-oauth-settings.js';
 import { registerStandardOAuthProviders } from '../composition/oauth-provider-registration.js';
 
@@ -114,7 +117,7 @@ export interface RuntimeScopeValue {
   metadata: Record<string, unknown>;
 }
 
-const runtimeScope = new AsyncLocalStorage<RuntimeScopeValue>();
+let runtimeScope = new AsyncLocalStorage<RuntimeScopeValue>();
 
 export function enterRuntimeScope(scope: RuntimeScopeValue): void {
   runtimeScope.enterWith(scope);
@@ -130,21 +133,33 @@ export function runWithRuntimeScope<T>(
 export function getCurrentRuntimeScope(): RuntimeScopeValue | undefined {
   return runtimeScope.getStore();
 }
+export function resetRuntimeScopeForTesting(): void {
+  runtimeScope.disable();
+  runtimeScope = new AsyncLocalStorage<RuntimeScopeValue>();
+}
 
 interface RuntimeActivationBindings {
-  resetInfrastructure: () => void | Promise<void>;
+  resetInfrastructure: (runtimeId?: string) => void | Promise<void>;
   setRuntimeContext: (
     settingsService: SettingsService,
     config: Config,
     options: {
       metadata?: Record<string, unknown>;
       runtimeId: string;
+      setAsDefault?: boolean;
+      runtimeKind?: RuntimeKind;
     },
   ) => void | Promise<void>;
   registerInfrastructure: (
     manager: RuntimeProviderManager,
     oauthManager: OAuthManager,
-    options: { messageBus: MessageBus },
+    options: {
+      messageBus: MessageBus;
+      runtimeId: string;
+      metadata?: Record<string, unknown>;
+      registerAsGlobalSingleton?: boolean;
+      runtimeKind?: RuntimeKind;
+    },
   ) => void | Promise<void>;
   linkProviderManager: (
     config: Config,
@@ -171,6 +186,7 @@ interface RuntimeActivationState {
 export interface IsolatedRuntimeActivationOptions {
   metadata?: Record<string, unknown>;
   runtimeId?: string;
+  runtimeKind?: RuntimeKind;
 }
 
 /**
@@ -181,6 +197,7 @@ export interface IsolatedRuntimeActivationOptions {
  */
 export interface IsolatedRuntimeContextOptions {
   runtimeId?: string;
+  runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
   settingsService?: SettingsService;
   config?: Config;
@@ -351,6 +368,7 @@ function buildActivateClosure(
     const bindings = activationBindings;
 
     state.currentRuntimeId = activationOptions?.runtimeId ?? runtimeId;
+    validateRuntimeId(state.currentRuntimeId);
     state.currentMetadata = {
       ...baseMetadata,
       ...(activationOptions?.metadata ?? {}),
@@ -360,6 +378,8 @@ function buildActivateClosure(
       runtimeId: state.currentRuntimeId,
       metadata: state.currentMetadata,
     };
+    const effectiveRuntimeKind =
+      activationOptions?.runtimeKind ?? options.runtimeKind ?? 'agent';
 
     enterRuntimeScope(scope);
 
@@ -372,11 +392,17 @@ function buildActivateClosure(
       });
       providerManager.setRuntimeContext(scopedRuntime);
 
-      await Promise.resolve(bindings.resetInfrastructure());
+      await Promise.resolve(
+        bindings.resetInfrastructure(state.currentRuntimeId),
+      );
       await Promise.resolve(
         bindings.setRuntimeContext(resolvedSettingsService, config, {
           runtimeId: state.currentRuntimeId,
           metadata: state.currentMetadata,
+          // Isolated runtimes MUST NOT mutate the CLI default pointer (issue
+          // #2300); only the CLI composition boundary sets the default.
+          setAsDefault: false,
+          runtimeKind: effectiveRuntimeKind,
         }),
       );
 
@@ -394,6 +420,10 @@ function buildActivateClosure(
       await Promise.resolve(
         bindings.registerInfrastructure(providerManager, oauthManager, {
           messageBus: sessionMessageBus,
+          runtimeId: state.currentRuntimeId,
+          metadata: state.currentMetadata,
+          registerAsGlobalSingleton: false,
+          runtimeKind: effectiveRuntimeKind,
         }),
       );
       await Promise.resolve(
@@ -431,9 +461,14 @@ function buildCleanupClosure(
 
     await runWithRuntimeScope(scope, async () => {
       if (bindings) {
-        await Promise.resolve(bindings.resetInfrastructure());
+        await Promise.resolve(
+          bindings.resetInfrastructure(state.currentRuntimeId),
+        );
       }
-      clearSettingsProviderRuntimeContext();
+      const activeContext = peekActiveProviderRuntimeContext();
+      if (activeContext?.runtimeId === state.currentRuntimeId) {
+        clearSettingsProviderRuntimeContext();
+      }
 
       const revocation: RuntimeAuthScopeFlushResult = flushRuntimeAuthScope(
         state.currentRuntimeId,
@@ -478,6 +513,7 @@ export function createIsolatedRuntimeContext(
   const runtimeId =
     options.runtimeId ??
     `cli-isolated-${Date.now().toString(16)}-${(runtimeCounter += 1).toString(16)}`;
+  validateRuntimeId(runtimeId);
 
   const baseMetadata = {
     source: 'cli-isolated-runtime-factory',

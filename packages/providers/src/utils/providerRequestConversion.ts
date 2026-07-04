@@ -61,6 +61,7 @@ export function buildAnthropicDumpMessages(
   history: IContent[],
   settings?: unknown,
   config?: Config,
+  model?: string,
 ): unknown[] {
   return convertToAnthropicMessages(history, {
     isOAuth: false,
@@ -76,6 +77,7 @@ export function buildAnthropicDumpMessages(
         | undefined) ?? false,
     reasoningEnabled: true,
     config,
+    currentModel: model,
     unprefixToolName: (name) => name,
     logger: new DebugLogger('llxprt:providers:dumpConversion:anthropic'),
   });
@@ -148,6 +150,7 @@ export function buildProviderDumpBody(params: {
           params.history,
           params.settings,
           params.config,
+          params.model,
         ),
       },
       params.model,

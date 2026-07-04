@@ -28,6 +28,7 @@ import {
 import { applyProfileToRuntime } from './profileRuntimeApplication.js';
 import {
   createBootstrapResult,
+  resolveForegroundRuntimeId,
   type BootstrapRuntimeState,
   type BootstrapProfileArgs,
 } from './profileBootstrap.js';
@@ -193,7 +194,7 @@ async function setupRuntimeContext(
   const settingsService = getSettingsService(input);
 
   const bootstrapRuntimeId =
-    runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';
+    runtimeState.runtime.runtimeId ?? resolveForegroundRuntimeId();
   const baseBootstrapMetadata = {
     ...(runtimeState.runtime.metadata ?? {}),
     stage: 'post-config',
@@ -228,7 +229,11 @@ async function setupRuntimeContext(
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
       runtimeState.oauthManager,
-      { messageBus: runtimeState.runtimeMessageBus },
+      {
+        messageBus: runtimeState.runtimeMessageBus,
+        runtimeId: bootstrapRuntimeId,
+        metadata: baseBootstrapMetadata,
+      },
     );
   }
 
@@ -287,15 +292,17 @@ async function activateProviderAndProfile(
     }
   }
 
-  try {
-    await switchActiveProvider(finalProvider);
-  } catch (error) {
-    logger.warn(
-      () =>
-        `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
+  if (!profileApplicationResult.appliedFromLoadedProfile) {
+    try {
+      await switchActiveProvider(finalProvider);
+    } catch (error) {
+      logger.warn(
+        () =>
+          `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
   }
 
   return finalProvider;

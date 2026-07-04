@@ -175,10 +175,8 @@ function useAuthDialogState(
   );
 
   const refreshAuthStatuses = useCallback(async (): Promise<void> => {
-    const oauthManager = runtime.getCliOAuthManager();
-    if (!oauthManager) return;
     try {
-      const statuses = await oauthManager.getAuthStatus();
+      const statuses = await runtime.getCliOAuthManager().getAuthStatus();
       if (!mountedRef.current) return;
       setAuthStatuses(
         new Map(statuses.map((status) => [status.provider, status])),
@@ -269,16 +267,12 @@ export function AuthDialog({
       }
 
       const providerName = authMethod.replace('oauth_', '');
-      const oauthManager = runtime.getCliOAuthManager();
-
-      if (!oauthManager) {
-        setErrorMessage('OAuth manager unavailable');
-        return;
-      }
 
       void (async () => {
         try {
-          const enabled = await oauthManager.toggleOAuthEnabled(providerName);
+          const enabled = await runtime
+            .getCliOAuthManager()
+            .toggleOAuthEnabled(providerName);
           if (!mountedRef.current) return;
           setEnabledProviders((prev) => {
             const next = new Set(prev);

@@ -10,6 +10,8 @@
  * embed remediation steps so operators know how to unblock stateless runs.
  */
 
+export { MissingProviderRuntimeError } from '../errors.js';
+
 const PLAN_TAG = '@plan:PLAN-20251023-STATELESS-HARDENING.P10';
 const MISSING_RUNTIME_REQUIREMENTS = [
   '@requirement:REQ-SP4-001',

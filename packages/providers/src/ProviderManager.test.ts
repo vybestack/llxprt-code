@@ -19,6 +19,7 @@ import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
+  type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 function createRuntimeConfigStub(): Config {
@@ -36,14 +37,20 @@ function createRuntimeConfigStub(): Config {
   } as unknown as Config;
 }
 
-function setTestRuntimeContext(settingsService = new SettingsService()): void {
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService,
-      config: createRuntimeConfigStub(),
-      metadata: { source: 'ProviderManager.test' },
-    }),
-  );
+// Builds the runtime the manager is constructed with AND registers it as the
+// active context (some assertions read settings back through the singleton).
+// The manager itself always receives the runtime EXPLICITLY — it never reads
+// ambient global state (issue #2300).
+function setTestRuntimeContext(
+  settingsService = new SettingsService(),
+): ProviderRuntimeContext {
+  const runtime = createProviderRuntimeContext({
+    settingsService,
+    config: createRuntimeConfigStub(),
+    metadata: { source: 'ProviderManager.test' },
+  });
+  setActiveProviderRuntimeContext(runtime);
+  return runtime;
 }
 
 describe('ProviderManager provider ordering', () => {
@@ -57,9 +64,10 @@ describe('ProviderManager provider ordering', () => {
       invokeServerTool: vi.fn().mockRejectedValue(new Error('Not implemented')),
     }) as unknown as IProvider;
 
+  let runtime: ProviderRuntimeContext;
   beforeEach(() => {
     resetSettingsService();
-    setTestRuntimeContext();
+    runtime = setTestRuntimeContext();
   });
 
   afterEach(() => {
@@ -67,7 +75,7 @@ describe('ProviderManager provider ordering', () => {
   });
 
   it('prioritizes core providers and sorts remaining alphabetically', () => {
-    const manager = new ProviderManager();
+    const manager = new ProviderManager(runtime);
 
     const providerNames = [
       'openai-responses',
@@ -94,31 +102,33 @@ describe('ProviderManager provider ordering', () => {
     ]);
   });
 
-  it('falls back to active runtime config when init provides only settings service', () => {
+  it('uses the explicitly provided config and never adopts ambient runtime config (issue #2300)', () => {
     const settingsService = new SettingsService();
-    const runtimeConfig = {
-      getConversationLoggingEnabled: () => false,
-      getProviderManager: () => ({ accumulateSessionTokens: () => {} }),
-      getRedactionConfig: () => ({
-        redactApiKeys: false,
-        redactCredentials: false,
-        redactFilePaths: false,
-        redactUrls: false,
-        redactEmails: false,
-        redactPersonalInfo: false,
-      }),
-    } as unknown as Config;
+    const runtimeConfig = createRuntimeConfigStub();
+
+    // An ambient context with a config is present, but the manager receives
+    // only { settingsService } — it must NOT backfill config from ambient
+    // state, so no LoggingProviderWrapper is applied.
     setActiveProviderRuntimeContext({
       settingsService,
       config: runtimeConfig,
-      runtimeId: 'provider-manager.config-fallback-test',
+      runtimeId: 'provider-manager.no-ambient-adoption-test',
       metadata: { source: 'ProviderManager.test' },
     });
 
-    const manager = new ProviderManager({ settingsService });
-    manager.registerProvider(createProvider('fallback-provider'));
+    const withoutConfig = new ProviderManager({ settingsService });
+    withoutConfig.registerProvider(createProvider('no-config-provider'));
+    expect(
+      withoutConfig.getProviderByName('no-config-provider'),
+    ).not.toBeInstanceOf(LoggingProviderWrapper);
 
-    expect(manager.getProviderByName('fallback-provider')).toBeInstanceOf(
+    // The same construction WITH an explicit config gets the wrapper.
+    const withConfig = new ProviderManager({
+      settingsService,
+      config: runtimeConfig,
+    });
+    withConfig.registerProvider(createProvider('with-config-provider'));
+    expect(withConfig.getProviderByName('with-config-provider')).toBeInstanceOf(
       LoggingProviderWrapper,
     );
   });
@@ -126,15 +136,16 @@ describe('ProviderManager provider ordering', () => {
 
 describe('ProviderPerformanceTracker', () => {
   let mockProvider: IProvider;
+  let runtime: ProviderRuntimeContext;
 
   it('returns null metrics when no active provider is set', () => {
-    const manager = new ProviderManager();
+    const manager = new ProviderManager(setTestRuntimeContext());
 
     expect(manager.getProviderMetrics()).toBeNull();
   });
   beforeEach(() => {
     resetSettingsService();
-    setTestRuntimeContext();
+    runtime = setTestRuntimeContext();
     registerSettingsService(new SettingsService());
     mockProvider = {
       name: 'test-provider',
@@ -152,7 +163,7 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should accumulate session tokens correctly', () => {
-    const manager = new ProviderManager();
+    const manager = new ProviderManager(runtime);
 
     // Register a mock provider
     manager.registerProvider(mockProvider);
@@ -206,7 +217,7 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should reset session token usage', () => {
-    const manager = new ProviderManager();
+    const manager = new ProviderManager(runtime);
     resetSettingsService();
 
     // Register a mock provider

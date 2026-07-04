@@ -11,6 +11,10 @@ import {
   switchActiveProvider,
   setActiveModel,
 } from '@vybestack/llxprt-code-providers/runtime.js';
+import {
+  hasProfileAuthEphemerals,
+  snapshotProfileAuthEphemerals,
+} from './config/profileAuthEphemerals.js';
 
 export interface ForegroundAgentOptions {
   config: Config;
@@ -18,11 +22,13 @@ export interface ForegroundAgentOptions {
 }
 
 /**
- * `fromConfig` → `activate()` calls `resetInfrastructure()` which clears the
- * active provider on the shared ProviderManager. This re-activates the provider
- * and model that were configured (via --profile-load or --provider) so the
- * status bar and the first request use the correct provider.
+ * `fromConfig` can disturb provider runtime state during foreground-agent
+ * construction. For provider-only paths we re-switch the provider here. For
+ * already-applied profile auth paths, switching again clears keyfile/base-url
+ * ephemerals and regresses interactive profile-load, so the existing profile
+ * runtime remains authoritative and only the model is reasserted.
  */
+
 async function restoreActiveProvider(
   config: Config,
   agent: Agent,
@@ -30,8 +36,11 @@ async function restoreActiveProvider(
   const provider = config.getProvider() ?? agent.getProvider();
   if (!provider) return;
   try {
-    await switchActiveProvider(provider);
     const model = config.getModel();
+    const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
+    if (!hasProfileAuthEphemerals(profileAuthEphemerals)) {
+      await switchActiveProvider(provider);
+    }
     if (model && model !== 'placeholder-model') {
       await setActiveModel(model);
     }

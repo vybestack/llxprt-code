@@ -368,7 +368,7 @@ describe('CLI runtime isolation', () => {
     try {
       await expect(setActiveModel('stateless-model')).rejects.toThrow(
         testRegex(
-          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'No active runtime[\\s\\S]*MissingProviderRuntimeError[\\s\\S]*REQ-SP4-004',
           'i',
         ),
       );
@@ -392,7 +392,7 @@ describe('CLI runtime isolation', () => {
       // This simulates missing SettingsService scenario
       expect(() => getCliRuntimeContext()).toThrow(
         testRegex(
-          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'No active runtime[\\s\\S]*MissingProviderRuntimeError[\\s\\S]*REQ-SP4-004',
           'i',
         ),
       );
@@ -415,7 +415,7 @@ describe('CLI runtime isolation', () => {
       // Try to get context without any runtime registration
       expect(() => getCliRuntimeContext()).toThrow(
         testRegex(
-          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'No active runtime[\\s\\S]*MissingProviderRuntimeError[\\s\\S]*REQ-SP4-004',
           'i',
         ),
       );
@@ -474,7 +474,7 @@ describe('CLI runtime isolation', () => {
       // Try to ensure ready with no runtime registered - should throw
       expect(() => ensureStatelessProviderReady()).toThrow(
         testRegex(
-          'MissingProviderRuntimeError[\\s\\S]*runtime registration[\\s\\S]*REQ-SP4-004',
+          'No active runtime[\\s\\S]*MissingProviderRuntimeError[\\s\\S]*REQ-SP4-004',
           'i',
         ),
       );

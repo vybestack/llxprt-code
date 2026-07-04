@@ -11,7 +11,7 @@
 #
 # A "profile" is one of: opusfirst, gptfirst, glm. Omit to target all three.
 #
-# Why tmux: `node scripts/start.js` keeps stdin as a TTY inside tmux so it
+# Why tmux: `bun scripts/start.ts` keeps stdin as a TTY inside tmux so it
 # stays interactive (piping stdin would force non-interactive mode). This
 # lets you drive each profile by hand to reproduce/verify the failover fix.
 
@@ -25,7 +25,7 @@ MODE="${1:-launch}"
 PROFILE_ARG="${2:-}"
 
 # Validate the optional profile argument against the allow-list so typos or
-# anything containing shell metacharacters cannot reach the tmux/ node command.
+# anything containing shell metacharacters cannot reach the tmux/ bun command.
 if [[ -n "${PROFILE_ARG}" ]]; then
   valid=0
   for candidate in "${ALL_PROFILES[@]}"; do
@@ -40,8 +40,8 @@ if [[ -n "${PROFILE_ARG}" ]]; then
   fi
 fi
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "ERROR: 'node' was not found on PATH." >&2
+if ! command -v bun >/dev/null 2>&1; then
+  echo "ERROR: 'bun' was not found on PATH." >&2
   exit 127
 fi
 
@@ -55,9 +55,9 @@ if [[ "${MODE}" == "smoke" ]]; then
 
   for p in "${PROFILES[@]}"; do
     echo "=== smoke: ${p} ==="
-    # Non-interactive: a positional prompt makes start.js run once and exit.
+    # Non-interactive: a positional prompt makes start.ts run once and exit.
     set +e
-    output="$(node scripts/start.js --profile-load "${p}" \
+    output="$(bun scripts/start.ts --profile-load "${p}" \
       "Reply with only the word: ok" 2>&1)"
     rc=$?
     set -e
@@ -69,7 +69,7 @@ if [[ "${MODE}" == "smoke" ]]; then
     fi
     if [[ ${rc} -ne 0 ]]; then
       if echo "${output}" | grep -q "command not found"; then
-        echo "ERROR: ${p} could not run — node or a dependency is missing (rc=${rc})."
+        echo "ERROR: ${p} could not run — bun or a dependency is missing (rc=${rc})."
       else
         echo "WARN: ${p} exited non-zero (rc=${rc}); confirm whether the provider credentials/network are healthy."
       fi
@@ -96,7 +96,7 @@ for p in "${PROFILES[@]}"; do
     # ${p} is validated against the allow-list above; quoting keeps the
     # command unambiguous and safe.
     tmux new-session -d -s "${session}" -c "${ROOT}" \
-      "node scripts/start.js --profile-load '${p}'; echo '(exited)'; bash"
+      "bun scripts/start.ts --profile-load '${p}'; echo '(exited)'; bash"
     echo "Created tmux session '${session}' for profile '${p}'."
   fi
 done

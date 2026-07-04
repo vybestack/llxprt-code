@@ -50,12 +50,15 @@ describe('Settings Remediation Integration', () => {
 
     mockEventListeners = [];
 
+    // Config never adopts ambient runtime state (issue #2300) — the settings
+    // service is passed explicitly.
     config = new Config({
       sessionId: 'test-session',
       targetDir: process.cwd(),
       debugMode: false,
       model: 'test-model',
       cwd: process.cwd(),
+      settingsService,
     });
   });
 
@@ -268,6 +271,7 @@ describe('Settings Remediation Integration', () => {
         debugMode: false,
         model: 'test-model',
         cwd: process.cwd(),
+        settingsService: newSettingsService,
       });
 
       expect(newConfig.getEphemeralSetting('persistTest')).toBeUndefined();
@@ -290,6 +294,7 @@ describe('Settings Remediation Integration', () => {
         debugMode: false,
         model: 'test-model-2',
         cwd: process.cwd(),
+        settingsService,
       });
 
       config.setEphemeralSetting('sharedValue', 'visible-to-all');

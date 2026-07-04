@@ -26,7 +26,7 @@ import type { ISettingsService } from './settings-service.js';
 export interface IProviderRuntimeContext {
   settingsService: ISettingsService;
   config?: unknown;
-  runtimeId?: string;
+  runtimeId: string;
   metadata?: Record<string, unknown>;
 }
 

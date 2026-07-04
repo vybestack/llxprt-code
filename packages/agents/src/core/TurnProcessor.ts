@@ -21,6 +21,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
@@ -732,8 +733,13 @@ export class TurnProcessor {
     for (const content of newEntries) {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+      // AFC history is mixed user/model; stampAiTurnModel no-ops on non-ai
+      // entries, so only freshly generated model turns get the origin stamp.
       this.historyService.add(
-        ContentConverters.toIContent(content, idGen, matcher, turnKey),
+        stampAiTurnModel(
+          ContentConverters.toIContent(content, idGen, matcher, turnKey),
+          currentModel,
+        ),
         currentModel,
       );
     }
@@ -781,11 +787,14 @@ export class TurnProcessor {
         const turnKey = this.historyService.generateTurnKey();
         const idGen = this.historyService.getIdGeneratorCallback(turnKey);
         this.historyService.add(
-          ContentConverters.toIContent(
-            contentForHistory,
-            idGen,
-            undefined,
-            turnKey,
+          stampAiTurnModel(
+            ContentConverters.toIContent(
+              contentForHistory,
+              idGen,
+              undefined,
+              turnKey,
+            ),
+            currentModel,
           ),
           currentModel,
         );
@@ -797,11 +806,14 @@ export class TurnProcessor {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
       this.historyService.add(
-        ContentConverters.toIContent(
-          { role: 'model', parts: [] } as Content,
-          idGen,
-          undefined,
-          turnKey,
+        stampAiTurnModel(
+          ContentConverters.toIContent(
+            { role: 'model', parts: [] } as Content,
+            idGen,
+            undefined,
+            turnKey,
+          ),
+          currentModel,
         ),
         currentModel,
       );

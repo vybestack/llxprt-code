@@ -1,0 +1,39 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": false,
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": [
+    "scripts/bind-release-deps.ts",
+    "scripts/build.ts",
+    "scripts/build_package.ts",
+    "scripts/build_sandbox.ts",
+    "scripts/build_vscode_companion.ts",
+    "scripts/check-build-status.ts",
+    "scripts/check-cli-import-boundary.ts",
+    "scripts/check-lockfile.ts",
+    "scripts/check-storage-import-boundary.ts",
+    "scripts/check-storage-package-cycle.ts",
+    "scripts/chmod_executable.ts",
+    "scripts/clean.ts",
+    "scripts/copy_bundle_assets.ts",
+    "scripts/copy_files.ts",
+    "scripts/deflake.ts",
+    "scripts/generate-git-commit-info.ts",
+    "scripts/generate-keybindings-doc.ts",
+    "scripts/generate-settings-doc.ts",
+    "scripts/generate-settings-schema.ts",
+    "scripts/generate_prompt_manifest.ts",
+    "scripts/get-release-version.ts",
+    "scripts/prepare-package.ts",
+    "scripts/run-lint.ts",
+    "scripts/sandbox_command.ts",
+    "scripts/start.ts",
+    "scripts/telemetry.ts",
+    "scripts/utils/**/*.ts",
+    "scripts/version.ts"
+  ]
+}

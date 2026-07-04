@@ -10,7 +10,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from './IProvider.js';
 import {
   createProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
@@ -54,24 +53,47 @@ describe('ProviderManager runtime context', () => {
     expect(manager.getActiveProvider().name).toBe('stub-provider');
   });
 
-  it('respects legacy constructor by using the active runtime context', async () => {
-    const previous = peekActiveProviderRuntimeContext();
-    const settingsService = new SettingsService();
+  it('requires an explicit runtime and never reads ambient global state (issue #2300)', () => {
+    // Even with an ambient context set, the no-arg constructor must refuse to
+    // adopt it — identity is supplied explicitly, never inferred.
+    const ambientSettings = new SettingsService();
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: ambientSettings,
+        runtimeId: 'ambient-should-be-ignored',
+        metadata: { source: 'unit-test-ambient' },
+      }),
+    );
+
+    expect(() => new ProviderManager()).toThrow(
+      /does not read ambient global runtime state/,
+    );
+  });
+
+  it('binds to the explicitly provided runtime context, not the ambient one', () => {
+    const ambientSettings = new SettingsService();
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: ambientSettings,
+        runtimeId: 'ambient-context',
+        metadata: { source: 'unit-test-ambient' },
+      }),
+    );
+
+    const explicitSettings = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService,
-      runtimeId: 'legacy-constructor-test',
-      metadata: { source: 'unit-test-legacy' },
+      settingsService: explicitSettings,
+      runtimeId: 'explicit-context',
+      metadata: { source: 'unit-test-explicit' },
     });
-    setActiveProviderRuntimeContext(runtime);
 
-    const manager = new ProviderManager();
-    const provider = createStubProvider('legacy-provider');
+    const manager = new ProviderManager(runtime);
+    manager.registerProvider(createStubProvider('explicit-provider'));
 
-    manager.registerProvider(provider);
-
-    expect(settingsService.get('activeProvider')).toBe('legacy-provider');
-    expect(manager.getActiveProvider().name).toBe('legacy-provider');
-
-    setActiveProviderRuntimeContext(previous ?? null);
+    // The active provider is written to the EXPLICIT settings service, and the
+    // ambient one is left untouched.
+    expect(explicitSettings.get('activeProvider')).toBe('explicit-provider');
+    expect(ambientSettings.get('activeProvider')).toBeUndefined();
+    expect(manager.getActiveProvider().name).toBe('explicit-provider');
   });
 });

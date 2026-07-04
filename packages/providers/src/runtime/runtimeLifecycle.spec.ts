@@ -12,6 +12,7 @@
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
+  getDefaultCliRuntimeId,
   resetCliRuntimeRegistryForTesting,
   runtimeRegistry,
 } from './runtimeRegistry.js';
@@ -122,13 +123,26 @@ describe('runtimeLifecycle', () => {
       expect(entry?.config).toBe(mockConfig);
     });
 
-    it('should generate runtimeId if not provided', () => {
-      setCliRuntimeContext(mockSettingsService, mockConfig);
+    it('should throw when runtimeId is omitted (issue #2300)', () => {
+      // runtimeId is now REQUIRED — no implicit process-derived fallback.
+      // Cast to simulate a caller that omits the required option.
+      const omitOptions = {} as Parameters<typeof setCliRuntimeContext>[2];
+      expect(() =>
+        setCliRuntimeContext(mockSettingsService, mockConfig, omitOptions),
+      ).toThrow(/runtimeId/i);
+    });
 
-      // Runtime should be registered with a generated ID
-      expect(runtimeRegistry.size).toBe(1);
-      const [registeredId] = Array.from(runtimeRegistry.keys());
-      expect(registeredId).toMatch(/^cli-runtime-/);
+    it('should throw when runtimeId is an empty or whitespace-only string', () => {
+      expect(() =>
+        setCliRuntimeContext(mockSettingsService, mockConfig, {
+          runtimeId: '',
+        }),
+      ).toThrow(/runtimeId/i);
+      expect(() =>
+        setCliRuntimeContext(mockSettingsService, mockConfig, {
+          runtimeId: '   ',
+        }),
+      ).toThrow(/runtimeId/i);
     });
 
     it('should include metadata in the entry', () => {
@@ -146,16 +160,55 @@ describe('runtimeLifecycle', () => {
     });
 
     it('should support multiple runtimes with different IDs', () => {
+      // The first runtime claims the foreground default; additional runtimes
+      // are background/isolated and MUST opt out of the default pointer
+      // (setAsDefault: false) so they never overwrite it (issue #2300).
       setCliRuntimeContext(mockSettingsService, mockConfig, {
         runtimeId: 'runtime-A',
       });
       setCliRuntimeContext(mockSettingsService, mockConfig, {
         runtimeId: 'runtime-B',
+        setAsDefault: false,
       });
 
       expect(runtimeRegistry.size).toBe(2);
       expect(runtimeRegistry.has('runtime-A')).toBe(true);
       expect(runtimeRegistry.has('runtime-B')).toBe(true);
+    });
+
+    it('should throw when a second runtime overwrites the default without a hand-off (issue #2300)', () => {
+      setCliRuntimeContext(mockSettingsService, mockConfig, {
+        runtimeId: 'runtime-A',
+      });
+      expect(() =>
+        setCliRuntimeContext(mockSettingsService, mockConfig, {
+          runtimeId: 'runtime-B',
+        }),
+      ).toThrow(/Refusing to overwrite the default CLI runtime pointer/);
+      expect(getDefaultCliRuntimeId()).toBe('runtime-A');
+    });
+
+    it('should allow a deliberate foreground hand-off via allowDefaultHandoff', () => {
+      setCliRuntimeContext(mockSettingsService, mockConfig, {
+        runtimeId: 'runtime-A',
+      });
+      setCliRuntimeContext(mockSettingsService, mockConfig, {
+        runtimeId: 'runtime-B',
+        allowDefaultHandoff: true,
+      });
+      expect(getDefaultCliRuntimeId()).toBe('runtime-B');
+    });
+
+    it('should be idempotent when re-affirming the same default id', () => {
+      setCliRuntimeContext(mockSettingsService, mockConfig, {
+        runtimeId: 'runtime-A',
+      });
+      expect(() =>
+        setCliRuntimeContext(mockSettingsService, mockConfig, {
+          runtimeId: 'runtime-A',
+        }),
+      ).not.toThrow();
+      expect(getDefaultCliRuntimeId()).toBe('runtime-A');
     });
 
     it('should update existing entry when called with same ID', () => {
@@ -174,6 +227,19 @@ describe('runtimeLifecycle', () => {
   });
 
   describe('registerCliProviderInfrastructure', () => {
+    it('should throw when runtimeId is omitted', () => {
+      const omitOptions = {
+        messageBus: mockMessageBus,
+      } as Parameters<typeof registerCliProviderInfrastructure>[2];
+      expect(() =>
+        registerCliProviderInfrastructure(
+          mockRuntimeProviderManager,
+          mockOAuthManager,
+          omitOptions,
+        ),
+      ).toThrow(/runtimeId/i);
+    });
+
     it('should update runtime entry with providerManager', () => {
       const runtimeId = 'test-runtime-infra-1';
       setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
@@ -183,6 +249,7 @@ describe('runtimeLifecycle', () => {
         mockOAuthManager,
         {
           messageBus: mockMessageBus,
+          runtimeId,
         },
       );
 
@@ -200,6 +267,7 @@ describe('runtimeLifecycle', () => {
         mockOAuthManager,
         {
           messageBus: mockMessageBus,
+          runtimeId,
         },
       );
 
@@ -216,6 +284,7 @@ describe('runtimeLifecycle', () => {
         mockOAuthManager,
         {
           messageBus: mockMessageBus,
+          runtimeId,
         },
       );
 
@@ -237,6 +306,7 @@ describe('runtimeLifecycle', () => {
         mockOAuthManager,
         {
           messageBus: mockMessageBus,
+          runtimeId,
         },
       );
 
@@ -261,6 +331,7 @@ describe('runtimeLifecycle', () => {
         mockOAuthManager,
         {
           messageBus: mockMessageBus,
+          runtimeId,
         },
       );
 

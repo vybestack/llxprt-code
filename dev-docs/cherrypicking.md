@@ -158,7 +158,7 @@ npm run format
 npm run build
 
 # 6. Synthetic smoke-run
-node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
+bun scripts/start.ts --profile-load synthetic --prompt "write me a haiku"
 ```
 
 If you get noisy “working tree modified” warnings during long runs, it’s OK to
@@ -185,7 +185,7 @@ When cherry-picking multiple commits, **verify after every batch**, and run the 
    npm run test
    npm run format
    npm run build
-   node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
+   bun scripts/start.ts --profile-load synthetic --prompt "write me a haiku"
    git add -A  # Stage formatted changes if any
    ```
 4. Verify commits were actually applied:

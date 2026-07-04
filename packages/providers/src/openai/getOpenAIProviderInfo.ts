@@ -9,7 +9,6 @@
  * @requirement REQ-INT-001.1
  */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { getActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ConversationCache } from './ConversationCache.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 
@@ -39,17 +38,30 @@ export interface OpenAIProviderInfo {
 }
 
 /**
- * Retrieves OpenAI provider information from a provider manager.
+ * The runtime inputs OpenAI provider info derives from. Supplied explicitly by
+ * the caller (which already resolves the active runtime deterministically)
+ * rather than read from ambient global state, so settings/config always belong
+ * to the SAME runtime as the provider manager (issue #2300).
+ */
+export interface OpenAIProviderInfoRuntime {
+  settingsService: ProviderInfoSettings;
+  config?: ProviderInfoConfig;
+}
+
+/**
+ * Retrieves OpenAI provider information from an explicit runtime.
  *
  * Accepts the minimal structural surface (`OpenAIProviderInfoSource`) the
  * function actually consumes, so callers holding the core
  * `RuntimeProviderManager` contract (rather than the concrete providers
  * `ProviderManager`) can pass it directly without a type-escape cast.
  *
+ * @param runtime The active runtime's settings service and config
  * @param providerManager A structural provider-info source, or null/undefined
  * @returns OpenAI provider info if available, null values otherwise
  */
 export function getOpenAIProviderInfo(
+  runtime: OpenAIProviderInfoRuntime,
   providerManager?: OpenAIProviderInfoSource | null,
 ): OpenAIProviderInfo {
   const result: OpenAIProviderInfo = {
@@ -61,7 +73,6 @@ export function getOpenAIProviderInfo(
   };
 
   try {
-    const runtime = getActiveProviderRuntimeContext();
     const settingsService = runtime.settingsService;
     const config = runtime.config;
 
@@ -209,7 +220,10 @@ function getValidString(value: unknown): string | undefined {
 /**
  * Example usage:
  *
- * const openAIInfo = getOpenAIProviderInfo(providerManager);
+ * const openAIInfo = getOpenAIProviderInfo(
+ *   { settingsService, config },
+ *   providerManager,
+ * );
  * if (openAIInfo.provider && openAIInfo.conversationCache) {
  *   // Access conversation cache
  *   const cachedMessages = openAIInfo.conversationCache.get(conversationId, parentId);

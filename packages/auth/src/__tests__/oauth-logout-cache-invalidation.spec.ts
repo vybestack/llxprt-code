@@ -60,7 +60,6 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
   beforeEach(() => {
     // Flush any pre-existing runtime state
     flushRuntimeAuthScope(testRuntimeId);
-    flushRuntimeAuthScope('legacy-singleton');
 
     mockSettingsService = createStubSettingsService({
       activeProvider: 'anthropic',
@@ -83,13 +82,16 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
       {
         oauthManager: mockOAuthManager,
         settingsService: mockSettingsService,
+        getActiveRuntimeContext: () => ({
+          settingsService: mockSettingsService,
+          runtimeId: testRuntimeId,
+        }),
       },
     );
   });
 
   afterEach(() => {
     flushRuntimeAuthScope(testRuntimeId);
-    flushRuntimeAuthScope('legacy-singleton');
     vi.clearAllMocks();
   });
 
