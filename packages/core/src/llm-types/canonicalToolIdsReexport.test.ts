@@ -30,6 +30,14 @@ import {
 } from './index.js';
 
 describe('llm-types canonical tool-ID contract re-export', () => {
+  it('re-exports canonicalizeToolCallId as a function', () => {
+    expect(typeof canonicalizeToolCallId).toBe('function');
+  });
+
+  it('re-exports canonicalizeToolResponseId as a function', () => {
+    expect(typeof canonicalizeToolResponseId).toBe('function');
+  });
+
   const input: CanonicalToolIdInput = {
     providerName: 'openai',
     rawId: 'call_abc123',

@@ -39,7 +39,14 @@ export interface FinishInfo {
   rawStopReason: string;
 }
 
-const CANONICAL_SET: ReadonlySet<string> = new Set<CanonicalFinishReason>([
+/**
+ * Compile-time-synchronized array of all canonical finish reasons. The
+ * `satisfies readonly CanonicalFinishReason[]` ensures every element is a
+ * valid union member, and the exhaustiveness assertion below ensures every
+ * union member is present in the array. If a variant is added or removed,
+ * TypeScript flags the mismatch at compile time.
+ */
+export const CANONICAL_FINISH_REASONS = [
   'stop',
   'max_tokens',
   'tool_calls',
@@ -47,7 +54,22 @@ const CANONICAL_SET: ReadonlySet<string> = new Set<CanonicalFinishReason>([
   'refusal',
   'error',
   'other',
-]);
+] as const satisfies readonly CanonicalFinishReason[];
+
+// Compile-time exhaustiveness check: if CanonicalFinishReason has a member
+// not present in CANONICAL_FINISH_REASONS, this type is `never` → assignment
+// of `true` fails to compile. Zero runtime cost.
+type _AssertAllCovered = [
+  Exclude<CanonicalFinishReason, (typeof CANONICAL_FINISH_REASONS)[number]>,
+] extends [never]
+  ? true
+  : never;
+const _assertAllCovered: _AssertAllCovered = true;
+void _assertAllCovered;
+
+const CANONICAL_SET: ReadonlySet<string> = new Set<string>(
+  CANONICAL_FINISH_REASONS,
+);
 
 /**
  * @plan PLAN-20260702-LLMTYPES.P03

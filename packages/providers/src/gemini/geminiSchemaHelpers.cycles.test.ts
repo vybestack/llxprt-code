@@ -288,20 +288,26 @@ describe('property-based — cleanGeminiSchema invariants', () => {
     });
 
     fc.assert(
-      fc.property(childArb, fc.string(), fc.string(), (child, keyA, keyB) => {
-        const schema = {
-          type: 'object',
-          properties: { [keyA]: child, [keyB]: child },
-        };
-        const cleaned = asRecord(cleanGeminiSchema(schema));
-        const props = asRecord(cleaned['properties']);
-        // Both occurrences must be cleaned (not {} — that would indicate a
-        // global-visited bug), and must be structurally identical.
-        const a = sortedJson(props[keyA]);
-        const b = sortedJson(props[keyB]);
-        expect(a).not.toBe('{}');
-        expect(a).toBe(b);
-      }),
+      fc.property(
+        childArb,
+        fc
+          .tuple(fc.string({ minLength: 1 }), fc.string({ minLength: 1 }))
+          .filter(([a, b]) => a !== b),
+        (child, [keyA, keyB]) => {
+          const schema = {
+            type: 'object',
+            properties: { [keyA]: child, [keyB]: child },
+          };
+          const cleaned = asRecord(cleanGeminiSchema(schema));
+          const props = asRecord(cleaned['properties']);
+          // Both occurrences must be cleaned (not {} — that would indicate a
+          // global-visited bug), and must be structurally identical.
+          const a = sortedJson(props[keyA]);
+          const b = sortedJson(props[keyB]);
+          expect(a).not.toBe('{}');
+          expect(a).toBe(b);
+        },
+      ),
     );
   });
 });

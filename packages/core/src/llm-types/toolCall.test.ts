@@ -236,6 +236,29 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       inlineData: { mimeType: 'image/png' },
     });
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('malformed inlineData');
+    }
+  });
+
+  it('rejects inlineData with missing mimeType', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      inlineData: { data: 'abc' },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('malformed inlineData');
+    }
+  });
+
+  it('rejects malformed fileData with missing fileUri', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      fileData: { mimeType: 'image/png' },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('malformed fileData');
+    }
   });
 
   it('rejects functionResponse with missing name', () => {
@@ -243,6 +266,19 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       functionResponse: { response: 'ok' },
     });
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('malformed functionResponse');
+    }
+  });
+
+  it('rejects malformed functionResponse that is not a record', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      functionResponse: 'not-a-record',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('malformed functionResponse');
+    }
   });
 
   it('never silently stringifies or drops unsupported shapes', () => {
@@ -333,14 +369,15 @@ describe('toolCall property-based', () => {
     'inlineData with string mimeType+data always yields MediaBlock base64',
     (input) => {
       const result = toolResultContentFromLegacyPartListUnion(input);
-      if (!result.ok || !Array.isArray(result.value)) return false;
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(Array.isArray(result.value)).toBe(true);
+      if (!Array.isArray(result.value)) return;
       const block = result.value[0];
-      return (
-        block.type === 'media' &&
-        block.encoding === 'base64' &&
-        block.mimeType === input.inlineData.mimeType &&
-        block.data === input.inlineData.data
-      );
+      expect(block.type).toBe('media');
+      expect(block.encoding).toBe('base64');
+      expect(block.mimeType).toBe(input.inlineData.mimeType);
+      expect(block.data).toBe(input.inlineData.data);
     },
   );
 
@@ -369,22 +406,26 @@ describe('toolCall property-based', () => {
       functionResponse: fc.record({
         name: fc.string({ minLength: 1, maxLength: 20 }),
         id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
-        response: fc.string({ maxLength: 30 }),
+        response: fc.option(fc.string({ maxLength: 30 })),
       }),
     }),
   ])(
     'functionResponse always yields ToolResponseBlock with correct fields',
     (input) => {
       const result = toolResultContentFromLegacyPartListUnion(input);
-      if (!result.ok || !Array.isArray(result.value)) return false;
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(Array.isArray(result.value)).toBe(true);
+      if (!Array.isArray(result.value)) return;
       const block = result.value[0];
-      if (block.type !== 'tool_response') return false;
-      if (block.toolName !== input.functionResponse.name) return false;
+      expect(block.type).toBe('tool_response');
+      expect(block.toolName).toBe(input.functionResponse.name);
       const expectedCallId = input.functionResponse.id ?? '';
-      return (
-        block.callId === expectedCallId &&
-        block.result === input.functionResponse.response
-      );
+      expect(block.callId).toBe(expectedCallId);
+      // fc.option returns null for absent; the record always includes the
+      // response key, so 'response' in fnResp is true and result === the raw
+      // value (string or null).
+      expect(block.result).toBe(input.functionResponse.response);
     },
   );
 

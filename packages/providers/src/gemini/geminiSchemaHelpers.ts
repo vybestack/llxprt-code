@@ -126,10 +126,13 @@ function cleanGeminiSchemaInternal(
  * API's supported Schema definition. Acts as a whitelist, removing properties
  * not explicitly supported by the Gemini API (e.g. `exclusiveMinimum`).
  *
- * Cycle-safe and non-mutating: a `visited` WeakSet tracks already-seen object
- * references to guarantee termination on cyclic schemas; a cycle edge yields
- * `{}` (lossy-by-design, documented). The input is never mutated — a fresh
- * copy is always returned for object schemas.
+ * Cycle-safe and non-mutating: a `visited` WeakSet is used for PATH-BASED cycle
+ * detection — each schema reference is added before recursing into its children
+ * and removed (via try/finally) after the subtree is processed, so only true
+ * ancestor-cycles are detected while shared sibling references (diamond/DAG
+ * shapes) are cleaned normally on every occurrence. A cycle edge yields `{}`
+ * (lossy-by-design, documented). The input is never mutated — a fresh copy is
+ * always returned for object schemas.
  *
  * @plan PLAN-20260702-LLMTYPES.P05
  * @requirement REQ-011.1, REQ-011.2, REQ-011.3

@@ -121,49 +121,62 @@ function partLikeToBlock(item: unknown): ConversionResult<ContentBlock> {
   if ('inlineData' in item) {
     const inline = item['inlineData'];
     if (
-      isRecord(inline) &&
-      typeof inline['mimeType'] === 'string' &&
-      typeof inline['data'] === 'string'
+      !isRecord(inline) ||
+      typeof inline['mimeType'] !== 'string' ||
+      typeof inline['data'] !== 'string'
     ) {
-      const block: MediaBlock = {
-        type: 'media',
-        mimeType: inline['mimeType'],
-        data: inline['data'],
-        encoding: 'base64',
+      return {
+        ok: false,
+        error:
+          'malformed inlineData: expected { mimeType: string, data: string }',
       };
-      return { ok: true, value: block };
     }
+    const block: MediaBlock = {
+      type: 'media',
+      mimeType: inline['mimeType'],
+      data: inline['data'],
+      encoding: 'base64',
+    };
+    return { ok: true, value: block };
   }
 
   if ('fileData' in item) {
     const fileData = item['fileData'];
-    if (isRecord(fileData) && typeof fileData['fileUri'] === 'string') {
-      const fileUri: string = fileData['fileUri'];
-      const mimeType =
-        typeof fileData['mimeType'] === 'string'
-          ? fileData['mimeType']
-          : 'application/octet-stream';
-      const block: MediaBlock = {
-        type: 'media',
-        mimeType,
-        data: fileUri,
-        encoding: 'url',
+    if (!isRecord(fileData) || typeof fileData['fileUri'] !== 'string') {
+      return {
+        ok: false,
+        error: 'malformed fileData: expected { fileUri: string }',
       };
-      return { ok: true, value: block };
     }
+    const fileUri: string = fileData['fileUri'];
+    const mimeType =
+      typeof fileData['mimeType'] === 'string'
+        ? fileData['mimeType']
+        : 'application/octet-stream';
+    const block: MediaBlock = {
+      type: 'media',
+      mimeType,
+      data: fileUri,
+      encoding: 'url',
+    };
+    return { ok: true, value: block };
   }
 
   if ('functionResponse' in item) {
     const fnResp = item['functionResponse'];
-    if (isRecord(fnResp) && typeof fnResp['name'] === 'string') {
-      const block: ToolResponseBlock = {
-        type: 'tool_response',
-        callId: typeof fnResp['id'] === 'string' ? fnResp['id'] : '',
-        toolName: fnResp['name'],
-        result: 'response' in fnResp ? fnResp['response'] : undefined,
+    if (!isRecord(fnResp) || typeof fnResp['name'] !== 'string') {
+      return {
+        ok: false,
+        error: 'malformed functionResponse: expected { name: string }',
       };
-      return { ok: true, value: block };
     }
+    const block: ToolResponseBlock = {
+      type: 'tool_response',
+      callId: typeof fnResp['id'] === 'string' ? fnResp['id'] : '',
+      toolName: fnResp['name'],
+      result: 'response' in fnResp ? fnResp['response'] : undefined,
+    };
+    return { ok: true, value: block };
   }
 
   return { ok: false, error: 'unsupported tool result part shape' };

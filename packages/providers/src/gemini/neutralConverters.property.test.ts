@@ -15,6 +15,7 @@
 import { describe, it } from 'vitest';
 import * as fc from 'fast-check';
 import { Outcome, Language, type Part } from '@google/genai';
+import { isRecord } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   geminiPartsToBlocks,
   blocksToGeminiParts,
@@ -26,7 +27,13 @@ function roundTrip(part: Part): Part {
 }
 
 function sortedJson(value: unknown): string {
-  if (typeof value !== 'object' || value === null) {
+  if (value === undefined) return '"<undefined>"';
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return '"<NaN>"';
+    if (value === Infinity) return '"<Infinity>"';
+    if (value === -Infinity) return '"<-Infinity>"';
+  }
+  if (!isRecord(value) && !Array.isArray(value)) {
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) {
@@ -42,7 +49,15 @@ function deepEqual(a: unknown, b: unknown): boolean {
 }
 
 function base64ish(): fc.Arbitrary<string> {
-  return fc.stringMatching(/[A-Za-z0-9+/=]{8,64}/);
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  return fc
+    .array(fc.constantFrom(...chars.split('')), { minLength: 8, maxLength: 48 })
+    .map((arr) => {
+      const str = arr.join('');
+      const pad = str.length % 4 === 0 ? '' : '='.repeat(4 - (str.length % 4));
+      return str + pad;
+    });
 }
 
 describe('property-based round-trips (REQ-010.2)', () => {

@@ -143,16 +143,30 @@ describe('modelRequest property-based', () => {
       temperature: fc.float({ min: 0, max: 2, noNaN: true }),
       maxOutputTokens: fc.nat({ max: 100000 }),
       systemInstruction: fc.string({ maxLength: 100 }),
+      reasoning: fc.oneof(
+        fc.constant(undefined),
+        fc.record({ budgetTokens: fc.nat({ max: 100000 }) }),
+      ),
+      toolChoice: fc.oneof(
+        fc.constant(undefined),
+        fc.record({
+          mode: fc.constantFrom('auto', 'none', 'required'),
+        }),
+      ),
     }),
   ])(
     'ModelGenerationSettings round-trips through JSON preserving fields',
     (fields) => {
       const settings: ModelGenerationSettings = fields;
       const rt: ModelGenerationSettings = JSON.parse(JSON.stringify(settings));
-      return (
+      const coreMatches =
         rt.temperature === fields.temperature &&
         rt.maxOutputTokens === fields.maxOutputTokens &&
-        rt.systemInstruction === fields.systemInstruction
+        rt.systemInstruction === fields.systemInstruction;
+      return (
+        coreMatches &&
+        rt.reasoning?.budgetTokens === fields.reasoning?.budgetTokens &&
+        rt.toolChoice?.mode === fields.toolChoice?.mode
       );
     },
   );
@@ -172,11 +186,11 @@ describe('modelRequest property-based', () => {
       { minLength: 1, maxLength: 5 },
     ),
   ])(
-    'ModelGenerationRequest contents length preserved through JSON round-trip',
+    'ModelGenerationRequest contents deep-equal after JSON round-trip',
     (contents) => {
       const req: ModelGenerationRequest = { contents };
       const rt: ModelGenerationRequest = JSON.parse(JSON.stringify(req));
-      return rt.contents.length === contents.length;
+      return JSON.stringify(rt.contents) === JSON.stringify(contents);
     },
   );
 
@@ -215,11 +229,11 @@ describe('modelRequest property-based', () => {
       ),
     }),
   ])(
-    'ModelGenerationRequest with only contents round-trips through JSON',
+    'ModelGenerationRequest with only contents deep-equal after JSON round-trip',
     ({ contents }) => {
       const req: ModelGenerationRequest = { contents };
       const rt: ModelGenerationRequest = JSON.parse(JSON.stringify(req));
-      return rt.contents.length === contents.length;
+      return JSON.stringify(rt.contents) === JSON.stringify(contents);
     },
   );
 });

@@ -70,6 +70,10 @@ describe('isJsonSchema', () => {
     expect(isJsonSchema('string')).toBe(false);
   });
 
+  it('rejects empty string', () => {
+    expect(isJsonSchema('')).toBe(false);
+  });
+
   it('rejects array', () => {
     expect(isJsonSchema([1, 2, 3])).toBe(false);
   });

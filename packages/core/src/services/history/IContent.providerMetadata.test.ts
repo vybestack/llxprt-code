@@ -217,7 +217,7 @@ describe('IContent providerMetadata property-based', () => {
       text: fc.string({ maxLength: 100 }),
       providerMetadata: fc.dictionary(
         fc.string({ minLength: 1, maxLength: 10 }),
-        fc.string({ maxLength: 20 }),
+        fc.jsonValue(),
       ),
     }),
   ])(
@@ -237,7 +237,7 @@ describe('IContent providerMetadata property-based', () => {
       { minLength: 1, maxLength: 5 },
     ),
   ])(
-    'pre-change history (no providerMetadata) still parses and ContentValidation verdicts are deterministic',
+    'hasContent verdict is deterministic for pre-change-shaped text blocks (no providerMetadata)',
     (blocks) => {
       const content: IContent = {
         speaker: 'human',
@@ -293,26 +293,28 @@ describe('IContent providerMetadata property-based', () => {
   );
 
   it.prop([
-    fc.record({
-      promptTokens: fc.nat({ max: 100000 }),
-      completionTokens: fc.nat({ max: 100000 }),
-      totalTokens: fc.nat({ max: 200000 }),
-      reasoningTokens: fc.option(fc.nat({ max: 50000 })),
-      toolTokens: fc.option(fc.nat({ max: 50000 })),
-    }),
+    fc
+      .record({
+        promptTokens: fc.nat({ max: 100000 }),
+        completionTokens: fc.nat({ max: 100000 }),
+        totalTokens: fc.nat({ max: 200000 }),
+        reasoningTokens: fc.option(fc.nat({ max: 50000 })),
+        toolTokens: fc.option(fc.nat({ max: 50000 })),
+      })
+      .map(
+        (v): UsageStats => ({
+          promptTokens: v.promptTokens,
+          completionTokens: v.completionTokens,
+          totalTokens: v.totalTokens,
+          reasoningTokens: v.reasoningTokens ?? undefined,
+          toolTokens: v.toolTokens ?? undefined,
+        }),
+      ),
   ])(
     'UsageStats with new fields round-trips through JSON unchanged',
-    (stats) => {
-      const cleaned: UsageStats = {
-        promptTokens: stats.promptTokens,
-        completionTokens: stats.completionTokens,
-        totalTokens: stats.totalTokens,
-      };
-      if (stats.reasoningTokens !== null)
-        cleaned.reasoningTokens = stats.reasoningTokens;
-      if (stats.toolTokens !== null) cleaned.toolTokens = stats.toolTokens;
-      const roundTripped: UsageStats = JSON.parse(JSON.stringify(cleaned));
-      return JSON.stringify(roundTripped) === JSON.stringify(cleaned);
+    (stats: UsageStats) => {
+      const roundTripped: UsageStats = JSON.parse(JSON.stringify(stats));
+      return JSON.stringify(roundTripped) === JSON.stringify(stats);
     },
   );
 });

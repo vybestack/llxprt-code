@@ -4,12 +4,12 @@
 
 Every tracked TypeScript file under `packages/**` that imports `@google/genai`, classified to the downstream issue that removes the import (or to the permanent Gemini `enclave`). This file is the baseline the #2352 enforcement ratchet compares against — the count may only ever decrease as migration issues land.
 
-**Total importers:** 245
+**Total importers:** 244
 
 **Per-owner breakdown:**
 
 - `enclave`: 21
-- `#2348`: 46
+- `#2348`: 45
 - `#2349`: 103
 - `#2350`: 49
 - `#2351`: 26
@@ -195,7 +195,6 @@ Every tracked TypeScript file under `packages/**` that imports `@google/genai`, 
 | `packages/core/src/hooks/hookTranslator.test.ts`                                           | #2348   |
 | `packages/core/src/hooks/hookTranslator.ts`                                                | #2348   |
 | `packages/core/src/hooks/types.ts`                                                         | #2348   |
-| `packages/core/src/llm-types/toolCall.ts`                                                  | #2348   |
 | `packages/core/src/policy/policy-helpers.ts`                                               | #2348   |
 | `packages/core/src/runtime/AgentRuntimeContext.ts`                                         | #2348   |
 | `packages/core/src/services/history/ContentConverters.test.ts`                             | #2348   |

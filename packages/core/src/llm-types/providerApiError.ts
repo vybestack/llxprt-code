@@ -67,5 +67,21 @@ export function isProviderApiError(value: unknown): value is ProviderApiError {
     return false;
   }
 
+  if ('retryAfterMs' in value && typeof value['retryAfterMs'] !== 'number') {
+    return false;
+  }
+
+  if ('isQuotaError' in value && typeof value['isQuotaError'] !== 'boolean') {
+    return false;
+  }
+
+  if ('isAuthError' in value && typeof value['isAuthError'] !== 'boolean') {
+    return false;
+  }
+
+  if ('isTransient' in value && typeof value['isTransient'] !== 'boolean') {
+    return false;
+  }
+
   return true;
 }

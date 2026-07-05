@@ -88,6 +88,28 @@ describe('isProviderApiError', () => {
       isProviderApiError({ message: 'err', extra: 'stuff', anything: true }),
     ).toBe(true);
   });
+
+  it('rejects object with non-number retryAfterMs', () => {
+    expect(isProviderApiError({ message: 'err', retryAfterMs: 'soon' })).toBe(
+      false,
+    );
+  });
+
+  it('rejects object with non-boolean isQuotaError', () => {
+    expect(isProviderApiError({ message: 'err', isQuotaError: 'yes' })).toBe(
+      false,
+    );
+  });
+
+  it('rejects object with non-boolean isAuthError', () => {
+    expect(isProviderApiError({ message: 'err', isAuthError: 1 })).toBe(false);
+  });
+
+  it('rejects object with non-boolean isTransient', () => {
+    expect(isProviderApiError({ message: 'err', isTransient: 'maybe' })).toBe(
+      false,
+    );
+  });
 });
 
 // ============================================================================
@@ -96,19 +118,20 @@ describe('isProviderApiError', () => {
 
 describe('providerApiError property-based', () => {
   it.prop([
-    fc.record({
-      message: fc.string({ minLength: 1 }),
-      status: fc.option(fc.integer({ min: 100, max: 599 })),
-      code: fc.option(fc.string()),
-      provider: fc.option(fc.string()),
-    }),
+    fc.tuple(
+      fc.string({ minLength: 1 }),
+      fc.option(fc.integer({ min: 100, max: 599 })),
+      fc.option(fc.string()),
+      fc.option(fc.string()),
+    ),
   ])(
     'any object with string message and valid optional fields is a ProviderApiError',
-    (obj) => {
-      const cleaned = Object.fromEntries(
-        Object.entries(obj).filter(([, v]) => v !== null),
-      );
-      return isProviderApiError(cleaned) === true;
+    ([message, status, code, provider]) => {
+      const obj: Record<string, unknown> = { message };
+      if (status !== null) obj.status = status;
+      if (code !== null) obj.code = code;
+      if (provider !== null) obj.provider = provider;
+      return isProviderApiError(obj) === true;
     },
   );
 
@@ -120,7 +143,7 @@ describe('providerApiError property-based', () => {
       fc.record({ status: fc.integer() }),
     ),
   ])(
-    'any object without a string message is NOT a ProviderApiError',
+    'non-string or missing message is NOT a ProviderApiError',
     (obj: unknown) => isProviderApiError(obj) === false,
   );
 

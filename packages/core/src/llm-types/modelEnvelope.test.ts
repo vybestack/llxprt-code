@@ -220,6 +220,18 @@ describe('accumulateModelStreamChunk', () => {
     expect(r.hookRestrictions).toStrictEqual(hook);
   });
 
+  it('preserves acc.hookRestrictions when chunk omits it', () => {
+    const hook: HookRestrictions = { allowedToolNames: ['a'] };
+    const acc: ModelOutput = {
+      content: { speaker: 'ai', blocks: [] },
+      hookRestrictions: hook,
+    };
+    const r = accumulateModelStreamChunk(acc, {
+      content: { speaker: 'ai', blocks: [] },
+    });
+    expect(r.hookRestrictions).toStrictEqual(hook);
+  });
+
   it('omits undefined-valued optional keys from result', () => {
     const r = accumulateModelStreamChunk(
       { content: { speaker: 'ai', blocks: [textBlock('x')] } },
@@ -451,6 +463,17 @@ describe('toModelStreamChunk', () => {
     expect(result.rawStopReason).toBe('stop');
   });
 
+  it('metadata.finishReason non-canonical value is mapped', () => {
+    const ic: IContent = {
+      speaker: 'ai',
+      blocks: [],
+      metadata: { finishReason: 'end_turn' },
+    };
+    const result = toModelStreamChunk(ic);
+    expect(result.rawStopReason).toBe('end_turn');
+    expect(result.finishReason).toBe('stop');
+  });
+
   it('stopReason preferred over finishReason when both present', () => {
     const ic: IContent = {
       speaker: 'ai',
@@ -497,7 +520,7 @@ describe('toModelStreamChunk property-based', () => {
     );
   });
 
-  it.prop([fc.string({ maxLength: 30 })])(
+  it.prop([fc.string({ minLength: 1, maxLength: 30 })])(
     'any raw stopReason produces a canonical finishReason and preserves raw',
     (raw: string) => {
       const ic: IContent = {

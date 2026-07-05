@@ -113,6 +113,26 @@ describe('geminiPartsToBlocks / blocksToGeminiParts round-trip (REQ-010.2)', () 
     expect(roundTrip(part)).toStrictEqual(part);
   });
 
+  it('fileData with empty-string mimeType gets octet-stream fallback and round-trips without empty mimeType', () => {
+    const part: Part = {
+      fileData: { mimeType: '', fileUri: 'https://example.com/f.bin' },
+    };
+    // The block gets the fallback mimeType (not the empty string).
+    const block = geminiPartToBlock(part);
+    expect(block).toStrictEqual({
+      type: 'media',
+      mimeType: 'application/octet-stream',
+      data: 'https://example.com/f.bin',
+      encoding: 'url',
+      providerMetadata: { 'gemini.fileData': true },
+    });
+    // Round-trip must NOT emit an empty mimeType — the marker convention
+    // restores { fileData: { fileUri } } (no mimeType key).
+    expect(roundTrip(part)).toStrictEqual({
+      fileData: { fileUri: 'https://example.com/f.bin' },
+    });
+  });
+
   it('round-trips { executableCode } (casing preserved via providerMetadata)', () => {
     const part: Part = {
       executableCode: { code: 'print(1)', language: Language.PYTHON },
@@ -483,7 +503,7 @@ describe('geminiPartsToBlocks (pseudocode line 26)', () => {
 });
 
 describe('blocksToGeminiParts (pseudocode line 39)', () => {
-  it('maps and filters nulls from a mixed blocks array', () => {
+  it('maps text blocks to text parts', () => {
     const blocks = [
       { type: 'text' as const, text: 'a' },
       { type: 'text' as const, text: 'b' },

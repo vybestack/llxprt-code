@@ -51,6 +51,7 @@ import type {
   ProviderApiError,
   ToolDeclaration,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { isRecord } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { cleanGeminiSchema } from './geminiSchemaHelpers.js';
 
 /** Marker key set on a MediaBlock when fileData had no mimeType (lossless round-trip). */
@@ -61,10 +62,6 @@ const EXECUTABLE_CODE_KEY = 'gemini.executableCode';
 const CODE_EXEC_RESULT_KEY = 'gemini.codeExecutionResult';
 /** Key under which videoMetadata is preserved on a media block. */
 const VIDEO_METADATA_KEY = 'gemini.videoMetadata';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
@@ -116,10 +113,13 @@ function inlineDataToBlock(part: Part): MediaBlock {
 function fileDataToBlock(part: Part): MediaBlock {
   const fd = part.fileData;
   const rawMimeType = fd?.mimeType;
-  const hasMimeType = rawMimeType !== undefined;
+  const hasMimeType = typeof rawMimeType === 'string' && rawMimeType.length > 0;
   const block: MediaBlock = {
     type: 'media',
-    mimeType: hasMimeType ? rawMimeType : 'application/octet-stream',
+    mimeType:
+      typeof rawMimeType === 'string' && rawMimeType.length > 0
+        ? rawMimeType
+        : 'application/octet-stream',
     data: fd?.fileUri ?? '',
     encoding: 'url',
   };
@@ -494,7 +494,7 @@ export function geminiApiErrorToProviderApiError(
   if (status === 401 || status === 403) {
     result.isAuthError = true;
   }
-  if (status >= 500) {
+  if (typeof status === 'number' && status >= 500) {
     result.isTransient = true;
   }
   return result;

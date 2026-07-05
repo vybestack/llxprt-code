@@ -338,9 +338,7 @@ describe('finishReasons property-based', () => {
     (reason: CanonicalFinishReason) => isCanonicalFinishReason(reason) === true,
   );
 
-  it.prop([
-    fc.tuple(fc.string({ maxLength: 30 }), fc.string({ maxLength: 30 })),
-  ])(
+  it.prop([fc.string({ maxLength: 30 })])(
     'mapGeminiFinishReason is pure: same input always yields same output',
     (raw) => {
       const r1 = mapGeminiFinishReason(raw);
@@ -352,9 +350,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  it.prop([
-    fc.tuple(fc.string({ maxLength: 30 }), fc.string({ maxLength: 30 })),
-  ])(
+  it.prop([fc.string({ maxLength: 30 })])(
     'mapOpenAIFinishReason is pure: same input always yields same output',
     (raw) => {
       const r1 = mapOpenAIFinishReason(raw);
@@ -366,9 +362,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  it.prop([
-    fc.tuple(fc.string({ maxLength: 30 }), fc.string({ maxLength: 30 })),
-  ])(
+  it.prop([fc.string({ maxLength: 30 })])(
     'mapAnthropicStopReason is pure: same input always yields same output',
     (raw) => {
       const r1 = mapAnthropicStopReason(raw);

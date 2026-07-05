@@ -205,6 +205,10 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
  * @pseudocode lines 49-52
  */
 function tryAllMappers(raw: string): CanonicalFinishReason {
+  // Priority: OpenAI → Anthropic → Gemini. The maps have no conflicting keys
+  // today, so the order does not affect results for any known stop reason.
+  // hasOwnProperty is used (rather than `??`) to correctly handle keys whose
+  // mapped value could be falsy, though all values here are non-empty strings.
   if (Object.prototype.hasOwnProperty.call(OPENAI_FINISH_MAP, raw)) {
     return OPENAI_FINISH_MAP[raw];
   }

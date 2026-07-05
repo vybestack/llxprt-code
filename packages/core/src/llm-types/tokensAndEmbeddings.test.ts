@@ -123,7 +123,9 @@ describe('tokensAndEmbeddings property-based', () => {
       return (
         roundTripped.embeddings.length === embeddings.length &&
         roundTripped.embeddings.every(
-          (vec, i) => vec.length === embeddings[i].length,
+          (vec, i) =>
+            vec.length === embeddings[i].length &&
+            vec.every((v, j) => v === embeddings[i][j]),
         )
       );
     },
@@ -143,7 +145,11 @@ describe('tokensAndEmbeddings property-based', () => {
       const contents: IContent[] = [{ speaker: 'human' as const, blocks }];
       const req: CountTokensRequest = { contents };
       const roundTripped: CountTokensRequest = JSON.parse(JSON.stringify(req));
-      return roundTripped.contents.length === 1;
+      return (
+        roundTripped.contents.length === 1 &&
+        JSON.stringify(roundTripped.contents[0].blocks) ===
+          JSON.stringify(blocks)
+      );
     },
   );
 });

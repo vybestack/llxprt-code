@@ -5,7 +5,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { classifyGenaiImporter } from '../genai-import-inventory.ts';
+import {
+  classifyGenaiImporter,
+  isGenaiImporterContent,
+} from '../genai-import-inventory.ts';
 
 describe('classifyGenaiImporter', () => {
   describe('gemini enclave (packages/providers/src/gemini)', () => {
@@ -13,21 +16,21 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter(
         'packages/providers/src/gemini/geminiResponseMapper.ts',
       );
-      expect(result).toEqual({ issue: 'enclave' });
+      expect(result).toEqual({ kind: 'enclave' });
     });
 
     it('classifies a gemini provider test file as enclave', () => {
       const result = classifyGenaiImporter(
         'packages/providers/src/gemini/neutralConverters.test.ts',
       );
-      expect(result).toEqual({ issue: 'enclave' });
+      expect(result).toEqual({ kind: 'enclave' });
     });
 
     it('classifies a deeply nested gemini file as enclave', () => {
       const result = classifyGenaiImporter(
         'packages/providers/src/gemini/subdir/deep/path/converter.ts',
       );
-      expect(result).toEqual({ issue: 'enclave' });
+      expect(result).toEqual({ kind: 'enclave' });
     });
   });
 
@@ -36,21 +39,21 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter(
         'packages/core/src/code_assist/codeAssist.ts',
       );
-      expect(result).toEqual({ issue: 'enclave' });
+      expect(result).toEqual({ kind: 'enclave' });
     });
 
     it('classifies a code_assist test file as enclave', () => {
       const result = classifyGenaiImporter(
         'packages/core/src/code_assist/codeAssist.test.ts',
       );
-      expect(result).toEqual({ issue: 'enclave' });
+      expect(result).toEqual({ kind: 'enclave' });
     });
 
     it('classifies a deeply nested code_assist file as enclave', () => {
       const result = classifyGenaiImporter(
         'packages/core/src/code_assist/nested/module.ts',
       );
-      expect(result).toEqual({ issue: 'enclave' });
+      expect(result).toEqual({ kind: 'enclave' });
     });
   });
 
@@ -59,19 +62,19 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter(
         'packages/core/src/services/history/ContentConverters.ts',
       );
-      expect(result).toEqual({ issue: '#2348' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2348' });
     });
 
     it('classifies a core runtime file as #2348', () => {
       const result = classifyGenaiImporter(
         'packages/core/src/core/googleGenAIWrapper.ts',
       );
-      expect(result).toEqual({ issue: '#2348' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2348' });
     });
 
     it('classifies a core providers file as #2348', () => {
       const result = classifyGenaiImporter('packages/core/src/core/turn.ts');
-      expect(result).toEqual({ issue: '#2348' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2348' });
     });
   });
 
@@ -80,21 +83,21 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter(
         'packages/agents/src/core/MessageConverter.ts',
       );
-      expect(result).toEqual({ issue: '#2349' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2349' });
     });
 
     it('classifies an agents test file as #2349', () => {
       const result = classifyGenaiImporter(
         'packages/agents/src/core/chatSession.runtime.test.ts',
       );
-      expect(result).toEqual({ issue: '#2349' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2349' });
     });
 
     it('classifies a deeply nested agents file as #2349', () => {
       const result = classifyGenaiImporter(
         'packages/agents/src/core/agenticLoop/AgenticLoop.ts',
       );
-      expect(result).toEqual({ issue: '#2349' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2349' });
     });
   });
 
@@ -103,56 +106,56 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter(
         'packages/cli/src/commands/someCommand.ts',
       );
-      expect(result).toEqual({ issue: '#2350' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2350' });
     });
 
     it('classifies a cli test file as #2350', () => {
       const result = classifyGenaiImporter(
         'packages/cli/src/commands/someCommand.test.ts',
       );
-      expect(result).toEqual({ issue: '#2350' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2350' });
     });
   });
 
   describe('leaf packages (#2351)', () => {
     it('classifies a tools source file as #2351', () => {
       const result = classifyGenaiImporter('packages/tools/src/tools/tools.ts');
-      expect(result).toEqual({ issue: '#2351' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2351' });
     });
 
     it('classifies an mcp source file as #2351', () => {
       const result = classifyGenaiImporter(
         'packages/mcp/src/mcp-callable-tool.ts',
       );
-      expect(result).toEqual({ issue: '#2351' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2351' });
     });
 
     it('classifies a telemetry source file as #2351', () => {
       const result = classifyGenaiImporter(
         'packages/telemetry/src/api-events.ts',
       );
-      expect(result).toEqual({ issue: '#2351' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2351' });
     });
 
     it('classifies an a2a-server source file as #2351', () => {
       const result = classifyGenaiImporter(
         'packages/a2a-server/src/agent/task.ts',
       );
-      expect(result).toEqual({ issue: '#2351' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2351' });
     });
 
     it('classifies a test-utils source file as #2351', () => {
       const result = classifyGenaiImporter(
         'packages/test-utils/src/someHelper.ts',
       );
-      expect(result).toEqual({ issue: '#2351' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2351' });
     });
 
     it('classifies an a2a-server test file as #2351', () => {
       const result = classifyGenaiImporter(
         'packages/a2a-server/src/agent/task.test.ts',
       );
-      expect(result).toEqual({ issue: '#2351' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2351' });
     });
   });
 
@@ -161,21 +164,21 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter(
         'packages/providers/src/ProviderContentGenerator.ts',
       );
-      expect(result).toEqual({ issue: '#2349' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2349' });
     });
 
     it('classifies a non-gemini provider file as #2349', () => {
       const result = classifyGenaiImporter(
         'packages/providers/src/openai/openAiConverter.ts',
       );
-      expect(result).toEqual({ issue: '#2349' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2349' });
     });
 
     it('classifies a shared providers file as #2349', () => {
       const result = classifyGenaiImporter(
         'packages/providers/src/IProvider.ts',
       );
-      expect(result).toEqual({ issue: '#2349' });
+      expect(result).toEqual({ kind: 'issue', issue: '#2349' });
     });
   });
 
@@ -186,7 +189,7 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter(
         'packages/providers/src/gemini/geminiRequestBuilding.ts',
       );
-      expect(result).toEqual({ issue: 'enclave' });
+      expect(result).toEqual({ kind: 'enclave' });
     });
 
     it('code_assist enclave wins over the broader core rule', () => {
@@ -195,7 +198,7 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter(
         'packages/core/src/code_assist/deep/file.ts',
       );
-      expect(result).toEqual({ issue: 'enclave' });
+      expect(result).toEqual({ kind: 'enclave' });
     });
   });
 
@@ -203,6 +206,7 @@ describe('classifyGenaiImporter', () => {
     it('returns an error for a docs path', () => {
       const result = classifyGenaiImporter('docs/some-doc.ts');
       expect(result).toEqual({
+        kind: 'error',
         error: expect.stringContaining('docs/some-doc.ts'),
       });
     });
@@ -210,6 +214,7 @@ describe('classifyGenaiImporter', () => {
     it('returns an error for an integration-tests path', () => {
       const result = classifyGenaiImporter('integration-tests/something.ts');
       expect(result).toEqual({
+        kind: 'error',
         error: expect.stringContaining('integration-tests/something.ts'),
       });
     });
@@ -217,6 +222,7 @@ describe('classifyGenaiImporter', () => {
     it('returns an error for a scripts path', () => {
       const result = classifyGenaiImporter('scripts/some-script.ts');
       expect(result).toEqual({
+        kind: 'error',
         error: expect.stringContaining('scripts/some-script.ts'),
       });
     });
@@ -224,6 +230,7 @@ describe('classifyGenaiImporter', () => {
     it('returns an error for a root-level file', () => {
       const result = classifyGenaiImporter('someFile.ts');
       expect(result).toEqual({
+        kind: 'error',
         error: expect.stringContaining('someFile.ts'),
       });
     });
@@ -233,10 +240,43 @@ describe('classifyGenaiImporter', () => {
         'packages/some-other-package/src/file.ts',
       );
       expect(result).toEqual({
+        kind: 'error',
         error: expect.stringContaining(
           'packages/some-other-package/src/file.ts',
         ),
       });
     });
+  });
+});
+
+describe('isGenaiImporterContent', () => {
+  it('matches a single-quoted import specifier', () => {
+    expect(isGenaiImporterContent("import { X } from '@google/genai';")).toBe(
+      true,
+    );
+  });
+
+  it('matches a double-quoted import specifier', () => {
+    expect(isGenaiImporterContent('import { X } from "@google/genai";')).toBe(
+      true,
+    );
+  });
+
+  it('matches a subpath import', () => {
+    expect(
+      isGenaiImporterContent("import { X } from '@google/genai/sub';"),
+    ).toBe(true);
+  });
+
+  it('does NOT match a prose comment mentioning the package', () => {
+    expect(
+      isGenaiImporterContent(
+        '// structural checks — no @google/genai import) to neutral',
+      ),
+    ).toBe(false);
+  });
+
+  it('does NOT match an empty string', () => {
+    expect(isGenaiImporterContent('')).toBe(false);
   });
 });
