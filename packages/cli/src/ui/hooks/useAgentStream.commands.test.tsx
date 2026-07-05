@@ -12,6 +12,7 @@ import {
   mockSendMessageStream,
   mockStartChat,
   mockParseAndFormatApiError,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -214,7 +215,9 @@ describe('useAgentStream', () => {
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: unknown,
   ) => {
-    const client = agentClient ?? mockConfig.getAgentClient();
+    const client = createFakeAgentFromMockClient(
+      agentClient ?? new MockedAgentClientClass(mockConfig),
+    );
 
     const initialProps = {
       client,

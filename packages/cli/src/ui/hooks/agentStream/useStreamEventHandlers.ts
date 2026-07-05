@@ -92,6 +92,14 @@ interface StreamEventHandlersResult {
     event: ServerFinishedEvent,
     userMessageTimestamp: number,
   ) => void;
+  /**
+   * Finished-notice handler for the public AgentEvent done{stop|refusal} path.
+   * Receives the pre-computed message (or null for no notice).
+   */
+  handleFinishedNotice: (
+    message: string | null,
+    userMessageTimestamp: number,
+  ) => void;
   handleChatCompressionEvent: (
     eventValue: ServerChatCompressedEvent['value'],
     userMessageTimestamp: number,
@@ -239,6 +247,7 @@ function useStreamHandlers(
     handleErrorEvent: useErrorEventHandler(deps),
     handleCitationEvent: useCitationEventHandler(deps),
     handleFinishedEvent: useFinishedEventHandler(deps),
+    handleFinishedNotice: useFinishedNoticeHandler(deps),
     handleChatCompressionEvent: useChatCompressionHandler(deps),
     handleMaxSessionTurnsEvent: useMaxSessionTurnsHandler(deps),
     handleContextWindowWillOverflowEvent: useContextOverflowHandler(deps),
@@ -400,6 +409,25 @@ function useFinishedEventHandler(deps: StreamEventHandlerDeps) {
   );
 }
 
+/**
+ * Finished-notice handler for the public AgentEvent path. The agentEventDispatcher
+ * computes the message (from a FinishedValue) and passes it here; this handler
+ * only renders the WARNING item. Null message → no item (parity).
+ */
+function useFinishedNoticeHandler(deps: StreamEventHandlerDeps) {
+  const { addItem } = deps;
+  return useCallback(
+    (message: string | null, userMessageTimestamp: number) => {
+      if (!message) return;
+      addItem(
+        { type: 'info', text: `WARNING:  ${message}` },
+        userMessageTimestamp,
+      );
+    },
+    [addItem],
+  );
+}
+
 function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
   const { addItem, config, pendingHistoryItemRef, setPendingHistoryItem } =
     deps;
@@ -555,6 +583,7 @@ type HandlerMap = Pick<
   | 'handleErrorEvent'
   | 'handleChatCompressionEvent'
   | 'handleFinishedEvent'
+  | 'handleFinishedNotice'
   | 'handleMaxSessionTurnsEvent'
   | 'handleContextWindowWillOverflowEvent'
   | 'handleCitationEvent'

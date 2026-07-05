@@ -29,6 +29,7 @@ import {
   type AgentClientContract,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
@@ -112,7 +113,7 @@ interface DoubleCancelDeps {
   setIsRespondingCalls: boolean[];
   setIsResponding: Dispatch<SetStateAction<boolean>>;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
-  runLoopRef: React.MutableRefObject<
+  runStreamRef: React.MutableRefObject<
     | ((
         message: unknown,
         signal: AbortSignal,
@@ -141,7 +142,7 @@ function createDeps(
     abortControllerRef:
       options?.abortControllerRef ??
       ({ current: null as AbortController | null } as never),
-    runLoopRef: options?.runLoopRef ?? ({ current: null } as never),
+    runStreamRef: options?.runStreamRef ?? ({ current: null } as never),
     loopDetectedRef: options?.loopDetectedRef ?? ({ current: false } as never),
     handleLoopDetectedEvent: options?.handleLoopDetectedEvent ?? vi.fn(),
     flushAtTurnBoundarySpy: vi.fn(),
@@ -170,7 +171,7 @@ function renderUseSubmitQuery(
   return renderHook(() =>
     useSubmitQuery({
       config: createMockConfig(),
-      agentClient: createMockAgentClient(),
+      agent: createMockAgentClient() as unknown as Agent,
       addItem: vi.fn().mockReturnValue(1),
       settings: {} as never,
       onDebugMessage: vi.fn(),
@@ -198,7 +199,7 @@ function renderUseSubmitQuery(
       lastModelInfoRef: { current: null },
       lastModelIdentityRef: { current: null },
       abortControllerRef: deps.abortControllerRef,
-      runLoopRef: deps.runLoopRef,
+      runStreamRef: deps.runStreamRef,
       submitQueryRef: { current: null },
       isResponding: false,
       streamingState: overrides?.streamingState ?? StreamingState.Idle,
@@ -219,7 +220,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const turn2Deferred = createDeferred<void>();
 
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi
           .fn()
           .mockReturnValueOnce(turn1Deferred.promise)
@@ -272,7 +273,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const turn2Deferred = createDeferred<void>();
 
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi
           .fn()
           .mockReturnValueOnce(turn1Deferred.promise)
@@ -321,7 +322,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const turn2Deferred = createDeferred<void>();
 
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi
           .fn()
           .mockReturnValueOnce(turn1Deferred.promise)
@@ -369,7 +370,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const turn2Deferred = createDeferred<void>();
 
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi
           .fn()
           .mockReturnValueOnce(turn1Deferred.promise)
@@ -417,7 +418,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const turn2Deferred = createDeferred<void>();
 
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi
           .fn()
           .mockReturnValueOnce(turn1Deferred.promise)
@@ -471,7 +472,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const turn2Deferred = createDeferred<void>();
 
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi
           .fn()
           .mockReturnValueOnce(turn1Deferred.promise)
@@ -557,7 +558,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const turn2Deferred = createDeferred<void>();
 
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi
           .fn()
           .mockReturnValueOnce(turn1Deferred.promise)
@@ -577,7 +578,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       ({ streamingState }: { streamingState: StreamingState }) =>
         useSubmitQuery({
           config: createMockConfig(),
-          agentClient: createMockAgentClient(),
+          agent: createMockAgentClient() as unknown as Agent,
           addItem: vi.fn().mockReturnValue(1),
           settings: {} as never,
           onDebugMessage: vi.fn(),
@@ -605,7 +606,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
           lastModelInfoRef: { current: null },
           lastModelIdentityRef: { current: null },
           abortControllerRef: deps.abortControllerRef,
-          runLoopRef: deps.runLoopRef,
+          runStreamRef: deps.runStreamRef,
           submitQueryRef: { current: null },
           isResponding: false,
           streamingState,
@@ -673,7 +674,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const runDeferred = createDeferred<void>();
 
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi.fn().mockReturnValueOnce(runDeferred.promise),
       } as never,
     });

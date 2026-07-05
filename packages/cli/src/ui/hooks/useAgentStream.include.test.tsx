@@ -11,6 +11,7 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -216,7 +217,7 @@ describe('useAgentStream', () => {
 
     const { result } = renderHook(() =>
       useAgentStream(
-        mockConfig.getAgentClient(),
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,

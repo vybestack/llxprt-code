@@ -15,12 +15,12 @@
 import { useMemo } from 'react';
 import {
   type Config,
-  type AgentClientContract,
   type EditorType,
   type MessageBus,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItem,
@@ -35,7 +35,7 @@ import type { AgentStreamOrchestrationDeps } from './useAgentStreamOrchestration
 import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
 
 export const useAgentStream = (
-  agentClient: AgentClientContract,
+  agent: Agent,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   config: Config,
@@ -59,7 +59,7 @@ export const useAgentStream = (
   runtimeMessageBus?: MessageBus,
 ) => {
   const orchestration = useAgentStreamOrchestration({
-    agentClient,
+    agent,
     addItem,
     config,
     settings,
@@ -84,7 +84,7 @@ export const useAgentStream = (
     orchestration,
     config,
     history,
-    agentClient,
+    agent,
     onDebugMessage,
   );
 };
@@ -93,7 +93,7 @@ function useAgentStreamReturn(
   orchestration: ReturnType<typeof useAgentStreamOrchestration>,
   config: Config,
   history: HistoryItem[],
-  agentClient: AgentClientContract,
+  agent: Agent,
   onDebugMessage: (message: string) => void,
 ) {
   const pendingHistoryItems = usePendingHistoryItems(
@@ -106,7 +106,7 @@ function useAgentStreamReturn(
     config,
     orchestration.st.gitService,
     history,
-    agentClient,
+    agent,
     config.storage,
     onDebugMessage,
   );

@@ -11,6 +11,7 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -119,13 +120,6 @@ describe('useAgentStream', () => {
     vi.clearAllMocks(); // Clear mocks before each test
 
     mockAddItem = vi.fn();
-    // Define the mock for getAgentClient
-    const _mockGetAgentClient = vi.fn().mockImplementation(() => {
-      // MockedAgentClientClass is defined in the module scope by the previous change.
-      // It will use the mockStartChat and mockSendMessageStream that are managed within beforeEach.
-      const clientInstance = new MockedAgentClientClass(mockConfig);
-      return clientInstance;
-    });
 
     const contentGeneratorConfig = {
       model: 'test-model',
@@ -217,7 +211,9 @@ describe('useAgentStream', () => {
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: unknown,
   ) => {
-    const client = agentClient ?? mockConfig.getAgentClient();
+    const client = createFakeAgentFromMockClient(
+      agentClient ?? new MockedAgentClientClass(mockConfig),
+    );
 
     const initialProps = {
       client,

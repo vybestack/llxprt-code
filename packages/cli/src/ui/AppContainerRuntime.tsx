@@ -143,6 +143,7 @@ function buildLayoutParams(
 ): AppLayoutParams {
   return {
     config: bootstrap.config,
+    agent: bootstrap.agent,
     settings: bootstrap.settings,
     todoContinuationRef: bootstrap.todoContinuationRef,
     hadToolCallsRef: bootstrap.hadToolCallsRef,

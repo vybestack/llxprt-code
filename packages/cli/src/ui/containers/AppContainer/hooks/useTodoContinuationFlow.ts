@@ -22,6 +22,7 @@ import {
   type HistoryItemWithoutId,
 } from '../../../types.js';
 import { type Config } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   useTodoContinuation,
   type TodoContinuationHook,
@@ -31,6 +32,7 @@ export type { TodoContinuationHook };
 
 interface UseTodoContinuationFlowOptions {
   config: Config;
+  agent: Agent;
   streamingState: StreamingState;
   history: HistoryItem[];
   pendingHistoryItems: HistoryItemWithoutId[];
@@ -52,6 +54,7 @@ export interface UseTodoContinuationFlowResult {
 
 export function useTodoContinuationFlow({
   config,
+  agent,
   streamingState,
   history,
   pendingHistoryItems,
@@ -66,14 +69,8 @@ export function useTodoContinuationFlow({
   const todoContinuationRef =
     externalTodoContinuationRef ?? internalTodoContinuationRef;
 
-  /**
-   * @plan PLAN-20260129-TODOPERSIST.P12
-   * Wire up task-list continuation detection to trigger continuation prompts
-   * when streams complete without tool calls and active tasks exist.
-   */
-  const agentClientForContinuation = config.getAgentClient();
   const todoContinuation = useTodoContinuation(
-    agentClientForContinuation,
+    agent,
     config,
     streamingState === StreamingState.Responding ||
       streamingState === StreamingState.WaitingForConfirmation,

@@ -15,6 +15,7 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
@@ -198,11 +199,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
     mockAddItem = vi.fn();
 
-    const mockGetAgentClient = vi.fn().mockImplementation(() => {
-      const clientInstance = new MockedAgentClientClass(mockConfig);
-      return clientInstance;
-    });
-
     const contentGeneratorConfig = {
       model: 'test-model',
       apiKey: 'test-key',
@@ -235,7 +231,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
-      getAgentClient: mockGetAgentClient,
       getMcpClientManager: vi.fn(() => undefined),
       getMcpServers: vi.fn(() => undefined),
       getUsageStatisticsEnabled: () => true,
@@ -315,7 +310,9 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       vi.fn(),
     ]);
 
-    const client = agentClient ?? mockConfig.getAgentClient();
+    const client = createFakeAgentFromMockClient(
+      agentClient ?? new MockedAgentClientClass(mockConfig),
+    );
 
     const { result, rerender } = renderHook(
       (props: {
@@ -661,7 +658,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
     const { result } = renderHook(() =>
       useAgentStream(
-        mockConfig.getAgentClient(),
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,

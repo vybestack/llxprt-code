@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentClientContract, Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   createRuntimeStateFromConfig,
   DebugLogger,
@@ -14,9 +14,26 @@ import type { SendMessageParameters } from '@google/genai';
 import { FunctionCallingConfigMode } from '@google/genai';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 
+/**
+ * Structural interface describing exactly the agent-client surface this
+ * side-channel utility needs. Avoids importing the full agent-client type
+ * (issue #2372/#1595) by using the same ReturnType<Config['getAgentClient']>
+ * pattern packages/cli/src/ui/hooks/usePromptCompletion.ts uses.
+ */
+interface AutoPromptAgentClient {
+  generateDirectMessage(
+    params: SendMessageParameters,
+    promptId: string,
+  ): Promise<{ text?: string }>;
+  dispose(): void;
+  clearTools(): void;
+}
+
+type ConfigAgentClient = ReturnType<Config['getAgentClient']>;
+
 const logger = new DebugLogger('llxprt:subagent:auto-prompt');
 
-export function createDetachedAgentClient(config: Config): AgentClientContract {
+export function createDetachedAgentClient(config: Config): ConfigAgentClient {
   const baseRuntimeId =
     typeof config.getSessionId === 'function'
       ? config.getSessionId()
@@ -52,7 +69,7 @@ export async function generateAutoPrompt(
       ? config.getProvider()?.toLowerCase()
       : undefined;
   const configuredClient = config.getAgentClient() as
-    | AgentClientContract
+    | ConfigAgentClient
     | null
     | undefined;
   const useDetachedClient =
@@ -70,7 +87,7 @@ export async function generateAutoPrompt(
   }
 
   const requestFromClient = async (
-    targetClient: AgentClientContract,
+    targetClient: AutoPromptAgentClient,
     options?: { useRuntimeScope?: boolean },
   ): Promise<{ text?: string }> => {
     const executeRequest = () =>

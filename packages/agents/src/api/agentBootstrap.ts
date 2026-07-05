@@ -25,6 +25,11 @@ import type {
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type {
+  OutputUpdateHandler,
+  ToolCallsUpdateHandler,
+  CompletedToolCall,
+} from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { AgentClient } from '../core/client.js';
 import type {
   AgentConfig,
@@ -204,6 +209,66 @@ export function deriveDisplayCallbacks(
     cbs.onEditorClose = editorCallbacks.onEditorClose;
   }
   return cbs;
+}
+
+/**
+ * The mutable holder for post-construction display callbacks. ToolControl's
+ * `setDisplayCallbacks` writes here; the stable forwarding object reads the
+ * LATEST values at call time so registration is observable by the CURRENT
+ * loop's turn (and survives loop rebuilds).
+ */
+export interface StableDisplayCallbacksHolder {
+  onToolCallsUpdate?: ToolCallsUpdateHandler;
+  outputUpdateHandler?: OutputUpdateHandler;
+  onAllToolCallsComplete?: (
+    completed: CompletedToolCall[],
+  ) => void | Promise<void>;
+}
+
+/**
+ * The mutable editor-callbacks holder, mirror of AgentImpl.editorCallbacksHolder.
+ */
+export interface StableEditorCallbacksHolder {
+  editorCallbacks: EditorCallbacks;
+}
+
+/**
+ * Builds ONE stable forwarding {@link DisplayCallbacks} object whose methods
+ * read the LATEST values at call time:
+ *  - onToolCallsUpdate/outputUpdateHandler/onAllToolCallsComplete read from
+ *    {@link StableDisplayCallbacksHolder} (written by
+ *    {@link AgentToolControl.setDisplayCallbacks}).
+ *  - getPreferredEditor/onEditorOpen/onEditorClose read live from
+ *    {@link StableEditorCallbacksHolder} (written by
+ *    {@link AgentToolControl.setEditorCallbacks}).
+ *
+ * This object is what rebuildLoop receives in BOTH build sites (the initial
+ * build and every subsequent rebuild), so registration survives provider/model
+ * switches and loop rebuilds. The editor trio reading live from the holder
+ * ALSO makes `tools.setEditorCallbacks` changes observable by the CURRENT loop
+ * (not just after a rebuild).
+ */
+export function createStableDisplayCallbacks(
+  editorHolder: StableEditorCallbacksHolder,
+  displayHolder: StableDisplayCallbacksHolder,
+): DisplayCallbacks {
+  return {
+    onToolCallsUpdate: (toolCalls) => {
+      displayHolder.onToolCallsUpdate?.(toolCalls);
+    },
+    outputUpdateHandler: (callId, chunk) => {
+      displayHolder.outputUpdateHandler?.(callId, chunk);
+    },
+    onAllToolCallsComplete: (completed) => {
+      return displayHolder.onAllToolCallsComplete?.(completed);
+    },
+    getPreferredEditor: () =>
+      editorHolder.editorCallbacks.getPreferredEditor?.() as
+        | ReturnType<NonNullable<DisplayCallbacks['getPreferredEditor']>>
+        | undefined,
+    onEditorOpen: () => editorHolder.editorCallbacks.onEditorOpen?.(),
+    onEditorClose: () => editorHolder.editorCallbacks.onEditorClose?.(),
+  };
 }
 
 /**
