@@ -23,6 +23,7 @@ import * as ReactDOM from 'react-dom';
 import { useAgentStream } from './agentStream/index.js';
 import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import type {
   Config,
   EditorType,
@@ -338,6 +339,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           props.history,
           props.addItem,
           props.config,
+          createInteractiveToolScheduler(props.config, undefined),
           mockSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -667,6 +669,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         [],
         mockAddItem,
         mockConfig,
+        createInteractiveToolScheduler(mockConfig, undefined),
         settingsWithReasoning,
         mockOnDebugMessage,
         mockHandleSlashCommand,

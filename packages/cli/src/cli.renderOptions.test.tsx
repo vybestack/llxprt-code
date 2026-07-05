@@ -16,6 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import { createInteractiveToolScheduler } from './runtime/interactiveToolScheduler.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 
 import { LoadedSettings } from './config/settings.js';
@@ -133,6 +134,7 @@ describe('startInteractiveUI ink render options', () => {
       await startInteractiveUI(
         config,
         createFakeAgent(config),
+        createInteractiveToolScheduler(config, undefined),
         settings,
         [],
         tempDir,
@@ -173,6 +175,7 @@ describe('startInteractiveUI ink render options', () => {
       await startInteractiveUI(
         config,
         createFakeAgent(config),
+        createInteractiveToolScheduler(config, undefined),
         createLoadedSettings(),
         [],
         tempDir,

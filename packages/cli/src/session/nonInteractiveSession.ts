@@ -22,6 +22,7 @@ import { initializeOutputListenersAndFlush } from './outputListeners.js';
 import { installNonInteractiveSigintHandler } from './signalHandlers.js';
 import { reportNonInteractiveError } from './errorReporting.js';
 import { startInteractiveUI } from './interactiveUI.js';
+import { createInteractiveToolScheduler } from '../runtime/interactiveToolScheduler.js';
 
 /**
  * Report a non-interactive error while swallowing secondary failures so they
@@ -94,9 +95,17 @@ export async function dispatchInteractiveOrNonInteractive({
     // branch keeps its own explicit call since it builds no Agent).
     const agent = await createForegroundAgent({ config, sessionMessageBus });
 
+    // Construct the interactive tool-scheduler capability at the composition
+    // root so UI code never imports the scheduler factory (issue #2376).
+    const interactiveToolScheduler = createInteractiveToolScheduler(
+      config,
+      sessionMessageBus,
+    );
+
     await startInteractiveUI(
       config,
       agent,
+      interactiveToolScheduler,
       settings,
       startupWarnings,
       workspaceRoot,

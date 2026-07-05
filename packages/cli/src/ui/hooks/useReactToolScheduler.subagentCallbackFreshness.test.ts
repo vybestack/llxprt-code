@@ -17,6 +17,7 @@ import {
 } from 'vitest';
 import { renderHook, cleanup } from '../../test-utils/render.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import {
   ApprovalMode,
   type CompletedToolCall,
@@ -230,12 +231,18 @@ describe('useReactToolScheduler subagent callback freshness', () => {
     const onComplete1 = vi.fn();
     const onComplete2 = vi.fn();
 
+    // Construct the capability once so it stays stable across rerenders.
+    const capability = createInteractiveToolScheduler(
+      mockConfig as unknown as Config,
+      undefined,
+    );
+
     // Render with the first onComplete.
     const { result, rerender } = renderHook(
       ({ cb }: { cb: Mock }) =>
         useReactToolScheduler(
           cb,
-          mockConfig,
+          capability,
           setPendingHistoryItem,
           () => undefined,
           () => {},

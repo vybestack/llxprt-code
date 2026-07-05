@@ -10,7 +10,6 @@ import {
   type CompletedToolCall,
   type EditorType,
   type AgentClientContract,
-  type MessageBus,
   type ToolCallRequestInfo,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
@@ -26,6 +25,7 @@ import {
   type TrackedToolCall,
   useReactToolScheduler,
 } from '../useReactToolScheduler.js';
+import type { InteractiveToolScheduler } from '../../../runtime/interactiveToolScheduler.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import { classifyCompletedTools } from './toolCompletionHandler.js';
 import { useKeypress, type Key } from '../useKeypress.js';
@@ -69,13 +69,13 @@ function isTerminalToolCall(status: TrackedToolCall['status']): boolean {
 
 export function useToolSchedulerSetup(
   config: Config,
+  interactiveToolScheduler: InteractiveToolScheduler,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
   onEditorOpen: () => void,
-  runtimeMessageBus: MessageBus | undefined,
   addItem: UseHistoryManagerReturn['addItem'],
   agentClient: AgentClientContract,
 ) {
@@ -98,12 +98,11 @@ export function useToolSchedulerSetup(
         addItem,
       );
     },
-    config,
+    interactiveToolScheduler,
     setPendingHistoryItem,
     getPreferredEditor,
     onEditorClose,
     onEditorOpen,
-    runtimeMessageBus,
   );
 
   return { toolSchedulerResult };

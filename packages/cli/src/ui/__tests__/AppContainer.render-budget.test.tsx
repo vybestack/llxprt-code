@@ -20,6 +20,7 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 
 // Mock config type
 interface MockConfig {
@@ -460,6 +461,10 @@ describe('AppContainer.render-budget', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
+        interactiveToolScheduler: createInteractiveToolScheduler(
+          mockConfig as unknown as Config,
+          undefined,
+        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -492,6 +497,10 @@ describe('AppContainer.render-budget', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
+        interactiveToolScheduler: createInteractiveToolScheduler(
+          mockConfig as unknown as Config,
+          undefined,
+        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -518,6 +527,10 @@ describe('AppContainer.render-budget', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
+        interactiveToolScheduler: createInteractiveToolScheduler(
+          mockConfig as unknown as Config,
+          undefined,
+        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -538,6 +551,10 @@ describe('AppContainer.render-budget', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
+        interactiveToolScheduler: createInteractiveToolScheduler(
+          mockConfig as unknown as Config,
+          undefined,
+        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -560,6 +577,10 @@ describe('AppContainer.render-budget', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
+        interactiveToolScheduler: createInteractiveToolScheduler(
+          mockConfig as unknown as Config,
+          undefined,
+        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -580,6 +601,10 @@ describe('AppContainer.render-budget', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
+        interactiveToolScheduler: createInteractiveToolScheduler(
+          mockConfig as unknown as Config,
+          undefined,
+        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -611,6 +636,10 @@ describe('AppContainer.render-budget', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
+        interactiveToolScheduler: createInteractiveToolScheduler(
+          mockConfig as unknown as Config,
+          undefined,
+        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

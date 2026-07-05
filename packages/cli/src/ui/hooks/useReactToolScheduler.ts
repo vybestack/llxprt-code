@@ -5,7 +5,6 @@
  */
 
 import {
-  type Config,
   type ToolCallRequestInfo,
   type ExecutingToolCall,
   type ScheduledToolCall,
@@ -16,17 +15,13 @@ import {
   type ToolCall,
   type EditorType,
   type AnsiOutput,
-  type MessageBus,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
-import {
-  createInteractiveToolScheduler,
-  type InteractiveToolScheduler,
-} from '../../runtime/interactiveToolScheduler.js';
+import type { InteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 
 const logger = DebugLogger.getLogger('llxprt:cli:react-tool-scheduler');
 
@@ -562,14 +557,13 @@ export function useReactToolScheduler(
     tools: CompletedToolCall[],
     options: { isPrimary: boolean },
   ) => Promise<void> | void,
-  config: Config,
+  capability: InteractiveToolScheduler,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
   onEditorOpen: () => void = () => {},
-  runtimeMessageBus?: MessageBus,
 ): ReactToolSchedulerResult {
   const [toolCallsByScheduler, setToolCallsByScheduler] = useState<
     Map<symbol, TrackedToolCall[]>
@@ -587,10 +581,6 @@ export function useReactToolScheduler(
   const toolCallUpdaters = useToolCallUpdaters(
     setPendingHistoryItem,
     setToolCallsByScheduler,
-  );
-  const capability = useMemo(
-    () => createInteractiveToolScheduler(config, runtimeMessageBus),
-    [config, runtimeMessageBus],
   );
   const mainSchedulerCallbacks = useMainSchedulerCallbacks(
     toolCallUpdaters,

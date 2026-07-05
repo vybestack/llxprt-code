@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useAgentStream } from './agentStream/index.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import type {
   Config,
   AgentClientContract as AgentClient,
@@ -252,6 +253,7 @@ describe('useAgentStream duplicate tool call deduplication (issue #1040)', () =>
         mockHistory,
         mockAddItem,
         mockConfig,
+        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
@@ -322,6 +324,7 @@ describe('useAgentStream duplicate tool call deduplication (issue #1040)', () =>
         mockHistory,
         mockAddItem,
         mockConfig,
+        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,

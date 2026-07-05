@@ -30,6 +30,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
+import type { InteractiveToolScheduler } from '../runtime/interactiveToolScheduler.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
 import {
   AppContainerRuntime,
@@ -43,6 +44,11 @@ export interface AppContainerProps {
    * `config` remains a temporary migration bridge (see #1595).
    */
   agent: Agent;
+  /**
+   * The interactive tool-scheduler capability, constructed at the composition
+   * root and injected so UI code never imports the scheduler factory.
+   */
+  interactiveToolScheduler: InteractiveToolScheduler;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];

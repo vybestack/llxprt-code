@@ -24,6 +24,7 @@ import {
 import { renderHook, cleanup } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import {
   ApprovalMode,
   type CompletedToolCall,
@@ -463,16 +464,21 @@ const renderScheduler = (
   onComplete: Mock,
   mockConfig: Partial<Config>,
   setPendingHistoryItem: Mock,
-) =>
-  renderHook(() =>
+) => {
+  const capability = createInteractiveToolScheduler(
+    mockConfig as unknown as Config,
+    undefined,
+  );
+  return renderHook(() =>
     useReactToolScheduler(
       onComplete,
-      mockConfig as unknown as Config,
+      capability,
       setPendingHistoryItem,
       () => undefined,
       () => {},
     ),
   );
+};
 
 describe('useReactToolScheduler (split)', () => {
   // Note(ntaylormullen): The following tests are skipped due to difficulties in

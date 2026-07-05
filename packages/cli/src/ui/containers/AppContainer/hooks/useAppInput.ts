@@ -26,6 +26,7 @@ import { isEditorAvailable } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../../../config/settings.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { IdeIntegrationNudgeResult } from '../../../IdeIntegrationNudge.js';
+import type { InteractiveToolScheduler } from '../../../../runtime/interactiveToolScheduler.js';
 import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
@@ -38,6 +39,7 @@ export interface AppInputParams {
   // From bootstrap
   config: AppBootstrapResult['config'];
   agent: AppBootstrapResult['agent'];
+  interactiveToolScheduler: InteractiveToolScheduler;
   settings: AppBootstrapResult['settings'];
   runtime: AppBootstrapResult['runtime'];
   history: AppBootstrapResult['history'];
@@ -312,6 +314,7 @@ function useInputStreamSetup(
   const {
     config,
     agent,
+    interactiveToolScheduler,
     settings,
     history,
     addItem,
@@ -340,6 +343,7 @@ function useInputStreamSetup(
     history,
     addItem,
     config,
+    interactiveToolScheduler,
     settings,
     setDebugMessage,
     handleSlashCommand,

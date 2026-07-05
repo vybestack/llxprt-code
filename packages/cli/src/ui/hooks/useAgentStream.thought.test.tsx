@@ -18,6 +18,7 @@ import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
   TrackedToolCall,
@@ -242,6 +243,7 @@ describe('useAgentStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -325,6 +327,7 @@ describe('useAgentStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -412,6 +415,7 @@ describe('useAgentStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -463,6 +467,7 @@ describe('useAgentStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -521,6 +526,7 @@ describe('useAgentStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,

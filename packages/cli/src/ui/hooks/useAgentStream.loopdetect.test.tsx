@@ -17,6 +17,7 @@ import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
   TrackedToolCall,
@@ -277,6 +278,7 @@ describe('useAgentStream', () => {
           props.history,
           props.addItem,
           props.config,
+          createInteractiveToolScheduler(props.config, undefined),
           props.loadedSettings,
           props.onDebugMessage,
           props.handleSlashCommand,

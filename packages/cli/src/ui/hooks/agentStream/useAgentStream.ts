@@ -29,6 +29,7 @@ import {
   type SlashCommandProcessorResult,
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
+import type { InteractiveToolScheduler } from '../../../runtime/interactiveToolScheduler.js';
 import { mergePendingToolGroupsForDisplay } from './streamUtils.js';
 import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
@@ -41,6 +42,7 @@ export const useAgentStream = (
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   config: Config,
+  interactiveToolScheduler: InteractiveToolScheduler,
   settings: LoadedSettings,
   onDebugMessage: (message: string) => void,
   handleSlashCommand: (
@@ -65,6 +67,7 @@ export const useAgentStream = (
     getToolHandle,
     addItem,
     config,
+    interactiveToolScheduler,
     settings,
     onDebugMessage,
     handleSlashCommand,

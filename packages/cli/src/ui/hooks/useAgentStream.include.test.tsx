@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useAgentStream } from './agentStream/index.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type { Config, ToolRegistry } from '@vybestack/llxprt-code-core';
@@ -221,6 +222,7 @@ describe('useAgentStream', () => {
         [],
         mockAddItem,
         mockConfig,
+        createInteractiveToolScheduler(mockConfig, undefined),
         mockLoadedSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,

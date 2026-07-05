@@ -15,6 +15,7 @@ import type {
   TrackedToolCall,
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
+import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import type {
   Config,
   AgentClientContract as AgentClient,
@@ -277,6 +278,7 @@ describe('useAgentStream subagent isolation', () => {
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
+        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -388,6 +390,7 @@ describe('useAgentStream subagent isolation', () => {
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
+        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -458,6 +461,7 @@ describe('useAgentStream subagent isolation', () => {
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
+        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -511,6 +515,7 @@ describe('useAgentStream subagent isolation', () => {
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
+        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (

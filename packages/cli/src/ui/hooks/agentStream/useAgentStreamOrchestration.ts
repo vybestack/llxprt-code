@@ -24,6 +24,7 @@ import {
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { type TrackedToolCall } from '../useReactToolScheduler.js';
+import type { InteractiveToolScheduler } from '../../../runtime/interactiveToolScheduler.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import { useStreamState } from './useStreamState.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from './useSubmitQuery.js';
@@ -40,6 +41,7 @@ export interface AgentStreamOrchestrationDeps {
   getToolHandle: (name: string) => AgentToolHandle | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   config: Config;
+  interactiveToolScheduler: InteractiveToolScheduler;
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
   handleSlashCommand: (
@@ -181,11 +183,11 @@ function useToolSchedulerState(
 ): ToolSchedulerState {
   const scheduler = useToolSchedulerSetup(
     args.config,
+    args.interactiveToolScheduler,
     st.setPendingHistoryItem,
     args.getPreferredEditor,
     args.onEditorClose,
     args.onEditorOpen,
-    args.runtimeMessageBus,
     args.addItem,
     args.agentClient,
   );

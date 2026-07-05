@@ -15,6 +15,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
+import type { InteractiveToolScheduler } from '../runtime/interactiveToolScheduler.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
 import { MouseProvider } from './contexts/MouseContext.js';
 import { SessionStatsProvider } from './contexts/SessionContext.js';
@@ -38,6 +39,11 @@ interface AppProps {
    * remaining UI Config consumers are migrated to the Agent (see #1595).
    */
   agent: Agent;
+  /**
+   * The interactive tool-scheduler capability, constructed at the composition
+   * root and injected so UI code never imports the scheduler factory.
+   */
+  interactiveToolScheduler: InteractiveToolScheduler;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
