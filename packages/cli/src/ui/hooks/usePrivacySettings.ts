@@ -9,28 +9,8 @@ import {
   type Config,
   type CodeAssistServer,
   UserTierId,
-  // Follow-up (#1569): Re-enable when getCodeAssistServer is exported from core
-  // getCodeAssistServer,
+  getCodeAssistServer,
 } from '@vybestack/llxprt-code-core';
-
-// Follow-up (#1569): Remove when getCodeAssistServer is exported from core
-function getCodeAssistServer(config: Config): CodeAssistServer | undefined {
-  const contentGenerator: unknown = config
-    .getAgentClient()
-    .getContentGenerator();
-
-  // Check if it's a CodeAssistServer
-  if (
-    contentGenerator !== undefined &&
-    contentGenerator !== null &&
-    typeof contentGenerator === 'object' &&
-    'projectId' in contentGenerator
-  ) {
-    return contentGenerator as CodeAssistServer;
-  }
-
-  return undefined;
-}
 
 export interface PrivacyState {
   isLoading: boolean;

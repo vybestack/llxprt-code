@@ -766,7 +766,7 @@ export class AgentClient implements AgentClientContract {
     model: string,
   ): Promise<GenerateContentResponse> {
     await this.lazyInitialize();
-    return clientLlmGenerateContent(
+    const output = await clientLlmGenerateContent(
       this.config,
       this.getContentGenerator(),
       contents,
@@ -776,6 +776,9 @@ export class AgentClient implements AgentClientContract {
       this.lastPromptId ?? this.config.getSessionId(),
       this.generateContentConfig,
     );
+    // Convert neutral ModelOutput back to Google GenerateContentResponse
+    // to preserve the AgentClientContract (migrated fully in #2349).
+    return this.getChat().convertIContentToResponse(output.content);
   }
 
   async generateEmbedding(texts: string[]): Promise<number[][]> {

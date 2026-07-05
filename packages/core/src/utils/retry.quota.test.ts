@@ -8,7 +8,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ApiError } from '@google/genai';
 import {
   retryWithBackoff,
   isRetryableError,
@@ -18,6 +17,13 @@ import { setSimulate429 } from './testUtils.js';
 import { RetryableQuotaError } from './googleQuotaErrors.js';
 import type { GoogleApiError } from './googleErrors.js';
 import { DebugLogger } from '../debug/index.js';
+
+/** Structural error carrying an HTTP status (replaces ApiError usage). */
+function statusError(message: string, status: number): Error {
+  const error = new Error(message) as Error & { status?: number };
+  error.status = status;
+  return error;
+}
 
 /**
  * @plan PLAN-20250219-GMERGE021.R13.P02
@@ -44,18 +50,18 @@ describe('isRetryableError', () => {
     expect(isRetryableError(error)).toBe(true);
   });
 
-  it('should never retry 400 ApiError', () => {
-    const error = new ApiError({ message: 'Bad Request', status: 400 });
+  it('should never retry 400 error', () => {
+    const error = statusError('Bad Request', 400);
     expect(isRetryableError(error)).toBe(false);
   });
 
-  it('should retry 503 ApiError', () => {
-    const error = new ApiError({ message: 'Service Unavailable', status: 503 });
+  it('should retry 503 error', () => {
+    const error = statusError('Service Unavailable', 503);
     expect(isRetryableError(error)).toBe(true);
   });
 
-  it('should retry 429 ApiError', () => {
-    const error = new ApiError({ message: 'Too Many Requests', status: 429 });
+  it('should retry 429 error', () => {
+    const error = statusError('Too Many Requests', 429);
     expect(isRetryableError(error)).toBe(true);
   });
 

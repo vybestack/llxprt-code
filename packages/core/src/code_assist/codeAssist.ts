@@ -5,6 +5,22 @@
  */
 
 import type { ContentGenerator } from '../core/contentGenerator.js';
+import type {
+  ModelGenerationRequest,
+  ModelOutput,
+  ModelStreamChunk,
+  CountTokensRequest,
+  CountTokensResult,
+  EmbedContentRequest,
+  EmbedContentResult,
+} from '../llm-types/index.js';
+import {
+  toGenerateContentParameters,
+  fromGenerateContentResponse,
+  toCountTokensParameters,
+  fromCountTokensResponse,
+  mapGeminiStreamToChunks,
+} from './contentGeneratorAdapters.js';
 import { getOauthClient } from './oauth2.js';
 import { setupUser } from './setup.js';
 import type { HttpOptions } from './server.js';
@@ -12,6 +28,62 @@ import { CodeAssistServer } from './server.js';
 import type { Config } from '../config/config.js';
 import { DebugLogger } from '../debug/index.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import type { UserTierId } from './types.js';
+
+/**
+ * Neutral ContentGenerator adapter that wraps a Google-native CodeAssistServer.
+ * Converts neutral requests to Google parameters and Google responses back to
+ * neutral ModelOutput. Preserves projectId so usePrivacySettings can detect
+ * code-assist via structural probing.
+ */
+export class CodeAssistContentGeneratorAdapter implements ContentGenerator {
+  readonly server: CodeAssistServer;
+
+  constructor(server: CodeAssistServer) {
+    this.server = server;
+  }
+
+  get projectId(): string | undefined {
+    return this.server.projectId;
+  }
+
+  get userTier(): UserTierId | undefined {
+    return this.server.userTier;
+  }
+
+  async generateContent(
+    request: ModelGenerationRequest,
+    userPromptId: string,
+  ): Promise<ModelOutput> {
+    const params = toGenerateContentParameters(request);
+    const response = await this.server.generateContent(params, userPromptId);
+    return fromGenerateContentResponse(response);
+  }
+
+  async generateContentStream(
+    request: ModelGenerationRequest,
+    userPromptId: string,
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    const params = toGenerateContentParameters(request);
+    const stream = await this.server.generateContentStream(
+      params,
+      userPromptId,
+    );
+    return mapGeminiStreamToChunks(stream);
+  }
+
+  async countTokens(request: CountTokensRequest): Promise<CountTokensResult> {
+    const params = toCountTokensParameters(request);
+    const response = await this.server.countTokens(params);
+    return fromCountTokensResponse(response);
+  }
+
+  async embedContent(
+    _request: EmbedContentRequest,
+  ): Promise<EmbedContentResult> {
+    throw new Error('embedContent not supported for code_assist');
+  }
+}
 
 export async function createCodeAssistContentGenerator(
   httpOptions: HttpOptions,
@@ -26,50 +98,69 @@ export async function createCodeAssistContentGenerator(
       `createCodeAssistContentGenerator: config=defined, baseURL=${baseURL}`,
   );
 
-  try {
-    logger.debug(
-      () => `createCodeAssistContentGenerator: calling getOauthClient`,
-    );
-    const authClient = await getOauthClient(config);
-    logger.debug(
-      () =>
-        `createCodeAssistContentGenerator: OAuth client created, calling setupUser`,
-    );
-    const userData = await setupUser(authClient);
-    logger.debug(
-      () =>
-        `createCodeAssistContentGenerator: setupUser completed, projectId=${userData.projectId}, userTier=${userData.userTier}`,
-    );
-    return new CodeAssistServer(
-      authClient,
-      userData.projectId,
-      httpOptions,
-      // PRIVACY FIX: sessionId removed to prevent transmission to Google servers
-      // sessionId, // removed
-      userData.userTier,
-      baseURL, // Pass baseURL to constructor
-    );
-  } catch (error) {
-    logger.debug(
-      () =>
-        `createCodeAssistContentGenerator: ERROR during OAuth setup: ${error}`,
-    );
-    logger.debug(
-      () => `createCodeAssistContentGenerator: Error details: ${error}`,
-    );
-    throw error;
-  }
+  const server = await createCodeAssistServer(
+    httpOptions,
+    config,
+    baseURL,
+    logger,
+  );
+  return new CodeAssistContentGeneratorAdapter(server);
+}
+
+/**
+ * Create a raw CodeAssistServer (Google-native). Used by the Gemini provider's
+ * OAuth path which calls the Google-native methods directly.
+ */
+export async function createCodeAssistServer(
+  httpOptions: HttpOptions,
+  config: Config,
+  baseURL?: string,
+  logger?: DebugLogger,
+): Promise<CodeAssistServer> {
+  const log = logger ?? new DebugLogger('llxprt:code:assist');
+
+  log.debug(() => `createCodeAssistServer: calling getOauthClient`);
+  const authClient = await getOauthClient(config);
+  log.debug(
+    () => `createCodeAssistServer: OAuth client created, calling setupUser`,
+  );
+  const userData = await setupUser(authClient);
+  log.debug(
+    () =>
+      `createCodeAssistServer: setupUser completed, projectId=${userData.projectId}, userTier=${userData.userTier}`,
+  );
+  return new CodeAssistServer(
+    authClient,
+    userData.projectId,
+    httpOptions,
+    userData.userTier,
+    baseURL,
+  );
 }
 
 export function getCodeAssistServer(
   config: Config,
 ): CodeAssistServer | undefined {
-  const server = config.getAgentClient().getContentGenerator();
+  const generator = config.getAgentClient().getContentGenerator();
 
-  if (!(server instanceof CodeAssistServer)) {
-    return undefined;
+  // Unwrap the neutral adapter if present
+  if (generator instanceof CodeAssistContentGeneratorAdapter) {
+    return generator.server;
   }
-  return server;
+
+  // Direct CodeAssistServer (e.g. in tests or legacy wiring)
+  if (generator instanceof CodeAssistServer) {
+    return generator;
+  }
+
+  // Structural fallback: some test mocks and legacy wiring produce plain
+  // objects that carry projectId. Detect them structurally so the privacy
+  // settings hook continues to work.
+  if ('projectId' in generator) {
+    return generator as unknown as CodeAssistServer;
+  }
+
+  return undefined;
 }
 
 /**

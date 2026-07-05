@@ -127,6 +127,33 @@ describe('ModelGenerationRequest', () => {
     const req: ModelGenerationRequest = { contents: [] };
     expect(req.contents).toHaveLength(0);
   });
+
+  it('constructs with model, abortSignal, and modelParams', () => {
+    const controller = new AbortController();
+    const req: ModelGenerationRequest = {
+      contents: [{ speaker: 'human', blocks: [textBlock('hi')] }],
+      model: 'gemini-2.5-pro',
+      abortSignal: controller.signal,
+      modelParams: { responseMimeType: 'application/json' },
+    };
+    expect(req.model).toBe('gemini-2.5-pro');
+    expect(req.abortSignal).toBe(controller.signal);
+    expect(req.modelParams?.responseMimeType).toBe('application/json');
+  });
+});
+
+describe('ModelGenerationSettings additive fields', () => {
+  it('constructs with topP', () => {
+    const settings: ModelGenerationSettings = { topP: 0.9 };
+    expect(settings.topP).toBe(0.9);
+  });
+
+  it('constructs with responseJsonSchema', () => {
+    const settings: ModelGenerationSettings = {
+      responseJsonSchema: { type: 'object' },
+    };
+    expect(settings.responseJsonSchema).toStrictEqual({ type: 'object' });
+  });
 });
 
 // ---------------------------------------------------------------------------

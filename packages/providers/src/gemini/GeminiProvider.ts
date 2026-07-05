@@ -13,7 +13,7 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
-import type { createCodeAssistContentGenerator as _createCodeAssistContentGenerator } from '@vybestack/llxprt-code-core/code_assist/codeAssist.js';
+import type { createCodeAssistServer as _createCodeAssistServer } from '@vybestack/llxprt-code-core/code_assist/codeAssist.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   type GenerateContentParameters,
@@ -51,7 +51,7 @@ import {
   type OAuthContentGeneratorFactory,
 } from './geminiGenerationExecution.js';
 
-type CodeAssistGeneratorFactory = typeof _createCodeAssistContentGenerator;
+type CodeAssistGeneratorFactory = typeof _createCodeAssistServer;
 type CodeAssistContentGenerator = Awaited<
   ReturnType<CodeAssistGeneratorFactory>
 >;
@@ -109,10 +109,10 @@ export class GeminiProvider extends BaseProvider {
     config: Config,
     baseURL?: string,
   ): Promise<CodeAssistContentGenerator> {
-    const { createCodeAssistContentGenerator } = await import(
+    const { createCodeAssistServer } = await import(
       '@vybestack/llxprt-code-core/code_assist/codeAssist.js'
     );
-    return createCodeAssistContentGenerator(httpOptions, config, baseURL);
+    return createCodeAssistServer(httpOptions, config, baseURL);
   }
 
   clearClientCache(_runtimeKey?: string): void {

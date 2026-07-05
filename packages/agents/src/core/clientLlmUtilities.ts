@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  GenerateContentConfig,
-  Content,
-  GenerateContentResponse,
-} from '@google/genai';
+import type { GenerateContentConfig, Content } from '@google/genai';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import {
   getEnabledToolNamesForPrompt,
@@ -18,8 +14,10 @@ import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 async function buildLightweightSystemPrompt(
@@ -43,10 +41,6 @@ async function buildLightweightSystemPrompt(
 
 /**
  * Generates structured JSON using the BaseLLMClient utility path.
- *
- * Uses getCoreSystemPromptAsync directly — the lightweight path that includes
- * userMemory and mcpInstructions but NOT environment context, core memory, or
- * JIT memory (those are only in buildSystemInstruction used by startChat).
  */
 export async function generateJson(
   config: Config,
@@ -87,8 +81,6 @@ export async function generateJson(
 
     const result = await retryWithBackoff(apiCall, { signal: abortSignal });
 
-    // Gemini sometimes returns a bare "user"/"model" string instead of JSON
-    // when asked for `next_speaker`. Wrap it so callers always get an object.
     if (
       typeof result === 'string' &&
       (result === 'user' || result === 'model') &&
@@ -127,10 +119,8 @@ export async function generateJson(
 
 /**
  * Generates content using ContentGenerator directly.
- *
- * Uses getCoreSystemPromptAsync directly — the lightweight path that includes
- * userMemory and mcpInstructions but NOT environment context, core memory, or
- * JIT memory (those are only in buildSystemInstruction used by startChat).
+ * Returns a neutral ModelOutput; callers that need Google shapes should convert
+ * at their boundary (migration in issue #2349).
  */
 export async function generateContent(
   config: Config,
@@ -141,7 +131,7 @@ export async function generateContent(
   model: string,
   lastPromptId: string,
   baseGenerateContentConfig: GenerateContentConfig,
-): Promise<GenerateContentResponse> {
+): Promise<ModelOutput> {
   const configToUse: GenerateContentConfig = {
     ...baseGenerateContentConfig,
     ...generationConfig,
@@ -150,21 +140,25 @@ export async function generateContent(
   try {
     const systemInstruction = await buildLightweightSystemPrompt(config, model);
 
-    const requestConfig = {
-      ...configToUse,
+    const icontents = ContentConverters.toIContents(contents);
+
+    const settings = {
+      temperature: configToUse.temperature,
+      topP: configToUse.topP,
+      maxOutputTokens: configToUse.maxOutputTokens,
+      systemInstruction:
+        typeof systemInstruction === 'string' ? systemInstruction : undefined,
+    };
+
+    const request = {
+      model,
+      contents: icontents,
+      settings,
       abortSignal,
-      systemInstruction,
     };
 
     const apiCall = () =>
-      contentGenerator.generateContent(
-        {
-          model,
-          contents,
-          config: requestConfig,
-        },
-        lastPromptId,
-      );
+      contentGenerator.generateContent(request, lastPromptId);
 
     return await retryWithBackoff(apiCall, { signal: abortSignal });
   } catch (error: unknown) {

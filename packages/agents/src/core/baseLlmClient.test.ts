@@ -7,40 +7,38 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BaseLLMClient } from './baseLlmClient.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type {
-  GenerateContentResponse,
-  EmbedContentResponse,
-  CountTokensResponse,
-} from '@google/genai';
+import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 // Mock retryWithBackoff to immediately call the function once without delays
-// This prevents actual retry delays from running during tests
 vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn(
     async <T>(
       fn: () => Promise<T>,
       options?: { shouldRetryOnContent?: (response: T) => boolean },
     ) => {
-      // Execute the function once (first attempt)
       const result = await fn();
-
-      // If shouldRetryOnContent is provided and returns true (indicating retry needed),
-      // simulate what would happen after exhausting retries
       if (options?.shouldRetryOnContent?.(result) === true) {
         throw new Error('Retry attempts exhausted');
       }
-
       return result;
     },
   ),
 }));
+
+function textModelOutput(text: string): ModelOutput {
+  return {
+    content: {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text }],
+    },
+  };
+}
 
 describe('BaseLLMClient', () => {
   let mockContentGenerator: ContentGenerator;
   let baseLlmClient: BaseLLMClient;
 
   beforeEach(() => {
-    // Create mock ContentGenerator with all required methods
     mockContentGenerator = {
       generateContent: vi.fn(),
       generateContentStream: vi.fn(),
@@ -54,20 +52,8 @@ describe('BaseLLMClient', () => {
 
   describe('generateJson', () => {
     it('should generate valid JSON from a prompt', async () => {
-      // Mock response with JSON content
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: '{"name": "test", "value": 42}' }],
-            },
-          },
-        ],
-      };
-
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        textModelOutput('{"name": "test", "value": 42}'),
       );
 
       const result = await baseLlmClient.generateJson({
@@ -80,19 +66,8 @@ describe('BaseLLMClient', () => {
     });
 
     it('should handle JSON wrapped in markdown code blocks', async () => {
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: '```json\n{"status": "ok"}\n```' }],
-            },
-          },
-        ],
-      };
-
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        textModelOutput('```json\n{"status": "ok"}\n```'),
       );
 
       const result = await baseLlmClient.generateJson({
@@ -104,19 +79,8 @@ describe('BaseLLMClient', () => {
     });
 
     it('should use provided schema for validation', async () => {
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: '{"required": "field"}' }],
-            },
-          },
-        ],
-      };
-
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        textModelOutput('{"required": "field"}'),
       );
 
       const schema = {
@@ -135,8 +99,8 @@ describe('BaseLLMClient', () => {
 
       const callArgs = vi.mocked(mockContentGenerator.generateContent).mock
         .calls[0][0];
-      expect(callArgs.config?.responseJsonSchema).toStrictEqual(schema);
-      expect(callArgs.config?.responseMimeType).toBe('application/json');
+      expect(callArgs.settings?.responseJsonSchema).toStrictEqual(schema);
+      expect(callArgs.modelParams?.responseMimeType).toBe('application/json');
     });
 
     it('should handle generation errors gracefully', async () => {
@@ -153,19 +117,8 @@ describe('BaseLLMClient', () => {
     });
 
     it('should handle empty response', async () => {
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [],
-            },
-          },
-        ],
-      };
-
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        textModelOutput(''),
       );
 
       await expect(
@@ -177,19 +130,8 @@ describe('BaseLLMClient', () => {
     });
 
     it('should handle invalid JSON in response', async () => {
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: 'not valid json' }],
-            },
-          },
-        ],
-      };
-
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        textModelOutput('not valid json'),
       );
 
       await expect(
@@ -201,19 +143,8 @@ describe('BaseLLMClient', () => {
     });
 
     it('should support custom temperature', async () => {
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: '{"temp": "test"}' }],
-            },
-          },
-        ],
-      };
-
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        textModelOutput('{"temp": "test"}'),
       );
 
       await baseLlmClient.generateJson({
@@ -224,23 +155,15 @@ describe('BaseLLMClient', () => {
 
       const callArgs = vi.mocked(mockContentGenerator.generateContent).mock
         .calls[0][0];
-      expect(callArgs.config?.temperature).toBe(0.7);
+      expect(callArgs.settings?.temperature).toBe(0.7);
     });
   });
 
   describe('generateEmbedding', () => {
     it('should generate embeddings for text', async () => {
-      const mockEmbedResponse: EmbedContentResponse = {
-        embeddings: [
-          {
-            values: [0.1, 0.2, 0.3, 0.4, 0.5],
-          },
-        ],
-      };
-
-      vi.mocked(mockContentGenerator.embedContent).mockResolvedValue(
-        mockEmbedResponse,
-      );
+      vi.mocked(mockContentGenerator.embedContent).mockResolvedValue({
+        embeddings: [[0.1, 0.2, 0.3, 0.4, 0.5]],
+      });
 
       const result = await baseLlmClient.generateEmbedding({
         text: 'test text',
@@ -252,13 +175,12 @@ describe('BaseLLMClient', () => {
     });
 
     it('should handle multiple text inputs', async () => {
-      const mockEmbedResponse: EmbedContentResponse = {
-        embeddings: [{ values: [0.1, 0.2] }, { values: [0.3, 0.4] }],
-      };
-
-      vi.mocked(mockContentGenerator.embedContent).mockResolvedValue(
-        mockEmbedResponse,
-      );
+      vi.mocked(mockContentGenerator.embedContent).mockResolvedValue({
+        embeddings: [
+          [0.1, 0.2],
+          [0.3, 0.4],
+        ],
+      });
 
       const result = await baseLlmClient.generateEmbedding({
         text: ['text1', 'text2'],
@@ -285,13 +207,9 @@ describe('BaseLLMClient', () => {
     });
 
     it('should validate embeddings response', async () => {
-      const mockEmbedResponse: EmbedContentResponse = {
+      vi.mocked(mockContentGenerator.embedContent).mockResolvedValue({
         embeddings: [],
-      };
-
-      vi.mocked(mockContentGenerator.embedContent).mockResolvedValue(
-        mockEmbedResponse,
-      );
+      });
 
       await expect(
         baseLlmClient.generateEmbedding({
@@ -304,13 +222,9 @@ describe('BaseLLMClient', () => {
 
   describe('countTokens', () => {
     it('should count tokens in text', async () => {
-      const mockCountResponse: CountTokensResponse = {
+      vi.mocked(mockContentGenerator.countTokens).mockResolvedValue({
         totalTokens: 42,
-      };
-
-      vi.mocked(mockContentGenerator.countTokens).mockResolvedValue(
-        mockCountResponse,
-      );
+      });
 
       const result = await baseLlmClient.countTokens({
         text: 'test text',
@@ -335,13 +249,9 @@ describe('BaseLLMClient', () => {
     });
 
     it('should handle contents array', async () => {
-      const mockCountResponse: CountTokensResponse = {
+      vi.mocked(mockContentGenerator.countTokens).mockResolvedValue({
         totalTokens: 100,
-      };
-
-      vi.mocked(mockContentGenerator.countTokens).mockResolvedValue(
-        mockCountResponse,
-      );
+      });
 
       const result = await baseLlmClient.countTokens({
         contents: [
@@ -360,19 +270,9 @@ describe('BaseLLMClient', () => {
 
   describe('generateContent', () => {
     it('should call generateContent with correct parameters', async () => {
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: 'This is the content.' }],
-            },
-          },
-        ],
-      };
-
+      const mockOutput = textModelOutput('This is the content.');
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        mockOutput,
       );
 
       const abortController = new AbortController();
@@ -385,32 +285,19 @@ describe('BaseLLMClient', () => {
 
       const result = await baseLlmClient.generateContent(options);
 
-      expect(result).toBe(mockResponse);
+      expect(result).toBe(mockOutput);
 
-      // Validate the parameters passed to the underlying generator
       expect(mockContentGenerator.generateContent).toHaveBeenCalledTimes(1);
       const callArgs = vi.mocked(mockContentGenerator.generateContent).mock
         .calls[0][0];
       expect(callArgs.model).toBe('test-model');
-      expect(callArgs.contents).toStrictEqual(options.contents);
-      expect(callArgs.config?.temperature).toBe(0);
-      expect(callArgs.config?.topP).toBe(1);
+      expect(callArgs.settings?.temperature).toBe(0);
+      expect(callArgs.settings?.topP).toBe(1);
     });
 
     it('should handle empty response', async () => {
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [],
-            },
-          },
-        ],
-      };
-
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        textModelOutput(''),
       );
 
       const abortController = new AbortController();
@@ -427,19 +314,8 @@ describe('BaseLLMClient', () => {
     });
 
     it('should support system instruction', async () => {
-      const mockResponse: GenerateContentResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: 'Response with instruction.' }],
-            },
-          },
-        ],
-      };
-
       vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
-        mockResponse,
+        textModelOutput('Response with instruction.'),
       );
 
       const abortController = new AbortController();
@@ -453,7 +329,7 @@ describe('BaseLLMClient', () => {
 
       const callArgs = vi.mocked(mockContentGenerator.generateContent).mock
         .calls[0][0];
-      expect(callArgs.config?.systemInstruction).toBe('Be helpful');
+      expect(callArgs.settings?.systemInstruction).toBe('Be helpful');
     });
   });
 

@@ -31,7 +31,7 @@ import {
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
-import type { GenerateContentResponse } from '@google/genai';
+import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 
 const TEST_MODEL = 'test-model';
@@ -54,8 +54,11 @@ function makeContentGenerator(
 ): ContentGenerator {
   return {
     generateContent: vi.fn().mockResolvedValue({
-      candidates: [{ content: { parts: [{ text: '{"key":"value"}' }] } }],
-    }),
+      content: {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: '{"key":"value"}' }],
+      },
+    } as ModelOutput),
     generateContentStream: vi.fn(),
     countTokens: vi.fn(),
     embedContent: vi.fn(),
@@ -184,9 +187,12 @@ describe('generateContent', () => {
   let config: Config;
   let contentGenerator: ContentGenerator;
   const abortSignal = new AbortController().signal;
-  const mockResponse: GenerateContentResponse = {
-    candidates: [{ content: { parts: [{ text: 'generated text' }] } }],
-  } as GenerateContentResponse;
+  const mockResponse: ModelOutput = {
+    content: {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'generated text' }],
+    },
+  };
 
   beforeEach(() => {
     config = makeConfig();
@@ -216,7 +222,7 @@ describe('generateContent', () => {
     expect(contentGenerator.generateContent).toHaveBeenCalledWith(
       expect.objectContaining({
         model: TEST_MODEL,
-        config: expect.objectContaining({
+        settings: expect.objectContaining({
           temperature: 0.5,
           topP: 1,
           systemInstruction: SYSTEM_PROMPT,

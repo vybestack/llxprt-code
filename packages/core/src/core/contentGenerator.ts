@@ -11,15 +11,14 @@
  */
 
 import type {
-  CountTokensResponse,
-  GenerateContentResponse,
-  EmbedContentResponse,
-} from '@google/genai';
-import {
-  type GenerateContentParameters,
-  type CountTokensParameters,
-  type EmbedContentParameters,
-} from '@google/genai';
+  ModelGenerationRequest,
+  ModelOutput,
+  ModelStreamChunk,
+  CountTokensRequest,
+  CountTokensResult,
+  EmbedContentRequest,
+  EmbedContentResult,
+} from '../llm-types/index.js';
 import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import type { Config } from '../config/config.js';
@@ -35,26 +34,29 @@ import type { Config } from '../config/config.js';
 import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { UserTierId } from '../code_assist/types.js';
-import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
+import { GoogleGenAIWrapper } from '../code_assist/googleGenAIWrapper.js';
 import { InstallationManager } from '../utils/installationManager.js';
 
 /**
- * Interface abstracting the core functionalities for generating content and counting tokens.
+ * Neutral ContentGenerator interface. All request/response types come from the
+ * provider-agnostic llm-types layer. Implementations convert to/from their
+ * native shapes at the provider boundary (e.g. the code_assist enclave for the
+ * Gemini-backed paths).
  */
 export interface ContentGenerator {
   generateContent(
-    request: GenerateContentParameters,
+    request: ModelGenerationRequest,
     userPromptId: string,
-  ): Promise<GenerateContentResponse>;
+  ): Promise<ModelOutput>;
 
   generateContentStream(
-    request: GenerateContentParameters,
+    request: ModelGenerationRequest,
     userPromptId: string,
-  ): Promise<AsyncGenerator<GenerateContentResponse>>;
+  ): Promise<AsyncGenerator<ModelStreamChunk>>;
 
-  countTokens(request: CountTokensParameters): Promise<CountTokensResponse>;
+  countTokens(request: CountTokensRequest): Promise<CountTokensResult>;
 
-  embedContent(request: EmbedContentParameters): Promise<EmbedContentResponse>;
+  embedContent(request: EmbedContentRequest): Promise<EmbedContentResult>;
 
   userTier?: UserTierId;
 }
@@ -84,8 +86,7 @@ export function createContentGeneratorConfig(
   const geminiApiKey = process.env.GEMINI_API_KEY ?? undefined;
   const googleApiKey = process.env.GOOGLE_API_KEY ?? undefined;
   const rawGoogleCloudProject =
-    process.env['GOOGLE_CLOUD_PROJECT'] ??
-    process.env['GOOGLE_CLOUD_PROJECT_ID'];
+    process.env['GOOGLE_CLOUD_PROJECT'] ?? process.env.GOOGLE_CLOUD_PROJECT_ID;
   const googleCloudProject =
     rawGoogleCloudProject === '' ? undefined : rawGoogleCloudProject;
   const googleCloudLocation = process.env.GOOGLE_CLOUD_LOCATION ?? undefined;

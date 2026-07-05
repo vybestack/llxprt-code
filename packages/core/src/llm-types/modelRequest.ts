@@ -24,6 +24,7 @@
 
 import type { IContent } from '../services/history/IContent.js';
 import type { ToolDeclaration, ToolChoice } from './toolDeclaration.js';
+import type { JsonSchema } from './jsonSchema.js';
 
 /**
  * @plan PLAN-20260702-LLMTYPES.P04
@@ -47,6 +48,16 @@ export interface ModelGenerationSettings {
   systemInstruction?: string;
   reasoning?: ReasoningConfig;
   toolChoice?: ToolChoice;
+  /**
+   * Top-p (nucleus) sampling. Provider-specific extras that don't have a
+   * neutral home still go through {@link ModelGenerationRequest.modelParams}.
+   */
+  topP?: number;
+  /**
+   * Structured-output schema shared by ≥2 providers. Mapped per-provider
+   * (e.g. Gemini config.responseJsonSchema, OpenAI response_format).
+   */
+  responseJsonSchema?: JsonSchema;
 }
 
 /**
@@ -58,4 +69,20 @@ export interface ModelGenerationRequest {
   contents: IContent[];
   tools?: ToolDeclaration[];
   settings?: ModelGenerationSettings;
+  /**
+   * The model identifier. Providers that ignore this (e.g. those with a
+   * pre-bound model) are free to disregard it.
+   */
+  model?: string;
+  /**
+   * Abort signal propagated to the provider call so callers can cancel
+   * in-flight generation.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * Provider-specific extras channel (foundation principle 5). Examples:
+   * Gemini responseMimeType, Anthropic top_k, OpenAI seed. Explicit provider
+   * params spread LAST win over the neutral settings mapping.
+   */
+  modelParams?: Record<string, unknown>;
 }

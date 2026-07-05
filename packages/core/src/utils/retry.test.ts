@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ApiError } from '@google/genai';
 import type { HttpError } from './retry.js';
 import { retryWithBackoff, isOverloadError } from './retry.js';
 import { setSimulate429 } from './testUtils.js';
@@ -148,9 +147,11 @@ describe('retryWithBackoff', () => {
     expect(mockFn).not.toHaveBeenCalled();
   });
 
-  it('should use default shouldRetry if not provided, retrying on ApiError 429', async () => {
+  it('should use default shouldRetry if not provided, retrying on error with status 429', async () => {
     const mockFn = vi.fn(async () => {
-      throw new ApiError({ message: 'Too Many Requests', status: 429 });
+      const error: HttpError = new Error('Too Many Requests');
+      error.status = 429;
+      throw error;
     });
 
     const promise = retryWithBackoff(mockFn, {
@@ -166,9 +167,11 @@ describe('retryWithBackoff', () => {
     expect(mockFn).toHaveBeenCalledTimes(2);
   });
 
-  it('should use default shouldRetry if not provided, not retrying on ApiError 400', async () => {
+  it('should use default shouldRetry if not provided, not retrying on error with status 400', async () => {
     const mockFn = vi.fn(async () => {
-      throw new ApiError({ message: 'Bad Request', status: 400 });
+      const error: HttpError = new Error('Bad Request');
+      error.status = 400;
+      throw error;
     });
 
     const promise = retryWithBackoff(mockFn, {

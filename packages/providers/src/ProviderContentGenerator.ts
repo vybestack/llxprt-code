@@ -9,17 +9,14 @@ import {
   type ContentGeneratorConfig,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type {
-  GenerateContentResponse,
-  CountTokensResponse,
-  EmbedContentResponse,
-} from '@google/genai';
-import {
-  type GenerateContentParameters,
-  type CountTokensParameters,
-  type EmbedContentParameters,
-  type Content,
-  type Part,
-} from '@google/genai';
+  ModelGenerationRequest,
+  ModelOutput,
+  ModelStreamChunk,
+  CountTokensRequest,
+  CountTokensResult,
+  EmbedContentRequest,
+  EmbedContentResult,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 /**
  * Minimal structural contract for the provider-manager capability that
@@ -33,63 +30,56 @@ export interface ProviderContentGeneratorManager {
 }
 
 /**
- * ContentGenerator implementation that delegates to external providers
+ * ContentGenerator implementation that delegates to external providers.
+ *
+ * The actual generation goes through the IContent pipeline (not this class).
+ * Only countTokens estimation and embedContent throwing are implemented here.
  */
 export class ProviderContentGenerator implements ContentGenerator {
   constructor(
     private providerManager: ProviderContentGeneratorManager,
     private _config: ContentGeneratorConfig,
   ) {
-    // Config parameter is reserved for future use
+    void this.providerManager;
     void this._config;
   }
 
-  private getWrapper(): unknown {
-    this.providerManager.getActiveProvider();
+  private throwDirectNotSupported(): never {
     throw new Error(
-      'GeminiCompatibleWrapper has been removed - direct IContent interface is now used',
+      'Provider-backed content generation uses the IContent pipeline; direct ContentGenerator generation is not supported',
     );
   }
 
   async generateContent(
-    _request: GenerateContentParameters,
-  ): Promise<GenerateContentResponse> {
-    // The getWrapper method always throws, so we'll never reach this return
-    this.getWrapper();
-    throw new Error('This should never be reached');
+    _request: ModelGenerationRequest,
+    _userPromptId: string,
+  ): Promise<ModelOutput> {
+    this.throwDirectNotSupported();
   }
 
   async generateContentStream(
-    _request: GenerateContentParameters,
-  ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    // The getWrapper method always throws, so we'll never reach this return
-    this.getWrapper();
-    throw new Error('This should never be reached');
+    _request: ModelGenerationRequest,
+    _userPromptId: string,
+  ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    this.throwDirectNotSupported();
   }
 
-  async countTokens(
-    request: CountTokensParameters,
-  ): Promise<CountTokensResponse> {
-    // Rough estimation for providers that don't support token counting
+  async countTokens(request: CountTokensRequest): Promise<CountTokensResult> {
     let text = '';
-    if (typeof request.contents === 'string') {
-      text = request.contents;
-    } else if (Array.isArray(request.contents)) {
-      text = request.contents
-        .flatMap((c: Content) => c.parts)
-        .map((p: Part | undefined) => p?.text ?? '')
-        .join(' ');
+    for (const content of request.contents) {
+      for (const block of content.blocks) {
+        if (block.type === 'text') {
+          text += block.text + ' ';
+        }
+      }
     }
-    // Very rough approximation: ~4 characters per token
-    const estimatedTokens = Math.ceil(text.length / 4);
-    return {
-      totalTokens: estimatedTokens,
-    };
+    const estimatedTokens = Math.ceil(text.trim().length / 4);
+    return { totalTokens: estimatedTokens };
   }
 
   async embedContent(
-    _request: EmbedContentParameters,
-  ): Promise<EmbedContentResponse> {
+    _request: EmbedContentRequest,
+  ): Promise<EmbedContentResult> {
     throw new Error('Embeddings not supported for providers');
   }
 }

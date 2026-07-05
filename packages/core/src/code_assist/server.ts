@@ -26,7 +26,6 @@ import {
   type GenerateContentParameters,
 } from '@google/genai';
 import * as readline from 'readline';
-import { type ContentGenerator } from '../core/contentGenerator.js';
 import type { UserTierId } from './types.js';
 import {
   type CaCountTokenResponse,
@@ -48,7 +47,13 @@ export interface HttpOptions {
 export const CODE_ASSIST_ENDPOINT = 'https://cloudcode-pa.googleapis.com';
 export const CODE_ASSIST_API_VERSION = 'v1internal';
 
-export class CodeAssistServer implements ContentGenerator {
+/**
+ * Google-native CodeAssist server. The methods use Google SDK types
+ * (GenerateContentParameters/GenerateContentResponse) because this IS a Google
+ * API client. The neutral ContentGenerator adapter (see
+ * CodeAssistContentGeneratorAdapter) wraps this server.
+ */
+export class CodeAssistServer {
   constructor(
     readonly client: OAuth2Client,
     readonly projectId?: string,

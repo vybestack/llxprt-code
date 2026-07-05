@@ -4,16 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  GenerateContentResponse,
-  Content,
-  CountTokensResponse,
-  EmbedContentResponse,
-  Part,
-  GenerateContentParameters,
-} from '@google/genai';
+import type { Content, Part } from '@google/genai';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { getResponseText } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import type {
+  ModelGenerationRequest,
+  ModelOutput,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  IContent,
+  ContentBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 
@@ -106,11 +107,26 @@ function extractJsonFromMarkdown(text: string): string {
 }
 
 /**
+ * Extract text from a neutral ModelOutput's content blocks.
+ */
+function getTextFromModelOutput(output: ModelOutput): string {
+  const blocks = output.content.blocks;
+  const textBlocks = blocks.filter(
+    (b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text',
+  );
+  return textBlocks.map((b) => b.text).join('');
+}
+
+/**
+ * Convert legacy Google Content[] to IContent[] using the sanctioned bridge.
+ */
+function contentsToIContents(contents: Content[]): IContent[] {
+  return ContentConverters.toIContents(contents);
+}
+
+/**
  * BaseLLMClient extracts stateless utility methods for LLM operations.
  * Unlike the main Client class, this handles utility calls without conversation state.
- *
- * This implements the baseLlmClient pattern from upstream gemini-cli but adapted
- * for llxprt's multi-provider architecture.
  *
  * Key features:
  * - Multi-provider support (Anthropic, OpenAI, Gemini, Vertex AI)
@@ -128,10 +144,6 @@ export class BaseLLMClient {
   /**
    * Generate structured JSON from a prompt with optional schema validation.
    * Supports all providers through the ContentGenerator abstraction.
-   *
-   * @param options - Generation options including prompt, schema, model, etc.
-   * @returns Parsed JSON object
-   * @throws Error if generation fails or response cannot be parsed
    */
   async generateJson<T = unknown>(options: GenerateJsonOptions): Promise<T> {
     const {
@@ -150,32 +162,33 @@ export class BaseLLMClient {
       },
     ];
 
-    const config: Record<string, unknown> = {
+    const icontents = contentsToIContents(contents);
+
+    const settings: ModelGenerationRequest['settings'] = {
       temperature,
       topP: 1,
     };
 
     if (systemInstruction) {
-      config.systemInstruction = { text: systemInstruction };
+      settings.systemInstruction = systemInstruction;
     }
 
+    const modelParams: Record<string, unknown> = {};
     if (schema) {
-      config.responseJsonSchema = schema;
-      config.responseMimeType = 'application/json';
+      settings.responseJsonSchema = schema;
+      modelParams.responseMimeType = 'application/json';
     }
 
-    const shouldRetryOnContent = (response: GenerateContentResponse) => {
-      const text = getResponseText(response)?.trim();
+    const shouldRetryOnContent = (output: ModelOutput) => {
+      const text = getTextFromModelOutput(output).trim();
       if (!text) {
-        return true; // Retry on empty response
+        return true;
       }
       try {
-        // Extract JSON from potential markdown wrapper
         const cleanedText = extractJsonFromMarkdown(text);
         JSON.parse(cleanedText);
-        return false; // Valid JSON, don't retry
+        return false;
       } catch {
-        // Invalid JSON - trigger retry
         return true;
       }
     };
@@ -183,8 +196,10 @@ export class BaseLLMClient {
     const result = await this._generateWithRetry(
       {
         model,
-        contents,
-        config,
+        contents: icontents,
+        settings,
+        modelParams:
+          Object.keys(modelParams).length > 0 ? modelParams : undefined,
       },
       promptId,
       options.maxAttempts,
@@ -192,12 +207,11 @@ export class BaseLLMClient {
       'generateJson',
     );
 
-    let text = getResponseText(result);
+    let text = getTextFromModelOutput(result);
     if (!text) {
       throw new Error('API returned an empty response for generateJson.');
     }
 
-    // Handle markdown wrapping
     const prefix = '```json';
     const suffix = '```';
     if (text.startsWith(prefix) && text.endsWith(suffix)) {
@@ -205,7 +219,6 @@ export class BaseLLMClient {
     }
 
     try {
-      // Extract JSON from potential markdown wrapper
       const cleanedText = extractJsonFromMarkdown(text);
       return JSON.parse(cleanedText) as T;
     } catch (parseError) {
@@ -217,52 +230,38 @@ export class BaseLLMClient {
 
   /**
    * Generate embeddings for text input.
-   * Supports single text string or array of strings.
-   *
-   * @param options - Embedding options including text and model
-   * @returns Embedding vector(s) as number array(s)
-   * @throws Error if generation fails or response is invalid
    */
   async generateEmbedding(
     options: GenerateEmbeddingOptions,
   ): Promise<number[] | number[][]> {
-    const { text, model } = options;
+    const { text } = options;
 
     try {
       const texts = Array.isArray(text) ? text : [text];
 
-      const embedContentResponse: EmbedContentResponse =
-        await this.contentGenerator!.embedContent({
-          model,
-          contents: texts,
-        });
+      const result = await this.contentGenerator!.embedContent({
+        texts,
+      });
 
-      if (
-        !embedContentResponse.embeddings ||
-        embedContentResponse.embeddings.length === 0
-      ) {
+      if (result.embeddings.length === 0) {
         throw new Error('No embeddings found in API response.');
       }
 
-      if (embedContentResponse.embeddings.length !== texts.length) {
+      if (result.embeddings.length !== texts.length) {
         throw new Error(
-          `API returned a mismatched number of embeddings. Expected ${texts.length}, got ${embedContentResponse.embeddings.length}.`,
+          `API returned a mismatched number of embeddings. Expected ${texts.length}, got ${result.embeddings.length}.`,
         );
       }
 
-      const embeddings = embedContentResponse.embeddings.map(
-        (embedding, index) => {
-          const values = embedding.values;
-          if (!values || values.length === 0) {
-            throw new Error(
-              `API returned an empty embedding for input text at index ${index}: "${texts[index]}"`,
-            );
-          }
-          return values;
-        },
-      );
+      const embeddings = result.embeddings.map((values, index) => {
+        if (values.length === 0) {
+          throw new Error(
+            `API returned an empty embedding for input text at index ${index}: "${texts[index]}"`,
+          );
+        }
+        return values;
+      });
 
-      // Return single array if input was a single string
       return Array.isArray(text) ? embeddings : embeddings[0];
     } catch (error) {
       throw new Error(
@@ -273,14 +272,9 @@ export class BaseLLMClient {
 
   /**
    * Count tokens in text or contents without making an API call to generate.
-   * Useful for checking context limits before generation.
-   *
-   * @param options - Options including text/contents and model
-   * @returns Token count
-   * @throws Error if counting fails
    */
   async countTokens(options: CountTokensOptions): Promise<number> {
-    const { text, contents, model } = options;
+    const { text, contents } = options;
 
     try {
       let requestContents: Content[];
@@ -298,13 +292,13 @@ export class BaseLLMClient {
         throw new Error('Either text or contents must be provided');
       }
 
-      const response: CountTokensResponse =
-        await this.contentGenerator!.countTokens({
-          model,
-          contents: requestContents,
-        });
+      const icontents = contentsToIContents(requestContents);
 
-      return response.totalTokens ?? 0;
+      const result = await this.contentGenerator!.countTokens({
+        contents: icontents,
+      });
+
+      return result.totalTokens;
     } catch (error) {
       throw new Error(`Failed to count tokens: ${getErrorMessage(error)}`);
     }
@@ -312,15 +306,10 @@ export class BaseLLMClient {
 
   /**
    * Generate content from a prompt.
-   * This is a general-purpose content generation method that doesn't enforce JSON output.
-   *
-   * @param options - Generation options
-   * @returns Raw GenerateContentResponse
-   * @throws Error if generation fails
+   * Returns the raw GenerateContentResponse for backward compatibility with callers
+   * that haven't migrated to neutral types yet (issue #2349).
    */
-  async generateContent(
-    options: GenerateContentOptions,
-  ): Promise<GenerateContentResponse> {
+  async generateContent(options: GenerateContentOptions): Promise<ModelOutput> {
     const {
       contents,
       model,
@@ -330,26 +319,42 @@ export class BaseLLMClient {
       maxAttempts,
     } = options;
 
-    const config: Record<string, unknown> = {
+    const icontents = contentsToIContents(contents);
+
+    const settings: ModelGenerationRequest['settings'] = {
       temperature: 0,
       topP: 1,
-      abortSignal,
     };
 
     if (systemInstruction !== undefined && systemInstruction !== '') {
-      config.systemInstruction = systemInstruction;
+      if (typeof systemInstruction === 'string') {
+        settings.systemInstruction = systemInstruction;
+      } else {
+        // Non-string systemInstruction (Part/Part[]/Content) — extract text
+        const siContent: Content =
+          'parts' in (systemInstruction as Content)
+            ? (systemInstruction as Content)
+            : { role: 'user', parts: [systemInstruction as Part] };
+        const converted = ContentConverters.toIContent(siContent);
+        const textBlocks = converted.blocks.filter(
+          (b): b is Extract<ContentBlock, { type: 'text' }> =>
+            b.type === 'text',
+        );
+        settings.systemInstruction = textBlocks.map((b) => b.text).join('\n');
+      }
     }
 
-    const shouldRetryOnContent = (response: GenerateContentResponse) => {
-      const text = getResponseText(response)?.trim();
-      return !text; // Retry on empty response
+    const shouldRetryOnContent = (output: ModelOutput) => {
+      const text = getTextFromModelOutput(output).trim();
+      return !text;
     };
 
     return this._generateWithRetry(
       {
         model,
-        contents,
-        config,
+        contents: icontents,
+        settings,
+        abortSignal,
       },
       promptId,
       maxAttempts,
@@ -359,17 +364,17 @@ export class BaseLLMClient {
   }
 
   private async _generateWithRetry(
-    requestParams: GenerateContentParameters,
+    request: ModelGenerationRequest,
     promptId: string,
     maxAttempts: number | undefined,
-    shouldRetryOnContent: (response: GenerateContentResponse) => boolean,
+    shouldRetryOnContent: (output: ModelOutput) => boolean,
     _errorContext: 'generateJson' | 'generateContent',
-  ): Promise<GenerateContentResponse> {
-    const abortSignal = requestParams.config?.abortSignal;
+  ): Promise<ModelOutput> {
+    const abortSignal = request.abortSignal;
 
     try {
       const apiCall = () =>
-        this.contentGenerator!.generateContent(requestParams, promptId);
+        this.contentGenerator!.generateContent(request, promptId);
 
       return await retryWithBackoff(apiCall, {
         shouldRetryOnContent,

@@ -518,14 +518,11 @@ sub memory
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         generateContent: vi.fn().mockResolvedValue({
-          candidates: [
-            {
-              content: {
-                parts: [{ text: '{"key": "value"}' }],
-              },
-            },
-          ],
-        } as GenerateContentResponse),
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: '{"key": "value"}' }],
+          },
+        }),
         generateContentStream: vi.fn(),
         embedContent: vi.fn(),
       };
@@ -545,8 +542,10 @@ sub memory
       expect(mockGenerator.generateContent).toHaveBeenCalledWith(
         expect.objectContaining({
           model: 'test-model',
-          config: expect.objectContaining({
+          settings: expect.objectContaining({
             responseJsonSchema: schema,
+          }),
+          modelParams: expect.objectContaining({
             responseMimeType: 'application/json',
           }),
         }),
@@ -569,14 +568,11 @@ sub memory
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         generateContent: vi.fn().mockResolvedValue({
-          candidates: [
-            {
-              content: {
-                parts: [{ text: '{"key": "value"}' }],
-              },
-            },
-          ],
-        } as GenerateContentResponse),
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: '{"key": "value"}' }],
+          },
+        }),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -595,9 +591,11 @@ sub memory
       expect(mockGenerator.generateContent).toHaveBeenCalledWith(
         expect.objectContaining({
           model: customModel,
-          config: expect.objectContaining({
+          settings: expect.objectContaining({
             temperature: 0.9,
             responseJsonSchema: schema,
+          }),
+          modelParams: expect.objectContaining({
             responseMimeType: 'application/json',
           }),
         }),

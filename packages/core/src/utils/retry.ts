@@ -5,8 +5,6 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import type { GenerateContentResponse } from '@google/genai';
-import { ApiError } from '@google/genai';
 import { DebugLogger } from '../debug/index.js';
 import { delay, createAbortError } from './delay.js';
 import { RetryableQuotaError } from './googleQuotaErrors.js';
@@ -21,12 +19,12 @@ function isRetryableStatus(status: number): boolean {
   return RETRYABLE_STATUS_CODES.has(status) || (status >= 500 && status < 600);
 }
 
-export interface RetryOptions {
+export interface RetryOptions<T = unknown> {
   maxAttempts: number;
   initialDelayMs: number;
   maxDelayMs: number;
   shouldRetryOnError: (error: Error) => boolean;
-  shouldRetryOnContent?: (content: GenerateContentResponse) => boolean;
+  shouldRetryOnContent?: (content: T) => boolean;
   onPersistent429?: (error?: unknown) => Promise<string | boolean | null>;
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
   signal?: AbortSignal;
@@ -230,9 +228,8 @@ export function isNetworkTransientError(error: unknown): boolean {
  *    (centralized in isNetworkTransientError)
  * 2. RetryableQuotaError → retry
  * 3. Anthropic body-level errors (overloaded_error, rate_limit_error, api_error, no HTTP status) → retry
- * 4. ApiError with status 400 → NEVER retry; ApiError 401/403/429/5xx → retry
- * 5. Generic status 401/403/429 or 5xx → retry
- * 6. All others → do not retry
+ * 4. Generic status 401/403/429 or 5xx → retry; 400 → NEVER retry
+ * 5. All others → do not retry
  *
  * @param error The error object.
  * @returns True if the error is retryable, false otherwise.
@@ -255,13 +252,8 @@ export function isRetryableError(error: Error | unknown): boolean {
     return true;
   }
 
-  // PRIORITY 4: ApiError with deterministic 400 is NEVER retryable
-  if (error instanceof ApiError) {
-    if (error.status === 400) return false;
-    return isRetryableStatus(error.status);
-  }
-
-  // PRIORITY 5: Generic status-based retry (handles non-ApiError shapes)
+  // PRIORITY 4: Generic status-based retry (handles all status-bearing errors
+  // including those that were previously ApiError-specific; 400 is not retryable).
   const status = getErrorStatus(error);
   if (status !== undefined) {
     return isRetryableStatus(status);
@@ -303,15 +295,13 @@ function classifyError(error: unknown) {
  */
 async function handleContentRetry<T>(
   result: T,
-  shouldRetryOnContent:
-    | ((content: GenerateContentResponse) => boolean)
-    | undefined,
+  shouldRetryOnContent: ((content: T) => boolean) | undefined,
   state: RetryLoopState,
   maxDelayMs: number,
   initialDelayMs: number,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  if (shouldRetryOnContent?.(result as GenerateContentResponse) !== true) {
+  if (shouldRetryOnContent?.(result) !== true) {
     return false;
   }
   const jitter = state.currentDelay * 0.3 * (Math.random() * 2 - 1);
@@ -712,7 +702,7 @@ async function handleRetryFailure(
 
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
-  options?: Partial<RetryOptions>,
+  options?: Partial<RetryOptions<T>>,
 ): Promise<T> {
   if (options?.signal?.aborted === true) {
     throw createAbortError();
@@ -747,7 +737,7 @@ export async function retryWithBackoff<T>(
     maxDelayMs,
     shouldRetryOnError,
     signal,
-    options,
+    options: cleanOptions,
     logger,
     failoverThreshold: 1,
   };

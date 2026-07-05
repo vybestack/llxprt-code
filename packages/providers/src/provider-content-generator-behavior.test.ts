@@ -80,7 +80,12 @@ describe('ProviderContentGenerator behavioral tests', () => {
 
     const generator = new ProviderContentGenerator(mockManager, {});
     const result = await generator.countTokens({
-      contents: 'hello world this is a test',
+      contents: [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello world this is a test' }],
+        },
+      ],
     });
     expect(result).toBeDefined();
     expect(result.totalTokens).toBeGreaterThan(0);
@@ -96,7 +101,7 @@ describe('ProviderContentGenerator behavioral tests', () => {
     const mockManager = {} as unknown as IProviderManager;
     const generator = new ProviderContentGenerator(mockManager, {});
 
-    await expect(generator.embedContent({} as never)).rejects.toThrow(
+    await expect(generator.embedContent({ texts: [] })).rejects.toThrow(
       /embeddings not supported/i,
     );
   });
