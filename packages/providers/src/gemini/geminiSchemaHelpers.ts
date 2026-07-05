@@ -43,51 +43,98 @@ const SUPPORTED_SCHEMA_PROPERTIES: ReadonlyArray<keyof Schema> = [
   'maximum',
 ];
 
-function cleanPropertiesObject(properties: unknown): Record<string, Schema> {
+/** Module-private narrowing predicate for plain records (non-array objects). */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function cleanPropertiesObject(
+  properties: unknown,
+  visited: WeakSet<object>,
+): Record<string, Schema> {
   const cleaned: Record<string, Schema> = {};
-  if (properties === null || typeof properties !== 'object') {
+  if (!isRecord(properties)) {
     return cleaned;
   }
-  const source = properties as Record<string, unknown>;
-  for (const propKey in source) {
-    cleaned[propKey] = cleanGeminiSchema(source[propKey]);
+  for (const propKey in properties) {
+    cleaned[propKey] = cleanGeminiSchemaInternal(properties[propKey], visited);
   }
   return cleaned;
 }
 
-function cleanAnyOfArray(value: unknown): Schema[] {
+function cleanAnyOfArray(value: unknown, visited: WeakSet<object>): Schema[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value.map((item) => cleanGeminiSchema(item));
+  return value.map((item) => cleanGeminiSchemaInternal(item, visited));
+}
+
+/**
+ * Internal recursive core of {@link cleanGeminiSchema}. Threads a `visited`
+ * WeakSet for PATH-BASED cycle detection: a schema is added to `visited`
+ * before recursing into its children and removed after the subtree is
+ * processed (try/finally). This means only true ancestor-cycles hit the
+ * visited check; shared sibling references (diamond/DAG shapes) clean
+ * normally on every occurrence. A cycle edge yields `{}`.
+ *
+ * @plan PLAN-20260702-LLMTYPES.P05
+ * @requirement REQ-011.1, REQ-011.2
+ * @pseudocode lines 80-86
+ */
+function cleanGeminiSchemaInternal(
+  schema: unknown,
+  visited: WeakSet<object>,
+): Schema {
+  // Primitives pass through unchanged. The public contract returns Schema but
+  // historically passes non-object garbage through verbatim; this assertion is
+  // unavoidable without an API change (Schema has no primitive fields).
+  if (!isRecord(schema)) {
+    return schema as Schema;
+  }
+
+  if (visited.has(schema)) {
+    const empty: Schema = {};
+    return empty;
+  }
+  visited.add(schema);
+
+  const cleanedSchema: Record<string, unknown> = {};
+  try {
+    for (const key of SUPPORTED_SCHEMA_PROPERTIES) {
+      if (!Object.prototype.hasOwnProperty.call(schema, key)) {
+        continue;
+      }
+      if (key === 'properties') {
+        cleanedSchema[key] = cleanPropertiesObject(schema[key], visited);
+      } else if (key === 'items' && isRecord(schema[key])) {
+        cleanedSchema[key] = cleanGeminiSchemaInternal(schema[key], visited);
+      } else if (key === 'anyOf') {
+        cleanedSchema[key] = cleanAnyOfArray(schema[key], visited);
+      } else {
+        cleanedSchema[key] = schema[key];
+      }
+    }
+  } finally {
+    // Remove from path so sibling references to the same object clean normally.
+    visited.delete(schema);
+  }
+  return cleanedSchema as Schema;
 }
 
 /**
  * Cleans a JSON Schema object to ensure it strictly conforms to the Gemini
  * API's supported Schema definition. Acts as a whitelist, removing properties
  * not explicitly supported by the Gemini API (e.g. `exclusiveMinimum`).
+ *
+ * Cycle-safe and non-mutating: a `visited` WeakSet tracks already-seen object
+ * references to guarantee termination on cyclic schemas; a cycle edge yields
+ * `{}` (lossy-by-design, documented). The input is never mutated — a fresh
+ * copy is always returned for object schemas.
+ *
+ * @plan PLAN-20260702-LLMTYPES.P05
+ * @requirement REQ-011.1, REQ-011.2, REQ-011.3
+ * @pseudocode lines 80-88
  */
 export function cleanGeminiSchema(schema: unknown): Schema {
-  if (typeof schema !== 'object' || schema === null) {
-    return schema as Schema;
-  }
-
-  const typedSchema = schema as Record<string, unknown>;
-  const cleanedSchema: Record<string, unknown> = {};
-
-  for (const key of SUPPORTED_SCHEMA_PROPERTIES) {
-    if (!Object.prototype.hasOwnProperty.call(schema, key)) {
-      continue;
-    }
-    if (key === 'properties') {
-      cleanedSchema[key] = cleanPropertiesObject(typedSchema[key]);
-    } else if (key === 'items' && typeof typedSchema[key] === 'object') {
-      cleanedSchema[key] = cleanGeminiSchema(typedSchema[key]);
-    } else if (key === 'anyOf') {
-      cleanedSchema[key] = cleanAnyOfArray(typedSchema[key]);
-    } else {
-      cleanedSchema[key] = typedSchema[key];
-    }
-  }
-  return cleanedSchema as Schema;
+  return cleanGeminiSchemaInternal(schema, new WeakSet());
 }
