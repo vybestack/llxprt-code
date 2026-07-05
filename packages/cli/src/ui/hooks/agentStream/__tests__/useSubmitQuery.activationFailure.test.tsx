@@ -33,6 +33,7 @@ import {
   type AgentClientContract,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
@@ -115,7 +116,7 @@ interface ActivationFailureDeps {
   setIsRespondingCalls: boolean[];
   setIsResponding: Dispatch<SetStateAction<boolean>>;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
-  runLoopRef: React.MutableRefObject<
+  runStreamRef: React.MutableRefObject<
     | ((
         message: unknown,
         signal: AbortSignal,
@@ -139,7 +140,7 @@ function createDeps(
     abortControllerRef:
       options?.abortControllerRef ??
       ({ current: null as AbortController | null } as never),
-    runLoopRef: options?.runLoopRef ?? ({ current: null } as never),
+    runStreamRef: options?.runStreamRef ?? ({ current: null } as never),
     loopDetectedRef: options?.loopDetectedRef ?? ({ current: false } as never),
     onAuthError: options?.onAuthError ?? vi.fn(),
     addItem: options?.addItem ?? vi.fn().mockReturnValue(1),
@@ -153,7 +154,7 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
   // excess-property checks that can misfire under incremental typecheck caches.
   const hookDeps: UseSubmitQueryDeps = {
     config: createMockConfig(),
-    agentClient: createMockAgentClient(),
+    agent: createMockAgentClient() as unknown as Agent,
     addItem: deps.addItem,
     settings: {} as never,
     onDebugMessage: vi.fn(),
@@ -183,7 +184,7 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
     lastModelInfoRef: { current: null },
     lastModelIdentityRef: { current: null },
     abortControllerRef: deps.abortControllerRef,
-    runLoopRef: deps.runLoopRef,
+    runStreamRef: deps.runStreamRef,
     submitQueryRef: { current: null },
     isResponding: false,
     streamingState: StreamingState.Idle,
@@ -200,7 +201,7 @@ describe('useSubmitQuery — pre-request activation failure (issue #2379)', () =
   it('clears isResponding when the current turn runLoop rejects before any provider request', async () => {
     const runDeferred = createDeferred<void>();
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi.fn().mockReturnValueOnce(runDeferred.promise),
       } as never,
     });
@@ -235,7 +236,7 @@ describe('useSubmitQuery — pre-request activation failure (issue #2379)', () =
     handleSubmissionErrorMock.mockClear();
     const runDeferred = createDeferred<void>();
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi.fn().mockReturnValueOnce(runDeferred.promise),
       } as never,
     });
@@ -302,7 +303,7 @@ describe('useSubmitQuery — pre-request activation failure (issue #2379)', () =
 
     const runDeferred = createDeferred<void>();
     const deps = createDeps({
-      runLoopRef: {
+      runStreamRef: {
         current: vi.fn().mockReturnValueOnce(runDeferred.promise),
       } as never,
     });
