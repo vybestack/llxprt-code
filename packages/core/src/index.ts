@@ -551,6 +551,11 @@ export * from './adapters/IStreamAdapter.js';
 export * from './parsers/TextToolCallParser.js';
 
 // Export tool formatters
+// NOTE: the formatter package's ToolCallBlock is intentionally NOT re-exported
+// here — the canonical ToolCallBlock at this barrel is the IContent content
+// model's (see services/history/IContent.js re-export above), which the
+// formatter shape structurally matches. Import the formatter variant from
+// @vybestack/llxprt-code-tools directly if needed.
 export type {
   IToolFormatter,
   ToolFormat,
@@ -558,7 +563,6 @@ export type {
   OpenAITool,
   ResponsesTool,
   FormatterTool,
-  ToolCallBlock,
 } from '@vybestack/llxprt-code-tools';
 export { ToolFormatter } from '@vybestack/llxprt-code-tools';
 
