@@ -187,10 +187,6 @@ export function wrapApprovalHandler(
 }
 
 /**
- * Derives DisplayCallbacks from EditorCallbacks for the AgenticLoop.
- * @pseudocode createAgent.md step 147
- */
-/**
  * Validates a public EditorCallbacks preferred-editor string against the
  * known EditorType union. Unknown values are dropped (undefined) so an
  * unsupported editor cannot slip into the internal editor flow.
@@ -199,26 +195,6 @@ function toValidEditorType(
   editor: string | undefined,
 ): ReturnType<NonNullable<DisplayCallbacks['getPreferredEditor']>> {
   return editor !== undefined && isValidEditorType(editor) ? editor : undefined;
-}
-
-export function deriveDisplayCallbacks(
-  editorCallbacks: EditorCallbacks | undefined,
-): DisplayCallbacks | undefined {
-  if (editorCallbacks === undefined) {
-    return undefined;
-  }
-  const cbs: DisplayCallbacks = {};
-  if (editorCallbacks.getPreferredEditor !== undefined) {
-    cbs.getPreferredEditor = () =>
-      toValidEditorType(editorCallbacks.getPreferredEditor?.());
-  }
-  if (editorCallbacks.onEditorOpen !== undefined) {
-    cbs.onEditorOpen = editorCallbacks.onEditorOpen;
-  }
-  if (editorCallbacks.onEditorClose !== undefined) {
-    cbs.onEditorClose = editorCallbacks.onEditorClose;
-  }
-  return cbs;
 }
 
 /**

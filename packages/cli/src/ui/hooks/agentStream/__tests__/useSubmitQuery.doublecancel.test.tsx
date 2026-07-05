@@ -37,7 +37,6 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 
 vi.mock('../useStreamEventHandlers.js', () => ({
   useStreamEventHandlers: () => ({
-    processStreamEvent: vi.fn(),
     displayUserMessage: vi.fn(),
     prepareQueryForAgent: vi
       .fn()

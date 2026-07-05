@@ -394,8 +394,8 @@ describe('mutation P23.e — rebuild with approval + display callbacks (REQ-005)
   }, 30000);
 
   it('setModel on an agent WITH editorCallbacks triggers rebuild carrying displayCallbacks (covers line 1196) (REQ-005)', async () => {
-    // Build WITH editorCallbacks — deriveDisplayCallbacks threads them into
-    // deps.displayCallbacks, so the rebuild conditional spread at line
+    // Build WITH editorCallbacks — createStableDisplayCallbacks threads them
+    // into deps.displayCallbacks, so the rebuild conditional spread at line
     // 1195-1197 includes them.
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       editorCallbacks: {

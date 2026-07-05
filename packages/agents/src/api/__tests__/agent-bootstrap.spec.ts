@@ -25,7 +25,6 @@
  * - buildAgentResult: error and usage are INDEPENDENT optional surfaces.
  * - buildProviderInfos / buildToolInfos: name/configured/source/server/enabled
  *   projection with mcp-vs-builtin discrimination.
- * - deriveDisplayCallbacks: undefined passthrough, selective field copying.
  * - wrapApprovalHandler: maps request fields, applies '' fallbacks for missing
  *   id/name, returns {outcome}.
  * - recordOwnership: default flags + sessionLocks default.
@@ -45,7 +44,6 @@ import {
   buildAgentResult,
   buildProviderInfos,
   buildToolInfos,
-  deriveDisplayCallbacks,
   recordOwnership,
   AgentBootstrapError,
   runWrapSchedulerFactory,
@@ -346,66 +344,6 @@ describe('Agent bootstrap helpers @plan:PLAN-20260617-COREAPI.P15 @requirement:R
       expect(mcp?.source).toBe('mcp');
       expect(mcp?.server).toBe('db');
       expect(mcp?.enabled).toBe(false);
-    });
-  });
-
-  describe('deriveDisplayCallbacks @requirement:REQ-001', () => {
-    it('returns undefined when given undefined @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', () => {
-      expect(deriveDisplayCallbacks(undefined)).toBeUndefined();
-    });
-
-    it('copies only the provided callback fields @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', () => {
-      const onEditorOpen = (): void => {};
-      const cbs = deriveDisplayCallbacks({ onEditorOpen });
-      expect(cbs).toBeDefined();
-      expect(cbs?.onEditorOpen).toBe(onEditorOpen);
-      expect(cbs?.onEditorClose).toBeUndefined();
-      expect(cbs?.getPreferredEditor).toBeUndefined();
-    });
-
-    it('copies onEditorClose when provided and leaves the others unset @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', () => {
-      const onEditorClose = (): void => {};
-      const cbs = deriveDisplayCallbacks({ onEditorClose });
-      expect(cbs?.onEditorClose).toBe(onEditorClose);
-      expect(cbs?.onEditorOpen).toBeUndefined();
-      expect(cbs?.getPreferredEditor).toBeUndefined();
-    });
-
-    it('does not even define the onEditorOpen/onEditorClose keys when those callbacks are absent @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', () => {
-      // Only getPreferredEditor supplied → the open/close keys must be ABSENT
-      // (not present-with-undefined), so consumers can detect "not configured".
-      const cbs = deriveDisplayCallbacks({ getPreferredEditor: () => 'nano' });
-      expect(cbs).toBeDefined();
-      const record = cbs as unknown as Record<string, unknown>;
-      expect('onEditorOpen' in record).toBe(false);
-      expect('onEditorClose' in record).toBe(false);
-    });
-
-    it('does not define getPreferredEditor key when that callback is absent @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', () => {
-      const cbs = deriveDisplayCallbacks({ onEditorOpen: () => {} });
-      const record = cbs as unknown as Record<string, unknown>;
-      expect('getPreferredEditor' in record).toBe(false);
-    });
-
-    it('copies all three callbacks when all are provided @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', () => {
-      const onEditorOpen = (): void => {};
-      const onEditorClose = (): void => {};
-      const cbs = deriveDisplayCallbacks({
-        getPreferredEditor: () => 'emacs',
-        onEditorOpen,
-        onEditorClose,
-      });
-      expect(cbs?.onEditorOpen).toBe(onEditorOpen);
-      expect(cbs?.onEditorClose).toBe(onEditorClose);
-      expect(cbs?.getPreferredEditor?.()).toBe('emacs');
-    });
-
-    it('wraps getPreferredEditor so its value flows through @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', () => {
-      const cbs = deriveDisplayCallbacks({
-        getPreferredEditor: () => 'vscode',
-      });
-      expect(cbs?.getPreferredEditor).toBeDefined();
-      expect(cbs?.getPreferredEditor?.()).toBe('vscode');
     });
   });
 

@@ -6,20 +6,18 @@
 
 /**
  * Extracted stream event handler hooks from useAgentStream.
- * Contains the per-event handler useCallbacks plus the single-event router
- * (processStreamEvent) consumed by the engine-owned AgenticLoop, and
- * displayUserMessage. Multi-turn continuation is owned by the AgenticLoop in
+ * Contains the per-event handler useCallbacks consumed by the AgentEvent
+ * dispatcher (agentEventDispatcher.dispatchAgentEvent), and displayUserMessage.
+ * Multi-turn continuation is owned by the AgenticLoop in
  * @vybestack/llxprt-code-agents, not by this module.
  */
 
 import type React from 'react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   type Config,
-  type ServerAgentStreamEvent as GeminiEvent,
   type ServerErrorEvent as ErrorEvent,
   type ServerChatCompressedEvent,
-  type ServerFinishedEvent,
   type MessageSenderType,
   type ToolCallRequestInfo,
   parseAndFormatApiError,
@@ -37,12 +35,7 @@ import {
   type SlashCommandProcessorResult,
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
-import {
-  showCitations,
-  getCurrentProfileName,
-  buildFinishReasonMessage,
-  buildRefusalNoticeMessage,
-} from './streamUtils.js';
+import { showCitations, getCurrentProfileName } from './streamUtils.js';
 import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
@@ -69,7 +62,6 @@ import {
   processContentEvent,
   type ContentEventDeps,
 } from './contentEventProcessor.js';
-import { dispatchStreamEvent } from './streamEventDispatcher.js';
 import {
   prepareQueryForAgent as prepareQueryImpl,
   type PrepareQueryDeps,
@@ -88,10 +80,6 @@ interface StreamEventHandlersResult {
     options?: { clearQueue?: boolean },
   ) => void;
   handleCitationEvent: (text: string, userMessageTimestamp: number) => void;
-  handleFinishedEvent: (
-    event: ServerFinishedEvent,
-    userMessageTimestamp: number,
-  ) => void;
   /**
    * Finished-notice handler for the public AgentEvent done{stop|refusal} path.
    * Receives the pre-computed message (or null for no notice).
@@ -110,15 +98,6 @@ interface StreamEventHandlersResult {
     remainingTokenCount: number,
   ) => void;
   handleLoopDetectedEvent: () => void;
-  /**
-   * Processes a SINGLE stream event into React state. Used by the AgenticLoop's
-   * stream-event router. Does NOT schedule tools or trigger continuation — the
-   * loop owns those.
-   */
-  processStreamEvent: (
-    event: GeminiEvent,
-    userMessageTimestamp: number,
-  ) => void;
   displayUserMessage: (
     trimmedQuery: string,
     userMessageTimestamp: number,
@@ -202,13 +181,11 @@ export function useStreamEventHandlers(
     handleContentEvent,
     handleLoopDetectedEvent,
   );
-  const processStreamEvent = useProcessStreamEvent(deps, handlers);
   const displayUserMessage = useDisplayUserMessage(deps);
   const prepareQueryForAgent = usePrepareQueryForAgent(deps);
 
   return {
     ...handlers,
-    processStreamEvent,
     displayUserMessage,
     prepareQueryForAgent,
   };
@@ -246,7 +223,6 @@ function useStreamHandlers(
     handleUserCancelledEvent: useUserCancelledHandler(deps),
     handleErrorEvent: useErrorEventHandler(deps),
     handleCitationEvent: useCitationEventHandler(deps),
-    handleFinishedEvent: useFinishedEventHandler(deps),
     handleFinishedNotice: useFinishedNoticeHandler(deps),
     handleChatCompressionEvent: useChatCompressionHandler(deps),
     handleMaxSessionTurnsEvent: useMaxSessionTurnsHandler(deps),
@@ -386,26 +362,6 @@ function useCitationEventHandler(deps: StreamEventHandlerDeps) {
       setPendingHistoryItem,
       settings,
     ],
-  );
-}
-
-function useFinishedEventHandler(deps: StreamEventHandlerDeps) {
-  const { addItem } = deps;
-  return useCallback(
-    (event: ServerFinishedEvent, userMessageTimestamp: number) => {
-      // @issue:2329 — prefer a refusal-specific notice when the raw provider
-      // stop reason indicates a safety-classifier refusal; otherwise fall back
-      // to the generic finish-reason message.
-      const message =
-        buildRefusalNoticeMessage(event.value.stopReason) ??
-        buildFinishReasonMessage(event.value.reason);
-      if (message)
-        addItem(
-          { type: 'info', text: `WARNING:  ${message}` },
-          userMessageTimestamp,
-        );
-    },
-    [addItem],
   );
 }
 
@@ -567,7 +523,7 @@ function useDisplayUserMessage(deps: StreamEventHandlerDeps) {
         userMessageTimestamp,
       );
       // Inline profile_change notifications are now owned exclusively by the
-      // ModelInfo event path (streamEventDispatcher.handleModelInfoEvent).
+      // ModelInfo event path (agentEventDispatcher.handleModelInfoEvent).
       // We still track lastProfileNameRef for backward-compatible diagnostics.
       const liveProfileName = getCurrentProfileName(config);
       lastProfileNameRef.current = liveProfileName ?? undefined;
@@ -582,51 +538,9 @@ type HandlerMap = Pick<
   | 'handleUserCancelledEvent'
   | 'handleErrorEvent'
   | 'handleChatCompressionEvent'
-  | 'handleFinishedEvent'
   | 'handleFinishedNotice'
   | 'handleMaxSessionTurnsEvent'
   | 'handleContextWindowWillOverflowEvent'
   | 'handleCitationEvent'
   | 'handleLoopDetectedEvent'
 >;
-
-/**
- * Processes a SINGLE stream event into React state without scheduling tools
- * or triggering continuation. The AgenticLoop's stream-event router calls this
- * per event. A ref-backed buffer accumulates gemini content across events
- * within a turn.
- */
-function useProcessStreamEvent(
-  deps: StreamEventHandlerDeps,
-  handlers: HandlerMap,
-) {
-  const bufferRef = useRef('');
-  return useCallback(
-    (event: GeminiEvent, userMessageTimestamp: number) => {
-      const result = dispatchStreamEvent(
-        event,
-        {
-          addItem: deps.addItem,
-          sanitizeContent: deps.sanitizeContent,
-          flushPendingHistoryItem: deps.flushPendingHistoryItem,
-          pendingHistoryItemRef: deps.pendingHistoryItemRef,
-          thinkingBlocksRef: deps.thinkingBlocksRef,
-          turnCancelledRef: deps.turnCancelledRef,
-          loopDetectedRef: deps.loopDetectedRef,
-          lastModelInfoRef: deps.lastModelInfoRef,
-          lastModelIdentityRef: deps.lastModelIdentityRef,
-          setPendingHistoryItem: deps.setPendingHistoryItem,
-          setLastAgentActivityTime: deps.setLastAgentActivityTime,
-          setThought: deps.setThought,
-          getContentPrefixIdentity: defaultGetContentPrefixIdentity,
-          ...handlers,
-          scheduleToolCalls: deps.scheduleToolCalls,
-        },
-        bufferRef.current,
-        userMessageTimestamp,
-      );
-      bufferRef.current = result.agentMessageBuffer;
-    },
-    [deps, handlers],
-  );
-}

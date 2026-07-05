@@ -36,8 +36,11 @@ import type { ToolConfirmation, ToolUpdate } from '../event-types.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { buildToolInfos } from '../agentBootstrap.js';
 import type { StableDisplayCallbacksHolder } from '../agentBootstrap.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ToolKeysControl } from './toolKeysControl.js';
 import type { ToolKeysControlDeps } from './toolKeysControl.js';
+
+const logger = new DebugLogger('llxprt:agents:tool-control');
 
 /**
  * Typed error thrown by {@link ToolControl.respondToConfirmation} when the
@@ -242,8 +245,11 @@ export class ToolControl implements AgentToolControl {
       const model =
         client.getCurrentSequenceModel() ?? this.deps.config.getModel();
       client.getChat().recordCompletedToolCalls(model, [...completed]);
-    } catch {
+    } catch (error) {
       // History persistence is best-effort.
+      logger.debug(
+        `recordCompletedToolCalls best-effort persistence failed: ${error}`,
+      );
     }
   }
 

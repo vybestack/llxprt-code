@@ -7,8 +7,7 @@
 /**
  * AgentEvent dispatch logic: the switch/case dispatcher that maps a single
  * public AgentEvent (from agent.stream()) to the appropriate React state
- * update. Mirrors streamEventDispatcher.ts but consumes the public AgentEvent
- * union instead of raw ServerAgentStreamEvents. Reuses the same per-event
+ * update. Consumes the public AgentEvent union and reuses the same per-event
  * handlers so rendered behavior is identical.
  *
  * None of these functions call React hooks.
@@ -93,7 +92,6 @@ type DispatchResult = {
 
 /**
  * Events that should reset the accumulated content buffer after dispatch.
- * Mirrors BUFFER_RESET_EVENTS from streamEventDispatcher.ts.
  */
 const BUFFER_RESET_AGENT_EVENTS = new Set<AgentEvent['type']>([
   'done',
@@ -208,8 +206,7 @@ function handleModelInfoEvent(
 /**
  * Type-safely narrows a string to FinishReason by checking membership in the
  * enum's values. Returns undefined for unknown values so buildFinishReasonMessage
- * is never called with an out-of-range key. Behavior is identical to the old
- * raw-path handleFinishedEvent which received the verbatim enum value.
+ * is never called with an out-of-range key.
  */
 function narrowFinishReason(reason: string): FinishReason | undefined {
   const values = Object.values(FinishReason) as string[];
@@ -282,7 +279,6 @@ function dispatchDoneEvent(
 
 /**
  * Dispatches a single public AgentEvent to the appropriate React state update.
- * Parity-mapped from streamEventDispatcher.dispatchStreamEvent.
  */
 export function dispatchAgentEvent(
   event: AgentEvent,
@@ -358,7 +354,7 @@ export function dispatchAgentEvent(
     case 'invalid-stream':
     case 'notice':
       // No state change — display flows through displayCallbacks or is
-      // handled by the loop internally. Parity with raw dispatcher.
+      // handled by the loop internally.
       return { agentMessageBuffer };
     default:
       return { agentMessageBuffer };
