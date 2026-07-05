@@ -45,6 +45,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const part: Part = { text };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -58,6 +59,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -72,6 +74,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -86,6 +89,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -97,6 +101,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -106,6 +111,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const part: Part = { thought: true, text, thoughtSignature: sig };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -119,6 +125,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -128,6 +135,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const part: Part = { fileData: { fileUri } };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -139,6 +147,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -150,6 +159,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -163,6 +173,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -176,6 +187,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -187,6 +199,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -197,6 +210,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const roundTripped = blocksToGeminiParts(geminiPartsToBlocks(parts));
         return deepEqual(roundTripped, parts);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -216,6 +230,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTripped, parts);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -225,6 +240,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const part: Part = { thought: true, text };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -239,6 +255,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -250,6 +267,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         };
         return deepEqual(roundTrip(part), part);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -260,6 +278,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const roundTripped = blocksToGeminiParts(geminiPartsToBlocks(parts));
         return deepEqual(roundTripped, parts);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -273,6 +292,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const roundTripped = blocksToGeminiParts(geminiPartsToBlocks(parts));
         return deepEqual(roundTripped, parts);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -286,6 +306,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const roundTripped = blocksToGeminiParts(geminiPartsToBlocks(parts));
         return deepEqual(roundTripped, parts);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -305,6 +326,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTripped, parts);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -315,6 +337,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const roundTripped = blocksToGeminiParts(geminiPartsToBlocks(parts));
         return deepEqual(roundTripped, parts);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -325,6 +348,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const roundTripped = blocksToGeminiParts(geminiPartsToBlocks(parts));
         return deepEqual(roundTripped, parts);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -348,6 +372,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
         const roundTripped = blocksToGeminiParts(geminiPartsToBlocks(parts));
         return deepEqual(roundTripped, parts);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -366,6 +391,7 @@ describe('property-based round-trips (REQ-010.2)', () => {
           return deepEqual(roundTripped, parts);
         },
       ),
+      { numRuns: 200 },
     );
   });
 });
@@ -384,6 +410,7 @@ describe('property-based — videoMetadata round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -402,6 +429,7 @@ describe('property-based — videoMetadata round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -418,6 +446,7 @@ describe('property-based — videoMetadata round-trips (REQ-010.2)', () => {
           return deepEqual(roundTrip(part), part);
         },
       ),
+      { numRuns: 200 },
     );
   });
 });
@@ -442,6 +471,7 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
           );
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -477,6 +507,7 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
           );
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -494,6 +525,7 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
           result.toolTokens === undefined
         );
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -512,6 +544,7 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
           result.toolTokens === undefined
         );
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -536,6 +569,7 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
           );
         },
       ),
+      { numRuns: 200 },
     );
   });
 });
@@ -557,6 +591,7 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
           expect(result.functionCall.args).toStrictEqual({});
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -575,6 +610,7 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
           expect(result.functionResponse.response).toStrictEqual({});
         },
       ),
+      { numRuns: 200 },
     );
   });
 
@@ -589,6 +625,7 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
         expect(result.functionCall.id).toBeUndefined();
         expect(result.functionCall.name).toBe(name);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -602,6 +639,7 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
         expect(result.functionResponse.id).toBeUndefined();
         expect(result.functionResponse.name).toBe(name);
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -615,6 +653,7 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
         expect(result.executableCode.code).toBe(code);
         expect(result.executableCode.language).toBeUndefined();
       }),
+      { numRuns: 200 },
     );
   });
 
@@ -629,6 +668,7 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
         // output is absent on input but normalized to "" on output.
         expect(result.codeExecutionResult.output).toBe('');
       }),
+      { numRuns: 200 },
     );
   });
 });

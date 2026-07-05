@@ -138,7 +138,7 @@ describe('jsonSchema property-based', () => {
 
   it.prop([fc.array(fc.string())])(
     'isJsonSchema is false for arrays',
-    (v: unknown) => isJsonSchema(v) === false,
+    (v: string[]) => isJsonSchema(v) === false,
   );
 
   it.prop([

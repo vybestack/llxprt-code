@@ -62,6 +62,11 @@ const EXECUTABLE_CODE_KEY = 'gemini.executableCode';
 const CODE_EXEC_RESULT_KEY = 'gemini.codeExecutionResult';
 /** Key under which videoMetadata is preserved on a media block. */
 const VIDEO_METADATA_KEY = 'gemini.videoMetadata';
+/**
+ * Key under which a non-record functionResponse.response (null/array/primitive)
+ * is preserved so the round-trip is lossless (mirrors executableCode/fileData).
+ */
+const FUNCTION_RESPONSE_KEY = 'gemini.functionResponse';
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
@@ -187,12 +192,20 @@ export function geminiPartToBlock(part: Part): ContentBlock | null {
   }
   if (part.functionResponse) {
     const fr = part.functionResponse;
-    return {
+    const rawResponse: unknown = fr.response;
+    const block: ToolResponseBlock = {
       type: 'tool_response',
       callId: fr.id ?? '',
       toolName: fr.name ?? '',
-      result: isRecord(fr.response) ? fr.response : {},
+      result: isRecord(rawResponse) ? rawResponse : {},
     };
+    // Lossless preservation: when response is a non-record (null/array/
+    // primitive) and present, stash it in providerMetadata so the reverse
+    // converter can restore it byte-identical (mirrors executableCode/fileData).
+    if (!isRecord(rawResponse) && rawResponse !== undefined) {
+      block.providerMetadata = { [FUNCTION_RESPONSE_KEY]: rawResponse };
+    }
+    return block;
   }
   if (part.inlineData) {
     return inlineDataToBlock(part);
@@ -243,10 +256,22 @@ function buildToolCallPart(block: ToolCallBlock): Part {
 }
 
 function buildFunctionResponsePart(block: ToolResponseBlock): Part {
+  // If a non-record response was preserved in providerMetadata (lossless
+  // round-trip), restore it verbatim; otherwise map the record result.
+  const meta = block.providerMetadata;
   const fr: NonNullable<Part['functionResponse']> = {
     name: block.toolName,
     response: isRecord(block.result) ? block.result : {},
   };
+  if (meta !== undefined && FUNCTION_RESPONSE_KEY in meta) {
+    // The SDK types FunctionResponse.response as Record<string, unknown>,
+    // but the lossless-preservation contract can hold any JSON value
+    // (null/array/primitive). The field is read back verbatim on the
+    // reverse path, so the widening is intentional and safe.
+    fr.response = meta[FUNCTION_RESPONSE_KEY] as NonNullable<
+      Part['functionResponse']
+    >['response'];
+  }
   if (block.callId !== '') {
     fr.id = block.callId;
   }
@@ -486,13 +511,18 @@ export function geminiUrlMetadataToUrlAccessInfo(
 export function geminiApiErrorToProviderApiError(
   e: ApiError,
 ): ProviderApiError {
-  const status = e.status;
+  // The @google/genai SDK declares ApiError.status as a `number`, but in
+  // practice a gRPC string status (e.g. 'RESOURCE_EXHAUSTED') can surface.
+  // Read defensively via a widened local so string-based statuses are still
+  // classified — no type assertion is needed since we branch on typeof.
+  const rawStatus: unknown = e.status;
   const result: ProviderApiError = {
     provider: 'gemini',
     message: e.message,
     raw: e,
   };
-  if (typeof status === 'number') {
+  if (typeof rawStatus === 'number') {
+    const status = rawStatus;
     result.status = status;
     if (status === 429) {
       result.isQuotaError = true;
@@ -502,6 +532,23 @@ export function geminiApiErrorToProviderApiError(
       result.isAuthError = true;
     }
     if (status >= 500) {
+      result.isTransient = true;
+    }
+  } else if (typeof rawStatus === 'string') {
+    const status = rawStatus;
+    result.code = status;
+    if (status === 'RESOURCE_EXHAUSTED') {
+      result.isQuotaError = true;
+      result.isTransient = true;
+    }
+    if (status === 'UNAUTHENTICATED' || status === 'PERMISSION_DENIED') {
+      result.isAuthError = true;
+    }
+    if (
+      status === 'UNAVAILABLE' ||
+      status === 'DEADLINE_EXCEEDED' ||
+      status === 'INTERNAL'
+    ) {
       result.isTransient = true;
     }
   }

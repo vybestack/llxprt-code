@@ -106,6 +106,25 @@ describe('geminiPartsToBlocks / blocksToGeminiParts round-trip (REQ-010.2)', () 
     expect(roundTrip(part)).toStrictEqual(part);
   });
 
+  // Non-record functionResponse.response round-trip (lossless via
+  // providerMetadata): the SDK types response as Record<string, unknown>,
+  // but a non-record value can occur in practice. The preservation path
+  // stashes it in providerMetadata and restores it on the reverse trip.
+  it.each([
+    ['null', null],
+    ['array', [1, 2]],
+    ['string', 'plain string'],
+  ] satisfies ReadonlyArray<readonly [string, unknown]>)(
+    'round-trips functionResponse with response: %s (lossless via providerMetadata)',
+    (_label, rawResponse) => {
+      const part: Part = {
+        functionResponse: { name: 'fn', response: {} },
+      };
+      Reflect.set(part.functionResponse!, 'response', rawResponse);
+      expect(roundTrip(part)).toStrictEqual(part);
+    },
+  );
+
   it('round-trips { inlineData: { mimeType, data } }', () => {
     const part: Part = {
       inlineData: { mimeType: 'image/png', data: 'iVBORw0KGgo=' },
@@ -722,64 +741,68 @@ describe('geminiUrlMetadataToUrlAccessInfo (REQ-010.4, pseudocode lines 65-66)',
 // ---------------------------------------------------------------------------
 
 describe('geminiApiErrorToProviderApiError (REQ-010.5, pseudocode lines 70-72)', () => {
-  it('429 → quota + transient flags', () => {
-    const err = makeApiError(429, 'rate limited');
+  it.each([
+    [429, true, true, undefined],
+    [401, undefined, undefined, true],
+    [403, undefined, undefined, true],
+    [500, undefined, true, undefined],
+    [503, undefined, true, undefined],
+    [400, undefined, undefined, undefined],
+  ] satisfies ReadonlyArray<
+    readonly [
+      number,
+      boolean | undefined,
+      boolean | undefined,
+      boolean | undefined,
+    ]
+  >)('%d → correct flags', (status, quota, transient, auth) => {
+    const err = makeApiError(status, 'err');
     const result = geminiApiErrorToProviderApiError(err);
-    expect(result).toStrictEqual({
-      provider: 'gemini',
-      status: 429,
-      message: 'rate limited',
-      raw: err,
-      isQuotaError: true,
-      isTransient: true,
-    });
-    expect(result.isAuthError).toBeFalsy();
-    expect(isProviderApiError(result)).toBe(true);
-  });
-
-  it('401 → auth flag', () => {
-    const err = makeApiError(401, 'unauthorized');
-    const result = geminiApiErrorToProviderApiError(err);
-    expect(result.isAuthError).toBe(true);
-    expect(result.isQuotaError).toBeFalsy();
-    expect(result.isTransient).toBeFalsy();
-    expect(isProviderApiError(result)).toBe(true);
-  });
-
-  it('403 → auth flag', () => {
-    const err = makeApiError(403, 'forbidden');
-    const result = geminiApiErrorToProviderApiError(err);
-    expect(result.isAuthError).toBe(true);
-    expect(isProviderApiError(result)).toBe(true);
-  });
-
-  it('500 → transient flag', () => {
-    const err = makeApiError(500, 'server error');
-    const result = geminiApiErrorToProviderApiError(err);
-    expect(result.isTransient).toBe(true);
-    expect(result.isQuotaError).toBeFalsy();
-    expect(result.isAuthError).toBeFalsy();
-    expect(isProviderApiError(result)).toBe(true);
-  });
-
-  it('400 → no flags', () => {
-    const err = makeApiError(400, 'bad request');
-    const result = geminiApiErrorToProviderApiError(err);
-    expect(result.isQuotaError).toBeFalsy();
-    expect(result.isAuthError).toBeFalsy();
-    expect(result.isTransient).toBeFalsy();
+    expect(result.isQuotaError).toBe(quota);
+    expect(result.isTransient).toBe(transient);
+    expect(result.isAuthError).toBe(auth);
     expect(isProviderApiError(result)).toBe(true);
   });
 
   it('undefined status → no flags (defensive path for network errors)', () => {
     const err = new ApiError({ message: 'network error' });
     const result = geminiApiErrorToProviderApiError(err);
-    expect(result.isQuotaError).toBeFalsy();
-    expect(result.isAuthError).toBeFalsy();
-    expect(result.isTransient).toBeFalsy();
+    expect(result.isQuotaError).toBeUndefined();
+    expect(result.isAuthError).toBeUndefined();
+    expect(result.isTransient).toBeUndefined();
     // status is omitted entirely (not set to undefined) when the SDK error
     // carries no numeric status, so the guard accepts the result.
     expect('status' in result).toBe(false);
+    expect(isProviderApiError(result)).toBe(true);
+  });
+
+  // gRPC string status tests: the SDK declares status as `number`, but the
+  // converter reads it defensively as `unknown`. These tests use Reflect.set
+  // to simulate a runtime string status (no type assertions needed since
+  // Reflect.set's value parameter is typed `any`).
+  it.each([
+    ['RESOURCE_EXHAUSTED', true, true, undefined],
+    ['UNAUTHENTICATED', undefined, undefined, true],
+    ['PERMISSION_DENIED', undefined, undefined, true],
+    ['UNAVAILABLE', undefined, true, undefined],
+    ['DEADLINE_EXCEEDED', undefined, true, undefined],
+    ['INTERNAL', undefined, true, undefined],
+    ['SOME_UNKNOWN_CODE', undefined, undefined, undefined],
+  ] satisfies ReadonlyArray<
+    readonly [
+      string,
+      boolean | undefined,
+      boolean | undefined,
+      boolean | undefined,
+    ]
+  >)('gRPC string %s → correct flags', (code, quota, transient, auth) => {
+    const err = makeApiError(500, code);
+    Reflect.set(err, 'status', code);
+    const result = geminiApiErrorToProviderApiError(err);
+    expect(result.code).toBe(code);
+    expect(result.isQuotaError).toBe(quota);
+    expect(result.isTransient).toBe(transient);
+    expect(result.isAuthError).toBe(auth);
     expect(isProviderApiError(result)).toBe(true);
   });
 });
@@ -832,9 +855,9 @@ describe('toolDeclarationsToGemini (REQ-010.6, pseudocode lines 75-77)', () => {
 
 describe('consistency with ContentConverters.toIContent (REQ-010.7)', () => {
   // ContentConverters.toIContent applies ID canonicalization:
-  //  - functionCall: if no raw id, it generates a canonical id via
-  //    canonicalizeToolCallId(providerName, rawId, toolName, turnKey, callIndex).
-  //    If a raw id IS present, toIContent uses it directly.
+  //  - functionCall: toIContent ALWAYS canonicalizes the id via
+  //    canonicalizeToolCallId(providerName, rawId, toolName, turnKey, callIndex),
+  //    even when a raw id is present (rawId is used as input to canonicalization).
   //  - functionResponse: same pattern via canonicalizeToolResponseId.
   // The neutral geminiPartToBlock uses the raw id directly ('' when absent),
   // WITHOUT canonicalization — it is a lossless, id-free boundary helper.
@@ -844,14 +867,6 @@ describe('consistency with ContentConverters.toIContent (REQ-010.7)', () => {
   //    modulo metadata.turnId (toIContent stamps a turnKey).
   //  - functionCall/functionResponse WITHOUT a raw id: IDs DIFFER — toIContent
   //    canonicalizes, neutralConverter returns ''. This difference is documented.
-
-  function blockId(block: { type?: string; id?: unknown }): string {
-    return typeof block.id === 'string' ? block.id : '';
-  }
-
-  function blockCallId(block: { type?: string; callId?: unknown }): string {
-    return typeof block.callId === 'string' ? block.callId : '';
-  }
 
   /**
    * Normalize a block by deleting all ID-bearing fields so that the deep
@@ -864,8 +879,17 @@ describe('consistency with ContentConverters.toIContent (REQ-010.7)', () => {
     return clone;
   }
 
-  it('text part: neutral block deep-equals toIContent block', () => {
-    const part: Part = { text: 'hello' };
+  it.each([
+    ['text', { text: 'hello' } satisfies Part],
+    [
+      'thought',
+      {
+        thought: true,
+        text: 'reasoning',
+        thoughtSignature: 's',
+      } satisfies Part,
+    ],
+  ])('%s part: neutral block deep-equals toIContent block', (_label, part) => {
     const neutralBlock = geminiPartToBlock(part);
     const icontent = ContentConverters.toIContent({
       role: 'model',
@@ -874,91 +898,33 @@ describe('consistency with ContentConverters.toIContent (REQ-010.7)', () => {
     expect(neutralBlock).toStrictEqual(icontent.blocks[0]);
   });
 
-  it('thought part: neutral block deep-equals toIContent block', () => {
-    const part: Part = {
-      thought: true,
-      text: 'reasoning',
-      thoughtSignature: 's',
-    };
+  it.each([
+    [
+      'functionCall WITH id',
+      {
+        functionCall: { id: 'call_42', name: 'fn', args: { x: 1 } },
+      } satisfies Part,
+    ],
+    [
+      'functionResponse WITH id',
+      {
+        functionResponse: { id: 'call_42', name: 'fn', response: { ok: true } },
+      } satisfies Part,
+    ],
+    [
+      'functionCall WITHOUT id',
+      { functionCall: { name: 'fn', args: { a: 1 } } } satisfies Part,
+    ],
+    [
+      'functionResponse WITHOUT id',
+      { functionResponse: { name: 'fn', response: { r: 2 } } } satisfies Part,
+    ],
+  ])('%s — block payload deep-equals modulo id fields', (_label, part) => {
     const neutralBlock = geminiPartToBlock(part);
     const icontent = ContentConverters.toIContent({
       role: 'model',
       parts: [part],
     });
-    expect(neutralBlock).toStrictEqual(icontent.blocks[0]);
-  });
-
-  it('functionCall WITH id — full block deep-equals modulo id fields', () => {
-    const part: Part = {
-      functionCall: { id: 'call_42', name: 'fn', args: { x: 1 } },
-    };
-    const neutralBlock = geminiPartToBlock(part);
-    const icontent = ContentConverters.toIContent({
-      role: 'model',
-      parts: [part],
-    });
-    // Canonicalization difference: toIContent always rewrites the id.
-    expect(blockId(neutralBlock)).toBe('call_42');
-    const ccId = blockId(icontent.blocks[0]);
-    expect(ccId).not.toBe('call_42');
-    expect(ccId.length).toBeGreaterThan(0);
-    // Full payload (name, parameters, type) deep-equals modulo the id field.
-    expect(stripIds(neutralBlock as Record<string, unknown>)).toStrictEqual(
-      stripIds(icontent.blocks[0] as Record<string, unknown>),
-    );
-  });
-
-  it('functionResponse WITH id — full block deep-equals modulo id fields', () => {
-    const part: Part = {
-      functionResponse: { id: 'call_42', name: 'fn', response: { ok: true } },
-    };
-    const neutralBlock = geminiPartToBlock(part);
-    const icontent = ContentConverters.toIContent({
-      role: 'model',
-      parts: [part],
-    });
-    // Canonicalization difference: toIContent always rewrites the callId.
-    expect(blockCallId(neutralBlock)).toBe('call_42');
-    const ccCallId = blockCallId(icontent.blocks[0]);
-    expect(ccCallId).not.toBe('call_42');
-    // Full payload (toolName, result, type) deep-equals modulo the callId field.
-    expect(stripIds(neutralBlock as Record<string, unknown>)).toStrictEqual(
-      stripIds(icontent.blocks[0] as Record<string, unknown>),
-    );
-  });
-
-  it('functionCall WITHOUT id — full block deep-equals modulo id fields', () => {
-    const part: Part = { functionCall: { name: 'fn', args: { a: 1 } } };
-    const neutralBlock = geminiPartToBlock(part);
-    const icontent = ContentConverters.toIContent({
-      role: 'model',
-      parts: [part],
-    });
-    // Neutral converter: id === '' (no canonicalization).
-    // ContentConverters: id is a canonicalized non-empty string.
-    expect(blockId(neutralBlock)).toBe('');
-    const ccId = blockId(icontent.blocks[0]);
-    expect(ccId).not.toBe('');
-    expect(ccId.length).toBeGreaterThan(0);
-    // Full payload deep-equals modulo the id field.
-    expect(stripIds(neutralBlock as Record<string, unknown>)).toStrictEqual(
-      stripIds(icontent.blocks[0] as Record<string, unknown>),
-    );
-  });
-
-  it('functionResponse WITHOUT id — full block deep-equals modulo id fields', () => {
-    const part: Part = {
-      functionResponse: { name: 'fn', response: { r: 2 } },
-    };
-    const neutralBlock = geminiPartToBlock(part);
-    const icontent = ContentConverters.toIContent({
-      role: 'model',
-      parts: [part],
-    });
-    expect(blockCallId(neutralBlock)).toBe('');
-    const ccCallId = blockCallId(icontent.blocks[0]);
-    expect(ccCallId).not.toBe('');
-    // Full payload deep-equals modulo the callId field.
     expect(stripIds(neutralBlock as Record<string, unknown>)).toStrictEqual(
       stripIds(icontent.blocks[0] as Record<string, unknown>),
     );

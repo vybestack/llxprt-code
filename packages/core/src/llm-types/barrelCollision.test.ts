@@ -19,6 +19,12 @@ describe('llm-types / IContent barrel runtime collision guard', () => {
   it('runtime export name sets are disjoint (no name clashes)', () => {
     const llmTypesKeys = new Set(Object.keys(llmTypes));
     const icontentKeys = new Set(Object.keys(icontent));
+
+    // Sanity: ensure both barrels actually expose runtime symbols,
+    // otherwise the disjointness assertion would pass trivially.
+    expect(llmTypesKeys.size).toBeGreaterThan(0);
+    expect(icontentKeys.size).toBeGreaterThan(0);
+
     const intersection = [...llmTypesKeys].filter((k) => icontentKeys.has(k));
     expect(intersection).toStrictEqual([]);
   });

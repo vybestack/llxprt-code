@@ -240,6 +240,7 @@ describe('mapAnthropicStopReason', () => {
 
 describe('isCanonicalFinishReason', () => {
   it('returns true for every canonical value', () => {
+    expect(ALL_CANONICAL.length).toBeGreaterThan(0);
     for (const v of ALL_CANONICAL) {
       expect(isCanonicalFinishReason(v)).toBe(true);
     }

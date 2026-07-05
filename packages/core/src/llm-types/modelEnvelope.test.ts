@@ -164,17 +164,17 @@ describe('accumulateModelStreamChunk', () => {
       content: {
         speaker: 'ai' as const,
         blocks: [textBlock('a')],
-        metadata: { model: 'm' },
+        metadata: { model: 'm', nested: { k: 'v' } },
       },
-      providerMetadata: { a: 1 },
+      providerMetadata: { a: 1, nested: { shared: true } },
     });
     const frozenChunk = deepFreeze({
       content: {
         speaker: 'ai' as const,
         blocks: [textBlock('b')],
-        metadata: { id: 'x' },
+        metadata: { id: 'x', nested: { k2: 'v2' } },
       },
-      providerMetadata: { b: 2 },
+      providerMetadata: { b: 2, nested: { shared2: false } },
     });
 
     const beforeAcc = JSON.parse(JSON.stringify(frozenAcc));
@@ -225,13 +225,19 @@ describe('accumulateModelStreamChunk', () => {
     expect(r.responseId).toBe('r2');
   });
 
-  it('hookRestrictions set once: chunk wins over acc', () => {
-    const hook: HookRestrictions = { allowedToolNames: ['a'] };
-    const r = accumulateModelStreamChunk(emptyModelOutput(), {
+  it('hookRestrictions: chunk wins over acc when both present', () => {
+    const accHook: HookRestrictions = { allowedToolNames: ['a'] };
+    const chunkHook: HookRestrictions = { allowedToolNames: ['b', 'c'] };
+    const acc: ModelOutput = {
       content: { speaker: 'ai', blocks: [] },
-      hookRestrictions: hook,
+      hookRestrictions: accHook,
+    };
+    const r = accumulateModelStreamChunk(acc, {
+      content: { speaker: 'ai', blocks: [] },
+      hookRestrictions: chunkHook,
     });
-    expect(r.hookRestrictions).toStrictEqual(hook);
+    expect(r.hookRestrictions).toStrictEqual(chunkHook);
+    expect(r.hookRestrictions).not.toBe(accHook);
   });
 
   it('preserves acc.hookRestrictions when chunk omits it', () => {

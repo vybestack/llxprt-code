@@ -361,15 +361,20 @@ describe('IContent providerMetadata property-based', () => {
         reasoningTokens: fc.option(fc.nat({ max: 50000 })),
         toolTokens: fc.option(fc.nat({ max: 50000 })),
       })
-      .map(
-        (v): UsageStats => ({
+      .map((v): UsageStats => {
+        const stats: UsageStats = {
           promptTokens: v.promptTokens,
           completionTokens: v.completionTokens,
           totalTokens: v.totalTokens,
-          reasoningTokens: v.reasoningTokens,
-          toolTokens: v.toolTokens,
-        }),
-      ),
+        };
+        if (v.reasoningTokens !== null) {
+          stats.reasoningTokens = v.reasoningTokens;
+        }
+        if (v.toolTokens !== null) {
+          stats.toolTokens = v.toolTokens;
+        }
+        return stats;
+      }),
   ])(
     'UsageStats with new fields round-trips through JSON unchanged',
     (stats: UsageStats) => {

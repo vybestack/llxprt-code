@@ -483,8 +483,9 @@ describe('toolCall property-based', () => {
           id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
           response: fc.option(fc.string({ maxLength: 30 })),
         }),
-        // Case 2: response key is optional — exercises both the present and
-        // the result:{} fallback (when fast-check omits the response key)
+        // Case 2: response key is optional — fast-check will sometimes
+        // omit the 'response' key entirely, exercising the result:{} fallback.
+        // When present, it's always a string.
         fc.record(
           {
             name: fc.string({ minLength: 1, maxLength: 20 }),
@@ -504,12 +505,10 @@ describe('toolCall property-based', () => {
       if (block.type !== 'tool_response') return false;
       const fnResp = input.functionResponse;
       const expectedResult = 'response' in fnResp ? fnResp['response'] : {};
-      return (
-        block.toolName === fnResp.name &&
-        block.callId === (typeof fnResp.id === 'string' ? fnResp.id : '') &&
-        // toStrictEqual-equivalent deep check for the absent case (=== {})
-        JSON.stringify(block.result) === JSON.stringify(expectedResult)
-      );
+      expect(block.toolName).toBe(fnResp.name);
+      expect(block.callId).toBe(typeof fnResp.id === 'string' ? fnResp.id : '');
+      expect(block.result).toStrictEqual(expectedResult);
+      return true;
     },
   );
 

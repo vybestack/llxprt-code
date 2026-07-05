@@ -67,7 +67,11 @@ export function isProviderApiError(value: unknown): value is ProviderApiError {
     return false;
   }
 
-  if ('retryAfterMs' in value && typeof value['retryAfterMs'] !== 'number') {
+  if (
+    'retryAfterMs' in value &&
+    (typeof value['retryAfterMs'] !== 'number' ||
+      !Number.isFinite(value['retryAfterMs']))
+  ) {
     return false;
   }
 

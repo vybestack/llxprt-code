@@ -95,6 +95,18 @@ describe('isProviderApiError', () => {
     );
   });
 
+  it('rejects object with Infinity retryAfterMs', () => {
+    expect(isProviderApiError({ message: 'err', retryAfterMs: Infinity })).toBe(
+      false,
+    );
+  });
+
+  it('rejects object with NaN retryAfterMs', () => {
+    expect(isProviderApiError({ message: 'err', retryAfterMs: NaN })).toBe(
+      false,
+    );
+  });
+
   it('rejects object with non-boolean isQuotaError', () => {
     expect(isProviderApiError({ message: 'err', isQuotaError: 'yes' })).toBe(
       false,

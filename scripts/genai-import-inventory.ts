@@ -118,6 +118,17 @@ const GENERATED_BY_NOTE =
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+/**
+ * Deterministic code-unit comparison for stable sorting across environments.
+ * Uses raw `<`/`>` (not `localeCompare`) so output is identical regardless of
+ * the host's LC_COLLATE setting.
+ */
+function compareStrings(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 // ─── Classification (pure, unit-tested) ─────────────────────────────────────
 
 /**
@@ -158,21 +169,32 @@ export function classifyGenaiImporter(path: string): Classification {
  * node_modules/dist/build) and a content scan for the import filter.
  */
 function findGenaiImporters(): string[] {
-  const tracked = execFileSync(
-    'git',
-    ['ls-files', 'packages/**/*.ts', 'packages/**/*.tsx'],
-    {
-      cwd: REPO_ROOT,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  )
+  let tracked: string;
+  try {
+    tracked = execFileSync(
+      'git',
+      ['ls-files', 'packages/**/*.ts', 'packages/**/*.tsx'],
+      {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(
+      `genai-import-inventory: git ls-files failed (is git on PATH ` +
+        `and is this a git repo?): ${msg}`,
+    );
+    process.exit(1);
+  }
+  const files = tracked
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
   const importers: string[] = [];
-  for (const relPath of tracked) {
+  for (const relPath of files) {
     const absPath = join(REPO_ROOT, relPath);
     let content: string;
     try {
@@ -224,7 +246,9 @@ function buildInventory(files: readonly string[]): InventoryResult {
   }
   // Stable sort by file path (the input is already sorted, but keep it
   // explicit so rendering is deterministic regardless of input order).
-  entries.sort((a, b) => a.file.localeCompare(b.file));
+  // Code-unit comparison (not localeCompare) for fully deterministic output
+  // across environments with different LC_COLLATE settings.
+  entries.sort((a, b) => compareStrings(a.file, b.file));
   return { entries, errors };
 }
 
@@ -262,10 +286,11 @@ function renderInventory(result: InventoryResult): string {
   lines.push('');
 
   // Deterministic owner order: enclave first, then issue numbers ascending.
+  // Code-unit comparison (not localeCompare) for cross-environment determinism.
   const ownerOrder = Array.from(perOwner.keys()).sort((a, b) => {
     if (a === 'enclave') return -1;
     if (b === 'enclave') return 1;
-    return a.localeCompare(b);
+    return compareStrings(a, b);
   });
   for (const owner of ownerOrder) {
     lines.push(`- \`${owner}\`: ${perOwner.get(owner) ?? 0}`);
@@ -363,6 +388,26 @@ function main(): void {
       );
       return;
     }
+    // Print a simple set-diff of the table lines so the developer can see
+    // exactly which importers were added/removed/reclassified.
+    const expectedTableLines = extractTableLines(checkedIn);
+    const actualTableLines = extractTableLines(generated);
+    const expectedSet = new Set(expectedTableLines);
+    const actualSet = new Set(actualTableLines);
+    const removed = expectedTableLines.filter((l) => !actualSet.has(l));
+    const added = actualTableLines.filter((l) => !expectedSet.has(l));
+    if (removed.length > 0) {
+      console.error('genai-import-inventory: removed from baseline:');
+      for (const line of removed) {
+        console.error('  - ' + line);
+      }
+    }
+    if (added.length > 0) {
+      console.error('genai-import-inventory: added vs baseline:');
+      for (const line of added) {
+        console.error('  + ' + line);
+      }
+    }
     console.error(
       'genai-import-inventory: baseline drift detected. ' +
         'Run `scripts/genai-import-inventory.ts` (without --check) to ' +
@@ -410,6 +455,36 @@ function trimTrailingSpaces(line: string): string {
     end -= 1;
   }
   return line.slice(0, end);
+}
+
+/**
+ * Extract the data rows (not header/separator) from the markdown table in a
+ * rendered baseline document. Used to produce a simple set-diff on baseline
+ * drift so the developer sees exactly which importers changed.
+ */
+function extractTableLines(content: string): string[] {
+  const lines = content.split('\n');
+  const tableLines: string[] = [];
+  let inTable = false;
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+    const isTableRow = trimmed.startsWith('| ');
+    if (inTable && !isTableRow) {
+      // First non-table line ends the table.
+      return tableLines;
+    }
+    if (isTableRow) {
+      inTable = true;
+      // Skip the header row and the separator row (dashes).
+      const isHeader =
+        trimmed.includes('---') ||
+        (trimmed.includes('File') && trimmed.includes('Owner'));
+      if (!isHeader) {
+        tableLines.push(trimTrailingSpaces(line));
+      }
+    }
+  }
+  return tableLines;
 }
 
 if (

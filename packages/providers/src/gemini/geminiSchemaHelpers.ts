@@ -112,6 +112,14 @@ function cleanGeminiSchemaInternal(
         // is still copied). The Gemini API expects items to be a schema
         // object or absent; null is preserved as-is for compatibility.
         cleanedSchema[key] = cleanGeminiSchemaInternal(schema[key], visited);
+      } else if (key === 'items' && Array.isArray(schema[key])) {
+        // Tuple-validation items array (JSON Schema draft-04 tuples): each
+        // member is a sub-schema that must be cleaned independently so $ref
+        // and other unsupported keys are stripped from every member.
+        const itemsArray = schema[key];
+        cleanedSchema[key] = itemsArray.map((item: unknown) =>
+          cleanGeminiSchemaInternal(item, visited),
+        );
       } else if (key === 'anyOf') {
         cleanedSchema[key] = cleanAnyOfArray(schema[key], visited);
       } else {

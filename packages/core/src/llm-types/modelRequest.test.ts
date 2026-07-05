@@ -11,8 +11,9 @@ import type {
   ModelGenerationSettings,
   ModelGenerationRequest,
 } from './modelRequest.js';
-import type { IContent, TextBlock } from '../services/history/IContent.js';
 import type {
+  IContent,
+  TextBlock,
   ToolCallBlock,
   ThinkingBlock,
 } from '../services/history/IContent.js';

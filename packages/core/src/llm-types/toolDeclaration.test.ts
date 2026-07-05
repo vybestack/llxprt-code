@@ -123,6 +123,19 @@ describe('toolDeclarationsFromLegacyToolset', () => {
     ]);
   });
 
+  it('falls back to {} when parametersJsonSchema is an array', () => {
+    const input = [
+      {
+        functionDeclarations: [
+          { name: 'tool', parametersJsonSchema: [1, 2, 3] },
+        ],
+      },
+    ];
+    expect(toolDeclarationsFromLegacyToolset(input)).toStrictEqual([
+      { name: 'tool', parametersJsonSchema: {} },
+    ]);
+  });
+
   it('handles multiple groups with multiple declarations', () => {
     const input = [
       {
@@ -152,7 +165,7 @@ describe('toolDeclarationsFromLegacyToolset', () => {
     ).toStrictEqual([]);
   });
 
-  it('omits description key entirely when undefined', () => {
+  it('preserves boolean false as parametersJsonSchema', () => {
     const input = [
       {
         functionDeclarations: [{ name: 'tool', parametersJsonSchema: false }],

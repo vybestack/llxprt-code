@@ -199,6 +199,29 @@ describe('cleanGeminiSchema — $ref/$defs stripping (documented lossiness)', ()
     expect(result).toHaveProperty('type', 'array');
   });
 
+  it('cleans each member of an items tuple array (strips $ref from members)', () => {
+    // JSON Schema draft-04 tuple-validation: items is an array of sub-schemas.
+    // Each member must be cleaned independently so unsupported keys ($ref,
+    // $defs, etc.) are stripped from every member.
+    const input = {
+      type: 'array',
+      items: [
+        { type: 'string', $ref: '#/$defs/Foo' },
+        { type: 'number', $ref: '#/$defs/Bar' },
+      ],
+    };
+    const result = asRecord(cleanGeminiSchema(input));
+    const items = result['items'];
+    expect(items).toBeInstanceOf(Array);
+    const members = items as unknown[];
+    expect(members).toHaveLength(2);
+    expect(members[0]).toStrictEqual({ type: 'string' });
+    expect(members[1]).toStrictEqual({ type: 'number' });
+    // $ref must be stripped from each member
+    expect(asRecord(members[0])).not.toHaveProperty('$ref');
+    expect(asRecord(members[1])).not.toHaveProperty('$ref');
+  });
+
   it('strips additionalProperties from the output (not in whitelist)', () => {
     const input = {
       type: 'object',
@@ -230,7 +253,7 @@ describe('property-based — cleanGeminiSchema invariants', () => {
   function deepFreeze<T>(value: T): Readonly<T> {
     if (typeof value === 'object' && value !== null) {
       Object.freeze(value);
-      for (const key in value) {
+      for (const key of Object.keys(value)) {
         deepFreeze((value as Record<string, unknown>)[key]);
       }
     }
