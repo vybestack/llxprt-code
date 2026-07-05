@@ -37,7 +37,7 @@ function createMockAgent(tools: readonly ToolInfo[] = mockTools) {
 }
 
 describe('toolsCommand', () => {
-  it('reports missing tool registry', async () => {
+  it('reports missing tools from the agent', async () => {
     const mockContext = createMockCommandContext({
       services: {
         agent: null,
@@ -53,7 +53,7 @@ describe('toolsCommand', () => {
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
         type: MessageType.ERROR,
-        text: 'Could not retrieve tool registry.',
+        text: 'Could not retrieve tools from the agent.',
       },
       expect.any(Number),
     );

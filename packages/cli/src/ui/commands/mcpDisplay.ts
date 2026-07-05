@@ -10,6 +10,7 @@ import type {
   McpPromptInfo,
   McpResourceInfo,
   Agent,
+  McpServerDetail,
 } from '@vybestack/llxprt-code-agents';
 import {
   getMCPDiscoveryState,
@@ -475,12 +476,20 @@ export async function buildMcpStatusMessage(
 
   message += 'Configured MCP servers:\n\n';
 
-  const details = await agent.mcp.details({
-    includeTools: true,
-    includePrompts: true,
-    includeResources: true,
-  });
-  const detailByServer = new Map(details.servers.map((s) => [s.name, s]));
+  // Degrade gracefully if details() rejects: proceed with an empty detail map
+  // and append a visible warning so the user still sees server names/status
+  // (which don't depend on details).
+  let detailByServer = new Map<string, McpServerDetail>();
+  try {
+    const details = await agent.mcp.details({
+      includeTools: true,
+      includePrompts: true,
+      includeResources: true,
+    });
+    detailByServer = new Map(details.servers.map((s) => [s.name, s]));
+  } catch (error) {
+    message += `${COLOR_YELLOW}Failed to load MCP tool details: ${error instanceof Error ? error.message : String(error)}${RESET_COLOR}\n\n`;
+  }
 
   for (const serverName of serverNames) {
     const server = mcpServers[serverName];

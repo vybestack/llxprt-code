@@ -221,7 +221,7 @@ describe('mcpCommand', () => {
       });
     });
 
-    it('should show an error if tool registry (agent) is not available', async () => {
+    it('should show an error if agent is not available', async () => {
       const contextWithNoAgent = createMockCommandContext({
         services: {
           config: mockConfig,
@@ -233,7 +233,7 @@ describe('mcpCommand', () => {
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Could not retrieve tool registry.',
+        content: 'Could not retrieve tools from the agent.',
       });
     });
   });
@@ -557,6 +557,45 @@ describe('mcpCommand', () => {
       expect(result.content).toContain(
         '[BLOCKED] \u001b[1mblocked-server (from another-extension)\u001b[0m - Blocked',
       );
+    });
+
+    it('degrades gracefully when agent.mcp.details() rejects, showing servers and a warning', async () => {
+      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
+        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
+        return MCPServerStatus.DISCONNECTED;
+      });
+
+      // Create an agent whose mcp.details() rejects.
+      const failingAgent = {
+        mcp: {
+          details: vi.fn().mockRejectedValue(new Error('details unavailable')),
+          refresh: vi.fn().mockResolvedValue(undefined),
+          status: vi.fn(),
+          listServers: vi.fn().mockReturnValue([]),
+        },
+        tools: { list: vi.fn().mockReturnValue([]) },
+      } as unknown as Agent;
+
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+          agent: failingAgent,
+        },
+        ui: { reloadCommands: vi.fn() },
+      });
+
+      // Must NOT throw — it should degrade and return a message.
+      const result = await mcpCommand.action!(testContext, '');
+      assertMessageAction(result);
+      const message = result.content;
+
+      // Server name must still appear (status rendering doesn't depend on details).
+      expect(message).toContain('server1');
+      expect(message).toContain('server2');
+
+      // Warning line must be present.
+      expect(message).toContain('Failed to load MCP tool details');
+      expect(message).toContain('details unavailable');
     });
   });
 });

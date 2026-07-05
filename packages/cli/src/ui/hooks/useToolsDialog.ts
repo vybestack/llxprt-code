@@ -119,7 +119,7 @@ export const useToolsDialog = ({
         if (tools === null) {
           addMessage({
             type: MessageType.ERROR,
-            content: 'Could not retrieve tool registry.',
+            content: 'Could not retrieve tools from the agent.',
             timestamp: new Date(),
           });
           return;

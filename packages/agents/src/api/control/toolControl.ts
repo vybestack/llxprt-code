@@ -48,6 +48,26 @@ import { ToolKeysControl } from './toolKeysControl.js';
 import type { ToolKeysControlDeps } from './toolKeysControl.js';
 
 /**
+ * Type-safely reads an optional string property from a tool that may carry
+ * runtime-only fields (serverName, serverToolName) not declared on
+ * {@link AnyDeclarativeTool}. Returns undefined for missing/non-string values.
+ * Uses a Record index for dynamic property access after a runtime `in` check.
+ *
+ * @plan:ISSUE-2376
+ */
+function readOptionalStringProp(
+  tool: object,
+  prop: string,
+): string | undefined {
+  if (!(prop in tool)) {
+    return undefined;
+  }
+  const record = tool as Record<string, unknown>;
+  const value = record[prop];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
  * Typed error thrown by {@link ToolControl.respondToConfirmation} when the
  * caller supplies an unknown confirmationId.
  *
@@ -127,8 +147,8 @@ export class ToolControl implements AgentToolControl {
         displayName: t.displayName,
         description: t.description,
         schema: t.schema,
-        serverName: (t as { serverName?: string }).serverName,
-        serverToolName: (t as { serverToolName?: string }).serverToolName,
+        serverName: readOptionalStringProp(t, 'serverName'),
+        serverToolName: readOptionalStringProp(t, 'serverToolName'),
       }),
     );
     const enabledNames = new Set(registry.getEnabledTools().map((t) => t.name));

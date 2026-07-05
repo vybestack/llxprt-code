@@ -93,14 +93,16 @@ export async function runZedIntegration(
   try {
     let zedAgent: ZedAgent | undefined;
     const stream = acp.ndJsonStream(stdout, stdin);
+    // Register cleanup exactly once, outside the factory closure. This avoids
+    // duplicate registrations if the factory were ever invoked more than once
+    // (issue #2376). zedAgent is captured via closure so it resolves to the
+    // instance the factory created.
+    registerCleanup(async () => {
+      await zedAgent?.disposeAllSessions();
+    });
     const connection = new acp.AgentSideConnection((conn) => {
       logger.debug(() => 'Creating ZedAgent');
       zedAgent = new ZedAgent(config, settings, conn);
-      // Dispose all per-session Agents on process exit cleanup so agents
-      // created via fromConfig are not leaked (issue #2376).
-      registerCleanup(async () => {
-        await zedAgent?.disposeAllSessions();
-      });
       return zedAgent;
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
@@ -226,16 +228,11 @@ export class ZedAgent {
         messageBus: undefined,
         sessionId,
       });
-      await restoreActiveProvider(sessionConfig, agent);
 
-      const session = new Session(
-        sessionId,
-        chat,
-        sessionConfig,
-        this.connection,
-        agent,
-      );
-      this.sessions.set(sessionId, session);
+      // Guard the post-fromConfig steps: if restoreActiveProvider, Session
+      // construction, or sessions.set throws, dispose the freshly created
+      // agent so it is not leaked (issue #2376).
+      await this.createAndStoreSession(agent, sessionConfig, sessionId, chat);
 
       return {
         sessionId,
@@ -247,6 +244,49 @@ export class ZedAgent {
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
       throw error;
+    }
+  }
+
+  /**
+   * Restores the active provider on the freshly created agent, then constructs
+   * and stores the Session. If any step fails, the agent is disposed so it is
+   * not leaked (issue #2376). The dispose itself is guarded so its failure
+   * never masks the original error.
+   *
+   * Extracted as a separate method so the leak-guard behavior is unit-testable
+   * without needing to exercise the full newSession authentication flow.
+   */
+  async createAndStoreSession(
+    agent: Agent,
+    sessionConfig: Config,
+    sessionId: string,
+    chat: AgentChatContract,
+  ): Promise<void> {
+    try {
+      await restoreActiveProvider(sessionConfig, agent);
+
+      const session = new Session(
+        sessionId,
+        chat,
+        sessionConfig,
+        this.connection,
+        agent,
+      );
+      this.sessions.set(sessionId, session);
+    } catch (creationError) {
+      try {
+        await agent.dispose();
+      } catch (disposeError) {
+        this.logger.debug(
+          () =>
+            `Error disposing leaked session agent: ${
+              disposeError instanceof Error
+                ? disposeError.message
+                : String(disposeError)
+            }`,
+        );
+      }
+      throw creationError;
     }
   }
 

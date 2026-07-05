@@ -29,6 +29,7 @@ import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { Kind } from '@vybestack/llxprt-code-tools';
 import { ToolControl } from '../control/toolControl.js';
 import type { ToolControlDeps } from '../control/toolControl.js';
+import { createToolControlDeps } from './helpers/fakeToolControlDeps.js';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';
 import type { EditorCallbacks } from '../config-types.js';
@@ -260,5 +261,52 @@ describe('McpControl details() resource description projection @plan:ISSUE-2376'
     const byUri = new Map(server!.resources!.map((r) => [r.uri, r]));
     expect(byUri.get('file:///res1')?.description).toBe('A test resource.');
     expect(byUri.get('file:///res2')?.description).toBeUndefined();
+  });
+});
+
+describe('ToolControl.get via hardened fakeToolControlDeps @plan:ISSUE-2376', () => {
+  it('returns real invocable tools whose build().execute() returns real behavior', async () => {
+    const { deps } = createToolControlDeps([
+      { name: 'fake_tool', enabled: true },
+    ]);
+    const control = new ToolControl(deps);
+    const handle = control.get('fake_tool');
+    expect(handle).toBeDefined();
+    expect(handle?.name).toBe('fake_tool');
+
+    const invocation = handle!.build({});
+    // MockToolInvocation.getDescription() returns a deterministic string.
+    expect(invocation.getDescription()).toContain('fake_tool');
+
+    const result = await invocation.execute(new AbortController().signal);
+    // The hardened fake returns ran:<name> for llmContent and returnDisplay.
+    expect(result.llmContent).toBe('ran:fake_tool');
+    expect(result.returnDisplay).toBe('ran:fake_tool');
+  });
+
+  it('buildAndExecute() runs build + execute end-to-end through the public surface', async () => {
+    const { deps } = createToolControlDeps([
+      { name: 'batch_tool', enabled: true },
+    ]);
+    const control = new ToolControl(deps);
+    const handle = control.get('batch_tool');
+    const result = await handle!.buildAndExecute(
+      { key: 'val' },
+      new AbortController().signal,
+    );
+    expect(result.llmContent).toBe('ran:batch_tool');
+    expect(result.returnDisplay).toBe('ran:batch_tool');
+  });
+
+  it('projects serverName/serverToolName for MCP tools in list()', () => {
+    const { deps } = createToolControlDeps([
+      { name: 'mcp_tool', serverName: 'srv', serverToolName: 'remote_tool' },
+    ]);
+    const control = new ToolControl(deps);
+    const info = control.list().find((t) => t.name === 'mcp_tool');
+    expect(info).toBeDefined();
+    expect(info?.source).toBe('mcp');
+    expect(info?.server).toBe('srv');
+    expect(info?.serverToolName).toBe('remote_tool');
   });
 });

@@ -224,3 +224,99 @@ describe('Session agent disposal', () => {
     expect(dispose2).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ZedAgent.createAndStoreSession leak guard (issue #2376)', () => {
+  let ZedAgentMod: typeof import('./zedIntegration.js');
+
+  beforeAll(async () => {
+    ZedAgentMod = await import('./zedIntegration.js');
+  });
+
+  function createMockAgent(): {
+    agent: Agent;
+    dispose: ReturnType<typeof vi.fn>;
+  } {
+    const dispose = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const agent = {
+      dispose,
+      getProvider: () => undefined,
+    } as unknown as Agent;
+    return { agent, dispose };
+  }
+
+  function createZedAgent(): InstanceType<typeof ZedAgentMod.ZedAgent> {
+    const mockConfig = {
+      getProfileManager: () => ({ listProfiles: async () => [] }),
+      getEphemeralSetting: () => undefined,
+      getProvider: () => undefined,
+      getModel: () => undefined,
+    };
+    return new ZedAgentMod.ZedAgent(
+      mockConfig as never,
+      { debug: () => {} } as never,
+      undefined as never,
+    );
+  }
+
+  it('disposes the agent when Session construction fails', async () => {
+    const { agent, dispose } = createMockAgent();
+    const zedAgent = createZedAgent();
+
+    // Force Session construction to fail by passing a config whose
+    // getEphemeralSetting throws (the Session constructor reads it).
+    // getProvider/getModel are provided so restoreActiveProvider passes.
+    const throwingConfig = {
+      getEphemeralSetting: () => {
+        throw new Error('boom');
+      },
+      getProvider: () => undefined,
+      getModel: () => undefined,
+    };
+
+    await expect(
+      zedAgent.createAndStoreSession(
+        agent,
+        throwingConfig as never,
+        'fail-session',
+        {} as never,
+      ),
+    ).rejects.toThrow('boom');
+
+    // The agent must be disposed exactly once.
+    expect(dispose).toHaveBeenCalledTimes(1);
+
+    // The session must NOT be stored.
+    const sessions = (zedAgent as unknown as { sessions: Map<string, unknown> })
+      .sessions;
+    expect(sessions.has('fail-session')).toBe(false);
+  });
+
+  it('does not mask the original error if dispose also fails', async () => {
+    const dispose = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValue(new Error('dispose error'));
+    const agent = {
+      dispose,
+      getProvider: () => undefined,
+    } as unknown as Agent;
+    const zedAgent = createZedAgent();
+
+    const throwingConfig = {
+      getEphemeralSetting: () => {
+        throw new Error('original');
+      },
+      getProvider: () => undefined,
+      getModel: () => undefined,
+    };
+
+    // The original error must surface, not the dispose error.
+    await expect(
+      zedAgent.createAndStoreSession(
+        agent,
+        throwingConfig as never,
+        'fail-both',
+        {} as never,
+      ),
+    ).rejects.toThrow('original');
+  });
+});

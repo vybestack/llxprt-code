@@ -278,7 +278,7 @@ export const toolsCommand: SlashCommand = {
       context.ui.addItem(
         {
           type: MessageType.ERROR,
-          text: 'Could not retrieve tool registry.',
+          text: 'Could not retrieve tools from the agent.',
         },
         Date.now(),
       );

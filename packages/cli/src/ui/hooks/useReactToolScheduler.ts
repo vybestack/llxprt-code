@@ -17,6 +17,7 @@ import {
   type EditorType,
   type AnsiOutput,
   type MessageBus,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 
@@ -26,6 +27,8 @@ import {
   createInteractiveToolScheduler,
   type InteractiveToolScheduler,
 } from '../../runtime/interactiveToolScheduler.js';
+
+const logger = DebugLogger.getLogger('llxprt:cli:react-tool-scheduler');
 
 export type ScheduleFn = (
   request: ToolCallRequestInfo | ToolCallRequestInfo[],
@@ -483,14 +486,30 @@ function useCapabilityAttach(
       isMounted: () => mounted.current,
     };
 
-    void capability.attach(mainHooks, subagentCallbacks).then((d) => {
-      detach = d;
-      if (mounted.current) {
-        setInteractiveRuntimeReady(capability.isReady());
-      } else {
-        d();
-      }
-    });
+    void capability
+      .attach(mainHooks, subagentCallbacks)
+      .then((d) => {
+        detach = d;
+        if (mounted.current) {
+          setInteractiveRuntimeReady(capability.isReady());
+        } else {
+          d();
+        }
+      })
+      .catch((error) => {
+        // Attach failed (e.g. scheduler creation rejected). If still mounted,
+        // leave interactiveRuntimeReady false; the rejection is logged but not
+        // surfaced as an unhandled promise rejection.
+        logger.debug(
+          () =>
+            `Interactive scheduler attach failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+        if (mounted.current) {
+          setInteractiveRuntimeReady(false);
+        }
+      });
 
     return () => {
       mounted.current = false;

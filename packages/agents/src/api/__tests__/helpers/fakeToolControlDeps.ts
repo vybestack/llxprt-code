@@ -30,6 +30,8 @@ import type {
   ToolConfirmationOutcome,
   ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-tools';
+import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../../config-types.js';
 import type { ToolControlDeps } from '../../control/toolControl.js';
 
@@ -79,19 +81,40 @@ export function createToolControlDeps(
     },
   );
 
-  const allTools = tools.map((t) => ({
-    name: t.name,
-    ...(t.serverName !== undefined ? { serverName: t.serverName } : {}),
-    // ISSUE-2376: the enriched list()/get() projection reads displayName/
-    // description/schema off each registry tool. Provide duck-typed stand-ins
-    // so the REAL ToolControl projection runs against realistic shapes.
-    displayName: t.name,
-    description: t.name,
-    schema: {},
-    ...(t.serverToolName !== undefined
-      ? { serverToolName: t.serverToolName }
-      : {}),
-  }));
+  // Build REAL invocable MockTool instances so ToolControl.get(name) returns
+  // a handle whose build()/buildAndExecute() delegate to genuine tool behavior
+  // (execute returns { llmContent: `ran:${name}`, returnDisplay: '...' }).
+  const allTools: AnyDeclarativeTool[] = tools.map((t) => {
+    const mock = new MockTool({
+      name: t.name,
+      displayName: t.name,
+      description: t.name,
+      execute: async () => ({
+        llmContent: `ran:${t.name}`,
+        returnDisplay: `ran:${t.name}`,
+      }),
+    });
+    // Attach serverName/serverToolName at runtime for MCP tools so the
+    // projectRegistryTool projection reads them (MockTool does not declare
+    // them; they are runtime-only on real DiscoveredMCPTool instances).
+    if (t.serverName !== undefined) {
+      Object.defineProperty(mock, 'serverName', {
+        value: t.serverName,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    if (t.serverToolName !== undefined) {
+      Object.defineProperty(mock, 'serverToolName', {
+        value: t.serverToolName,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return mock as AnyDeclarativeTool;
+  });
   const enabledTools = tools
     .filter((t) => t.enabled !== false)
     .map((t) => ({ name: t.name }));
@@ -108,7 +131,8 @@ export function createToolControlDeps(
   const toolRegistry = {
     getAllTools: () => allTools,
     getEnabledTools: () => enabledTools,
-    getTool: (name: string): unknown => toolMap.get(name),
+    getTool: (name: string): AnyDeclarativeTool | undefined =>
+      toolMap.get(name),
   };
 
   const config = {

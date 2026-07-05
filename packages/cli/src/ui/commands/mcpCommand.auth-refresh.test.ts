@@ -316,7 +316,7 @@ describe('mcpCommand', () => {
       });
     });
 
-    it('should show an error if tool registry (agent) is not available', async () => {
+    it('should show an error if agent is not available', async () => {
       const contextWithNoAgent = createMockCommandContext({
         services: {
           config: mockConfig,
@@ -335,7 +335,7 @@ describe('mcpCommand', () => {
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Could not retrieve tool registry.',
+        content: 'Could not retrieve tools from the agent.',
       });
     });
   });

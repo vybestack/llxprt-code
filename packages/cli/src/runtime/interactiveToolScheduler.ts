@@ -224,17 +224,23 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
     const instance = await this.createMainScheduler(mainHooks);
 
     // If the component unmounted during async creation, dispose and bail.
+    // Clear pending requests so stale entries don't fire on a later attach.
     if (!mainHooks.isMounted()) {
       if (instance) {
         this.config.disposeScheduler(this.sessionId);
       }
       this.deregisterSubagentFactory();
+      this.pendingRequests.length = 0;
       return () => {};
     }
 
     if (instance) {
       this.scheduler = instance;
       processPendingRequests(instance, this.pendingRequests);
+      this.pendingRequests.length = 0;
+    } else {
+      // Creation failed (createMainScheduler returned null). Clear pending
+      // requests so they don't fire on a later attach.
       this.pendingRequests.length = 0;
     }
 
@@ -243,6 +249,7 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
       if (detached) return;
       detached = true;
       this.deregisterSubagentFactory();
+      this.pendingRequests.length = 0;
       if (this.scheduler) {
         this.config.disposeScheduler(this.sessionId);
         this.scheduler = null;

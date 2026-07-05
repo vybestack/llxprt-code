@@ -486,6 +486,23 @@ export function projectRegistryTool(tool: {
 }
 
 /**
+ * Structural view of a registry tool element. Declares optional serverName /
+ * serverToolName because {@link AnyDeclarativeTool} does not expose them as
+ * public properties — MCP tools carry them at runtime. Optional properties
+ * are satisfied by absence, so plain builtin tools pass structurally.
+ *
+ * @plan:ISSUE-2376
+ */
+export interface RegistryToolElementView {
+  readonly name: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly schema: { readonly parametersJsonSchema?: unknown };
+  readonly serverName?: string;
+  readonly serverToolName?: string;
+}
+
+/**
  * Convenience: builds the ToolInfo[] array directly from raw registry tools
  * (`AnyDeclarativeTool[]`) + the enabled set, projecting each via
  * {@link projectRegistryTool}. Keeps `AgentImpl.listTools()` minimal.
@@ -493,12 +510,7 @@ export function projectRegistryTool(tool: {
  * @plan:ISSUE-2376
  */
 export function buildToolInfosFromRegistry(
-  tools: ReadonlyArray<{
-    readonly name: string;
-    readonly displayName: string;
-    readonly description: string;
-    readonly schema: { readonly parametersJsonSchema?: unknown };
-  }>,
+  tools: readonly RegistryToolElementView[],
   enabledSet: ReadonlySet<string>,
 ): readonly ToolInfo[] {
   return buildToolInfos(
@@ -508,8 +520,8 @@ export function buildToolInfosFromRegistry(
         displayName: t.displayName,
         description: t.description,
         schema: t.schema,
-        serverName: (t as { serverName?: string }).serverName,
-        serverToolName: (t as { serverToolName?: string }).serverToolName,
+        serverName: t.serverName,
+        serverToolName: t.serverToolName,
       }),
     ),
     enabledSet,

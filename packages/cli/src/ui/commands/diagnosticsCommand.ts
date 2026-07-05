@@ -465,7 +465,7 @@ function appendToolsAndTelemetry(
       diagnostics.push(`- First 10 Tools: ${toolNames.join(', ')}`);
     }
   } catch {
-    diagnostics.push('- Tool Registry: Not initialized');
+    diagnostics.push('- Agent tools: Not initialized');
   }
 
   diagnostics.push('\n## Telemetry');

@@ -39,7 +39,7 @@ const getMcpStatus = async (
     return {
       type: 'message',
       messageType: 'error',
-      content: 'Could not retrieve tool registry.',
+      content: 'Could not retrieve tools from the agent.',
     };
   }
 
@@ -165,7 +165,7 @@ const refreshCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Could not retrieve tool registry.',
+        content: 'Could not retrieve tools from the agent.',
       };
     }
 

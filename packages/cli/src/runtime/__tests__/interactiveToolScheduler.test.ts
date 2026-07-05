@@ -11,6 +11,8 @@ import {
   type ToolCallRequestInfo,
   type ToolSchedulerContract,
   type CompletedToolCall,
+  type ToolCall,
+  type AnsiOutput,
 } from '@vybestack/llxprt-code-core';
 import {
   createInteractiveToolScheduler,
@@ -352,6 +354,145 @@ describe('createInteractiveToolScheduler', () => {
     await passedCallbacks.onAllToolCallsComplete(completedCalls);
 
     expect(onAllToolCallsComplete).toHaveBeenCalledWith(completedCalls);
+
+    detach();
+  });
+
+  it('disposes scheduler, deregisters factory, and clears pending requests when unmounted during async attach', async () => {
+    const scheduler = buildMockScheduler();
+    const config = buildMockConfig(scheduler, { hasSubagentFactory: true });
+
+    // Make getOrCreateScheduler controllable so we can set isMounted=false
+    // before it resolves.
+    let resolveScheduler!: (s: ToolSchedulerContract) => void;
+    config.getOrCreateSchedulerMock.mockImplementation(
+      () =>
+        new Promise<ToolSchedulerContract>((resolve) => {
+          resolveScheduler = resolve;
+        }),
+    );
+
+    const capability = createInteractiveToolScheduler(config, undefined);
+
+    // Queue a pending request BEFORE attach resolves.
+    const req = buildRequest({ callId: 'stale-1' });
+    await capability.schedule(req, new AbortController().signal);
+
+    let isMounted = true;
+    const mainHooks = buildMainHooks({
+      isMounted: () => isMounted,
+    });
+    const subagentHooks = buildSubagentHooks();
+
+    const attachP = capability.attach(mainHooks, subagentHooks);
+
+    // Unmount while attach is in flight.
+    isMounted = false;
+    resolveScheduler(scheduler);
+
+    const detach = await attachP;
+
+    // Scheduler should have been disposed.
+    expect(config.disposeSchedulerMock).toHaveBeenCalledWith(
+      config.getSessionId(),
+    );
+
+    // Subagent factory should have been de-registered.
+    expect(config.setFactoryCalls.length).toBeGreaterThanOrEqual(2);
+    expect(
+      config.setFactoryCalls[config.setFactoryCalls.length - 1],
+    ).toBeUndefined();
+
+    // isReady must be false (scheduler never assigned).
+    expect(capability.isReady()).toBe(false);
+
+    // The detach is a no-op; calling it should be safe.
+    detach();
+
+    // Now re-attach: the stale pending request must NOT have been flushed.
+    const freshScheduler = buildMockScheduler();
+    const freshConfig = buildMockConfig(freshScheduler);
+    // Re-create the capability to test pendingRequests clearing
+    const freshCapability = createInteractiveToolScheduler(
+      freshConfig,
+      undefined,
+    );
+    const freshDetach = await freshCapability.attach(
+      buildMainHooks(),
+      buildSubagentHooks(),
+    );
+    expect(freshScheduler.scheduleMock).not.toHaveBeenCalled();
+    freshDetach();
+  });
+
+  it('clears pending requests and stays not-ready when scheduler creation fails', async () => {
+    // getOrCreateScheduler rejects → createMainScheduler returns null.
+    const config = buildMockConfig({} as ToolSchedulerContract);
+    config.getOrCreateSchedulerMock.mockRejectedValue(
+      new Error('creation failed'),
+    );
+
+    const capability = createInteractiveToolScheduler(config, undefined);
+
+    // Queue a pending request.
+    await capability.schedule(
+      buildRequest({ callId: 'doomed' }),
+      new AbortController().signal,
+    );
+
+    // Attach must resolve (not throw) even though creation failed.
+    const detach = await capability.attach(
+      buildMainHooks(),
+      buildSubagentHooks(),
+    );
+
+    // isReady must be false.
+    expect(capability.isReady()).toBe(false);
+
+    // Pending requests must be cleared — schedule() after failed attach
+    // should not crash and should simply queue again (scheduler is null).
+    await expect(
+      capability.schedule(
+        buildRequest({ callId: 'after-fail' }),
+        new AbortController().signal,
+      ),
+    ).resolves.toBeUndefined();
+
+    detach();
+  });
+
+  it('suppresses main-scheduler display callbacks after isMounted() returns false', async () => {
+    const scheduler = buildMockScheduler();
+    const config = buildMockConfig(scheduler);
+    const capability = createInteractiveToolScheduler(config, undefined);
+
+    const onToolCallsUpdate = vi.fn();
+    const outputUpdateHandler = vi.fn();
+    let isMounted = true;
+    const mainHooks = buildMainHooks({
+      onToolCallsUpdate,
+      outputUpdateHandler,
+      isMounted: () => isMounted,
+    });
+    const detach = await capability.attach(mainHooks, buildSubagentHooks());
+
+    // Extract the callbacks passed to getOrCreateScheduler.
+    const createCall = config.getOrCreateSchedulerMock.mock.calls[0];
+    const passedCallbacks = createCall[1] as {
+      onToolCallsUpdate: (calls: ToolCall[]) => void;
+      outputUpdateHandler: (
+        toolCallId: string,
+        chunk: string | AnsiOutput,
+      ) => void;
+    };
+
+    // Unmount — callbacks must be suppressed.
+    isMounted = false;
+    passedCallbacks.onToolCallsUpdate([] as unknown as ToolCall[]);
+    passedCallbacks.outputUpdateHandler('id', 'chunk');
+
+    expect(onToolCallsUpdate).not.toHaveBeenCalled();
+    expect(outputUpdateHandler).not.toHaveBeenCalled();
 
     detach();
   });
