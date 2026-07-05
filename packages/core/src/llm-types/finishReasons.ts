@@ -109,6 +109,7 @@ export const OPENAI_FINISH_MAP: Readonly<
   tool_calls: 'tool_calls',
   function_call: 'tool_calls',
   content_filter: 'safety',
+  refusal: 'refusal',
 };
 
 /**
@@ -130,16 +131,28 @@ function mapWithTable(
   raw: string,
   table: Readonly<Record<string, CanonicalFinishReason>>,
 ): FinishInfo {
-  const mapped = Object.prototype.hasOwnProperty.call(table, raw)
-    ? table[raw]
+  // Guard against nullish runtime values (JS interop / any-typed callers).
+  // Without this, null/undefined are coerced to the strings "null"/"undefined".
+  // The nullishToEmpty helper routes through unknown so the TS-aware lint rule
+  // does not flag the nullish check as unnecessary on a string-typed param.
+  const key = nullishToEmpty(raw);
+  const mapped = Object.prototype.hasOwnProperty.call(table, key)
+    ? table[key]
     : undefined;
   return {
     // Unmapped provider strings default to 'other' (benign unknown). Callers
     // needing diagnostics should inspect rawStopReason rather than relying on
     // finishReason alone.
     finishReason: mapped ?? 'other',
-    rawStopReason: raw,
+    rawStopReason: key,
   };
+}
+
+function nullishToEmpty(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return typeof value === 'string' ? value : String(value);
 }
 
 /**

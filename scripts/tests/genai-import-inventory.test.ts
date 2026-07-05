@@ -207,6 +207,16 @@ describe('classifyGenaiImporter', () => {
       const result = classifyGenaiImporter('packages/providers/src/gemini');
       expect(result).toEqual({ kind: 'issue', issue: '#2349' });
     });
+
+    it('does NOT classify a sibling directory like gemini-backup as enclave', () => {
+      // 'packages/providers/src/gemini-backup/' must NOT match the
+      // 'packages/providers/src/gemini/' prefix — the trailing slash is
+      // the boundary.
+      const result = classifyGenaiImporter(
+        'packages/providers/src/gemini-backup/converter.ts',
+      );
+      expect(result).toEqual({ kind: 'issue', issue: '#2349' });
+    });
   });
 
   describe('unmatched paths (error)', () => {
@@ -307,5 +317,27 @@ describe('isGenaiImporterContent', () => {
 
   it('does NOT match an empty string', () => {
     expect(isGenaiImporterContent('')).toBe(false);
+  });
+
+  it('matches a quoted @google/genai reference even inside a comment (known limitation)', () => {
+    // The regex is content-based, not AST-based: any quoted occurrence
+    // is treated as an import. This documents that tradeoff.
+    expect(isGenaiImporterContent("// see '@google/genai' for details")).toBe(
+      true,
+    );
+  });
+
+  it('does NOT match a similarly named package like @google/genai-utils', () => {
+    expect(
+      isGenaiImporterContent("import { X } from '@google/genai-utils';"),
+    ).toBe(false);
+  });
+
+  it('does NOT match @google/genai embedded in a larger word', () => {
+    // The pattern requires quote-adjacent boundaries: the quote precedes
+    // 'fake', not '@google', so this does NOT match.
+    expect(isGenaiImporterContent("const x = 'fake-@google/genai';")).toBe(
+      false,
+    );
   });
 });

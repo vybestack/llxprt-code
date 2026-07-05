@@ -164,7 +164,7 @@ export function getToolCalls(output: ModelOutput): ToolCallRequest[] {
       continue;
     }
 
-    const args = isRecord(block.parameters) ? block.parameters : {};
+    const args = isRecord(block.parameters) ? { ...block.parameters } : {};
 
     const call: ToolCallRequest = {
       id: block.id,

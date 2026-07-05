@@ -12,7 +12,7 @@
  * @requirement REQ-010.2
  */
 
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { Outcome, Language, type Part } from '@google/genai';
 import {
@@ -536,6 +536,99 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
           );
         },
       ),
+    );
+  });
+});
+
+describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
+  it('functionCall with omitted args round-trips gaining args:{} (documented normalization)', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1 }),
+        fc.string({ minLength: 1 }),
+        (id, name) => {
+          const part: Part = { functionCall: { id, name } };
+          const result = roundTrip(part);
+          // args is absent on input but normalized to {} on output — this is
+          // a spec'd normalization, not a round-trip violation.
+          expect(result.functionCall).toBeDefined();
+          if (!result.functionCall) return;
+          expect(result.functionCall.name).toBe(name);
+          expect(result.functionCall.args).toStrictEqual({});
+        },
+      ),
+    );
+  });
+
+  it('functionResponse with omitted response round-trips gaining response:{} (documented normalization)', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1 }),
+        fc.string({ minLength: 1 }),
+        (id, name) => {
+          const part: Part = { functionResponse: { id, name } };
+          const result = roundTrip(part);
+          // response is absent on input but normalized to {} on output.
+          expect(result.functionResponse).toBeDefined();
+          if (!result.functionResponse) return;
+          expect(result.functionResponse.name).toBe(name);
+          expect(result.functionResponse.response).toStrictEqual({});
+        },
+      ),
+    );
+  });
+
+  it('functionCall without id round-trips losslessly (id-absent preserved)', () => {
+    fc.assert(
+      fc.property(fc.string({ minLength: 1 }), (name) => {
+        const part: Part = { functionCall: { name, args: {} } };
+        const result = roundTrip(part);
+        // No id on input → no id on output (lossless, G3 fix).
+        expect(result.functionCall).toBeDefined();
+        if (!result.functionCall) return;
+        expect(result.functionCall.id).toBeUndefined();
+        expect(result.functionCall.name).toBe(name);
+      }),
+    );
+  });
+
+  it('functionResponse without id round-trips losslessly (id-absent preserved)', () => {
+    fc.assert(
+      fc.property(fc.string({ minLength: 1 }), (name) => {
+        const part: Part = { functionResponse: { name, response: {} } };
+        const result = roundTrip(part);
+        expect(result.functionResponse).toBeDefined();
+        if (!result.functionResponse) return;
+        expect(result.functionResponse.id).toBeUndefined();
+        expect(result.functionResponse.name).toBe(name);
+      }),
+    );
+  });
+
+  it('executableCode with omitted language round-trips losslessly', () => {
+    fc.assert(
+      fc.property(fc.string({ minLength: 1 }), (code) => {
+        const part: Part = { executableCode: { code } };
+        const result = roundTrip(part);
+        expect(result.executableCode).toBeDefined();
+        if (!result.executableCode) return;
+        expect(result.executableCode.code).toBe(code);
+        expect(result.executableCode.language).toBeUndefined();
+      }),
+    );
+  });
+
+  it('codeExecutionResult with omitted output round-trips gaining output:"" (documented normalization)', () => {
+    fc.assert(
+      fc.property(fc.constant(Outcome.OUTCOME_OK), (outcome) => {
+        const part: Part = { codeExecutionResult: { outcome } };
+        const result = roundTrip(part);
+        expect(result.codeExecutionResult).toBeDefined();
+        if (!result.codeExecutionResult) return;
+        expect(result.codeExecutionResult.outcome).toBe(outcome);
+        // output is absent on input but normalized to "" on output.
+        expect(result.codeExecutionResult.output).toBe('');
+      }),
     );
   });
 });

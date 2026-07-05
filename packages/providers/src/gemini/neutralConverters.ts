@@ -229,25 +229,28 @@ export function geminiPartsToBlocks(parts: readonly Part[]): ContentBlock[] {
 }
 
 function buildToolCallPart(block: ToolCallBlock): Part {
-  const part: Part = {
-    functionCall: {
-      id: block.id,
-      name: block.name,
-      args: isRecord(block.parameters) ? block.parameters : {},
-    },
+  const fc: NonNullable<Part['functionCall']> = {
+    name: block.name,
+    args: isRecord(block.parameters) ? block.parameters : {},
   };
-  return part;
+  // Only set id when present — an empty-string id (from an id-absent Gemini
+  // functionCall) must NOT be emitted, preserving the lossless round-trip
+  // invariant (REQ-010.2).
+  if (block.id !== '') {
+    fc.id = block.id;
+  }
+  return { functionCall: fc };
 }
 
 function buildFunctionResponsePart(block: ToolResponseBlock): Part {
-  const part: Part = {
-    functionResponse: {
-      id: block.callId,
-      name: block.toolName,
-      response: isRecord(block.result) ? block.result : {},
-    },
+  const fr: NonNullable<Part['functionResponse']> = {
+    name: block.toolName,
+    response: isRecord(block.result) ? block.result : {},
   };
-  return part;
+  if (block.callId !== '') {
+    fr.id = block.callId;
+  }
+  return { functionResponse: fr };
 }
 
 function buildCodeExecutionResultPart(block: ToolResponseBlock): Part | null {
@@ -486,11 +489,11 @@ export function geminiApiErrorToProviderApiError(
   const status = e.status;
   const result: ProviderApiError = {
     provider: 'gemini',
-    status,
     message: e.message,
     raw: e,
   };
   if (typeof status === 'number') {
+    result.status = status;
     if (status === 429) {
       result.isQuotaError = true;
       result.isTransient = true;

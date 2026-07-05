@@ -273,8 +273,14 @@ describe('property-based — cleanGeminiSchema invariants', () => {
       fc.property(schemaArb, (schema) => {
         const snapshot = JSON.parse(JSON.stringify(schema));
         deepFreeze(schema);
-        // Must not throw on frozen input, and must not mutate it.
-        expect(() => cleanGeminiSchema(schema)).not.toThrow();
+        // Separately verify: (1) no throw, (2) input not mutated,
+        // (3) result is a well-formed record.
+        let result: unknown;
+        expect(() => {
+          result = cleanGeminiSchema(schema);
+        }).not.toThrow();
+        expect(typeof result).toBe('object');
+        expect(result).not.toBeNull();
         expect(sortedJson(schema)).toBe(sortedJson(snapshot));
       }),
     );

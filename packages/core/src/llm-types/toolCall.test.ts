@@ -190,6 +190,19 @@ describe('toolResultContentFromLegacyPartListUnion - single part object', () => 
       expect(result.error).toContain('JSON-serializable');
     }
   });
+
+  it('rejects {functionResponse} with explicit undefined response (present-key, non-JSON-serializable)', () => {
+    // The absent-key case (no 'response' property) defaults to {} and is
+    // valid. Only the present-but-undefined case errors.
+    const input: { functionResponse: { name: string; response?: unknown } } = {
+      functionResponse: { name: 'searchWeb', response: undefined },
+    };
+    const result = toolResultContentFromLegacyPartListUnion(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('JSON-serializable');
+    }
+  });
 });
 
 describe('toolResultContentFromLegacyPartListUnion - array input', () => {
@@ -470,7 +483,8 @@ describe('toolCall property-based', () => {
           id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
           response: fc.option(fc.string({ maxLength: 30 })),
         }),
-        // Case 2: response key absent — exercises the result:{} fallback
+        // Case 2: response key is optional — exercises both the present and
+        // the result:{} fallback (when fast-check omits the response key)
         fc.record(
           {
             name: fc.string({ minLength: 1, maxLength: 20 }),
@@ -514,7 +528,13 @@ describe('toolCall property-based', () => {
       if (!result.ok || !Array.isArray(result.value)) return false;
       return (
         result.value.length === parts.length &&
-        result.value.every((b) => b.type === 'text')
+        parts.every((p, i) => {
+          const block = result.value[i];
+          return (
+            block.type === 'text' &&
+            block.text === (typeof p === 'string' ? p : p.text)
+          );
+        })
       );
     },
   );

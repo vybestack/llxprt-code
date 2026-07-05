@@ -34,9 +34,13 @@ export interface GroundingSource {
 }
 
 /**
- * @plan PLAN-20260702-LLMTYPES.P03
- * @requirement REQ-008.3
- * @pseudocode line 96
+ * Represents a grounded text span within the LLM response.
+ *
+ * - `startIndex` and `endIndex` are 0-based byte offsets into the response
+ *   text (as provided by the provider; Gemini supplies byte-oriented indices).
+ *   `endIndex` is EXCLUSIVE.
+ * - `sourceIndices` are 0-based indices into the `GroundingInfo.sources`
+ *   array, indicating which sources support this segment.
  */
 export interface GroundingSegment {
   startIndex?: number;
@@ -56,9 +60,10 @@ export interface GroundingInfo {
 }
 
 /**
- * @plan PLAN-20260702-LLMTYPES.P03
- * @requirement REQ-008.4
- * @pseudocode line 98
+ * Represents the outcome of accessing a URL during grounding.
+ *
+ * `status` is a provider-specific string (e.g., `'200'`, `'BLOCKED'`).
+ * Consumers should normalize as needed for their use case.
  */
 export interface UrlAccessInfo {
   url: string;

@@ -38,6 +38,14 @@ describe('llm-types canonical tool-ID contract re-export', () => {
     expect(typeof canonicalizeToolResponseId).toBe('function');
   });
 
+  const input: CanonicalToolIdInput = {
+    providerName: 'openai',
+    rawId: 'call_abc123',
+    toolName: 'read_file',
+    turnKey: 'turn_fixture',
+    callIndex: 0,
+  };
+
   it('canonicalizeToolResponseId produces the expected hist_tool_ format', () => {
     const id = canonicalizeToolResponseId(input);
     expect(id.startsWith('hist_tool_')).toBe(true);
@@ -48,14 +56,6 @@ describe('llm-types canonical tool-ID contract re-export', () => {
       canonicalizeToolResponseId(input),
     );
   });
-
-  const input: CanonicalToolIdInput = {
-    providerName: 'openai',
-    rawId: 'call_abc123',
-    toolName: 'read_file',
-    turnKey: 'turn_fixture',
-    callIndex: 0,
-  };
 
   it('canonicalizes a tool call ID into the hist_tool_ namespace', () => {
     const id = canonicalizeToolCallId(input);
@@ -106,6 +106,19 @@ describe('llm-types canonical tool-ID contract re-export', () => {
     // When rawId already starts with hist_tool_, buildCanonicalToolId returns
     // it verbatim (no re-hashing).
     expect(id).toBe('hist_tool_existingvalue');
+  });
+
+  it('normalizes bare call+token prefix (no underscore)', () => {
+    const bareCallToken: CanonicalToolIdInput = {
+      providerName: 'openai',
+      rawId: 'callAbcd1234efgh',
+      toolName: 'read_file',
+      turnKey: 'turn_fixture',
+      callIndex: 0,
+    };
+    const id = canonicalizeToolCallId(bareCallToken);
+    expect(id.startsWith('hist_tool_')).toBe(true);
+    expect(id).toHaveLength(34);
   });
 
   it('normalizes different provider prefixes to the same canonical ID when rawId core matches', () => {

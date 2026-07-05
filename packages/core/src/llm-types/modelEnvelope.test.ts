@@ -23,6 +23,12 @@ import type {
 } from '../services/history/IContent.js';
 import { CANONICAL_FINISH_REASONS } from './finishReasons.js';
 
+// Hoisted to module scope: avoids repeated Set allocation across 100+
+// fast-check iterations of the property-based tests below.
+const CANONICAL_FINISH_REASON_SET: ReadonlySet<string> = new Set<string>(
+  CANONICAL_FINISH_REASONS,
+);
+
 // ---------------------------------------------------------------------------
 // Helpers / fixtures
 // ---------------------------------------------------------------------------
@@ -521,7 +527,7 @@ describe('toModelStreamChunk property-based', () => {
     },
   );
 
-  it.prop([fc.string({ minLength: 1, maxLength: 30 })])(
+  it.prop([fc.string({ minLength: 0, maxLength: 30 })])(
     'any raw stopReason produces a canonical finishReason and preserves raw',
     (raw: string) => {
       const ic: IContent = {
@@ -530,12 +536,9 @@ describe('toModelStreamChunk property-based', () => {
         metadata: { stopReason: raw },
       };
       const result = toModelStreamChunk(ic);
-      const canonicalSet = new Set<string>(CANONICAL_FINISH_REASONS);
-      return (
-        typeof result.finishReason === 'string' &&
-        canonicalSet.has(result.finishReason) &&
-        result.rawStopReason === raw
-      );
+      expect(typeof result.finishReason).toBe('string');
+      expect(CANONICAL_FINISH_REASON_SET.has(result.finishReason)).toBe(true);
+      expect(result.rawStopReason).toBe(raw);
     },
   );
 

@@ -78,10 +78,27 @@ describe('geminiPartsToBlocks / blocksToGeminiParts round-trip (REQ-010.2)', () 
     expect(roundTrip(part)).toStrictEqual(part);
   });
 
+  it('round-trips { functionCall: { name, args } } without id (lossless)', () => {
+    const part: Part = {
+      functionCall: { name: 'getWeather', args: { city: 'SF' } },
+    };
+    expect(roundTrip(part)).toStrictEqual(part);
+  });
+
   it('round-trips { functionResponse: { id, name, response } }', () => {
     const part: Part = {
       functionResponse: {
         id: 'call_1',
+        name: 'getWeather',
+        response: { temp: 72 },
+      },
+    };
+    expect(roundTrip(part)).toStrictEqual(part);
+  });
+
+  it('round-trips { functionResponse: { name, response } } without id (lossless)', () => {
+    const part: Part = {
+      functionResponse: {
         name: 'getWeather',
         response: { temp: 72 },
       },
@@ -140,9 +157,23 @@ describe('geminiPartsToBlocks / blocksToGeminiParts round-trip (REQ-010.2)', () 
     expect(roundTrip(part)).toStrictEqual(part);
   });
 
+  it('round-trips { executableCode } without language', () => {
+    const part: Part = {
+      executableCode: { code: 'print(1)' },
+    };
+    expect(roundTrip(part)).toStrictEqual(part);
+  });
+
   it('round-trips { codeExecutionResult }', () => {
     const part: Part = {
       codeExecutionResult: { outcome: Outcome.OUTCOME_OK, output: '1\n' },
+    };
+    expect(roundTrip(part)).toStrictEqual(part);
+  });
+
+  it('round-trips { codeExecutionResult } without outcome', () => {
+    const part: Part = {
+      codeExecutionResult: { output: '1\n' },
     };
     expect(roundTrip(part)).toStrictEqual(part);
   });
@@ -737,6 +768,18 @@ describe('geminiApiErrorToProviderApiError (REQ-010.5, pseudocode lines 70-72)',
     expect(result.isQuotaError).toBeFalsy();
     expect(result.isAuthError).toBeFalsy();
     expect(result.isTransient).toBeFalsy();
+    expect(isProviderApiError(result)).toBe(true);
+  });
+
+  it('undefined status → no flags (defensive path for network errors)', () => {
+    const err = new ApiError({ message: 'network error' });
+    const result = geminiApiErrorToProviderApiError(err);
+    expect(result.isQuotaError).toBeFalsy();
+    expect(result.isAuthError).toBeFalsy();
+    expect(result.isTransient).toBeFalsy();
+    // status is omitted entirely (not set to undefined) when the SDK error
+    // carries no numeric status, so the guard accepts the result.
+    expect('status' in result).toBe(false);
     expect(isProviderApiError(result)).toBe(true);
   });
 });

@@ -331,7 +331,11 @@ describe('toolDeclaration property-based', () => {
         },
       ];
       const result = toolDeclarationsFromLegacyToolset(toolset);
-      return result.length === 1 && result[0].parametersJsonSchema === schema;
+      return (
+        result.length === 1 &&
+        result[0].parametersJsonSchema === schema &&
+        result[0].description === description
+      );
     },
   );
 });

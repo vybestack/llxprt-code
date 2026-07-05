@@ -162,37 +162,48 @@ function partLikeToBlock(item: unknown): ConversionResult<ContentBlock> {
   }
 
   if ('functionResponse' in item) {
-    const fnResp = item['functionResponse'];
-    if (!isRecord(fnResp) || typeof fnResp['name'] !== 'string') {
-      return {
-        ok: false,
-        error: 'malformed functionResponse: expected { name: string }',
-      };
-    }
-    const rawResponse = 'response' in fnResp ? fnResp['response'] : {};
-    // Top-level JSON-serializability guard: reject values whose typeof cannot
-    // survive JSON serialization. This is intentionally a shallow check — it
-    // does not attempt deep/circular validation.
-    if (
-      typeof rawResponse === 'function' ||
-      typeof rawResponse === 'symbol' ||
-      typeof rawResponse === 'bigint'
-    ) {
-      return {
-        ok: false,
-        error: 'malformed functionResponse: response must be JSON-serializable',
-      };
-    }
-    const block: ToolResponseBlock = {
-      type: 'tool_response',
-      callId: typeof fnResp['id'] === 'string' ? fnResp['id'] : '',
-      toolName: fnResp['name'],
-      result: rawResponse,
-    };
-    return { ok: true, value: block };
+    return functionResponseToBlock(item['functionResponse']);
   }
 
-  return { ok: false, error: 'unsupported tool result part shape' };
+  return {
+    ok: false,
+    error: `unsupported tool result part shape: keys [${Object.keys(item).join(', ')}]`,
+  };
+}
+
+function functionResponseToBlock(
+  fnResp: unknown,
+): ConversionResult<ContentBlock> {
+  if (!isRecord(fnResp) || typeof fnResp['name'] !== 'string') {
+    return {
+      ok: false,
+      error: 'malformed functionResponse: expected { name: string }',
+    };
+  }
+  const rawResponse = 'response' in fnResp ? fnResp['response'] : {};
+  // Top-level JSON-serializability guard: reject values whose typeof cannot
+  // survive JSON serialization. This is intentionally a shallow check — it
+  // does not attempt deep/circular validation. The absent-key case
+  // (no 'response' property) defaults to {}; only an explicitly-present
+  // undefined value is rejected.
+  if (
+    typeof rawResponse === 'function' ||
+    typeof rawResponse === 'symbol' ||
+    typeof rawResponse === 'bigint' ||
+    typeof rawResponse === 'undefined'
+  ) {
+    return {
+      ok: false,
+      error: 'malformed functionResponse: response must be JSON-serializable',
+    };
+  }
+  const block: ToolResponseBlock = {
+    type: 'tool_response',
+    callId: typeof fnResp['id'] === 'string' ? fnResp['id'] : '',
+    toolName: fnResp['name'],
+    result: rawResponse,
+  };
+  return { ok: true, value: block };
 }
 
 function textBlock(text: string): TextBlock {

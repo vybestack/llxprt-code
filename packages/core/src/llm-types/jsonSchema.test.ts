@@ -125,9 +125,14 @@ describe('jsonSchema property-based', () => {
   );
 
   it.prop([
-    fc.oneof(fc.integer(), fc.string({ minLength: 1 }), fc.constant(null)),
+    fc.oneof(
+      fc.integer(),
+      fc.string(),
+      fc.constant(null),
+      fc.constant(undefined),
+    ),
   ])(
-    'isJsonSchema is false for numbers, non-empty strings, and null',
+    'isJsonSchema is false for numbers, strings, null, and undefined',
     (v: unknown) => isJsonSchema(v) === false,
   );
 

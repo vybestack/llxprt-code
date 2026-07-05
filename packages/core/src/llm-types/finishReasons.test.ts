@@ -134,6 +134,13 @@ describe('mapGeminiFinishReason', () => {
       rawStopReason: 'SOMETHING_NEW',
     });
   });
+
+  it('empty string maps to other with empty rawStopReason (nullish guard)', () => {
+    expect(mapGeminiFinishReason('')).toStrictEqual({
+      finishReason: 'other',
+      rawStopReason: '',
+    });
+  });
 });
 
 describe('mapOpenAIFinishReason', () => {
@@ -169,6 +176,13 @@ describe('mapOpenAIFinishReason', () => {
     expect(mapOpenAIFinishReason('content_filter')).toStrictEqual({
       finishReason: 'safety',
       rawStopReason: 'content_filter',
+    });
+  });
+
+  it('maps refusal to refusal', () => {
+    expect(mapOpenAIFinishReason('refusal')).toStrictEqual({
+      finishReason: 'refusal',
+      rawStopReason: 'refusal',
     });
   });
 
@@ -279,6 +293,7 @@ describe('mapping tables export', () => {
     expect(OPENAI_FINISH_MAP['tool_calls']).toBe('tool_calls');
     expect(OPENAI_FINISH_MAP['function_call']).toBe('tool_calls');
     expect(OPENAI_FINISH_MAP['content_filter']).toBe('safety');
+    expect(OPENAI_FINISH_MAP['refusal']).toBe('refusal');
   });
 
   it('ANTHROPIC_STOP_MAP covers known strings', () => {
@@ -387,25 +402,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  it.prop([
-    fc.constantFrom(
-      'STOP',
-      'MAX_TOKENS',
-      'SAFETY',
-      'RECITATION',
-      'LANGUAGE',
-      'BLOCKLIST',
-      'PROHIBITED_CONTENT',
-      'SPII',
-      'MALFORMED_FUNCTION_CALL',
-      'OTHER',
-      'IMAGE_SAFETY',
-      'UNEXPECTED_TOOL_CALL',
-      'IMAGE_PROHIBITED_CONTENT',
-      'NO_IMAGE',
-      'FINISH_REASON_UNSPECIFIED',
-    ),
-  ])(
+  it.prop([fc.constantFrom(...Object.keys(GEMINI_FINISH_MAP))])(
     'every known Gemini FinishReason maps to a canonical value via GEMINI_FINISH_MAP',
     (raw: string) => {
       const result = mapGeminiFinishReason(raw);
@@ -414,15 +411,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  it.prop([
-    fc.constantFrom(
-      'stop',
-      'length',
-      'tool_calls',
-      'function_call',
-      'content_filter',
-    ),
-  ])(
+  it.prop([fc.constantFrom(...Object.keys(OPENAI_FINISH_MAP))])(
     'every known OpenAI finish reason maps via OPENAI_FINISH_MAP',
     (raw: string) => {
       const result = mapOpenAIFinishReason(raw);
@@ -431,15 +420,7 @@ describe('finishReasons property-based', () => {
     },
   );
 
-  it.prop([
-    fc.constantFrom(
-      'end_turn',
-      'max_tokens',
-      'tool_use',
-      'refusal',
-      'stop_sequence',
-    ),
-  ])(
+  it.prop([fc.constantFrom(...Object.keys(ANTHROPIC_STOP_MAP))])(
     'every known Anthropic stop reason maps via ANTHROPIC_STOP_MAP',
     (raw: string) => {
       const result = mapAnthropicStopReason(raw);

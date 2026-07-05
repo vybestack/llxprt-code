@@ -12,7 +12,7 @@ import type {
   EmbedContentRequest,
   EmbedContentResult,
 } from './tokensAndEmbeddings.js';
-import type { IContent } from '../services/history/IContent.js';
+import type { IContent, ContentBlock } from '../services/history/IContent.js';
 
 describe('CountTokensRequest / Result', () => {
   it('constructs a count tokens request with contents', () => {
@@ -111,9 +111,11 @@ describe('tokensAndEmbeddings property-based', () => {
         // Exclude -0: JSON.stringify(-0) → "0" → JSON.parse → +0, so -0 is
         // not losslessly round-trippable. Object.is (below) would correctly
         // flag it; filtering it scopes the property to JSON-lossless doubles.
+        // Exclude ±Infinity: JSON.stringify(Infinity) → "null". noNaN:true
+        // does NOT exclude Infinity, so Number.isFinite is required.
         fc
-          .double({ min: -1, max: 1, noNaN: true })
-          .filter((v) => !Object.is(v, -0)),
+          .double({ noNaN: true })
+          .filter((v) => Number.isFinite(v) && !Object.is(v, -0)),
         {
           minLength: 1,
           maxLength: 10,
@@ -141,15 +143,22 @@ describe('tokensAndEmbeddings property-based', () => {
 
   it.prop([
     fc.array(
-      fc.record({
-        type: fc.constant('text'),
-        text: fc.string({ minLength: 1, maxLength: 30 }),
-      }),
+      fc.oneof(
+        fc.record({
+          type: fc.constant('text' as const),
+          text: fc.string({ minLength: 1, maxLength: 30 }),
+        }),
+        fc.record({
+          type: fc.constant('code' as const),
+          code: fc.string({ minLength: 1, maxLength: 30 }),
+          language: fc.option(fc.string()),
+        }),
+      ),
       { minLength: 0, maxLength: 5 },
     ),
   ])(
     'CountTokensRequest contents length is preserved through JSON round-trip',
-    (blocks: Array<{ type: 'text'; text: string }>) => {
+    (blocks: ContentBlock[]) => {
       const contents: IContent[] = [{ speaker: 'human' as const, blocks }];
       const req: CountTokensRequest = { contents };
       const roundTripped: CountTokensRequest = JSON.parse(JSON.stringify(req));

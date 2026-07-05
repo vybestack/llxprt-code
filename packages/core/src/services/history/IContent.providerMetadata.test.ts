@@ -62,31 +62,44 @@ const PRE_CHANGE_HISTORY: IContent[] = [
   },
   {
     speaker: 'ai',
+    // media: hasContent checks !!data && !!mimeType → true
     blocks: [
-      // media: hasContent checks !!data && !!mimeType → true
       {
         type: 'media',
         mimeType: 'image/png',
         data: 'base64data',
         encoding: 'base64',
       },
-      // thinking with sourceField 'thinking': hasContent checks
-      // hasThought && Boolean(signature) → true
+    ],
+  },
+  {
+    speaker: 'ai',
+    // thinking with sourceField 'thinking': hasContent checks
+    // hasThought && Boolean(signature) → true
+    blocks: [
       {
         type: 'thinking',
         thought: 'a thought',
         sourceField: 'thinking',
         signature: 'sig-abc',
       },
-      // plain thought (no sourceField): hasContent checks
-      // hasThought || hasEncrypted → true
+    ],
+  },
+  {
+    speaker: 'ai',
+    // plain thought (no sourceField): hasContent checks
+    // hasThought || hasEncrypted → true
+    blocks: [
       {
         type: 'thinking',
         thought: 'plain thought',
       },
-      // code: hasContent checks Boolean(code) && code.trim().length > 0 → true
-      { type: 'code', code: 'print(1)', language: 'python' },
     ],
+  },
+  {
+    speaker: 'ai',
+    // code: hasContent checks Boolean(code) && code.trim().length > 0 → true
+    blocks: [{ type: 'code', code: 'print(1)', language: 'python' }],
   },
 ];
 
@@ -106,8 +119,24 @@ describe('REQ-009.3: pre-change serialized history compatibility', () => {
     // Verdicts derived from ContentValidation.hasContent logic:
     // [0] text 'Hello' → true; [1] text 'Hi there' → true;
     // [2] text '   ' → false (whitespace-only); [3] tool_call → true;
-    // [4] tool_response → true; [5] media+thinking(with signature)+code → true
-    const expectedVerdicts = [true, true, false, true, true, true];
+    // [4] tool_response → true;
+    // [5] media (data+mimeType present) → true;
+    // [6] thinking (sourceField 'thinking' + signature) → true;
+    // [7] plain thought (hasThought) → true;
+    // [8] code (non-empty code) → true.
+    // Each block type is in its own IContent entry so .some() does not
+    // short-circuit and mask individual verdicts.
+    const expectedVerdicts = [
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    ];
     for (let i = 0; i < parsed.length; i++) {
       expect(ContentValidation.hasContent(parsed[i])).toBe(expectedVerdicts[i]);
     }

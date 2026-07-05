@@ -99,6 +99,7 @@ describe('grounding property-based', () => {
       const roundTripped: GroundingInfo = JSON.parse(JSON.stringify(info));
       return (
         roundTripped.sources.length === cleanedSources.length &&
+        roundTripped.segments === undefined &&
         roundTripped.sources.every(
           (src, i) =>
             src.title === cleanedSources[i].title &&
