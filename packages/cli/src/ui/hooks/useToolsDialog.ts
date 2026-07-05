@@ -5,7 +5,8 @@
  */
 
 import { useCallback, useState } from 'react';
-import type { AnyDeclarativeTool, Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { AppState } from '../reducers/appReducer.js';
@@ -18,6 +19,7 @@ interface UseToolsDialogParams {
   }) => void;
   appState: AppState;
   config: Config;
+  agent: Agent | null;
 }
 
 function getDisabledToolsFromConfig(config: Config): string[] {
@@ -31,20 +33,16 @@ function getDisabledToolsFromConfig(config: Config): string[] {
 }
 
 function filterToolsByAction(
-  tools: AnyDeclarativeTool[],
+  tools: ToolInfo[],
   disabledTools: string[],
   action: 'enable' | 'disable',
-): AnyDeclarativeTool[] {
+): ToolInfo[] {
   if (action === 'disable') {
     // Show only enabled tools for disabling
-    return tools.filter(
-      (tool: AnyDeclarativeTool) => !disabledTools.includes(tool.name),
-    );
+    return tools.filter((tool: ToolInfo) => !disabledTools.includes(tool.name));
   }
   // Show only disabled tools for enabling
-  return tools.filter((tool: AnyDeclarativeTool) =>
-    disabledTools.includes(tool.name),
-  );
+  return tools.filter((tool: ToolInfo) => disabledTools.includes(tool.name));
 }
 
 function buildNoToolsMessage(action: 'enable' | 'disable'): string {
@@ -54,28 +52,25 @@ function buildNoToolsMessage(action: 'enable' | 'disable'): string {
 }
 
 async function loadToolsForDialog(
+  agent: Agent | null,
   config: Config,
   action: 'enable' | 'disable',
-): Promise<AnyDeclarativeTool[] | null> {
-  const toolRegistry = config.getToolRegistry() as
-    | ReturnType<Config['getToolRegistry']>
-    | null
-    | undefined;
-  if (toolRegistry === null || toolRegistry === undefined) {
+): Promise<ToolInfo[] | null> {
+  if (agent === null) {
     return null;
   }
 
   const disabledTools = getDisabledToolsFromConfig(config);
-  const allTools = toolRegistry.getAllTools();
+  const allTools = [...agent.tools.list()];
   const geminiTools = allTools.filter(
-    (tool: AnyDeclarativeTool) => !('serverName' in tool),
+    (tool: ToolInfo) => tool.source !== 'mcp',
   );
 
   return filterToolsByAction(geminiTools, disabledTools, action);
 }
 
 function handleEmptyToolsList(
-  tools: AnyDeclarativeTool[],
+  tools: ToolInfo[],
   action: 'enable' | 'disable',
   addMessage: (msg: {
     type: MessageType;
@@ -109,19 +104,18 @@ export const useToolsDialog = ({
   addMessage,
   appState,
   config,
+  agent,
 }: UseToolsDialogParams) => {
   const appDispatch = useAppDispatch();
   const showDialog = appState.openDialogs.tools;
   const [action, setAction] = useState<'enable' | 'disable'>('disable');
-  const [availableTools, setAvailableTools] = useState<AnyDeclarativeTool[]>(
-    [],
-  );
+  const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
 
   const openDialog = useCallback(
     async (dialogAction: 'enable' | 'disable') => {
       try {
-        const tools = await loadToolsForDialog(config, dialogAction);
+        const tools = await loadToolsForDialog(agent, config, dialogAction);
         if (tools === null) {
           addMessage({
             type: MessageType.ERROR,
@@ -148,7 +142,7 @@ export const useToolsDialog = ({
         });
       }
     },
-    [addMessage, appDispatch, config],
+    [addMessage, appDispatch, config, agent],
   );
 
   const closeDialog = useCallback(
@@ -172,7 +166,7 @@ export const useToolsDialog = ({
 
       addMessage({
         type: MessageType.INFO,
-        content: `Tool '${selectedTool.displayName}' has been ${action}d.`,
+        content: `Tool '${selectedTool.displayName ?? selectedTool.name}' has been ${action}d.`,
         timestamp: new Date(),
       });
 

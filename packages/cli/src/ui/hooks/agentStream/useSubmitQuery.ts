@@ -24,6 +24,7 @@ import {
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import {
   StreamingState,
   type HistoryItem,
@@ -39,6 +40,7 @@ import type { QueuedSubmission } from './types.js';
 
 export interface UseSubmitQueryDeps {
   config: Config;
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
   agentClient: AgentClientContract;
   addItem: (
     item: Omit<HistoryItem, 'id'>,
@@ -150,6 +152,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     handleLoopDetectedEvent,
   } = useStreamEventHandlers({
     config: deps.config,
+    getToolHandle: deps.getToolHandle,
     settings: deps.settings,
     addItem: deps.addItem,
     onDebugMessage: deps.onDebugMessage,
@@ -188,37 +191,14 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     getPromptCount,
   });
 
-  useEffect(() => {
-    deps.submitQueryRef.current = submitQuery;
-  }, [submitQuery, deps.submitQueryRef]);
-
-  useEffect(() => {
-    if (deps.streamingState === StreamingState.Idle) {
-      scheduleNextQueuedSubmission();
-    }
-  }, [deps.streamingState, scheduleNextQueuedSubmission]);
-
-  useEffect(() => {
-    const isAgentBusy = () => deps.streamingState !== StreamingState.Idle;
-    const triggerAgentTurn = async (message: string) => {
-      deps.queuedSubmissionsRef.current.push({ query: [{ text: message }] });
-      scheduleNextQueuedSubmission();
-    };
-
-    const unsubscribe = deps.config.setupAsyncTaskAutoTrigger(
-      isAgentBusy,
-      triggerAgentTurn,
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [
-    deps.config,
-    deps.streamingState,
+  useSubmitQueryEffects({
+    submitQueryRef: deps.submitQueryRef,
+    submitQuery,
+    streamingState: deps.streamingState,
     scheduleNextQueuedSubmission,
-    deps.queuedSubmissionsRef,
-  ]);
+    config: deps.config,
+    queuedSubmissionsRef: deps.queuedSubmissionsRef,
+  });
 
   return {
     submitQuery,
@@ -228,6 +208,60 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     prepareQueryForAgent,
     handleLoopDetectedEvent,
   };
+}
+
+interface SubmitQueryEffectsDeps {
+  submitQueryRef: UseSubmitQueryDeps['submitQueryRef'];
+  submitQuery: UseSubmitQueryReturn['submitQuery'];
+  streamingState: StreamingState;
+  scheduleNextQueuedSubmission: () => void;
+  config: Config;
+  queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>;
+}
+
+/**
+ * Keeps the submitQuery ref current, drains the queued-submission queue when
+ * the stream goes idle, and wires the async-task auto-trigger.
+ */
+function useSubmitQueryEffects({
+  submitQueryRef,
+  submitQuery,
+  streamingState,
+  scheduleNextQueuedSubmission,
+  config,
+  queuedSubmissionsRef,
+}: SubmitQueryEffectsDeps): void {
+  useEffect(() => {
+    submitQueryRef.current = submitQuery;
+  }, [submitQuery, submitQueryRef]);
+
+  useEffect(() => {
+    if (streamingState === StreamingState.Idle) {
+      scheduleNextQueuedSubmission();
+    }
+  }, [streamingState, scheduleNextQueuedSubmission]);
+
+  useEffect(() => {
+    const isAgentBusy = () => streamingState !== StreamingState.Idle;
+    const triggerAgentTurn = async (message: string) => {
+      queuedSubmissionsRef.current.push({ query: [{ text: message }] });
+      scheduleNextQueuedSubmission();
+    };
+
+    const unsubscribe = config.setupAsyncTaskAutoTrigger(
+      isAgentBusy,
+      triggerAgentTurn,
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [
+    config,
+    streamingState,
+    scheduleNextQueuedSubmission,
+    queuedSubmissionsRef,
+  ]);
 }
 
 function useScheduleNext(deps: UseSubmitQueryDeps) {

@@ -217,6 +217,7 @@ describe('useAgentStream', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         mockConfig.getAgentClient(),
+        () => undefined,
         [],
         mockAddItem,
         mockConfig,

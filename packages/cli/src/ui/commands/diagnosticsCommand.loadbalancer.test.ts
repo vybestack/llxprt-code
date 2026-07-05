@@ -69,9 +69,9 @@ function addConfigStubs(mockContext: CommandContext): void {
   config.getMcpServerCommand = () => undefined;
   config.getUserMemory = () => '';
   config.getLlxprtMdFileCount = () => 0;
-  config.getToolRegistry = () => ({
-    getAllTools: () => [],
-  });
+  mockContext.services.agent = {
+    tools: { list: () => [] },
+  } as never;
   mockContext.services.settings = {
     merged: {
       ui: { theme: 'default', usageStatisticsEnabled: false },

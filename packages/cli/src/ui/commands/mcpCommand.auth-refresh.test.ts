@@ -14,6 +14,7 @@ import {
   getMCPServerStatus,
   getMCPDiscoveryState,
 } from '@vybestack/llxprt-code-mcp';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // Mock external dependencies
 vi.mock('open', () => ({
@@ -54,42 +55,46 @@ function assertMessageAction(
 
 describe('mcpCommand', () => {
   let mockConfig: {
-    getToolRegistry: ReturnType<typeof vi.fn>;
     getMcpServers: ReturnType<typeof vi.fn>;
     getBlockedMcpServers: ReturnType<typeof vi.fn>;
-    getPromptRegistry: ReturnType<typeof vi.fn>;
-    getResourceRegistry: ReturnType<typeof vi.fn>;
-    getAgentClient?: ReturnType<typeof vi.fn>;
   };
+
+  const createMockAgent = (
+    refresh: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
+  ): Agent =>
+    ({
+      mcp: {
+        details: vi.fn().mockResolvedValue({ servers: [], blockedServers: [] }),
+        refresh,
+        status: vi.fn(),
+        listServers: vi.fn().mockReturnValue([]),
+        toolsByServer: vi.fn().mockReturnValue({}),
+        auth: vi.fn(),
+        discoveryState: vi.fn().mockReturnValue('ready'),
+        authenticate: vi.fn(),
+      },
+      tools: {
+        list: vi.fn().mockReturnValue([]),
+        get: vi.fn(),
+        setEnabled: vi.fn(),
+        onConfirmationRequest: vi.fn(),
+        respondToConfirmation: vi.fn(),
+        onToolUpdate: vi.fn(),
+        setEditorCallbacks: vi.fn(),
+        keys: {} as never,
+      },
+    }) as unknown as Agent;
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Set up default mock environment
     delete process.env.SANDBOX;
-
-    // Default mock implementations
     vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
     vi.mocked(getMCPDiscoveryState).mockReturnValue(
       MCPDiscoveryState.COMPLETED,
     );
-
-    // Create mock config with all necessary methods
     mockConfig = {
-      getToolRegistry: vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue([]),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      }),
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
-      getPromptRegistry: vi.fn().mockReturnValue({
-        getAllPrompts: vi.fn().mockReturnValue([]),
-        getPromptsByServer: vi.fn().mockReturnValue([]),
-      }),
-      getResourceRegistry: vi.fn().mockReturnValue({
-        getAllResources: vi.fn().mockReturnValue([]),
-      }),
-      getAgentClient: vi.fn().mockReturnValue(null),
     };
   });
 
@@ -167,7 +172,6 @@ describe('mcpCommand', () => {
                 oauth: { enabled: true },
               },
             }),
-            getToolRegistry: vi.fn().mockReturnValue({}),
             getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
             getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
             getPromptRegistry: vi.fn().mockReturnValue({
@@ -257,28 +261,17 @@ describe('mcpCommand', () => {
 
   describe('refresh subcommand', () => {
     it('should refresh the list of tools and display the status', async () => {
-      const mockToolRegistry = {
-        discoverAllTools: vi.fn(),
-        getAllTools: vi.fn().mockReturnValue([]),
-      };
-      const mockAgentClient = {
-        setTools: vi.fn(),
-      };
+      const refresh = vi.fn().mockResolvedValue(undefined);
 
       const context = createMockCommandContext({
         services: {
           config: {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
-            getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
-            getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
-            getPromptRegistry: vi.fn().mockReturnValue({
-              getPromptsByServer: vi.fn().mockReturnValue([]),
-            }),
           },
+          agent: createMockAgent(refresh),
         },
       });
-      // Mock the reloadCommands function, which is new logic.
       context.ui.reloadCommands = vi.fn();
 
       const refreshCommand = mcpCommand.subCommands?.find(
@@ -295,8 +288,7 @@ describe('mcpCommand', () => {
         },
         expect.any(Number),
       );
-      expect(mockToolRegistry.discoverAllTools).toHaveBeenCalled();
-      expect(mockAgentClient.setTools).toHaveBeenCalled();
+      expect(refresh).toHaveBeenCalled();
       expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       assertMessageAction(result);
@@ -324,13 +316,11 @@ describe('mcpCommand', () => {
       });
     });
 
-    it('should show an error if tool registry is not available', async () => {
-      const contextWithNoRegistry = createMockCommandContext({
+    it('should show an error if tool registry (agent) is not available', async () => {
+      const contextWithNoAgent = createMockCommandContext({
         services: {
-          config: {
-            ...mockConfig,
-            getToolRegistry: vi.fn().mockReturnValue(undefined),
-          },
+          config: mockConfig,
+          agent: null,
         },
         ui: {
           reloadCommands: vi.fn(),
@@ -340,7 +330,7 @@ describe('mcpCommand', () => {
       const refreshCommand = mcpCommand.subCommands?.find(
         (cmd) => cmd.name === 'refresh',
       );
-      const result = await refreshCommand!.action!(contextWithNoRegistry, '');
+      const result = await refreshCommand!.action!(contextWithNoAgent, '');
 
       expect(result).toStrictEqual({
         type: 'message',

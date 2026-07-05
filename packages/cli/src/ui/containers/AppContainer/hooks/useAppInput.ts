@@ -311,6 +311,7 @@ function useInputStreamSetup(
 ) {
   const {
     config,
+    agent,
     settings,
     history,
     addItem,
@@ -335,6 +336,7 @@ function useInputStreamSetup(
     // replaces it with the threaded Agent once the streaming hooks migrate to
     // the public Agent API; the hooks are intentionally unchanged at this stage.
     config.getAgentClient(),
+    (name) => agent.tools.get(name),
     history,
     addItem,
     config,

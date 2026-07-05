@@ -7,8 +7,6 @@
 import {
   type Config,
   type ToolResult,
-  type AnyToolInvocation,
-  type ContextAwareTool,
   type ToolCallConfirmationDetails,
   type ToolConfirmationPayload,
   logToolCall,
@@ -16,9 +14,13 @@ import {
   ToolConfirmationOutcome,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
-import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
+import type {
+  AgentToolControl,
+  AgentToolHandle,
+  AgentToolInvocation,
+} from '@vybestack/llxprt-code-agents';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { FunctionCall, Part } from '@google/genai';
+import type { FunctionCall, Part, PartListUnion } from '@google/genai';
 import { z } from 'zod';
 import { toToolCallContent, toPermissionOptions } from './zed-helpers.js';
 import { extractToolResultText } from './zed-content-utils.js';
@@ -42,6 +44,7 @@ export class ZedToolHandler {
   constructor(
     private readonly sessionId: string,
     private readonly config: Config,
+    private readonly tools: Pick<AgentToolControl, 'get'>,
     private readonly connection: acp.AgentSideConnection,
     private readonly sendUpdate: SendUpdateFn,
   ) {}
@@ -69,35 +72,32 @@ export class ZedToolHandler {
       return errorResponse(new Error('Missing function name'));
     }
 
-    const toolRegistry = this.config.getToolRegistry();
-    const tool = toolRegistry.getTool(fc.name);
+    const handle = this.tools.get(fc.name);
     const toolErrorResponse = this.buildErrorResponse(
       fc,
       callId,
       args,
       startTime,
-      tool as ContextAwareTool | undefined,
+      handle,
       promptId,
     );
 
-    if (!tool) {
+    if (!handle) {
       return toolErrorResponse(
         new Error(`Tool "${fc.name}" not found in registry.`),
       );
     }
 
     try {
-      if ('context' in tool) {
-        (tool as ContextAwareTool).context = {
-          sessionId: this.sessionId,
-          interactiveMode: true,
-        };
-      }
+      handle.setContext?.({
+        sessionId: this.sessionId,
+        interactiveMode: true,
+      });
 
-      const invocation = tool.build(args);
+      const invocation = handle.build(args);
       const needsConfirmation = await this.requestToolPermission(
         invocation,
-        tool as ContextAwareTool,
+        handle,
         callId,
         args,
         abortSignal,
@@ -116,7 +116,7 @@ export class ZedToolHandler {
         args,
         promptId,
         startTime,
-        tool as ContextAwareTool,
+        handle,
         abortSignal,
       );
     } catch (e) {
@@ -140,7 +140,7 @@ export class ZedToolHandler {
     callId: string,
     args: Record<string, unknown>,
     startTime: number,
-    tool: ContextAwareTool | undefined,
+    handle: AgentToolHandle | undefined,
     promptId: string,
   ): (error: Error) => ToolRunResult {
     return (error: Error): ToolRunResult => {
@@ -154,10 +154,7 @@ export class ZedToolHandler {
         duration_ms: durationMs,
         success: false,
         error: error.message,
-        tool_type:
-          typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
-            ? 'mcp'
-            : 'native',
+        tool_type: handle?.source === 'mcp' ? 'mcp' : 'native',
         agent_id: DEFAULT_AGENT_ID,
       });
 
@@ -184,8 +181,8 @@ export class ZedToolHandler {
   }
 
   async requestToolPermission(
-    invocation: AnyToolInvocation,
-    tool: ContextAwareTool,
+    invocation: AgentToolInvocation,
+    handle: AgentToolHandle,
     callId: string,
     _args: Record<string, unknown>,
     abortSignal: AbortSignal,
@@ -194,7 +191,11 @@ export class ZedToolHandler {
       | ToolCallConfirmationDetails
       | false
       | null
-      | undefined = await invocation.shouldConfirmExecute(abortSignal);
+      | undefined = (await invocation.shouldConfirmExecute(abortSignal)) as
+      | ToolCallConfirmationDetails
+      | false
+      | null
+      | undefined;
 
     if (
       confirmationDetails === false ||
@@ -206,8 +207,8 @@ export class ZedToolHandler {
         status: 'in_progress',
         title: invocation.getDescription(),
         content: [],
-        locations: invocation.toolLocations(),
-        kind: (tool as { kind?: string }).kind as acp.ToolKind | undefined,
+        locations: invocation.toolLocations() as acp.ToolCallLocation[],
+        kind: handle.kind as acp.ToolKind | undefined,
       });
       return { cancelled: false };
     }
@@ -215,15 +216,15 @@ export class ZedToolHandler {
     return this.handleConfirmationOutcome(
       confirmationDetails,
       invocation,
-      tool,
+      handle,
       callId,
     );
   }
 
   async handleConfirmationOutcome(
     confirmationDetails: ToolCallConfirmationDetails,
-    invocation: AnyToolInvocation,
-    tool: ContextAwareTool,
+    invocation: AgentToolInvocation,
+    handle: AgentToolHandle,
     callId: string,
   ): Promise<{ cancelled: boolean }> {
     const content: acp.ToolCallContent[] = [];
@@ -245,8 +246,8 @@ export class ZedToolHandler {
         status: 'pending',
         title: invocation.getDescription(),
         content,
-        locations: invocation.toolLocations(),
-        kind: (tool as { kind?: string }).kind as acp.ToolKind | undefined,
+        locations: invocation.toolLocations() as acp.ToolCallLocation[],
+        kind: handle.kind as acp.ToolKind | undefined,
       },
     };
 
@@ -305,16 +306,17 @@ export class ZedToolHandler {
   }
 
   async executeToolAndBuildResult(
-    invocation: AnyToolInvocation,
+    invocation: AgentToolInvocation,
     fc: FunctionCall,
     callId: string,
     args: Record<string, unknown>,
     promptId: string,
     startTime: number,
-    tool: ContextAwareTool,
+    handle: AgentToolHandle,
     abortSignal: AbortSignal,
   ): Promise<ToolRunResult> {
-    const toolResult: ToolResult = await invocation.execute(abortSignal);
+    const execResult = await invocation.execute(abortSignal);
+    const toolResult = execResult as unknown as ToolResult;
     const content = toToolCallContent(toolResult);
 
     await this.sendUpdate({
@@ -333,14 +335,14 @@ export class ZedToolHandler {
       duration_ms: durationMs,
       success: true,
       prompt_id: promptId,
-      tool_type: tool instanceof DiscoveredMCPTool ? 'mcp' : 'native',
+      tool_type: handle.source === 'mcp' ? 'mcp' : 'native',
       agent_id: DEFAULT_AGENT_ID,
     });
 
     const functionResponseParts = convertToFunctionResponse(
       fc.name!,
       callId,
-      toolResult.llmContent,
+      execResult.llmContent as PartListUnion,
       this.config,
     );
     const message = extractToolResultText(toolResult);

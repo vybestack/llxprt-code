@@ -16,10 +16,13 @@ import {
   validatePathWithinWorkspace,
 } from '@vybestack/llxprt-code-core';
 import type {
-  AnyToolInvocation,
   Config,
   DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
+import type {
+  AgentToolHandle,
+  AgentToolInvocation,
+} from '@vybestack/llxprt-code-agents';
 import type { HistoryItem, IndividualToolCallDisplay } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -42,9 +45,7 @@ type ResourceRegistry = {
   findResourceByUri: (identifier: string) => DiscoveredMCPResource | undefined;
 };
 
-type ToolRegistryTool = ReturnType<
-  ReturnType<Config['getToolRegistry']>['getTool']
->;
+type ToolRegistryTool = AgentToolHandle | undefined;
 
 interface ResolutionState {
   pathSpecsToRead: string[];
@@ -645,7 +646,7 @@ export async function readFilesAndBuildResult({
       addToolGroup(addItem, userMessageTimestamp, resourceReadDisplays);
     return { processedQuery: processedQueryParts };
   }
-  let invocation: AnyToolInvocation | undefined;
+  let invocation: AgentToolInvocation | undefined;
   try {
     invocation = readManyFilesTool.build(
       buildToolArgs(pathSpecsToRead, respectFileIgnore),
@@ -704,7 +705,7 @@ function buildToolArgs(
 
 function buildReadSuccessDisplay(
   readManyFilesTool: NonNullable<ToolRegistryTool>,
-  invocation: AnyToolInvocation,
+  invocation: AgentToolInvocation,
   result: { returnDisplay?: unknown },
   contentLabelsForDisplay: string[],
   userMessageTimestamp: number,
@@ -724,7 +725,7 @@ function buildReadSuccessDisplay(
 
 function buildReadErrorDisplay(
   readManyFilesTool: NonNullable<ToolRegistryTool>,
-  invocation: AnyToolInvocation | undefined,
+  invocation: AgentToolInvocation | undefined,
   contentLabelsForDisplay: string[],
   userMessageTimestamp: number,
   error: unknown,

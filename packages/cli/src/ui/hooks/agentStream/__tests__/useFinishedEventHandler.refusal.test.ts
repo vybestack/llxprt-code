@@ -72,6 +72,7 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
         handleSlashCommand: vi.fn().mockResolvedValue(false),
         logger: null,
         shellModeActive: false,
+        getToolHandle: vi.fn(),
         loopDetectedRef: { current: false },
         lastProfileNameRef: { current: undefined },
         lastModelInfoRef: { current: null },

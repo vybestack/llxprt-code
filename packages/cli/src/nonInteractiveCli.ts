@@ -24,7 +24,11 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { type Part } from '@google/genai';
 import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import {
+  fromConfig,
+  wrapToolHandle,
+  type Agent,
+} from '@vybestack/llxprt-code-agents';
 
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
@@ -215,6 +219,13 @@ async function resolveNonInteractiveQuery(
   const { processedQuery, error } = await handleAtCommand({
     query: input,
     config,
+    // nonInteractiveCli is outside packages/cli/src/ui and may keep raw Config
+    // access. The agent is created later (processQuery), so build the lookup
+    // from the registry here via the public wrapToolHandle (issue #2376 Task E).
+    getToolHandle: (name) => {
+      const tool = config.getToolRegistry().getTool(name);
+      return tool ? wrapToolHandle(tool) : undefined;
+    },
     addItem: (_item, _timestamp) => 0,
     onDebugMessage: () => {},
     messageId: Date.now(),

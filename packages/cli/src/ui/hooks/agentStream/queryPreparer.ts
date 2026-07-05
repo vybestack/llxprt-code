@@ -19,6 +19,7 @@ import {
   MessageSenderType,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import { type SlashCommandProcessorResult } from '../../types.js';
 import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
@@ -27,6 +28,7 @@ import { handleAtCommand } from '../atCommandProcessor.js';
 
 export interface PrepareQueryDeps {
   config: Config;
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
@@ -135,6 +137,7 @@ async function processStringQuery(
     const atCommandResult = await handleAtCommand({
       query: trimmedQuery,
       config,
+      getToolHandle: deps.getToolHandle,
       addItem,
       onDebugMessage,
       messageId: userMessageTimestamp,

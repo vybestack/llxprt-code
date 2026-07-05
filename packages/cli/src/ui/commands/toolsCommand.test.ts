@@ -8,30 +8,40 @@ import { describe, it, expect, vi } from 'vitest';
 import { toolsCommand } from './toolsCommand.ts';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import type { Tool } from '@vybestack/llxprt-code-core';
+import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-const mockTools = [
+const mockTools: readonly ToolInfo[] = [
   {
     name: 'file-reader',
     displayName: 'File Reader',
     description: 'Reads files from the local system.',
-    schema: {},
+    source: 'builtin',
+    enabled: true,
   },
   {
     name: 'code-editor',
     displayName: 'Code Editor',
     description: 'Edits code files.',
-    schema: {},
+    source: 'builtin',
+    enabled: true,
   },
-] as Tool[];
+];
+
+function createMockAgent(tools: readonly ToolInfo[] = mockTools) {
+  return {
+    tools: {
+      list: () => tools,
+    },
+  };
+}
 
 describe('toolsCommand', () => {
   it('reports missing tool registry', async () => {
     const mockContext = createMockCommandContext({
       services: {
+        agent: null,
         config: {
-          getToolRegistry: vi.fn().mockReturnValue(undefined),
           getSettingsService: vi.fn(),
         },
       },
@@ -55,8 +65,8 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
+        agent: createMockAgent() as never,
         config: {
-          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({ 'tools.disabled': ['file-reader'] }),
         },
@@ -76,8 +86,8 @@ describe('toolsCommand', () => {
     const settings = new SettingsService();
     const mockContext = createMockCommandContext({
       services: {
+        agent: createMockAgent() as never,
         config: {
-          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
         },
@@ -98,8 +108,8 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
+        agent: createMockAgent() as never,
         config: {
-          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
           getAgentClient: () => ({ setTools: setToolsSpy }),
@@ -119,8 +129,8 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
+        agent: createMockAgent() as never,
         config: {
-          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({ 'tools.disabled': ['code-editor'] }),
         },
@@ -139,8 +149,8 @@ describe('toolsCommand', () => {
     const settings = new SettingsService();
     const mockContext = createMockCommandContext({
       services: {
+        agent: createMockAgent() as never,
         config: {
-          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
         },
@@ -161,8 +171,8 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
+        agent: createMockAgent() as never,
         config: {
-          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({ 'tools.disabled': ['code-editor'] }),
         },
@@ -183,8 +193,8 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
+        agent: createMockAgent() as never,
         config: {
-          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({
             'tools.disabled': ['code-editor'],
@@ -209,8 +219,8 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
+        agent: createMockAgent() as never,
         config: {
-          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({ 'tools.disabled': ['file-reader'] }),
         },

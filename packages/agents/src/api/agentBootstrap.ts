@@ -448,14 +448,90 @@ export function buildProviderInfos(
 }
 
 /**
+ * Projects a single registry tool (`AnyDeclarativeTool`) into the enriched
+ * element shape {@link buildToolInfos} consumes. Centralizes the schema/
+ * identity read so both `AgentImpl.listTools()` and `ToolControl.list()` stay
+ * in sync without duplication.
+ *
+ * @plan:ISSUE-2376
+ */
+export function projectRegistryTool(tool: {
+  readonly name: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly schema: { readonly parametersJsonSchema?: unknown };
+  readonly serverName?: string;
+  readonly serverToolName?: string;
+}): {
+  readonly name: string;
+  readonly serverName?: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly parametersSchema?: Readonly<Record<string, unknown>>;
+  readonly serverToolName?: string;
+} {
+  const schema = tool.schema.parametersJsonSchema;
+  return {
+    name: tool.name,
+    serverName: tool.serverName,
+    displayName: tool.displayName,
+    description: tool.description,
+    ...(schema !== undefined
+      ? { parametersSchema: schema as Readonly<Record<string, unknown>> }
+      : {}),
+    ...(tool.serverToolName !== undefined
+      ? { serverToolName: tool.serverToolName }
+      : {}),
+  };
+}
+
+/**
+ * Convenience: builds the ToolInfo[] array directly from raw registry tools
+ * (`AnyDeclarativeTool[]`) + the enabled set, projecting each via
+ * {@link projectRegistryTool}. Keeps `AgentImpl.listTools()` minimal.
+ *
+ * @plan:ISSUE-2376
+ */
+export function buildToolInfosFromRegistry(
+  tools: ReadonlyArray<{
+    readonly name: string;
+    readonly displayName: string;
+    readonly description: string;
+    readonly schema: { readonly parametersJsonSchema?: unknown };
+  }>,
+  enabledSet: ReadonlySet<string>,
+): readonly ToolInfo[] {
+  return buildToolInfos(
+    tools.map((t) =>
+      projectRegistryTool({
+        name: t.name,
+        displayName: t.displayName,
+        description: t.description,
+        schema: t.schema,
+        serverName: (t as { serverName?: string }).serverName,
+        serverToolName: (t as { serverToolName?: string }).serverToolName,
+      }),
+    ),
+    enabledSet,
+  );
+}
+
+/**
  * Builds the ToolInfo[] array from the tool registry tool list.
  * @plan:PLAN-20260617-COREAPI.P15
  * @requirement:REQ-017
+ * @plan:ISSUE-2376 — projects the enriched displayName/description/
+ * parametersSchema/serverToolName fields additively (each included only when
+ * the source element defines it).
  */
 export function buildToolInfos(
   tools: ReadonlyArray<{
     readonly name: string;
     readonly serverName?: string;
+    readonly displayName?: string;
+    readonly description?: string;
+    readonly parametersSchema?: Readonly<Record<string, unknown>>;
+    readonly serverToolName?: string;
   }>,
   enabledSet: ReadonlySet<string>,
 ): readonly ToolInfo[] {
@@ -463,9 +539,21 @@ export function buildToolInfos(
     const isMcp = tool.serverName !== undefined;
     return {
       name: tool.name,
+      ...(tool.description !== undefined
+        ? { description: tool.description }
+        : {}),
       source: isMcp ? 'mcp' : 'builtin',
       ...(isMcp ? { server: tool.serverName } : {}),
       enabled: enabledSet.has(tool.name),
+      ...(tool.displayName !== undefined
+        ? { displayName: tool.displayName }
+        : {}),
+      ...(tool.parametersSchema !== undefined
+        ? { parametersSchema: tool.parametersSchema }
+        : {}),
+      ...(tool.serverToolName !== undefined
+        ? { serverToolName: tool.serverToolName }
+        : {}),
     };
   });
 }

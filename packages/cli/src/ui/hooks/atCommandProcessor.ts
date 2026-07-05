@@ -7,6 +7,7 @@
 import type { PartUnion } from '@google/genai';
 import { unescapePath } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   buildInitialQueryText,
@@ -35,6 +36,7 @@ let powershellTipShown = false;
 interface HandleAtCommandParams {
   query: string;
   config: Config;
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
   messageId: number;
@@ -146,6 +148,7 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
 export async function handleAtCommand({
   query,
   config,
+  getToolHandle,
   addItem,
   onDebugMessage,
   messageId: userMessageTimestamp,
@@ -160,8 +163,7 @@ export async function handleAtCommand({
   if (atPathCommandParts.length === 0)
     return { processedQuery: [{ text: query }] };
 
-  const toolRegistry = config.getToolRegistry();
-  const readManyFilesTool = toolRegistry.getTool('read_many_files');
+  const readManyFilesTool = getToolHandle('read_many_files');
   if (!readManyFilesTool) {
     return handleMissingReadManyFilesTool(addItem, userMessageTimestamp);
   }
@@ -170,7 +172,7 @@ export async function handleAtCommand({
     atPathCommandParts,
     config,
     resourceRegistry: getResourceRegistry(config),
-    globTool: toolRegistry.getTool('glob'),
+    globTool: getToolHandle('glob'),
     signal,
     onDebugMessage,
   });

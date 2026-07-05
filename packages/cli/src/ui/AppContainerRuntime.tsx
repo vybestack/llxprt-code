@@ -410,6 +410,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   const bootstrap = useAppBootstrap(props);
   const dialogs = useAppDialogs({
     config: bootstrap.config,
+    agent: bootstrap.agent,
     settings: bootstrap.settings,
     appState: props.appState,
     appDispatch: props.appDispatch,

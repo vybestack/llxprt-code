@@ -112,10 +112,12 @@ export function setupDiagnosticsTest(): DiagnosticsTestSetup {
         getMcpServerCommand: vi.fn(() => null),
         getUserMemory: vi.fn(() => null),
         getLlxprtMdFileCount: vi.fn(() => 0),
-        getToolRegistry: vi.fn(async () => ({
-          getAllTools: () => [],
-        })),
       },
+      agent: {
+        tools: {
+          list: vi.fn(() => []),
+        },
+      } as never,
       settings: {
         merged: {
           ui: {

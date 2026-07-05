@@ -28,6 +28,7 @@ import {
   type ServerContentEvent,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -128,6 +129,7 @@ interface StreamEventHandlersResult {
 
 interface StreamEventHandlerDeps {
   config: Config;
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
@@ -509,6 +511,7 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
   return useMemo(
     () => ({
       config: deps.config,
+      getToolHandle: deps.getToolHandle,
       addItem: deps.addItem,
       onDebugMessage: deps.onDebugMessage,
       handleShellCommand: deps.handleShellCommand,
@@ -519,6 +522,7 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
     }),
     [
       deps.config,
+      deps.getToolHandle,
       deps.addItem,
       deps.onDebugMessage,
       deps.handleShellCommand,

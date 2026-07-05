@@ -334,6 +334,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         }
         return useAgentStream(
           props.client,
+          () => undefined,
           props.history,
           props.addItem,
           props.config,
@@ -662,6 +663,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         mockConfig.getAgentClient(),
+        () => undefined,
         [],
         mockAddItem,
         mockConfig,

@@ -248,6 +248,7 @@ describe('useAgentStream duplicate tool call deduplication (issue #1040)', () =>
     const { result } = renderHook(() =>
       useAgentStream(
         mockAgentClient,
+        () => undefined,
         mockHistory,
         mockAddItem,
         mockConfig,
@@ -317,6 +318,7 @@ describe('useAgentStream duplicate tool call deduplication (issue #1040)', () =>
     const { result } = renderHook(() =>
       useAgentStream(
         mockAgentClient,
+        () => undefined,
         mockHistory,
         mockAddItem,
         mockConfig,

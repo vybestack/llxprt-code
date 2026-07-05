@@ -313,9 +313,66 @@ Runtime-side profile operations on the live agent: `list()`, `get(name)`,
 
 #### `agent.tools` — `AgentToolControl`
 
-Live tool registry + confirmation wiring: `list()`, `setEnabled(names)`,
+Live tool registry + confirmation wiring: `list()`, `get(name)`, `setEnabled(names)`,
 `onConfirmationRequest(cb)`, `respondToConfirmation(confirmationId, decision)`,
 `onToolUpdate(cb)`, `setEditorCallbacks(cbs)`.
+
+<!-- added by #2376 -->
+
+`list()` returns a frozen `readonly ToolInfo[]` snapshot of every registered
+tool. Each `ToolInfo` carries the enriched identity fields the CLI display
+layer reads:
+
+- `name: string` — the internal tool name (registry key).
+- `description?: string` — the tool's description (mirrors
+  `DeclarativeTool.description`).
+- `source: 'builtin' | 'mcp' | 'extension' | 'skill'` — derived from the
+  server tag.
+- `server?: string` — the originating MCP server (MCP tools only).
+- `enabled: boolean` — whether the tool is active under the current
+  `tools.allowed` governance.
+- `displayName?: string` — the user-facing display name (mirrors
+  `DeclarativeTool.displayName`).
+- `parametersSchema?: Readonly<Record<string, unknown>>` — the JSON schema for
+  the tool's parameters (mirrors `tool.schema.parametersJsonSchema`); present
+  only when the tool declares one.
+- `serverToolName?: string` — for MCP tools, the tool name as the originating
+  server knows it (`DiscoveredMCPTool.serverToolName`); absent for builtins.
+
+`get(name)` returns an `AgentToolHandle | undefined` wrapping the real
+registered tool (or `undefined` when no tool is registered under `name`). The
+handle exposes the tool's identity (`name`, `displayName`, `description?`,
+`kind?`) plus `build(params)` / `buildAndExecute(params, signal)` that delegate
+to the real tool. The invocation projection is thin (raw invocation, no
+confirmation flow) and exposes `getDescription()`, `execute(signal)`,
+`shouldConfirmExecute(signal)`, and `toolLocations()` so consumers (the CLI
+at-command processor, the Zed integration) can drive a tool without touching
+`ToolRegistry` directly. `setContext?(context)` is present only when the
+underlying tool is context-aware (the same `'context' in tool` check the Zed
+integration performs).
+
+```ts
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
+const agent = await createAgent({ provider: 'fake', model: 'fake-model' });
+
+// Inspect the enriched tool list.
+for (const info of agent.tools.list()) {
+  console.log(info.displayName ?? info.name, info.source, info.enabled);
+}
+
+// Look up a named tool and execute it via the public handle.
+const handle = agent.tools.get('read_many_files');
+if (handle) {
+  const result = await handle.buildAndExecute(
+    { paths: ['src/**/*.ts'] },
+    new AbortController().signal,
+  );
+  console.log(result.llmContent);
+}
+```
+
+<!-- /added by #2376 -->
 
 ##### `agent.tools.keys` — `AgentToolKeyControl`
 
@@ -376,6 +433,7 @@ agent.mcp.details(opts?: McpDetailsOptions): Promise<McpDetailStatus>
 - **CORRECTION (#2165):** `authenticated` now means "a valid persisted OAuth token exists" (i.e. `oauthStatus === 'authenticated'`) — it is NO LONGER derived from the in-session marker; `requiresAuth` is now the real per-server value (no longer hardcoded `true`).
 - `McpDetailsOptions` = `{ includeTools?: boolean; includePrompts?: boolean; includeResources?: boolean }`.
 - `McpDetailStatus` = `{ servers: readonly McpServerDetail[]; blockedServers: readonly McpBlockedServer[] }`.
+- <!-- added by #2376 --> `McpResourceInfo` now carries an optional `description?: string` (mirrors `MCPResource.description`), projected onto each resource in `details({ includeResources: true })`.
 
 `authenticate(server)` runs the real OAuth flow against a server that requires
 auth, then refreshes that server's tool declarations so the live tool list

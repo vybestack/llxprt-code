@@ -39,6 +39,7 @@ export interface FakeRegistryToolEntry {
   readonly name: string;
   readonly serverName?: string;
   readonly enabled?: boolean;
+  readonly serverToolName?: string;
 }
 
 export interface ToolControlDepsHandle {
@@ -81,6 +82,15 @@ export function createToolControlDeps(
   const allTools = tools.map((t) => ({
     name: t.name,
     ...(t.serverName !== undefined ? { serverName: t.serverName } : {}),
+    // ISSUE-2376: the enriched list()/get() projection reads displayName/
+    // description/schema off each registry tool. Provide duck-typed stand-ins
+    // so the REAL ToolControl projection runs against realistic shapes.
+    displayName: t.name,
+    description: t.name,
+    schema: {},
+    ...(t.serverToolName !== undefined
+      ? { serverToolName: t.serverToolName }
+      : {}),
   }));
   const enabledTools = tools
     .filter((t) => t.enabled !== false)
@@ -94,9 +104,11 @@ export function createToolControlDeps(
     },
   };
 
+  const toolMap = new Map(allTools.map((t) => [t.name, t]));
   const toolRegistry = {
     getAllTools: () => allTools,
     getEnabledTools: () => enabledTools,
+    getTool: (name: string): unknown => toolMap.get(name),
   };
 
   const config = {

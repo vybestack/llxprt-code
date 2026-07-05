@@ -26,18 +26,26 @@ import * as acp from '@agentclientprotocol/sdk';
 import {
   StreamEventType,
   type StreamEvent,
+  type Agent,
+  fromConfig,
 } from '@vybestack/llxprt-code-agents';
+import {
+  switchActiveProvider,
+  setActiveModel,
+  getActiveProfileName,
+  loadProfileByName,
+  setCliRuntimeContext,
+} from '@vybestack/llxprt-code-providers/runtime.js';
 
 import { Readable, Writable } from 'node:stream';
 import { type Content, type Part, type FunctionCall } from '@google/genai';
 import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
-import {
-  getActiveProfileName,
-  loadProfileByName,
-  setCliRuntimeContext,
-} from '@vybestack/llxprt-code-providers/runtime.js';
 import { runExitCleanup } from '../utils/cleanup.js';
+import {
+  hasProfileAuthEphemerals,
+  snapshotProfileAuthEphemerals,
+} from '../config/profileAuthEphemerals.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { parseZedAuthMethodId, buildAvailableModes } from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
@@ -63,6 +71,32 @@ function getRuntimeAgentClient(
   return (
     config as { getAgentClient: () => AgentClientContract | undefined }
   ).getAgentClient();
+}
+
+/**
+ * Mirrors cliAgentBootstrap.restoreActiveProvider: `fromConfig` can disturb
+ * provider runtime state (activate() resets the active provider on the shared
+ * ProviderManager). For provider-only paths we re-switch; for profile-auth
+ * paths we reassert only the model so keyfile/base-url ephemerals survive.
+ */
+async function restoreActiveProvider(
+  config: Config,
+  agent: Agent,
+): Promise<void> {
+  const provider = config.getProvider() ?? agent.getProvider();
+  if (!provider) return;
+  try {
+    const model = config.getModel();
+    const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
+    if (!hasProfileAuthEphemerals(profileAuthEphemerals)) {
+      await switchActiveProvider(provider);
+    }
+    if (model && model !== 'placeholder-model') {
+      await setActiveModel(model);
+    }
+  } catch {
+    // Best-effort: auth will be triggered lazily on the first API call.
+  }
 }
 
 export async function runZedIntegration(
@@ -206,11 +240,24 @@ export class ZedAgent {
         sessionConfig,
         this.logger,
       );
+
+      // Create the Agent via fromConfig so the Zed tool handlers can resolve
+      // tools through the public Agent.tools API instead of touching the
+      // ToolRegistry directly (issue #2376). Restore the provider state that
+      // fromConfig's activate() may disturb.
+      const agent = await fromConfig({
+        config: sessionConfig,
+        messageBus: undefined,
+        sessionId,
+      });
+      await restoreActiveProvider(sessionConfig, agent);
+
       const session = new Session(
         sessionId,
         chat,
         sessionConfig,
         this.connection,
+        agent,
       );
       this.sessions.set(sessionId, session);
 
@@ -301,6 +348,7 @@ export class Session {
     private readonly chat: AgentChatContract,
     private readonly config: Config,
     private readonly connection: acp.AgentSideConnection,
+    private readonly agent: Agent,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
     const configuredEmojiFilterMode = this.config.getEphemeralSetting(
@@ -312,12 +360,14 @@ export class Session {
 
     this.pathResolver = new ZedPathResolver(
       this.config,
+      this.agent.tools,
       (update) => this.sendUpdate(update),
       (msg) => this.debug(msg),
     );
     this.toolHandler = new ZedToolHandler(
       this.id,
       this.config,
+      this.agent.tools,
       this.connection,
       (update) => this.sendUpdate(update),
     );

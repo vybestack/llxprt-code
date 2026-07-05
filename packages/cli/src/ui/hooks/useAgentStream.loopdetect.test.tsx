@@ -273,6 +273,7 @@ describe('useAgentStream', () => {
 
         return useAgentStream(
           props.client,
+          () => undefined,
           props.history,
           props.addItem,
           props.config,

@@ -40,6 +40,10 @@ export * from './agent.js';
 export * from './event-schema.js';
 export { createAgent } from './createAgent.js';
 export { fromConfig } from './fromConfig.js';
+// Public utility for wrapping a real AnyDeclarativeTool as an AgentToolHandle,
+// consumed by non-UI CLI callers (nonInteractiveCli) that still hold a Config
+// but need the handle shape (#2376).
+export { wrapToolHandle } from './control/toolControl.js';
 export { listProviders, listTools } from './discovery.js';
 export { mapLoopStream, mapStreamEvent } from './eventAdapter.js';
 export { toConfigParameters, AdapterError } from './agentConfig.adapter.js';

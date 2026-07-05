@@ -53,7 +53,34 @@ export function buildMcpControlDeps(
     isMcpAuthenticated,
     markAuthenticated,
     getManager: () => config.getMcpClientManager(),
-    getToolRegistry: () => config.getToolRegistry(),
+    // @plan:ISSUE-2376 — project the real registry tools (AnyDeclarativeTool)
+    // into the McpToolRegistryView element shape so displayName/
+    // parametersSchema/serverToolName flow through to the public ToolInfo.
+    getToolRegistry: () => {
+      const registry = config.getToolRegistry();
+      return {
+        getAllTools: () =>
+          registry.getAllTools().map((t) => {
+            const schema = t.schema.parametersJsonSchema;
+            return {
+              name: t.name,
+              description: t.description,
+              serverName: (t as { serverName?: string }).serverName,
+              displayName: t.displayName,
+              ...(schema !== undefined
+                ? {
+                    parametersSchema: schema as Readonly<
+                      Record<string, unknown>
+                    >,
+                  }
+                : {}),
+              serverToolName: (t as { serverToolName?: string }).serverToolName,
+            };
+          }),
+        getEnabledTools: () =>
+          registry.getEnabledTools().map((t) => ({ name: t.name })),
+      };
+    },
     getServerConfigs: () => config.getMcpServers(),
     getBlockedServers: () => config.getBlockedMcpServers() ?? [],
     getPromptRegistry: () => ({

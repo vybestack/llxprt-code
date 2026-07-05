@@ -15,6 +15,8 @@ import {
   COMMON_IGNORE_PATTERNS,
   DEFAULT_FILE_EXCLUDES,
 } from '@vybestack/llxprt-code-core';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
+import { wrapToolHandle } from '@vybestack/llxprt-code-agents';
 import {
   FileDiscoveryService,
   StandardFileSystemService,
@@ -40,6 +42,7 @@ export interface AtCommandTestSetup {
   mockOnDebugMessage: ReturnType<typeof vi.fn>;
   abortController: AbortController;
   originalCwd: string;
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
 }
 
 function buildMockConfig(testRootDir: string): Config {
@@ -142,6 +145,11 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
   registry.registerTool(new GlobTool(toolHost));
   vi.mocked(mockConfig.getToolRegistry).mockReturnValue(registry);
 
+  const getToolHandle = (name: string): AgentToolHandle | undefined => {
+    const tool = registry.getTool(name);
+    return tool !== undefined ? wrapToolHandle(tool) : undefined;
+  };
+
   return {
     testRootDir,
     mockConfig,
@@ -149,6 +157,7 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
     mockOnDebugMessage,
     abortController,
     originalCwd,
+    getToolHandle,
   };
 }
 

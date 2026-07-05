@@ -238,6 +238,7 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(mockConfig),
+          () => undefined,
           [],
           mockAddItem,
           mockConfig,
@@ -320,6 +321,7 @@ describe('useAgentStream', () => {
       const { result, rerender } = renderHook(() =>
         useAgentStream(
           mockConfig.getAgentClient(),
+          () => undefined,
           [],
           mockAddItem,
           mockConfig,
@@ -406,6 +408,7 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           mockConfig.getAgentClient(),
+          () => undefined,
           [],
           mockAddItem,
           mockConfig,
@@ -456,6 +459,7 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(mockConfig),
+          () => undefined,
           [],
           mockAddItem,
           mockConfig,
@@ -513,6 +517,7 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(mockConfig),
+          () => undefined,
           [],
           mockAddItem,
           mockConfig,

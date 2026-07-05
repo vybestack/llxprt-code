@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core';
 import type {
-  Config,
-  ToolResult,
-  AnyDeclarativeTool,
-} from '@vybestack/llxprt-code-core';
+  AgentToolControl,
+  AgentToolExecResult,
+  AgentToolHandle,
+} from '@vybestack/llxprt-code-agents';
 import {
   getErrorMessage,
   isNodeError,
@@ -31,18 +32,12 @@ interface DebugFn {
   (msg: string): void;
 }
 
-type GlobTool =
-  | {
-      buildAndExecute: (
-        args: { pattern: string; path: string },
-        signal: AbortSignal,
-      ) => Promise<ToolResult>;
-    }
-  | undefined;
+type GlobTool = AgentToolHandle | undefined;
 
 export class ZedPathResolver {
   constructor(
     private readonly config: Config,
+    private readonly tools: Pick<AgentToolControl, 'get'>,
     private readonly sendUpdate: SendUpdateFn,
     private readonly debug: DebugFn,
   ) {}
@@ -74,9 +69,9 @@ export class ZedPathResolver {
     const contentLabelsForDisplay: string[] = [];
     const ignoredPaths: string[] = [];
 
-    const toolRegistry = this.config.getToolRegistry();
-    const readManyFilesTool = toolRegistry.getTool('read_many_files')!;
-    const globTool = toolRegistry.getTool('glob');
+    const toolRegistry = this.tools;
+    const readManyFilesTool = toolRegistry.get('read_many_files')!;
+    const globTool = toolRegistry.get('glob');
 
     await this.resolvePathSpecs(
       atPathCommandParts,
@@ -297,7 +292,7 @@ export class ZedPathResolver {
 
   private extractGlobResult(
     pathName: string,
-    globResult: ToolResult,
+    globResult: AgentToolExecResult,
   ): { absolutePath: string; relativePath: string } | undefined {
     if (
       typeof globResult.llmContent === 'string' &&
@@ -408,7 +403,7 @@ export class ZedPathResolver {
   private async readReferencedFiles(
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
-    readManyFilesTool: AnyDeclarativeTool,
+    readManyFilesTool: AgentToolHandle,
     abortSignal: AbortSignal,
     processedQueryParts: Part[],
   ): Promise<void> {
@@ -424,14 +419,14 @@ export class ZedPathResolver {
         status: 'in_progress',
         title: invocation.getDescription(),
         content: [],
-        locations: invocation.toolLocations(),
-        kind: (invocation as { kind?: string }).kind as
-          | acp.ToolKind
-          | undefined,
+        locations: invocation.toolLocations() as acp.ToolCallLocation[],
+        kind: readManyFilesTool.kind as acp.ToolKind | undefined,
       });
 
       const result = await invocation.execute(abortSignal);
-      const content = toToolCallContent(result) ?? {
+      const content = toToolCallContent(
+        result as unknown as Parameters<typeof toToolCallContent>[0],
+      ) ?? {
         type: 'content',
         content: {
           type: 'text',
@@ -445,7 +440,10 @@ export class ZedPathResolver {
         content: [content],
       });
 
-      this.appendFileContent(result.llmContent, processedQueryParts);
+      this.appendFileContent(
+        result.llmContent as PartListUnion | undefined,
+        processedQueryParts,
+      );
     } catch (error: unknown) {
       await this.sendUpdate({
         sessionUpdate: 'tool_call_update',

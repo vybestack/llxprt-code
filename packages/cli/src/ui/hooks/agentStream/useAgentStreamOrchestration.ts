@@ -16,6 +16,7 @@ import {
   type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -36,6 +37,7 @@ import {
 
 export interface AgentStreamOrchestrationDeps {
   agentClient: AgentClientContract;
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   config: Config;
   settings: LoadedSettings;
@@ -336,6 +338,7 @@ function buildSubmitQueryDeps({
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
   return {
     config: args.config,
+    getToolHandle: args.getToolHandle,
     agentClient: args.agentClient,
     addItem: args.addItem,
     settings: args.settings,

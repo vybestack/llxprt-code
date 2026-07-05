@@ -37,6 +37,7 @@ import type {
   IdeContext,
   RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { HistoryItem, ConsoleMessageItem } from '../../../types.js';
@@ -45,6 +46,7 @@ const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
 export interface AppDialogsParams {
   config: Config;
+  agent: Agent;
   settings: LoadedSettings;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
@@ -319,7 +321,8 @@ function useDialogsAuth(
 }
 
 function useDialogsProfiles(p: AppDialogsParams) {
-  const { config, settings, appState, addItem, setLlxprtMdFileCount } = p;
+  const { config, agent, settings, appState, addItem, setLlxprtMdFileCount } =
+    p;
   const loadProfile = useLoadProfileDialog({
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
@@ -338,6 +341,7 @@ function useDialogsProfiles(p: AppDialogsParams) {
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
     appState,
     config,
+    agent,
   });
   const openToolsDialog = useCallback(
     (action: 'enable' | 'disable') => {

@@ -21,6 +21,7 @@ import {
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItem,
@@ -36,6 +37,7 @@ import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
 
 export const useAgentStream = (
   agentClient: AgentClientContract,
+  getToolHandle: (name: string) => AgentToolHandle | undefined,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   config: Config,
@@ -60,6 +62,7 @@ export const useAgentStream = (
 ) => {
   const orchestration = useAgentStreamOrchestration({
     agentClient,
+    getToolHandle,
     addItem,
     config,
     settings,

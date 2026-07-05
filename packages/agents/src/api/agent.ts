@@ -118,6 +118,15 @@ export interface ToolInfo {
   readonly source: 'builtin' | 'mcp' | 'extension' | 'skill';
   readonly server?: string;
   readonly enabled: boolean;
+  // added by #2376 — user-facing display name (mirrors DeclarativeTool.displayName)
+  readonly displayName?: string;
+  // added by #2376 — JSON schema for the tool's parameters (mirrors
+  // FunctionDeclaration.parametersJsonSchema); only present when the tool
+  // declares one.
+  readonly parametersSchema?: Readonly<Record<string, unknown>>;
+  // added by #2376 — for MCP tools, the tool name as the originating server
+  // knows it (DiscoveredMCPTool.serverToolName); absent for builtins.
+  readonly serverToolName?: string;
 }
 
 export interface ProviderStatus {
@@ -186,6 +195,8 @@ export interface McpPromptInfo {
 export interface McpResourceInfo {
   readonly name?: string;
   readonly uri: string;
+  // added by #2376 — resource description (mirrors MCPResource.description)
+  readonly description?: string;
 }
 
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
@@ -316,8 +327,82 @@ export interface AgentToolKeyControl {
   getKeyFile(toolName: string): Promise<string | null>;
 }
 
+// added by #2376 — projected result of a tool execution. Mirrors the
+// shape of ToolResult (from @vybestack/llxprt-code-tools) the CLI consumers
+// (atCommandProcessorHelpers.ts, zed-tool-handler.ts) read: llmContent for
+// history, returnDisplay for UI, and an optional error sentinel.
+export interface AgentToolExecResult {
+  readonly llmContent: unknown;
+  readonly returnDisplay?: unknown;
+  readonly error?: unknown;
+}
+
+// added by #2376 — a file/location a tool invocation will affect. Mirrors
+// ToolLocation from @vybestack/llxprt-code-tools (used by zed-tool-handler.ts).
+export interface AgentToolLocation {
+  readonly path: string;
+  readonly line?: number;
+}
+
+// added by #2376 — confirmation details surfaced by shouldConfirmExecute.
+// Typed opaquely (unknown) so the public surface does not couple to the
+// engine's ToolCallConfirmationDetails union; consumers that need the
+// structured shape cast at the boundary (as zed-tool-handler.ts already does).
+export type AgentToolConfirmationDetails = unknown;
+
+// added by #2376 — thin projection of a built tool invocation. Exposes the
+// methods the CLI consumers actually call: getDescription (display title),
+// execute (run + collect result), shouldConfirmExecute + toolLocations
+// (zed-tool-handler.ts permission flow). The projection delegates to the real
+// AnyToolInvocation; it never drives the confirmation flow itself.
+export interface AgentToolInvocation {
+  getDescription(): string;
+  execute(
+    signal: AbortSignal,
+    updateOutput?: (chunk: string) => void,
+  ): Promise<AgentToolExecResult>;
+  shouldConfirmExecute(
+    signal: AbortSignal,
+  ): Promise<AgentToolConfirmationDetails | false>;
+  toolLocations(): readonly AgentToolLocation[];
+}
+
+// added by #2376 — a context bundle context-aware tools accept. Mirrors the
+// shape zed-tool-handler.ts assigns via `tool.context = { sessionId, interactiveMode }`.
+export interface AgentToolContext {
+  readonly sessionId: string;
+  readonly interactiveMode: boolean;
+}
+
+// added by #2376 — a named-tool lookup handle. Returned by
+// AgentToolControl.get(name); wraps a real AnyDeclarativeTool so consumers
+// (the CLI at-command processor, the Zed integration) can build/execute tools
+// without touching ToolRegistry directly. The handle exposes the tool's
+// identity (name/displayName/description/kind/source), a build() that yields a
+// thin AgentToolInvocation projection, a buildAndExecute() convenience, and an
+// optional setContext() for context-aware tools.
+export interface AgentToolHandle {
+  readonly name: string;
+  readonly displayName: string;
+  readonly description?: string;
+  readonly kind?: string;
+  // added by #2376 — the tool's origin ('builtin'|'mcp'|...), mirroring
+  // ToolInfo.source. Consumers (zed-tool-handler.ts) read it for telemetry
+  // tool_type ('mcp' vs 'native') without needing the DiscoveredMCPTool
+  // instanceof check.
+  readonly source?: ToolInfo['source'];
+  build(params: Record<string, unknown>): AgentToolInvocation;
+  buildAndExecute(
+    params: Record<string, unknown>,
+    signal: AbortSignal,
+  ): Promise<AgentToolExecResult>;
+  setContext?(context: AgentToolContext): void;
+}
+
 export interface AgentToolControl {
   list(): readonly ToolInfo[];
+  // added by #2376 — named-tool lookup; returns undefined when absent.
+  get(name: string): AgentToolHandle | undefined;
   setEnabled(names: readonly string[]): Promise<void>;
   onConfirmationRequest(cb: (req: ToolConfirmation) => void): Unsubscribe;
   respondToConfirmation(

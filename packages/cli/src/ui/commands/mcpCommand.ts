@@ -26,6 +26,7 @@ const getMcpStatus = async (
   showTips: boolean = false,
 ): Promise<SlashCommandActionReturn> => {
   const { config } = context.services;
+  const agent = context.services.agent;
   if (!config) {
     return {
       type: 'message',
@@ -34,9 +35,7 @@ const getMcpStatus = async (
     };
   }
 
-  const runtimeConfig = asRuntimeConfig(config);
-  const toolRegistry = runtimeConfig.getToolRegistry?.();
-  if (!toolRegistry) {
+  if (!agent) {
     return {
       type: 'message',
       messageType: 'error',
@@ -59,8 +58,7 @@ const getMcpStatus = async (
   }
 
   const message = await buildMcpStatusMessage(
-    config,
-    runtimeConfig,
+    agent,
     serverNames,
     mcpServers,
     blockedMcpServers,
@@ -154,6 +152,7 @@ const refreshCommand: SlashCommand = {
     context: CommandContext,
   ): Promise<SlashCommandActionReturn> => {
     const { config } = context.services;
+    const agent = context.services.agent;
     if (!config) {
       return {
         type: 'message',
@@ -162,9 +161,7 @@ const refreshCommand: SlashCommand = {
       };
     }
 
-    const runtimeConfig = asRuntimeConfig(config);
-    const toolRegistry = runtimeConfig.getToolRegistry?.();
-    if (!toolRegistry) {
+    if (!agent) {
       return {
         type: 'message',
         messageType: 'error',
@@ -180,13 +177,7 @@ const refreshCommand: SlashCommand = {
       Date.now(),
     );
 
-    await toolRegistry.discoverAllTools();
-
-    // Update the client with the new tools
-    const agentClient = runtimeConfig.getAgentClient?.();
-    if (agentClient) {
-      await agentClient.setTools();
-    }
+    await agent.mcp.refresh();
 
     // Reload the slash commands to reflect the changes.
     context.ui.reloadCommands();

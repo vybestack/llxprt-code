@@ -274,6 +274,7 @@ describe('useAgentStream', () => {
 
         return useAgentStream(
           props.client,
+          () => undefined,
           props.history,
           props.addItem,
           props.config,
@@ -441,6 +442,7 @@ describe('useAgentStream', () => {
     renderHook(() =>
       useAgentStream(
         new MockedAgentClientClass(mockConfig),
+        () => undefined,
         [],
         mockAddItem,
         mockConfig,
@@ -551,6 +553,7 @@ describe('useAgentStream', () => {
     renderHook(() =>
       useAgentStream(
         new MockedAgentClientClass(mockConfig),
+        () => undefined,
         [],
         mockAddItem,
         mockConfig,

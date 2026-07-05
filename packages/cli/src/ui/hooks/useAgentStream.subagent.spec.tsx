@@ -278,6 +278,7 @@ describe('useAgentStream subagent isolation', () => {
     renderHook(() =>
       useAgentStream(
         client,
+        () => undefined,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
@@ -388,6 +389,7 @@ describe('useAgentStream subagent isolation', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         client,
+        () => undefined,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
@@ -457,6 +459,7 @@ describe('useAgentStream subagent isolation', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         client,
+        () => undefined,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
@@ -509,6 +512,7 @@ describe('useAgentStream subagent isolation', () => {
     renderHook(() =>
       useAgentStream(
         client,
+        () => undefined,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,

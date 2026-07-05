@@ -63,9 +63,15 @@
   "AgentToolCall",
   "AgentToolCallEvent",
   "AgentToolCallSchema",
+  "AgentToolConfirmationDetails",
   "AgentToolConfirmationEvent",
+  "AgentToolContext",
   "AgentToolControl",
+  "AgentToolExecResult",
+  "AgentToolHandle",
+  "AgentToolInvocation",
   "AgentToolKeyControl",
+  "AgentToolLocation",
   "AgentToolOutputLimits",
   "AgentToolResult",
   "AgentToolResultEvent",
@@ -168,5 +174,6 @@
   "mapLoopStream",
   "mapStreamEvent",
   "splitPartsByRole",
-  "toConfigParameters"
+  "toConfigParameters",
+  "wrapToolHandle"
 ]
