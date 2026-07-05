@@ -543,12 +543,15 @@ export class Session {
         return null;
       }
       case 'tool-call':
+        await batcher.flush();
         await emitToolCallStart(event.call, (u) => this.sendUpdate(u));
         return null;
       case 'tool-status':
+        await batcher.flush();
         await emitToolStatus(event.update, (u) => this.sendUpdate(u));
         return null;
       case 'tool-result':
+        await batcher.flush();
         await emitToolResult(event.result, (u) => this.sendUpdate(u));
         return null;
       case 'tool-confirmation':
@@ -589,6 +592,7 @@ export class Session {
         });
         return null;
       case 'usage': {
+        await batcher.flush();
         await this.sendUsageUpdate(event.usage);
         return null;
       }
@@ -788,7 +792,9 @@ class StreamBatcher {
   ) {}
 
   append(text: string, isThought: boolean): void {
-    const filterResult = this.emojiFilter.filterText(text);
+    const filterResult = isThought
+      ? this.emojiFilter.filterText(text)
+      : this.emojiFilter.filterStreamChunk(text);
     if (filterResult.blocked) {
       const pending = this.flushChain
         .then(() => this.doFlush())
@@ -821,9 +827,20 @@ class StreamBatcher {
       clearTimeout(this.batchTimer);
       this.batchTimer = null;
     }
-    const pending = this.flushChain.then(() => this.doFlush());
+    const pending = this.flushChain
+      .then(() => this.doFlush())
+      .then(() => this.flushEmojiBuffer());
     this.flushChain = pending.catch(() => undefined);
     await pending;
+  }
+
+  private async flushEmojiBuffer(): Promise<void> {
+    const remaining = this.emojiFilter.flushBuffer();
+    if (remaining.length === 0) {
+      return;
+    }
+    this.appendPendingChunk('text', remaining);
+    await this.doFlush();
   }
 
   private appendPendingChunk(kind: 'text' | 'thought', text: string): void {

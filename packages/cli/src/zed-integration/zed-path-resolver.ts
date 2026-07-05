@@ -512,6 +512,9 @@ export class ZedPathResolver {
         processedQueryParts.push({ text: content });
       }
     } catch (error) {
+      if (abortSignal.aborted) {
+        return;
+      }
       processedQueryParts.push({
         text: `\nError reading files (${label}): ${getErrorMessage(error)}`,
       });
@@ -543,12 +546,18 @@ export class ZedPathResolver {
         return;
       }
       const content = await fileSystemService.readTextFile(absolute);
+      if (abortSignal.aborted) {
+        return;
+      }
       processedQueryParts.push({ text: `\nContent from @${label}:\n` });
       const parts = normalizeToParts(content);
       for (const part of parts) {
         processedQueryParts.push(part);
       }
     } catch (error) {
+      if (abortSignal.aborted) {
+        return;
+      }
       processedQueryParts.push({
         text: `\nError reading file (${label}): ${getErrorMessage(error)}`,
       });
