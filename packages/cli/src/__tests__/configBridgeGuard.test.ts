@@ -224,4 +224,13 @@ describe('#2373 config boundary guard', () => {
     }
     expect(offenders).toStrictEqual([]);
   });
+
+  it('does not pass raw Config as slashCommandRuntime at the composition root', () => {
+    const interactiveUI = read('session/interactiveUI.tsx');
+
+    // The composition root must build a delegation adapter via
+    // buildSlashCommandRuntime, never pass the raw config object directly.
+    expect(interactiveUI).toMatch(/buildSlashCommandRuntime/);
+    expect(interactiveUI).not.toMatch(/slashCommandRuntime=\{config\}/);
+  });
 });

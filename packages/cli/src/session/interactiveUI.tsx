@@ -28,7 +28,10 @@ import { registerCleanup, registerSyncCleanup } from '../utils/cleanup.js';
 import { appendInteractiveUiDebug } from './debugLog.js';
 import { mouseEventsExitHandler } from './terminalCleanup.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { buildUiRuntimeFromSource } from '../ui/cliUiRuntime.js';
+import {
+  buildUiRuntimeFromSource,
+  buildSlashCommandRuntime,
+} from '../ui/cliUiRuntime.js';
 
 /**
  * Module-level reference to the latest rendered Ink instance.
@@ -148,6 +151,7 @@ export async function startInteractiveUI(
 
   const renderOptions = inkRenderOptions(config, settings);
   const uiRuntime = buildUiRuntimeFromSource(config);
+  const slashCommandRuntime = buildSlashCommandRuntime(config);
   appendInteractiveUiDebug(
     `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
   );
@@ -185,7 +189,7 @@ export async function startInteractiveUI(
           <SettingsContext.Provider value={settings}>
             <AppWrapper
               uiRuntime={uiRuntime}
-              slashCommandRuntime={config}
+              slashCommandRuntime={slashCommandRuntime}
               agent={agent}
               settings={settings}
               runtimeMessageBus={runtimeMessageBus}

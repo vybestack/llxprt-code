@@ -735,8 +735,46 @@ export function buildUiRuntimeFromSource(
  * (memory, tools, MCP, IDE, hooks, settings, extensions, etc.), so this named
  * boundary keeps that surface explicit and confined to the command layer.
  * Streaming and AppContainer internals use StreamRuntime/UiRuntime instead.
+ *
+ * Callers MUST use {@link buildSlashCommandRuntime} at the composition edge to
+ * produce a flat delegation adapter — never pass the raw Config instance
+ * directly as a SlashCommandRuntime prop.
  */
 export type SlashCommandRuntime = UiRuntimeBareSource;
+
+/**
+ * Builds a flat delegation adapter satisfying {@link SlashCommandRuntime} from
+ * the bootstrap source. This breaks the Config identity link: downstream code
+ * receives a plain object literal with delegated methods, not the raw Config
+ * instance. Each method delegates through the focused capability builders so
+ * the adapter is structurally identical to the nested UiRuntime but exposes the
+ * flat surface that slash commands and dialogs expect.
+ */
+export function buildSlashCommandRuntime(
+  source: UiRuntimeBareSource,
+): SlashCommandRuntime {
+  const r = buildUiRuntimeFromSource(source);
+  const step1 = Object.assign(
+    {},
+    r.session,
+    r.model,
+    r.agentClientSource,
+    r.shell,
+  );
+  const step2 = Object.assign(step1, r.files, r.memory, r.ide, r.hooks);
+  const step3 = Object.assign(step2, r.mcp, r.settings, r.tools, r.scheduler);
+  const step4 = Object.assign(
+    step3,
+    r.asyncTasks,
+    r.bucketFailover,
+    r.checkpoint,
+    r.sessionLimits,
+  );
+  const step5 = Object.assign(step4, r.interactive, r.ephemeral, {
+    storage: r.storage,
+  });
+  return Object.assign(step5, r.approval, r.extensions, r.app);
+}
 
 /**
  * MCP-command boundary: the focused capability slice that MCP display and
