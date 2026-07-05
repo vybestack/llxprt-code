@@ -29,8 +29,6 @@ import {
   type DoneReason,
   type ThoughtSummary,
 } from '@vybestack/llxprt-code-agents';
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
-
 import { Readable, Writable } from 'node:stream';
 import * as path from 'node:path';
 import { type Part } from '@google/genai';
@@ -124,7 +122,6 @@ export function createSessionScopedConfig(
   let fileSystemService = initialFileSystemService;
   let providerManager: RuntimeProviderManager | undefined =
     config.getProviderManager();
-  const workspaceContext = new WorkspaceContext(targetDir);
   return new Proxy(config, {
     get(target, property, receiver) {
       if (property === 'getFileSystemService') {
@@ -145,9 +142,6 @@ export function createSessionScopedConfig(
       }
       if (property === 'getProjectRoot') {
         return () => targetDir;
-      }
-      if (property === 'getWorkspaceContext') {
-        return () => workspaceContext;
       }
       if (property === 'getTargetDir') {
         return () => targetDir;
