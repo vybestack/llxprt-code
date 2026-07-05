@@ -259,9 +259,8 @@ export function createStableDisplayCallbacks(
     outputUpdateHandler: (callId, chunk) => {
       displayHolder.outputUpdateHandler?.(callId, chunk);
     },
-    onAllToolCallsComplete: (completed) => {
-      return displayHolder.onAllToolCallsComplete?.(completed);
-    },
+    onAllToolCallsComplete: (completed) =>
+      displayHolder.onAllToolCallsComplete?.(completed),
     getPreferredEditor: () =>
       editorHolder.editorCallbacks.getPreferredEditor?.() as
         | ReturnType<NonNullable<DisplayCallbacks['getPreferredEditor']>>

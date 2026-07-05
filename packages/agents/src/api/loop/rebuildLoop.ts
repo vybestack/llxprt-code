@@ -139,3 +139,31 @@ export function ensureFreshClientLoop(
   }
   rebuild();
 }
+
+/**
+ * Resolves the holder's loop after a stale-client rebuild attempt. Returns the
+ * live loop on success, or a structured error message when the rebuild threw
+ * or no loop is initialized — so stream() can yield error/done events instead
+ * of rejecting the async generator.
+ */
+export function resolveLoopOrError(
+  holder: LoopHolder,
+  resolveClient: () => AgenticLoopOptions['agentClient'],
+  rebuild: () => void,
+):
+  | { loop: AgenticLoop; error?: undefined }
+  | { loop?: undefined; error: { message: string } } {
+  try {
+    ensureFreshClientLoop(holder, resolveClient, rebuild);
+  } catch (e) {
+    return {
+      error: {
+        message: `Agent loop initialization failed: ${e instanceof Error ? e.message : String(e)}`,
+      },
+    };
+  }
+  const loop = holder.current;
+  return loop
+    ? { loop }
+    : { error: { message: 'Agent loop is not initialized' } };
+}

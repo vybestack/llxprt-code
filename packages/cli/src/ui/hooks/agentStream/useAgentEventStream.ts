@@ -244,7 +244,7 @@ export function useAgentEventStream(
         }
       }
     },
-    [args.agent],
+    [args.agent, processedMemoryTools],
   );
 
   return { runStream };

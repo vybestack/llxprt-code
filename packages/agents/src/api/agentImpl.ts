@@ -18,10 +18,7 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import {
-  PerformCompressionResult,
-  type StructuredError,
-} from '@vybestack/llxprt-code-core/core/turn.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getResponseText } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import type {
@@ -81,7 +78,7 @@ import { ProfilesControl } from './control/profilesControl.js';
 import { buildNewControls } from './control/newControls.js';
 import type { NewControls } from './control/newControls.js';
 import type { LoopHolder, RebuildLoopDeps } from './loop/rebuildLoop.js';
-import { ensureFreshClientLoop } from './loop/rebuildLoop.js';
+import { resolveLoopOrError } from './loop/rebuildLoop.js';
 import type {
   ApprovalHandler,
   DisplayCallbacks,
@@ -548,27 +545,6 @@ export class AgentImpl implements Agent {
     };
   }
 
-  /** Resolves the loop after stale-client rebuild; returns StructuredError on failure. */
-  private resolveLoopOrError():
-    | { loop: NonNullable<LoopHolder['current']>; error?: undefined }
-    | { loop?: undefined; error: StructuredError } {
-    try {
-      ensureFreshClientLoop(this.deps.loopHolder, this.deps.resolveClient, () =>
-        this.rebuild(),
-      );
-    } catch (e) {
-      return {
-        error: {
-          message: `Agent loop initialization failed: ${e instanceof Error ? e.message : String(e)}`,
-        },
-      };
-    }
-    const loop = this.deps.loopHolder.current;
-    return loop
-      ? { loop }
-      : { error: { message: 'Agent loop is not initialized' } };
-  }
-
   /**
    * Streams AgentEvents by delegating to the current loop's run().
    * @plan:PLAN-20260617-COREAPI.P15
@@ -593,7 +569,11 @@ export class AgentImpl implements Agent {
       yield { type: 'done', reason: 'error' };
       return;
     }
-    const init = this.resolveLoopOrError();
+    const init = resolveLoopOrError(
+      this.deps.loopHolder,
+      this.deps.resolveClient,
+      () => this.rebuild(),
+    );
     if (init.error !== undefined) {
       yield { type: 'error', error: init.error };
       yield { type: 'done', reason: 'error' };
