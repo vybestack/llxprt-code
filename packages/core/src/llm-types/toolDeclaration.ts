@@ -89,7 +89,7 @@ export function toolDeclarationsFromLegacyToolset(
         name: decl.name,
         parametersJsonSchema: schema,
       };
-      if (decl.description !== undefined) {
+      if (decl.description != null) {
         entry.description = decl.description;
       }
       result.push(entry);

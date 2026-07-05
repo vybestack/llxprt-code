@@ -107,10 +107,18 @@ describe('tokensAndEmbeddings property-based', () => {
 
   it.prop([
     fc.array(
-      fc.array(fc.double({ min: -1, max: 1, noNaN: true }), {
-        minLength: 1,
-        maxLength: 10,
-      }),
+      fc.array(
+        // Exclude -0: JSON.stringify(-0) → "0" → JSON.parse → +0, so -0 is
+        // not losslessly round-trippable. Object.is (below) would correctly
+        // flag it; filtering it scopes the property to JSON-lossless doubles.
+        fc
+          .double({ min: -1, max: 1, noNaN: true })
+          .filter((v) => !Object.is(v, -0)),
+        {
+          minLength: 1,
+          maxLength: 10,
+        },
+      ),
       { minLength: 0, maxLength: 5 },
     ),
   ])(
@@ -125,7 +133,7 @@ describe('tokensAndEmbeddings property-based', () => {
         roundTripped.embeddings.every(
           (vec, i) =>
             vec.length === embeddings[i].length &&
-            vec.every((v, j) => v === embeddings[i][j]),
+            vec.every((v, j) => Object.is(v, embeddings[i][j])),
         )
       );
     },
@@ -141,7 +149,7 @@ describe('tokensAndEmbeddings property-based', () => {
     ),
   ])(
     'CountTokensRequest contents length is preserved through JSON round-trip',
-    (blocks) => {
+    (blocks: Array<{ type: 'text'; text: string }>) => {
       const contents: IContent[] = [{ speaker: 'human' as const, blocks }];
       const req: CountTokensRequest = { contents };
       const roundTripped: CountTokensRequest = JSON.parse(JSON.stringify(req));

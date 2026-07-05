@@ -167,10 +167,11 @@ describe('toolDeclarationsFromLegacyToolset', () => {
     });
   });
 
-  it('preserves description when it is null (null !== undefined)', () => {
+  it('omits description key entirely when null (null != null is false)', () => {
     // Build the input with a description field set to null at runtime.
     // The LegacyToolsetLike type declares description?: string, but the
-    // implementation checks `!== undefined`, so null is preserved.
+    // implementation guards with `!= null`, so a null value is treated the
+    // same as undefined and the description key is omitted from the result.
     const decl: {
       name: string;
       description?: string;
@@ -183,7 +184,8 @@ describe('toolDeclarationsFromLegacyToolset', () => {
     const input = [{ functionDeclarations: [decl] }];
     const result = toolDeclarationsFromLegacyToolset(input);
     expect(result).toHaveLength(1);
-    expect(result[0].description).toBe(null);
+    expect(result[0].description).toBeUndefined();
+    expect(result[0]).not.toHaveProperty('description');
   });
 });
 
@@ -234,7 +236,10 @@ describe('toolDeclaration property-based', () => {
       if (result.length !== 1) return false;
       if (result[0].name !== name) return false;
       if (result[0].parametersJsonSchema !== schema) return false;
-      if (description !== null && result[0].description !== description) {
+      // null is omitted by the `!= null` guard → description is undefined.
+      if (description === null) {
+        if (result[0].description !== undefined) return false;
+      } else if (result[0].description !== description) {
         return false;
       }
       return true;

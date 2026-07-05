@@ -182,7 +182,7 @@ export function geminiPartToBlock(part: Part): ContentBlock | null {
       type: 'tool_call',
       id: fc.id ?? '',
       name: fc.name ?? '',
-      parameters: fc.args ?? {},
+      parameters: isRecord(fc.args) ? fc.args : {},
     };
   }
   if (part.functionResponse) {
@@ -191,7 +191,7 @@ export function geminiPartToBlock(part: Part): ContentBlock | null {
       type: 'tool_response',
       callId: fr.id ?? '',
       toolName: fr.name ?? '',
-      result: fr.response ?? {},
+      result: isRecord(fr.response) ? fr.response : {},
     };
   }
   if (part.inlineData) {
@@ -230,21 +230,23 @@ export function geminiPartsToBlocks(parts: readonly Part[]): ContentBlock[] {
 
 function buildToolCallPart(block: ToolCallBlock): Part {
   const part: Part = {
-    functionCall: { id: block.id, name: block.name },
+    functionCall: {
+      id: block.id,
+      name: block.name,
+      args: isRecord(block.parameters) ? block.parameters : {},
+    },
   };
-  if (part.functionCall) {
-    part.functionCall.args = isRecord(block.parameters) ? block.parameters : {};
-  }
   return part;
 }
 
 function buildFunctionResponsePart(block: ToolResponseBlock): Part {
   const part: Part = {
-    functionResponse: { id: block.callId, name: block.toolName },
+    functionResponse: {
+      id: block.callId,
+      name: block.toolName,
+      response: isRecord(block.result) ? block.result : {},
+    },
   };
-  if (part.functionResponse) {
-    part.functionResponse.response = isRecord(block.result) ? block.result : {};
-  }
   return part;
 }
 

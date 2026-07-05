@@ -239,7 +239,11 @@ describe('property-based — cleanGeminiSchema invariants', () => {
 
   it('arbitrary JSON-object schemas never mutate the input (deep-freeze + clone compare)', () => {
     const schemaArb = fc.letrec((tie) => ({
+      // maxDepth guarantees termination of schema generation across all seeds
+      // and library versions. Once maxDepth is reached, only the first
+      // (leaf, non-recursive) arbitrary is selected.
       self: fc.oneof(
+        { maxDepth: 5 },
         fc.record({
           type: fc.constantFrom(
             'string',

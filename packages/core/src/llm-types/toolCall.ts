@@ -148,7 +148,6 @@ function partLikeToBlock(item: unknown): ConversionResult<ContentBlock> {
         error: 'malformed fileData: expected { fileUri: string }',
       };
     }
-    const fileUri: string = fileData['fileUri'];
     const mimeType =
       typeof fileData['mimeType'] === 'string'
         ? fileData['mimeType']
@@ -156,7 +155,7 @@ function partLikeToBlock(item: unknown): ConversionResult<ContentBlock> {
     const block: MediaBlock = {
       type: 'media',
       mimeType,
-      data: fileUri,
+      data: fileData['fileUri'],
       encoding: 'url',
     };
     return { ok: true, value: block };
@@ -170,11 +169,25 @@ function partLikeToBlock(item: unknown): ConversionResult<ContentBlock> {
         error: 'malformed functionResponse: expected { name: string }',
       };
     }
+    const rawResponse = 'response' in fnResp ? fnResp['response'] : {};
+    // Top-level JSON-serializability guard: reject values whose typeof cannot
+    // survive JSON serialization. This is intentionally a shallow check — it
+    // does not attempt deep/circular validation.
+    if (
+      typeof rawResponse === 'function' ||
+      typeof rawResponse === 'symbol' ||
+      typeof rawResponse === 'bigint'
+    ) {
+      return {
+        ok: false,
+        error: 'malformed functionResponse: response must be JSON-serializable',
+      };
+    }
     const block: ToolResponseBlock = {
       type: 'tool_response',
       callId: typeof fnResp['id'] === 'string' ? fnResp['id'] : '',
       toolName: fnResp['name'],
-      result: 'response' in fnResp ? fnResp['response'] : {},
+      result: rawResponse,
     };
     return { ok: true, value: block };
   }

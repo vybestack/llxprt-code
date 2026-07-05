@@ -151,6 +151,45 @@ describe('toolResultContentFromLegacyPartListUnion - single part object', () => 
       ],
     });
   });
+
+  it('rejects {functionResponse} with a function-valued response (non-JSON-serializable)', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      functionResponse: {
+        name: 'searchWeb',
+        response: (() => {}) as unknown,
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('JSON-serializable');
+    }
+  });
+
+  it('rejects {functionResponse} with a bigint-valued response (non-JSON-serializable)', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      functionResponse: {
+        name: 'searchWeb',
+        response: BigInt(42) as unknown,
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('JSON-serializable');
+    }
+  });
+
+  it('rejects {functionResponse} with a symbol-valued response (non-JSON-serializable)', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      functionResponse: {
+        name: 'searchWeb',
+        response: Symbol('s') as unknown,
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('JSON-serializable');
+    }
+  });
 });
 
 describe('toolResultContentFromLegacyPartListUnion - array input', () => {
@@ -394,6 +433,7 @@ describe('toolCall property-based', () => {
       if (!Array.isArray(result.value)) return false;
       const block = result.value[0];
       expect(block.type).toBe('media');
+      if (block.type !== 'media') return false;
       expect(block.encoding).toBe('base64');
       expect(block.mimeType).toBe(input.inlineData.mimeType);
       expect(block.data).toBe(input.inlineData.data);
@@ -422,31 +462,40 @@ describe('toolCall property-based', () => {
   });
 
   it.prop([
-    fc.record({
-      functionResponse: fc.record({
-        name: fc.string({ minLength: 1, maxLength: 20 }),
-        id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
-        response: fc.option(fc.string({ maxLength: 30 })),
-      }),
-    }),
+    fc
+      .oneof(
+        // Case 1: response key present (fc.option → null or string)
+        fc.record({
+          name: fc.string({ minLength: 1, maxLength: 20 }),
+          id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
+          response: fc.option(fc.string({ maxLength: 30 })),
+        }),
+        // Case 2: response key absent — exercises the result:{} fallback
+        fc.record(
+          {
+            name: fc.string({ minLength: 1, maxLength: 20 }),
+            id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
+            response: fc.string({ maxLength: 30 }),
+          },
+          { requiredKeys: ['name'] },
+        ),
+      )
+      .map((fnResp) => ({ functionResponse: fnResp })),
   ])(
     'functionResponse always yields ToolResponseBlock with correct fields',
     (input) => {
       const result = toolResultContentFromLegacyPartListUnion(input);
-      expect(result.ok).toBe(true);
-      if (!result.ok) return false;
-      expect(Array.isArray(result.value)).toBe(true);
-      if (!Array.isArray(result.value)) return false;
+      if (!result.ok || !Array.isArray(result.value)) return false;
       const block = result.value[0];
-      expect(block.type).toBe('tool_response');
-      expect(block.toolName).toBe(input.functionResponse.name);
-      const expectedCallId = input.functionResponse.id ?? '';
-      expect(block.callId).toBe(expectedCallId);
-      // fc.option returns null for absent; the record always includes the
-      // response key, so 'response' in fnResp is true and result === the raw
-      // value (string or null).
-      expect(block.result).toBe(input.functionResponse.response);
-      return true;
+      if (block.type !== 'tool_response') return false;
+      const fnResp = input.functionResponse;
+      const expectedResult = 'response' in fnResp ? fnResp['response'] : {};
+      return (
+        block.toolName === fnResp.name &&
+        block.callId === (typeof fnResp.id === 'string' ? fnResp.id : '') &&
+        // toStrictEqual-equivalent deep check for the absent case (=== {})
+        JSON.stringify(block.result) === JSON.stringify(expectedResult)
+      );
     },
   );
 

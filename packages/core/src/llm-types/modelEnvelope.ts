@@ -131,7 +131,10 @@ export function accumulateModelStreamChunk(
 
   const hookRestrictions = chunk.hookRestrictions ?? acc.hookRestrictions;
   if (hookRestrictions !== undefined) {
-    result.hookRestrictions = hookRestrictions;
+    // Defensive copy: top-level object is copied so callers cannot mutate the
+    // original acc/chunk. Nested arrays (allowedToolNames, filteredRestrictedCalls)
+    // are shared by reference — callers must not mutate them.
+    result.hookRestrictions = { ...hookRestrictions };
   }
 
   // Note: shallow merge — top-level keys are copied, but nested object/array

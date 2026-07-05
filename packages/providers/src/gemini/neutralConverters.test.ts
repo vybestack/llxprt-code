@@ -218,6 +218,34 @@ describe('geminiPartToBlock direction (REQ-010.1, pseudocode lines 10-25)', () =
     });
   });
 
+  it('normalizes functionCall with non-record args to parameters {} (isRecord guard)', () => {
+    // The Gemini SDK types args as `object`, but malformed responses may carry
+    // undefined/non-record values. The isRecord guard normalizes to {}.
+    const part = {
+      functionCall: { id: 'c1', name: 'fn' },
+    } as unknown as Part;
+    const block = geminiPartToBlock(part);
+    expect(block).toStrictEqual({
+      type: 'tool_call',
+      id: 'c1',
+      name: 'fn',
+      parameters: {},
+    });
+  });
+
+  it('normalizes functionResponse with non-record response to result {} (isRecord guard)', () => {
+    const part = {
+      functionResponse: { id: 'c1', name: 'fn' },
+    } as unknown as Part;
+    const block = geminiPartToBlock(part);
+    expect(block).toStrictEqual({
+      type: 'tool_response',
+      callId: 'c1',
+      toolName: 'fn',
+      result: {},
+    });
+  });
+
   it('maps { inlineData } to a MediaBlock (base64)', () => {
     const block = geminiPartToBlock({
       inlineData: { mimeType: 'image/png', data: 'abc' },

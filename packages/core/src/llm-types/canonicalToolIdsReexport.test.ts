@@ -38,6 +38,17 @@ describe('llm-types canonical tool-ID contract re-export', () => {
     expect(typeof canonicalizeToolResponseId).toBe('function');
   });
 
+  it('canonicalizeToolResponseId produces the expected hist_tool_ format', () => {
+    const id = canonicalizeToolResponseId(input);
+    expect(id.startsWith('hist_tool_')).toBe(true);
+    // Total length = 10 (prefix) + 24 (hash slice)
+    expect(id).toHaveLength(34);
+    // Deterministic: identical inputs yield identical IDs
+    expect(canonicalizeToolResponseId(input)).toBe(
+      canonicalizeToolResponseId(input),
+    );
+  });
+
   const input: CanonicalToolIdInput = {
     providerName: 'openai',
     rawId: 'call_abc123',

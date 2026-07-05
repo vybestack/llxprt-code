@@ -12,6 +12,10 @@ import type {
   ModelGenerationRequest,
 } from './modelRequest.js';
 import type { IContent, TextBlock } from '../services/history/IContent.js';
+import type {
+  ToolCallBlock,
+  ThinkingBlock,
+} from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // ReasoningConfig
@@ -151,6 +155,12 @@ describe('modelRequest property-based', () => {
         fc.constant(undefined),
         fc.record({
           mode: fc.constantFrom('auto', 'none', 'required'),
+          allowedToolNames: fc.oneof(
+            fc.constant(undefined),
+            fc.array(fc.string({ minLength: 1, maxLength: 20 }), {
+              maxLength: 5,
+            }),
+          ),
         }),
       ),
     }),
@@ -166,7 +176,9 @@ describe('modelRequest property-based', () => {
       return (
         coreMatches &&
         rt.reasoning?.budgetTokens === fields.reasoning?.budgetTokens &&
-        rt.toolChoice?.mode === fields.toolChoice?.mode
+        rt.toolChoice?.mode === fields.toolChoice?.mode &&
+        JSON.stringify(rt.toolChoice?.allowedToolNames) ===
+          JSON.stringify(fields.toolChoice?.allowedToolNames)
       );
     },
   );
@@ -176,10 +188,32 @@ describe('modelRequest property-based', () => {
       fc.record({
         speaker: fc.constantFrom('human', 'ai', 'tool'),
         blocks: fc.array(
-          fc.record({
-            type: fc.constant('text' as const),
-            text: fc.string({ minLength: 1, maxLength: 30 }),
-          }),
+          fc.oneof(
+            fc.record({
+              type: fc.constant('text' as const),
+              text: fc.string({ minLength: 1, maxLength: 30 }),
+            }),
+            fc
+              .record({
+                type: fc.constant('tool_call' as const),
+                id: fc.string({ minLength: 1, maxLength: 10 }),
+                name: fc.string({ minLength: 1, maxLength: 15 }),
+                parameters: fc.dictionary(
+                  fc.string({ minLength: 1, maxLength: 5 }),
+                  fc.string({ maxLength: 10 }),
+                ),
+              })
+              .map((b): ToolCallBlock => b),
+            fc
+              .record({
+                type: fc.constant('thinking' as const),
+                thought: fc.string({ minLength: 1, maxLength: 30 }),
+                signature: fc.option(
+                  fc.string({ minLength: 1, maxLength: 20 }),
+                ),
+              })
+              .map((b): ThinkingBlock => b),
+          ),
           { minLength: 1, maxLength: 3 },
         ),
       }),

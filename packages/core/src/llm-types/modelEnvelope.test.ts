@@ -21,6 +21,7 @@ import type {
   TextBlock,
   ToolCallBlock,
 } from '../services/history/IContent.js';
+import { CANONICAL_FINISH_REASONS } from './finishReasons.js';
 
 // ---------------------------------------------------------------------------
 // Helpers / fixtures
@@ -505,27 +506,20 @@ describe('toModelStreamChunk', () => {
 });
 
 describe('toModelStreamChunk property-based', () => {
-  it.prop([
-    fc.constantFrom(
-      'stop',
-      'max_tokens',
-      'tool_calls',
-      'safety',
-      'refusal',
-      'error',
-      'other',
-    ),
-  ])('already-canonical raw passes through unchanged', (canonical: string) => {
-    const ic: IContent = {
-      speaker: 'ai',
-      blocks: [],
-      metadata: { stopReason: canonical },
-    };
-    const result = toModelStreamChunk(ic);
-    return (
-      result.finishReason === canonical && result.rawStopReason === canonical
-    );
-  });
+  it.prop([fc.constantFrom(...CANONICAL_FINISH_REASONS)])(
+    'already-canonical raw passes through unchanged',
+    (canonical: string) => {
+      const ic: IContent = {
+        speaker: 'ai',
+        blocks: [],
+        metadata: { stopReason: canonical },
+      };
+      const result = toModelStreamChunk(ic);
+      return (
+        result.finishReason === canonical && result.rawStopReason === canonical
+      );
+    },
+  );
 
   it.prop([fc.string({ minLength: 1, maxLength: 30 })])(
     'any raw stopReason produces a canonical finishReason and preserves raw',
@@ -536,15 +530,7 @@ describe('toModelStreamChunk property-based', () => {
         metadata: { stopReason: raw },
       };
       const result = toModelStreamChunk(ic);
-      const canonicalSet = new Set([
-        'stop',
-        'max_tokens',
-        'tool_calls',
-        'safety',
-        'refusal',
-        'error',
-        'other',
-      ]);
+      const canonicalSet = new Set<string>(CANONICAL_FINISH_REASONS);
       return (
         typeof result.finishReason === 'string' &&
         canonicalSet.has(result.finishReason) &&

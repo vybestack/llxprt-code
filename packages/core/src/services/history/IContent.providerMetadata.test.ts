@@ -62,7 +62,31 @@ const PRE_CHANGE_HISTORY: IContent[] = [
   },
   {
     speaker: 'ai',
-    blocks: [{ type: 'text', text: '' }],
+    blocks: [
+      // media: hasContent checks !!data && !!mimeType → true
+      {
+        type: 'media',
+        mimeType: 'image/png',
+        data: 'base64data',
+        encoding: 'base64',
+      },
+      // thinking with sourceField 'thinking': hasContent checks
+      // hasThought && Boolean(signature) → true
+      {
+        type: 'thinking',
+        thought: 'a thought',
+        sourceField: 'thinking',
+        signature: 'sig-abc',
+      },
+      // plain thought (no sourceField): hasContent checks
+      // hasThought || hasEncrypted → true
+      {
+        type: 'thinking',
+        thought: 'plain thought',
+      },
+      // code: hasContent checks Boolean(code) && code.trim().length > 0 → true
+      { type: 'code', code: 'print(1)', language: 'python' },
+    ],
   },
 ];
 
@@ -79,7 +103,11 @@ describe('REQ-009.3: pre-change serialized history compatibility', () => {
     const serialized = JSON.stringify(PRE_CHANGE_HISTORY);
     const parsed: IContent[] = JSON.parse(serialized);
 
-    const expectedVerdicts = [true, true, false, true, true, false];
+    // Verdicts derived from ContentValidation.hasContent logic:
+    // [0] text 'Hello' → true; [1] text 'Hi there' → true;
+    // [2] text '   ' → false (whitespace-only); [3] tool_call → true;
+    // [4] tool_response → true; [5] media+thinking(with signature)+code → true
+    const expectedVerdicts = [true, true, false, true, true, true];
     for (let i = 0; i < parsed.length; i++) {
       expect(ContentValidation.hasContent(parsed[i])).toBe(expectedVerdicts[i]);
     }
@@ -237,17 +265,20 @@ describe('IContent providerMetadata property-based', () => {
       { minLength: 1, maxLength: 5 },
     ),
   ])(
-    'hasContent verdict is deterministic for pre-change-shaped text blocks (no providerMetadata)',
+    'hasContent verdict is stable across JSON round-trips (no providerMetadata)',
     (blocks) => {
       const content: IContent = {
         speaker: 'human',
         blocks,
       };
-      const serialized = JSON.stringify(content);
-      const parsed: IContent = JSON.parse(serialized);
-      const verdict = ContentValidation.hasContent(parsed);
-      const expectedVerdict = blocks.some((b) => b.text.trim().length > 0);
-      return verdict === expectedVerdict;
+      const verdict = ContentValidation.hasContent(content);
+      // Round-trip-stability invariant: hasContent must yield the same verdict
+      // after a JSON round-trip. This does NOT re-implement the hasContent
+      // predicate (which would mirror the implementation under test).
+      const roundTrippedVerdict = ContentValidation.hasContent(
+        JSON.parse(JSON.stringify(content)),
+      );
+      return verdict === roundTrippedVerdict;
     },
   );
 

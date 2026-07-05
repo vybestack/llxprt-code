@@ -50,7 +50,7 @@ type RuntimeContentsLocal = IContent[];
 describe('REQ-003.4 compile-time assignability (no casts needed)', () => {
   it('ProviderToolset-shaped literal converts via toolDeclarationsFromLegacyToolset', () => {
     // This is a COMPILE-TIME proof: the literal matches LegacyToolsetLike
-    // because LegacyToolsetLike is structally wider. No cast.
+    // because LegacyToolsetLike is structurally wider. No cast.
     const legacy: ProviderToolsetLocal = [
       {
         functionDeclarations: [
