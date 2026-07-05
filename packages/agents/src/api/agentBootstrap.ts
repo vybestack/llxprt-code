@@ -42,6 +42,7 @@ import type {
   ApprovalHandler,
   DisplayCallbacks,
 } from '../core/agenticLoop/types.js';
+import { isValidEditorType } from '@vybestack/llxprt-code-core/utils/editor.js';
 import type { AgentEvent, AgentToolCall, DoneReason } from './event-types.js';
 import type { ProviderInfo, ToolInfo, SessionStats } from './agent.js';
 
@@ -189,6 +190,17 @@ export function wrapApprovalHandler(
  * Derives DisplayCallbacks from EditorCallbacks for the AgenticLoop.
  * @pseudocode createAgent.md step 147
  */
+/**
+ * Validates a public EditorCallbacks preferred-editor string against the
+ * known EditorType union. Unknown values are dropped (undefined) so an
+ * unsupported editor cannot slip into the internal editor flow.
+ */
+function toValidEditorType(
+  editor: string | undefined,
+): ReturnType<NonNullable<DisplayCallbacks['getPreferredEditor']>> {
+  return editor !== undefined && isValidEditorType(editor) ? editor : undefined;
+}
+
 export function deriveDisplayCallbacks(
   editorCallbacks: EditorCallbacks | undefined,
 ): DisplayCallbacks | undefined {
@@ -198,9 +210,7 @@ export function deriveDisplayCallbacks(
   const cbs: DisplayCallbacks = {};
   if (editorCallbacks.getPreferredEditor !== undefined) {
     cbs.getPreferredEditor = () =>
-      editorCallbacks.getPreferredEditor?.() as
-        | ReturnType<NonNullable<DisplayCallbacks['getPreferredEditor']>>
-        | undefined;
+      toValidEditorType(editorCallbacks.getPreferredEditor?.());
   }
   if (editorCallbacks.onEditorOpen !== undefined) {
     cbs.onEditorOpen = editorCallbacks.onEditorOpen;
@@ -262,9 +272,7 @@ export function createStableDisplayCallbacks(
     onAllToolCallsComplete: (completed) =>
       displayHolder.onAllToolCallsComplete?.(completed),
     getPreferredEditor: () =>
-      editorHolder.editorCallbacks.getPreferredEditor?.() as
-        | ReturnType<NonNullable<DisplayCallbacks['getPreferredEditor']>>
-        | undefined,
+      toValidEditorType(editorHolder.editorCallbacks.getPreferredEditor?.()),
     onEditorOpen: () => editorHolder.editorCallbacks.onEditorOpen?.(),
     onEditorClose: () => editorHolder.editorCallbacks.onEditorClose?.(),
   };
