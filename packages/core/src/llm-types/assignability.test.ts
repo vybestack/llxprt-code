@@ -15,6 +15,10 @@ import {
 } from './toolDeclaration.js';
 import type { ModelGenerationRequest } from './modelRequest.js';
 import type { IContent } from '../services/history/IContent.js';
+import type {
+  RuntimeProviderToolset,
+  RuntimeGenerateChatOptions,
+} from '../runtime/contracts/RuntimeProviderChat.js';
 
 // ---------------------------------------------------------------------------
 // Local structural shapes mirroring the legacy runtime contracts.
@@ -35,17 +39,16 @@ type ProviderToolsetLocal = Array<{
   }>;
 }>;
 
-/** Mirrors packages/core/src/runtime/contracts/RuntimeProviderChat.ts:RuntimeProviderToolset */
-type RuntimeProviderToolsetLocal = Array<{
-  functionDeclarations: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-  }>;
-}>;
+/**
+ * The runtime contracts live in THIS package, so the REAL types are used
+ * directly — no mirror, no drift risk. Only the providers-package shape
+ * above must be mirrored (importing it would invert package dependencies);
+ * drift there is caught by the providers package itself, whose
+ * ProviderToolset literally reuses this structural shape.
+ */
+type RuntimeProviderToolsetLocal = RuntimeProviderToolset;
 
-/** Mirrors packages/core/src/runtime/contracts/RuntimeProviderChat.ts:RuntimeGenerateChatOptions.contents (IContent[]) */
-type RuntimeContentsLocal = IContent[];
+type RuntimeContentsLocal = NonNullable<RuntimeGenerateChatOptions['contents']>;
 
 describe('REQ-003.4 compile-time assignability (no casts needed)', () => {
   it('ProviderToolset-shaped literal converts via toolDeclarationsFromLegacyToolset', () => {

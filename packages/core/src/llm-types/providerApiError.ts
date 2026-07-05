@@ -38,6 +38,12 @@ export interface ProviderApiError {
   isQuotaError?: boolean;
   isAuthError?: boolean;
   isTransient?: boolean;
+  /**
+   * The original provider SDK error, preserved verbatim for diagnostics.
+   * May carry request/response context (headers, auth-adjacent details) from
+   * the SDK — consumers MUST sanitize before logging, serializing, or sending
+   * to telemetry; never emit `raw` unconditionally.
+   */
   raw?: unknown;
 }
 

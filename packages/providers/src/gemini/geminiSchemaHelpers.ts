@@ -56,7 +56,16 @@ function cleanPropertiesObject(
   if (!isRecord(properties)) {
     return cleaned;
   }
-  for (const propKey in properties) {
+  for (const propKey of Object.keys(properties)) {
+    // Schema-supplied keys are attacker-influenced (e.g. third-party MCP tool
+    // schemas parsed from JSON). Skip prototype-polluting names outright.
+    if (
+      propKey === '__proto__' ||
+      propKey === 'constructor' ||
+      propKey === 'prototype'
+    ) {
+      continue;
+    }
     cleaned[propKey] = cleanGeminiSchemaInternal(properties[propKey], visited);
   }
   return cleaned;
@@ -122,6 +131,10 @@ function cleanGeminiSchemaInternal(
         );
       } else if (key === 'anyOf') {
         cleanedSchema[key] = cleanAnyOfArray(schema[key], visited);
+      } else if (Array.isArray(schema[key])) {
+        // Copy array-valued generic keys (enum, required, ...) so the
+        // returned schema shares no array references with the input.
+        cleanedSchema[key] = [...schema[key]];
       } else {
         cleanedSchema[key] = schema[key];
       }
