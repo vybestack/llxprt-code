@@ -304,6 +304,45 @@ describe('mapping tables export', () => {
     expect(ANTHROPIC_STOP_MAP['refusal']).toBe('refusal');
     expect(ANTHROPIC_STOP_MAP['stop_sequence']).toBe('stop');
   });
+
+  // tryAllMappers (modelEnvelope.ts) probes the provider maps in a fixed
+  // order (OpenAI → Anthropic → Gemini) and documents that this order is
+  // irrelevant because no shared key maps to different canonical values.
+  // This test ENFORCES that invariant: if a future map addition introduces
+  // a conflicting shared key, order would silently start to matter for
+  // unattributed stop reasons — fail loudly here instead.
+  it('provider maps never disagree on a shared raw key (tryAllMappers order-independence)', () => {
+    const tables: ReadonlyArray<[string, Readonly<Record<string, string>>]> = [
+      ['OPENAI_FINISH_MAP', OPENAI_FINISH_MAP],
+      ['ANTHROPIC_STOP_MAP', ANTHROPIC_STOP_MAP],
+      ['GEMINI_FINISH_MAP', GEMINI_FINISH_MAP],
+    ];
+
+    const tablePairs = tables.flatMap(([nameA, mapA], i) =>
+      tables
+        .slice(i + 1)
+        .map(([nameB, mapB]): [string, typeof mapA, string, typeof mapB] => [
+          nameA,
+          mapA,
+          nameB,
+          mapB,
+        ]),
+    );
+
+    const conflicts = tablePairs.flatMap(([nameA, mapA, nameB, mapB]) =>
+      Object.keys(mapA)
+        .filter(
+          (key) =>
+            Object.prototype.hasOwnProperty.call(mapB, key) &&
+            mapA[key] !== mapB[key],
+        )
+        .map(
+          (key) =>
+            `${nameA}[${key}]=${mapA[key]} vs ${nameB}[${key}]=${mapB[key]}`,
+        ),
+    );
+    expect(conflicts).toStrictEqual([]);
+  });
 });
 
 // ============================================================================
