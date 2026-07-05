@@ -360,15 +360,18 @@ export class Session {
       (update) => this.sendUpdate(update),
     );
 
-    todoEvents.onTodoUpdated((event: TodoUpdateEvent) => {
+    this.todoListener = (event: TodoUpdateEvent) => {
       const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
       if (event.sessionId === this.id && eventAgentId === DEFAULT_AGENT_ID) {
         this.sendPlanUpdate(event.todos).catch((error) => {
           debugLogger.error('Failed to send plan update to Zed:', error);
         });
       }
-    });
+    };
+    todoEvents.onTodoUpdated(this.todoListener);
   }
+
+  private readonly todoListener: (event: TodoUpdateEvent) => void;
 
   setMode(modeId: acp.SessionModeId): acp.SetSessionModeResponse {
     const availableModes = buildAvailableModes();
@@ -391,15 +394,16 @@ export class Session {
   private _disposed = false;
 
   /**
-   * Disposes the session's Agent, guarding against double-dispose. Errors are
-   * caught and logged via the DebugLogger so disposal never masks an
-   * in-flight error.
+   * Disposes the session's Agent and unsubscribes the plan-update listener,
+   * guarding against double-dispose. Errors are caught and logged via the
+   * DebugLogger so disposal never masks an in-flight error.
    */
   async dispose(): Promise<void> {
     if (this._disposed) {
       return;
     }
     this._disposed = true;
+    todoEvents.offTodoUpdated(this.todoListener);
     try {
       await this.agent.dispose();
     } catch (error) {

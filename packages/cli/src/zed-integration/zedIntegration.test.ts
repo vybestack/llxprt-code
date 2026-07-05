@@ -164,6 +164,18 @@ describe('Session agent disposal', () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
+  it('unsubscribes the todo-update listener on dispose()', async () => {
+    const { todoEvents } = await import('@vybestack/llxprt-code-core');
+    const { agent } = createMockAgent();
+    const before = todoEvents.listenerCount('todo-updated');
+    const session = createSession(agent);
+    expect(todoEvents.listenerCount('todo-updated')).toBe(before + 1);
+
+    await session.dispose();
+
+    expect(todoEvents.listenerCount('todo-updated')).toBe(before);
+  });
+
   it('guards against double-dispose (calls agent.dispose exactly once)', async () => {
     const { agent, dispose } = createMockAgent();
     const session = createSession(agent);

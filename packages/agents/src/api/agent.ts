@@ -423,9 +423,12 @@ export interface AgentToolHandle {
   readonly description?: string;
   readonly kind?: string;
   /**
-   * The tool's origin (`'builtin'` | `'mcp'` | ...), mirroring `ToolInfo.source`.
-   * Consumers (zed-tool-handler.ts) read it for telemetry `tool_type` ('mcp' vs
-   * 'native') without needing the `DiscoveredMCPTool` instanceof check.
+   * The tool's origin, mirroring `ToolInfo.source`. The current projection
+   * distinguishes `'mcp'` (server-discovered tools) from `'builtin'` (all
+   * locally registered tools, including extension/skill-provided ones) —
+   * matching the `buildToolInfos` classification. Consumers use it for
+   * telemetry `tool_type` ('mcp' vs 'native') without needing the
+   * `DiscoveredMCPTool` instanceof check.
    *
    * (added by #2376)
    */

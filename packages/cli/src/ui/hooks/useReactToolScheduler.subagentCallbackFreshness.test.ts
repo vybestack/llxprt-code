@@ -52,18 +52,21 @@ function buildMainScheduler(
   return {
     schedule: vi.fn(async (request, _signal) => {
       const requests = Array.isArray(request) ? request : [request];
-      const completed: CompletedToolCall[] = requests.map((req) => ({
-        status: 'success' as const,
-        request: req,
-        response: {
-          callId: req.callId,
-          responseParts: [],
-          resultDisplay: 'done',
-          error: undefined,
-          errorType: undefined,
-          agentId: req.agentId ?? 'primary',
-        },
-      }));
+      const completed = requests.map(
+        (req) =>
+          ({
+            status: 'success' as const,
+            request: req,
+            response: {
+              callId: req.callId,
+              responseParts: [],
+              resultDisplay: 'done',
+              error: undefined,
+              errorType: undefined,
+              agentId: req.agentId ?? 'primary',
+            },
+          }) as unknown as CompletedToolCall,
+      );
       callbacks.onToolCallsUpdate?.(completed);
       await callbacks.onAllToolCallsComplete?.(completed);
       callbacks.onToolCallsUpdate?.([]);
@@ -176,18 +179,21 @@ describe('useReactToolScheduler subagent callback freshness', () => {
             req: ToolCallRequestInfo | ToolCallRequestInfo[],
           ) => {
             const requests = Array.isArray(req) ? req : [req];
-            const completed: CompletedToolCall[] = requests.map((r) => ({
-              status: 'success' as const,
-              request: r,
-              response: {
-                callId: r.callId,
-                responseParts: [],
-                resultDisplay: 'done',
-                error: undefined,
-                errorType: undefined,
-                agentId: r.agentId ?? 'primary',
-              },
-            }));
+            const completed = requests.map(
+              (r) =>
+                ({
+                  status: 'success' as const,
+                  request: r,
+                  response: {
+                    callId: r.callId,
+                    responseParts: [],
+                    resultDisplay: 'done',
+                    error: undefined,
+                    errorType: undefined,
+                    agentId: r.agentId ?? 'primary',
+                  },
+                }) as unknown as CompletedToolCall,
+            );
             callbacks.onToolCallsUpdate?.(completed);
             await callbacks.onAllToolCallsComplete?.(completed);
             callbacks.onToolCallsUpdate?.([]);
