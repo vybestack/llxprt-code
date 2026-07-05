@@ -29,9 +29,9 @@ import {
   type AgentClientContract,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
 // We stub them so the test can isolate the turn-lifecycle / finally logic.
 
@@ -169,8 +169,8 @@ function renderUseSubmitQuery(
 ) {
   return renderHook(() =>
     useSubmitQuery({
-      config: createMockConfig(),
-      agent: createMockAgentClient() as unknown as Agent,
+      runtime: createStreamRuntimeForTest(createMockConfig()),
+      agentClient: createMockAgentClient(),
       addItem: vi.fn().mockReturnValue(1),
       settings: {} as never,
       onDebugMessage: vi.fn(),
@@ -576,8 +576,8 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const { result, rerender } = renderHook(
       ({ streamingState }: { streamingState: StreamingState }) =>
         useSubmitQuery({
-          config: createMockConfig(),
-          agent: createMockAgentClient() as unknown as Agent,
+          runtime: createStreamRuntimeForTest(createMockConfig()),
+          agentClient: createMockAgentClient(),
           addItem: vi.fn().mockReturnValue(1),
           settings: {} as never,
           onDebugMessage: vi.fn(),

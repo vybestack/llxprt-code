@@ -36,7 +36,7 @@ import { isTypedScalarOrArraySetting } from './settingsDialogHelpers.js';
 import type { KeypressCtx } from './settingsDialogKeypress.js';
 import { handleSettingsKeypress } from './settingsDialogKeypress.js';
 import type { PendingValue, SettingItem } from './settingsDialogTypes.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import { AsyncFzf } from 'fzf';
 import React, {
   useCallback,
@@ -45,6 +45,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface FzfResult {
   item: string;
@@ -380,7 +381,7 @@ interface SettingsDialogRuntimeArgs {
   scrollOffset: number;
   selectedScope: SettingScope;
   settings: LoadedSettings;
-  config?: Config;
+  config?: CliUiRuntime;
   onRestartRequest?: () => void;
   onSelect: (settingName: string | undefined, scope: SettingScope) => void;
   setFocusSection: React.Dispatch<React.SetStateAction<'settings' | 'scope'>>;
@@ -480,7 +481,7 @@ function buildKeypressCtx(deps: {
   scrollOffset: number;
   selectedScope: SettingScope;
   settings: LoadedSettings;
-  config?: Config;
+  config?: CliUiRuntime;
   onRestartRequest?: () => void;
   onSelect: (settingName: string | undefined, scope: SettingScope) => void;
   saveRestart: () => void;
@@ -614,7 +615,7 @@ interface ItemsActionsCtx {
   vimEnabled: boolean;
   editingKey: string | null;
   editBuffer: string;
-  config?: Config;
+  config?: CliUiRuntime;
   setEditingKey: React.Dispatch<React.SetStateAction<string | null>>;
   setEditBuffer: React.Dispatch<React.SetStateAction<string>>;
   setEditCursorPos: React.Dispatch<React.SetStateAction<number>>;
@@ -635,7 +636,7 @@ export function useSettingsItemsAndActions(
   search: SearchState,
   edit: ReturnType<typeof useEditState>,
   vimEnabled: boolean,
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
   setSelectedScope: React.Dispatch<React.SetStateAction<SettingScope>>,
   setFocusSection: React.Dispatch<React.SetStateAction<'settings' | 'scope'>>,
 ) {

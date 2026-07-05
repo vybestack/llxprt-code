@@ -8,14 +8,15 @@ import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { Key } from '../hooks/useKeypress.js';
 import type { StreamingState } from '../types.js';
 import type { TextBuffer } from './shared/text-buffer.js';
-import type { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export interface InputPromptProps {
   buffer: TextBuffer;
   onSubmit: (value: string) => void;
   userMessages: readonly string[];
   onClearScreen: () => void;
-  config: Config;
+  config: CliUiRuntime;
   slashCommands: readonly SlashCommand[];
   commandContext: CommandContext;
   placeholder?: string;

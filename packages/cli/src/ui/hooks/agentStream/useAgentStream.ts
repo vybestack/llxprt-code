@@ -14,7 +14,6 @@
 
 import { useMemo } from 'react';
 import {
-  type Config,
   type EditorType,
   type MessageBus,
   type RecordingIntegration,
@@ -33,12 +32,13 @@ import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
 import type { AgentStreamOrchestrationDeps } from './useAgentStreamOrchestration.js';
 import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export const useAgentStream = (
   agent: Agent,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
-  config: Config,
+  runtime: StreamRuntime,
   settings: LoadedSettings,
   onDebugMessage: (message: string) => void,
   handleSlashCommand: (
@@ -61,7 +61,7 @@ export const useAgentStream = (
   const orchestration = useAgentStreamOrchestration({
     agent,
     addItem,
-    config,
+    runtime,
     settings,
     onDebugMessage,
     handleSlashCommand,
@@ -82,7 +82,7 @@ export const useAgentStream = (
 
   return useAgentStreamReturn(
     orchestration,
-    config,
+    runtime,
     history,
     agent,
     onDebugMessage,
@@ -91,7 +91,7 @@ export const useAgentStream = (
 
 function useAgentStreamReturn(
   orchestration: ReturnType<typeof useAgentStreamOrchestration>,
-  config: Config,
+  runtime: StreamRuntime,
   history: HistoryItem[],
   agent: Agent,
   onDebugMessage: (message: string) => void,
@@ -103,11 +103,11 @@ function useAgentStreamReturn(
 
   useCheckpointPersistence(
     orchestration.toolCalls,
-    config,
+    runtime,
     orchestration.st.gitService,
     history,
     agent,
-    config.storage,
+    runtime.storage,
     onDebugMessage,
   );
 

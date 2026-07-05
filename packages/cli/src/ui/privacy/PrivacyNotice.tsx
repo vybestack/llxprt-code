@@ -5,13 +5,14 @@
  */
 
 import { Box } from 'ink';
-import { type Config } from '@vybestack/llxprt-code-core';
+
 import { GeminiPrivacyNotice } from './GeminiPrivacyNotice.js';
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface PrivacyNoticeProps {
   onExit: () => void;
-  config: Config;
+  config: CliUiRuntime;
 }
 
 /**
@@ -21,7 +22,7 @@ const PrivacyNoticeText = ({
   config,
   onExit,
 }: {
-  config: Config;
+  config: CliUiRuntime;
   onExit: () => void;
 }) => {
   // Check active provider to determine which privacy notice to show

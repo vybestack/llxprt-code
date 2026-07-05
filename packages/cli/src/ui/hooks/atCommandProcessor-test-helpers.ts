@@ -6,7 +6,6 @@
 
 import { vi } from 'vitest';
 import {
-  type Config,
   CoreToolHostAdapter,
   GlobTool,
   type MessageBus,
@@ -23,6 +22,7 @@ import * as os from 'os';
 import * as fsPromises from 'fs/promises';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export async function createTestFile(
   fullPath: string,
@@ -35,14 +35,14 @@ export async function createTestFile(
 
 export interface AtCommandTestSetup {
   testRootDir: string;
-  mockConfig: Config;
+  mockConfig: CliUiRuntime;
   mockAddItem: ReturnType<typeof vi.fn>;
   mockOnDebugMessage: ReturnType<typeof vi.fn>;
   abortController: AbortController;
   originalCwd: string;
 }
 
-function buildMockConfig(testRootDir: string): Config {
+function buildMockConfig(testRootDir: string): CliUiRuntime {
   const getToolRegistry = vi.fn();
 
   const mockConfig = {
@@ -91,11 +91,15 @@ function buildMockConfig(testRootDir: string): Config {
     getMcpServers: () => ({}),
     getMcpServerCommand: () => undefined,
     getResourceRegistry: () => ({
+      getAllResources: () => [],
       findResourceByUri: () => undefined,
     }),
     getMcpClientManager: () => undefined,
     getPromptRegistry: () => ({
       getPromptsByServer: () => [],
+      getAllPrompts: () => [],
+      getPrompt: () => undefined,
+      clear: () => {},
     }),
     getDebugMode: () => false,
     getFileExclusions: () => ({
@@ -107,7 +111,7 @@ function buildMockConfig(testRootDir: string): Config {
     }),
     getUsageStatisticsEnabled: () => false,
     getEnableExtensionReloading: () => false,
-  } as unknown as Config;
+  } as unknown as CliUiRuntime;
 
   return mockConfig;
 }

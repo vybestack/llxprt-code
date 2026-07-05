@@ -10,15 +10,15 @@ import {
   AllBucketsExhaustedError,
   isAuthBucketFailureReason,
 } from '@vybestack/llxprt-code-providers';
-import type { Config } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../../types.js';
+import { createStreamRuntimeForTest } from './__tests__/streamRuntimeTestHelper.js';
 
 describe('handleSubmissionError', () => {
   const mockAddItem = vi.fn();
   const mockOnAuthError = vi.fn();
-  const mockConfig = {
+  const mockConfig = createStreamRuntimeForTest({
     getModel: vi.fn(() => 'test-model'),
-  } as unknown as Config;
+  });
 
   beforeEach(() => {
     mockAddItem.mockClear();

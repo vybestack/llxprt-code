@@ -19,46 +19,13 @@
  * under the original `AppContainer` name used by App.tsx and the public API.
  */
 
-import type React from 'react';
-import type {
-  Config,
-  MessageBus,
-  RecordingIntegration,
-  SessionRecordingService,
-  LockHandle,
-  IContent,
-} from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { LoadedSettings } from '../config/settings.js';
-import type { AppState, AppAction } from './reducers/appReducer.js';
 import {
   AppContainerRuntime,
   type AppContainerRuntimeProps,
 } from './AppContainerRuntime.js';
 
-export interface AppContainerProps {
-  config: Config;
-  /**
-   * The single interactive Agent threaded from the composition root.
-   * `config` remains a temporary migration bridge (see #1595).
-   */
-  agent: Agent;
-  settings: LoadedSettings;
-  startupWarnings?: string[];
-  resumedHistory?: IContent[];
-  version: string;
-  terminalBackgroundColor?: string;
-  runtimeMessageBus?: MessageBus;
-  appState: AppState;
-  appDispatch: React.Dispatch<AppAction>;
-  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
-  recordingIntegration?: RecordingIntegration;
-  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialRecordingService?: SessionRecordingService;
-  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialLockHandle?: LockHandle | null;
-}
+export type AppContainerProps = AppContainerRuntimeProps;
 
 export const AppContainer = (props: AppContainerProps) => (
-  <AppContainerRuntime {...(props as AppContainerRuntimeProps)} />
+  <AppContainerRuntime {...props} />
 );

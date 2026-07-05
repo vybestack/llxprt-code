@@ -4,14 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import process from 'node:process';
 import * as path from 'node:path';
-import type {
-  Config,
-  RecordingIntegration,
-  Todo,
-} from '@vybestack/llxprt-code-core';
+import type { RecordingIntegration, Todo } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   addMCPStatusChangeListener,
@@ -48,7 +45,7 @@ interface TodoContextValue {
 }
 
 interface CommandContextInputs {
-  config: Config | null;
+  config: CliUiRuntime | null;
   agent: Agent | null;
   settings: LoadedSettings;
   gitService: GitService | undefined;
@@ -118,7 +115,7 @@ function convertMessageToHistoryItem(message: Message): HistoryItemWithoutId {
   }
 }
 
-export function useManagers(config: Config | null): {
+export function useManagers(config: CliUiRuntime | null): {
   gitService: GitService | undefined;
   logger: Logger;
   profileManager: ProfileManager | undefined;
@@ -237,7 +234,7 @@ function buildCommandContextUi(
 }
 
 export function useCommandReload(
-  config: Config | null,
+  config: CliUiRuntime | null,
   reloadTrigger: number,
   isConfigInitialized: boolean,
   reloadCommands: () => void,
@@ -257,7 +254,7 @@ export function useCommandReload(
 }
 
 function subscribeToExternalCommandChanges(
-  config: Config | null,
+  config: CliUiRuntime | null,
   reloadCommands: () => void,
 ): (() => void) | undefined {
   if (!config) return undefined;
@@ -281,13 +278,13 @@ function shouldUseBuiltinCommandsOnly(): boolean {
 }
 
 export function loadBuiltinSlashCommandsForTesting(
-  config: Config | null,
+  config: CliUiRuntime | null,
 ): readonly SlashCommand[] {
   return new BuiltinCommandLoader(config).loadCommandsSync();
 }
 
 async function loadSlashCommands(
-  config: Config | null,
+  config: CliUiRuntime | null,
   signal: AbortSignal,
   setCommands: (commands: readonly SlashCommand[]) => void,
 ): Promise<void> {

@@ -8,8 +8,7 @@ import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { AppState } from '../reducers/appReducer.js';
-import type { Config } from '@vybestack/llxprt-code-core';
-import type { LoadedSettings } from '../../config/settings.js';
+
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseLoadProfileDialogParams {
@@ -19,8 +18,6 @@ interface UseLoadProfileDialogParams {
     timestamp: Date;
   }) => void;
   appState: AppState;
-  config: Config;
-  settings: LoadedSettings;
 }
 
 function formatInfoMessages(result: { infoMessages: string[] }): string {
@@ -74,8 +71,6 @@ function handleProfileLoadError(
 export const useLoadProfileDialog = ({
   addMessage,
   appState,
-  config: _config,
-  settings: _settings,
 }: UseLoadProfileDialogParams) => {
   const appDispatch = useAppDispatch();
   const runtime = useRuntimeApi();

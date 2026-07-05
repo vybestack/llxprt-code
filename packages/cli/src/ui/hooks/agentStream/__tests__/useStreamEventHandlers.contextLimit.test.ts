@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { Config } from '@vybestack/llxprt-code-core';
 import { getTokenLimitForConfiguredContext } from '../contextLimit.js';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 
 /**
  * The overflow-guidance token-limit helper delegates to the shared resolver in
@@ -21,9 +21,11 @@ describe('contextLimit helper (cli wrapper)', () => {
       getEphemeralSetting: vi.fn((key: string) =>
         key === 'context-limit' ? 200_000 : undefined,
       ),
-    } as unknown as Config;
+    };
 
-    const limit = getTokenLimitForConfiguredContext(configWithContextLimit);
+    const limit = getTokenLimitForConfiguredContext(
+      createStreamRuntimeForTest(configWithContextLimit),
+    );
 
     expect(limit).toBe(200_000);
   });
@@ -34,9 +36,11 @@ describe('contextLimit helper (cli wrapper)', () => {
     const configWithoutLimit = {
       getModel: vi.fn(() => 'gpt-4o'),
       getEphemeralSetting: vi.fn(() => undefined),
-    } as unknown as Config;
+    };
 
-    const limit = getTokenLimitForConfiguredContext(configWithoutLimit);
+    const limit = getTokenLimitForConfiguredContext(
+      createStreamRuntimeForTest(configWithoutLimit),
+    );
 
     expect(limit).toBe(128_000);
   });

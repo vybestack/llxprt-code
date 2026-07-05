@@ -395,6 +395,11 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
+import {
+  buildUiRuntimeFromSource,
+  type SlashCommandRuntime,
+  type UiRuntimeBareSource,
+} from '../cliUiRuntime.js';
 
 // Type for the mock config
 interface MockConfig {
@@ -481,7 +486,10 @@ describe('AppContainer.mount', () => {
     it('should mount without throwing errors', () => {
       // Arrange: All dependencies mocked
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -498,7 +506,10 @@ describe('AppContainer.mount', () => {
     it('should render with provider contexts active', () => {
       // Arrange
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -520,7 +531,10 @@ describe('AppContainer.mount', () => {
     it('should render DefaultAppLayout', () => {
       // Arrange
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -545,7 +559,10 @@ describe('AppContainer.mount', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there!' }] },
       ];
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -566,7 +583,10 @@ describe('AppContainer.mount', () => {
       // Arrange
       const startupWarnings = ['Warning 1', 'Warning 2'];
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -586,7 +606,10 @@ describe('AppContainer.mount', () => {
     it('should unmount without errors', () => {
       // Arrange
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',

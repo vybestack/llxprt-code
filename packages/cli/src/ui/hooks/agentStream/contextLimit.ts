@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
 import { getTokenLimitForConfiguredContext as resolveTokenLimitForModel } from '@vybestack/llxprt-code-agents';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 /**
  * Resolve the effective context-window token limit for the overflow-guidance
@@ -13,6 +13,12 @@ import { getTokenLimitForConfiguredContext as resolveTokenLimitForModel } from '
  * there is a single source of truth for the user-override → provider-limit →
  * model-name precedence (issue #2251).
  */
-export function getTokenLimitForConfiguredContext(config: Config): number {
-  return resolveTokenLimitForModel(config.getModel(), config);
+export function getTokenLimitForConfiguredContext(
+  runtime: StreamRuntime,
+): number {
+  return resolveTokenLimitForModel(runtime.model.getModel(), {
+    getEphemeralSetting: (key: string) =>
+      runtime.ephemeral.getEphemeralSetting(key),
+    getContentGeneratorConfig: () => runtime.model.getContentGeneratorConfig(),
+  });
 }

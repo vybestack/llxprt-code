@@ -26,8 +26,9 @@ import {
 } from './settingsDialogActions.js';
 import { matchesScalarSettingType } from './settingsDialogHelpers.js';
 import type { PendingValue, SettingItem } from './settingsDialogTypes.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import type React from 'react';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 // --- Keypress handler sub-handlers ---
 
@@ -261,7 +262,7 @@ function handleReturnKeypress(
     editingKey: string | null;
     activeSettingIndex: number;
     scrollOffset: number;
-    config?: Config;
+    config?: CliUiRuntime;
     pendingSettings: Settings;
     settings: LoadedSettings;
     selectedScope: SettingScope;
@@ -394,7 +395,7 @@ export interface KeypressCtx {
   activeSettingIndex: number;
   scrollOffset: number;
   effectiveMaxItemsToShow: number;
-  config?: Config;
+  config?: CliUiRuntime;
   pendingSettings: Settings;
   settings: LoadedSettings;
   selectedScope: SettingScope;
@@ -445,7 +446,7 @@ interface SettingsFocusCtx {
   activeSettingIndex: number;
   scrollOffset: number;
   effectiveMaxItemsToShow: number;
-  config?: Config;
+  config?: CliUiRuntime;
   pendingSettings: Settings;
   settings: LoadedSettings;
   selectedScope: SettingScope;

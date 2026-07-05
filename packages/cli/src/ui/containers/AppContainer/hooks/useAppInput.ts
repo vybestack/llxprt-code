@@ -33,11 +33,14 @@ import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
+import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 
 export interface AppInputParams {
   // From bootstrap
-  config: AppBootstrapResult['config'];
+  streamRuntime: AppBootstrapResult['streamRuntime'];
+  slashCommandRuntime: SlashCommandRuntime;
   agent: AppBootstrapResult['agent'];
+  agentClientSource: AppBootstrapResult['agentClientSource'];
   settings: AppBootstrapResult['settings'];
   runtime: AppBootstrapResult['runtime'];
   history: AppBootstrapResult['history'];
@@ -175,7 +178,6 @@ function useSlashCommandSetup(
   toggleVimEnabled: () => Promise<boolean>,
 ) {
   const {
-    config,
     agent,
     settings,
     addItem,
@@ -196,7 +198,7 @@ function useSlashCommandSetup(
     [todos, updateTodos],
   );
   return useSlashCommandProcessor(
-    config,
+    p.slashCommandRuntime,
     agent,
     settings,
     addItem,
@@ -231,7 +233,7 @@ function useInputCoreProcessors(p: AppInputParams) {
   const slashResult = useSlashCommandSetup(p, quitHandler, toggleVimEnabled);
   const exitResult = useExitHandling({
     handleSlashCommand: slashResult.handleSlashCommand,
-    config: p.config,
+    config: p.streamRuntime.hooks,
   });
   setQuittingMessagesRef.current = exitResult.setQuittingMessages;
   return {
@@ -310,7 +312,8 @@ function useInputStreamSetup(
   core: ReturnType<typeof useInputCore>,
 ) {
   const {
-    config,
+    streamRuntime,
+    agentClientSource,
     settings,
     history,
     addItem,
@@ -333,7 +336,7 @@ function useInputStreamSetup(
     p.agent,
     history,
     addItem,
-    config,
+    streamRuntime,
     settings,
     setDebugMessage,
     handleSlashCommand,
@@ -385,7 +388,7 @@ function useInputStreamWiring(
   });
 
   // MCP readiness: derives isMcpReady from discovery state via coreEvents.
-  const { isMcpReady } = useMcpStatus(p.config);
+  const { isMcpReady } = useMcpStatus(p.streamRuntime.mcp);
 
   // Message queue: holds prompts submitted while MCP init or streaming is in
   // progress. Auto-flushes as a combined submission when all gates open.

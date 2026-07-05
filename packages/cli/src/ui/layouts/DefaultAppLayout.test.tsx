@@ -16,6 +16,7 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { StreamingState } from '../types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
 
 const { dialogManagerRenderSpy, composerRenderSpy } = vi.hoisted(() => ({
   dialogManagerRenderSpy: vi.fn(() => null),
@@ -252,7 +253,8 @@ describe('DefaultAppLayout', () => {
 
     render(
       <DefaultAppLayout
-        config={createConfigStub() as never}
+        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
+        slashCommandRuntime={createConfigStub() as never}
         settings={createSettingsStub() as never}
         startupWarnings={[]}
         version={'0.0.0-test'}
@@ -273,7 +275,8 @@ describe('DefaultAppLayout', () => {
 
     render(
       <DefaultAppLayout
-        config={createConfigStub() as never}
+        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
+        slashCommandRuntime={createConfigStub() as never}
         settings={createSettingsStub() as never}
         startupWarnings={[]}
         version={'0.0.0-test'}

@@ -5,7 +5,6 @@
  */
 
 import {
-  type Config,
   type ToolCallRequestInfo,
   type ExecutingToolCall,
   type ScheduledToolCall,
@@ -29,18 +28,19 @@ import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
+import type { StreamRuntime } from '../cliUiRuntime.js';
 
-type SchedulerConfigWithExplicitMessageBus = Config & {
+type ReactToolSchedulerRuntime = Pick<StreamRuntime, 'scheduler' | 'session'>;
+
+type SchedulerConfigWithExplicitMessageBus = {
   getOrCreateScheduler(
     sessionId: string,
     callbacks: {
       outputUpdateHandler?: OutputUpdateHandler;
-      onAllToolCallsComplete?: (
-        calls: CompletedToolCall[],
-      ) => Promise<void> | void;
+      onAllToolCallsComplete?: (calls: CompletedToolCall[]) => Promise<void>;
       onToolCallsUpdate?: ToolCallsUpdateHandler;
-      getPreferredEditor?: () => EditorType | undefined;
-      onEditorClose?: () => void;
+      getPreferredEditor: () => EditorType | undefined;
+      onEditorClose: () => void;
       onEditorOpen?: () => void;
     },
     options?: Record<string, unknown>,
@@ -327,7 +327,7 @@ function createSubagentCallbacks(
  * Initializes a scheduler instance.
  */
 async function initializeSchedulerInstance(
-  config: Config,
+  config: ReactToolSchedulerRuntime,
   sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
@@ -335,16 +335,14 @@ async function initializeSchedulerInstance(
   mounted: React.MutableRefObject<boolean>,
 ): Promise<ToolSchedulerContract | null> {
   try {
-    const instance = await (
-      config as SchedulerConfigWithExplicitMessageBus
-    ).getOrCreateScheduler(
+    const instance = await config.scheduler.getOrCreateScheduler(
       sessionId,
       createMainSchedulerCallbacks(mainSchedulerId, refs, mounted),
       undefined,
       { messageBus: runtimeMessageBus },
     );
     if (!mounted.current) {
-      config.disposeScheduler(sessionId);
+      config.scheduler.disposeScheduler(sessionId);
       return null;
     }
     return instance;
@@ -433,7 +431,7 @@ function useToolCallUpdaters(
  * Hook that manages scheduler initialization effect.
  */
 function useSchedulerEffect(
-  config: Config,
+  config: ReactToolSchedulerRuntime,
   sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
@@ -470,7 +468,7 @@ function useSchedulerEffect(
     return () => {
       mounted.current = false;
       if (resolved.current) {
-        config.disposeScheduler(sessionId);
+        config.scheduler.disposeScheduler(sessionId);
       }
     };
   }, [
@@ -488,7 +486,7 @@ function useSchedulerEffect(
  * Hook that manages scheduler initialization.
  */
 function useScheduler(
-  config: Config,
+  config: ReactToolSchedulerRuntime,
   sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
@@ -547,20 +545,22 @@ function useExternalSchedulerFactoryCreator(
  * Hook that manages external scheduler factory setup.
  */
 function useExternalSchedulerSetup(
-  config: Config,
+  config: ReactToolSchedulerRuntime,
   createExternalScheduler: SubagentSchedulerFactory,
   setExternalSchedulerRegistered: (registered: boolean) => void,
 ): void {
   useEffect(() => {
-    if (!hasInteractiveSubagentScheduler(config)) {
+    if (!hasInteractiveSubagentScheduler(config.scheduler)) {
       setExternalSchedulerRegistered(true);
       return () => setExternalSchedulerRegistered(false);
     }
-    config.setInteractiveSubagentSchedulerFactory(createExternalScheduler);
+    config.scheduler.setInteractiveSubagentSchedulerFactory(
+      createExternalScheduler,
+    );
     setExternalSchedulerRegistered(true);
     return () => {
       setExternalSchedulerRegistered(false);
-      config.setInteractiveSubagentSchedulerFactory(undefined);
+      config.scheduler.setInteractiveSubagentSchedulerFactory(undefined);
     };
   }, [config, createExternalScheduler, setExternalSchedulerRegistered]);
 }
@@ -569,7 +569,7 @@ function useExternalSchedulerSetup(
  * Composes external scheduler factory creation with its registration effect.
  */
 function useExternalSchedulerRegistration(
-  config: Config,
+  config: ReactToolSchedulerRuntime,
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
   setExternalSchedulerRegistered: (registered: boolean) => void,
@@ -803,7 +803,7 @@ export function useReactToolScheduler(
     tools: CompletedToolCall[],
     options: { isPrimary: boolean },
   ) => Promise<void> | void,
-  config: Config,
+  config: ReactToolSchedulerRuntime,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
@@ -819,7 +819,7 @@ export function useReactToolScheduler(
   const [externalSchedulerRegistered, setExternalSchedulerRegistered] =
     useState(false);
   const mainSchedulerId = useState(() => Symbol('main-scheduler'))[0];
-  const sessionId = useMemo(() => config.getSessionId(), [config]);
+  const sessionId = useMemo(() => config.session.getSessionId(), [config]);
   const pendingScheduleRequests = useRef<PendingScheduleRequests>([]);
 
   const syncedRefs = useRefState(

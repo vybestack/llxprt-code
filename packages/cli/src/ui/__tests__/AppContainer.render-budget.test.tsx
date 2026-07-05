@@ -20,6 +20,11 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
+import {
+  buildUiRuntimeFromSource,
+  type SlashCommandRuntime,
+  type UiRuntimeBareSource,
+} from '../cliUiRuntime.js';
 
 // Mock config type
 interface MockConfig {
@@ -458,7 +463,10 @@ describe('AppContainer.render-budget', () => {
   describe('callback stability', () => {
     it('should maintain stable output across re-renders', () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -490,7 +498,10 @@ describe('AppContainer.render-budget', () => {
 
     it('should not throw on rapid re-renders', () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -516,7 +527,10 @@ describe('AppContainer.render-budget', () => {
   describe('memoization', () => {
     it('should use useMemo for computed values', () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -536,7 +550,10 @@ describe('AppContainer.render-budget', () => {
 
     it('should use useCallback for event handlers', () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -558,7 +575,10 @@ describe('AppContainer.render-budget', () => {
   describe('render performance', () => {
     it('should mount within reasonable time', async () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -578,7 +598,10 @@ describe('AppContainer.render-budget', () => {
 
     it('should handle re-renders efficiently', async () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -609,7 +632,10 @@ describe('AppContainer.render-budget', () => {
   describe('cleanup smoke test', () => {
     it('should complete mount/unmount cycles without errors', () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',

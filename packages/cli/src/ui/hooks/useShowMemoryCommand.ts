@@ -6,26 +6,27 @@
 
 import type { Message } from '../types.js';
 import { MessageType } from '../types.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import type { LoadedSettings } from '../../config/settings.js';
+import type { MemoryState } from '../cliUiRuntime.js';
 
 export function createShowMemoryAction(
-  config: Config | null,
+  memory: MemoryState | null,
   settings: LoadedSettings,
   addMessage: (message: Message) => void,
 ) {
   return async () => {
-    if (!config) {
+    if (!memory) {
       addMessage({
         type: MessageType.ERROR,
-        content: 'Configuration not available. Cannot show memory.',
+        content: 'Memory state is not available. Cannot show memory.',
         timestamp: new Date(),
       });
       return;
     }
 
-    const currentMemory = config.getUserMemory();
-    const fileCount = config.getLlxprtMdFileCount();
+    const currentMemory = memory.getUserMemory();
+    const fileCount = memory.getLlxprtMdFileCount();
     const contextFileName = settings.merged.ui.contextFileName;
     const contextFileNames = Array.isArray(contextFileName)
       ? contextFileName

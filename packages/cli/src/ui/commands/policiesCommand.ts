@@ -157,7 +157,7 @@ function handlePoliciesCommand(
     );
   }
 
-  // Fallback: Config path (tracked migration debt for null agent)
+  // Fallback for command contexts that have not yet been bound to an Agent.
   const config = context.services.config;
   if (!config) {
     return {

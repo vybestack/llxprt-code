@@ -6,10 +6,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
-import {
-  type Config,
-  type DiscoveredMCPResource,
-} from '@vybestack/llxprt-code-core';
+import { type DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { ToolCallStatus } from '../types.js';
 import * as path from 'path';
 import {
@@ -22,7 +21,7 @@ import {
 describe('handleAtCommand', () => {
   let setup: AtCommandTestSetup;
   let testRootDir: string;
-  let mockConfig: Config;
+  let mockConfig: CliUiRuntime;
   let mockAddItem: ReturnType<typeof vi.fn>;
   let mockOnDebugMessage: ReturnType<typeof vi.fn>;
   let abortController: AbortController;
@@ -77,9 +76,18 @@ describe('handleAtCommand', () => {
 
     mockConfig = {
       ...mockConfig,
-      getResourceRegistry: () => ({ findResourceByUri }),
-      getMcpClientManager: () => ({ getClient }),
-    } as unknown as Config;
+      getResourceRegistry: () => ({
+        getAllResources: () => [],
+        findResourceByUri,
+      }),
+      getMcpClientManager: () =>
+        ({
+          getClient,
+          getDiscoveryState: () => MCPDiscoveryState.COMPLETED,
+          getMcpServerCount: () => 0,
+          restartServer: async () => {},
+        }) as ReturnType<CliUiRuntime['getMcpClientManager']>,
+    };
 
     const result = await handleAtCommand({
       query,

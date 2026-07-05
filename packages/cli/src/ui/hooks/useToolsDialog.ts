@@ -5,10 +5,11 @@
  */
 
 import { useCallback, useState } from 'react';
-import type { AnyDeclarativeTool, Config } from '@vybestack/llxprt-code-core';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { AppState } from '../reducers/appReducer.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface UseToolsDialogParams {
   addMessage: (msg: {
@@ -17,10 +18,10 @@ interface UseToolsDialogParams {
     timestamp: Date;
   }) => void;
   appState: AppState;
-  config: Config;
+  config: CliUiRuntime;
 }
 
-function getDisabledToolsFromConfig(config: Config): string[] {
+function getDisabledToolsFromConfig(config: CliUiRuntime): string[] {
   const ephemeralSettings = config.getEphemeralSettings() as
     | Record<string, unknown>
     | undefined;
@@ -54,17 +55,10 @@ function buildNoToolsMessage(action: 'enable' | 'disable'): string {
 }
 
 async function loadToolsForDialog(
-  config: Config,
+  config: CliUiRuntime,
   action: 'enable' | 'disable',
-): Promise<AnyDeclarativeTool[] | null> {
-  const toolRegistry = config.getToolRegistry() as
-    | ReturnType<Config['getToolRegistry']>
-    | null
-    | undefined;
-  if (toolRegistry === null || toolRegistry === undefined) {
-    return null;
-  }
-
+): Promise<AnyDeclarativeTool[]> {
+  const toolRegistry = config.getToolRegistry();
   const disabledTools = getDisabledToolsFromConfig(config);
   const allTools = toolRegistry.getAllTools();
   const geminiTools = allTools.filter(
@@ -122,14 +116,6 @@ export const useToolsDialog = ({
     async (dialogAction: 'enable' | 'disable') => {
       try {
         const tools = await loadToolsForDialog(config, dialogAction);
-        if (tools === null) {
-          addMessage({
-            type: MessageType.ERROR,
-            content: 'Could not retrieve tool registry.',
-            timestamp: new Date(),
-          });
-          return;
-        }
 
         if (handleEmptyToolsList(tools, dialogAction, addMessage)) {
           return;

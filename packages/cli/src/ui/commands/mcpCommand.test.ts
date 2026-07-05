@@ -154,29 +154,7 @@ describe('mcpCommand', () => {
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Config not loaded.',
-      });
-    });
-
-    it('should show an error if tool registry is not available', async () => {
-      const contextWithNoRegistry = createMockCommandContext({
-        services: {
-          config: {
-            ...mockConfig,
-            getToolRegistry: vi.fn().mockReturnValue(undefined),
-          },
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
-      });
-
-      const result = await mcpCommand.action!(contextWithNoRegistry, '');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'error',
-        content: 'Could not retrieve tool registry.',
+        content: 'Configuration not loaded.',
       });
     });
   });

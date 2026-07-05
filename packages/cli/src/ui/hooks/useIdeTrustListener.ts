@@ -5,18 +5,19 @@
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import { ideContext } from '@vybestack/llxprt-code-core';
+import type { IdeState } from '../cliUiRuntime.js';
 
 /**
  * This hook listens for trust status updates from the IDE companion extension.
  * It provides the current trust status from the IDE and a flag indicating
  * if a restart is needed because the trust state has changed.
  */
-export function useIdeTrustListener(config: Config) {
+export function useIdeTrustListener(ide: IdeState) {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
-      const ideClient = config.getIdeClient();
+      const ideClient = ide.getIdeClient();
       if (!ideClient) {
         return () => {}; // Return empty cleanup function if no IDE client
       }
@@ -25,7 +26,7 @@ export function useIdeTrustListener(config: Config) {
         ideClient.removeTrustChangeListener(onStoreChange);
       };
     },
-    [config],
+    [ide],
   );
 
   const getSnapshot = () =>

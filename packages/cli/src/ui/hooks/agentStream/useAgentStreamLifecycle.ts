@@ -6,7 +6,6 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import {
-  type Config,
   type CompletedToolCall,
   type EditorType,
   type MessageBus,
@@ -31,6 +30,7 @@ import { classifyCompletedTools } from './toolCompletionHandler.js';
 import { useKeypress, type Key } from '../useKeypress.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { type QueuedSubmission } from './types.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export function useStreamingState(
   isResponding: boolean,
@@ -68,7 +68,7 @@ function isTerminalToolCall(status: TrackedToolCall['status']): boolean {
 }
 
 export function useToolSchedulerSetup(
-  config: Config,
+  runtime: StreamRuntime,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
@@ -79,6 +79,10 @@ export function useToolSchedulerSetup(
   addItem: UseHistoryManagerReturn['addItem'],
   agent: Agent,
 ) {
+  const schedulerRuntime = useMemo(
+    () => ({ scheduler: runtime.scheduler, session: runtime.session }),
+    [runtime],
+  );
   const toolSchedulerResult = useReactToolScheduler(
     async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) return;
@@ -97,7 +101,7 @@ export function useToolSchedulerSetup(
         addItem,
       );
     },
-    config,
+    schedulerRuntime,
     setPendingHistoryItem,
     getPreferredEditor,
     onEditorClose,
@@ -157,7 +161,7 @@ export function useShellCommandSetup({
   setPendingHistoryItem,
   setIsResponding,
   onDebugMessage,
-  config,
+  runtime,
   agent,
   setShellInputFocused,
   terminalWidth,
@@ -170,13 +174,17 @@ export function useShellCommandSetup({
   >;
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>;
   onDebugMessage: (message: string) => void;
-  config: Config;
+  runtime: StreamRuntime;
   agent: Agent;
   setShellInputFocused: (value: boolean) => void;
   terminalWidth?: number;
   terminalHeight?: number;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
 }) {
+  const shellRuntime = useMemo(
+    () => ({ ...runtime.shell, ...runtime.session }),
+    [runtime],
+  );
   const onExec = useCallback(
     async (done: Promise<void>) => {
       setIsResponding(true);
@@ -190,7 +198,7 @@ export function useShellCommandSetup({
     setPendingHistoryItem,
     onExec,
     onDebugMessage,
-    config,
+    shellRuntime,
     agent,
     setShellInputFocused,
     terminalWidth,

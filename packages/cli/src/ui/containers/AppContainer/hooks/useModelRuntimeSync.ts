@@ -9,12 +9,18 @@ import {
   coreEvents,
   CoreEvent,
   debugLogger,
-  type Config,
   type ModelProfileInfoPayload,
 } from '@vybestack/llxprt-code-core';
+import type {
+  EphemeralSettingsRuntime,
+  ModelState,
+} from '../../../cliUiRuntime.js';
+
+type ModelRuntimeSyncRuntime = Pick<ModelState, 'getModel'> &
+  Pick<EphemeralSettingsRuntime, 'getEphemeralSetting'>;
 
 interface UseModelRuntimeSyncParams {
-  config: Config;
+  config: ModelRuntimeSyncRuntime;
   currentModel: string;
   setCurrentModel: (model: string) => void;
   /**
@@ -150,7 +156,7 @@ function subscribeToModelRuntimeEvents(
 interface SyncModelLabelParams {
   isInitial: boolean;
   payload: ModelProfileInfoPayload | undefined;
-  config: Config;
+  config: ModelRuntimeSyncRuntime;
   getActiveModelName: () => string | undefined;
   getActiveProviderName?: () => string | undefined;
   resolveModelDisplayLabel?: () => string;
@@ -215,7 +221,7 @@ function syncModelLabel(params: SyncModelLabelParams): void {
 }
 
 function computeEffectiveModel(
-  config: Config,
+  config: ModelRuntimeSyncRuntime,
   getActiveModelName: () => string | undefined,
 ): string {
   const configModel = config.getModel();
@@ -234,7 +240,7 @@ function computeEffectiveModel(
  */
 function computeEffectiveModelLabel(
   payload: ModelProfileInfoPayload | undefined,
-  config: Config,
+  config: ModelRuntimeSyncRuntime,
   getActiveModelName: () => string | undefined,
   getActiveProviderName?: () => string | undefined,
 ): string {

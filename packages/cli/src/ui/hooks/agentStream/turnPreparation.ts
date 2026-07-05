@@ -4,14 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config, ThinkingBlock } from '@vybestack/llxprt-code-core';
-
-function bindOptionalConfigMethod<T extends (...args: never[]) => unknown>(
-  method: T | undefined,
-  config: Config,
-): T | undefined {
-  return method?.bind(config) as T | undefined;
-}
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 /**
  * Resets or carries-over per-turn state depending on whether this is a new
@@ -19,38 +13,32 @@ function bindOptionalConfigMethod<T extends (...args: never[]) => unknown>(
  */
 export async function prepareTurnForQuery(
   isContinuation: boolean,
-  config: Config,
+  runtime: StreamRuntime,
   startNewPrompt: () => void,
   setThought: (t: null) => void,
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
 ): Promise<void> {
-  const getBucketFailoverHandler = bindOptionalConfigMethod(
-    config.getBucketFailoverHandler,
-    config,
-  );
+  const getBucketFailoverHandler = () =>
+    runtime.bucketFailover.getBucketFailoverHandler();
 
   if (!isContinuation) {
     startNewPrompt();
     setThought(null);
     thinkingBlocksRef.current = [];
-    getBucketFailoverHandler?.()?.reset?.();
+    const handler = getBucketFailoverHandler();
+    handler?.reset?.();
 
     // Invalidate auth cache at turn boundaries for new turns
     // This ensures tokens updated by other processes are picked up
-    const handler = getBucketFailoverHandler?.();
     if (handler?.invalidateAuthCache) {
-      const getRuntimeSessionId = bindOptionalConfigMethod(
-        config.getSessionId,
-        config,
-      );
-      const runtimeId = getRuntimeSessionId?.() ?? 'default';
+      const runtimeId = runtime.session.getSessionId();
       handler.invalidateAuthCache(runtimeId);
     }
   } else {
-    getBucketFailoverHandler?.()?.resetSession?.();
+    getBucketFailoverHandler()?.resetSession?.();
   }
   try {
-    await getBucketFailoverHandler?.()?.ensureBucketsAuthenticated?.();
+    await getBucketFailoverHandler()?.ensureBucketsAuthenticated?.();
   } catch {
     // Swallow — partial auth is acceptable.
   }

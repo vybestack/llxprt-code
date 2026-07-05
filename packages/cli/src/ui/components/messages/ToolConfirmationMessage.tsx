@@ -9,15 +9,13 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
-import type {
-  ToolCallConfirmationDetails,
-  Config,
-} from '@vybestack/llxprt-code-core';
+import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import {
   IdeClient,
   ToolConfirmationOutcome,
   hasRedirection,
 } from '@vybestack/llxprt-code-core';
+import type { CliUiRuntime } from '../../cliUiRuntime.js';
 import type { RadioSelectItem } from '../shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { MaxSizedBox, MINIMUM_MAX_HEIGHT } from '../shared/MaxSizedBox.js';
@@ -38,7 +36,7 @@ import {
 function buildEditOptions(
   isTrustedFolder: boolean,
   allowPermanentApproval: boolean,
-  config: Config,
+  config: CliUiRuntime,
   isDiffingEnabled: boolean | null,
 ): Array<RadioSelectItem<ToolConfirmationOutcome>> {
   const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [];
@@ -178,7 +176,7 @@ function buildQuestionAndOptions(
   confirmationDetails: ToolCallConfirmationDetails,
   isTrustedFolder: boolean,
   allowPermanentApproval: boolean,
-  config: Config,
+  config: CliUiRuntime,
   isDiffingEnabled: boolean | null,
 ): {
   question: string;
@@ -417,7 +415,7 @@ function buildBodyContent(
 /**
  * Hook to manage IDE client state.
  */
-function useIdeClientState(config: Config): {
+function useIdeClientState(config: CliUiRuntime): {
   ideClient: IdeClient | null;
   isDiffingEnabled: boolean | null;
 } {
@@ -451,7 +449,7 @@ function useIdeClientState(config: Config): {
  */
 function useConfirmationContent(
   confirmationDetails: ToolCallConfirmationDetails,
-  config: Config,
+  config: CliUiRuntime,
   isDiffingEnabled: boolean | null,
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
@@ -520,7 +518,7 @@ function useCancelKeypress(
 
 export interface ToolConfirmationMessageProps {
   confirmationDetails: ToolCallConfirmationDetails;
-  config: Config;
+  config: CliUiRuntime;
   isFocused?: boolean;
   availableTerminalHeight?: number;
   terminalWidth: number;
@@ -533,7 +531,7 @@ export interface ToolConfirmationMessageProps {
 async function performConfirm(
   outcome: ToolConfirmationOutcome,
   confirmationDetails: ToolCallConfirmationDetails,
-  config: Config,
+  config: CliUiRuntime,
   ideClient: IdeClient | null,
   isDiffingEnabled: boolean | null,
   onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>,

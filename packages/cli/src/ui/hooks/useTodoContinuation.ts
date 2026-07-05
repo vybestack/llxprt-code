@@ -5,10 +5,15 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { Config, Todo } from '@vybestack/llxprt-code-core';
+import type { Todo } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useTodoContext } from '../contexts/TodoContext.js';
+
+export interface TodoContinuationRuntime {
+  getEphemeralSettings(): Record<string, unknown>;
+  getApprovalMode(): ApprovalMode;
+}
 
 export interface ContinuationState {
   isActive: boolean;
@@ -45,7 +50,7 @@ export interface TodoContinuationHook {
 function evaluateConditions(
   hadToolCalls: boolean,
   todoPaused: boolean,
-  config: Config,
+  config: TodoContinuationRuntime,
   todos: Todo[],
   isActive: boolean,
 ): ContinuationConditions {
@@ -99,7 +104,7 @@ function findMostRelevantTodo(todos: Todo[]): Todo | null {
   return null;
 }
 
-function generatePrompt(todo: Todo, config: Config): string {
+function generatePrompt(todo: Todo, config: TodoContinuationRuntime): string {
   const isYoloMode = config.getApprovalMode() === ApprovalMode.YOLO;
 
   if (isYoloMode) {
@@ -169,7 +174,7 @@ function sendContinuationPrompt(
 function processContinuation(
   hadToolCalls: boolean,
   todoContext: { todos: Todo[]; paused: boolean },
-  config: Config,
+  config: TodoContinuationRuntime,
   isResponding: boolean,
   continuationState: ContinuationState,
   continuationInProgressRef: React.MutableRefObject<boolean>,
@@ -223,7 +228,7 @@ function processContinuation(
  */
 export const useTodoContinuation = (
   agent: Agent,
-  config: Config,
+  config: TodoContinuationRuntime,
   isResponding: boolean,
   onDebugMessage: (message: string) => void,
 ): TodoContinuationHook => {

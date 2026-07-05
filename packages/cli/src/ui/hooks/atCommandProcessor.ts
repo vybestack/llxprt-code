@@ -6,7 +6,7 @@
 
 import type { PartUnion } from '@google/genai';
 import { unescapePath } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   buildInitialQueryText,
@@ -16,9 +16,29 @@ import {
   resolveAtPathCommands,
 } from './atCommandProcessorHelpers.js';
 import type {
+  AtCommandHelperRuntime,
   AtCommandPart,
   AtCommandProcessResult,
 } from './atCommandProcessorHelpers.js';
+import type { McpState, StreamRuntime } from '../cliUiRuntime.js';
+
+export type AtCommandRuntime = AtCommandHelperRuntime &
+  Pick<McpState, 'getMcpClientManager' | 'getResourceRegistry'>;
+
+export function buildAtCommandRuntimeFromStream(
+  runtime: StreamRuntime,
+): AtCommandRuntime {
+  return {
+    getToolRegistry: () => runtime.tools.getToolRegistry(),
+    getMcpClientManager: () => runtime.mcp.getMcpClientManager(),
+    getResourceRegistry: () => runtime.mcp.getResourceRegistry(),
+    getFileFilteringOptions: () => runtime.files.getFileFilteringOptions(),
+    getWorkspaceContext: () => runtime.files.getWorkspaceContext(),
+    getFileService: () => runtime.files.getFileService(),
+    getEnableRecursiveFileSearch: () =>
+      runtime.files.getEnableRecursiveFileSearch(),
+  };
+}
 
 // Detect if running in PowerShell to handle @ symbol conflicts
 // PowerShell's IntelliSense treats @ as hashtable start and causes severe lag
@@ -34,7 +54,7 @@ let powershellTipShown = false;
 
 interface HandleAtCommandParams {
   query: string;
-  config: Config;
+  config: AtCommandRuntime;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
   messageId: number;
@@ -169,7 +189,7 @@ export async function handleAtCommand({
   const resolution = await resolveAtPathCommands({
     atPathCommandParts,
     config,
-    resourceRegistry: getResourceRegistry(config),
+    resourceRegistry: config.getResourceRegistry(),
     globTool: toolRegistry.getTool('glob'),
     signal,
     onDebugMessage,
@@ -226,16 +246,6 @@ function showPowerShellTip(
   onDebugMessage(
     'TIP: PowerShell tip: You can use "+" instead of "@" to avoid IntelliSense lag (e.g., +example.txt instead of @example.txt)',
   );
-}
-
-function getResourceRegistry(config: Config) {
-  return (
-    config as Config & {
-      getResourceRegistry: () => {
-        findResourceByUri: (identifier: string) => unknown;
-      };
-    }
-  ).getResourceRegistry();
 }
 
 function handleMissingReadManyFilesTool(

@@ -10,15 +10,25 @@ import {
   escapeShellArg,
   getShellConfiguration,
   ShellExecutionService,
+  type ShellPermissionConfig,
 } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core';
 
 import type { CommandContext } from '../../ui/commands/types.js';
+import type {
+  ApprovalState,
+  SessionIdentity,
+  ShellState,
+} from '../../ui/cliUiRuntime.js';
 import type { IPromptProcessor } from './types.js';
 import {
   SHELL_INJECTION_TRIGGER,
   SHORTHAND_ARGS_PLACEHOLDER,
 } from './types.js';
+
+type ShellProcessorRuntime = ShellPermissionConfig &
+  ApprovalState &
+  SessionIdentity &
+  ShellState;
 
 export class ConfirmationRequiredError extends Error {
   constructor(
@@ -113,7 +123,7 @@ export class ShellProcessor implements IPromptProcessor {
 
   private checkPermissions(
     resolvedInjections: ShellInjection[],
-    config: Config,
+    config: ShellProcessorRuntime,
     sessionShellAllowlist: Set<string>,
   ): void {
     const commandsToConfirm = new Set<string>();
@@ -147,7 +157,7 @@ export class ShellProcessor implements IPromptProcessor {
   private async executeInjections(
     prompt: string,
     resolvedInjections: ShellInjection[],
-    config: Config,
+    config: ShellProcessorRuntime,
     userArgsRaw: string,
   ): Promise<string> {
     let processedPrompt = '';

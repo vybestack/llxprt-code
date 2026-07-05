@@ -70,7 +70,7 @@ async function listHooks(context: CommandContext): Promise<void> {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
-        text: 'Config not loaded.',
+        text: 'Configuration not loaded.',
       },
       Date.now(),
     );
@@ -155,7 +155,7 @@ async function enableHook(
     context.ui.addItem(
       {
         type: MessageType.ERROR,
-        text: 'Config not loaded.',
+        text: 'Configuration not loaded.',
       },
       Date.now(),
     );
@@ -242,7 +242,7 @@ async function disableHook(
     context.ui.addItem(
       {
         type: MessageType.ERROR,
-        text: 'Config not loaded.',
+        text: 'Configuration not loaded.',
       },
       Date.now(),
     );
@@ -334,7 +334,7 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
-        text: 'Config not loaded.',
+        text: 'Configuration not loaded.',
       },
       Date.now(),
     );
@@ -428,7 +428,7 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
-        text: 'Config not loaded.',
+        text: 'Configuration not loaded.',
       },
       Date.now(),
     );

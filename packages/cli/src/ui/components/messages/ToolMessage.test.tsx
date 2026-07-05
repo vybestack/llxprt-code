@@ -249,7 +249,7 @@ describe('<ToolMessage />', () => {
           ptyId={42}
           activeShellPtyId={42}
           embeddedShellFocused={true}
-          config={shellConfig}
+          shell={shellConfig}
         />,
         StreamingState.Idle,
       );
@@ -266,7 +266,7 @@ describe('<ToolMessage />', () => {
           ptyId={42}
           activeShellPtyId={42}
           embeddedShellFocused={false}
-          config={shellConfig}
+          shell={shellConfig}
         />,
         StreamingState.Idle,
       );
@@ -285,7 +285,7 @@ describe('<ToolMessage />', () => {
           ptyId={42}
           activeShellPtyId={42}
           embeddedShellFocused={true}
-          config={shellConfig}
+          shell={shellConfig}
         />,
         StreamingState.Idle,
       );
@@ -303,7 +303,7 @@ describe('<ToolMessage />', () => {
           ptyId={42}
           activeShellPtyId={42}
           embeddedShellFocused={true}
-          config={shellConfig}
+          shell={shellConfig}
         />,
         StreamingState.Idle,
       );
@@ -319,7 +319,7 @@ describe('<ToolMessage />', () => {
           status={ToolCallStatus.Success}
           ptyId={42}
           embeddedShellFocused={true}
-          config={shellConfig}
+          shell={shellConfig}
         />,
         StreamingState.Idle,
       );
@@ -338,7 +338,7 @@ describe('<ToolMessage />', () => {
           ptyId={42}
           activeShellPtyId={42}
           embeddedShellFocused={false}
-          config={shellConfig}
+          shell={shellConfig}
         />,
         StreamingState.Idle,
       );
@@ -357,7 +357,7 @@ describe('<ToolMessage />', () => {
           ptyId={42}
           activeShellPtyId={42}
           embeddedShellFocused={true}
-          config={shellConfig}
+          shell={shellConfig}
         />,
         StreamingState.Idle,
       );

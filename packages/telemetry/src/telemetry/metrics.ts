@@ -188,7 +188,7 @@ export function recordApiErrorMetrics(
 }
 
 export function recordFileOperationMetric(
-  config: TelemetryConfig,
+  config: ISessionConfig,
   operation: FileOperation,
   lines?: number,
   mimetype?: string,

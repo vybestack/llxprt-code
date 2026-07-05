@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
-import {
-  getErrorMessage,
-  getMCPServerPrompts,
-} from '@vybestack/llxprt-code-core';
+import { getErrorMessage } from '@vybestack/llxprt-code-core';
+import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
 import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 import type {
   CommandContext,
@@ -28,7 +25,7 @@ import type {
  * Model-Context-Protocol (MCP) servers.
  */
 export class McpPromptLoader implements ICommandLoader {
-  constructor(private readonly config: Config | null) {}
+  constructor(private readonly config: CliUiRuntime | null) {}
 
   /**
    * Loads all available prompts from all configured MCP servers and adapts
@@ -43,8 +40,9 @@ export class McpPromptLoader implements ICommandLoader {
       return Promise.resolve([]);
     }
     const mcpServers = this.config.getMcpServers() ?? {};
+    const promptRegistry = this.config.getPromptRegistry();
     for (const serverName in mcpServers) {
-      const prompts = getMCPServerPrompts(this.config, serverName);
+      const prompts = promptRegistry.getPromptsByServer(serverName);
       for (const prompt of prompts) {
         promptCommands.push(this.buildPromptCommand(prompt, serverName));
       }
@@ -126,7 +124,7 @@ export class McpPromptLoader implements ICommandLoader {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'Config not loaded.',
+          content: 'Configuration not loaded.',
         };
       }
 

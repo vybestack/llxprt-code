@@ -10,21 +10,26 @@ import {
   triggerSessionStartHook,
   SessionEndReason,
   SessionStartSource,
-  type Config,
   type SessionStartHookOutput,
 } from '@vybestack/llxprt-code-core';
 import { CommandKind, type SlashCommand } from './types.js';
+import type { HookSkillState } from '../cliUiRuntime.js';
+
+type SessionHookRuntime = Pick<
+  HookSkillState,
+  'getEnableHooks' | 'getHookSystem'
+>;
 
 /**
  * Helper to trigger session end hook with fail-open behavior.
  */
 async function triggerSessionEndHookSafe(
-  config: Config | null | undefined,
+  runtime: SessionHookRuntime | null | undefined,
   reason: SessionEndReason,
 ): Promise<void> {
-  if (!config) return;
+  if (!runtime) return;
   try {
-    await triggerSessionEndHook(config, reason);
+    await triggerSessionEndHook(runtime, reason);
   } catch {
     // Hooks are fail-open - continue even if hook fails
   }
@@ -34,12 +39,12 @@ async function triggerSessionEndHookSafe(
  * Helper to trigger session start hook with fail-open behavior.
  */
 async function triggerSessionStartHookSafe(
-  config: Config | null | undefined,
+  runtime: SessionHookRuntime | null | undefined,
   source: SessionStartSource,
 ): Promise<SessionStartHookOutput | undefined> {
-  if (!config) return undefined;
+  if (!runtime) return undefined;
   try {
-    return await triggerSessionStartHook(config, source);
+    return await triggerSessionStartHook(runtime, source);
   } catch {
     // Hooks are fail-open - continue even if hook fails
     return undefined;

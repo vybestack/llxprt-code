@@ -7,7 +7,7 @@
 /**
  * @hook useTodoContinuationFlow
  * @description Task-list continuation detection and prompts
- * @inputs config, streamingState, history, pendingHistoryItems, todoContinuation
+ * @inputs uiRuntime, streamingState, history, pendingHistoryItems, setDebugMessage, todoContinuationRef, hadToolCallsRef
  * @outputs todoContinuationRef
  * @sideEffects Effect watching streaming state
  * @cleanup N/A
@@ -15,24 +15,24 @@
  * @subscriptionStrategy Resubscribe
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   StreamingState,
   type HistoryItem,
   type HistoryItemWithoutId,
 } from '../../../types.js';
-import { type Config } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+
+
 import {
   useTodoContinuation,
   type TodoContinuationHook,
 } from '../../../hooks/useTodoContinuation.js';
+import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 export type { TodoContinuationHook };
 
 interface UseTodoContinuationFlowOptions {
-  config: Config;
-  agent: Agent;
+  uiRuntime: UiRuntime;
   streamingState: StreamingState;
   history: HistoryItem[];
   pendingHistoryItems: HistoryItemWithoutId[];
@@ -53,8 +53,7 @@ export interface UseTodoContinuationFlowResult {
 }
 
 export function useTodoContinuationFlow({
-  config,
-  agent,
+  uiRuntime,
   streamingState,
   history,
   pendingHistoryItems,
@@ -69,9 +68,23 @@ export function useTodoContinuationFlow({
   const todoContinuationRef =
     externalTodoContinuationRef ?? internalTodoContinuationRef;
 
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P12
+   * Wire up task-list continuation detection to trigger continuation prompts
+   * when streams complete without tool calls and active tasks exist.
+   */
+  const agentClientForContinuation =
+    uiRuntime.agentClientSource.getAgentClient();
+  const continuationRuntime = useMemo(
+    () => ({
+      getEphemeralSettings: () => uiRuntime.app.getEphemeralSettings(),
+      getApprovalMode: () => uiRuntime.approval.getApprovalMode(),
+    }),
+    [uiRuntime.app, uiRuntime.approval],
+  );
   const todoContinuation = useTodoContinuation(
-    agent,
-    config,
+    agentClientForContinuation,
+    continuationRuntime,
     streamingState === StreamingState.Responding ||
       streamingState === StreamingState.WaitingForConfirmation,
     setDebugMessage,

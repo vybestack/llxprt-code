@@ -163,11 +163,11 @@ export const compressCommand: SlashCommand = {
           ui.addItem(compressionResult);
           return;
         } catch {
-          // Fall through to the legacy Config-based path if agent compression
+          // Fall through to the legacy runtime-based path if agent compression
           // fails, so users still get compression.
         }
       }
-      // Fallback: Config path (tracked migration debt for null agent).
+      // Fallback: command-context service path (tracked migration debt for null agent).
       const agentClient = context.services.config?.getAgentClient();
       if (agentClient == null || agentClient.hasChatInitialized() !== true) {
         ui.addItem(

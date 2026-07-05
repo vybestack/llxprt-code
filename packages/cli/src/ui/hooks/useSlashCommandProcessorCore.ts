@@ -4,13 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useState } from 'react';
 import { type PartListUnion } from '@google/genai';
-import type {
-  Config,
-  RecordingIntegration,
-  Todo,
-} from '@vybestack/llxprt-code-core';
+import type { RecordingIntegration, Todo } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
@@ -59,7 +56,7 @@ export type SlashCommandProcessorCoreResult = {
 };
 
 export interface UseSlashCommandProcessorCoreArgs {
-  config: Config | null;
+  config: CliUiRuntime | null;
   agent: Agent | null;
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
@@ -99,7 +96,7 @@ interface SlashCommandProcessorState {
 }
 
 function useSlashCommandProcessorState(
-  config: Config | null,
+  config: CliUiRuntime | null,
 ): SlashCommandProcessorState {
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>

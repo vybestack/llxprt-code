@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
-  type Config,
+  type AgentClientContract,
   type MessageSenderType,
   type RecordingIntegration,
   type ThinkingBlock,
@@ -22,7 +22,6 @@ import {
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   StreamingState,
   type HistoryItem,
@@ -41,6 +40,7 @@ import {
   createCliModelIdentityRuntime,
 } from '../../utils/modelIdentity.js';
 import type { QueuedSubmission } from './types.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 /**
  * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
@@ -55,8 +55,8 @@ function defaultGetContentPrefixIdentity(): string | null {
 }
 
 export interface UseSubmitQueryDeps {
-  config: Config;
-  agent: Agent;
+  runtime: StreamRuntime;
+  agentClient: AgentClientContract;
   addItem: (
     item: Omit<HistoryItem, 'id'>,
     timestamp?: number,
@@ -158,7 +158,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
   const { startNewPrompt, getPromptCount } = useSessionStats();
 
   const handlers = useStreamEventHandlers({
-    config: deps.config,
+    runtime: deps.runtime,
     settings: deps.settings,
     addItem: deps.addItem,
     onDebugMessage: deps.onDebugMessage,
@@ -280,7 +280,7 @@ function useSubmitQueryEffects(
       scheduleNextQueuedSubmission();
     };
 
-    const unsubscribe = deps.config.setupAsyncTaskAutoTrigger(
+    const unsubscribe = deps.runtime.asyncTasks.setupAsyncTaskAutoTrigger(
       isAgentBusy,
       triggerAgentTurn,
     );
@@ -289,7 +289,7 @@ function useSubmitQueryEffects(
       unsubscribe();
     };
   }, [
-    deps.config,
+    deps.runtime,
     deps.streamingState,
     scheduleNextQueuedSubmission,
     deps.queuedSubmissionsRef,
@@ -352,7 +352,7 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
 
       const turn = initTurn(cbd, query, prompt_id, cbd.getPromptCount);
 
-      if (isMcpDiscoveryBlocking(cbd.config, turn.trimmedStr)) {
+      if (isMcpDiscoveryBlocking(cbd.runtime, turn.trimmedStr)) {
         cbd.addItem(
           {
             type: 'info' as const,
@@ -391,7 +391,7 @@ async function runSubmitQueryCore(
 
   await prepareTurnForQuery(
     false,
-    cbd.config,
+    cbd.runtime,
     cbd.startNewPrompt,
     cbd.setThought,
     cbd.thinkingBlocksRef,
@@ -409,7 +409,7 @@ async function runSubmitQueryCore(
       handleSubmissionError(
         error,
         cbd.addItem,
-        cbd.config,
+        cbd.runtime,
         cbd.onAuthError,
         turn.userMessageTimestamp,
       );
@@ -444,15 +444,18 @@ function shouldDisplayUserMessage(trimmedStr: string): boolean {
   return !!trimmedStr && !isSlashCommand(trimmedStr);
 }
 
-function isMcpDiscoveryBlocking(config: Config, trimmedStr: string): boolean {
+function isMcpDiscoveryBlocking(
+  runtime: StreamRuntime,
+  trimmedStr: string,
+): boolean {
   if (!trimmedStr) return false;
   if (isSlashCommand(trimmedStr)) return false;
 
-  const mcpManager = config.getMcpClientManager();
+  const mcpManager = runtime.mcp.getMcpClientManager();
   const discoveryState = mcpManager?.getDiscoveryState();
   const configuredMcpServers =
     mcpManager !== undefined
-      ? Object.keys(config.getMcpServers() ?? {}).length
+      ? Object.keys(runtime.mcp.getMcpServers() ?? {}).length
       : 0;
 
   return (
@@ -479,7 +482,8 @@ function initTurn(
   deps.turnCancelledRef.current = false;
 
   const resolvedPromptId =
-    promptId ?? deps.config.getSessionId() + '########' + getPromptCount();
+    promptId ??
+    deps.runtime.session.getSessionId() + '########' + getPromptCount();
 
   const trimmedStr = typeof query === 'string' ? query.trim() : '';
 

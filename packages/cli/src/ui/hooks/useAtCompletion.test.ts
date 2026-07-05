@@ -25,6 +25,8 @@ describe('useAtCompletion', () => {
       })),
       getEnableRecursiveFileSearch: () => true,
       getFileFilteringDisableFuzzySearch: () => false,
+      getResourceRegistry: () => ({ getAllResources: () => [] }),
+      getSubagentManager: () => undefined,
     } as unknown as Config;
     vi.clearAllMocks();
   });
@@ -478,6 +480,8 @@ describe('useAtCompletion', () => {
           respectLlxprtIgnore: true,
         })),
         getFileFilteringDisableFuzzySearch: () => false,
+        getResourceRegistry: () => ({ getAllResources: () => [] }),
+        getSubagentManager: () => undefined,
       } as unknown as Config;
 
       const { result } = renderHook(() =>

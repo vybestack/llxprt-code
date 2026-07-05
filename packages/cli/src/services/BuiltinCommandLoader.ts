@@ -11,10 +11,11 @@ import type {
   MessageActionReturn,
 } from '../ui/commands/types.js';
 import { CommandKind } from '../ui/commands/types.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type {
+  CliUiRuntime,
+  ExtensionEnablementSource,
+} from '../ui/cliUiRuntime.js';
 import type { ICommandLoader } from './types.js';
-
-import type { ExtensionEnablementManager } from '../config/extensions/extensionEnablement.js';
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
 import { authCommand } from '../ui/commands/authCommand.js';
 import { bugCommand } from '../ui/commands/bugCommand.js';
@@ -76,16 +77,12 @@ import { continueCommand } from '../ui/commands/continueCommand.js';
  * of the LLxprt Code application.
  */
 export class BuiltinCommandLoader implements ICommandLoader {
-  private extensionEnablementManager?: ExtensionEnablementManager;
+  private extensionEnablementManager?: ExtensionEnablementSource;
 
-  constructor(private config: Config | null) {
+  constructor(private config: CliUiRuntime | null) {
     // Access extensionEnablementManager if available on config
     if (config && 'extensionEnablementManager' in config) {
-      this.extensionEnablementManager = (
-        config as Config & {
-          extensionEnablementManager?: ExtensionEnablementManager;
-        }
-      ).extensionEnablementManager;
+      this.extensionEnablementManager = config.extensionEnablementManager;
     }
   }
 

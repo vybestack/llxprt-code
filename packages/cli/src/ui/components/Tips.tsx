@@ -7,10 +7,10 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import { type Config } from '@vybestack/llxprt-code-core';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface TipsProps {
-  config: Config;
+  config: CliUiRuntime;
 }
 
 export const Tips: React.FC<TipsProps> = ({ config }) => {

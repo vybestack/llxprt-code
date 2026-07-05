@@ -24,11 +24,11 @@ import type { HistoryItem } from '../../../types.js';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
 import type { AppInputResult } from './useAppInput.js';
+import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 export interface AppLayoutParams {
   // From bootstrap
-  config: AppBootstrapResult['config'];
-  agent: AppBootstrapResult['agent'];
+  uiRuntime: UiRuntime;
   settings: AppBootstrapResult['settings'];
   todoContinuationRef: AppBootstrapResult['todoContinuationRef'];
   hadToolCallsRef: AppBootstrapResult['hadToolCallsRef'];
@@ -89,10 +89,17 @@ export interface AppLayoutParams {
   terminalWidth: AppInputResult['terminalWidth'];
   buffer: AppInputResult['buffer'];
 }
+function pickCopyModeKeybindingState(p: AppLayoutParams) {
+  return {
+    copyModeEnabled: p.copyModeEnabled,
+    setCopyModeEnabled: p.setCopyModeEnabled,
+    useAlternateBuffer: p.useAlternateBuffer,
+  };
+}
 
 function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
   const {
-    config,
+    uiRuntime,
     clearItems,
     clearConsoleMessagesState,
     constrainHeight,
@@ -106,9 +113,6 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
     setRenderMarkdown,
     isTodoPanelCollapsed,
     setIsTodoPanelCollapsed,
-    copyModeEnabled,
-    setCopyModeEnabled,
-    useAlternateBuffer,
     ideContextState,
     activeShellPtyId,
     setEmbeddedShellFocused,
@@ -120,6 +124,7 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
     addItem,
     inputHistoryStore,
     buffer,
+    useAlternateBuffer,
   } = p;
   useKeybindings({
     exit: {
@@ -147,19 +152,19 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
     shell: {
       activeShellPtyId,
       setEmbeddedShellFocused,
-      getEnableInteractiveShell: () => config.getEnableInteractiveShell(),
+      getEnableInteractiveShell: () =>
+        uiRuntime.shell.getEnableInteractiveShell(),
     },
-    copyMode: {
-      copyModeEnabled,
-      setCopyModeEnabled,
-      useAlternateBuffer,
+    copyMode: pickCopyModeKeybindingState(p),
+    ideContext: {
+      getIdeMode: () => uiRuntime.ide.getIdeMode(),
+      ideContextState,
     },
-    ideContext: { getIdeMode: () => config.getIdeMode(), ideContextState },
     mcp: {
-      getMcpServers: () => config.getMcpServers() as Record<string, unknown>,
+      getMcpServers: () => uiRuntime.mcp.getMcpServers(),
     },
   });
-  const logger = useLogger(config.storage);
+  const logger = useLogger(uiRuntime.storage);
   useInputHistoryBootstrap({ inputHistoryStore, logger });
   const handleClearScreen = useClearScreenAction({
     clearItems,
@@ -172,8 +177,7 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
 
 function useLayoutMeasure(p: AppLayoutParams) {
   const {
-    config,
-    agent,
+    uiRuntime,
     todoContinuationRef,
     hadToolCallsRef,
     consoleMessages,
@@ -207,8 +211,7 @@ function useLayoutMeasure(p: AppLayoutParams) {
   );
   useFlickerDetector(rootUiRef, terminalHeight, constrainHeight);
   useTodoContinuationFlow({
-    config,
-    agent,
+    uiRuntime,
     streamingState,
     history,
     pendingHistoryItems,
@@ -227,7 +230,7 @@ function useLayoutMeasure(p: AppLayoutParams) {
 
 function useLayoutContext(p: AppLayoutParams) {
   const {
-    config,
+    uiRuntime,
     settings,
     runtimeMessageBus,
     consoleMessages,
@@ -247,23 +250,23 @@ function useLayoutContext(p: AppLayoutParams) {
     vimModeEnabled,
     startupGuardsInitialized,
   } = p;
-  const debugMode = config.getDebugMode();
+  const debugMode = uiRuntime.app.getDebugMode();
   const filteredConsoleMessages = useMemo(() => {
     if (debugMode) return consoleMessages;
     return consoleMessages.filter((msg) => msg.type !== 'debug');
   }, [consoleMessages, debugMode]);
-  const branchName = useGitBranchName(config.getTargetDir());
+  const branchName = useGitBranchName(uiRuntime.session.getTargetDir());
   const contextFileNames = useMemo(() => {
     const fromSettings = settings.merged.ui.contextFileName;
     if (fromSettings != null && fromSettings !== '')
       return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
     return getAllLlxprtMdFilenames();
   }, [settings.merged.ui.contextFileName]);
-  const initialPrompt = useMemo(() => config.getQuestion(), [config]);
+  const initialPrompt = useMemo(() => uiRuntime.app.getQuestion(), [uiRuntime]);
   useInitialPromptSubmit({
     initialPrompt,
     submitPrompt: handleUserInputSubmit,
-    agentClientPresent: Boolean(config.getAgentClient()),
+    agentClientPresent: Boolean(uiRuntime.agentClientSource.getAgentClient()),
     interactiveRuntimeReady,
     blockedByDialogs: {
       isAuthDialogOpen,
@@ -281,8 +284,8 @@ function useLayoutContext(p: AppLayoutParams) {
   const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
   const placeholder = usePowerShellPlaceholder({ vimModeEnabled });
   useEffect(() => {
-    config.setPtyTerminalSize(mainAreaWidth, terminalHeight);
-  }, [config, mainAreaWidth, terminalHeight]);
+    uiRuntime.shell.setPtyTerminalSize(mainAreaWidth, terminalHeight);
+  }, [uiRuntime, mainAreaWidth, terminalHeight]);
   const activeHooks = useHookDisplayState(runtimeMessageBus);
   return {
     filteredConsoleMessages,

@@ -16,10 +16,7 @@ import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import { mcpServerRequiresOAuth } from '@vybestack/llxprt-code-mcp';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import type {
-  RuntimeConfigWithOptionalServices,
-  RuntimeMcpServers,
-} from './mcpDisplay.js';
+import type { RuntimeMcpServices, RuntimeMcpServers } from './mcpDisplay.js';
 
 export const mcpAuthSchema: CommandArgumentSchema = [
   {
@@ -83,7 +80,7 @@ export async function performMcpOAuth(
   context: CommandContext,
   serverName: string,
   server: MCPServerConfig,
-  runtimeConfig: RuntimeConfigWithOptionalServices,
+  runtimeConfig: RuntimeMcpServices,
 ): Promise<MessageActionReturn> {
   const displayListener = (message: string) => {
     context.ui.addItem({ type: 'info', text: message });
@@ -120,7 +117,7 @@ export async function performMcpOAuth(
       Date.now(),
     );
 
-    const mcpClientManager = runtimeConfig.getMcpClientManager?.();
+    const mcpClientManager = runtimeConfig.getMcpClientManager();
     if (mcpClientManager !== undefined) {
       context.ui.addItem(
         {
@@ -131,10 +128,8 @@ export async function performMcpOAuth(
       );
       await mcpClientManager.restartServer(serverName);
     }
-    const agentClient = runtimeConfig.getAgentClient?.();
-    if (agentClient) {
-      await agentClient.setTools();
-    }
+    const agentClient = runtimeConfig.getAgentClient();
+    await agentClient.setTools();
 
     context.ui.reloadCommands();
 

@@ -8,10 +8,7 @@ import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { type AppState } from '../reducers/appReducer.js';
-import {
-  type Config,
-  type RecordingIntegration,
-} from '@vybestack/llxprt-code-core';
+import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseProviderDialogParams {
@@ -22,7 +19,6 @@ interface UseProviderDialogParams {
   }) => void;
   onProviderChange?: () => void;
   appState: AppState;
-  config: Config;
   onClear?: () => void;
   recordingIntegration?: RecordingIntegration;
 }
@@ -86,7 +82,6 @@ export const useProviderDialog = ({
   addMessage,
   onProviderChange,
   appState,
-  config: _config,
   onClear,
   recordingIntegration,
 }: UseProviderDialogParams) => {

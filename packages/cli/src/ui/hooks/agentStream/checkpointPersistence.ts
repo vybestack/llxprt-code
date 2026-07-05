@@ -15,10 +15,11 @@
  * The hook accepts an injectable `fsOps` parameter so tests can avoid real I/O.
  */
 
+import type { CheckpointRuntime, StreamRuntime } from '../../cliUiRuntime.js';
 import { useEffect, useRef } from 'react';
 import path from 'path';
 import { promises as nodeFs } from 'fs';
-import type { Config, GitService } from '@vybestack/llxprt-code-core';
+import type { GitService } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { getErrorMessage, isNodeError } from '@vybestack/llxprt-code-core';
 import type { TrackedToolCall } from '../useReactToolScheduler.js';
@@ -133,16 +134,16 @@ function isRestorableToolCall(toolCall: TrackedToolCall): boolean {
 
 async function saveRestorableToolCalls(
   toolCalls: TrackedToolCall[],
-  config: Config,
+  checkpoint: CheckpointRuntime,
   gitService: GitService | undefined,
   history: HistoryItem[],
   agent: Agent,
-  storage: Config['storage'],
+  storage: StreamRuntime['storage'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
   checkpointedCallIds?: Set<string>,
 ): Promise<void> {
-  if (!config.getCheckpointingEnabled()) return;
+  if (!checkpoint.getCheckpointingEnabled()) return;
 
   const restorableToolCalls = toolCalls.filter(
     (tc) =>
@@ -207,7 +208,7 @@ async function saveRestorableToolCalls(
  * Runs the checkpoint persistence effect for restorable tool calls.
  *
  * @param toolCalls - All currently tracked tool calls.
- * @param config - App configuration (for checkpoint enable check + storage).
+ * @param runtime - StreamRuntime or bare CheckpointRuntime used for checkpoint enablement.
  * @param gitService - Git service (may be undefined if no project root).
  * @param history - Current UI history items.
  * @param agent - Agent facade for fetching chat history.
@@ -217,15 +218,16 @@ async function saveRestorableToolCalls(
  */
 export function useCheckpointPersistence(
   toolCalls: TrackedToolCall[],
-  config: Config,
+  runtime: StreamRuntime | CheckpointRuntime,
   gitService: GitService | undefined,
   history: HistoryItem[],
   agent: Agent,
-  storage: Config['storage'],
+  storage: StreamRuntime['storage'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
 ): void {
   const checkpointedCallIdsRef = useRef<Set<string>>(new Set());
+  const checkpoint = 'checkpoint' in runtime ? runtime.checkpoint : runtime;
 
   useEffect(() => {
     // Clear checkpointed tracking for callIds no longer in the tool list,
@@ -239,7 +241,7 @@ export function useCheckpointPersistence(
 
     void saveRestorableToolCalls(
       toolCalls,
-      config,
+      checkpoint,
       gitService,
       history,
       agent,
@@ -250,7 +252,7 @@ export function useCheckpointPersistence(
     );
   }, [
     toolCalls,
-    config,
+    checkpoint,
     onDebugMessage,
     gitService,
     history,

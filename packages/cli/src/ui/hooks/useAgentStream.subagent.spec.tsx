@@ -29,6 +29,7 @@ import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
 import { StreamingState } from '../types.js';
+import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 
 const inkMock = vi.hoisted(() => {
   const noop = vi.fn(() => null);
@@ -280,7 +281,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        mockConfig,
+        createStreamRuntimeForTest(mockConfig),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -390,7 +391,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        mockConfig,
+        createStreamRuntimeForTest(mockConfig),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -459,7 +460,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        mockConfig,
+        createStreamRuntimeForTest(mockConfig),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -511,7 +512,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        mockConfig,
+        createStreamRuntimeForTest(mockConfig),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (

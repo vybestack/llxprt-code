@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { InputPrompt } from './InputPrompt.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 /**
  * Determines the placeholder text based on editor mode.
@@ -32,7 +32,7 @@ function getComposerPlaceholder(
 }
 
 interface ComposerProps {
-  config: Config;
+  config: CliUiRuntime;
   settings: LoadedSettings;
   onSuggestionsVisibilityChange?: (visible: boolean) => void;
 }

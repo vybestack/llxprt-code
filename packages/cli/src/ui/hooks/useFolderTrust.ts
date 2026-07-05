@@ -5,11 +5,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  type Config,
-  DebugLogger,
-  ExitCodes,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger, ExitCodes } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings, Settings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
@@ -19,6 +15,7 @@ import {
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import process from 'node:process';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
@@ -94,15 +91,13 @@ function showStartupMessage(
 
 export const useFolderTrust = (
   settings: LoadedSettings,
-  config: Config,
+  config: CliUiRuntime,
   addItem?: AddItemFn,
 ) => {
   const [isTrusted, setIsTrusted] = useState<boolean | undefined>(
     config.isTrustedFolder(),
   );
-  const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
-    (config.isTrustedFolder() as boolean | undefined) === undefined,
-  );
+  const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const startupMessageSent = useRef(false);
 

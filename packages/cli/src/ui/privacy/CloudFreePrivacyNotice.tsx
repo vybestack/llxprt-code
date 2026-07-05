@@ -9,12 +9,13 @@ import { useCallback } from 'react';
 import { RadioButtonSelect } from '../components/shared/RadioButtonSelect.js';
 import { usePrivacySettings } from '../hooks/usePrivacySettings.js';
 import { CloudPaidPrivacyNotice } from './CloudPaidPrivacyNotice.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import type { AgentClientSource } from '../cliUiRuntime.js';
 
 interface CloudFreePrivacyNoticeProps {
-  config: Config;
+  config: AgentClientSource;
   onExit: () => void;
 }
 

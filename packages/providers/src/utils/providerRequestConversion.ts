@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
@@ -47,7 +47,7 @@ function createOptions(settings?: unknown): ReasoningMessageOptions {
 export function buildOpenAIDumpMessages(
   history: IContent[],
   settings?: unknown,
-  config?: Config,
+  config?: ToolOutputSettingsProvider,
 ): unknown[] {
   return buildMessagesWithReasoning(
     history,
@@ -60,7 +60,7 @@ export function buildOpenAIDumpMessages(
 export function buildAnthropicDumpMessages(
   history: IContent[],
   settings?: unknown,
-  config?: Config,
+  config?: ToolOutputSettingsProvider,
   model?: string,
 ): unknown[] {
   return convertToAnthropicMessages(history, {
@@ -86,7 +86,7 @@ export function buildAnthropicDumpMessages(
 export function buildGeminiDumpContents(
   history: IContent[],
   model?: string,
-  config?: Config,
+  config?: ToolOutputSettingsProvider,
 ): unknown[] {
   return convertHistoryToGeminiFormat(history, model, config);
 }
@@ -128,7 +128,7 @@ export function buildProviderDumpBody(params: {
   providerName: string;
   history: IContent[];
   settings?: unknown;
-  config?: Config;
+  config?: ToolOutputSettingsProvider;
   model?: string;
 }): Record<string, unknown> {
   if (isOpenAICompatibleProvider(params.providerName)) {

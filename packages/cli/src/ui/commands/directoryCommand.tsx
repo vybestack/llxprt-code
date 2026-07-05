@@ -11,6 +11,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { loadServerHierarchicalMemory } from '@vybestack/llxprt-code-core';
 import { loadTrustedFolders } from '../../config/trustedFolders.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export function expandHomeDir(p: string): string {
   if (!p) {
@@ -25,10 +26,8 @@ export function expandHomeDir(p: string): string {
   return path.normalize(expandedPath);
 }
 
-type ConfigType = NonNullable<CommandContext['services']['config']>;
-
 function addDirectoriesToWorkspace(
-  config: ConfigType,
+  config: CliUiRuntime,
   pathsToAdd: string[],
   added: string[],
   errors: string[],
@@ -62,7 +61,7 @@ function addDirectoriesToWorkspace(
 
 async function refreshMemoryAfterAdd(
   context: CommandContext,
-  config: ConfigType,
+  config: CliUiRuntime,
   added: string[],
   errors: string[],
 ): Promise<void> {
