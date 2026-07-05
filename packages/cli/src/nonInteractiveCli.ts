@@ -26,8 +26,8 @@ import { type Part } from '@google/genai';
 import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   fromConfig,
-  wrapToolHandle,
   type Agent,
+  type AgentToolHandle,
 } from '@vybestack/llxprt-code-agents';
 
 import readline from 'node:readline';
@@ -201,6 +201,7 @@ async function resolveNonInteractiveQuery(
   abortController: AbortController,
   config: Config,
   settings: LoadedSettings,
+  getToolHandle: (name: string) => AgentToolHandle | undefined,
 ): Promise<Part[]> {
   if (isSlashCommand(input)) {
     const slashCommandResult = await handleSlashCommand(
@@ -219,13 +220,10 @@ async function resolveNonInteractiveQuery(
   const { processedQuery, error } = await handleAtCommand({
     query: input,
     config,
-    // nonInteractiveCli is outside packages/cli/src/ui and may keep raw Config
-    // access. The agent is created later (processQuery), so build the lookup
-    // from the registry here via the public wrapToolHandle (issue #2376 Task E).
-    getToolHandle: (name) => {
-      const tool = config.getToolRegistry().getTool(name);
-      return tool ? wrapToolHandle(tool) : undefined;
-    },
+    // nonInteractiveCli creates the Agent via fromConfig before calling
+    // resolveNonInteractiveQuery, so resolve tool lookups through the public
+    // Agent.tools API (issue #2376 Task E).
+    getToolHandle,
     addItem: (_item, _timestamp) => 0,
     onDebugMessage: () => {},
     messageId: Date.now(),
@@ -255,6 +253,7 @@ function emitUserMessage(
 
 async function processQuery(
   query: Part[],
+  agent: Agent,
   params: RunNonInteractiveParams,
   options: {
     abortController: AbortController;
@@ -265,51 +264,78 @@ async function processQuery(
     startTime: number;
   },
 ): Promise<void> {
-  let agent: Agent | undefined;
-  try {
-    agent = await fromConfig({
+  const eventStream = agent.stream(query, {
+    signal: options.abortController.signal,
+    promptId: params.prompt_id,
+    maxTurns: params.config.getMaxSessionTurns(),
+  });
+  await processAgentStream(
+    eventStream,
+    {
       config: params.config,
-      messageBus: params.runtimeMessageBus,
-      sessionId: params.config.getSessionId(),
-    });
-    const eventStream = agent.stream(query, {
-      signal: options.abortController.signal,
-      promptId: params.prompt_id,
-      maxTurns: params.config.getMaxSessionTurns(),
-    });
-    await processAgentStream(
-      eventStream,
-      {
-        config: params.config,
-        jsonOutput: options.jsonOutput,
-        streamJsonOutput: options.streamJsonOutput,
-        streamFormatter: options.streamFormatter,
-        emojiFilter: options.emojiFilter,
-        createProfileNameWriter: () =>
-          createProfileNameWriter(
-            params.config,
-            options.jsonOutput,
-            options.streamFormatter,
-          ),
-      },
-      options.startTime,
-      () => uiTelemetryService.getMetrics(),
+      jsonOutput: options.jsonOutput,
+      streamJsonOutput: options.streamJsonOutput,
+      streamFormatter: options.streamFormatter,
+      emojiFilter: options.emojiFilter,
+      createProfileNameWriter: () =>
+        createProfileNameWriter(
+          params.config,
+          options.jsonOutput,
+          options.streamFormatter,
+        ),
+    },
+    options.startTime,
+    () => uiTelemetryService.getMetrics(),
+  );
+}
+
+/**
+ * Creates the Agent, resolves the @-command query, streams the response, and
+ * disposes the agent. Extracted from runNonInteractive to keep function length
+ * within lint limits. The agent is created before resolveNonInteractiveQuery so
+ * that @-command tool lookups go through the public Agent.tools API and the
+ * same agent is reused by processQuery (issue #2376).
+ */
+async function resolveAndStream(
+  params: RunNonInteractiveParams,
+  options: {
+    abortController: AbortController;
+    jsonOutput: boolean;
+    streamJsonOutput: boolean;
+    streamFormatter: StreamJsonFormatter | null;
+    emojiFilter: EmojiFilter | undefined;
+    startTime: number;
+  },
+): Promise<void> {
+  const { config, input, settings } = params;
+  const agent = await fromConfig({
+    config,
+    messageBus: params.runtimeMessageBus,
+    sessionId: config.getSessionId(),
+  });
+  try {
+    const query = await resolveNonInteractiveQuery(
+      input,
+      options.abortController,
+      config,
+      settings,
+      (name) => agent.tools.get(name),
     );
+    emitUserMessage(options.streamFormatter, input);
+    await processQuery(query, agent, params, options);
   } finally {
-    if (agent !== undefined) {
-      // Dispose in its own try/catch so a disposal failure never masks the
-      // original error thrown by the stream/turn loop above.
-      try {
-        await agent.dispose();
-      } catch (disposeError) {
-        debugLogger.error(
-          `Failed to dispose agent: ${
-            disposeError instanceof Error
-              ? disposeError.message
-              : String(disposeError)
-          }`,
-        );
-      }
+    // Dispose in its own try/catch so a disposal failure never masks the
+    // original error thrown by resolve/processQuery above.
+    try {
+      await agent.dispose();
+    } catch (disposeError) {
+      debugLogger.error(
+        `Failed to dispose agent: ${
+          disposeError instanceof Error
+            ? disposeError.message
+            : String(disposeError)
+        }`,
+      );
     }
   }
 }
@@ -317,7 +343,7 @@ async function processQuery(
 export async function runNonInteractive(
   params: RunNonInteractiveParams,
 ): Promise<void> {
-  const { config, input, settings, deferTelemetryShutdown = false } = params;
+  const { config, deferTelemetryShutdown = false } = params;
   const outputFormat = config.getOutputFormat();
   const jsonOutput = outputFormat === OutputFormat.JSON;
   const streamJsonOutput = outputFormat === OutputFormat.STREAM_JSON;
@@ -349,14 +375,7 @@ export async function runNonInteractive(
     );
     emitStreamInit(streamFormatter, config);
     stdinCancellation.setup();
-    const query = await resolveNonInteractiveQuery(
-      input,
-      abortController,
-      config,
-      settings,
-    );
-    emitUserMessage(streamFormatter, input);
-    await processQuery(query, params, {
+    await resolveAndStream(params, {
       abortController,
       jsonOutput,
       streamJsonOutput,

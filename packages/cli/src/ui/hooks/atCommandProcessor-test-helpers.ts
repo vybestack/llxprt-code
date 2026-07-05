@@ -15,8 +15,10 @@ import {
   COMMON_IGNORE_PATTERNS,
   DEFAULT_FILE_EXCLUDES,
 } from '@vybestack/llxprt-code-core';
-import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
-import { wrapToolHandle } from '@vybestack/llxprt-code-agents';
+import type {
+  AgentToolHandle,
+  AgentToolInvocation,
+} from '@vybestack/llxprt-code-agents';
 import {
   FileDiscoveryService,
   StandardFileSystemService,
@@ -25,6 +27,68 @@ import * as os from 'os';
 import * as fsPromises from 'fs/promises';
 import * as fs from 'fs';
 import * as path from 'path';
+
+/**
+ * Minimal adapter that wraps a real tool (from ToolRegistry.getTool) as an
+ * AgentToolHandle for the at-command test harness. This mirrors the shape
+ * ToolControl.get() produces (via the internal wrapToolHandle) so the
+ * at-command processor exercises the same code paths as production.
+ */
+function wrapToolForTest(tool: unknown): AgentToolHandle {
+  const t = tool as {
+    name: string;
+    displayName: string;
+    description: string;
+    kind?: string;
+    build(params: Record<string, unknown>): {
+      getDescription(): string;
+      execute(
+        signal: AbortSignal,
+        updateOutput?: (chunk: string) => void,
+      ): Promise<{
+        llmContent: unknown;
+        returnDisplay?: unknown;
+        error?: unknown;
+      }>;
+      shouldConfirmExecute(signal: AbortSignal): Promise<unknown | false>;
+      toolLocations(): ReadonlyArray<{ path: string; line?: number }>;
+    };
+    buildAndExecute(
+      params: Record<string, unknown>,
+      signal: AbortSignal,
+    ): Promise<{
+      llmContent: unknown;
+      returnDisplay?: unknown;
+      error?: unknown;
+    }>;
+  };
+  const buildInvocation = (
+    params: Record<string, unknown>,
+  ): AgentToolInvocation => {
+    const invocation = t.build(params);
+    return {
+      getDescription: () => invocation.getDescription(),
+      execute: async (signal, updateOutput) => {
+        const result = await invocation.execute(signal, updateOutput);
+        return result;
+      },
+      shouldConfirmExecute: (signal) => invocation.shouldConfirmExecute(signal),
+      toolLocations: () => invocation.toolLocations(),
+    };
+  };
+  return {
+    name: t.name,
+    displayName: t.displayName,
+    ...(t.description.length > 0 ? { description: t.description } : {}),
+    ...(t.kind !== undefined ? { kind: t.kind } : {}),
+    source: 'builtin',
+    build: buildInvocation,
+    buildAndExecute: async (params, signal) => {
+      const result = await t.buildAndExecute(params, signal);
+      return result;
+    },
+  };
+}
 
 export async function createTestFile(
   fullPath: string,
@@ -147,7 +211,8 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
 
   const getToolHandle = (name: string): AgentToolHandle | undefined => {
     const tool = registry.getTool(name);
-    return tool !== undefined ? wrapToolHandle(tool) : undefined;
+    if (tool === undefined) return undefined;
+    return wrapToolForTest(tool);
   };
 
   return {

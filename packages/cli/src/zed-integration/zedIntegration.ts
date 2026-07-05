@@ -30,8 +30,6 @@ import {
   fromConfig,
 } from '@vybestack/llxprt-code-agents';
 import {
-  switchActiveProvider,
-  setActiveModel,
   getActiveProfileName,
   loadProfileByName,
   setCliRuntimeContext,
@@ -41,11 +39,8 @@ import { Readable, Writable } from 'node:stream';
 import { type Content, type Part, type FunctionCall } from '@google/genai';
 import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
-import { runExitCleanup } from '../utils/cleanup.js';
-import {
-  hasProfileAuthEphemerals,
-  snapshotProfileAuthEphemerals,
-} from '../config/profileAuthEphemerals.js';
+import { runExitCleanup, registerCleanup } from '../utils/cleanup.js';
+import { restoreActiveProvider } from '../cliAgentBootstrap.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { parseZedAuthMethodId, buildAvailableModes } from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
@@ -73,32 +68,6 @@ function getRuntimeAgentClient(
   ).getAgentClient();
 }
 
-/**
- * Mirrors cliAgentBootstrap.restoreActiveProvider: `fromConfig` can disturb
- * provider runtime state (activate() resets the active provider on the shared
- * ProviderManager). For provider-only paths we re-switch; for profile-auth
- * paths we reassert only the model so keyfile/base-url ephemerals survive.
- */
-async function restoreActiveProvider(
-  config: Config,
-  agent: Agent,
-): Promise<void> {
-  const provider = config.getProvider() ?? agent.getProvider();
-  if (!provider) return;
-  try {
-    const model = config.getModel();
-    const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
-    if (!hasProfileAuthEphemerals(profileAuthEphemerals)) {
-      await switchActiveProvider(provider);
-    }
-    if (model && model !== 'placeholder-model') {
-      await setActiveModel(model);
-    }
-  } catch {
-    // Best-effort: auth will be triggered lazily on the first API call.
-  }
-}
-
 export async function runZedIntegration(
   config: Config,
   settings: LoadedSettings,
@@ -122,10 +91,17 @@ export async function runZedIntegration(
   });
 
   try {
+    let zedAgent: ZedAgent | undefined;
     const stream = acp.ndJsonStream(stdout, stdin);
     const connection = new acp.AgentSideConnection((conn) => {
       logger.debug(() => 'Creating ZedAgent');
-      return new ZedAgent(config, settings, conn);
+      zedAgent = new ZedAgent(config, settings, conn);
+      // Dispose all per-session Agents on process exit cleanup so agents
+      // created via fromConfig are not leaked (issue #2376).
+      registerCleanup(async () => {
+        await zedAgent?.disposeAllSessions();
+      });
+      return zedAgent;
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
 
@@ -334,6 +310,18 @@ export class ZedAgent {
     }
     return session.prompt(params);
   }
+
+  /**
+   * Disposes every active session's Agent. Called during process exit cleanup
+   * so per-session agents constructed via fromConfig are not leaked.
+   */
+  async disposeAllSessions(): Promise<void> {
+    const sessions = Array.from(this.sessions.values());
+    this.sessions.clear();
+    for (const session of sessions) {
+      await session.dispose();
+    }
+  }
 }
 
 export class Session {
@@ -398,6 +386,30 @@ export class Session {
     }
     this.pendingPrompt.abort();
     this.pendingPrompt = null;
+  }
+
+  private _disposed = false;
+
+  /**
+   * Disposes the session's Agent, guarding against double-dispose. Errors are
+   * caught and logged via the DebugLogger so disposal never masks an
+   * in-flight error.
+   */
+  async dispose(): Promise<void> {
+    if (this._disposed) {
+      return;
+    }
+    this._disposed = true;
+    try {
+      await this.agent.dispose();
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Error disposing session agent: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
   }
 
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {

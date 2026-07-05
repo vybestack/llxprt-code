@@ -45,7 +45,7 @@ type ResourceRegistry = {
   findResourceByUri: (identifier: string) => DiscoveredMCPResource | undefined;
 };
 
-type ToolRegistryTool = AgentToolHandle | undefined;
+type MaybeToolHandle = AgentToolHandle | undefined;
 
 interface ResolutionState {
   pathSpecsToRead: string[];
@@ -64,7 +64,7 @@ interface ResolveCommandsParams {
   atPathCommandParts: AtCommandPart[];
   config: Config;
   resourceRegistry: ResourceRegistry;
-  globTool: ToolRegistryTool;
+  globTool: MaybeToolHandle;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
 }
@@ -85,7 +85,7 @@ interface FileReadParams {
   absoluteToRelativePathMap: Map<string, string>;
   processedQueryParts: PartUnion[];
   resourceReadDisplays: IndividualToolCallDisplay[];
-  readManyFilesTool: NonNullable<ToolRegistryTool>;
+  readManyFilesTool: NonNullable<MaybeToolHandle>;
   respectFileIgnore: ReturnType<Config['getFileFilteringOptions']>;
   config: Config;
   addItem: UseHistoryManagerReturn['addItem'];
@@ -104,13 +104,13 @@ interface ResourceReadParams {
 
 interface ResolveParams {
   config: Config;
-  globTool: ToolRegistryTool;
+  globTool: MaybeToolHandle;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
 }
 
 interface GlobSearchParams {
-  globTool: NonNullable<ToolRegistryTool>;
+  globTool: NonNullable<MaybeToolHandle>;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
 }
@@ -704,7 +704,7 @@ function buildToolArgs(
 }
 
 function buildReadSuccessDisplay(
-  readManyFilesTool: NonNullable<ToolRegistryTool>,
+  readManyFilesTool: NonNullable<MaybeToolHandle>,
   invocation: AgentToolInvocation,
   result: { returnDisplay?: unknown },
   contentLabelsForDisplay: string[],
@@ -724,7 +724,7 @@ function buildReadSuccessDisplay(
 }
 
 function buildReadErrorDisplay(
-  readManyFilesTool: NonNullable<ToolRegistryTool>,
+  readManyFilesTool: NonNullable<MaybeToolHandle>,
   invocation: AgentToolInvocation | undefined,
   contentLabelsForDisplay: string[],
   userMessageTimestamp: number,

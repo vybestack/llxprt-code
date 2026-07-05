@@ -445,7 +445,13 @@ function useSubagentCallbacks(
     () => ({
       updateToolCallOutput: toolCallUpdaters.updateToolCallOutput,
       replaceToolCalls: toolCallUpdaters.replaceToolCallsForScheduler,
-      onComplete: syncedRefs.onCompleteRef.current,
+      onComplete: (
+        ...args: [
+          schedulerId: symbol,
+          tools: CompletedToolCall[],
+          options: { isPrimary: boolean },
+        ]
+      ) => syncedRefs.onCompleteRef.current(...args),
       getPreferredEditor: () => syncedRefs.getPreferredEditorRef.current(),
       onEditorClose: () => syncedRefs.onEditorCloseRef.current(),
       onEditorOpen: () => syncedRefs.onEditorOpenRef.current(),

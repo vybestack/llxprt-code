@@ -317,7 +317,7 @@ Live tool registry + confirmation wiring: `list()`, `get(name)`, `setEnabled(nam
 `onConfirmationRequest(cb)`, `respondToConfirmation(confirmationId, decision)`,
 `onToolUpdate(cb)`, `setEditorCallbacks(cbs)`.
 
-<!-- added by #2376 -->
+Enriched tool listing and named-tool lookup (added by #2376):
 
 `list()` returns a frozen `readonly ToolInfo[]` snapshot of every registered
 tool. Each `ToolInfo` carries the enriched identity fields the CLI display
@@ -371,8 +371,6 @@ if (handle) {
   console.log(result.llmContent);
 }
 ```
-
-<!-- /added by #2376 -->
 
 ##### `agent.tools.keys` — `AgentToolKeyControl`
 
@@ -433,7 +431,7 @@ agent.mcp.details(opts?: McpDetailsOptions): Promise<McpDetailStatus>
 - **CORRECTION (#2165):** `authenticated` now means "a valid persisted OAuth token exists" (i.e. `oauthStatus === 'authenticated'`) — it is NO LONGER derived from the in-session marker; `requiresAuth` is now the real per-server value (no longer hardcoded `true`).
 - `McpDetailsOptions` = `{ includeTools?: boolean; includePrompts?: boolean; includeResources?: boolean }`.
 - `McpDetailStatus` = `{ servers: readonly McpServerDetail[]; blockedServers: readonly McpBlockedServer[] }`.
-- <!-- added by #2376 --> `McpResourceInfo` now carries an optional `description?: string` (mirrors `MCPResource.description`), projected onto each resource in `details({ includeResources: true })`.
+- (added by #2376) `McpResourceInfo` now carries an optional `description?: string` (mirrors `MCPResource.description`), projected onto each resource in `details({ includeResources: true })`.
 
 `authenticate(server)` runs the real OAuth flow against a server that requires
 auth, then refreshes that server's tool declarations so the live tool list

@@ -49,6 +49,8 @@ async function restoreActiveProvider(
   }
 }
 
+export { restoreActiveProvider };
+
 /**
  * Single creation point for the interactive CLI Agent.
  *
