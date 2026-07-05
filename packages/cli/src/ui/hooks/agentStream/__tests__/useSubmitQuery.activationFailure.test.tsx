@@ -26,7 +26,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../../../test-utils/render.js';
-import { useSubmitQuery } from '../useSubmitQuery.js';
+import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import {
   type Config,
@@ -147,48 +147,51 @@ function createDeps(
 }
 
 function renderUseSubmitQuery(deps: ActivationFailureDeps) {
-  return renderHook(() =>
-    useSubmitQuery({
-      config: createMockConfig(),
-      agentClient: createMockAgentClient(),
-      addItem: deps.addItem,
-      settings: {} as never,
-      onDebugMessage: vi.fn(),
-      onCancelSubmit: vi.fn(),
-      onAuthError: deps.onAuthError,
-      sanitizeContent: (text: string) => ({ text, blocked: false }),
-      flushPendingHistoryItem: vi.fn(),
-      pendingHistoryItemRef: {
-        current: null,
-      } as React.MutableRefObject<HistoryItemWithoutId | null>,
-      thinkingBlocksRef: { current: [] },
-      turnCancelledRef: { current: false },
-      queuedSubmissionsRef: { current: [] },
-      setPendingHistoryItem: vi.fn(),
-      setIsResponding: deps.setIsResponding,
-      setInitError: vi.fn(),
-      setThought: vi.fn(),
-      setLastAgentActivityTime: vi.fn(),
-      scheduleToolCalls: vi.fn(),
-      abortActiveStream: vi.fn(),
-      handleShellCommand: vi.fn().mockReturnValue(false),
-      handleSlashCommand: vi.fn().mockResolvedValue(false),
-      logger: null,
-      shellModeActive: false,
-      loopDetectedRef: deps.loopDetectedRef,
-      lastProfileNameRef: { current: undefined },
-      lastModelInfoRef: { current: null },
-      lastModelIdentityRef: { current: null },
-      abortControllerRef: deps.abortControllerRef,
-      runLoopRef: deps.runLoopRef,
-      submitQueryRef: { current: null },
-      isResponding: false,
-      streamingState: StreamingState.Idle,
-      recordingIntegration: {
-        flushAtTurnBoundary: vi.fn(),
-      } as unknown as RecordingIntegration,
-    }),
-  );
+  // Assemble the hook deps as an explicitly-typed UseSubmitQueryDeps constant
+  // rather than an inline call-site object literal. This keeps the props type
+  // anchored to the imported interface and avoids fresh-object-literal
+  // excess-property checks that can misfire under incremental typecheck caches.
+  const hookDeps: UseSubmitQueryDeps = {
+    config: createMockConfig(),
+    agentClient: createMockAgentClient(),
+    addItem: deps.addItem,
+    settings: {} as never,
+    onDebugMessage: vi.fn(),
+    onCancelSubmit: vi.fn(),
+    onAuthError: deps.onAuthError,
+    sanitizeContent: (text: string) => ({ text, blocked: false }),
+    flushPendingHistoryItem: vi.fn(),
+    pendingHistoryItemRef: {
+      current: null,
+    } as React.MutableRefObject<HistoryItemWithoutId | null>,
+    thinkingBlocksRef: { current: [] },
+    turnCancelledRef: { current: false },
+    queuedSubmissionsRef: { current: [] },
+    setPendingHistoryItem: vi.fn(),
+    setIsResponding: deps.setIsResponding,
+    setInitError: vi.fn(),
+    setThought: vi.fn(),
+    setLastAgentActivityTime: vi.fn(),
+    scheduleToolCalls: vi.fn(),
+    abortActiveStream: vi.fn(),
+    handleShellCommand: vi.fn().mockReturnValue(false),
+    handleSlashCommand: vi.fn().mockResolvedValue(false),
+    logger: null,
+    shellModeActive: false,
+    loopDetectedRef: deps.loopDetectedRef,
+    lastProfileNameRef: { current: undefined },
+    lastModelInfoRef: { current: null },
+    lastModelIdentityRef: { current: null },
+    abortControllerRef: deps.abortControllerRef,
+    runLoopRef: deps.runLoopRef,
+    submitQueryRef: { current: null },
+    isResponding: false,
+    streamingState: StreamingState.Idle,
+    recordingIntegration: {
+      flushAtTurnBoundary: vi.fn(),
+    } as unknown as RecordingIntegration,
+  };
+  return renderHook(() => useSubmitQuery(hookDeps));
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
