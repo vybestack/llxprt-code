@@ -49,6 +49,48 @@ const STREAM_IDLE_TIMEOUT_CONFIG_KEYS = [
   STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
 ] as const;
 
+/**
+ * Default first-response timeout in milliseconds (5 minutes).
+ *
+ * Unlike the inter-chunk idle timeout (DEFAULT-ON = 0, i.e. disabled), the
+ * first-response watchdog is DEFAULT-ON because an unbounded wait from send
+ * until the FIRST stream event is never legitimate — it is the exact
+ * "Responding" hang seen in issue #2379 when a provider activation never
+ * settles. 5 minutes is generous enough that slow reasoning-model activation
+ * never false-trips, yet bounded enough that a truly-hung activation surfaces
+ * an error instead of hanging the UI forever.
+ *
+ * A value of 0 (or <=0) explicitly disables this watchdog.
+ */
+export const DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = 300_000;
+
+/**
+ * Environment variable name for first-response timeout override.
+ * Takes precedence over config settings.
+ */
+export const LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV =
+  'LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS';
+
+/**
+ * Ephemeral setting key for the first-response timeout.
+ * Hyphenated canonical key (mirrors stream-idle-timeout-ms convention);
+ * takes priority over the camelCase alias.
+ */
+export const STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY =
+  'stream-first-response-timeout-ms';
+
+/**
+ * CamelCase alias for the first-response timeout setting key, surfaced via
+ * settings.json through the CLI schema (config-schema.ts).
+ */
+export const STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY =
+  'streamFirstResponseTimeoutMs';
+
+const STREAM_FIRST_RESPONSE_CONFIG_KEYS = [
+  STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
+  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+] as const;
+
 function parseTimeoutConfigValue(value: unknown): number {
   if (typeof value === 'number') {
     return value;
@@ -74,6 +116,38 @@ function normalizeTimeoutConfigValue(value: unknown): number | undefined {
 }
 
 /**
+ * Resolves an effective timeout by checking, in priority order:
+ * 1. A process.env override (if set and valid)
+ * 2. Each config ephemeral setting key in order (hyphenated canonical first)
+ * 3. The supplied fallback default
+ *
+ * Values <= 0 are normalized to 0 (disabled sentinel).
+ * Invalid/empty string values fall through to the next priority level.
+ */
+function resolveTimeout(
+  envName: string,
+  configKeys: readonly string[],
+  fallbackDefault: number,
+  config?: { getEphemeralSetting?: (key: string) => unknown },
+): number {
+  const envValue = normalizeTimeoutConfigValue(process.env[envName]);
+  if (envValue !== undefined) {
+    return envValue;
+  }
+
+  for (const settingKey of configKeys) {
+    const configValue = normalizeTimeoutConfigValue(
+      config?.getEphemeralSetting?.(settingKey),
+    );
+    if (configValue !== undefined) {
+      return configValue;
+    }
+  }
+
+  return fallbackDefault;
+}
+
+/**
  * Resolves the effective stream idle timeout value.
  *
  * Priority order:
@@ -95,25 +169,44 @@ function normalizeTimeoutConfigValue(value: unknown): number | undefined {
 export function resolveStreamIdleTimeoutMs(config?: {
   getEphemeralSetting?: (key: string) => unknown;
 }): number {
-  // Check environment variable first (highest priority)
-  const envValue = normalizeTimeoutConfigValue(
-    process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV],
+  return resolveTimeout(
+    LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
+    STREAM_IDLE_TIMEOUT_CONFIG_KEYS,
+    DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+    config,
   );
-  if (envValue !== undefined) {
-    return envValue;
-  }
+}
 
-  // Check config ephemeral settings: hyphenated first (canonical), then camelCase alias
-  for (const settingKey of STREAM_IDLE_TIMEOUT_CONFIG_KEYS) {
-    const configValue = normalizeTimeoutConfigValue(
-      config?.getEphemeralSetting?.(settingKey),
-    );
-    if (configValue !== undefined) {
-      return configValue;
-    }
-  }
-
-  return DEFAULT_STREAM_IDLE_TIMEOUT_MS;
+/**
+ * Resolves the effective stream first-response timeout value.
+ *
+ * This is the time-to-first-response watchdog: it bounds the ENTIRE window
+ * from sending the request until the FIRST stream event is produced
+ * (activation + connect + first token). An infinite wait here is never
+ * legitimate — it is the exact "Responding" hang in issue #2379 — so this
+ * watchdog is DEFAULT-ON (300000ms), unlike the inter-chunk idle timeout.
+ *
+ * Priority order (same semantics as resolveStreamIdleTimeoutMs):
+ * 1. Environment variable LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS
+ * 2. Config ephemeral setting 'stream-first-response-timeout-ms' (hyphenated)
+ * 3. Config ephemeral setting 'streamFirstResponseTimeoutMs' (camelCase alias)
+ * 4. DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS (300000 — enabled)
+ *
+ * Values <= 0 disable the watchdog (return 0).
+ * Invalid/empty string values fall back to the next priority level.
+ *
+ * @param config - Optional Config instance to read ephemeral setting from
+ * @returns Resolved timeout in ms, or 0 if watchdog should be disabled
+ */
+export function resolveStreamFirstResponseTimeoutMs(config?: {
+  getEphemeralSetting?: (key: string) => unknown;
+}): number {
+  return resolveTimeout(
+    LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
+    STREAM_FIRST_RESPONSE_CONFIG_KEYS,
+    DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
+    config,
+  );
 }
 
 export interface NextStreamEventWithIdleTimeoutOptions<T> {

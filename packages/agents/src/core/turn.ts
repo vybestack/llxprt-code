@@ -55,8 +55,10 @@ import { parseThought } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js'
 import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
+  resolveStreamFirstResponseTimeoutMs,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import {
   DEFAULT_AGENT_ID,
   AgentEventType,
@@ -433,12 +435,19 @@ export class Turn {
     signal: AbortSignal,
     effectiveTimeoutMs: number,
     idleFlag: { timedOut: boolean },
+    firstResult?: IteratorResult<StreamEvent>,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     let cumulativeOutcome = this.createEmptyResponseOutcome();
+    let pendingResult: IteratorResult<StreamEvent> | undefined = firstResult;
     for (;;) {
       // Use watchdog if timeout > 0, otherwise call iterator.next() directly
       let result: IteratorResult<StreamEvent>;
-      if (effectiveTimeoutMs > 0) {
+      if (pendingResult !== undefined) {
+        // First event was already fetched (and bounded by the first-response
+        // watchdog in run()); consume it directly, then clear the pending slot.
+        result = pendingResult;
+        pendingResult = undefined;
+      } else if (effectiveTimeoutMs > 0) {
         result = await nextStreamEventWithIdleTimeout({
           iterator: streamIterator,
           timeoutMs: effectiveTimeoutMs,
@@ -656,18 +665,24 @@ export class Turn {
       const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
         this.chat.getConfig(),
       );
+      const firstResponseTimeoutMs = resolveStreamFirstResponseTimeoutMs(
+        this.chat.getConfig(),
+      );
 
       try {
-        const responseStream = await this.chat.sendMessageStream(
-          {
-            message: req,
-            config: {
-              abortSignal: timeoutSignal,
-            },
-          },
-          this.prompt_id,
+        // Acquire the stream AND await the FIRST event, bounding the entire
+        // window (activation + connect + first token) by the first-response
+        // watchdog. After the first event arrives the first-response timer is
+        // cancelled and inter-chunk gaps are governed solely by the existing
+        // (default-off) effectiveTimeoutMs watchdog in consumeStreamEvents.
+        const { iterator, firstResult } = await this.acquireFirstStreamEvent(
+          req,
+          timeoutSignal,
+          timeoutController,
+          firstResponseTimeoutMs,
+          idleFlag,
         );
-        streamIterator = responseStream[Symbol.asyncIterator]();
+        streamIterator = iterator;
 
         yield* this.consumeStreamEvents(
           streamIterator,
@@ -675,6 +690,7 @@ export class Turn {
           signal,
           effectiveTimeoutMs,
           idleFlag,
+          firstResult,
         );
       } finally {
         streamIterator?.return?.().catch(() => {});
@@ -684,6 +700,141 @@ export class Turn {
     } catch (e) {
       yield* this.handleRunError(e, req, signal, idleFlag);
     }
+  }
+
+  /**
+   * Acquire the response stream and await its FIRST event, bounding the whole
+   * time-to-first-response window (both the sendMessageStream() acquisition and
+   * the first .next(), since the network work happens on that first .next()) by
+   * the first-response watchdog. A dedicated AbortController drives the timer
+   * and is aborted in `finally` once the first event resolves or throws, so it
+   * can never fire mid-stream. On timeout it sets idleFlag.timedOut, aborts the
+   * turn's timeoutController, and throws the canonical idle-timeout error so
+   * handleRunError yields StreamIdleTimeout; a parent-signal abort during the
+   * wait yields UserCancelled instead (guarded by `!timeoutSignal.aborted`).
+   * When disabled (<=0) the behavior is the pre-existing direct acquire-then-
+   * next with no bound. Mirrors the first-chunk-timeout pattern in
+   * loadBalancing/streamTimeout.ts and RetryOrchestrator.ts.
+   */
+  private async acquireFirstStreamEvent(
+    req: PartListUnion,
+    timeoutSignal: AbortSignal,
+    timeoutController: AbortController,
+    firstResponseTimeoutMs: number,
+    idleFlag: { timedOut: boolean },
+  ): Promise<{
+    iterator: AsyncIterator<StreamEvent>;
+    firstResult: IteratorResult<StreamEvent>;
+  }> {
+    if (firstResponseTimeoutMs <= 0) {
+      // First-response watchdog explicitly disabled: direct acquire + first next.
+      const iterator = await this.openResponseStreamIterator(
+        req,
+        timeoutSignal,
+      );
+      try {
+        const firstResult = await iterator.next();
+        return { iterator, firstResult };
+      } catch (error) {
+        // On a first-next failure the iterator has not yet been handed to
+        // run() (streamIterator is still unassigned there), so close it here to
+        // avoid leaking the provider connection before rethrowing.
+        await iterator.return?.().catch(() => {});
+        throw error;
+      }
+    }
+
+    // Dedicated timer cancelled in `finally` so it can never fire mid-stream.
+    const firstResponseTimer = new AbortController();
+    const timeoutPromise = delay(
+      firstResponseTimeoutMs,
+      firstResponseTimer.signal,
+    ).then(() => {
+      // If the parent already aborted, do NOT mask that with a timeout error:
+      // surface an AbortError so the race settles with the accurate cause.
+      // handleRunError yields UserCancelled either way, but the thrown error is
+      // then correct for any upstream diagnostics.
+      if (timeoutSignal.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      idleFlag.timedOut = true;
+      timeoutController.abort();
+      throw new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE);
+    });
+    // Aborting the timer (in `finally`, once the event wins) rejects the
+    // delay() with an AbortError. Suppress it: the timeout losing the race is
+    // expected, and an unhandled rejection could otherwise crash under strict
+    // Node --unhandled-rejections modes.
+    timeoutPromise.catch(() => {});
+
+    // Race the ENTIRE first-response window: acquisition (sendMessageStream)
+    // AND the first .next(), because in production the network work happens on
+    // the first .next(), not necessarily during acquisition. The
+    // firstEventPromise chains acquisition then first-next; whichever of it or
+    // the timeout settles first wins.
+    let acquiredIterator: AsyncIterator<StreamEvent> | undefined;
+    const firstEventPromise = (async () => {
+      const iterator = await this.openResponseStreamIterator(
+        req,
+        timeoutSignal,
+      );
+      acquiredIterator = iterator;
+      const firstResult = await iterator.next();
+      return { iterator, firstResult };
+    })();
+    // Attach a no-op rejection handler immediately (mirroring timeoutPromise
+    // above) so that if firstEventPromise rejects in the brief window before
+    // the catch block below attaches the real cleanup handler, it cannot
+    // surface as an unhandled rejection under strict Node modes. Promise.race
+    // still delivers the rejection to the caller.
+    firstEventPromise.catch(() => {});
+
+    try {
+      const result = await Promise.race([firstEventPromise, timeoutPromise]);
+      // firstEventPromise won: the caller owns and later closes this iterator.
+      return result;
+    } catch (error) {
+      // The timeout won (or acquisition/first-next threw). firstEventPromise is
+      // the loser, so its result is discarded and must be cleaned up. Attaching
+      // the cleanup HERE — only once we know firstEvent lost — makes correctness
+      // independent of microtask ordering: on the winning path above we return
+      // without ever attaching cleanup, so the returned iterator is never closed
+      // underneath the caller. On the losing path, close the iterator whether it
+      // resolves LATE (first event arrived just after the abort) or REJECTS (the
+      // aborted provider throws), and swallow the rejection to avoid an
+      // unhandled rejection under strict Node modes.
+      firstEventPromise
+        .then((late) => {
+          late.iterator.return?.().catch(() => {});
+        })
+        .catch(() => {
+          acquiredIterator?.return?.().catch(() => {});
+        });
+      throw error;
+    } finally {
+      firstResponseTimer.abort();
+    }
+  }
+
+  /**
+   * Open the provider response stream and return its async iterator. Shared by
+   * both the bounded and unbounded first-response paths so the request shape is
+   * defined in exactly one place.
+   */
+  private async openResponseStreamIterator(
+    req: PartListUnion,
+    timeoutSignal: AbortSignal,
+  ): Promise<AsyncIterator<StreamEvent>> {
+    const responseStream = await this.chat.sendMessageStream(
+      {
+        message: req,
+        config: {
+          abortSignal: timeoutSignal,
+        },
+      },
+      this.prompt_id,
+    );
+    return responseStream[Symbol.asyncIterator]();
   }
 
   private handlePendingFunctionCall(

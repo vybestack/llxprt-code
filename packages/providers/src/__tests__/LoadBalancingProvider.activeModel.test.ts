@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { IProvider } from '../IProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -14,26 +13,7 @@ import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-
-function makeMockProvider(name: string): IProvider {
-  return {
-    name,
-    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-      yield { role: 'model', parts: [{ text: `${name} response` }] };
-    },
-    getModels: async () => [],
-    getDefaultModel: () => 'model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
-  } as unknown as IProvider;
-}
-
-async function drain(iterator: AsyncIterableIterator<IContent>): Promise<void> {
-  for await (const _chunk of iterator) {
-    // consume
-  }
-}
+import { makeMockProvider, drain } from './loadBalancerTestHelpers.js';
 
 describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
   let settingsService: SettingsService;
