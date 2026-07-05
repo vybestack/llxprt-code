@@ -20,10 +20,12 @@
 
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../config-types.js';
 import type {
+  AgentDisplayCallbacks,
   AgentToolControl,
   AgentToolKeyControl,
   ToolDecision,
@@ -31,9 +33,14 @@ import type {
   Unsubscribe,
 } from '../agent.js';
 import type { ToolConfirmation, ToolUpdate } from '../event-types.js';
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { buildToolInfos } from '../agentBootstrap.js';
+import type { StableDisplayCallbacksHolder } from '../agentBootstrap.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ToolKeysControl } from './toolKeysControl.js';
 import type { ToolKeysControlDeps } from './toolKeysControl.js';
+
+const logger = new DebugLogger('llxprt:agents:tool-control');
 
 /**
  * Typed error thrown by {@link ToolControl.respondToConfirmation} when the
@@ -67,6 +74,16 @@ export interface ToolControlDeps {
    * `setEditorCallbacks` is observable by the next turn's scheduler.
    */
   readonly editorCallbacksHolder: { editorCallbacks: EditorCallbacks };
+  /**
+   * The mutable display-callbacks holder shared with the scheduler factory so
+   * `setDisplayCallbacks` is observable by the CURRENT loop's turn (and
+   * survives loop rebuilds via the stable forwarding object).
+   */
+  readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
+  /**
+   * Resolves the live AgentClient (for recordCompletedToolCalls). Never cached.
+   */
+  readonly resolveClient: () => AgentClientContract;
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
   /** The deps bundle for the constructed ToolKeysControl. */
   readonly keysDeps: ToolKeysControlDeps;
@@ -199,6 +216,41 @@ export class ToolControl implements AgentToolControl {
    */
   setEditorCallbacks(cbs: EditorCallbacks): void {
     this.deps.editorCallbacksHolder.editorCallbacks = cbs;
+  }
+
+  /**
+   * Registers display callbacks (tool updates, output, completion) on the
+   * shared mutable holder. The stable forwarding DisplayCallbacks object the
+   * loop holds reads the LATEST values at call time, so registration is
+   * observable by the CURRENT loop's turn (and survives loop rebuilds).
+   * REPLACES previously registered display callbacks (no merge).
+   */
+  setDisplayCallbacks(cbs: AgentDisplayCallbacks): void {
+    this.deps.displayCallbacksHolder.onToolCallsUpdate = cbs.onToolCallsUpdate;
+    this.deps.displayCallbacksHolder.outputUpdateHandler =
+      cbs.outputUpdateHandler;
+    this.deps.displayCallbacksHolder.onAllToolCallsComplete =
+      cbs.onAllToolCallsComplete;
+  }
+
+  /**
+   * Records completed tool calls into chat history (best-effort, mirroring the
+   * AgenticLoop's own recordCompletedToolCalls semantics). Used by UI clients
+   * that schedule tools outside the loop but still want the results persisted.
+   * History persistence is best-effort: a failure is swallowed.
+   */
+  recordCompletedToolCalls(completed: readonly CompletedToolCall[]): void {
+    try {
+      const client = this.deps.resolveClient();
+      const model =
+        client.getCurrentSequenceModel() ?? this.deps.config.getModel();
+      client.getChat().recordCompletedToolCalls(model, [...completed]);
+    } catch (error) {
+      // History persistence is best-effort.
+      logger.debug(
+        `recordCompletedToolCalls best-effort persistence failed: ${error}`,
+      );
+    }
   }
 
   // ─── Stream-tap notification (called by AgentImpl.stream) ──────────────────

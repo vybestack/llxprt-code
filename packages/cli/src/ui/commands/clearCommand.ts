@@ -5,7 +5,6 @@
  */
 
 import {
-  type AgentClientContract,
   uiTelemetryService,
   triggerSessionEndHook,
   triggerSessionStartHook,
@@ -14,12 +13,7 @@ import {
   type Config,
   type SessionStartHookOutput,
 } from '@vybestack/llxprt-code-core';
-import {
-  CommandKind,
-  type SlashCommand,
-  type CommandContext,
-} from './types.js';
-import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';
+import { CommandKind, type SlashCommand } from './types.js';
 
 /**
  * Helper to trigger session end hook with fail-open behavior.
@@ -52,29 +46,15 @@ async function triggerSessionStartHookSafe(
   }
 }
 
-function resolveForegroundAgentClient(
-  context: CommandContext,
-): AgentClientContract | null {
-  if (context.services.config) {
-    return context.services.config.getAgentClient();
-  }
-
-  try {
-    return getCliRuntimeServices().config.getAgentClient();
-  } catch {
-    return null;
-  }
-}
-
 export const clearCommand: SlashCommand = {
   name: 'clear',
   description: 'clear the screen and conversation history',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (context, _args) => {
-    const agentClient = resolveForegroundAgentClient(context);
+    const agent = context.services.agent;
 
-    if (agentClient) {
+    if (agent) {
       context.ui.setDebugMessage('Clearing terminal and resetting chat.');
 
       // Trigger SessionEnd hook before clearing (fail-open)
@@ -83,7 +63,7 @@ export const clearCommand: SlashCommand = {
         SessionEndReason.Clear,
       );
 
-      await agentClient.resetChat();
+      await agent.resetChat();
 
       // Trigger SessionStart hook after clearing (fail-open)
       const sessionStartOutput = await triggerSessionStartHookSafe(

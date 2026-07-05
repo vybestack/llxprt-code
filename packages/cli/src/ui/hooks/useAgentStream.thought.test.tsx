@@ -12,6 +12,7 @@ import {
   mockSendMessageStream,
   mockStartChat,
   mockParseAndFormatApiError,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -319,7 +320,7 @@ describe('useAgentStream', () => {
 
       const { result, rerender } = renderHook(() =>
         useAgentStream(
-          mockConfig.getAgentClient(),
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,
@@ -405,7 +406,7 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          mockConfig.getAgentClient(),
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,

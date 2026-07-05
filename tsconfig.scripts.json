@@ -27,6 +27,7 @@
     "scripts/generate-settings-doc.ts",
     "scripts/generate-settings-schema.ts",
     "scripts/generate_prompt_manifest.ts",
+    "scripts/genai-import-inventory.ts",
     "scripts/get-release-version.ts",
     "scripts/prepare-package.ts",
     "scripts/run-lint.ts",

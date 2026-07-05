@@ -9,11 +9,11 @@ import {
   type Config,
   type CompletedToolCall,
   type EditorType,
-  type AgentClientContract,
   type MessageBus,
   type ToolCallRequestInfo,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   MessageType,
   StreamingState,
@@ -77,7 +77,7 @@ export function useToolSchedulerSetup(
   onEditorOpen: () => void,
   runtimeMessageBus: MessageBus | undefined,
   addItem: UseHistoryManagerReturn['addItem'],
-  agentClient: AgentClientContract,
+  agent: Agent,
 ) {
   const toolSchedulerResult = useReactToolScheduler(
     async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
@@ -86,8 +86,7 @@ export function useToolSchedulerSetup(
         processPrimaryCompletion(
           completedToolCallsFromScheduler,
           addItem,
-          agentClient,
-          config,
+          agent,
           toolSchedulerResult[2],
         );
         return;
@@ -112,8 +111,7 @@ export function useToolSchedulerSetup(
 function processPrimaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
   addItem: UseHistoryManagerReturn['addItem'],
-  agentClient: AgentClientContract,
-  config: Config,
+  agent: Agent,
   markToolsAsDisplayCleared: (callIds: string[]) => void,
 ): void {
   addItem(
@@ -121,21 +119,16 @@ function processPrimaryCompletion(
     Date.now(),
   );
   try {
-    const currentModel =
-      agentClient.getCurrentSequenceModel() ?? config.getModel();
-    agentClient
-      .getChat()
-      .recordCompletedToolCalls(
-        currentModel,
-        completedToolCallsFromScheduler as CompletedToolCall[],
-      );
+    agent.tools.recordCompletedToolCalls(
+      completedToolCallsFromScheduler as CompletedToolCall[],
+    );
   } catch (error) {
     debugLogger.error(
       `Error recording completed tool call information: ${error}`,
     );
   }
   // Mark external (subagent) tools as cleared from display. Continuation is
-  // owned by the AgenticLoop; this is display-only.
+  // owned by the Agent/loop; this is display-only.
   const { externalTools } = classifyCompletedTools(
     completedToolCallsFromScheduler,
   );
@@ -165,7 +158,7 @@ export function useShellCommandSetup({
   setIsResponding,
   onDebugMessage,
   config,
-  agentClient,
+  agent,
   setShellInputFocused,
   terminalWidth,
   terminalHeight,
@@ -178,7 +171,7 @@ export function useShellCommandSetup({
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>;
   onDebugMessage: (message: string) => void;
   config: Config;
-  agentClient: AgentClientContract;
+  agent: Agent;
   setShellInputFocused: (value: boolean) => void;
   terminalWidth?: number;
   terminalHeight?: number;
@@ -198,7 +191,7 @@ export function useShellCommandSetup({
     onExec,
     onDebugMessage,
     config,
-    agentClient,
+    agent,
     setShellInputFocused,
     terminalWidth,
     terminalHeight,

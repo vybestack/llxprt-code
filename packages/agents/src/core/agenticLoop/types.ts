@@ -83,6 +83,17 @@ export interface DisplayCallbacks {
   onToolCallsUpdate?: ToolCallsUpdateHandler;
   /** Forwarded after the loop records its own tool_output event (string chunks only). */
   outputUpdateHandler?: OutputUpdateHandler;
+  /**
+   * Forwarded once per turn with the same rich CompletedToolCall[] batch the
+   * loop emits as its tools_complete event, AFTER the loop records the
+   * completed calls into chat history and BEFORE the tools_complete event is
+   * yielded. Supports async callbacks; the loop does NOT await the returned
+   * promise (it attaches a rejection handler so async failures are logged and
+   * swallowed, never breaking the loop).
+   */
+  onAllToolCallsComplete?: (
+    completed: CompletedToolCall[],
+  ) => void | Promise<void>;
   /** Preferred editor for ModifyWithEditor flows; `undefined` when the caller has none. */
   getPreferredEditor?: () => EditorType | undefined;
   /** Invoked when an editor is opened during a ModifyWithEditor flow. */

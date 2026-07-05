@@ -20,6 +20,11 @@ import type {
   ToolConfirmationOutcome,
   ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-tools';
+import type {
+  CompletedToolCall,
+  OutputUpdateHandler,
+  ToolCallsUpdateHandler,
+} from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { PolicyDecision } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
 import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
@@ -316,6 +321,25 @@ export interface AgentToolKeyControl {
   getKeyFile(toolName: string): Promise<string | null>;
 }
 
+/**
+ * Post-construction display callbacks a UI client attaches to a constructed
+ * Agent via {@link AgentToolControl.setDisplayCallbacks}. These flow through to
+ * the AgenticLoop's scheduler via a stable forwarding object, so registration
+ * after construction is observable by the CURRENT loop's turn (and survives
+ * loop rebuilds). Each field mirrors the corresponding loop DisplayCallbacks
+ * signature.
+ *
+ * `setDisplayCallbacks` REPLACES previously registered display callbacks
+ * (merge semantics are not supported).
+ */
+export interface AgentDisplayCallbacks {
+  readonly onToolCallsUpdate?: ToolCallsUpdateHandler;
+  readonly outputUpdateHandler?: OutputUpdateHandler;
+  readonly onAllToolCallsComplete?: (
+    completed: CompletedToolCall[],
+  ) => void | Promise<void>;
+}
+
 export interface AgentToolControl {
   list(): readonly ToolInfo[];
   setEnabled(names: readonly string[]): Promise<void>;
@@ -328,6 +352,19 @@ export interface AgentToolControl {
   ): void;
   onToolUpdate(cb: (u: ToolUpdate) => void): Unsubscribe;
   setEditorCallbacks(cbs: EditorCallbacks): void;
+  /**
+   * Registers display callbacks (tool updates, output, completion) on the
+   * shared mutable holder so the CURRENT loop's turn observes them. Replaces
+   * previously registered display callbacks.
+   */
+  setDisplayCallbacks(cbs: AgentDisplayCallbacks): void;
+  /**
+   * Records completed tool calls into chat history (best-effort, mirroring the
+   * loop's own recordCompletedToolCalls semantics). Used by UI clients that
+   * schedule tools outside the loop (e.g. slash-command flows) but still want
+   * the results persisted into history.
+   */
+  recordCompletedToolCalls(completed: readonly CompletedToolCall[]): void;
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
   readonly keys: AgentToolKeyControl;
 }

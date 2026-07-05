@@ -27,6 +27,7 @@ import { describe, it, expect } from 'vitest';
 import {
   createRebuildLoopProbe,
   makeClient,
+  createInteractiveConfig,
 } from './helpers/rebuildLoopProbe.js';
 
 describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requirement:REQ-007', () => {
@@ -166,5 +167,53 @@ describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requ
     // a second loop is constructed regardless; no throw from the empty path
     expect(probe.constructions).toHaveLength(2);
     expect(probe.holder.current).toBe(secondLoop);
+  });
+
+  it('threads interactiveMode from config.isInteractive() into the constructed loop (true) @requirement:REQ-007', () => {
+    const probe = createRebuildLoopProbe();
+    probe.setClient(makeClient('interactive'));
+
+    probe.rebuild({
+      config: createInteractiveConfig(true),
+    });
+
+    expect(probe.constructions).toHaveLength(1);
+    expect(probe.constructions[0].options.interactiveMode).toBe(true);
+  });
+
+  it('threads interactiveMode from config.isInteractive() into the constructed loop (false when non-interactive) @requirement:REQ-007', () => {
+    const probe = createRebuildLoopProbe();
+    probe.setClient(makeClient('non-interactive'));
+
+    probe.rebuild({
+      config: createInteractiveConfig(false),
+    });
+
+    expect(probe.constructions).toHaveLength(1);
+    expect(probe.constructions[0].options.interactiveMode).toBe(false);
+  });
+
+  it('records the bound client in holder.boundClient on initial build @requirement:REQ-007', () => {
+    const probe = createRebuildLoopProbe();
+    const client = makeClient('initial-bound');
+    probe.setClient(client);
+
+    probe.rebuild();
+
+    expect(probe.holder.boundClient).toBe(client);
+  });
+
+  it('updates holder.boundClient to the NEW client on rebuild @requirement:REQ-007', () => {
+    const probe = createRebuildLoopProbe();
+    const first = makeClient('first-bound');
+    probe.setClient(first);
+    probe.rebuild();
+    expect(probe.holder.boundClient).toBe(first);
+
+    const second = makeClient('second-bound');
+    probe.setClient(second);
+    probe.rebuild();
+
+    expect(probe.holder.boundClient).toBe(second);
   });
 });

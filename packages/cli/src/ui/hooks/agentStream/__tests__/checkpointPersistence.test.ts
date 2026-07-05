@@ -16,11 +16,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
-import type {
-  Config,
-  AgentClientContract as AgentClient,
-  GitService,
-} from '@vybestack/llxprt-code-core';
+import type { Config, GitService } from '@vybestack/llxprt-code-core';
+import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
 import type { TrackedToolCall } from '../../useReactToolScheduler.js';
 import type { HistoryItem } from '../../../types.js';
 import {
@@ -29,6 +26,14 @@ import {
 } from '../checkpointPersistence.js';
 
 // ─── Test Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Wraps createFakeAgentFromMockClient so call sites don't repeat the
+ * `as unknown as Record<string, unknown>` cast boilerplate ~15 times.
+ */
+function makeFakeAgent(mockClient: Record<string, unknown>) {
+  return createFakeAgentFromMockClient(mockClient);
+}
 
 function makeRestorableTool(
   callId: string,
@@ -134,7 +139,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'replace', '/project/src/foo.ts'),
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      agentClient as unknown as AgentClient,
+      makeFakeAgent(agentClient),
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -165,7 +170,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'write_file', '/project/file.ts'),
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      agentClient as unknown as AgentClient,
+      makeFakeAgent(agentClient),
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -192,7 +197,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'replace', '/project/file.ts'),
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      agentClient as unknown as AgentClient,
+      makeFakeAgent(agentClient),
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -216,7 +221,7 @@ describe('createToolCheckpoint', () => {
       toolWithNoPath,
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      makeAgentClient() as unknown as AgentClient,
+      makeFakeAgent(makeAgentClient()),
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -259,7 +264,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          agentClient as unknown as AgentClient,
+          makeFakeAgent(agentClient),
           config.storage,
           onDebugMessage,
           fsOps,
@@ -284,7 +289,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeAgentClient() as unknown as AgentClient,
+          makeFakeAgent(makeAgentClient()),
           config.storage,
           vi.fn(),
           fsOps,
@@ -309,7 +314,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeAgentClient() as unknown as AgentClient,
+          makeFakeAgent(makeAgentClient()),
           config.storage,
           vi.fn(),
           fsOps,
@@ -334,7 +339,7 @@ describe('useCheckpointPersistence', () => {
           config,
           undefined, // no gitService
           mockHistory,
-          makeAgentClient() as unknown as AgentClient,
+          makeFakeAgent(makeAgentClient()),
           config.storage,
           onDebugMessage,
           fsOps,
@@ -366,7 +371,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          agentClient as unknown as AgentClient,
+          makeFakeAgent(agentClient),
           config.storage,
           onDebugMessage,
           fsOps,
@@ -396,7 +401,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeAgentClient() as unknown as AgentClient,
+          makeFakeAgent(makeAgentClient()),
           config.storage,
           onDebugMessage,
           fsOps,
@@ -432,7 +437,7 @@ describe('useCheckpointPersistence', () => {
           config,
           gitService as unknown as GitService,
           mockHistory,
-          agentClient as unknown as AgentClient,
+          makeFakeAgent(agentClient),
           config.storage,
           onDebugMessage,
           fsOps,
@@ -464,7 +469,7 @@ describe('useCheckpointPersistence', () => {
           config,
           makeGitService() as unknown as GitService,
           mockHistory,
-          makeAgentClient() as unknown as AgentClient,
+          makeFakeAgent(makeAgentClient()),
           config.storage,
           vi.fn(),
           fsOps,
@@ -492,7 +497,7 @@ describe('useCheckpointPersistence', () => {
         config,
         gitService as unknown as GitService,
         mockHistory,
-        agentClient as unknown as AgentClient,
+        makeFakeAgent(agentClient),
         config.storage,
         onDebugMessage,
         fsOps,
@@ -530,7 +535,7 @@ describe('useCheckpointPersistence', () => {
         config,
         gitService as unknown as GitService,
         mockHistory,
-        agentClient as unknown as AgentClient,
+        makeFakeAgent(agentClient),
         config.storage,
         onDebugMessage,
         fsOps,

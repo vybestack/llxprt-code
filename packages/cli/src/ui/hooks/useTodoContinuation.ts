@@ -5,12 +5,9 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type {
-  Config,
-  AgentClientContract,
-  Todo,
-} from '@vybestack/llxprt-code-core';
+import type { Config, Todo } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useTodoContext } from '../contexts/TodoContext.js';
 
 export interface ContinuationState {
@@ -113,7 +110,7 @@ function generatePrompt(todo: Todo, config: Config): string {
 }
 
 function sendContinuationPrompt(
-  agentClient: AgentClientContract,
+  agent: Agent,
   taskDescription: string,
   continuationPrompt: string,
   onDebugMessage: (message: string) => void,
@@ -140,11 +137,10 @@ function sendContinuationPrompt(
 
   void (async () => {
     try {
-      const stream = agentClient.sendMessageStream(
-        continuationPrompt,
-        abortController.signal,
+      const stream = agent.stream(continuationPrompt, {
+        signal: abortController.signal,
         promptId,
-      );
+      });
       for await (const _event of stream) {
         // Continuation prompts are submitted for side effects; the main stream
         // UI owns rendering for user-initiated turns.
@@ -178,7 +174,7 @@ function processContinuation(
   continuationState: ContinuationState,
   continuationInProgressRef: React.MutableRefObject<boolean>,
   abortControllerRef: React.MutableRefObject<AbortController | undefined>,
-  agentClient: AgentClientContract,
+  agent: Agent,
   onDebugMessage: (message: string) => void,
   setContinuationState: React.Dispatch<React.SetStateAction<ContinuationState>>,
 ): void {
@@ -210,7 +206,7 @@ function processContinuation(
 
   const continuationPrompt = generatePrompt(activeTodo, config);
   sendContinuationPrompt(
-    agentClient,
+    agent,
     activeTodo.content,
     continuationPrompt,
     onDebugMessage,
@@ -226,7 +222,7 @@ function processContinuation(
  * [REQ-001] Task Continuation Detection, [REQ-002] Continuation Prompting
  */
 export const useTodoContinuation = (
-  agentClient: AgentClientContract,
+  agent: Agent,
   config: Config,
   isResponding: boolean,
   onDebugMessage: (message: string) => void,
@@ -250,7 +246,7 @@ export const useTodoContinuation = (
         continuationState,
         continuationInProgressRef,
         abortControllerRef,
-        agentClient,
+        agent,
         onDebugMessage,
         setContinuationState,
       );
@@ -260,7 +256,7 @@ export const useTodoContinuation = (
       todoContext,
       continuationState,
       isResponding,
-      agentClient,
+      agent,
       onDebugMessage,
     ],
   );

@@ -11,6 +11,7 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -230,7 +231,7 @@ describe('useAgentStream', () => {
 
     return renderHook(() =>
       useAgentStream(
-        new MockedAgentClientClass(mockConfig),
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,
@@ -269,7 +270,7 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          new MockedAgentClientClass(mockConfig),
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,
@@ -446,7 +447,7 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          new MockedAgentClientClass(mockConfig),
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,
@@ -624,13 +625,13 @@ describe('useAgentStream', () => {
 
     const { result } = renderHook(() =>
       useAgentStream(
-        new MockedAgentClientClass(mockConfig),
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,
         mockLoadedSettings,
-        vi.fn(),
-        vi.fn(),
+        mockOnDebugMessage,
+        mockHandleSlashCommand,
         false,
         () => 'vscode' as EditorType,
         vi.fn(),

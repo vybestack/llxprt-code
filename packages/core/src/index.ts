@@ -524,6 +524,18 @@ export { sessionId } from './utils/session.js';
 // Export content interfaces
 export * from './services/history/IContent.js';
 
+// @plan PLAN-20260702-LLMTYPES.P04
+// @requirement REQ-013.1
+// Export neutral llm-types layer. The barrel re-exports IContent types
+// type-only, but also re-exports many runtime value symbols (e.g.
+// CANONICAL_FINISH_REASONS, mapGeminiFinishReason, canonicalizeToolCallId).
+// `export *` is safe here ONLY because none of those runtime names collide
+// with IContent's runtime exports today — safety depends on the absence of
+// name collisions between the two barrels, not on type-only re-exports.
+// The guard test barrelCollision.test.ts asserts the runtime export name
+// sets are disjoint.
+export * from './llm-types/index.js';
+
 // @plan:PLAN-20260603-ISSUE1584.P11
 // @requirement:REQ-SHIM-001
 // Provider implementations and provider public APIs live outside core.
@@ -539,6 +551,11 @@ export * from './adapters/IStreamAdapter.js';
 export * from './parsers/TextToolCallParser.js';
 
 // Export tool formatters
+// NOTE: the formatter package's ToolCallBlock is intentionally NOT re-exported
+// here — the canonical ToolCallBlock at this barrel is the IContent content
+// model's (see services/history/IContent.js re-export above), which the
+// formatter shape structurally matches. Import the formatter variant from
+// @vybestack/llxprt-code-tools directly if needed.
 export type {
   IToolFormatter,
   ToolFormat,
@@ -546,7 +563,6 @@ export type {
   OpenAITool,
   ResponsesTool,
   FormatterTool,
-  ToolCallBlock,
 } from '@vybestack/llxprt-code-tools';
 export { ToolFormatter } from '@vybestack/llxprt-code-tools';
 

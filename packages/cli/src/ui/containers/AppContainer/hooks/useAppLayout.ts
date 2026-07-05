@@ -28,6 +28,7 @@ import type { AppInputResult } from './useAppInput.js';
 export interface AppLayoutParams {
   // From bootstrap
   config: AppBootstrapResult['config'];
+  agent: AppBootstrapResult['agent'];
   settings: AppBootstrapResult['settings'];
   todoContinuationRef: AppBootstrapResult['todoContinuationRef'];
   hadToolCallsRef: AppBootstrapResult['hadToolCallsRef'];
@@ -172,6 +173,7 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
 function useLayoutMeasure(p: AppLayoutParams) {
   const {
     config,
+    agent,
     todoContinuationRef,
     hadToolCallsRef,
     consoleMessages,
@@ -206,6 +208,7 @@ function useLayoutMeasure(p: AppLayoutParams) {
   useFlickerDetector(rootUiRef, terminalHeight, constrainHeight);
   useTodoContinuationFlow({
     config,
+    agent,
     streamingState,
     history,
     pendingHistoryItems,

@@ -59,7 +59,6 @@ import type {
 import type { AgentEvent } from './event-types.js';
 import { mapLoopStream } from './eventAdapter.js';
 import { ToolControl } from './control/toolControl.js';
-import type { ToolControlDeps } from './control/toolControl.js';
 import { McpControl } from './control/mcpControl.js';
 import type { McpControlDeps } from './control/mcpControl.js';
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
@@ -78,8 +77,8 @@ import type { SessionControlDeps } from './control/sessionControl.js';
 import { ProfilesControl } from './control/profilesControl.js';
 import { buildNewControls } from './control/newControls.js';
 import type { NewControls } from './control/newControls.js';
-import type { LoopHolder } from './loop/rebuildLoop.js';
-import type { RebuildLoopDeps } from './loop/rebuildLoop.js';
+import type { LoopHolder, RebuildLoopDeps } from './loop/rebuildLoop.js';
+import { resolveLoopOrError } from './loop/rebuildLoop.js';
 import type {
   ApprovalHandler,
   DisplayCallbacks,
@@ -92,6 +91,7 @@ import {
   buildToolInfos,
   toPartListUnion,
   type OwnershipRecord,
+  type StableDisplayCallbacksHolder,
 } from './agentBootstrap.js';
 import type { EditorCallbacks } from './config-types.js';
 import type { AgentAuth } from './config-types.js';
@@ -140,12 +140,12 @@ export interface AgentDeps {
    * @plan:PLAN-20260617-COREAPI.P16
    */
   readonly approvalHandler?: ApprovalHandler;
-  /**
-   * The displayCallbacks createAgent built (deriveDisplayCallbacks).
-   * Threaded through so every P16 client-rebinding rebuild reuses them.
-   * @plan:PLAN-20260617-COREAPI.P16
-   */
-  readonly displayCallbacks?: DisplayCallbacks;
+  /** Stable forwarding DisplayCallbacks; reads live from the holders. @plan:PLAN-20260617-COREAPI.P16 */
+  readonly displayCallbacks: DisplayCallbacks;
+  /** Shared editor-callbacks holder, threaded for ToolControl + forwarding object. */
+  readonly editorCallbacksHolder: { editorCallbacks: EditorCallbacks };
+  /** Shared display-callbacks holder, threaded for ToolControl + forwarding object. */
+  readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
   readonly onOAuthPrompt?: unknown;
   readonly editorCallbacks?: EditorCallbacks;
   /**
@@ -264,15 +264,11 @@ export class AgentImpl implements Agent {
    */
   private readonly authState: AgentAuthState;
 
-  /**
-   * Mutable editor-callbacks holder shared between ToolControl and the
-   * scheduler factory. `agent.tools.setEditorCallbacks` writes here; the
-   * rebuild-loop path reads it so the next turn's scheduler observes the
-   * update (T3c reads getPreferredEditor()==='test-editor').
-   * @plan:PLAN-20260617-COREAPI.P17
-   * @requirement:REQ-006
-   */
+  /** Mutable editor-callbacks holder shared with ToolControl + forwarding object. */
   private readonly editorCallbacksHolder: { editorCallbacks: EditorCallbacks };
+
+  /** Mutable display-callbacks holder shared with ToolControl + stable forwarding object. */
+  private readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
 
   constructor(private readonly deps: AgentDeps) {
     this.ownership = deps.ownership;
@@ -297,20 +293,17 @@ export class AgentImpl implements Agent {
     // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
     this.authState = createAgentAuthState();
     this.seedAuthState(rs.provider);
-    // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
-    // Shared mutable editor-callbacks holder seeded from createAgent's
-    // editorCallbacks; ToolControl writes and the scheduler factory reads.
-    this.editorCallbacksHolder = {
-      editorCallbacks: deps.editorCallbacks ?? {},
-    };
-    const toolControlDeps: ToolControlDeps = {
+    // Shared mutable holders threaded from finalizeAgent.
+    this.editorCallbacksHolder = deps.editorCallbacksHolder;
+    this.displayCallbacksHolder = deps.displayCallbacksHolder;
+    this.tools = new ToolControl({
       messageBus: deps.messageBus,
       config: deps.config,
       editorCallbacksHolder: this.editorCallbacksHolder,
-      // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+      displayCallbacksHolder: this.displayCallbacksHolder,
+      resolveClient: () => this.deps.resolveClient(),
       keysDeps: { getStorage: () => getToolKeyStorage() },
-    };
-    this.tools = new ToolControl(toolControlDeps);
+    });
     this.profiles = new ProfilesControl({
       getState: () => this.providerState,
       applySwitch: (provider, model) =>
@@ -537,18 +530,12 @@ export class AgentImpl implements Agent {
   private async awaitMcpDiscoveryGate(
     opts?: TurnOptions,
   ): Promise<AgentError | undefined> {
-    if (opts?.mcpDiscovery === 'skip') {
-      return undefined;
-    }
+    if (opts?.mcpDiscovery === 'skip') return undefined;
     const manager = this.deps.config.getMcpClientManager();
-    if (manager === undefined) {
-      return undefined;
-    }
+    if (manager === undefined) return undefined;
     await manager.whenDiscoverySettled();
     const failures = manager.getDiscoveryFailures();
-    if (failures.size === 0) {
-      return undefined;
-    }
+    if (failures.size === 0) return undefined;
     const detail = Array.from(failures.entries())
       .map(([server, message]) => `${server}: ${message}`)
       .join('; ');
@@ -575,9 +562,6 @@ export class AgentImpl implements Agent {
     // by exactly ONE done{reason:'error'} and stops — no model turn runs.
     const gateError = await this.awaitMcpDiscoveryGate(opts);
     if (gateError !== undefined) {
-      // StructuredError has no `code` field, so the typed AgentError code
-      // (e.g. 'mcp_discovery_failed') is prefixed onto the message to keep it
-      // programmatically distinguishable without widening the public type.
       yield {
         type: 'error',
         error: { message: `[${gateError.code}] ${gateError.message}` },
@@ -585,10 +569,17 @@ export class AgentImpl implements Agent {
       yield { type: 'done', reason: 'error' };
       return;
     }
-    const loop = this.deps.loopHolder.current;
-    if (loop === undefined) {
-      throw new Error('Agent loop is not initialized');
+    const init = resolveLoopOrError(
+      this.deps.loopHolder,
+      this.deps.resolveClient,
+      () => this.rebuild(),
+    );
+    if (init.error !== undefined) {
+      yield { type: 'error', error: init.error };
+      yield { type: 'done', reason: 'error' };
+      return;
     }
+    const loop = init.loop;
     const message = toPartListUnion(input);
     const effectiveSignal =
       opts?.signal ??
@@ -1243,30 +1234,18 @@ export class AgentImpl implements Agent {
       resolveClient: this.deps.resolveClient,
       config: this.deps.config,
       messageBus: this.deps.messageBus,
-      ...(this.deps.approvalHandler !== undefined
-        ? { approvalHandler: this.deps.approvalHandler }
-        : {}),
-      ...(this.deps.displayCallbacks !== undefined
-        ? { displayCallbacks: this.deps.displayCallbacks }
-        : {}),
+      approvalHandler: this.deps.approvalHandler,
+      displayCallbacks: this.deps.displayCallbacks,
     });
   }
 
-  /**
-   * Computes the auth status for an explicit provider.
-   * @plan:PLAN-20260617-COREAPI.P18
-   * @requirement:REQ-008
-   */
+  /** Computes the auth status for an explicit provider. @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008 */
   private computeAuthStatusForProvider(provider: string): AuthStatus {
     const winner = this.computeWinner(provider);
     return winner !== 'none' ? 'authenticated' : 'unauthenticated';
   }
 
-  /**
-   * Computes the REQ-008 precedence winner for a provider.
-   * @plan:PLAN-20260617-COREAPI.P18
-   * @requirement:REQ-008
-   */
+  /** Computes the REQ-008 precedence winner. @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008 */
   private computeWinner(provider: string): AuthWinner {
     return computeAuthWinner(
       this.authState,
