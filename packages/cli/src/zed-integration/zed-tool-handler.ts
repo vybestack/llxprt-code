@@ -4,359 +4,375 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import {
-  type Config,
-  type ToolResult,
-  type AnyToolInvocation,
-  type ContextAwareTool,
-  type ToolCallConfirmationDetails,
-  type ToolConfirmationPayload,
-  logToolCall,
-  convertToFunctionResponse,
   ToolConfirmationOutcome,
-  DEFAULT_AGENT_ID,
-} from '@vybestack/llxprt-code-core';
-import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
+  type ToolConfirmationPayload,
+} from '@vybestack/llxprt-code-tools';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { FunctionCall, Part } from '@google/genai';
 import { z } from 'zod';
-import { toToolCallContent, toPermissionOptions } from './zed-helpers.js';
-import { extractToolResultText } from './zed-content-utils.js';
+import { toPermissionOptions } from './zed-helpers.js';
+import type {
+  AgentToolCall,
+  AgentToolResult,
+  ToolUpdate,
+} from '@vybestack/llxprt-code-agents';
 
-export type ToolRunResult = {
-  parts: Part[];
-  message?: string | null;
+type SendUpdateFn = (update: acp.SessionUpdate) => Promise<void>;
+type Dict = Readonly<Record<string, unknown>>;
+
+export async function emitToolCallStart(
+  call: AgentToolCall,
+  sendUpdate: SendUpdateFn,
+): Promise<void> {
+  await sendUpdate({
+    sessionUpdate: 'tool_call',
+    toolCallId: call.id,
+    status: 'in_progress',
+    title: call.name,
+    content: [],
+    locations: buildToolLocations(call.args),
+    kind: inferToolKind(call.name),
+  });
+}
+
+export async function emitToolStatus(
+  update: ToolUpdate,
+  sendUpdate: SendUpdateFn,
+): Promise<void> {
+  const status = mapToolUpdateStatus(update.status);
+  if (status === null) {
+    return;
+  }
+  const text = stringifyToolOutput(update.output);
+  await sendUpdate({
+    sessionUpdate: 'tool_call_update',
+    toolCallId: update.id,
+    status,
+    content: text ? textContent(text) : [],
+  });
+}
+
+export async function emitToolResult(
+  result: AgentToolResult,
+  sendUpdate: SendUpdateFn,
+): Promise<void> {
+  const isError = result.isError === true;
+  const content = isError
+    ? buildErrorContent(result)
+    : buildSuccessContent(result);
+  await sendUpdate({
+    sessionUpdate: 'tool_call_update',
+    toolCallId: result.id,
+    status: isError ? 'failed' : 'completed',
+    content,
+  });
+}
+
+function buildErrorContent(result: AgentToolResult): acp.ToolCallContent[] {
+  return textContent(stringifyToolOutput(result.output));
+}
+
+export type PermissionRoundTripResult = {
+  readonly decision: ToolConfirmationOutcome;
+  readonly payload?: ToolConfirmationPayload;
+  readonly requiresUserConfirmation?: boolean;
 };
 
-interface SendUpdateFn {
-  (update: acp.SessionUpdate): Promise<void>;
+export async function requestToolConfirmation(
+  sessionId: string,
+  toolCallId: string,
+  name: string,
+  details: unknown,
+  connection: acp.AgentSideConnection,
+): Promise<PermissionRoundTripResult> {
+  const confirmationDetails = coerceConfirmationDetails(details);
+  const params: acp.RequestPermissionRequest = {
+    sessionId,
+    options:
+      confirmationDetails === null
+        ? defaultPermissionOptions()
+        : toPermissionOptions(confirmationDetails),
+    toolCall: {
+      toolCallId,
+      status: 'pending',
+      title: confirmationDetails?.title ?? name,
+      content: buildConfirmationContent(confirmationDetails),
+      locations: buildConfirmationLocations(confirmationDetails),
+      kind: inferToolKind(name),
+    },
+  };
+  return parsePermissionOutcome(await connection.requestPermission(params));
 }
 
-function isMissingConfirmationDetails(
-  value: unknown,
-): value is null | undefined {
-  return value == null;
+function buildSuccessContent(result: AgentToolResult): acp.ToolCallContent[] {
+  if (result.suppressDisplay === true) {
+    return [];
+  }
+  const display = toDisplayContent(result.display);
+  if (display !== null) {
+    return [display];
+  }
+  return textContent(stringifyToolOutput(result.output));
 }
 
-export class ZedToolHandler {
-  constructor(
-    private readonly sessionId: string,
-    private readonly config: Config,
-    private readonly connection: acp.AgentSideConnection,
-    private readonly sendUpdate: SendUpdateFn,
-  ) {}
-
-  async runTool(
-    abortSignal: AbortSignal,
-    promptId: string,
-    fc: FunctionCall,
-  ): Promise<ToolRunResult> {
-    const callId = fc.id ?? `${fc.name}-${Date.now()}`;
-    const args = fc.args ?? {};
-
-    const startTime = Date.now();
-
-    const errorResponse = this.buildErrorResponse(
-      fc,
-      callId,
-      args,
-      startTime,
-      undefined,
-      promptId,
-    );
-
-    if (!fc.name) {
-      return errorResponse(new Error('Missing function name'));
-    }
-
-    const toolRegistry = this.config.getToolRegistry();
-    const tool = toolRegistry.getTool(fc.name);
-    const toolErrorResponse = this.buildErrorResponse(
-      fc,
-      callId,
-      args,
-      startTime,
-      tool as ContextAwareTool | undefined,
-      promptId,
-    );
-
-    if (!tool) {
-      return toolErrorResponse(
-        new Error(`Tool "${fc.name}" not found in registry.`),
-      );
-    }
-
-    try {
-      if ('context' in tool) {
-        (tool as ContextAwareTool).context = {
-          sessionId: this.sessionId,
-          interactiveMode: true,
-        };
-      }
-
-      const invocation = tool.build(args);
-      const needsConfirmation = await this.requestToolPermission(
-        invocation,
-        tool as ContextAwareTool,
-        callId,
-        args,
-        abortSignal,
-      );
-
-      if (needsConfirmation.cancelled) {
-        return toolErrorResponse(
-          new Error(`Tool "${fc.name}" was canceled by the user.`),
-        );
-      }
-
-      return await this.executeToolAndBuildResult(
-        invocation,
-        fc,
-        callId,
-        args,
-        promptId,
-        startTime,
-        tool as ContextAwareTool,
-        abortSignal,
-      );
-    } catch (e) {
-      const error = e instanceof Error ? e : new Error(String(e));
-
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: callId,
-        status: 'failed',
-        content: [
-          { type: 'content', content: { type: 'text', text: error.message } },
-        ],
-      });
-
-      return toolErrorResponse(error);
-    }
-  }
-
-  private buildErrorResponse(
-    fc: FunctionCall,
-    callId: string,
-    args: Record<string, unknown>,
-    startTime: number,
-    tool: ContextAwareTool | undefined,
-    promptId: string,
-  ): (error: Error) => ToolRunResult {
-    return (error: Error): ToolRunResult => {
-      const durationMs = Date.now() - startTime;
-      logToolCall(this.config, {
-        'event.name': 'tool_call',
-        'event.timestamp': new Date().toISOString(),
-        prompt_id: promptId,
-        function_name: fc.name ?? '',
-        function_args: args,
-        duration_ms: durationMs,
-        success: false,
-        error: error.message,
-        tool_type:
-          typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
-            ? 'mcp'
-            : 'native',
-        agent_id: DEFAULT_AGENT_ID,
-      });
-
-      return {
-        parts: [
-          {
-            functionCall: {
-              id: callId,
-              name: fc.name ?? '',
-              args,
-            },
-          },
-          {
-            functionResponse: {
-              id: callId,
-              name: fc.name ?? '',
-              response: { error: error.message },
-            },
-          },
-        ],
-        message: error.message,
-      };
-    };
-  }
-
-  async requestToolPermission(
-    invocation: AnyToolInvocation,
-    tool: ContextAwareTool,
-    callId: string,
-    _args: Record<string, unknown>,
-    abortSignal: AbortSignal,
-  ): Promise<{ cancelled: boolean }> {
-    const confirmationDetails:
-      | ToolCallConfirmationDetails
-      | false
-      | null
-      | undefined = await invocation.shouldConfirmExecute(abortSignal);
-
-    if (
-      confirmationDetails === false ||
-      isMissingConfirmationDetails(confirmationDetails)
-    ) {
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call',
-        toolCallId: callId,
-        status: 'in_progress',
-        title: invocation.getDescription(),
-        content: [],
-        locations: invocation.toolLocations(),
-        kind: (tool as { kind?: string }).kind as acp.ToolKind | undefined,
-      });
-      return { cancelled: false };
-    }
-
-    return this.handleConfirmationOutcome(
-      confirmationDetails,
-      invocation,
-      tool,
-      callId,
-    );
-  }
-
-  async handleConfirmationOutcome(
-    confirmationDetails: ToolCallConfirmationDetails,
-    invocation: AnyToolInvocation,
-    tool: ContextAwareTool,
-    callId: string,
-  ): Promise<{ cancelled: boolean }> {
-    const content: acp.ToolCallContent[] = [];
-
-    if (confirmationDetails.type === 'edit') {
-      content.push({
-        type: 'diff',
-        path: confirmationDetails.fileName,
-        oldText: confirmationDetails.originalContent,
-        newText: confirmationDetails.newContent,
-      });
-    }
-
-    const params: acp.RequestPermissionRequest = {
-      sessionId: this.sessionId,
-      options: toPermissionOptions(confirmationDetails),
-      toolCall: {
-        toolCallId: callId,
-        status: 'pending',
-        title: invocation.getDescription(),
-        content,
-        locations: invocation.toolLocations(),
-        kind: (tool as { kind?: string }).kind as acp.ToolKind | undefined,
-      },
-    };
-
-    const output = await this.connection.requestPermission(params);
-    const { outcome, payload } = this.parsePermissionOutput(output);
-
-    await confirmationDetails.onConfirm(outcome, payload);
-
-    switch (outcome) {
-      case ToolConfirmationOutcome.Cancel:
-        return { cancelled: true };
-      case ToolConfirmationOutcome.SuggestEdit:
-        if (confirmationDetails.type !== 'exec' || !payload?.editedCommand) {
-          return { cancelled: true };
-        }
-        break;
-      case ToolConfirmationOutcome.ProceedOnce:
-      case ToolConfirmationOutcome.ProceedAlways:
-      case ToolConfirmationOutcome.ProceedAlwaysAndSave:
-      case ToolConfirmationOutcome.ProceedAlwaysServer:
-      case ToolConfirmationOutcome.ProceedAlwaysTool:
-      case ToolConfirmationOutcome.ModifyWithEditor:
-        break;
-      default: {
-        const resultOutcome: never = outcome;
-        throw new Error(`Unexpected: ${resultOutcome}`);
-      }
-    }
-
-    return { cancelled: false };
-  }
-
-  parsePermissionOutput(output: acp.RequestPermissionResponse): {
-    outcome: ToolConfirmationOutcome;
-    payload: ToolConfirmationPayload | undefined;
-  } {
-    let outcome: ToolConfirmationOutcome;
-    let payload: ToolConfirmationPayload | undefined;
-
-    if (output.outcome.outcome === 'cancelled') {
-      outcome = ToolConfirmationOutcome.Cancel;
-    } else {
-      outcome = z
-        .nativeEnum(ToolConfirmationOutcome)
-        .parse(output.outcome.optionId);
-      const selectedOutcome = output.outcome as {
-        payload?: { editedCommand?: string };
-      };
-      const editedCommand = selectedOutcome.payload?.editedCommand?.trim();
-      if (typeof editedCommand === 'string' && editedCommand.length > 0) {
-        payload = { editedCommand };
-      }
-    }
-
-    return { outcome, payload };
-  }
-
-  async executeToolAndBuildResult(
-    invocation: AnyToolInvocation,
-    fc: FunctionCall,
-    callId: string,
-    args: Record<string, unknown>,
-    promptId: string,
-    startTime: number,
-    tool: ContextAwareTool,
-    abortSignal: AbortSignal,
-  ): Promise<ToolRunResult> {
-    const toolResult: ToolResult = await invocation.execute(abortSignal);
-    const content = toToolCallContent(toolResult);
-
-    await this.sendUpdate({
-      sessionUpdate: 'tool_call_update',
-      toolCallId: callId,
-      status: 'completed',
-      content: content ? [content] : [],
-    });
-
-    const durationMs = Date.now() - startTime;
-    logToolCall(this.config, {
-      'event.name': 'tool_call',
-      'event.timestamp': new Date().toISOString(),
-      function_name: fc.name!,
-      function_args: args,
-      duration_ms: durationMs,
-      success: true,
-      prompt_id: promptId,
-      tool_type: tool instanceof DiscoveredMCPTool ? 'mcp' : 'native',
-      agent_id: DEFAULT_AGENT_ID,
-    });
-
-    const functionResponseParts = convertToFunctionResponse(
-      fc.name!,
-      callId,
-      toolResult.llmContent,
-      this.config,
-    );
-    const message = extractToolResultText(toolResult);
-
+function toDisplayContent(display: unknown): acp.ToolCallContent | null {
+  const diff = coerceFileDiff(display);
+  if (diff !== null) {
     return {
-      parts: [
-        {
-          functionCall: {
-            id: callId,
-            name: fc.name!,
-            args,
-          },
-        },
-        ...functionResponseParts,
-      ],
-      message,
+      type: 'diff',
+      path: diff.fileName,
+      oldText: diff.originalContent,
+      newText: diff.newContent,
     };
   }
+  const text = stringifyToolOutput(display);
+  return text ? { type: 'content', content: { type: 'text', text } } : null;
+}
+
+function coerceFileDiff(display: unknown): {
+  readonly fileName: string;
+  readonly originalContent: string | null;
+  readonly newContent: string;
+} | null {
+  const record = asRecord(display);
+  if (record === null || typeof record.fileDiff !== 'string') {
+    return null;
+  }
+  const { fileName, originalContent, newContent } = record;
+  if (typeof fileName !== 'string') {
+    return null;
+  }
+  if (typeof originalContent !== 'string' && originalContent !== null) {
+    return null;
+  }
+  if (typeof newContent !== 'string') {
+    return null;
+  }
+  return { fileName, originalContent, newContent };
+}
+
+function parsePermissionOutcome(
+  output: acp.RequestPermissionResponse,
+): PermissionRoundTripResult {
+  if (output.outcome.outcome === 'cancelled') {
+    return { decision: ToolConfirmationOutcome.Cancel };
+  }
+  const decision = z
+    .nativeEnum(ToolConfirmationOutcome)
+    .parse(output.outcome.optionId);
+  const payload = parsePermissionPayload(output.outcome);
+  const requiresUserConfirmation =
+    decision === ToolConfirmationOutcome.SuggestEdit ||
+    decision === ToolConfirmationOutcome.ModifyWithEditor;
+  return {
+    decision,
+    ...(payload === undefined ? {} : { payload }),
+    ...(requiresUserConfirmation ? { requiresUserConfirmation } : {}),
+  };
+}
+
+function parsePermissionPayload(
+  outcome: acp.RequestPermissionOutcome,
+): ToolConfirmationPayload | undefined {
+  if (outcome.outcome === 'cancelled') {
+    return undefined;
+  }
+  const source = asRecord(readOutcomePayload(outcome)) ?? {};
+  const editedCommand =
+    typeof source.editedCommand === 'string'
+      ? source.editedCommand.trim()
+      : undefined;
+  const newContent = source.newContent;
+  const payload: ToolConfirmationPayload = {};
+  if (editedCommand) {
+    payload.editedCommand = editedCommand;
+  }
+  if (typeof newContent === 'string') {
+    payload.newContent = newContent;
+  }
+  return Object.keys(payload).length === 0 ? undefined : payload;
+}
+
+function readOutcomePayload(outcome: acp.RequestPermissionOutcome): unknown {
+  return asRecord(outcome)?.payload;
+}
+
+function coerceConfirmationDetails(
+  details: unknown,
+): ToolCallConfirmationDetails | null {
+  const record = asRecord(details);
+  return typeof record?.type === 'string'
+    ? (details as ToolCallConfirmationDetails)
+    : null;
+}
+
+function buildConfirmationContent(
+  details: ToolCallConfirmationDetails | null,
+): acp.ToolCallContent[] {
+  if (details?.type !== 'edit') {
+    return [];
+  }
+  return [
+    {
+      type: 'diff',
+      path: details.fileName,
+      oldText: details.originalContent,
+      newText: details.newContent,
+    },
+  ];
+}
+
+function buildConfirmationLocations(
+  details: ToolCallConfirmationDetails | null,
+): acp.ToolCallLocation[] {
+  const record = asRecord(details);
+  const path = firstString(record, ['filePath', 'fileName']);
+  return path === undefined ? [] : [buildLocation(path)];
+}
+
+function buildToolLocations(args: Dict): acp.ToolCallLocation[] {
+  const paths = [
+    firstString(args, [
+      'absolute_path',
+      'file_path',
+      'path',
+      'dir_path',
+      'filePath',
+    ]),
+    ...readStringList(args.paths),
+  ];
+  const line = readLine(args);
+  return paths
+    .filter(isNonEmptyString)
+    .map((path) => buildLocation(path, line));
+}
+
+function firstString(
+  source: Dict | null,
+  keys: readonly string[],
+): string | undefined {
+  return keys
+    .map((key) => source?.[key])
+    .find((value): value is string => isNonEmptyString(value));
+}
+
+function readStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter(isNonEmptyString) : [];
+}
+
+function readLine(source: Dict): number | undefined {
+  const raw = source.line_number ?? source.start_line ?? source.offset;
+  const coerced =
+    typeof raw === 'string' ? Number.parseInt(raw, 10) : (raw as number);
+  return Number.isInteger(coerced) && coerced > 0 ? coerced : undefined;
+}
+
+function buildLocation(path: string, line?: number): acp.ToolCallLocation {
+  return line === undefined ? { path } : { path, line };
+}
+
+function stringifyToolOutput(output: unknown): string {
+  if (typeof output === 'string') {
+    return output;
+  }
+  const record = asRecord(output);
+  if (typeof record?.content === 'string') {
+    return record.content;
+  }
+  const error = asRecord(record?.error);
+  if (typeof error?.message === 'string') {
+    return error.message;
+  }
+  if (output === undefined || output === null) {
+    return '';
+  }
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
+}
+
+function textContent(text: string): acp.ToolCallContent[] {
+  return text ? [{ type: 'content', content: { type: 'text', text } }] : [];
+}
+
+function mapToolUpdateStatus(
+  status: ToolUpdate['status'],
+): acp.ToolCallStatus | null {
+  switch (status) {
+    case 'validating':
+    case 'scheduled':
+    case 'awaiting-approval':
+    case 'executing':
+      return 'in_progress';
+    case 'success':
+      return 'completed';
+    case 'error':
+    case 'cancelled':
+      return 'failed';
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+const TOOL_KIND_BY_NAME = new Map<string, acp.ToolKind>([
+  ...[
+    'read_file',
+    'read_line_range',
+    'ast_read_file',
+    'read_many_files',
+    'read',
+    'cat',
+    'list_directory',
+    'glob',
+    'grep',
+    'search_file_content',
+    'ast_grep',
+    'structural_analysis',
+  ].map((name) => [name, 'read'] as const),
+  ...[
+    'write_file',
+    'edit',
+    'ast_edit',
+    'apply_patch',
+    'replace',
+    'insert',
+    'insert_at_line',
+    'delete_line_range',
+    'delete_file',
+  ].map((name) => [name, 'edit'] as const),
+  ...['run_shell_command', 'execute_command', 'exec'].map(
+    (name) => [name, 'execute'] as const,
+  ),
+]);
+
+function inferToolKind(name: string): acp.ToolKind | undefined {
+  return TOOL_KIND_BY_NAME.get(name);
+}
+
+function asRecord(value: unknown): Dict | null {
+  return value !== null && typeof value === 'object' ? (value as Dict) : null;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function defaultPermissionOptions(): acp.PermissionOption[] {
+  return [
+    {
+      optionId: ToolConfirmationOutcome.ProceedOnce,
+      name: 'Allow',
+      kind: 'allow_once',
+    },
+    {
+      optionId: ToolConfirmationOutcome.Cancel,
+      name: 'Reject',
+      kind: 'reject_once',
+    },
+  ];
 }
