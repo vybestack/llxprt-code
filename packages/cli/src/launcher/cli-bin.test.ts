@@ -20,18 +20,32 @@ interface CredentialProxyHandle {
   stop: () => Promise<void>;
 }
 
+interface ProxyExitInfo {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}
+
+interface CredentialProxyStartOptions {
+  onUnexpectedExit?: (info: ProxyExitInfo) => void;
+  onProxyCreated?: (proxy: CredentialProxyHandle) => void;
+}
+
 interface RunCliBinOptions {
   exit?: ExitFn;
   spawn?: typeof spawnType;
   resolveBun?: () => string | null;
   resolveEntry?: () => string | null;
-  startCredentialProxy?: () => Promise<CredentialProxyHandle>;
+  startCredentialProxy?: (
+    options?: CredentialProxyStartOptions,
+  ) => Promise<CredentialProxyHandle>;
 }
 
 type ExitFn = (code?: number) => never;
 type RunCliBin = (options?: RunCliBinOptions) => Promise<void>;
 type CreateCredentialProxyDefault = (options?: {
   spawn?: typeof spawnType;
+  onUnexpectedExit?: (info: ProxyExitInfo) => void;
+  onProxyCreated?: (proxy: CredentialProxyHandle) => void;
 }) => Promise<CredentialProxyHandle>;
 
 interface CliBinModule {
@@ -126,10 +140,13 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     const child = createChildProcess();
     const proxyStop = vi.fn(async () => {});
     const spawnFn = vi.fn(() => child);
-    const startCredentialProxy = vi.fn(async () => ({
-      socketPath: '/tmp/llxprt-credential.sock',
-      stop: proxyStop,
-    }));
+    let receivedOnUnexpectedExit: ((info: ProxyExitInfo) => void) | undefined;
+    const startCredentialProxy = vi.fn(
+      async (proxyOptions?: CredentialProxyStartOptions) => {
+        receivedOnUnexpectedExit = proxyOptions?.onUnexpectedExit;
+        return { socketPath: '/tmp/llxprt-credential.sock', stop: proxyStop };
+      },
+    );
 
     await runCliBin({
       exit: recordingExit(exitCalls),
@@ -146,6 +163,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
       proxyStop,
       spawnFn,
       startCredentialProxy,
+      receivedOnUnexpectedExit: () => receivedOnUnexpectedExit,
     };
   }
 
@@ -224,20 +242,20 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     [['--provider', 'openai', '--keyfile', '/tmp/provider-key.txt']],
     [['--provider', 'openai', '--keyfile=/tmp/provider-key.txt']],
   ] satisfies string[][][])(
-    'skips the credential proxy when direct credential override is supplied: %j',
+    'still starts the credential proxy and forwards the socket for --key/--keyfile: %j',
     async (args) => {
       delete process.env[credentialSocketEnv];
       process.argv = ['/node', '/llxprt.cjs', ...args];
       const { child, exitCalls, spawnFn, startCredentialProxy } =
         await runLauncher();
 
-      expect(startCredentialProxy).not.toHaveBeenCalled();
+      expect(startCredentialProxy).toHaveBeenCalledTimes(1);
       expect(spawnFn).toHaveBeenCalledWith(
         '/path/to/bun',
         ['/entry.ts', ...args],
         expect.objectContaining({
-          env: expect.not.objectContaining({
-            [credentialSocketEnv]: expect.anything(),
+          env: expect.objectContaining({
+            [credentialSocketEnv]: '/tmp/llxprt-credential.sock',
           }),
         }),
       );
@@ -392,6 +410,41 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     },
   );
 
+  it('exits directly when a signal arrives before Bun starts', async () => {
+    delete process.env[credentialSocketEnv];
+    const exitCalls: number[] = [];
+    const proxyStop = vi.fn(async () => {});
+    const child = createChildProcess();
+    const spawnFn = vi.fn(() => child);
+    const startCredentialProxy = vi.fn(
+      async (proxyOptions?: CredentialProxyStartOptions) => {
+        const proxy = {
+          socketPath: '',
+          stop: proxyStop,
+        };
+        proxyOptions?.onProxyCreated?.(proxy);
+        process.nextTick(() => process.emit('SIGINT', 'SIGINT'));
+        await new Promise((resolve) => setImmediate(resolve));
+        proxy.socketPath = '/tmp/llxprt-credential.sock';
+        return proxy;
+      },
+    );
+
+    await runCliBin({
+      exit: recordingExit(exitCalls),
+      spawn: spawnFn as unknown as typeof spawnType,
+      resolveBun: () => '/path/to/bun',
+      resolveEntry: () => '/entry.ts',
+      startCredentialProxy,
+    });
+
+    expect(spawnFn).not.toHaveBeenCalled();
+    expect(proxyStop).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(exitCalls).toStrictEqual([130]);
+    });
+  });
+
   it('exits with code 1 when the Bun child closes without code or signal', async () => {
     delete process.env[credentialSocketEnv];
     const { child, exitCalls } = await runLauncher();
@@ -448,10 +501,15 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     const proxyHost = createChildProcess();
     process.env[credentialSocketEnv] = '/tmp/parent.sock';
     const spawnFn = vi.fn(() => proxyHost);
+    let createdProxy: CredentialProxyHandle | undefined;
     const proxyPromise = createCredentialProxyDefault({
       spawn: spawnFn as unknown as typeof spawnType,
+      onProxyCreated: (proxy) => {
+        createdProxy = proxy;
+      },
     });
 
+    expect(createdProxy?.socketPath).toBe('');
     proxyHost.stdout.emit('data', Buffer.from('{"socket'));
 
     proxyHost.stdout.emit(
@@ -473,6 +531,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
         }),
       }),
     );
+    expect(proxy).toBe(createdProxy);
     expect(proxy.socketPath).toBe('/tmp/llxprt-credential.sock');
 
     const stopPromise = proxy.stop();
@@ -500,6 +559,106 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
 
     expect(proxyHost.kill).not.toHaveBeenCalled();
   });
+
+  it('invokes onUnexpectedExit when the proxy host dies after startup', async () => {
+    const onUnexpectedExit = vi.fn();
+    const proxyHost = createChildProcess();
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+      onUnexpectedExit,
+    });
+
+    proxyHost.stdout.emit(
+      'data',
+      Buffer.from('{"socketPath":"/tmp/llxprt-credential.sock"}\n'),
+    );
+    await proxyPromise;
+
+    expect(onUnexpectedExit).not.toHaveBeenCalled();
+
+    proxyHost.exitCode = 1;
+    proxyHost.emit('close', 1, null);
+
+    expect(onUnexpectedExit).toHaveBeenCalledTimes(1);
+    expect(onUnexpectedExit).toHaveBeenCalledWith({ code: 1, signal: null });
+  });
+
+  it('does not invoke onUnexpectedExit when the proxy host exits during an intentional stop', async () => {
+    const onUnexpectedExit = vi.fn();
+    const proxyHost = createChildProcess();
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+      onUnexpectedExit,
+    });
+
+    proxyHost.stdout.emit(
+      'data',
+      Buffer.from('{"socketPath":"/tmp/llxprt-credential.sock"}\n'),
+    );
+    const proxy = await proxyPromise;
+
+    const stopPromise = proxy.stop();
+    proxyHost.emit('close', 0, null);
+    await stopPromise;
+
+    expect(onUnexpectedExit).not.toHaveBeenCalled();
+  });
+
+  it('kills the Bun child and exits fatally when the proxy host dies after startup', async () => {
+    delete process.env[credentialSocketEnv];
+    const { child, exitCalls, receivedOnUnexpectedExit } = await runLauncher();
+
+    const callback = receivedOnUnexpectedExit();
+    expect(callback).toBeDefined();
+    callback?.({ code: 1, signal: null });
+
+    await vi.waitFor(() => {
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(exitCalls).toStrictEqual([43]);
+    });
+  });
+
+  it('exits without spawning Bun when the proxy host dies before Bun starts', async () => {
+    delete process.env[credentialSocketEnv];
+    const exitCalls: number[] = [];
+    const child = createChildProcess();
+    const spawnFn = vi.fn(() => child);
+    const proxyStop = vi.fn(async () => {});
+    const startCredentialProxy = vi.fn(
+      async (proxyOptions?: CredentialProxyStartOptions) => {
+        const proxy = {
+          socketPath: '',
+          stop: proxyStop,
+        };
+        proxyOptions?.onProxyCreated?.(proxy);
+        await new Promise<void>((resolve) => {
+          process.nextTick(() => {
+            proxyOptions?.onUnexpectedExit?.({ code: 1, signal: null });
+            resolve();
+          });
+        });
+        proxy.socketPath = '/tmp/llxprt-credential.sock';
+        return proxy;
+      },
+    );
+
+    await runCliBin({
+      exit: recordingExit(exitCalls),
+      spawn: spawnFn as unknown as typeof spawnType,
+      resolveBun: () => '/path/to/bun',
+      resolveEntry: () => '/entry.ts',
+      startCredentialProxy,
+    });
+
+    expect(spawnFn).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(proxyStop).toHaveBeenCalledTimes(1);
+      expect(exitCalls).toStrictEqual([43]);
+    });
+  });
+
   it('escalates proxy host shutdown to SIGKILL when close never arrives', async () => {
     vi.useFakeTimers();
     try {
@@ -591,4 +750,32 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     const bin = loadCliBin();
     expect(typeof bin.runCliBin).toBe('function');
   });
+
+  it('real sidecar reports a socket usable by ProxySocketClient handshake', async () => {
+    delete process.env[credentialSocketEnv];
+    const proxy = await createCredentialProxyDefault();
+
+    try {
+      expect(typeof proxy.socketPath).toBe('string');
+      expect(proxy.socketPath.length).toBeGreaterThan(0);
+
+      const { ProxySocketClient } = await import('@vybestack/llxprt-code-core');
+      const client = new ProxySocketClient(proxy.socketPath);
+      try {
+        await expect(client.ensureConnected()).resolves.toBeUndefined();
+      } finally {
+        try {
+          client.close();
+        } catch {
+          // Preserve the original connection assertion failure if close also fails.
+        }
+      }
+    } finally {
+      try {
+        await proxy.stop();
+      } catch {
+        // Preserve the original test failure if cleanup also fails.
+      }
+    }
+  }, 20_000);
 });

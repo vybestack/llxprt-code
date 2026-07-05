@@ -183,36 +183,6 @@ function stopCredentialProxy(proxy) {
   return proxy.stop().catch(() => {});
 }
 
-function readFlagValue(args, index, flag) {
-  const arg = args[index];
-  if (arg === flag) {
-    const value = args[index + 1];
-    if (value === undefined || value.startsWith('-')) {
-      return '';
-    }
-    return value;
-  }
-  const prefix = `${flag}=`;
-  if (arg.startsWith(prefix)) {
-    return arg.slice(prefix.length);
-  }
-  return null;
-}
-
-function hasDirectCredentialOverride(args) {
-  for (let index = 1; index < args.length; index++) {
-    const key = readFlagValue(args, index, '--key');
-    if (key !== null && key.length > 0) {
-      return true;
-    }
-    const keyfile = readFlagValue(args, index, '--keyfile');
-    if (keyfile !== null && keyfile.length > 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function stopProxyHost(child) {
   return new Promise((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null || child.killed) {
@@ -256,6 +226,8 @@ function parseProxyHostLine(line) {
 
 function createCredentialProxyDefault(options = {}) {
   const spawnFn = options.spawn ?? spawn;
+  const onUnexpectedExit = options.onUnexpectedExit ?? (() => {});
+  const onProxyCreated = options.onProxyCreated ?? (() => {});
   const env = { ...process.env };
   delete env[CREDENTIAL_SOCKET_ENV];
 
@@ -272,6 +244,7 @@ function createCredentialProxyDefault(options = {}) {
     }
 
     let settled = false;
+    let stopping = false;
     let stdout = '';
     let stderr = '';
     const startupTimer = setTimeout(() => {
@@ -286,6 +259,13 @@ function createCredentialProxyDefault(options = {}) {
 
     const absorbLateChildError = () => {};
 
+    const onPostStartupClose = (code, signal) => {
+      if (stopping) {
+        return;
+      }
+      onUnexpectedExit({ code, signal });
+    };
+
     const cleanup = () => {
       clearTimeout(startupTimer);
       child.off('error', onError);
@@ -295,9 +275,25 @@ function createCredentialProxyDefault(options = {}) {
     };
 
     const cleanupAfterStartup = () => {
-      cleanup();
+      clearTimeout(startupTimer);
       child.on('error', absorbLateChildError);
+      child.on('close', onPostStartupClose);
+      child.off('error', onError);
+      child.off('close', onClose);
+      child.stdout?.off('data', onStdout);
+      child.stderr?.off('data', onStderr);
     };
+
+    const proxyHostHandle = {
+      socketPath: '',
+      stop: async () => {
+        stopping = true;
+        child.off('close', onPostStartupClose);
+        child.off('error', absorbLateChildError);
+        await stopProxyHost(child);
+      },
+    };
+    onProxyCreated(proxyHostHandle);
 
     const fail = async (error) => {
       if (settled) {
@@ -345,12 +341,10 @@ function createCredentialProxyDefault(options = {}) {
       const line = stdout.slice(0, newline).trim();
       try {
         const socketPath = parseProxyHostLine(line);
+        proxyHostHandle.socketPath = socketPath;
         settled = true;
         cleanupAfterStartup();
-        resolve({
-          socketPath,
-          stop: () => stopProxyHost(child),
-        });
+        resolve(proxyHostHandle);
       } catch (error) {
         void fail(new Error(fatalCredentialProxyMessage(error)));
       }
@@ -363,14 +357,22 @@ function createCredentialProxyDefault(options = {}) {
   });
 }
 
-async function createChildEnv(startCredentialProxy, args) {
-  if (process.env[CREDENTIAL_SOCKET_ENV] || hasDirectCredentialOverride(args)) {
+async function createChildEnv(
+  startCredentialProxy,
+  onUnexpectedExit,
+  onProxyCreated,
+) {
+  const existingSocket = process.env[CREDENTIAL_SOCKET_ENV];
+  if (existingSocket !== undefined && existingSocket.length > 0) {
     return {
       childEnv: { ...process.env, [RELAUNCH_ENV]: 'true' },
       credentialProxy: null,
     };
   }
-  const credentialProxy = await startCredentialProxy();
+  const credentialProxy = await startCredentialProxy({
+    onUnexpectedExit,
+    onProxyCreated,
+  });
   return {
     childEnv: {
       ...process.env,
@@ -385,7 +387,8 @@ async function runCliBin(options = {}) {
   const exit = options.exit ?? process.exit;
   const spawnFn = options.spawn ?? spawn;
   const startCredentialProxy =
-    options.startCredentialProxy ?? (() => createCredentialProxyDefault());
+    options.startCredentialProxy ??
+    ((proxyOptions) => createCredentialProxyDefault(proxyOptions));
 
   function fatalExit(message) {
     process.stderr.write(`${message}\n`);
@@ -420,41 +423,30 @@ async function runCliBin(options = {}) {
     return;
   }
 
+  let child;
   let credentialProxy = null;
   let childEnv;
-  try {
-    const envResult = await createChildEnv(startCredentialProxy, args);
-    credentialProxy = envResult.credentialProxy;
-    childEnv = envResult.childEnv;
-  } catch (error) {
-    fatalExit(describeError(error));
-    return;
-  }
-
-  let child;
-  try {
-    child = spawnFn(bunPath, args, {
-      stdio: 'inherit',
-      env: childEnv,
-      shell: isWindowsCmdShim(bunPath),
-    });
-  } catch (error) {
-    await stopCredentialProxy(credentialProxy);
-    fatalExit(
-      `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
-    );
-    return;
-  }
-
   let settled = false;
+
   const forwardSignal = (signal) => {
-    if (!settled) {
-      child.kill(signal);
+    if (settled) {
+      return;
     }
+    if (child !== undefined) {
+      child.kill(signal);
+      return;
+    }
+    settled = true;
+    cleanupListeners();
+    void stopCredentialProxy(credentialProxy).finally(() => {
+      exit(SIGNAL_EXIT_CODES[signal] ?? 1);
+    });
   };
   const cleanupListeners = () => {
-    child.off('close', onClose);
-    child.off('error', onError);
+    if (child !== undefined) {
+      child.off('close', onClose);
+      child.off('error', onError);
+    }
     for (const signal of FORWARDED_SIGNALS) {
       process.off(signal, forwardSignal);
     }
@@ -465,7 +457,7 @@ async function runCliBin(options = {}) {
     }
     settled = true;
     cleanupListeners();
-    child.on('error', () => {});
+    child?.on('error', () => {});
     let callbackCalled = false;
     const finish = () => {
       if (callbackCalled) {
@@ -476,7 +468,7 @@ async function runCliBin(options = {}) {
     };
     const fastExit = (signal) => {
       try {
-        child.kill(signal);
+        child?.kill(signal);
       } catch {
         // Child may have already exited before the second signal arrived.
       }
@@ -497,7 +489,7 @@ async function runCliBin(options = {}) {
   const onError = (error) => {
     void settle(() => {
       try {
-        child.kill('SIGTERM');
+        child?.kill('SIGTERM');
       } catch {
         // Child may have already exited before the async spawn error surfaced.
       }
@@ -519,10 +511,60 @@ async function runCliBin(options = {}) {
       exit(1);
     }).catch(() => {});
   };
+  const onProxyUnexpectedExit = ({ code, signal }) => {
+    void settle(() => {
+      try {
+        child?.kill('SIGTERM');
+      } catch {
+        // Bun child may have already exited before the proxy died.
+      }
+      fatalExit(
+        fatalCredentialProxyMessage(
+          `credential proxy host exited unexpectedly while Bun was running (code=${code}, signal=${signal})`,
+        ),
+      );
+    }).catch(() => {});
+  };
 
   for (const signal of FORWARDED_SIGNALS) {
     process.on(signal, forwardSignal);
   }
+
+  try {
+    const envResult = await createChildEnv(
+      startCredentialProxy,
+      onProxyUnexpectedExit,
+      (proxy) => {
+        credentialProxy = proxy;
+      },
+    );
+    credentialProxy = envResult.credentialProxy;
+    childEnv = envResult.childEnv;
+  } catch (error) {
+    if (settled) {
+      return;
+    }
+    cleanupListeners();
+    fatalExit(describeError(error));
+    return;
+  }
+  if (settled) {
+    return;
+  }
+  try {
+    child = spawnFn(bunPath, args, {
+      stdio: 'inherit',
+      env: childEnv,
+      shell: isWindowsCmdShim(bunPath),
+    });
+  } catch (error) {
+    await stopCredentialProxy(credentialProxy);
+    fatalExit(
+      `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
+    );
+    return;
+  }
+
   child.on('error', onError);
   child.on('close', onClose);
 }
