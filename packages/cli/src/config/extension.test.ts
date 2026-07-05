@@ -246,7 +246,7 @@ describe('extension tests', () => {
         extensions,
         tempWorkspaceDir,
         manager,
-      ).filter((e) => e.isActive === true);
+      ).filter((e) => e.isActive);
       expect(activeExtensions).toHaveLength(1);
       expect(activeExtensions[0].name).toBe('enabled-extension');
     });

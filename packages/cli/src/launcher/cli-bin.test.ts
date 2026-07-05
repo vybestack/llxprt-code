@@ -5,7 +5,9 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { resolve } from 'node:path';
+import { mkdtemp, rm, access } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
 import type { spawn as spawnType } from 'node:child_process';
@@ -15,8 +17,22 @@ const binPath = resolve(cliPackageRoot, 'bin', 'llxprt.cjs');
 const loadCommonJsModule = createRequire(import.meta.url);
 const credentialSocketEnv = 'LLXPRT_CREDENTIAL_SOCKET';
 
+// The launcher only accepts a sidecar socket directory that is a direct
+// lxcp-prefixed child of the OS temp dir, so fixtures must be built from the
+// real tmpdir() (which is not '/tmp' on macOS). These are parse-only fixtures:
+// the mock child process emits them as stdout text but never materializes them
+// on disk, so no mkdtemp/cleanup is needed.
+const fixtureSocketDir = join(tmpdir(), 'lxcp-fixture');
+const fixtureSocketPath = join(fixtureSocketDir, 'llxprt-credential.sock');
+const proxyStartupLine = `${JSON.stringify({
+  socketDir: fixtureSocketDir,
+  socketPath: fixtureSocketPath,
+})}
+`;
+
 interface CredentialProxyHandle {
   socketPath: string;
+  socketDir?: string;
   stop: () => Promise<void>;
 }
 
@@ -91,6 +107,15 @@ function loadCliBin(): CliBinModule {
     throw new Error('cli bin module did not expose expected test seams');
   }
   return module;
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createChildProcess({
@@ -510,11 +535,17 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
     });
 
     expect(createdProxy?.socketPath).toBe('');
-    proxyHost.stdout.emit('data', Buffer.from('{"socket'));
+    // Split the startup JSON across two chunks to exercise the buffered parser.
+    const startupJson = JSON.stringify({
+      socketDir: fixtureSocketDir,
+      socketPath: fixtureSocketPath,
+    });
+    const splitAt = startupJson.indexOf('socketDir');
+    proxyHost.stdout.emit('data', Buffer.from(startupJson.slice(0, splitAt)));
 
     proxyHost.stdout.emit(
       'data',
-      Buffer.from('Path":"/tmp/llxprt-credential.sock"}\nignored\n'),
+      Buffer.from(`${startupJson.slice(splitAt)}\nignored\n`),
     );
     const proxy = await proxyPromise;
 
@@ -532,7 +563,8 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
       }),
     );
     expect(proxy).toBe(createdProxy);
-    expect(proxy.socketPath).toBe('/tmp/llxprt-credential.sock');
+    expect(proxy.socketPath).toBe(fixtureSocketPath);
+    expect(proxy.socketDir).toBe(fixtureSocketDir);
 
     const stopPromise = proxy.stop();
     proxyHost.emit('close', 0, null);
@@ -548,10 +580,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
       spawn: spawnFn as unknown as typeof spawnType,
     });
 
-    proxyHost.stdout.emit(
-      'data',
-      Buffer.from('{"socketPath":"/tmp/llxprt-credential.sock"}\n'),
-    );
+    proxyHost.stdout.emit('data', Buffer.from(proxyStartupLine));
     const proxy = await proxyPromise;
     proxyHost.exitCode = 0;
 
@@ -569,10 +598,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
       onUnexpectedExit,
     });
 
-    proxyHost.stdout.emit(
-      'data',
-      Buffer.from('{"socketPath":"/tmp/llxprt-credential.sock"}\n'),
-    );
+    proxyHost.stdout.emit('data', Buffer.from(proxyStartupLine));
     await proxyPromise;
 
     expect(onUnexpectedExit).not.toHaveBeenCalled();
@@ -593,10 +619,7 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
       onUnexpectedExit,
     });
 
-    proxyHost.stdout.emit(
-      'data',
-      Buffer.from('{"socketPath":"/tmp/llxprt-credential.sock"}\n'),
-    );
+    proxyHost.stdout.emit('data', Buffer.from(proxyStartupLine));
     const proxy = await proxyPromise;
 
     const stopPromise = proxy.stop();
@@ -668,19 +691,91 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
         spawn: spawnFn as unknown as typeof spawnType,
       });
 
-      proxyHost.stdout.emit(
-        'data',
-        Buffer.from('{"socketPath":"/tmp/llxprt-credential.sock"}\n'),
-      );
+      proxyHost.stdout.emit('data', Buffer.from(proxyStartupLine));
       const proxy = await proxyPromise;
       const stopPromise = proxy.stop();
 
       expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
-      await vi.advanceTimersByTimeAsync(1000);
+      // Advance past the SIGTERM deadline (SIGKILL) plus the secondary
+      // post-SIGKILL reap deadline before the stop promise settles.
+      await vi.advanceTimersByTimeAsync(2000);
       await stopPromise;
       expect(proxyHost.kill).toHaveBeenCalledWith('SIGKILL');
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('removes the sidecar-reported socket dir when forced shutdown escalates to SIGKILL', async () => {
+    vi.useFakeTimers();
+    const socketDir = await mkdtemp(join(tmpdir(), 'lxcp-test-'));
+    try {
+      const proxyHost = createChildProcess({ autoClose: false });
+      const spawnFn = vi.fn(() => proxyHost);
+      const proxyPromise = createCredentialProxyDefault({
+        spawn: spawnFn as unknown as typeof spawnType,
+      });
+
+      expect(await pathExists(socketDir)).toBe(true);
+
+      proxyHost.stdout.emit(
+        'data',
+        Buffer.from(
+          `${JSON.stringify({
+            socketDir,
+            socketPath: join(socketDir, 'credential.sock'),
+          })}\n`,
+        ),
+      );
+      const proxy = await proxyPromise;
+
+      const stopPromise = proxy.stop();
+      // Advance past the SIGTERM deadline (SIGKILL), the secondary post-SIGKILL
+      // reap deadline, and the full removeSocketDirWithRetry backoff window
+      // (2 inter-attempt delays x 50ms = 100ms) so a retryable rm() error on a
+      // slow/flaky filesystem cannot leave the stop promise hanging under fake
+      // timers.
+      await vi.advanceTimersByTimeAsync(3000);
+      await stopPromise;
+
+      expect(proxyHost.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(await pathExists(socketDir)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      await rm(socketDir, { force: true, recursive: true });
+    }
+  });
+
+  it('leaves the sidecar-reported socket dir intact on a graceful stop', async () => {
+    const socketDir = await mkdtemp(join(tmpdir(), 'lxcp-test-'));
+    try {
+      const proxyHost = createChildProcess();
+      const spawnFn = vi.fn(() => proxyHost);
+      const proxyPromise = createCredentialProxyDefault({
+        spawn: spawnFn as unknown as typeof spawnType,
+      });
+
+      proxyHost.stdout.emit(
+        'data',
+        Buffer.from(
+          `${JSON.stringify({
+            socketDir,
+            socketPath: join(socketDir, 'credential.sock'),
+          })}\n`,
+        ),
+      );
+      const proxy = await proxyPromise;
+
+      const stopPromise = proxy.stop();
+      proxyHost.emit('close', 0, null);
+      await stopPromise;
+
+      // A graceful SIGTERM shutdown lets the sidecar remove its own directory;
+      // the parent must not delete it (there is no forced SIGKILL here).
+      expect(proxyHost.kill).not.toHaveBeenCalledWith('SIGKILL');
+      expect(await pathExists(socketDir)).toBe(true);
+    } finally {
+      await rm(socketDir, { force: true, recursive: true });
     }
   });
 
@@ -696,7 +791,8 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
 
       await vi.advanceTimersByTimeAsync(15_000);
       expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
-      await vi.advanceTimersByTimeAsync(1000);
+      // SIGKILL deadline plus the secondary post-SIGKILL reap deadline.
+      await vi.advanceTimersByTimeAsync(2000);
       const error = await rejection;
       expect(error).toBeInstanceOf(Error);
       expect(String(error)).toContain('credential proxy');
@@ -744,6 +840,83 @@ describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
 
     await expect(proxyPromise).rejects.toThrow(/credential proxy/);
     expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it.each([
+    // A bare filename: dirname() === '.', which must be rejected so force-kill
+    // cleanup can never target the launcher's working directory.
+    ['proxy.sock'],
+    // A file directly under the OS temp dir: dirname() yields tmpdir() itself,
+    // whose basename (e.g. 'tmp') does not carry the lxcp- prefix, so it is
+    // rejected at the basename guard before the parent === tmpdir() check.
+    [join(tmpdir(), 'proxy.sock')],
+    // The filesystem root: dirname('/proxy.sock') === '/'.
+    ['/proxy.sock'],
+    // An absolute path outside the OS temp dir.
+    ['/var/data/lxcp-abc/proxy.sock'],
+    // A socket file whose directory is a direct tmpdir child lacking the lxcp-
+    // prefix. This exercises the basename prefix guard specifically: the derived
+    // dir <tmpdir>/notlxcp-dir is rejected by the prefix check before the
+    // parent === tmpdir() check is evaluated.
+    [join(tmpdir(), 'notlxcp-dir', 'proxy.sock')],
+  ])(
+    'rejects a startup line whose derived socket dir is unsafe: %j',
+    async (socketPath) => {
+      const proxyHost = createChildProcess();
+      const spawnFn = vi.fn(() => proxyHost);
+      const proxyPromise = createCredentialProxyDefault({
+        spawn: spawnFn as unknown as typeof spawnType,
+      });
+
+      proxyHost.stdout.emit(
+        'data',
+        Buffer.from(`${JSON.stringify({ socketPath })}\n`),
+      );
+
+      await expect(proxyPromise).rejects.toThrow(/credential proxy/);
+      expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+    },
+  );
+
+  it('rejects an explicitly reported socketDir that is an unsafe path', async () => {
+    // The explicit socketDir branch must be validated too: a tampered/buggy
+    // sidecar could report '/' and trigger a catastrophic recursive rm().
+    const proxyHost = createChildProcess();
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+    });
+
+    proxyHost.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({ socketDir: '/', socketPath: '/proxy.sock' })}\n`,
+      ),
+    );
+
+    await expect(proxyPromise).rejects.toThrow(/credential proxy/);
+    expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('accepts a fallback socket dir that is a direct lxcp- child of the OS temp dir', async () => {
+    // Parse-only: verifies validation of the reported path; the launcher never
+    // materializes this directory on disk, so no mkdtemp/cleanup is needed.
+    const socketDir = join(tmpdir(), 'lxcp-abc');
+    const socketPath = join(socketDir, 'proxy.sock');
+    const proxyHost = createChildProcess();
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+    });
+
+    proxyHost.stdout.emit(
+      'data',
+      Buffer.from(`${JSON.stringify({ socketPath })}\n`),
+    );
+    const proxy = await proxyPromise;
+
+    expect(proxy.socketPath).toBe(socketPath);
+    expect(proxy.socketDir).toBe(socketDir);
   });
 
   it('exposes runCliBin as a function without executing the launcher on import', () => {

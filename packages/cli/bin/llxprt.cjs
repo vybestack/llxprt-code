@@ -2,11 +2,22 @@
 'use strict';
 
 const { spawn, spawnSync } = require('node:child_process');
-const { accessSync, constants, readFileSync, statSync } = require('node:fs');
-const { basename, dirname, join } = require('node:path');
-
-const RELAUNCH_ENV = 'LLXPRT_BUN_RELAUNCHED';
-const CREDENTIAL_SOCKET_ENV = 'LLXPRT_CREDENTIAL_SOCKET';
+const {
+  accessSync,
+  constants,
+  readFileSync,
+  realpathSync,
+  statSync,
+} = require('node:fs');
+const { rm } = require('node:fs/promises');
+const { tmpdir } = require('node:os');
+const { basename, dirname, isAbsolute, join, normalize } = require('node:path');
+const {
+  CREDENTIAL_SOCKET_ENV,
+  PROXY_SOCKET_PREFIX,
+  createLauncherChildEnv,
+  hasUsableCredentialSocket,
+} = require('./launcher-credential-env.cjs');
 const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'];
 const SIGNAL_EXIT_CODES = {
   SIGHUP: 129,
@@ -33,6 +44,15 @@ const PROXY_HOST_NODE_ARGS = [
 ];
 const PROXY_HOST_STARTUP_TIMEOUT_MS = 15_000;
 const PROXY_HOST_SHUTDOWN_TIMEOUT_MS = 1_000;
+// Shorter, distinct window to wait for the kernel to reap the process after
+// SIGKILL, so a child stuck in uninterruptible I/O does not double the total
+// shutdown latency.
+const POST_SIGKILL_REAP_TIMEOUT_MS = 250;
+// rm() error codes that indicate a transient lock (notably on Windows) and are
+// worth retrying before giving up on removing the socket directory.
+const RETRYABLE_RM_CODES = new Set(['EBUSY', 'EPERM', 'ENOTEMPTY']);
+// Backoff between socket-directory removal retries.
+const RM_RETRY_DELAY_MS = 50;
 
 function ancestors(startDir) {
   const dirs = [];
@@ -183,32 +203,175 @@ function stopCredentialProxy(proxy) {
   return proxy.stop().catch(() => {});
 }
 
-function stopProxyHost(child) {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null || child.killed) {
+async function stopProxyHost(child, socketDir = '') {
+  let forcedKill = false;
+  await new Promise((resolve) => {
+    // Only short-circuit when the child has ACTUALLY exited. child.killed is
+    // deliberately excluded: it is set as soon as any kill() is called (even a
+    // graceful SIGTERM the sidecar is still handling), so treating it as
+    // "already done" here would resolve before the process exits and skip the
+    // forced-kill cleanup accounting below.
+    if (child.exitCode !== null || child.signalCode !== null) {
+      // The child already exited/was signaled before we could send SIGTERM. If
+      // it died from a signal or a non-zero exit rather than exiting gracefully
+      // with code 0, the sidecar never ran its own cleanup, so the parent must
+      // remove the socket directory.
+      if (
+        child.signalCode !== null ||
+        (child.exitCode !== null && child.exitCode !== 0)
+      ) {
+        forcedKill = true;
+      }
       resolve();
       return;
     }
     const finish = () => {
       clearTimeout(timer);
+      child.off('close', finish);
       resolve();
     };
     const timer = setTimeout(() => {
+      // Only treat this as a forced kill if the child actually survived past the
+      // SIGTERM deadline. If it already exited gracefully (racing the timer), the
+      // sidecar cleaned up its own socket dir, so the parent must not attempt
+      // cleanup — keeping forcedKill accurate to its stated intent.
+      if (child.exitCode === null && child.signalCode === null) {
+        forcedKill = true;
+      }
+      // Wait for the kernel to reap the process before proceeding so the
+      // socket-directory cleanup below does not race with a lingering process
+      // still holding the directory (notably on Windows). Fall back to a short
+      // secondary deadline in case the close event never arrives.
+      let resolvedAfterKill = false;
+      const resolveOnce = () => {
+        if (resolvedAfterKill) {
+          return;
+        }
+        resolvedAfterKill = true;
+        clearTimeout(reapTimer);
+        child.off('close', resolveOnce);
+        resolve();
+      };
+      const reapTimer = setTimeout(resolveOnce, POST_SIGKILL_REAP_TIMEOUT_MS);
+      // Attach resolveOnce BEFORE removing finish so a 'close' emitted during
+      // the SIGKILL cannot slip through the gap between off() and once().
+      child.once('close', resolveOnce);
       child.off('close', finish);
       try {
         child.kill('SIGKILL');
       } catch {
         // Process may have already exited before the close event was delivered.
       }
-      resolve();
     }, PROXY_HOST_SHUTDOWN_TIMEOUT_MS);
     child.once('close', finish);
     try {
       child.kill('SIGTERM');
     } catch {
+      // If SIGTERM delivery failed and the child is still alive, it will not run
+      // its own cleanup, so the parent must take over socket-dir removal.
+      if (child.exitCode === null && child.signalCode === null) {
+        forcedKill = true;
+      }
       finish();
     }
   });
+  // The sidecar owns and removes its own socket directory during a graceful
+  // (SIGTERM) shutdown. Only when we escalate to SIGKILL — where the sidecar is
+  // terminated before it can run its own cleanup — does the parent take over
+  // removing the reported directory so it is not leaked.
+  if (forcedKill && socketDir.length > 0) {
+    await removeSocketDirWithRetry(socketDir);
+  }
+}
+
+// On Windows the kernel may still hold a lock on the socket file for a short
+// window after the process exits, so a single rm() can fail with EBUSY/EPERM/
+// ENOTEMPTY. Retry a few times before giving up, and surface a warning rather
+// than silently leaking the directory.
+async function removeSocketDirWithRetry(socketDir) {
+  // Operate only on the already-validated string form (a direct lxcp- child of
+  // tmpdir()). Deliberately do NOT realpath here: resolving a symlink before
+  // rm() would let a post-validation symlink swap redirect the recursive delete
+  // to an arbitrary target. rm() itself does not follow a top-level symlink, so
+  // the worst a swapped-in symlink can cause is removal of the link entry.
+  const maxAttempts = 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      await rm(socketDir, { force: true, recursive: true });
+      return;
+    } catch (error) {
+      const code =
+        error && typeof error === 'object' && typeof error.code === 'string'
+          ? error.code
+          : undefined;
+      if (!RETRYABLE_RM_CODES.has(code) || attempt === maxAttempts - 1) {
+        process.stderr.write(
+          `warning: failed to remove proxy socket dir ${socketDir}: ${describeError(error)}\n`,
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, RM_RETRY_DELAY_MS));
+    }
+  }
+}
+
+// '/' and '\' (backslash, code point 92) path separators. Backslash is only a
+// real separator on Windows; on POSIX it is a valid filename character, but
+// since mkdtemp never generates trailing separators, stripping it on all
+// platforms is a safe conservative normalization.
+const PATH_SEPARATORS = new Set(['/', String.fromCharCode(92)]);
+
+function stripTrailingSeparators(value) {
+  let end = value.length;
+  while (end > 0 && PATH_SEPARATORS.has(value[end - 1])) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
+// The socket directory is later handed to a recursive rm() on the force-kill
+// cleanup path, and the sidecar's stdout is a process boundary that a buggy,
+// compromised, or tampered producer could abuse to report an arbitrary path
+// (e.g. '/' or '/tmp'). Constrain ANY directory we accept — whether explicitly
+// reported by the sidecar or derived from socketPath — to an absolute path that
+// lives directly under the OS temp directory and carries the sidecar's socket
+// prefix (matching mkdtemp(join(tmpdir(), PROXY_SOCKET_PREFIX))). This bounds
+// what rm() can ever target.
+function safeRealpath(targetPath) {
+  try {
+    return realpathSync(targetPath);
+  } catch {
+    return undefined;
+  }
+}
+
+function isSafeProxySocketDir(candidateDir) {
+  // Strip trailing separators so a reported path like '/tmp/lxcp-abc/' still
+  // yields a usable basename.
+  const normalized = stripTrailingSeparators(candidateDir);
+  if (
+    !isAbsolute(normalized) ||
+    !basename(normalized).startsWith(PROXY_SOCKET_PREFIX)
+  ) {
+    return false;
+  }
+  // The parent must be the OS temp directory. Compare against BOTH the
+  // unresolved and realpath-resolved forms of tmpdir() and of the candidate's
+  // parent, so a symlinked temp root (e.g. macOS /var -> /private/var, which
+  // mkdtemp itself may return) is accepted whether or not the parent currently
+  // resolves on disk. If the parent does not exist (e.g. a fabricated payload)
+  // its unresolved form still will not match tmpdir(), so it is rejected.
+  const parent = dirname(normalized);
+  const acceptedParents = new Set([tmpdir()]);
+  const resolvedTmp = safeRealpath(tmpdir());
+  if (resolvedTmp !== undefined) {
+    acceptedParents.add(resolvedTmp);
+  }
+  const resolvedParent = safeRealpath(parent);
+  return (
+    acceptedParents.has(parent) ||
+    (resolvedParent !== undefined && acceptedParents.has(resolvedParent))
+  );
 }
 
 function parseProxyHostLine(line) {
@@ -221,7 +384,34 @@ function parseProxyHostLine(line) {
   ) {
     throw new Error('proxy host did not report a socket path');
   }
-  return parsed.socketPath;
+  // Prefer the explicitly reported socketDir; fall back to deriving it from
+  // socketPath for backward compatibility with older payloads. Either way the
+  // result must pass the same safety validation before it can reach rm().
+  const reportedDir =
+    typeof parsed.socketDir === 'string' && parsed.socketDir.length > 0
+      ? parsed.socketDir
+      : dirname(parsed.socketPath);
+  if (!isSafeProxySocketDir(reportedDir)) {
+    throw new Error('proxy host did not report a usable socket directory');
+  }
+  // Normalize to the trailing-separator-stripped form that isSafeProxySocketDir
+  // validated, so the containment comparison below uses exactly what was
+  // checked (dirname() never emits trailing separators).
+  const safeSocketDir = stripTrailingSeparators(reportedDir);
+  // The socketPath is forwarded to the Bun child as its credential socket, so a
+  // tampered producer must not be able to pair a safe-looking socketDir with a
+  // socketPath pointing elsewhere. Require the socket to live directly inside
+  // the validated directory. Normalize both sides so a legitimate payload that
+  // mixes '/' and '\' separators (possible on Windows) does not cause a
+  // spurious mismatch. Note: this comparison is case-sensitive; it is safe
+  // because both socketDir and socketPath originate from the same sidecar's
+  // single mkdtemp()+join() call and are therefore consistently cased.
+  if (normalize(dirname(parsed.socketPath)) !== normalize(safeSocketDir)) {
+    throw new Error(
+      'proxy host reported a socket path outside its socket directory',
+    );
+  }
+  return { socketPath: parsed.socketPath, socketDir: safeSocketDir };
 }
 
 function createCredentialProxyDefault(options = {}) {
@@ -286,11 +476,12 @@ function createCredentialProxyDefault(options = {}) {
 
     const proxyHostHandle = {
       socketPath: '',
+      socketDir: '',
       stop: async () => {
         stopping = true;
         child.off('close', onPostStartupClose);
         child.off('error', absorbLateChildError);
-        await stopProxyHost(child);
+        await stopProxyHost(child, proxyHostHandle.socketDir);
       },
     };
     onProxyCreated(proxyHostHandle);
@@ -301,7 +492,7 @@ function createCredentialProxyDefault(options = {}) {
       }
       settled = true;
       cleanup();
-      await stopProxyHost(child).catch(() => {});
+      await stopProxyHost(child, proxyHostHandle.socketDir).catch(() => {});
       reject(error);
     };
 
@@ -340,8 +531,9 @@ function createCredentialProxyDefault(options = {}) {
       }
       const line = stdout.slice(0, newline).trim();
       try {
-        const socketPath = parseProxyHostLine(line);
-        proxyHostHandle.socketPath = socketPath;
+        const proxyInfo = parseProxyHostLine(line);
+        proxyHostHandle.socketPath = proxyInfo.socketPath;
+        proxyHostHandle.socketDir = proxyInfo.socketDir;
         settled = true;
         cleanupAfterStartup();
         resolve(proxyHostHandle);
@@ -362,10 +554,9 @@ async function createChildEnv(
   onUnexpectedExit,
   onProxyCreated,
 ) {
-  const existingSocket = process.env[CREDENTIAL_SOCKET_ENV];
-  if (existingSocket !== undefined && existingSocket.length > 0) {
+  if (hasUsableCredentialSocket()) {
     return {
-      childEnv: { ...process.env, [RELAUNCH_ENV]: 'true' },
+      childEnv: createLauncherChildEnv({}),
       credentialProxy: null,
     };
   }
@@ -374,11 +565,9 @@ async function createChildEnv(
     onProxyCreated,
   });
   return {
-    childEnv: {
-      ...process.env,
-      [RELAUNCH_ENV]: 'true',
-      [CREDENTIAL_SOCKET_ENV]: credentialProxy.socketPath,
-    },
+    childEnv: createLauncherChildEnv({
+      credentialSocketPath: credentialProxy.socketPath,
+    }),
     credentialProxy,
   };
 }
