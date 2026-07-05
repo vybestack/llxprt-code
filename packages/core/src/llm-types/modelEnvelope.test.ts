@@ -38,6 +38,13 @@ function toolCallBlock(
   return { type: 'tool_call', id, name, parameters };
 }
 
+function textBlockArb(): fc.Arbitrary<TextBlock> {
+  return fc.record({
+    type: fc.constant('text' as const),
+    text: fc.string({ minLength: 0, maxLength: 50 }),
+  });
+}
+
 function usage(p: number, c: number, t: number): UsageStats {
   return { promptTokens: p, completionTokens: c, totalTokens: t };
 }
@@ -612,6 +619,7 @@ describe('emptyModelOutput property-based', () => {
       const out = emptyModelOutput(speaker);
       const optionalKeys = [
         'finishReason',
+        'rawStopReason',
         'usage',
         'responseId',
         'providerMetadata',
@@ -719,14 +727,3 @@ describe('accumulateModelStreamChunk additional property-based', () => {
     },
   );
 });
-
-// ---------------------------------------------------------------------------
-// Helpers for property-based
-// ---------------------------------------------------------------------------
-
-function textBlockArb(): fc.Arbitrary<TextBlock> {
-  return fc.record({
-    type: fc.constant('text' as const),
-    text: fc.string({ minLength: 0, maxLength: 50 }),
-  });
-}

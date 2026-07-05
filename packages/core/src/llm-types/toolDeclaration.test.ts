@@ -89,7 +89,7 @@ describe('toolDeclarationsFromLegacyToolset', () => {
     ]);
   });
 
-  it('falls back to {} when parametersJsonSchema is non-schema (e.g. string)', () => {
+  it('falls back to legacy parameters when parametersJsonSchema is non-schema (e.g. string)', () => {
     const input = [
       {
         functionDeclarations: [
@@ -166,6 +166,25 @@ describe('toolDeclarationsFromLegacyToolset', () => {
       parametersJsonSchema: false,
     });
   });
+
+  it('preserves description when it is null (null !== undefined)', () => {
+    // Build the input with a description field set to null at runtime.
+    // The LegacyToolsetLike type declares description?: string, but the
+    // implementation checks `!== undefined`, so null is preserved.
+    const decl: {
+      name: string;
+      description?: string;
+      parametersJsonSchema?: unknown;
+    } = {
+      name: 'tool',
+      parametersJsonSchema: { type: 'object' },
+    };
+    Object.assign(decl, { description: null });
+    const input = [{ functionDeclarations: [decl] }];
+    const result = toolDeclarationsFromLegacyToolset(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe(null);
+  });
 });
 
 describe('ToolChoice orthogonality', () => {
@@ -239,7 +258,14 @@ describe('toolDeclaration property-based', () => {
         0,
       );
       const result = toolDeclarationsFromLegacyToolset(toolset);
-      return result.length === expectedCount;
+      const expectedNames = toolset.flatMap((g) =>
+        g.functionDeclarations.map((d) => d.name),
+      );
+      const actualNames = result.map((r) => r.name);
+      return (
+        result.length === expectedCount &&
+        actualNames.every((n, i) => n === expectedNames[i])
+      );
     },
   );
 

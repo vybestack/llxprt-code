@@ -107,6 +107,10 @@ function cleanGeminiSchemaInternal(
       if (key === 'properties') {
         cleanedSchema[key] = cleanPropertiesObject(schema[key], visited);
       } else if (key === 'items' && isRecord(schema[key])) {
+        // Note: items:null passes through verbatim via the else branch below
+        // (isRecord rejects null, so it is not recursed into, but the value
+        // is still copied). The Gemini API expects items to be a schema
+        // object or absent; null is preserved as-is for compatibility.
         cleanedSchema[key] = cleanGeminiSchemaInternal(schema[key], visited);
       } else if (key === 'anyOf') {
         cleanedSchema[key] = cleanAnyOfArray(schema[key], visited);

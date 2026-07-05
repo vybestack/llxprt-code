@@ -49,15 +49,74 @@ describe('llm-types canonical tool-ID contract re-export', () => {
   it('canonicalizes a tool call ID into the hist_tool_ namespace', () => {
     const id = canonicalizeToolCallId(input);
     expect(id.startsWith('hist_tool_')).toBe(true);
+    // Total length = 10 (prefix) + 24 (hash slice)
+    expect(id).toHaveLength(34);
+    // The suffix after the prefix must be base64url-safe
+    expect(id.slice('hist_tool_'.length)).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
-  it('is deterministic for identical inputs', () => {
+  it('is deterministic for identical inputs and varies for distinct inputs', () => {
     expect(canonicalizeToolCallId(input)).toBe(canonicalizeToolCallId(input));
+
+    // Changing rawId (which participates in the hash seed) yields a distinct ID
+    const differentInput: CanonicalToolIdInput = {
+      ...input,
+      rawId: 'call_different456',
+    };
+    expect(canonicalizeToolCallId(differentInput)).not.toBe(
+      canonicalizeToolCallId(input),
+    );
   });
 
-  it('pairs a tool response with its originating call ID', () => {
-    const callId = canonicalizeToolCallId(input);
-    const responseId = canonicalizeToolResponseId(input);
-    expect(responseId).toBe(callId);
+  it('falls back to turnKey+callIndex seeding when rawId is undefined', () => {
+    const noRawId: CanonicalToolIdInput = {
+      providerName: 'openai',
+      toolName: 'read_file',
+      turnKey: 'turn_fixture',
+      callIndex: 0,
+    };
+    const id = canonicalizeToolCallId(noRawId);
+    expect(id.startsWith('hist_tool_')).toBe(true);
+    expect(id).toHaveLength(34);
+    // Distinct callIndex with undefined rawId must yield distinct IDs
+    const differentIndex: CanonicalToolIdInput = { ...noRawId, callIndex: 1 };
+    expect(canonicalizeToolCallId(differentIndex)).not.toBe(id);
+  });
+
+  it('is idempotent when rawId is already hist_tool_-prefixed', () => {
+    const alreadyPrefixed: CanonicalToolIdInput = {
+      providerName: 'openai',
+      rawId: 'hist_tool_existingvalue',
+      toolName: 'read_file',
+      turnKey: 'turn_fixture',
+      callIndex: 0,
+    };
+    const id = canonicalizeToolCallId(alreadyPrefixed);
+    // When rawId already starts with hist_tool_, buildCanonicalToolId returns
+    // it verbatim (no re-hashing).
+    expect(id).toBe('hist_tool_existingvalue');
+  });
+
+  it('normalizes different provider prefixes to the same canonical ID when rawId core matches', () => {
+    // normalizeRawId strips known prefixes: call_, toolu_, and bare call+token.
+    // 'call_abc123' and 'toolu_abc123' both normalize to 'abc123', so they
+    // produce the same canonical ID when other seed parts are identical.
+    const withCallPrefix: CanonicalToolIdInput = {
+      providerName: 'openai',
+      rawId: 'call_abc123',
+      toolName: 'read_file',
+      turnKey: 'turn_fixture',
+      callIndex: 0,
+    };
+    const withTooluPrefix: CanonicalToolIdInput = {
+      providerName: 'openai',
+      rawId: 'toolu_abc123',
+      toolName: 'read_file',
+      turnKey: 'turn_fixture',
+      callIndex: 0,
+    };
+    expect(canonicalizeToolCallId(withCallPrefix)).toBe(
+      canonicalizeToolCallId(withTooluPrefix),
+    );
   });
 });

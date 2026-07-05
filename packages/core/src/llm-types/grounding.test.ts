@@ -156,23 +156,47 @@ describe('grounding property-based', () => {
   it.prop([
     fc.record({
       sources: fc.array(
-        fc.record({ url: fc.webUrl(), title: fc.string({ maxLength: 30 }) }),
-        { minLength: 1, maxLength: 5 },
+        fc.record({
+          title: fc.option(fc.string({ maxLength: 30 })),
+          url: fc.option(fc.webUrl()),
+          snippet: fc.option(fc.string({ maxLength: 80 })),
+        }),
+        { minLength: 0, maxLength: 5 },
+      ),
+      segments: fc.array(
+        fc.record({
+          startIndex: fc.option(fc.nat()),
+          endIndex: fc.option(fc.nat()),
+          text: fc.option(fc.string({ maxLength: 50 })),
+          sourceIndices: fc.option(fc.array(fc.nat(), { maxLength: 5 })),
+        }),
+        { minLength: 0, maxLength: 5 },
       ),
     }),
   ])(
-    'GroundingInfo with sources and titles round-trips preserving count',
+    'GroundingInfo with sources AND segments round-trips through JSON preserving all fields',
     (input) => {
-      const info: GroundingInfo = { sources: input.sources };
+      const cleanedSources: GroundingSource[] = input.sources.map((s) => {
+        const out: GroundingSource = {};
+        if (s.title !== null) out.title = s.title;
+        if (s.url !== null) out.url = s.url;
+        if (s.snippet !== null) out.snippet = s.snippet;
+        return out;
+      });
+      const cleanedSegments: GroundingSegment[] = input.segments.map((s) => {
+        const out: GroundingSegment = {};
+        if (s.startIndex !== null) out.startIndex = s.startIndex;
+        if (s.endIndex !== null) out.endIndex = s.endIndex;
+        if (s.text !== null) out.text = s.text;
+        if (s.sourceIndices !== null) out.sourceIndices = s.sourceIndices;
+        return out;
+      });
+      const info: GroundingInfo = {
+        sources: cleanedSources,
+        segments: cleanedSegments,
+      };
       const roundTripped: GroundingInfo = JSON.parse(JSON.stringify(info));
-      return (
-        roundTripped.sources.length === input.sources.length &&
-        roundTripped.sources.every(
-          (s, i) =>
-            s.url === input.sources[i].url &&
-            s.title === input.sources[i].title,
-        )
-      );
+      return JSON.stringify(roundTripped) === JSON.stringify(info);
     },
   );
 });

@@ -80,7 +80,8 @@ export function emptyModelOutput(
 }
 
 /**
- * Pure accumulation: returns a NEW object, never mutates acc or chunk.
+ * Pure accumulation: returns new top-level objects, never mutates acc or
+ * chunk. Nested block objects are shared by reference (shallow-copy only).
  *
  * @plan PLAN-20260702-LLMTYPES.P04
  * @requirement REQ-005.3
@@ -96,6 +97,8 @@ export function accumulateModelStreamChunk(
   };
 
   if (acc.content.metadata || chunk.content.metadata) {
+    // Shallow merge only; nested objects (providerMetadata, usage) are
+    // shared by reference. Callers must not mutate them.
     content.metadata = {
       ...acc.content.metadata,
       ...chunk.content.metadata,
@@ -116,7 +119,9 @@ export function accumulateModelStreamChunk(
 
   const usage = chunk.usage ?? acc.usage;
   if (usage !== undefined) {
-    result.usage = usage;
+    // Defensive copy: last-write-wins semantics (whole-object replacement),
+    // but the copied object is not shared with the input chunk/acc.
+    result.usage = { ...usage };
   }
 
   const responseId = chunk.responseId ?? acc.responseId;
@@ -129,6 +134,8 @@ export function accumulateModelStreamChunk(
     result.hookRestrictions = hookRestrictions;
   }
 
+  // Note: shallow merge — top-level keys are copied, but nested object/array
+  // values within providerMetadata are shared by reference with the inputs.
   if (acc.providerMetadata || chunk.providerMetadata) {
     result.providerMetadata = {
       ...acc.providerMetadata,
@@ -189,7 +196,8 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
   }
 
   if (meta?.usage) {
-    result.usage = meta.usage;
+    // Defensive copy so callers cannot mutate the original IContent metadata.
+    result.usage = { ...meta.usage };
   }
 
   if (meta?.id) {

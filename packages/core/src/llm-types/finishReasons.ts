@@ -91,6 +91,8 @@ export const GEMINI_FINISH_MAP: Readonly<
   MALFORMED_FUNCTION_CALL: 'error',
   UNEXPECTED_TOOL_CALL: 'error',
   OTHER: 'other',
+  IMAGE_PROHIBITED_CONTENT: 'safety',
+  NO_IMAGE: 'other',
   FINISH_REASON_UNSPECIFIED: 'other',
 };
 
@@ -132,6 +134,9 @@ function mapWithTable(
     ? table[raw]
     : undefined;
   return {
+    // Unmapped provider strings default to 'other' (benign unknown). Callers
+    // needing diagnostics should inspect rawStopReason rather than relying on
+    // finishReason alone.
     finishReason: mapped ?? 'other',
     rawStopReason: raw,
   };

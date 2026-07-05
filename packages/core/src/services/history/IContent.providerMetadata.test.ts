@@ -306,8 +306,8 @@ describe('IContent providerMetadata property-based', () => {
           promptTokens: v.promptTokens,
           completionTokens: v.completionTokens,
           totalTokens: v.totalTokens,
-          reasoningTokens: v.reasoningTokens ?? undefined,
-          toolTokens: v.toolTokens ?? undefined,
+          reasoningTokens: v.reasoningTokens,
+          toolTokens: v.toolTokens,
         }),
       ),
   ])(

@@ -113,13 +113,14 @@ function inlineDataToBlock(part: Part): MediaBlock {
 function fileDataToBlock(part: Part): MediaBlock {
   const fd = part.fileData;
   const rawMimeType = fd?.mimeType;
-  const hasMimeType = typeof rawMimeType === 'string' && rawMimeType.length > 0;
+  const mimeType =
+    typeof rawMimeType === 'string' && rawMimeType.length > 0
+      ? rawMimeType
+      : undefined;
+  const hasMimeType = mimeType !== undefined;
   const block: MediaBlock = {
     type: 'media',
-    mimeType:
-      typeof rawMimeType === 'string' && rawMimeType.length > 0
-        ? rawMimeType
-        : 'application/octet-stream',
+    mimeType: mimeType ?? 'application/octet-stream',
     data: fd?.fileUri ?? '',
     encoding: 'url',
   };
@@ -487,15 +488,17 @@ export function geminiApiErrorToProviderApiError(
     message: e.message,
     raw: e,
   };
-  if (status === 429) {
-    result.isQuotaError = true;
-    result.isTransient = true;
-  }
-  if (status === 401 || status === 403) {
-    result.isAuthError = true;
-  }
-  if (typeof status === 'number' && status >= 500) {
-    result.isTransient = true;
+  if (typeof status === 'number') {
+    if (status === 429) {
+      result.isQuotaError = true;
+      result.isTransient = true;
+    }
+    if (status === 401 || status === 403) {
+      result.isAuthError = true;
+    }
+    if (status >= 500) {
+      result.isTransient = true;
+    }
   }
   return result;
 }

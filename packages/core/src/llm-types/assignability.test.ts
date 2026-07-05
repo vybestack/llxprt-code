@@ -70,7 +70,14 @@ describe('REQ-003.4 compile-time assignability (no casts needed)', () => {
     const result: ToolDeclaration[] = toolDeclarationsFromLegacyToolset(legacy);
     expect(result).toHaveLength(2);
     expect(result[0].name).toBe('getWeather');
+    expect(result[0].description).toBe('Get weather');
+    expect(result[0].parametersJsonSchema).toStrictEqual({
+      type: 'object',
+      properties: {},
+    });
     expect(result[1].name).toBe('legacyTool');
+    // Verify the `parameters` fallback was resolved as schema
+    expect(result[1].parametersJsonSchema).toStrictEqual({ type: 'object' });
   });
 
   it('RuntimeProviderToolset-shaped literal converts via toolDeclarationsFromLegacyToolset', () => {
@@ -90,6 +97,19 @@ describe('REQ-003.4 compile-time assignability (no casts needed)', () => {
       toolDeclarationsFromLegacyToolset(runtime);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('search');
+  });
+
+  it('falls back to empty schema when no valid schema is present', () => {
+    const legacy: ProviderToolsetLocal = [
+      {
+        functionDeclarations: [{ name: 'noSchema' }],
+      },
+    ];
+
+    const result: ToolDeclaration[] = toolDeclarationsFromLegacyToolset(legacy);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('noSchema');
+    expect(result[0].parametersJsonSchema).toStrictEqual({});
   });
 
   it('IContent[] assigns to ModelGenerationRequest.contents', () => {

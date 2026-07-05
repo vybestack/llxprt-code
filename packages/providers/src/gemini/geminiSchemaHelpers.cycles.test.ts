@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import { cleanGeminiSchema } from './geminiSchemaHelpers.js';
+import { sortedJson } from './__tests__/sortedJson.js';
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -73,7 +74,8 @@ describe('cleanGeminiSchema — cycle safety (REQ-011.2)', () => {
       type: 'array',
       items: { type: 'object', properties: {} },
     };
-    asRecord(s['items'])['parent'] = s;
+    // Cycle through whitelisted keys: s → items → properties.back → s
+    asRecord(asRecord(s['items'])['properties'])['back'] = s;
 
     expect(() => cleanGeminiSchema(s)).not.toThrow();
   });
@@ -187,6 +189,16 @@ describe('cleanGeminiSchema — $ref/$defs stripping (documented lossiness)', ()
     expect(result).not.toHaveProperty('allOf');
   });
 
+  it('preserves items:null verbatim (isRecord rejects null, not recursed, but copied)', () => {
+    // items:null is not a record, so it is not recursed into (no cycle risk),
+    // but the else branch copies it verbatim. The Gemini API expects items to
+    // be a schema object or absent; null is preserved as-is for compatibility.
+    const input = { type: 'array', items: null };
+    const result = asRecord(cleanGeminiSchema(input));
+    expect(result).toHaveProperty('items', null);
+    expect(result).toHaveProperty('type', 'array');
+  });
+
   it('strips additionalProperties from the output (not in whitelist)', () => {
     const input = {
       type: 'object',
@@ -223,23 +235,6 @@ describe('property-based — cleanGeminiSchema invariants', () => {
       }
     }
     return value;
-  }
-
-  function sortedJson(value: unknown): string {
-    if (typeof value !== 'object' || value === null) {
-      return JSON.stringify(value);
-    }
-    if (Array.isArray(value)) {
-      return '[' + value.map(sortedJson).join(',') + ']';
-    }
-    const keys = Object.keys(value).sort();
-    const pairs = keys.map(
-      (k) =>
-        JSON.stringify(k) +
-        ':' +
-        sortedJson((value as Record<string, unknown>)[k]),
-    );
-    return '{' + pairs.join(',') + '}';
   }
 
   it('arbitrary JSON-object schemas never mutate the input (deep-freeze + clone compare)', () => {

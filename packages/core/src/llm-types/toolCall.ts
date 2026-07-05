@@ -174,7 +174,7 @@ function partLikeToBlock(item: unknown): ConversionResult<ContentBlock> {
       type: 'tool_response',
       callId: typeof fnResp['id'] === 'string' ? fnResp['id'] : '',
       toolName: fnResp['name'],
-      result: 'response' in fnResp ? fnResp['response'] : undefined,
+      result: 'response' in fnResp ? fnResp['response'] : {},
     };
     return { ok: true, value: block };
   }

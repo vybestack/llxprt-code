@@ -14,18 +14,11 @@ import {
   GEMINI_FINISH_MAP,
   OPENAI_FINISH_MAP,
   ANTHROPIC_STOP_MAP,
+  CANONICAL_FINISH_REASONS,
   type CanonicalFinishReason,
 } from './finishReasons.js';
 
-const ALL_CANONICAL = [
-  'stop',
-  'max_tokens',
-  'tool_calls',
-  'safety',
-  'refusal',
-  'error',
-  'other',
-] as const satisfies readonly CanonicalFinishReason[];
+const ALL_CANONICAL = CANONICAL_FINISH_REASONS;
 
 const CANONICAL_STRINGS: readonly string[] = ALL_CANONICAL;
 
@@ -104,6 +97,20 @@ describe('mapGeminiFinishReason', () => {
     expect(mapGeminiFinishReason('IMAGE_SAFETY')).toStrictEqual({
       finishReason: 'safety',
       rawStopReason: 'IMAGE_SAFETY',
+    });
+  });
+
+  it('maps IMAGE_PROHIBITED_CONTENT to safety', () => {
+    expect(mapGeminiFinishReason('IMAGE_PROHIBITED_CONTENT')).toStrictEqual({
+      finishReason: 'safety',
+      rawStopReason: 'IMAGE_PROHIBITED_CONTENT',
+    });
+  });
+
+  it('maps NO_IMAGE to other', () => {
+    expect(mapGeminiFinishReason('NO_IMAGE')).toStrictEqual({
+      finishReason: 'other',
+      rawStopReason: 'NO_IMAGE',
     });
   });
 
@@ -239,7 +246,7 @@ describe('isCanonicalFinishReason', () => {
 });
 
 describe('mapping tables export', () => {
-  it('GEMINI_FINISH_MAP covers all 13 known enum strings', () => {
+  it('GEMINI_FINISH_MAP covers all 15 known enum strings', () => {
     const expected = [
       'STOP',
       'MAX_TOKENS',
@@ -253,11 +260,17 @@ describe('mapping tables export', () => {
       'OTHER',
       'IMAGE_SAFETY',
       'UNEXPECTED_TOOL_CALL',
+      'IMAGE_PROHIBITED_CONTENT',
+      'NO_IMAGE',
       'FINISH_REASON_UNSPECIFIED',
     ];
     for (const key of expected) {
       expect(GEMINI_FINISH_MAP[key]).toBeDefined();
     }
+    // Ensure no extra or missing keys — catches removals AND additions.
+    expect(Object.keys(GEMINI_FINISH_MAP).sort()).toStrictEqual(
+      [...expected].sort(),
+    );
   });
 
   it('OPENAI_FINISH_MAP covers known strings', () => {
@@ -388,6 +401,8 @@ describe('finishReasons property-based', () => {
       'OTHER',
       'IMAGE_SAFETY',
       'UNEXPECTED_TOOL_CALL',
+      'IMAGE_PROHIBITED_CONTENT',
+      'NO_IMAGE',
       'FINISH_REASON_UNSPECIFIED',
     ),
   ])(

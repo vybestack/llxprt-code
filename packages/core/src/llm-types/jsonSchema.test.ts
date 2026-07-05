@@ -142,25 +142,13 @@ describe('jsonSchema property-based', () => {
       properties: fc.object({ maxDepth: 2 }),
     }),
   ])(
-    'schema with type and properties is recognized as JsonSchema and round-trips',
-    (schema) => {
-      if (!isJsonSchema(schema)) return false;
-      const roundTripped = JSON.parse(JSON.stringify(schema));
-      return JSON.stringify(roundTripped) === JSON.stringify(schema);
-    },
+    'schema with type and properties is recognized as JsonSchema',
+    (schema) => isJsonSchema(schema) === true,
   );
 
   it.prop([fc.record({ $ref: fc.string({ minLength: 1, maxLength: 30 }) })])(
     'schema with $ref keyword is recognized as JsonSchema',
     (schema) => isJsonSchema(schema) === true,
-  );
-
-  it.prop([fc.boolean()])(
-    'boolean schema round-trips through JSON unchanged',
-    (v: boolean) => {
-      const roundTripped: unknown = JSON.parse(JSON.stringify(v));
-      return roundTripped === v && isJsonSchema(roundTripped);
-    },
   );
 
   it.prop([

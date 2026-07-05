@@ -200,6 +200,13 @@ describe('classifyGenaiImporter', () => {
       );
       expect(result).toEqual({ kind: 'enclave' });
     });
+
+    it('does NOT treat the gemini directory itself (no trailing slash) as enclave', () => {
+      // The enclave prefix has a trailing slash; a bare directory path
+      // must fall through to the broader providers (#2349) rule.
+      const result = classifyGenaiImporter('packages/providers/src/gemini');
+      expect(result).toEqual({ kind: 'issue', issue: '#2349' });
+    });
   });
 
   describe('unmatched paths (error)', () => {
@@ -265,6 +272,28 @@ describe('isGenaiImporterContent', () => {
   it('matches a subpath import', () => {
     expect(
       isGenaiImporterContent("import { X } from '@google/genai/sub';"),
+    ).toBe(true);
+  });
+
+  it('matches a backtick (template literal) import specifier', () => {
+    expect(isGenaiImporterContent('import(`@google/genai`);')).toBe(true);
+  });
+
+  it('matches a re-export from @google/genai', () => {
+    expect(isGenaiImporterContent("export { X } from '@google/genai';")).toBe(
+      true,
+    );
+  });
+
+  it('matches a require() call', () => {
+    expect(isGenaiImporterContent("const x = require('@google/genai');")).toBe(
+      true,
+    );
+  });
+
+  it('matches a dynamic await import()', () => {
+    expect(
+      isGenaiImporterContent("const x = await import('@google/genai');"),
     ).toBe(true);
   });
 

@@ -132,6 +132,25 @@ describe('toolResultContentFromLegacyPartListUnion - single part object', () => 
       ],
     });
   });
+
+  it('converts {functionResponse} without response to result {} (JSON-serializable contract)', () => {
+    const result = toolResultContentFromLegacyPartListUnion({
+      functionResponse: {
+        name: 'searchWeb',
+      },
+    });
+    expect(result).toStrictEqual({
+      ok: true,
+      value: [
+        {
+          type: 'tool_response',
+          callId: '',
+          toolName: 'searchWeb',
+          result: {},
+        },
+      ],
+    });
+  });
 });
 
 describe('toolResultContentFromLegacyPartListUnion - array input', () => {
@@ -370,14 +389,15 @@ describe('toolCall property-based', () => {
     (input) => {
       const result = toolResultContentFromLegacyPartListUnion(input);
       expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      if (!result.ok) return false;
       expect(Array.isArray(result.value)).toBe(true);
-      if (!Array.isArray(result.value)) return;
+      if (!Array.isArray(result.value)) return false;
       const block = result.value[0];
       expect(block.type).toBe('media');
       expect(block.encoding).toBe('base64');
       expect(block.mimeType).toBe(input.inlineData.mimeType);
       expect(block.data).toBe(input.inlineData.data);
+      return true;
     },
   );
 
@@ -414,9 +434,9 @@ describe('toolCall property-based', () => {
     (input) => {
       const result = toolResultContentFromLegacyPartListUnion(input);
       expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      if (!result.ok) return false;
       expect(Array.isArray(result.value)).toBe(true);
-      if (!Array.isArray(result.value)) return;
+      if (!Array.isArray(result.value)) return false;
       const block = result.value[0];
       expect(block.type).toBe('tool_response');
       expect(block.toolName).toBe(input.functionResponse.name);
@@ -426,6 +446,7 @@ describe('toolCall property-based', () => {
       // response key, so 'response' in fnResp is true and result === the raw
       // value (string or null).
       expect(block.result).toBe(input.functionResponse.response);
+      return true;
     },
   );
 

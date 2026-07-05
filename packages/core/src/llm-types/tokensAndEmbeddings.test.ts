@@ -107,7 +107,7 @@ describe('tokensAndEmbeddings property-based', () => {
 
   it.prop([
     fc.array(
-      fc.array(fc.float({ min: -1, max: 1, noNaN: true }), {
+      fc.array(fc.double({ min: -1, max: 1, noNaN: true }), {
         minLength: 1,
         maxLength: 10,
       }),

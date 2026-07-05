@@ -527,10 +527,13 @@ export * from './services/history/IContent.js';
 // @plan PLAN-20260702-LLMTYPES.P04
 // @requirement REQ-013.1
 // Export neutral llm-types layer. The barrel re-exports IContent types
-// type-only, so there is no runtime symbol collision with the IContent
-// export * above. Named exports for the new llm-types-only symbols would
-// be redundant with the barrel; `export *` is safe here because the only
-// overlapping symbols are the type-only IContent re-exports.
+// type-only, but also re-exports many runtime value symbols (e.g.
+// CANONICAL_FINISH_REASONS, mapGeminiFinishReason, canonicalizeToolCallId).
+// `export *` is safe here ONLY because none of those runtime names collide
+// with IContent's runtime exports today — safety depends on the absence of
+// name collisions between the two barrels, not on type-only re-exports.
+// The guard test barrelCollision.test.ts asserts the runtime export name
+// sets are disjoint.
 export * from './llm-types/index.js';
 
 // @plan:PLAN-20260603-ISSUE1584.P11

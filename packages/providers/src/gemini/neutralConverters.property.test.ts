@@ -15,37 +15,15 @@
 import { describe, it } from 'vitest';
 import * as fc from 'fast-check';
 import { Outcome, Language, type Part } from '@google/genai';
-import { isRecord } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   geminiPartsToBlocks,
   blocksToGeminiParts,
   geminiUsageToUsageStats,
 } from './neutralConverters.js';
+import { deepEqual } from './__tests__/sortedJson.js';
 
 function roundTrip(part: Part): Part {
   return blocksToGeminiParts(geminiPartsToBlocks([part]))[0];
-}
-
-function sortedJson(value: unknown): string {
-  if (value === undefined) return '"<undefined>"';
-  if (typeof value === 'number') {
-    if (Number.isNaN(value)) return '"<NaN>"';
-    if (value === Infinity) return '"<Infinity>"';
-    if (value === -Infinity) return '"<-Infinity>"';
-  }
-  if (!isRecord(value) && !Array.isArray(value)) {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return '[' + value.map(sortedJson).join(',') + ']';
-  }
-  const keys = Object.keys(value).sort();
-  const pairs = keys.map((k) => JSON.stringify(k) + ':' + sortedJson(value[k]));
-  return '{' + pairs.join(',') + '}';
-}
-
-function deepEqual(a: unknown, b: unknown): boolean {
-  return sortedJson(a) === sortedJson(b);
 }
 
 function base64ish(): fc.Arbitrary<string> {

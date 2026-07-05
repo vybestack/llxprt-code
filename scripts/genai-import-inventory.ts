@@ -98,7 +98,7 @@ const PREFIX_RULES: readonly PrefixRule[] = [
  * The surrounding quotes ensure unquoted prose comments (e.g.
  * "no @google/genai import") are NOT matched.
  */
-const GENAI_IMPORT_PATTERN = /['"]@google\/genai['"]|['"]@google\/genai\//;
+const GENAI_IMPORT_PATTERN = /['"`]@google\/genai['"`]|['"`]@google\/genai\//;
 
 /**
  * Pure content-matching predicate: returns true when `content` contains a
@@ -178,15 +178,14 @@ function findGenaiImporters(): string[] {
     try {
       content = readFileSync(absPath, 'utf8');
     } catch (e) {
-      // A tracked file that cannot be read (race, broken symlink) is skipped
-      // rather than aborting the whole inventory — git ls-files is the source
-      // of truth for what is tracked, and a transiently-unreadable file is
-      // not a classification problem. Log a stderr warning so the operator
-      // is aware files were skipped.
-      console.warn(
-        `genai-import-inventory: could not read tracked file '${relPath}', skipping: ${e instanceof Error ? e.message : String(e)}`,
+      // A tracked file that cannot be read is a hard error: silently skipping
+      // could hide a lost importer and cause a false baseline match in --check
+      // mode.
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(
+        `genai-import-inventory: could not read tracked file '${relPath}': ${msg}`,
       );
-      continue;
+      process.exit(1);
     }
     if (isGenaiImporterContent(content)) {
       importers.push(relPath);
