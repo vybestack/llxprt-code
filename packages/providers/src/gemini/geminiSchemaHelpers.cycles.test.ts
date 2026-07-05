@@ -247,6 +247,20 @@ describe('cleanGeminiSchema — $ref/$defs stripping (documented lossiness)', ()
       required: ['x'],
     });
   });
+
+  it('drops prototype-polluting property names (__proto__, constructor, prototype)', () => {
+    const input = {
+      type: 'object',
+      properties: JSON.parse(
+        '{"safe":{"type":"string"},"__proto__":{"type":"string"},"constructor":{"type":"number"},"prototype":{"type":"boolean"}}',
+      ) as Record<string, unknown>,
+    };
+    const result = asRecord(cleanGeminiSchema(input));
+    const props = asRecord(result['properties']);
+    expect(Object.keys(props)).toStrictEqual(['safe']);
+    // The output object's prototype chain is untouched.
+    expect(Object.getPrototypeOf(props)).toBe(Object.prototype);
+  });
 });
 
 describe('property-based — cleanGeminiSchema invariants', () => {
@@ -320,7 +334,15 @@ describe('property-based — cleanGeminiSchema invariants', () => {
         childArb,
         fc
           .tuple(fc.string({ minLength: 1 }), fc.string({ minLength: 1 }))
-          .filter(([a, b]) => a !== b),
+          .filter(
+            ([a, b]) =>
+              a !== b &&
+              // Prototype-polluting keys are intentionally DROPPED by
+              // cleanPropertiesObject (security guard) — excluded here and
+              // covered by the dedicated example test below.
+              !['__proto__', 'constructor', 'prototype'].includes(a) &&
+              !['__proto__', 'constructor', 'prototype'].includes(b),
+          ),
         (child, [keyA, keyB]) => {
           const schema = {
             type: 'object',
