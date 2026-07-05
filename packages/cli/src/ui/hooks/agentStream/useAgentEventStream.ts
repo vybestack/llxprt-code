@@ -254,6 +254,26 @@ export function useAgentEventStream(
  * Iterates the Agent's event generator, routing each event until the stream
  * ends or the signal aborts.
  */
+/**
+ * Normalizes a PartListUnion to AgentInput without type escapes:
+ * - string passes through;
+ * - arrays may contain string elements (PartUnion = Part | string), which
+ *   AgentInput's readonly Part[] does not accept — convert them to text Parts;
+ * - a bare single Part is wrapped in an array (AgentInput has no single-Part
+ *   variant), fixing a latent type gap for single-Part submissions.
+ */
+function toAgentInput(message: PartListUnion): AgentInput {
+  if (typeof message === 'string') {
+    return message;
+  }
+  if (Array.isArray(message)) {
+    return message.map(
+      (part): Part => (typeof part === 'string' ? { text: part } : part),
+    );
+  }
+  return [message];
+}
+
 function iterateAgentStream(
   agent: Agent,
   message: PartListUnion,
@@ -263,18 +283,7 @@ function iterateAgentStream(
   userMessageTimestamp: number,
 ): Promise<void> {
   return (async () => {
-    // Normalize PartListUnion to AgentInput: a bare single Part (not string,
-    // not array) must be wrapped in an array since AgentInput does not accept
-    // a single Part. This fixes a latent bug where single-Part submissions
-    // (e.g. some at-command results) would fail the AgentInput type.
-    let input: AgentInput;
-    if (typeof message === 'string') {
-      input = message;
-    } else if (Array.isArray(message)) {
-      input = message as unknown as readonly Part[];
-    } else {
-      input = [message];
-    }
+    const input = toAgentInput(message);
     const iterator = agent.stream(input, { signal, promptId });
     for await (const event of iterator) {
       if (signal.aborted) break;
