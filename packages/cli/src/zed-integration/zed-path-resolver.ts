@@ -424,9 +424,7 @@ export class ZedPathResolver {
       });
 
       const result = await invocation.execute(abortSignal);
-      const content = toToolCallContent(
-        result as unknown as Parameters<typeof toToolCallContent>[0],
-      ) ?? {
+      const content = toToolCallContent(result) ?? {
         type: 'content',
         content: {
           type: 'text',

@@ -4,14 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type ToolResult,
-  getResponseTextFromParts,
-} from '@vybestack/llxprt-code-core';
+import { getResponseTextFromParts } from '@vybestack/llxprt-code-core';
 import type { Content, Part, PartListUnion } from '@google/genai';
 
-export function extractToolResultText(toolResult: ToolResult): string | null {
-  const textFromLlmContent = extractTextFromPartList(toolResult.llmContent);
+/**
+ * Structural input for {@link extractToolResultText}: the LLM-content and
+ * display fields of a tool execution result. Both the core `ToolResult` and
+ * the public `AgentToolExecResult` (from `@vybestack/llxprt-code-agents`)
+ * satisfy it, so Zed code can pass either without casts.
+ */
+export interface ToolResultTextInput {
+  readonly llmContent?: unknown;
+  readonly returnDisplay?: unknown;
+}
+
+export function extractToolResultText(
+  toolResult: ToolResultTextInput,
+): string | null {
+  // llmContent is a PartListUnion at runtime for every producer (core tools
+  // and the public agent handle projection); the structural input widens it
+  // to unknown so both result types are accepted.
+  const textFromLlmContent = extractTextFromPartList(
+    toolResult.llmContent as PartListUnion | undefined,
+  );
   if (textFromLlmContent !== null) {
     return textFromLlmContent;
   }

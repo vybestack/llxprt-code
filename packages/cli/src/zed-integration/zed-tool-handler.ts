@@ -6,7 +6,6 @@
 
 import {
   type Config,
-  type ToolResult,
   type ToolCallConfirmationDetails,
   type ToolConfirmationPayload,
   logToolCall,
@@ -316,8 +315,7 @@ export class ZedToolHandler {
     abortSignal: AbortSignal,
   ): Promise<ToolRunResult> {
     const execResult = await invocation.execute(abortSignal);
-    const toolResult = execResult as unknown as ToolResult;
-    const content = toToolCallContent(toolResult);
+    const content = toToolCallContent(execResult);
 
     await this.sendUpdate({
       sessionUpdate: 'tool_call_update',
@@ -345,7 +343,7 @@ export class ZedToolHandler {
       execResult.llmContent as PartListUnion,
       this.config,
     );
-    const message = extractToolResultText(toolResult);
+    const message = extractToolResultText(execResult);
 
     return {
       parts: [
