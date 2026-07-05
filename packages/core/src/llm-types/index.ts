@@ -36,6 +36,23 @@ export * from './providerApiError.js';
 export * from './tokensAndEmbeddings.js';
 export * from './grounding.js';
 
+/**
+ * Neutral tool-call/tool-response ID canonicalization contract.
+ *
+ * The canonical-ID helpers live in services/history/canonicalToolIds.ts and
+ * are provider-independent; they are re-exported here so downstream packages
+ * (policy, MCP, message-bus, scheduler paths) can consume the contract from
+ * the neutral llm-types surface without reaching into history internals.
+ *
+ * @plan PLAN-20260702-LLMTYPES.P06
+ * @requirement REQ-012.3
+ */
+export {
+  canonicalizeToolCallId,
+  canonicalizeToolResponseId,
+  type CanonicalToolIdInput,
+} from '../services/history/canonicalToolIds.js';
+
 export type {
   IContent,
   ContentBlock,
