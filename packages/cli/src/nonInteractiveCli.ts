@@ -196,33 +196,47 @@ function createEmojiFilter(config: Config): EmojiFilter | undefined {
     : undefined;
 }
 
-async function resolveNonInteractiveQuery(
+/**
+ * Resolves a slash command to its submitted prompt parts, or undefined when
+ * the input is not a slash command (or the command produced no content).
+ * Runs BEFORE Agent construction (matching the pre-#2376 ordering) so a
+ * slash-only input that fails or exits never requires provider setup.
+ */
+async function resolveSlashQuery(
   input: string,
   abortController: AbortController,
   config: Config,
   settings: LoadedSettings,
+): Promise<Part[] | undefined> {
+  if (!isSlashCommand(input)) {
+    return undefined;
+  }
+  const slashCommandResult = await handleSlashCommand(
+    input,
+    abortController,
+    config,
+    settings,
+  );
+  if (
+    slashCommandResult !== undefined &&
+    (typeof slashCommandResult !== 'string' || slashCommandResult.length > 0)
+  ) {
+    return slashCommandResult as Part[];
+  }
+  return undefined;
+}
+
+async function resolveAtQuery(
+  input: string,
+  abortController: AbortController,
+  config: Config,
   getToolHandle: (name: string) => AgentToolHandle | undefined,
 ): Promise<Part[]> {
-  if (isSlashCommand(input)) {
-    const slashCommandResult = await handleSlashCommand(
-      input,
-      abortController,
-      config,
-      settings,
-    );
-    if (
-      slashCommandResult !== undefined &&
-      (typeof slashCommandResult !== 'string' || slashCommandResult.length > 0)
-    ) {
-      return slashCommandResult as Part[];
-    }
-  }
   const { processedQuery, error } = await handleAtCommand({
     query: input,
     config,
-    // nonInteractiveCli creates the Agent via fromConfig before calling
-    // resolveNonInteractiveQuery, so resolve tool lookups through the public
-    // Agent.tools API (issue #2376 Task E).
+    // Tool lookups resolve through the public Agent.tools API (issue #2376):
+    // the caller supplies getToolHandle from the already-created Agent.
     getToolHandle,
     addItem: (_item, _timestamp) => 0,
     onDebugMessage: () => {},
@@ -290,11 +304,13 @@ async function processQuery(
 }
 
 /**
- * Creates the Agent, resolves the @-command query, streams the response, and
- * disposes the agent. Extracted from runNonInteractive to keep function length
- * within lint limits. The agent is created before resolveNonInteractiveQuery so
- * that @-command tool lookups go through the public Agent.tools API and the
- * same agent is reused by processQuery (issue #2376).
+ * Resolves the query, streams the response, and disposes the agent. Extracted
+ * from runNonInteractive to keep function length within lint limits.
+ *
+ * Slash commands resolve BEFORE the Agent is created (preserving the
+ * pre-#2376 ordering, so slash-only inputs never depend on provider setup);
+ * the Agent is then created for @-command tool lookups (via the public
+ * Agent.tools API, issue #2376) and reused by processQuery.
  */
 async function resolveAndStream(
   params: RunNonInteractiveParams,
@@ -308,19 +324,23 @@ async function resolveAndStream(
   },
 ): Promise<void> {
   const { config, input, settings } = params;
+  const slashQuery = await resolveSlashQuery(
+    input,
+    options.abortController,
+    config,
+    settings,
+  );
   const agent = await fromConfig({
     config,
     messageBus: params.runtimeMessageBus,
     sessionId: config.getSessionId(),
   });
   try {
-    const query = await resolveNonInteractiveQuery(
-      input,
-      options.abortController,
-      config,
-      settings,
-      (name) => agent.tools.get(name),
-    );
+    const query =
+      slashQuery ??
+      (await resolveAtQuery(input, options.abortController, config, (name) =>
+        agent.tools.get(name),
+      ));
     emitUserMessage(options.streamFormatter, input);
     await processQuery(query, agent, params, options);
   } finally {
