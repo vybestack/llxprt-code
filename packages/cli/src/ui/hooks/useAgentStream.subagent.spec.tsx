@@ -20,7 +20,6 @@ import type {
   AgentClientContract as AgentClient,
   EditorType,
   AnyToolInvocation,
-  ToolRegistry,
   AnyDeclarativeTool,
 } from '@vybestack/llxprt-code-core';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
@@ -199,10 +198,6 @@ describe('useAgentStream subagent isolation', () => {
       vertexai: false,
       showMemoryUsage: false,
       contextFileName: undefined,
-      getToolRegistry: vi.fn(
-        () =>
-          ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
-      ),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       getCheckpointingEnabled: vi.fn(() => false),
       getAgentClient: mockGetAgentClient,
