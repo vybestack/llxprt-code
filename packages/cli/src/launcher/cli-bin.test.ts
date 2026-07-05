@@ -1,0 +1,594 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { EventEmitter } from 'node:events';
+import type { spawn as spawnType } from 'node:child_process';
+
+const cliPackageRoot = resolve(__dirname, '..', '..');
+const binPath = resolve(cliPackageRoot, 'bin', 'llxprt.cjs');
+const loadCommonJsModule = createRequire(import.meta.url);
+const credentialSocketEnv = 'LLXPRT_CREDENTIAL_SOCKET';
+
+interface CredentialProxyHandle {
+  socketPath: string;
+  stop: () => Promise<void>;
+}
+
+interface RunCliBinOptions {
+  exit?: ExitFn;
+  spawn?: typeof spawnType;
+  resolveBun?: () => string | null;
+  resolveEntry?: () => string | null;
+  startCredentialProxy?: () => Promise<CredentialProxyHandle>;
+}
+
+type ExitFn = (code?: number) => never;
+type RunCliBin = (options?: RunCliBinOptions) => Promise<void>;
+type CreateCredentialProxyDefault = (options?: {
+  spawn?: typeof spawnType;
+}) => Promise<CredentialProxyHandle>;
+
+interface CliBinModule {
+  runCliBin: RunCliBin;
+  createCredentialProxyDefault: CreateCredentialProxyDefault;
+}
+
+interface TestChildProcess extends EventEmitter {
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  stdin: EventEmitter;
+  kill: ReturnType<typeof vi.fn>;
+  killed: boolean;
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+}
+
+function recordingExit(sink: number[]): ExitFn {
+  const exit: ExitFn = (code?: number) => {
+    sink.push(code ?? 0);
+    return undefined as never;
+  };
+  return exit;
+}
+
+function isCliBinModule(module: unknown): module is CliBinModule {
+  if (typeof module !== 'object' || module === null) {
+    return false;
+  }
+  const { runCliBin, createCredentialProxyDefault } = module as {
+    runCliBin?: unknown;
+    createCredentialProxyDefault?: unknown;
+  };
+  return (
+    typeof runCliBin === 'function' &&
+    typeof createCredentialProxyDefault === 'function'
+  );
+}
+
+function loadCliBin(): CliBinModule {
+  const module = loadCommonJsModule(binPath);
+  if (!isCliBinModule(module)) {
+    throw new Error('cli bin module did not expose expected test seams');
+  }
+  return module;
+}
+
+function createChildProcess({
+  autoClose = true,
+}: { autoClose?: boolean } = {}): TestChildProcess {
+  const child = new EventEmitter() as TestChildProcess;
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.stdin = new EventEmitter();
+  child.kill = vi.fn((signal?: NodeJS.Signals | 'SIGKILL') => {
+    child.killed = true;
+    if (autoClose) {
+      process.nextTick(() => child.emit('close', null, signal ?? null));
+    }
+    return true;
+  });
+  child.killed = false;
+  child.exitCode = null;
+  child.signalCode = null;
+  return child;
+}
+
+describe('cli bin (packages/cli/bin/llxprt.cjs)', () => {
+  let originalEnv: NodeJS.ProcessEnv;
+  let originalArgv: string[];
+  let runCliBin: RunCliBin;
+  let createCredentialProxyDefault: CreateCredentialProxyDefault;
+
+  beforeEach(() => {
+    originalEnv = process.env;
+    originalArgv = process.argv;
+    process.env = { ...process.env };
+    process.argv = ['/node', '/llxprt.cjs'];
+    const bin = loadCliBin();
+    runCliBin = bin.runCliBin;
+    createCredentialProxyDefault = bin.createCredentialProxyDefault;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    process.argv = originalArgv;
+    vi.restoreAllMocks();
+  });
+
+  async function runLauncher(overrides: RunCliBinOptions = {}) {
+    const exitCalls: number[] = [];
+    const child = createChildProcess();
+    const proxyStop = vi.fn(async () => {});
+    const spawnFn = vi.fn(() => child);
+    const startCredentialProxy = vi.fn(async () => ({
+      socketPath: '/tmp/llxprt-credential.sock',
+      stop: proxyStop,
+    }));
+
+    await runCliBin({
+      exit: recordingExit(exitCalls),
+      spawn: spawnFn as unknown as typeof spawnType,
+      resolveBun: () => '/path/to/bun',
+      resolveEntry: () => '/entry.ts',
+      startCredentialProxy,
+      ...overrides,
+    });
+
+    return {
+      child,
+      exitCalls,
+      proxyStop,
+      spawnFn,
+      startCredentialProxy,
+    };
+  }
+
+  it('starts a Node-owned credential proxy and passes its socket to the Bun child', async () => {
+    delete process.env[credentialSocketEnv];
+    process.argv = ['/node', '/llxprt.cjs', '--profile-load', 'dev'];
+    const exitCalls: number[] = [];
+    const proxyStop = vi.fn(async () => {});
+    const child = createChildProcess();
+    const spawnFn = vi.fn(() => child);
+    const startCredentialProxy = vi.fn(async () => ({
+      socketPath: '/tmp/llxprt-credential.sock',
+      stop: proxyStop,
+    }));
+
+    await runCliBin({
+      exit: recordingExit(exitCalls),
+      spawn: spawnFn as unknown as typeof spawnType,
+      resolveBun: () => '/path/to/bun',
+      resolveEntry: () => '/entry.ts',
+      startCredentialProxy,
+    });
+
+    expect(startCredentialProxy).toHaveBeenCalledTimes(1);
+    expect(spawnFn).toHaveBeenCalledWith(
+      '/path/to/bun',
+      ['/entry.ts', '--profile-load', 'dev'],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          LLXPRT_BUN_RELAUNCHED: 'true',
+          [credentialSocketEnv]: '/tmp/llxprt-credential.sock',
+        }),
+      }),
+    );
+    child.emit('close', 0, null);
+    await vi.waitFor(() => {
+      expect(proxyStop).toHaveBeenCalledTimes(1);
+      expect(exitCalls).toStrictEqual([0]);
+    });
+  });
+
+  it('forwards an existing credential socket unchanged without nesting a proxy', async () => {
+    process.env[credentialSocketEnv] = '/tmp/existing.sock';
+    const exitCalls: number[] = [];
+    const child = createChildProcess();
+    const spawnFn = vi.fn(() => child);
+    const startCredentialProxy = vi.fn(async () => ({
+      socketPath: '/tmp/new.sock',
+      stop: vi.fn(async () => {}),
+    }));
+
+    await runCliBin({
+      exit: recordingExit(exitCalls),
+      spawn: spawnFn as unknown as typeof spawnType,
+      resolveBun: () => '/path/to/bun',
+      resolveEntry: () => '/entry.ts',
+      startCredentialProxy,
+    });
+
+    expect(startCredentialProxy).not.toHaveBeenCalled();
+    expect(spawnFn.mock.calls[0][2]).toStrictEqual(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          LLXPRT_BUN_RELAUNCHED: 'true',
+          [credentialSocketEnv]: '/tmp/existing.sock',
+        }),
+      }),
+    );
+    child.emit('close', 0, null);
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
+  });
+
+  it.each([
+    [['--provider', 'openai', '--key', 'sk-test']],
+    [['--provider', 'openai', '--key=sk-test']],
+    [['--provider', 'openai', '--keyfile', '/tmp/provider-key.txt']],
+    [['--provider', 'openai', '--keyfile=/tmp/provider-key.txt']],
+  ] satisfies string[][][])(
+    'skips the credential proxy when direct credential override is supplied: %j',
+    async (args) => {
+      delete process.env[credentialSocketEnv];
+      process.argv = ['/node', '/llxprt.cjs', ...args];
+      const { child, exitCalls, spawnFn, startCredentialProxy } =
+        await runLauncher();
+
+      expect(startCredentialProxy).not.toHaveBeenCalled();
+      expect(spawnFn).toHaveBeenCalledWith(
+        '/path/to/bun',
+        ['/entry.ts', ...args],
+        expect.objectContaining({
+          env: expect.not.objectContaining({
+            [credentialSocketEnv]: expect.anything(),
+          }),
+        }),
+      );
+      child.emit('close', 0, null);
+      await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
+    },
+  );
+
+  it.each([
+    [['--key']],
+    [['--key=']],
+    [['--key', '--provider']],
+    [['--keyfile']],
+    [['--keyfile=']],
+    [['--keyfile', '--model']],
+  ] satisfies string[][][])(
+    'starts the credential proxy when direct credential flag has no value: %j',
+    async (args) => {
+      delete process.env[credentialSocketEnv];
+      process.argv = ['/node', '/llxprt.cjs', ...args];
+      const { child, exitCalls, spawnFn, startCredentialProxy } =
+        await runLauncher();
+
+      expect(startCredentialProxy).toHaveBeenCalledTimes(1);
+      expect(spawnFn.mock.calls[0][2]).toStrictEqual(
+        expect.objectContaining({
+          env: expect.objectContaining({
+            [credentialSocketEnv]: '/tmp/llxprt-credential.sock',
+          }),
+        }),
+      );
+      child.emit('close', 0, null);
+      await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
+    },
+  );
+
+  it('still starts the credential proxy for named saved credentials', async () => {
+    delete process.env[credentialSocketEnv];
+    process.argv = ['/node', '/llxprt.cjs', '--key-name', 'work'];
+    const { child, exitCalls, startCredentialProxy, spawnFn } =
+      await runLauncher();
+
+    expect(startCredentialProxy).toHaveBeenCalledTimes(1);
+    expect(spawnFn.mock.calls[0][2]).toStrictEqual(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          [credentialSocketEnv]: '/tmp/llxprt-credential.sock',
+        }),
+      }),
+    );
+    child.emit('close', 0, null);
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
+  });
+
+  it('treats an empty credential socket as missing and starts a proxy', async () => {
+    process.env[credentialSocketEnv] = '';
+    const exitCalls: number[] = [];
+    const child = createChildProcess();
+    const spawnFn = vi.fn(() => child);
+    const startCredentialProxy = vi.fn(async () => ({
+      socketPath: '/tmp/new.sock',
+      stop: vi.fn(async () => {}),
+    }));
+
+    await runCliBin({
+      exit: recordingExit(exitCalls),
+      spawn: spawnFn as unknown as typeof spawnType,
+      resolveBun: () => '/path/to/bun',
+      resolveEntry: () => '/entry.ts',
+      startCredentialProxy,
+    });
+
+    expect(startCredentialProxy).toHaveBeenCalledTimes(1);
+    expect(spawnFn.mock.calls[0][2]).toStrictEqual(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          [credentialSocketEnv]: '/tmp/new.sock',
+        }),
+      }),
+    );
+    child.emit('close', 0, null);
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([0]));
+  });
+
+  it('stops the credential proxy when Bun emits an async spawn error', async () => {
+    delete process.env[credentialSocketEnv];
+    const { child, exitCalls, proxyStop } = await runLauncher();
+
+    child.emit('error', new Error('spawn failed'));
+
+    await vi.waitFor(() => {
+      expect(proxyStop).toHaveBeenCalledTimes(1);
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(exitCalls).toStrictEqual([43]);
+    });
+  });
+
+  it('exits after Bun closes even when credential proxy cleanup rejects', async () => {
+    delete process.env[credentialSocketEnv];
+    const proxyStop = vi.fn(async () => {
+      throw new Error('stop failed');
+    });
+    const { child, exitCalls } = await runLauncher({
+      startCredentialProxy: vi.fn(async () => ({
+        socketPath: '/tmp/llxprt-credential.sock',
+        stop: proxyStop,
+      })),
+    });
+
+    child.emit('close', 0, null);
+
+    await vi.waitFor(() => {
+      expect(proxyStop).toHaveBeenCalledTimes(1);
+      expect(exitCalls).toStrictEqual([0]);
+    });
+  });
+
+  it('stops the credential proxy when Bun spawn throws synchronously', async () => {
+    delete process.env[credentialSocketEnv];
+    const proxyStop = vi.fn(async () => {});
+
+    const { exitCalls } = await runLauncher({
+      spawn: vi.fn(() => {
+        throw new Error('sync spawn failed');
+      }) as unknown as typeof spawnType,
+      startCredentialProxy: vi.fn(async () => ({
+        socketPath: '/tmp/llxprt-credential.sock',
+        stop: proxyStop,
+      })),
+    });
+
+    expect(proxyStop).toHaveBeenCalledTimes(1);
+    expect(exitCalls).toStrictEqual([43]);
+  });
+
+  it.each([
+    ['SIGINT', 130],
+    ['SIGTERM', 143],
+    ['SIGHUP', 129],
+    ['SIGBREAK', 149],
+  ] satisfies Array<[NodeJS.Signals, number]>)(
+    'forwards %s to the Bun child until close',
+    async (signal, exitCode) => {
+      delete process.env[credentialSocketEnv];
+      const { child, exitCalls } = await runLauncher();
+
+      process.emit(signal, signal);
+      child.emit('close', null, signal);
+      await vi.waitFor(() => expect(exitCalls).toStrictEqual([exitCode]));
+
+      expect(child.kill).toHaveBeenCalledWith(signal);
+    },
+  );
+
+  it('exits with code 1 when the Bun child closes without code or signal', async () => {
+    delete process.env[credentialSocketEnv];
+    const { child, exitCalls } = await runLauncher();
+
+    child.emit('close', null, null);
+    await vi.waitFor(() => expect(exitCalls).toStrictEqual([1]));
+  });
+
+  it('exits before starting a proxy when Bun cannot be resolved', async () => {
+    const { exitCalls, startCredentialProxy } = await runLauncher({
+      resolveBun: () => null,
+    });
+
+    expect(startCredentialProxy).not.toHaveBeenCalled();
+    expect(exitCalls).toStrictEqual([43]);
+  });
+
+  it('exits before starting a proxy when the CLI entry cannot be resolved', async () => {
+    const { exitCalls, startCredentialProxy } = await runLauncher({
+      resolveEntry: () => null,
+    });
+
+    expect(startCredentialProxy).not.toHaveBeenCalled();
+    expect(exitCalls).toStrictEqual([43]);
+  });
+
+  it('fails closed when credential proxy startup fails', async () => {
+    delete process.env[credentialSocketEnv];
+    const spawnFn = vi.fn(() => createChildProcess());
+    const { exitCalls } = await runLauncher({
+      spawn: spawnFn as unknown as typeof spawnType,
+      startCredentialProxy: vi.fn(async () => {
+        throw new Error('proxy failed');
+      }),
+    });
+
+    expect(spawnFn).not.toHaveBeenCalled();
+    expect(exitCalls).toStrictEqual([43]);
+  });
+
+  it('rejects when the proxy host spawn throws synchronously', async () => {
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: vi.fn(() => {
+        throw new Error('proxy spawn failed');
+      }) as unknown as typeof spawnType,
+    });
+
+    await expect(proxyPromise).rejects.toThrow(
+      /Failed to start the credential proxy needed for Bun runtime access to saved provider credentials/,
+    );
+  });
+
+  it('starts the no-compile Node proxy host with parent socket stripped', async () => {
+    const proxyHost = createChildProcess();
+    process.env[credentialSocketEnv] = '/tmp/parent.sock';
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+    });
+
+    proxyHost.stdout.emit('data', Buffer.from('{"socket'));
+
+    proxyHost.stdout.emit(
+      'data',
+      Buffer.from('Path":"/tmp/llxprt-credential.sock"}\nignored\n'),
+    );
+    const proxy = await proxyPromise;
+
+    expect(spawnFn).toHaveBeenCalledWith(
+      process.execPath,
+      expect.arrayContaining([
+        '--disable-warning=ExperimentalWarning',
+        expect.stringContaining('credential-proxy-host.cjs'),
+      ]),
+      expect.objectContaining({
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: expect.not.objectContaining({
+          [credentialSocketEnv]: expect.anything(),
+        }),
+      }),
+    );
+    expect(proxy.socketPath).toBe('/tmp/llxprt-credential.sock');
+
+    const stopPromise = proxy.stop();
+    proxyHost.emit('close', 0, null);
+    await stopPromise;
+    expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+    delete process.env[credentialSocketEnv];
+  });
+
+  it('resolves proxy stop without killing when proxy host already exited', async () => {
+    const proxyHost = createChildProcess();
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+    });
+
+    proxyHost.stdout.emit(
+      'data',
+      Buffer.from('{"socketPath":"/tmp/llxprt-credential.sock"}\n'),
+    );
+    const proxy = await proxyPromise;
+    proxyHost.exitCode = 0;
+
+    await proxy.stop();
+
+    expect(proxyHost.kill).not.toHaveBeenCalled();
+  });
+  it('escalates proxy host shutdown to SIGKILL when close never arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      const proxyHost = createChildProcess({ autoClose: false });
+      const spawnFn = vi.fn(() => proxyHost);
+      const proxyPromise = createCredentialProxyDefault({
+        spawn: spawnFn as unknown as typeof spawnType,
+      });
+
+      proxyHost.stdout.emit(
+        'data',
+        Buffer.from('{"socketPath":"/tmp/llxprt-credential.sock"}\n'),
+      );
+      const proxy = await proxyPromise;
+      const stopPromise = proxy.stop();
+
+      expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+      await vi.advanceTimersByTimeAsync(1000);
+      await stopPromise;
+      expect(proxyHost.kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects and stops the proxy host when startup never reports a socket', async () => {
+    vi.useFakeTimers();
+    try {
+      const proxyHost = createChildProcess({ autoClose: false });
+      const spawnFn = vi.fn(() => proxyHost);
+      const proxyPromise = createCredentialProxyDefault({
+        spawn: spawnFn as unknown as typeof spawnType,
+      });
+      const rejection = proxyPromise.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+      await vi.advanceTimersByTimeAsync(1000);
+      const error = await rejection;
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toContain('credential proxy');
+      expect(proxyHost.kill).toHaveBeenCalledWith('SIGKILL');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects and stops the proxy host when stdout contains malformed JSON', async () => {
+    const proxyHost = createChildProcess();
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+    });
+
+    proxyHost.stdout.emit('data', Buffer.from('{"not valid json\n'));
+
+    await expect(proxyPromise).rejects.toThrow(/credential proxy/);
+    expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('rejects and stops the proxy host when stdout exceeds the socket line limit', async () => {
+    const proxyHost = createChildProcess();
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+    });
+
+    proxyHost.stdout.emit('data', Buffer.from('x'.repeat(8193)));
+
+    await expect(proxyPromise).rejects.toThrow(/credential proxy/);
+    expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('rejects when the no-compile proxy host exits before reporting a socket', async () => {
+    const proxyHost = createChildProcess();
+    const spawnFn = vi.fn(() => proxyHost);
+    const proxyPromise = createCredentialProxyDefault({
+      spawn: spawnFn as unknown as typeof spawnType,
+    });
+
+    proxyHost.stderr.emit('data', Buffer.from('proxy init failed\n'));
+    proxyHost.emit('close', 1, null);
+
+    await expect(proxyPromise).rejects.toThrow(/credential proxy/);
+    expect(proxyHost.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('exposes runCliBin as a function without executing the launcher on import', () => {
+    const bin = loadCliBin();
+    expect(typeof bin.runCliBin).toBe('function');
+  });
+});

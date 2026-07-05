@@ -6,6 +6,7 @@ const { accessSync, constants, readFileSync, statSync } = require('node:fs');
 const { basename, dirname, join } = require('node:path');
 
 const RELAUNCH_ENV = 'LLXPRT_BUN_RELAUNCHED';
+const CREDENTIAL_SOCKET_ENV = 'LLXPRT_CREDENTIAL_SOCKET';
 const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'];
 const SIGNAL_EXIT_CODES = {
   SIGHUP: 129,
@@ -25,6 +26,13 @@ const SIGNAL_EXIT_CODES = {
   SIGTERM: 143,
   SIGBREAK: 149,
 };
+const PROXY_HOST_PATH = join(__dirname, 'credential-proxy-host.cjs');
+const PROXY_HOST_NODE_ARGS = [
+  '--disable-warning=ExperimentalWarning',
+  PROXY_HOST_PATH,
+];
+const PROXY_HOST_STARTUP_TIMEOUT_MS = 15_000;
+const PROXY_HOST_SHUTDOWN_TIMEOUT_MS = 1_000;
 
 function ancestors(startDir) {
   const dirs = [];
@@ -160,82 +168,371 @@ function isWindowsCmdShim(path) {
   );
 }
 
-function fatal(message) {
-  process.stderr.write(`${message}\n`);
-  process.exit(43);
-}
-
 function describeError(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Note: LLXPRT_BUN_RELAUNCHED may already be set when a Bun-hosted LLxprt
-// process re-invokes this bin (e.g. nested tooling). That is safe: we always
-// spawn Bun directly on the TypeScript entry, never this launcher, so no
-// relaunch loop is possible and nested invocations must keep working.
-const bunPath = resolveBun();
-if (bunPath === null) {
-  fatal(
-    'Bun runtime was not found. Install it with "npm install" (it is bundled as the "bun" dependency) or install Bun directly from https://bun.sh and ensure it is on your PATH.',
-  );
+function fatalCredentialProxyMessage(error) {
+  return `Failed to start the credential proxy needed for Bun runtime access to saved provider credentials (${describeError(error)}). Reinstall dependencies with "npm install" and try again.`;
 }
 
-const entry = resolveEntry();
-if (entry === null) {
-  fatal(
-    'Could not locate the LLxprt Code TypeScript entry point (packages/cli/index.ts). Your installation may be corrupt; reinstall @vybestack/llxprt-code.',
-  );
+function stopCredentialProxy(proxy) {
+  if (proxy === null) {
+    return Promise.resolve();
+  }
+  return proxy.stop().catch(() => {});
 }
 
-const args = [entry, ...process.argv.slice(2)];
-if (isWindowsCmdShim(bunPath) && args.some(hasWindowsCmdMetaCharacter)) {
-  fatal(
-    'Cannot safely forward arguments containing Windows command-shell metacharacters through the bundled bun.cmd shim. Install Bun directly so bun.exe is on PATH, or remove shell metacharacters from the CLI arguments.',
-  );
+function readFlagValue(args, index, flag) {
+  const arg = args[index];
+  if (arg === flag) {
+    const value = args[index + 1];
+    if (value === undefined || value.startsWith('-')) {
+      return '';
+    }
+    return value;
+  }
+  const prefix = `${flag}=`;
+  if (arg.startsWith(prefix)) {
+    return arg.slice(prefix.length);
+  }
+  return null;
 }
 
-let child;
-try {
-  child = spawn(bunPath, args, {
-    stdio: 'inherit',
-    env: { ...process.env, [RELAUNCH_ENV]: 'true' },
-    shell: isWindowsCmdShim(bunPath),
-  });
-} catch (error) {
-  fatal(
-    `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
-  );
+function hasDirectCredentialOverride(args) {
+  for (let index = 1; index < args.length; index++) {
+    const key = readFlagValue(args, index, '--key');
+    if (key !== null && key.length > 0) {
+      return true;
+    }
+    const keyfile = readFlagValue(args, index, '--keyfile');
+    if (keyfile !== null && keyfile.length > 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
-let settled = false;
-for (const signal of FORWARDED_SIGNALS) {
-  process.on(signal, () => {
-    if (!settled) {
-      child.kill(signal);
+function stopProxyHost(child) {
+  return new Promise((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null || child.killed) {
+      resolve();
+      return;
+    }
+    const finish = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      child.off('close', finish);
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // Process may have already exited before the close event was delivered.
+      }
+      resolve();
+    }, PROXY_HOST_SHUTDOWN_TIMEOUT_MS);
+    child.once('close', finish);
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      finish();
     }
   });
 }
 
-child.on('error', (error) => {
-  if (settled) {
-    return;
+function parseProxyHostLine(line) {
+  const parsed = JSON.parse(line);
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    typeof parsed.socketPath !== 'string' ||
+    parsed.socketPath.length === 0
+  ) {
+    throw new Error('proxy host did not report a socket path');
   }
-  settled = true;
-  fatal(
-    `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
-  );
-});
+  return parsed.socketPath;
+}
 
-child.on('close', (code, signal) => {
-  if (settled) {
+function createCredentialProxyDefault(options = {}) {
+  const spawnFn = options.spawn ?? spawn;
+  const env = { ...process.env };
+  delete env[CREDENTIAL_SOCKET_ENV];
+
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawnFn(process.execPath, PROXY_HOST_NODE_ARGS, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env,
+      });
+    } catch (error) {
+      reject(new Error(fatalCredentialProxyMessage(error)));
+      return;
+    }
+
+    let settled = false;
+    let stdout = '';
+    let stderr = '';
+    const startupTimer = setTimeout(() => {
+      void fail(
+        new Error(
+          fatalCredentialProxyMessage(
+            'proxy host did not report a socket path within the startup timeout',
+          ),
+        ),
+      );
+    }, PROXY_HOST_STARTUP_TIMEOUT_MS);
+
+    const absorbLateChildError = () => {};
+
+    const cleanup = () => {
+      clearTimeout(startupTimer);
+      child.off('error', onError);
+      child.off('close', onClose);
+      child.stdout?.off('data', onStdout);
+      child.stderr?.off('data', onStderr);
+    };
+
+    const cleanupAfterStartup = () => {
+      cleanup();
+      child.on('error', absorbLateChildError);
+    };
+
+    const fail = async (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      await stopProxyHost(child).catch(() => {});
+      reject(error);
+    };
+
+    const onError = (error) => {
+      void fail(new Error(fatalCredentialProxyMessage(error)));
+    };
+
+    const onClose = (code, signal) => {
+      const reason =
+        stderr.trim() ||
+        `proxy host exited before reporting a socket path (code=${code}, signal=${signal})`;
+      void fail(new Error(fatalCredentialProxyMessage(reason)));
+    };
+
+    const onStderr = (chunk) => {
+      stderr += chunk.toString('utf8');
+      if (stderr.length > 4096) {
+        stderr = stderr.slice(-4096);
+      }
+    };
+
+    const onStdout = (chunk) => {
+      stdout += chunk.toString('utf8');
+      const newline = stdout.indexOf('\n');
+      if (newline === -1) {
+        if (stdout.length > 8192) {
+          void fail(
+            new Error(
+              fatalCredentialProxyMessage(
+                'proxy host stdout exceeded 8192 bytes before reporting a socket path',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      const line = stdout.slice(0, newline).trim();
+      try {
+        const socketPath = parseProxyHostLine(line);
+        settled = true;
+        cleanupAfterStartup();
+        resolve({
+          socketPath,
+          stop: () => stopProxyHost(child),
+        });
+      } catch (error) {
+        void fail(new Error(fatalCredentialProxyMessage(error)));
+      }
+    };
+
+    child.once('error', onError);
+    child.once('close', onClose);
+    child.stdout?.on('data', onStdout);
+    child.stderr?.on('data', onStderr);
+  });
+}
+
+async function createChildEnv(startCredentialProxy, args) {
+  if (process.env[CREDENTIAL_SOCKET_ENV] || hasDirectCredentialOverride(args)) {
+    return {
+      childEnv: { ...process.env, [RELAUNCH_ENV]: 'true' },
+      credentialProxy: null,
+    };
+  }
+  const credentialProxy = await startCredentialProxy();
+  return {
+    childEnv: {
+      ...process.env,
+      [RELAUNCH_ENV]: 'true',
+      [CREDENTIAL_SOCKET_ENV]: credentialProxy.socketPath,
+    },
+    credentialProxy,
+  };
+}
+
+async function runCliBin(options = {}) {
+  const exit = options.exit ?? process.exit;
+  const spawnFn = options.spawn ?? spawn;
+  const startCredentialProxy =
+    options.startCredentialProxy ?? (() => createCredentialProxyDefault());
+
+  function fatalExit(message) {
+    process.stderr.write(`${message}\n`);
+    exit(43);
+  }
+
+  const bunPath =
+    options.resolveBun === undefined ? resolveBun() : options.resolveBun();
+  if (bunPath === null) {
+    fatalExit(
+      'Bun runtime was not found. Install it with "npm install" (it is bundled as the "bun" dependency) or install Bun directly from https://bun.sh and ensure it is on your PATH.',
+    );
     return;
   }
-  settled = true;
-  if (code !== null) {
-    process.exit(code);
+
+  const entry =
+    options.resolveEntry === undefined
+      ? resolveEntry()
+      : options.resolveEntry();
+  if (entry === null) {
+    fatalExit(
+      'Could not locate the LLxprt Code TypeScript entry point (packages/cli/index.ts). Your installation may be corrupt; reinstall @vybestack/llxprt-code.',
+    );
+    return;
   }
-  if (signal !== null) {
-    process.exit(SIGNAL_EXIT_CODES[signal] ?? 1);
+
+  const args = [entry, ...process.argv.slice(2)];
+  if (isWindowsCmdShim(bunPath) && args.some(hasWindowsCmdMetaCharacter)) {
+    fatalExit(
+      'Cannot safely forward arguments containing Windows command-shell metacharacters through the bundled bun.cmd shim. Install Bun directly so bun.exe is on PATH, or remove shell metacharacters from the CLI arguments.',
+    );
+    return;
   }
-  process.exit(1);
-});
+
+  let credentialProxy = null;
+  let childEnv;
+  try {
+    const envResult = await createChildEnv(startCredentialProxy, args);
+    credentialProxy = envResult.credentialProxy;
+    childEnv = envResult.childEnv;
+  } catch (error) {
+    fatalExit(describeError(error));
+    return;
+  }
+
+  let child;
+  try {
+    child = spawnFn(bunPath, args, {
+      stdio: 'inherit',
+      env: childEnv,
+      shell: isWindowsCmdShim(bunPath),
+    });
+  } catch (error) {
+    await stopCredentialProxy(credentialProxy);
+    fatalExit(
+      `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
+    );
+    return;
+  }
+
+  let settled = false;
+  const forwardSignal = (signal) => {
+    if (!settled) {
+      child.kill(signal);
+    }
+  };
+  const cleanupListeners = () => {
+    child.off('close', onClose);
+    child.off('error', onError);
+    for (const signal of FORWARDED_SIGNALS) {
+      process.off(signal, forwardSignal);
+    }
+  };
+  const settle = async (callback) => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    cleanupListeners();
+    child.on('error', () => {});
+    let callbackCalled = false;
+    const finish = () => {
+      if (callbackCalled) {
+        return;
+      }
+      callbackCalled = true;
+      callback();
+    };
+    const fastExit = (signal) => {
+      try {
+        child.kill(signal);
+      } catch {
+        // Child may have already exited before the second signal arrived.
+      }
+      finish();
+    };
+    for (const signal of FORWARDED_SIGNALS) {
+      process.once(signal, fastExit);
+    }
+    try {
+      await stopCredentialProxy(credentialProxy);
+    } finally {
+      for (const signal of FORWARDED_SIGNALS) {
+        process.off(signal, fastExit);
+      }
+    }
+    finish();
+  };
+  const onError = (error) => {
+    void settle(() => {
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // Child may have already exited before the async spawn error surfaced.
+      }
+      fatalExit(
+        `Failed to launch Bun at "${bunPath}" (${describeError(error)}). Reinstall dependencies with "npm install" to restore the bundled Bun, or ensure a working Bun is executable and on your PATH (see https://bun.sh).`,
+      );
+    }).catch(() => {});
+  };
+  const onClose = (code, signal) => {
+    void settle(() => {
+      if (code !== null) {
+        exit(code);
+        return;
+      }
+      if (signal !== null) {
+        exit(SIGNAL_EXIT_CODES[signal] ?? 1);
+        return;
+      }
+      exit(1);
+    }).catch(() => {});
+  };
+
+  for (const signal of FORWARDED_SIGNALS) {
+    process.on(signal, forwardSignal);
+  }
+  child.on('error', onError);
+  child.on('close', onClose);
+}
+
+module.exports = { runCliBin, createCredentialProxyDefault };
+
+if (require.main === module) {
+  runCliBin().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+  });
+}
