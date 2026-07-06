@@ -15,7 +15,7 @@ describe('Built-in provider alias (LiteLLM)', () => {
     (entry) => entry.source === 'builtin',
   );
   const litellmEntry = builtinEntries.find(
-    (candidate) => candidate.alias === 'litellm',
+    (candidate) => candidate.alias === 'LiteLLM',
   );
 
   it('litellm alias is registered as a builtin', () => {
