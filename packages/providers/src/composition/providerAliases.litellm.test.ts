@@ -23,9 +23,7 @@ describe('Built-in provider alias (LiteLLM)', () => {
   });
 
   it('has correct base-url pointing to default LiteLLM proxy', () => {
-    expect(litellmEntry?.config['base-url']).toBe(
-      'http://127.0.0.1:4000/v1/',
-    );
+    expect(litellmEntry?.config['base-url']).toBe('http://127.0.0.1:4000/v1/');
   });
 
   it('uses openai as the base provider', () => {
