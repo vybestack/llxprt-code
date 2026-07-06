@@ -29,8 +29,10 @@ reviews:
     # Draft PRs are skipped (this is the default, stated here because the
     # recommended workflow relies on it: open as draft, mark ready when green).
     drafts: false
-    # Review once when the PR is opened/marked ready, not on every push.
-    # Multi-commit PRs (e.g. #2334 had 10 commits) otherwise consume one
-    # incremental review per push. Trigger follow-up reviews on demand by
-    # commenting `@coderabbitai review` after pushing fixes.
-    auto_incremental_review: false
+    # Keep automatic incremental reviews, but pause after 3 reviewed commits
+    # per PR (resume with `@coderabbitai resume`, or trigger a single review
+    # with `@coderabbitai review`). This caps quota use on multi-commit PRs
+    # without silently skipping later pushes: with incremental reviews fully
+    # disabled, follow-up commits merged unreviewed (e.g. #2394, #2384).
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 3
