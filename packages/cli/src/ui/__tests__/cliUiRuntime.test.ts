@@ -63,7 +63,9 @@ describe('buildSlashCommandRuntime', () => {
     const source = createProxySource();
     const adapter = buildSlashCommandRuntime(source);
 
-    expect((adapter as unknown as Record<string, unknown>).storage).toStrictEqual({
+    expect(
+      (adapter as unknown as Record<string, unknown>).storage,
+    ).toStrictEqual({
       id: 'mock-storage',
     });
   });
