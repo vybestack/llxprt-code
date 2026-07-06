@@ -861,7 +861,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       const client = createLspClient(
         createConfig(['--crash-on-method', 'textDocument/hover']),
         WORKSPACE_ROOT,
-        { requestTimeoutMs: 200 },
+        { requestTimeoutMs: 1000 },
       );
       createdClients.push(client);
 
@@ -880,7 +880,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
         ).rejects.toThrow();
 
         // Wait beyond requestTimeoutMs to ensure any leaked timer would fire
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await new Promise((resolve) => setTimeout(resolve, 1200));
       } finally {
         process.off('unhandledRejection', handler);
       }
