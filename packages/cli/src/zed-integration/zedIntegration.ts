@@ -370,6 +370,8 @@ export class Session {
   private logger: DebugLogger;
   private pathResolver: ZedPathResolver;
   private toolHandler: ZedToolHandler;
+  private readonly todoListener: (event: TodoUpdateEvent) => void;
+  private _disposed = false;
 
   constructor(
     private readonly id: string,
@@ -411,8 +413,6 @@ export class Session {
     todoEvents.onTodoUpdated(this.todoListener);
   }
 
-  private readonly todoListener: (event: TodoUpdateEvent) => void;
-
   setMode(modeId: acp.SessionModeId): acp.SetSessionModeResponse {
     const availableModes = buildAvailableModes();
     const mode = availableModes.find((m) => m.id === modeId);
@@ -431,8 +431,6 @@ export class Session {
     this.pendingPrompt = null;
   }
 
-  private _disposed = false;
-
   /**
    * Disposes the session's Agent and unsubscribes the plan-update listener,
    * guarding against double-dispose. Errors are caught and logged via the
@@ -443,7 +441,16 @@ export class Session {
       return;
     }
     this._disposed = true;
-    todoEvents.offTodoUpdated(this.todoListener);
+    try {
+      todoEvents.offTodoUpdated(this.todoListener);
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Error unsubscribing todo listener: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
     try {
       await this.agent.dispose();
     } catch (error) {

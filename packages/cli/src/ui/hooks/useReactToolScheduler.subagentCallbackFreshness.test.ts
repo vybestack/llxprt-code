@@ -167,15 +167,13 @@ describe('useReactToolScheduler subagent callback freshness', () => {
     // getOrCreateScheduler captures those callbacks and builds a scheduler
     // that immediately completes a call, invoking the factory's
     // onAllToolCallsComplete path (which calls hooks.onComplete).
-    let capturedCallbacks: SchedulerCallbacksCore | undefined;
     const subagentConfig = {
       getSessionId: () => subagentSessionId,
       getOrCreateScheduler: (
         _sessionId: string,
         callbacks: SchedulerCallbacksCore,
-      ): ToolSchedulerContract => {
-        capturedCallbacks = callbacks;
-        return {
+      ): ToolSchedulerContract =>
+        ({
           schedule: async (
             req: ToolCallRequestInfo | ToolCallRequestInfo[],
           ) => {
@@ -202,8 +200,7 @@ describe('useReactToolScheduler subagent callback freshness', () => {
           cancelAll: () => {},
           dispose: () => {},
           setCallbacks: () => {},
-        } as unknown as ToolSchedulerContract;
-      },
+        }) as unknown as ToolSchedulerContract,
       disposeScheduler: vi.fn(),
     };
 
@@ -224,7 +221,6 @@ describe('useReactToolScheduler subagent callback freshness', () => {
 
     await handle.schedule(request, new AbortController().signal);
     handle.dispose();
-    void capturedCallbacks;
   }
 
   it('subagent completion calls the LATEST onComplete after a rerender changes the prop', async () => {

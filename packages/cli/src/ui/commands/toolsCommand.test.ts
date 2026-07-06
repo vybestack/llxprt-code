@@ -26,6 +26,14 @@ const mockTools: readonly ToolInfo[] = [
     source: 'builtin',
     enabled: true,
   },
+  {
+    name: 'mcp-search',
+    displayName: 'MCP Search',
+    description: 'Searches via MCP server.',
+    source: 'mcp',
+    server: 'my-server',
+    enabled: true,
+  },
 ];
 
 function createMockAgent(tools: readonly ToolInfo[] = mockTools) {
@@ -80,6 +88,46 @@ describe('toolsCommand', () => {
     expect(output).toContain('File Reader [disabled]');
     expect(output).toContain('Code Editor [enabled]');
     expect(output).toContain('Disabled tools: 1');
+  });
+
+  it('excludes MCP tools from the /tools list output', async () => {
+    const settings = new SettingsService();
+    const mockContext = createMockCommandContext({
+      services: {
+        agent: createMockAgent() as never,
+        config: {
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({}),
+        },
+      },
+      ui: { addItem: vi.fn() },
+    });
+
+    await toolsCommand.action!(mockContext, 'list');
+
+    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    expect(output).toContain('File Reader');
+    expect(output).not.toContain('MCP Search');
+  });
+
+  it('errors when attempting /tools disable on an MCP tool name', async () => {
+    const settings = new SettingsService();
+    const mockContext = createMockCommandContext({
+      services: {
+        agent: createMockAgent() as never,
+        config: {
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({}),
+        },
+      },
+      ui: { addItem: vi.fn() },
+    });
+
+    await toolsCommand.action!(mockContext, 'disable mcp-search');
+
+    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0];
+    expect(output.type).toBe(MessageType.ERROR);
+    expect(output.text).toContain('Tool "mcp-search" not found');
   });
 
   it('disables a tool using its friendly name', async () => {

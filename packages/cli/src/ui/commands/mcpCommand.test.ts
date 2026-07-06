@@ -62,11 +62,7 @@ function assertMessageAction(
   }
 }
 
-const createMockMCPResource = (
-  serverName: string,
-  uri: string,
-  name: string,
-): McpResourceInfo => ({
+const createMockMCPResource = (uri: string, name: string): McpResourceInfo => ({
   name,
   uri,
   description: `Description for ${name}`,
@@ -98,9 +94,7 @@ const createMockMCPTool = (
  * detail payloads from legacy tool instances the tests already construct.
  */
 function projectToolToInfo(tool: DiscoveredMCPTool): ToolInfo {
-  const schema = tool.schema.parametersJsonSchema as
-    | Readonly<Record<string, unknown>>
-    | undefined;
+  const schema = tool.schema.parametersJsonSchema;
   return {
     name: tool.name,
     displayName: tool.displayName,
@@ -109,7 +103,9 @@ function projectToolToInfo(tool: DiscoveredMCPTool): ToolInfo {
     server: tool.serverName,
     enabled: true,
     serverToolName: tool.serverToolName,
-    ...(schema !== undefined ? { parametersSchema: schema } : {}),
+    ...(typeof schema === 'object' && schema !== null
+      ? { parametersSchema: schema as Readonly<Record<string, unknown>> }
+      : {}),
   };
 }
 
@@ -320,16 +316,11 @@ describe('mcpCommand', () => {
       const resources = [
         {
           serverName: 'server1',
-          resource: createMockMCPResource(
-            'server1',
-            'file:///docs/readme.md',
-            'README',
-          ),
+          resource: createMockMCPResource('file:///docs/readme.md', 'README'),
         },
         {
           serverName: 'server2',
           resource: createMockMCPResource(
-            'server2',
             'file:///docs/changelog.md',
             'CHANGELOG',
           ),

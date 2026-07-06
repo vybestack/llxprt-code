@@ -17,6 +17,26 @@ import {
   mcpServerRequiresOAuth,
 } from '@vybestack/llxprt-code-core';
 import type { McpControlDeps } from './mcpControl.js';
+import { projectRegistryTool } from '../agentBootstrap.js';
+
+/**
+ * Type-safely reads an optional string property from a tool that may carry
+ * runtime-only fields (serverName, serverToolName) not declared on
+ * {@link AnyDeclarativeTool}. Returns undefined for missing/non-string values.
+ *
+ * @plan:ISSUE-2376
+ */
+function readOptionalStringProp(
+  tool: object,
+  prop: string,
+): string | undefined {
+  if (!(prop in tool)) {
+    return undefined;
+  }
+  const record = tool as Record<string, unknown>;
+  const value = record[prop];
+  return typeof value === 'string' ? value : undefined;
+}
 
 /**
  * Inputs AgentImpl supplies so the MCP wiring can resolve the live
@@ -54,29 +74,24 @@ export function buildMcpControlDeps(
     markAuthenticated,
     getManager: () => config.getMcpClientManager(),
     // @plan:ISSUE-2376 — project the real registry tools (AnyDeclarativeTool)
-    // into the McpToolRegistryView element shape so displayName/
-    // parametersSchema/serverToolName flow through to the public ToolInfo.
+    // into the McpToolRegistryView element shape by reusing
+    // projectRegistryTool (the same helper toolControl.ts list() uses), so
+    // displayName/parametersSchema/serverToolName flow through consistently
+    // without duplicating the projection or relying on unsafe field casts.
     getToolRegistry: () => {
       const registry = config.getToolRegistry();
       return {
         getAllTools: () =>
-          registry.getAllTools().map((t) => {
-            const schema = t.schema.parametersJsonSchema;
-            return {
+          registry.getAllTools().map((t) =>
+            projectRegistryTool({
               name: t.name,
-              description: t.description,
-              serverName: (t as { serverName?: string }).serverName,
               displayName: t.displayName,
-              ...(schema !== undefined
-                ? {
-                    parametersSchema: schema as Readonly<
-                      Record<string, unknown>
-                    >,
-                  }
-                : {}),
-              serverToolName: (t as { serverToolName?: string }).serverToolName,
-            };
-          }),
+              description: t.description,
+              schema: t.schema,
+              serverName: readOptionalStringProp(t, 'serverName'),
+              serverToolName: readOptionalStringProp(t, 'serverToolName'),
+            }),
+          ),
         getEnabledTools: () =>
           registry.getEnabledTools().map((t) => ({ name: t.name })),
       };

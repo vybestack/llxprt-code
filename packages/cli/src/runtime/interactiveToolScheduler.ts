@@ -184,7 +184,11 @@ function processPendingRequests(
 ): void {
   for (const { request, signal } of requests) {
     if (signal.aborted) continue;
-    instance.schedule(request, signal).catch(() => {});
+    instance.schedule(request, signal).catch((error) => {
+      logger.debug(
+        () => `processPendingRequests: schedule() rejected: ${String(error)}`,
+      );
+    });
   }
 }
 
@@ -206,6 +210,13 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
   private scheduler: ToolSchedulerContract | null = null;
   private readonly pendingRequests: PendingScheduleRequests = [];
   private externalSchedulerRegistered = false;
+  /**
+   * Monotonically increasing generation counter. Each attach() call increments
+   * it; when the async portion completes, stale generations (where the counter
+   * has moved on due to a second attach or a detach) self-dispose instead of
+   * installing a scheduler.
+   */
+  private attachGeneration = 0;
 
   constructor(
     private readonly config: Config,
@@ -219,9 +230,38 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
     mainHooks: MainSchedulerDisplayHooks,
     subagentHooks: SubagentDisplayHooks,
   ): Promise<DetachScheduler> {
+    // If a scheduler is already attached from a prior attach, detach it first
+    // (React StrictMode double-effect can race a second attach before the first
+    // detach completes). The generation guard below handles in-flight races.
+    if (this.scheduler) {
+      this.config.disposeScheduler(this.sessionId);
+      this.scheduler = null;
+      this.deregisterSubagentFactory();
+    }
+
+    // Tag this attach attempt so we can detect staleness after the async gap.
+    const myGeneration = ++this.attachGeneration;
+
     this.registerSubagentFactory(subagentHooks);
 
-    const instance = await this.createMainScheduler(mainHooks);
+    let instance: ToolSchedulerContract | null;
+    try {
+      instance = await this.createMainScheduler(mainHooks);
+    } catch (error) {
+      // On failure, roll back the factory registration, clear pending requests,
+      // and rethrow so the caller knows attach failed.
+      this.rollbackAttach(myGeneration);
+      throw error;
+    }
+
+    // A newer attach or a detach superseded us — self-dispose and bail.
+    if (myGeneration !== this.attachGeneration) {
+      if (instance) {
+        this.config.disposeScheduler(this.sessionId);
+      }
+      this.deregisterSubagentFactory();
+      return () => {};
+    }
 
     // If the component unmounted during async creation, dispose and bail.
     // Clear pending requests so stale entries don't fire on a later attach.
@@ -248,6 +288,8 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
     return () => {
       if (detached) return;
       detached = true;
+      // Advance the generation so any in-flight attach self-disposes.
+      this.attachGeneration++;
       this.deregisterSubagentFactory();
       this.pendingRequests.length = 0;
       if (this.scheduler) {
@@ -255,6 +297,17 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
         this.scheduler = null;
       }
     };
+  }
+
+  /**
+   * Rolls back the side effects of a failed attach: deregisters the subagent
+   * factory, resets the externalSchedulerRegistered flag, and clears pending
+   * requests. Only acts if no newer attach has superseded the given generation.
+   */
+  private rollbackAttach(generation: number): void {
+    if (generation !== this.attachGeneration) return;
+    this.deregisterSubagentFactory();
+    this.pendingRequests.length = 0;
   }
 
   schedule(
@@ -266,7 +319,9 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
       this.pendingRequests.push({ request: normalizedRequest, signal });
       return Promise.resolve();
     }
-    return this.scheduler.schedule(normalizedRequest, signal).catch(() => {});
+    return this.scheduler.schedule(normalizedRequest, signal).catch((error) => {
+      logger.debug(() => `schedule() rejected: ${String(error)}`);
+    });
   }
 
   cancelAll(): void {

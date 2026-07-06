@@ -476,7 +476,7 @@ export function projectRegistryTool(tool: {
     serverName: tool.serverName,
     displayName: tool.displayName,
     description: tool.description,
-    ...(schema !== undefined
+    ...(typeof schema === 'object' && schema !== null
       ? { parametersSchema: schema as Readonly<Record<string, unknown>> }
       : {}),
     ...(tool.serverToolName !== undefined

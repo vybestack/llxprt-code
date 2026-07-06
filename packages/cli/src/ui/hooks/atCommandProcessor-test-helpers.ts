@@ -30,9 +30,10 @@ import * as path from 'path';
 
 /**
  * Minimal adapter that wraps a real tool (from ToolRegistry.getTool) as an
- * AgentToolHandle for the at-command test harness. This mirrors the shape
- * ToolControl.get() produces (via the internal wrapToolHandle) so the
- * at-command processor exercises the same code paths as production.
+ * AgentToolHandle for the at-command test harness. Mirrors the
+ * production-equivalent result projection (llmContent + returnDisplay
+ * unconditionally, error only when defined) so tests exercise shapes that
+ * match what ToolControl.get()/wrapInvocation produces internally.
  */
 function wrapToolForTest(tool: unknown): AgentToolHandle {
   const t = tool as {
@@ -62,6 +63,28 @@ function wrapToolForTest(tool: unknown): AgentToolHandle {
       error?: unknown;
     }>;
   };
+  /**
+   * Projects a raw tool result to the public shape: llmContent and
+   * returnDisplay always present, error included only when defined.
+   */
+  const projectResult = (result: {
+    llmContent: unknown;
+    returnDisplay?: unknown;
+    error?: unknown;
+  }): { llmContent: unknown; returnDisplay?: unknown; error?: unknown } => {
+    const projected: {
+      llmContent: unknown;
+      returnDisplay?: unknown;
+      error?: unknown;
+    } = {
+      llmContent: result.llmContent,
+      returnDisplay: result.returnDisplay,
+    };
+    if (result.error !== undefined) {
+      projected.error = result.error;
+    }
+    return projected;
+  };
   const buildInvocation = (
     params: Record<string, unknown>,
   ): AgentToolInvocation => {
@@ -70,7 +93,7 @@ function wrapToolForTest(tool: unknown): AgentToolHandle {
       getDescription: () => invocation.getDescription(),
       execute: async (signal, updateOutput) => {
         const result = await invocation.execute(signal, updateOutput);
-        return result;
+        return projectResult(result);
       },
       shouldConfirmExecute: (signal) => invocation.shouldConfirmExecute(signal),
       toolLocations: () => invocation.toolLocations(),
@@ -85,7 +108,7 @@ function wrapToolForTest(tool: unknown): AgentToolHandle {
     build: buildInvocation,
     buildAndExecute: async (params, signal) => {
       const result = await t.buildAndExecute(params, signal);
-      return result;
+      return projectResult(result);
     },
   };
 }

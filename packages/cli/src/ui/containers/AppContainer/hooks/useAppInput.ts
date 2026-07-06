@@ -331,6 +331,12 @@ function useInputStreamSetup(
     ...core,
     ...p,
   };
+  // Stable callback keyed on agent so downstream useMemo/useCallback chains in
+  // useStreamEventHandlers don't churn every render from a fresh arrow.
+  const getToolHandle = useCallback(
+    (name: string) => agent.tools.get(name),
+    [agent],
+  );
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
   const geminiResult = useAgentStream(
@@ -339,7 +345,7 @@ function useInputStreamSetup(
     // replaces it with the threaded Agent once the streaming hooks migrate to
     // the public Agent API; the hooks are intentionally unchanged at this stage.
     config.getAgentClient(),
-    (name) => agent.tools.get(name),
+    getToolHandle,
     history,
     addItem,
     config,

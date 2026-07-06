@@ -46,6 +46,7 @@ function getErrorMessage(error: unknown): string | undefined {
 }
 
 interface FileDiffDisplay {
+  fileDiff: string;
   fileName: string;
   originalContent: string | null;
   newContent: string;

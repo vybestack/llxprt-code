@@ -374,7 +374,7 @@ describe('createInteractiveToolScheduler', () => {
 
     const capability = createInteractiveToolScheduler(config, undefined);
 
-    // Queue a pending request BEFORE attach resolves.
+    // Queue a pending request on the ORIGINAL capability BEFORE attach.
     const req = buildRequest({ callId: 'stale-1' });
     await capability.schedule(req, new AbortController().signal);
 
@@ -409,20 +409,19 @@ describe('createInteractiveToolScheduler', () => {
     // The detach is a no-op; calling it should be safe.
     detach();
 
-    // Now re-attach: the stale pending request must NOT have been flushed.
-    const freshScheduler = buildMockScheduler();
-    const freshConfig = buildMockConfig(freshScheduler);
-    // Re-create the capability to test pendingRequests clearing
-    const freshCapability = createInteractiveToolScheduler(
-      freshConfig,
-      undefined,
+    // Now RE-ATTACH THE SAME CAPABILITY with a mounted hook. The previously
+    // queued request must NOT have been flushed (pending requests were cleared
+    // on unmount-during-attach).
+    isMounted = true;
+    const secondScheduler = buildMockScheduler();
+    // Override the mock to return a fresh scheduler for the second attach.
+    config.getOrCreateSchedulerMock.mockResolvedValue(secondScheduler);
+    const secondDetach = await capability.attach(mainHooks, subagentHooks);
+    // The stale 'stale-1' request must NOT reach the scheduler.
+    expect(secondScheduler.scheduleMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ callId: 'stale-1' }),
     );
-    const freshDetach = await freshCapability.attach(
-      buildMainHooks(),
-      buildSubagentHooks(),
-    );
-    expect(freshScheduler.scheduleMock).not.toHaveBeenCalled();
-    freshDetach();
+    secondDetach();
   });
 
   it('clears pending requests and stays not-ready when scheduler creation fails', async () => {
@@ -495,5 +494,45 @@ describe('createInteractiveToolScheduler', () => {
     expect(outputUpdateHandler).not.toHaveBeenCalled();
 
     detach();
+  });
+
+  it('handles a double-attach by disposing the first scheduler before installing the second', async () => {
+    const scheduler1 = buildMockScheduler();
+    const config = buildMockConfig(scheduler1);
+    const capability = createInteractiveToolScheduler(config, undefined);
+
+    const detach1 = await capability.attach(
+      buildMainHooks(),
+      buildSubagentHooks(),
+    );
+    expect(capability.isReady()).toBe(true);
+
+    // Second attach on the SAME capability (e.g. React StrictMode double-effect
+    // where cleanup-detach hasn't run yet). Must dispose the first scheduler.
+    const scheduler2 = buildMockScheduler();
+    config.getOrCreateSchedulerMock.mockResolvedValue(scheduler2);
+    const detach2 = await capability.attach(
+      buildMainHooks(),
+      buildSubagentHooks(),
+    );
+
+    // The first scheduler should have been disposed.
+    expect(config.disposeSchedulerMock).toHaveBeenCalledWith(
+      config.getSessionId(),
+    );
+
+    // The capability should be ready with the second scheduler.
+    expect(capability.isReady()).toBe(true);
+
+    // Scheduling should go to the second scheduler, not the first.
+    await capability.schedule(
+      buildRequest({ callId: 'post-double-attach' }),
+      new AbortController().signal,
+    );
+    expect(scheduler1.scheduleMock).not.toHaveBeenCalled();
+    expect(scheduler2.scheduleMock).toHaveBeenCalledTimes(1);
+
+    detach1();
+    detach2();
   });
 });

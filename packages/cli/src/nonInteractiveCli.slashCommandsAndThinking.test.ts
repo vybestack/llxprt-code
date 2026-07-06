@@ -305,6 +305,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     };
     mockGetCommands.mockReturnValue([mockCommand]);
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const fakeAgent = buildFakeAgent();
+    vi.mocked(fromConfig).mockResolvedValue(fakeAgent);
     agentState.events = [
       { type: 'text', text: 'ok' },
       { type: 'done', reason: 'stop' },
@@ -318,6 +320,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
+    expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('should treat an unknown slash command as a regular prompt', async () => {

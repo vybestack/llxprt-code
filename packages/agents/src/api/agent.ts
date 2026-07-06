@@ -442,6 +442,12 @@ export interface AgentToolHandle {
 }
 
 export interface AgentToolControl {
+  /**
+   * Returns a frozen snapshot of every registered tool projected to
+   * {@link ToolInfo} (name, displayName, description, parametersSchema,
+   * source/server, enabled). This is the canonical read-only listing surface
+   * for UI consumers (see #2376).
+   */
   list(): readonly ToolInfo[];
   /**
    * Named-tool lookup; returns the matching {@link AgentToolHandle} or
@@ -470,6 +476,14 @@ export interface AgentMcpControl {
   toolsByServer(): Readonly<Record<string, readonly ToolInfo[]>>;
   auth(server: string): Promise<McpServerAuthStatus>;
   discoveryState(): McpDiscoveryState;
+  /**
+   * Re-runs MCP discovery for the named server, or for ALL configured
+   * servers when `server` is omitted, then re-publishes the client tool
+   * declarations so newly discovered tools become callable. A no-op when
+   * MCP is not initialized; discovery/restart failures propagate to the
+   * caller. This is the public replacement for direct
+   * `toolRegistry.discoverAllTools()` access (see #2376).
+   */
   refresh(server?: string): Promise<void>;
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
   authenticate(server: string): Promise<McpServerAuthStatus>;

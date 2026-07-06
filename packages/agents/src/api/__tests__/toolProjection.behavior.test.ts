@@ -30,6 +30,7 @@ import { Kind } from '@vybestack/llxprt-code-tools';
 import { ToolControl } from '../control/toolControl.js';
 import type { ToolControlDeps } from '../control/toolControl.js';
 import { createToolControlDeps } from './helpers/fakeToolControlDeps.js';
+import { projectRegistryTool } from '../agentBootstrap.js';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';
 import type { EditorCallbacks } from '../config-types.js';
@@ -92,6 +93,19 @@ describe('ToolControl.list enriched projection @plan:ISSUE-2376', () => {
     // must be projected from tool.schema.parametersJsonSchema.
     expect(info?.parametersSchema).toBeDefined();
     expect(typeof info?.parametersSchema).toBe('object');
+  });
+
+  it('omits parametersSchema when the tool schema is null (null does not leak as a type lie)', () => {
+    // DeclarativeTool.schema can yield parametersJsonSchema: null at runtime.
+    // projectRegistryTool must include parametersSchema ONLY when the value is
+    // a non-null object — a null must NOT leak into ToolInfo.parametersSchema.
+    const projected = projectRegistryTool({
+      name: 'null-schema-tool',
+      displayName: 'Null Schema Tool',
+      description: 'A tool whose schema resolved to null.',
+      schema: { parametersJsonSchema: null },
+    });
+    expect(projected.parametersSchema).toBeUndefined();
   });
 
   it('projects source builtin/server for builtin tools and omits serverToolName for non-MCP tools', () => {

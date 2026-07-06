@@ -330,9 +330,20 @@ function wrapInvocation(invocation: AnyToolInvocation): AgentToolInvocation {
   return {
     getDescription: () => invocation.getDescription(),
     execute: async (signal, updateOutput) => {
+      // The public AgentToolInvocation.execute contract accepts only
+      // string chunks, but the real ToolInvocation.execute delivers
+      // string | AnsiOutput. When the caller supplies an updateOutput
+      // callback, wrap it so only string chunks are forwarded, honoring
+      // the public (string-only) contract honestly — no cast.
       const result: ToolResult = await invocation.execute(
         signal,
-        updateOutput as Parameters<typeof invocation.execute>[1],
+        updateOutput !== undefined
+          ? (chunk) => {
+              if (typeof chunk === 'string') {
+                updateOutput(chunk);
+              }
+            }
+          : undefined,
       );
       return projectResult(result);
     },
@@ -347,8 +358,8 @@ function wrapInvocation(invocation: AnyToolInvocation): AgentToolInvocation {
 
 /**
  * Projects a real {@link ToolResult} to the public {@link AgentToolExecResult}
- * shape (llmContent / returnDisplay / error), preserving each field only when
- * the source defines it.
+ * shape: llmContent and returnDisplay are copied unconditionally; error is
+ * included only when the source defines it (undefined is omitted).
  *
  * @plan:ISSUE-2376
  */
