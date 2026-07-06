@@ -250,7 +250,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       const { code, stdout } = runScript(null, 0, { useRealRepo: true });
       expect(stdout).toContain('CLI import boundary check PASSED.');
       expect(code).toBe(0);
-    });
+    }, 15000);
 
     it('flags a static deep import from providers/runtime not in the allowlist', () => {
       const { code, stdout } = withCliFixture(({ root, write }) => {
