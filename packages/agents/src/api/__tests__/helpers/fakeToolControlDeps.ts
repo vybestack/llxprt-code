@@ -66,6 +66,46 @@ const noopEditorCallbacks: EditorCallbacks = {
   onEditorOpen: () => {},
 };
 
+/**
+ * Builds REAL invocable MockTool instances so ToolControl.get(name) returns a
+ * handle whose build()/buildAndExecute() delegate to genuine tool behavior
+ * (execute returns { llmContent: `ran:${name}`, returnDisplay: '...' }).
+ * serverName/serverToolName are attached at runtime for MCP tools so the
+ * projectRegistryTool projection reads them (MockTool does not declare them;
+ * they are runtime-only on real DiscoveredMCPTool instances).
+ */
+function buildFakeRegistryTools(
+  tools: readonly FakeRegistryToolEntry[],
+): AnyDeclarativeTool[] {
+  const attachRuntimeProp = (
+    mock: MockTool,
+    key: 'serverName' | 'serverToolName',
+    value: string | undefined,
+  ): void => {
+    if (value === undefined) return;
+    Object.defineProperty(mock, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  };
+  return tools.map((t) => {
+    const mock = new MockTool({
+      name: t.name,
+      displayName: t.name,
+      description: t.name,
+      execute: async () => ({
+        llmContent: `ran:${t.name}`,
+        returnDisplay: `ran:${t.name}`,
+      }),
+    });
+    attachRuntimeProp(mock, 'serverName', t.serverName);
+    attachRuntimeProp(mock, 'serverToolName', t.serverToolName);
+    return mock as AnyDeclarativeTool;
+  });
+}
+
 export function createToolControlDeps(
   tools: readonly FakeRegistryToolEntry[] = [],
 ): ToolControlDepsHandle {
@@ -81,40 +121,7 @@ export function createToolControlDeps(
     },
   );
 
-  // Build REAL invocable MockTool instances so ToolControl.get(name) returns
-  // a handle whose build()/buildAndExecute() delegate to genuine tool behavior
-  // (execute returns { llmContent: `ran:${name}`, returnDisplay: '...' }).
-  const allTools: AnyDeclarativeTool[] = tools.map((t) => {
-    const mock = new MockTool({
-      name: t.name,
-      displayName: t.name,
-      description: t.name,
-      execute: async () => ({
-        llmContent: `ran:${t.name}`,
-        returnDisplay: `ran:${t.name}`,
-      }),
-    });
-    // Attach serverName/serverToolName at runtime for MCP tools so the
-    // projectRegistryTool projection reads them (MockTool does not declare
-    // them; they are runtime-only on real DiscoveredMCPTool instances).
-    if (t.serverName !== undefined) {
-      Object.defineProperty(mock, 'serverName', {
-        value: t.serverName,
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    }
-    if (t.serverToolName !== undefined) {
-      Object.defineProperty(mock, 'serverToolName', {
-        value: t.serverToolName,
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    }
-    return mock as AnyDeclarativeTool;
-  });
+  const allTools: AnyDeclarativeTool[] = buildFakeRegistryTools(tools);
   // Derive enabledTools from the full AnyDeclarativeTool instances (allTools)
   // rather than fabricating { name } stubs, mirroring the real
   // ToolRegistry.getEnabledTools() which returns AnyDeclarativeTool[]. This

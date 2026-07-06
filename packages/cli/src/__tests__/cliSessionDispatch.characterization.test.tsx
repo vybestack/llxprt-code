@@ -694,7 +694,6 @@ describe('session-dispatch characterization — terminal/mouse cleanup', () => {
     await startInteractiveUI(
       config as never,
       { fake: true } as never,
-      { fake: true } as never,
       settings as never,
       [],
       '/tmp/test',
@@ -719,7 +718,6 @@ describe('session-dispatch characterization — terminal/mouse cleanup', () => {
     await startInteractiveUI(
       config as never,
       { fake: true } as never,
-      { fake: true } as never,
       settings as never,
       [],
       '/tmp/test',
@@ -741,7 +739,6 @@ describe('session-dispatch characterization — terminal/mouse cleanup', () => {
 
     await startInteractiveUI(
       config as never,
-      { fake: true } as never,
       { fake: true } as never,
       settings as never,
       ['startup warning'],

@@ -28,6 +28,7 @@ export function createFakeAgent(
 function createStubTools(): Agent['tools'] {
   return {
     list: () => [],
+    get: () => undefined,
     async setEnabled() {},
     onConfirmationRequest: () => () => {},
     respondToConfirmation: (

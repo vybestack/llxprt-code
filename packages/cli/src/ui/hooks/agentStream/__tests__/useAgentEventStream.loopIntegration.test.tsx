@@ -360,6 +360,7 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
     profiles: {} as never,
     tools: {
       list: () => [],
+      get: () => undefined,
       async setEnabled() {},
       onConfirmationRequest: () => () => {},
       respondToConfirmation: () => {},
