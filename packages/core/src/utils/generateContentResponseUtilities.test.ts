@@ -157,6 +157,11 @@ describe('generateContentResponseUtilities', () => {
         ]),
       ).toBe('visible');
     });
+    it('should return undefined when text blocks are only whitespace', () => {
+      expect(
+        getResponseTextFromBlocks([textBlock('  '), textBlock('\n\t')]),
+      ).toBeUndefined();
+    });
     it('should return undefined when only thinking blocks exist', () => {
       expect(
         getResponseTextFromBlocks([thinkingBlock('thinking...')]),
@@ -419,6 +424,26 @@ describe('generateContentResponseUtilities', () => {
           callId: 'call-6',
           toolName: 'tool',
           result: originalResponse,
+        },
+      ]);
+    });
+
+    it('preserves normalized ContentBlock inputs before legacy conversion', () => {
+      const result = convertToFunctionResponse('tool', 'call-6b', [
+        {
+          type: 'tool_response',
+          callId: 'already-normalized',
+          toolName: 'existing-tool',
+          result: { output: 'normalized output' },
+        },
+      ]);
+
+      expect(result).toStrictEqual([
+        {
+          type: 'tool_response',
+          callId: 'call-6b',
+          toolName: 'tool',
+          result: { output: 'normalized output' },
         },
       ]);
     });

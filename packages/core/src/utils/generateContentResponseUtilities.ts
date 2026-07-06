@@ -77,7 +77,8 @@ export function getResponseTextFromBlocks(
 ): string | undefined {
   const textSegments = blocks
     .filter((block): block is TextBlock => block.type === 'text')
-    .map((block) => block.text);
+    .map((block) => block.text)
+    .filter((text) => text.trim() !== '');
 
   if (textSegments.length === 0) {
     return undefined;
@@ -230,6 +231,21 @@ interface LegacyPartLike {
 function isLegacyPartLike(value: unknown): value is LegacyPartLike {
   return typeof value === 'object' && value !== null;
 }
+const CONTENT_BLOCK_TYPES = new Set<ContentBlock['type']>([
+  'text',
+  'thinking',
+  'tool_call',
+  'tool_response',
+  'media',
+  'code',
+]);
+
+function isContentBlock(value: unknown): value is ContentBlock {
+  if (typeof value !== 'object' || value === null || !('type' in value)) {
+    return false;
+  }
+  return CONTENT_BLOCK_TYPES.has(value.type as ContentBlock['type']);
+}
 
 function toBlocksFromLegacyParts(input: unknown): ContentBlock[] {
   const entries = (Array.isArray(input) ? input : [input]) as unknown[];
@@ -238,6 +254,8 @@ function toBlocksFromLegacyParts(input: unknown): ContentBlock[] {
   for (const entry of entries) {
     if (typeof entry === 'string') {
       blocks.push({ type: 'text', text: entry });
+    } else if (isContentBlock(entry)) {
+      blocks.push(entry);
     } else if (
       entry !== null &&
       entry !== undefined &&

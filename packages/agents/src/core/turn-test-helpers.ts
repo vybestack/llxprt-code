@@ -46,6 +46,7 @@ export function mockResponseToChunk(response: {
   candidates?: Array<{
     content?: { parts?: Array<Record<string, unknown>> };
     finishReason?: string;
+    finishMessage?: string;
     providerStopReason?: string;
   }>;
   usageMetadata?: Record<string, number | undefined>;

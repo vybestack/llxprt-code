@@ -73,7 +73,7 @@ function toGeminiTools(tools: ToolDeclaration[]): Tool[] {
       functionDeclarations: tools.map((t) => ({
         name: t.name,
         ...(t.description !== undefined ? { description: t.description } : {}),
-        parameters: t.parametersJsonSchema as never,
+        parametersJsonSchema: t.parametersJsonSchema,
       })),
     },
   ];

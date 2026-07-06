@@ -248,6 +248,7 @@ describe('Issue 2329: Finished event carries raw stopReason @issue:2329', () => 
             {
               content: { parts: [{ text: 'A normal answer.' }] },
               finishReason: 'STOP',
+              finishMessage: 'completed successfully',
             },
           ],
         }),

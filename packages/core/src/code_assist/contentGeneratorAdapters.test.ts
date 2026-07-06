@@ -125,9 +125,15 @@ describe('toGenerateContentParameters', () => {
     const params = toGenerateContentParameters(request);
     expect(params.config?.tools).toBeDefined();
     const tools = params.config?.tools as Array<{
-      functionDeclarations: Array<{ name: string; parameters: unknown }>;
+      functionDeclarations: Array<{
+        name: string;
+        parametersJsonSchema: unknown;
+      }>;
     }>;
-    expect(tools[0].functionDeclarations[0].name).toBe('search');
+    expect(tools[0].functionDeclarations[0]).toStrictEqual({
+      name: 'search',
+      parametersJsonSchema: { type: 'object' },
+    });
   });
 
   it('modelParams spread LAST wins over settings', () => {

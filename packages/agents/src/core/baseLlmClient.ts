@@ -306,8 +306,7 @@ export class BaseLLMClient {
 
   /**
    * Generate content from a prompt.
-   * Returns the raw GenerateContentResponse for backward compatibility with callers
-   * that haven't migrated to neutral types yet (issue #2349).
+   * Returns the neutral ModelOutput contract.
    */
   async generateContent(options: GenerateContentOptions): Promise<ModelOutput> {
     const {

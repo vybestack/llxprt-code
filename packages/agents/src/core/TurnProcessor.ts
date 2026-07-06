@@ -426,7 +426,11 @@ export class TurnProcessor {
         durationMs,
         error,
       );
-      enrichSchemaDepthError(error, this.generationConfig.tools, this.logger);
+      enrichSchemaDepthError(
+        error,
+        this._selectRequestTools(params),
+        this.logger,
+      );
       this.sendPromise = Promise.resolve();
       throw error;
     } finally {

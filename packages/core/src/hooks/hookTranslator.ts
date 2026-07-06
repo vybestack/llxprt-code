@@ -80,12 +80,14 @@ export interface HookCandidate {
 
 export interface HookGenerateContentResponse {
   text?: string;
-  data: unknown | undefined;
-  functionCalls:
-    | Array<{ id?: string; name?: string; args?: Record<string, unknown> }>
-    | undefined;
-  executableCode: unknown | undefined;
-  codeExecutionResult: unknown | undefined;
+  data?: unknown;
+  functionCalls?: Array<{
+    id?: string;
+    name?: string;
+    args?: Record<string, unknown>;
+  }>;
+  executableCode?: unknown;
+  codeExecutionResult?: unknown;
   candidates?: HookCandidate[];
   usageMetadata?: {
     promptTokenCount?: number;
@@ -331,7 +333,10 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
     const config = extractGenerationConfig(sdkRequest);
 
     return {
-      model: sdkRequest.model ?? DEFAULT_GEMINI_FLASH_MODEL,
+      model:
+        sdkRequest.model === ''
+          ? DEFAULT_GEMINI_FLASH_MODEL
+          : (sdkRequest.model ?? DEFAULT_GEMINI_FLASH_MODEL),
       messages,
       config: {
         temperature: config?.temperature,
@@ -482,10 +487,6 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
     // Build response object with proper structure
     const response: HookGenerateContentResponse = {
       text: hookResponse.text,
-      data: undefined,
-      functionCalls: [],
-      executableCode: undefined,
-      codeExecutionResult: undefined,
       candidates: hookResponse.candidates.map((candidate) => ({
         content: {
           role: 'model',

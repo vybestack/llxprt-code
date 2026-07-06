@@ -138,6 +138,15 @@ describe('createContentGeneratorConfig', () => {
     expect(config.apiKey).toBeUndefined();
   });
 
+  it('should fall back to GOOGLE_CLOUD_PROJECT_ID when GOOGLE_CLOUD_PROJECT is empty', () => {
+    process.env.GOOGLE_CLOUD_PROJECT = '';
+    process.env.GOOGLE_CLOUD_PROJECT_ID = 'fallback-gcp-project';
+    process.env.GOOGLE_CLOUD_LOCATION = 'env-gcp-location';
+    const config = createContentGeneratorConfig(mockConfig);
+    expect(config.vertexai).toBe(true);
+    expect(config.apiKey).toBeUndefined();
+  });
+
   it('should not configure for Vertex AI if required env vars are empty', () => {
     process.env.GOOGLE_API_KEY = '';
     process.env.GOOGLE_CLOUD_PROJECT = '';

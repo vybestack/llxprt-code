@@ -417,6 +417,7 @@ export function classifyMixedParts(parts: Part[]): {
   for (const part of parts) {
     if (typeof part === 'string') {
       blocks.push({ type: 'text', text: part });
+      hasAIContent = true;
     } else if (isThoughtPart(part)) {
       const thinkingBlock: ThinkingBlock = {
         type: 'thinking',
@@ -431,6 +432,7 @@ export function classifyMixedParts(parts: Part[]): {
       hasAIContent = true;
     } else if ('text' in part && part.text !== undefined) {
       blocks.push({ type: 'text', text: part.text });
+      hasAIContent = true;
     } else if ('functionCall' in part && part.functionCall) {
       hasAIContent = true;
       blocks.push({

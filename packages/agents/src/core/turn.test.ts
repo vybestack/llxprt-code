@@ -314,7 +314,7 @@ describe('Turn', () => {
       expect(reportError).toHaveBeenCalledWith(
         error,
         'Error when talking to test API',
-        expect.any(Array),
+        [...historyContent, reqParts],
         'Turn.run-sendMessageStream',
       );
     });

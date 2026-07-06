@@ -80,15 +80,28 @@ export type ContentGeneratorConfig = {
   proxy?: string;
 };
 
+function firstNonEmptyEnvironmentValue(
+  primary: string | undefined,
+  fallback: string | undefined,
+): string | undefined {
+  if (primary !== undefined && primary !== '') {
+    return primary;
+  }
+  if (fallback !== '') {
+    return fallback;
+  }
+  return undefined;
+}
+
 export function createContentGeneratorConfig(
   config: Config,
 ): ContentGeneratorConfig {
   const geminiApiKey = process.env.GEMINI_API_KEY ?? undefined;
   const googleApiKey = process.env.GOOGLE_API_KEY ?? undefined;
-  const rawGoogleCloudProject =
-    process.env['GOOGLE_CLOUD_PROJECT'] ?? process.env.GOOGLE_CLOUD_PROJECT_ID;
-  const googleCloudProject =
-    rawGoogleCloudProject === '' ? undefined : rawGoogleCloudProject;
+  const googleCloudProject = firstNonEmptyEnvironmentValue(
+    process.env['GOOGLE_CLOUD_PROJECT'],
+    process.env.GOOGLE_CLOUD_PROJECT_ID,
+  );
   const googleCloudLocation = process.env.GOOGLE_CLOUD_LOCATION ?? undefined;
 
   // Use runtime model from config if available; otherwise, fall back to parameter or default
