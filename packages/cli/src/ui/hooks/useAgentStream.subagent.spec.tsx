@@ -242,12 +242,6 @@ describe('useAgentStream subagent isolation', () => {
       },
       agentClientSource: { getAgentClient: mockGetAgentClient },
       checkpoint: { getCheckpointingEnabled: () => false },
-      tools: {
-        getToolRegistry: vi.fn(
-          () =>
-            ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
-        ),
-      },
     };
 
     mockScheduleToolCalls = vi.fn();

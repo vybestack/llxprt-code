@@ -47,8 +47,8 @@ type MaybeToolHandle = AgentToolHandle | undefined;
 
 // @plan:ISSUE-2376 — file/workspace access flows through the #2384 UiRuntime
 // abstraction (FileWorkspaceState), but tool lookup is routed through the
-// public Agent surface (AgentToolHandle) rather than getToolRegistry, so the
-// runtime no longer needs the ToolRuntime.getToolRegistry pick here.
+// public Agent surface (AgentToolHandle) rather than the tool registry, so the
+// runtime slice here carries only file/workspace access.
 export type AtCommandHelperRuntime = Pick<
   FileWorkspaceState,
   | 'getFileFilteringOptions'

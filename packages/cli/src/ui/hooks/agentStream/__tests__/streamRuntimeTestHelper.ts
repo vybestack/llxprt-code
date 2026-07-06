@@ -49,7 +49,6 @@ export interface StreamRuntimeTestOverrides {
   hooks?: Partial<StreamRuntime['hooks']>;
   mcp?: Partial<StreamRuntime['mcp']>;
   settings?: Partial<StreamRuntime['settings']>;
-  tools?: Partial<StreamRuntime['tools']>;
   scheduler?: Partial<StreamRuntime['scheduler']>;
   asyncTasks?: Partial<StreamRuntime['asyncTasks']>;
   bucketFailover?: Partial<StreamRuntime['bucketFailover']>;
@@ -107,13 +106,6 @@ function makeAgentClient(source: LegacyRuntimeSource): AgentClientContract {
   return call(source, 'getAgentClient', {
     getHistory: vi.fn(async () => []),
   } as unknown as AgentClientContract);
-}
-
-function makeToolRegistry(source: LegacyRuntimeSource): ToolRegistry {
-  return call(source, 'getToolRegistry', {
-    getTool: vi.fn(() => undefined),
-    getAllTools: vi.fn(() => []),
-  } as unknown as ToolRegistry);
 }
 
 function makeWorkspaceContext(source: LegacyRuntimeSource): UiWorkspaceContext {
@@ -392,18 +384,6 @@ function makeSettingsRuntime(
   };
 }
 
-function makeToolsRuntime(
-  source: LegacyRuntimeSource,
-  override: StreamRuntimeTestOverrides['tools'],
-): StreamRuntime['tools'] {
-  return {
-    getToolRegistry: () => makeToolRegistry(source),
-    getToolRegistryInfo: () =>
-      call(source, 'getToolRegistryInfo', { registered: [], unregistered: [] }),
-    ...override,
-  };
-}
-
 function makeSchedulerRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['scheduler'],
@@ -508,7 +488,6 @@ export function createStreamRuntimeForTest(
     hooks: makeHooksRuntime(source, overrides.hooks),
     mcp: makeMcpRuntime(source, overrides.mcp),
     settings: makeSettingsRuntime(source, overrides.settings),
-    tools: makeToolsRuntime(source, overrides.tools),
     scheduler: makeSchedulerRuntime(source, overrides.scheduler),
     asyncTasks: makeAsyncTasksRuntime(source, overrides.asyncTasks),
     bucketFailover: {
