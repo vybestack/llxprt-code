@@ -71,7 +71,7 @@
     "build-and-start": "npm run build && npm run start",
     "build:vscode": "bun scripts/build_vscode_companion.ts",
     "build:all": "npm run build && npm run build:sandbox && npm run build:vscode",
-    "build:packages": "npm run build --workspaces",
+    "build:packages": "npm run generate && npm run build --workspaces",
     "build:sandbox": "bun scripts/build_sandbox.ts --skip-npm-install-build",
     "bundle": "npm run generate && bun scripts/bun-build.config.mjs",
     "test": "npm run test --workspaces --if-present",

@@ -505,6 +505,70 @@ describe('published package no-compile runtime contract (S6)', () => {
   }, 15000);
 });
 
+describe('release build self-contained generate contract (issue #2392)', () => {
+  // Regression guard for the release failure in
+  // https://github.com/vybestack/llxprt-code/actions/runs/28798881603
+  //
+  // packages/cli/src/generated/git-commit.ts is gitignored and only exists once
+  // `npm run generate` has run. The CLI workspace `build` script invokes tsc
+  // directly and imports GIT_COMMIT_INFO from that generated module, so tsc
+  // fails with TS2307 if the file was never generated. The release workflow
+  // builds via `npm run build:packages`, and it must NOT rely on an earlier
+  // step (e.g. Preflight) having generated the file as a side effect — when a
+  // dispatch sets force_skip_tests=true, Preflight is skipped and the build
+  // breaks. `build:packages` must therefore generate its own prerequisites.
+  it('runs generate before building workspaces in build:packages', () => {
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    ) as PackageScripts;
+    const scripts = rootPackage.scripts ?? {};
+    const buildPackages = scripts['build:packages'] ?? '';
+
+    expect(
+      buildPackages,
+      'root "build:packages" script is missing from package.json',
+    ).not.toBe('');
+
+    const generateIndex = buildPackages.indexOf('npm run generate');
+    const buildWorkspacesIndex = buildPackages.indexOf(
+      'npm run build --workspaces',
+    );
+
+    expect(
+      generateIndex,
+      '"build:packages" must run "npm run generate" so it produces its own ' +
+        'gitignored prerequisites (packages/cli/src/generated/git-commit.ts) ' +
+        'instead of depending on an earlier workflow step. See issue #2392.',
+    ).toBeGreaterThanOrEqual(0);
+
+    expect(
+      buildWorkspacesIndex,
+      '"build:packages" must build the workspaces via ' +
+        '"npm run build --workspaces".',
+    ).toBeGreaterThanOrEqual(0);
+
+    expect(
+      generateIndex,
+      '"build:packages" must run "npm run generate" BEFORE ' +
+        '"npm run build --workspaces", otherwise the CLI workspace tsc build ' +
+        'fails with TS2307 on the not-yet-generated git-commit module.',
+    ).toBeLessThan(buildWorkspacesIndex);
+  });
+
+  it('keeps the generate script wired to the git-commit generator', () => {
+    const rootPackage = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+    ) as PackageScripts;
+    const scripts = rootPackage.scripts ?? {};
+    const generate = scripts['generate'] ?? '';
+
+    // The whole point of running generate in build:packages is to create
+    // git-commit.ts. If the generate script stops invoking that generator,
+    // build:packages no longer satisfies the CLI build's import.
+    expect(generate).toContain('scripts/generate-git-commit-info.ts');
+  });
+});
+
 describe('findRelativeDependencySpecifiers (tarball-walker regex coverage)', () => {
   it('captures every supported static relative-reference form', () => {
     // Each line below is a distinct syntactic form the published lifecycle
