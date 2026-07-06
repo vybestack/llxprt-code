@@ -43,29 +43,13 @@ import type {
   Unsubscribe,
 } from '../agent.js';
 import type { ToolConfirmation, ToolUpdate } from '../event-types.js';
-import { buildToolInfos, projectRegistryTool } from '../agentBootstrap.js';
+import {
+  buildToolInfos,
+  projectRegistryTool,
+  readOptionalStringProp,
+} from '../agentBootstrap.js';
 import { ToolKeysControl } from './toolKeysControl.js';
 import type { ToolKeysControlDeps } from './toolKeysControl.js';
-
-/**
- * Type-safely reads an optional string property from a tool that may carry
- * runtime-only fields (serverName, serverToolName) not declared on
- * {@link AnyDeclarativeTool}. Returns undefined for missing/non-string values.
- * Uses a Record index for dynamic property access after a runtime `in` check.
- *
- * @plan:ISSUE-2376
- */
-function readOptionalStringProp(
-  tool: object,
-  prop: string,
-): string | undefined {
-  if (!(prop in tool)) {
-    return undefined;
-  }
-  const record = tool as Record<string, unknown>;
-  const value = record[prop];
-  return typeof value === 'string' ? value : undefined;
-}
 
 /**
  * Typed error thrown by {@link ToolControl.respondToConfirmation} when the
@@ -322,7 +306,7 @@ export class ToolControl implements AgentToolControl {
 /**
  * Wraps a real {@link AnyToolInvocation} as a thin {@link AgentToolInvocation}
  * projection. The wrapper delegates every method to the real invocation and
- * re-maps the result to the public {@link AgentToolResult} shape.
+ * re-maps the result to the public {@link AgentToolExecResult} shape.
  *
  * @plan:ISSUE-2376
  */
@@ -330,17 +314,25 @@ function wrapInvocation(invocation: AnyToolInvocation): AgentToolInvocation {
   return {
     getDescription: () => invocation.getDescription(),
     execute: async (signal, updateOutput) => {
-      // The public AgentToolInvocation.execute contract accepts only
-      // string chunks, but the real ToolInvocation.execute delivers
-      // string | AnsiOutput. When the caller supplies an updateOutput
-      // callback, wrap it so only string chunks are forwarded, honoring
-      // the public (string-only) contract honestly — no cast.
+      // The public AgentToolInvocation.execute contract accepts only string
+      // chunks, but the real ToolInvocation.execute delivers string |
+      // AnsiOutput. When the caller supplies an updateOutput callback, forward
+      // string chunks directly and losslessly flatten AnsiOutput (an
+      // AnsiToken[][]) to its plain text so rich terminal output is preserved
+      // rather than silently dropped — honoring the public (string-only)
+      // contract without a cast.
       const result: ToolResult = await invocation.execute(
         signal,
         updateOutput !== undefined
           ? (chunk) => {
               if (typeof chunk === 'string') {
                 updateOutput(chunk);
+              } else {
+                updateOutput(
+                  chunk
+                    .map((line) => line.map((token) => token.text).join(''))
+                    .join('\n'),
+                );
               }
             }
           : undefined,
@@ -389,9 +381,9 @@ export function wrapToolHandle(tool: AnyDeclarativeTool): AgentToolHandle {
     name: tool.name,
     displayName: tool.displayName,
     ...(tool.description.length > 0 ? { description: tool.description } : {}),
-    ...((tool as { kind?: string }).kind !== undefined
-      ? { kind: (tool as { kind: string }).kind }
-      : {}),
+    // DeclarativeTool.kind is a required `Kind` string enum, always present —
+    // assign it directly rather than guarding an always-true condition.
+    kind: tool.kind,
     // @plan:ISSUE-2376 populate source so consumers (zed-tool-handler.ts) can
     // determine tool_type ('mcp' vs 'native') for telemetry without the
     // DiscoveredMCPTool instanceof check.

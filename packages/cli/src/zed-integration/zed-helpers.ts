@@ -53,7 +53,16 @@ interface FileDiffDisplay {
 }
 
 function isFileDiffDisplay(value: object): value is FileDiffDisplay {
-  return 'fileDiff' in value;
+  // returnDisplay is now typed `unknown` (it may be an AgentToolExecResult from
+  // the public API surface), so an object carrying only `fileDiff` must NOT be
+  // treated as a full FileDiffDisplay — that would yield `path: undefined` and
+  // invalid ACP diff content. Require every field the diff branch dereferences.
+  return (
+    'fileDiff' in value &&
+    'fileName' in value &&
+    'originalContent' in value &&
+    'newContent' in value
+  );
 }
 
 export function toToolCallContent(

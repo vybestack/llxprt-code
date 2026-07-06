@@ -28,6 +28,7 @@ import type {
   McpStatus,
   ToolInfo,
 } from '../agent.js';
+import { buildToolInfos } from '../agentBootstrap.js';
 
 /**
  * Read-only view of the tool registry the MCP control needs to project
@@ -243,30 +244,22 @@ export class McpControl implements AgentMcpControl {
       return {};
     }
     const enabled = new Set(registry.getEnabledTools().map((t) => t.name));
+    // Keep only MCP tools (those with a non-empty serverName), then reuse the
+    // shared buildToolInfos projection so the additive-field logic lives in
+    // exactly one place (see #2376) rather than being re-implemented here.
+    const mcpTools = registry
+      .getAllTools()
+      .filter(
+        (tool) => tool.serverName !== undefined && tool.serverName.length > 0,
+      );
     const grouped = new Map<string, ToolInfo[]>();
-    for (const tool of registry.getAllTools()) {
-      const server = tool.serverName;
-      if (server === undefined || server.length === 0) {
+    for (const info of buildToolInfos(mcpTools, enabled)) {
+      // buildToolInfos sets `server` from serverName for MCP-sourced tools;
+      // the filter above guarantees it is a non-empty string here.
+      const server = info.server;
+      if (server === undefined) {
         continue;
       }
-      const info: ToolInfo = {
-        name: tool.name,
-        ...(tool.description !== undefined
-          ? { description: tool.description }
-          : {}),
-        source: 'mcp',
-        server,
-        enabled: enabled.has(tool.name),
-        ...(tool.displayName !== undefined
-          ? { displayName: tool.displayName }
-          : {}),
-        ...(tool.parametersSchema !== undefined
-          ? { parametersSchema: tool.parametersSchema }
-          : {}),
-        ...(tool.serverToolName !== undefined
-          ? { serverToolName: tool.serverToolName }
-          : {}),
-      };
       const bucket = grouped.get(server);
       if (bucket === undefined) {
         grouped.set(server, [info]);

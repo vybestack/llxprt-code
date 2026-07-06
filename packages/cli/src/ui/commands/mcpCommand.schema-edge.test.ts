@@ -214,12 +214,23 @@ describe('mcpCommand', () => {
         server1: { command: 'cmd1' },
       });
 
+      // Build the tool inline with an explicit undefined parameterSchema so
+      // schema.parametersJsonSchema resolves to undefined, genuinely
+      // exercising the no-parameter-schema path (createMockMCPTool always
+      // supplies an object schema, which would not).
+      const toolWithoutSchema = new DiscoveredMCPTool(
+        { callTool: vi.fn(), tool: vi.fn() } as unknown as CallableTool,
+        'server1',
+        'tool1',
+        'Tool without schema',
+        undefined,
+        true,
+      );
+
       const testContext = createMockCommandContext({
         services: {
           config: mockConfig,
-          agent: createMockAgent([
-            createMockMCPTool('tool1', 'server1', 'Tool without schema'),
-          ]),
+          agent: createMockAgent([toolWithoutSchema]),
         },
         ui: { reloadCommands: vi.fn() },
       });
@@ -230,6 +241,9 @@ describe('mcpCommand', () => {
 
       expect(message).toContain('tool1');
       expect(message).toContain('Tool without schema');
+      // With no parameter schema, the schema view must NOT emit a Parameters:
+      // section for this tool.
+      expect(message).not.toContain('Parameters:');
     });
   });
 

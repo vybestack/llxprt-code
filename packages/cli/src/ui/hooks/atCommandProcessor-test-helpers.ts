@@ -6,6 +6,7 @@
 
 import { vi } from 'vitest';
 import {
+  type AnyDeclarativeTool,
   type Config,
   CoreToolHostAdapter,
   GlobTool,
@@ -34,35 +35,15 @@ import * as path from 'path';
  * production-equivalent result projection (llmContent + returnDisplay
  * unconditionally, error only when defined) so tests exercise shapes that
  * match what ToolControl.get()/wrapInvocation produces internally.
+ *
+ * Note: production's ToolControl.get() uses the internal `wrapToolHandle`
+ * (packages/agents/src/api/control/toolControl.ts), which is deliberately NOT
+ * exported from the agents barrel. Re-exporting it purely to DRY this test
+ * harness would widen the public API surface (and churn the public-surface
+ * guard snapshots) for no runtime benefit, so we keep a small, typed local
+ * adapter instead.
  */
-function wrapToolForTest(tool: unknown): AgentToolHandle {
-  const t = tool as {
-    name: string;
-    displayName: string;
-    description: string;
-    kind?: string;
-    build(params: Record<string, unknown>): {
-      getDescription(): string;
-      execute(
-        signal: AbortSignal,
-        updateOutput?: (chunk: string) => void,
-      ): Promise<{
-        llmContent: unknown;
-        returnDisplay?: unknown;
-        error?: unknown;
-      }>;
-      shouldConfirmExecute(signal: AbortSignal): Promise<unknown | false>;
-      toolLocations(): ReadonlyArray<{ path: string; line?: number }>;
-    };
-    buildAndExecute(
-      params: Record<string, unknown>,
-      signal: AbortSignal,
-    ): Promise<{
-      llmContent: unknown;
-      returnDisplay?: unknown;
-      error?: unknown;
-    }>;
-  };
+function wrapToolForTest(t: AnyDeclarativeTool): AgentToolHandle {
   /**
    * Projects a raw tool result to the public shape: llmContent and
    * returnDisplay always present, error included only when defined.
@@ -92,7 +73,19 @@ function wrapToolForTest(tool: unknown): AgentToolHandle {
     return {
       getDescription: () => invocation.getDescription(),
       execute: async (signal, updateOutput) => {
-        const result = await invocation.execute(signal, updateOutput);
+        // Mirror production wrapInvocation (toolControl.ts): the public
+        // AgentToolInvocation.execute contract forwards only string chunks, so
+        // filter here too rather than passing updateOutput straight through.
+        const result = await invocation.execute(
+          signal,
+          updateOutput !== undefined
+            ? (chunk) => {
+                if (typeof chunk === 'string') {
+                  updateOutput(chunk);
+                }
+              }
+            : undefined,
+        );
         return projectResult(result);
       },
       shouldConfirmExecute: (signal) => invocation.shouldConfirmExecute(signal),
@@ -103,7 +96,7 @@ function wrapToolForTest(tool: unknown): AgentToolHandle {
     name: t.name,
     displayName: t.displayName,
     ...(t.description.length > 0 ? { description: t.description } : {}),
-    ...(t.kind !== undefined ? { kind: t.kind } : {}),
+    kind: t.kind,
     source: 'builtin',
     build: buildInvocation,
     buildAndExecute: async (params, signal) => {

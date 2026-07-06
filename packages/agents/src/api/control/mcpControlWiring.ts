@@ -17,26 +17,10 @@ import {
   mcpServerRequiresOAuth,
 } from '@vybestack/llxprt-code-core';
 import type { McpControlDeps } from './mcpControl.js';
-import { projectRegistryTool } from '../agentBootstrap.js';
-
-/**
- * Type-safely reads an optional string property from a tool that may carry
- * runtime-only fields (serverName, serverToolName) not declared on
- * {@link AnyDeclarativeTool}. Returns undefined for missing/non-string values.
- *
- * @plan:ISSUE-2376
- */
-function readOptionalStringProp(
-  tool: object,
-  prop: string,
-): string | undefined {
-  if (!(prop in tool)) {
-    return undefined;
-  }
-  const record = tool as Record<string, unknown>;
-  const value = record[prop];
-  return typeof value === 'string' ? value : undefined;
-}
+import {
+  projectRegistryTool,
+  readOptionalStringProp,
+} from '../agentBootstrap.js';
 
 /**
  * Inputs AgentImpl supplies so the MCP wiring can resolve the live

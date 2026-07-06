@@ -405,14 +405,25 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
         undefined,
         { messageBus: this.runtimeMessageBus },
       );
-      return Promise.resolve(instanceP).then((instance) => ({
-        schedule: (
-          req: ToolCallRequestInfo | ToolCallRequestInfo[],
-          signal: AbortSignal,
-        ) => instance.schedule(req, signal),
-        dispose: () =>
-          args.schedulerConfig.disposeScheduler(schedulerSessionId),
-      }));
+      return Promise.resolve(instanceP).then(
+        (instance) => ({
+          schedule: (
+            req: ToolCallRequestInfo | ToolCallRequestInfo[],
+            signal: AbortSignal,
+          ) => instance.schedule(req, signal),
+          dispose: () =>
+            args.schedulerConfig.disposeScheduler(schedulerSessionId),
+        }),
+        (error) => {
+          // Surface subagent scheduler-creation failures for observability
+          // instead of letting them propagate as an unhandled rejection; the
+          // core scheduler infrastructure still sees the rejection.
+          logger.debug(
+            () => `subagent scheduler creation failed: ${String(error)}`,
+          );
+          throw error;
+        },
+      );
     };
   }
 

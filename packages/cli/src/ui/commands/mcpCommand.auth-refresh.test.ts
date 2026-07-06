@@ -73,6 +73,9 @@ describe('mcpCommand', () => {
         discoveryState: vi.fn().mockReturnValue('ready'),
         authenticate: vi.fn(),
       },
+      // Partial tools mock: the /mcp command path never accesses tools.keys,
+      // so it is intentionally omitted rather than stubbed with an `as never`
+      // escape hatch (the outer `as unknown as Agent` permits the partial).
       tools: {
         list: vi.fn().mockReturnValue([]),
         get: vi.fn(),
@@ -81,7 +84,6 @@ describe('mcpCommand', () => {
         respondToConfirmation: vi.fn(),
         onToolUpdate: vi.fn(),
         setEditorCallbacks: vi.fn(),
-        keys: {} as never,
       },
     }) as unknown as Agent;
 
@@ -295,6 +297,37 @@ describe('mcpCommand', () => {
 
       expect(result.messageType).toBe('info');
       expect(result.content).toContain('Configured MCP servers:');
+    });
+    it('should return a user-friendly error when refresh rejects', async () => {
+      const refresh = vi.fn().mockRejectedValue(new Error('server boom'));
+
+      const context = createMockCommandContext({
+        services: {
+          config: {
+            getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
+            getBlockedMcpServers: vi.fn().mockReturnValue([]),
+          },
+          agent: createMockAgent(refresh),
+        },
+      });
+      context.ui.reloadCommands = vi.fn();
+
+      const refreshCommand = mcpCommand.subCommands?.find(
+        (cmd) => cmd.name === 'refresh',
+      );
+
+      const result = await refreshCommand!.action!(context, '');
+
+      // The rejection must be caught and surfaced as an error message rather
+      // than escaping as an unhandled rejection, and reloadCommands must NOT
+      // run when the refresh failed.
+      expect(refresh).toHaveBeenCalled();
+      expect(context.ui.reloadCommands).not.toHaveBeenCalled();
+
+      assertMessageAction(result);
+      expect(result.messageType).toBe('error');
+      expect(result.content).toContain('Failed to restart MCP servers');
+      expect(result.content).toContain('server boom');
     });
 
     it('should show an error if config is not available', async () => {

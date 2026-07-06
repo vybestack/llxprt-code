@@ -230,8 +230,7 @@ describe('useAgentStream', () => {
         vi.fn(), // getPreferredEditor
         vi.fn(), // onAuthError
         vi.fn(), // performMemoryRefresh
-        false, // modelSwitched
-        vi.fn(), // setModelSwitched
+        vi.fn(), // onEditorClose
         vi.fn(), // onCancelSubmit
         vi.fn(), // setShellInputFocused
         80, // terminalWidth

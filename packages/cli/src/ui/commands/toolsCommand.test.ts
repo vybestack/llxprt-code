@@ -8,7 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { toolsCommand } from './toolsCommand.ts';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import type { ToolInfo } from '@vybestack/llxprt-code-agents';
+import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const mockTools: readonly ToolInfo[] = [
@@ -36,12 +36,14 @@ const mockTools: readonly ToolInfo[] = [
   },
 ];
 
-function createMockAgent(tools: readonly ToolInfo[] = mockTools) {
+// Partial Agent mock: /tools only reads agent.tools.list(). The single
+// `as unknown as Agent` cast lives here so call sites stay strongly typed.
+function createMockAgent(tools: readonly ToolInfo[] = mockTools): Agent {
   return {
     tools: {
       list: () => tools,
     },
-  };
+  } as unknown as Agent;
 }
 
 describe('toolsCommand', () => {
@@ -73,7 +75,7 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({ 'tools.disabled': ['file-reader'] }),
@@ -94,7 +96,7 @@ describe('toolsCommand', () => {
     const settings = new SettingsService();
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
@@ -114,7 +116,7 @@ describe('toolsCommand', () => {
     const settings = new SettingsService();
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
@@ -134,7 +136,7 @@ describe('toolsCommand', () => {
     const settings = new SettingsService();
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
@@ -156,7 +158,7 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
@@ -177,7 +179,7 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({ 'tools.disabled': ['code-editor'] }),
@@ -197,7 +199,7 @@ describe('toolsCommand', () => {
     const settings = new SettingsService();
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
@@ -219,7 +221,7 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({ 'tools.disabled': ['code-editor'] }),
@@ -241,7 +243,7 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({
@@ -267,7 +269,7 @@ describe('toolsCommand', () => {
 
     const mockContext = createMockCommandContext({
       services: {
-        agent: createMockAgent() as never,
+        agent: createMockAgent(),
         config: {
           getSettingsService: () => settings,
           getEphemeralSettings: () => ({ 'tools.disabled': ['file-reader'] }),

@@ -580,9 +580,15 @@ describe('mcpCommand', () => {
       assertMessageAction(result);
       const message = result.content;
 
-      // Server name must still appear (status rendering doesn't depend on details).
-      expect(message).toContain('server1');
-      expect(message).toContain('server2');
+      // Server headers must still render correctly (status rendering does not
+      // depend on details()). Match the full header pattern — a bare substring
+      // like 'server1' would pass even if header rendering were broken.
+      expect(message).toContain(
+        '[READY] \u001b[1mserver1\u001b[0m - Ready (0 tools)',
+      );
+      expect(message).toContain(
+        '[DISCONNECTED] \u001b[1mserver2\u001b[0m - Disconnected',
+      );
 
       // Warning line must be present.
       expect(message).toContain('Failed to load MCP tool details');

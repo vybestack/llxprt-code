@@ -307,13 +307,15 @@ async function processQuery(
  * Resolves the query, streams the response, and disposes the agent. Extracted
  * from runNonInteractive to keep function length within lint limits.
  *
- * Slash commands are RESOLVED before the Agent is created (so a slash command
- * that requires confirmation or fails can exit early without constructing an
- * Agent or depending on provider setup). If the slash command produces content,
- * that content is used as the query; if it produces NO content (unrecognized
- * slash or no-op), the input falls through to normal prompt handling, which
- * DOES use the Agent (created below for @-command tool lookups via the public
- * Agent.tools API, issue #2376) and reused by processQuery.
+ * Slash commands are RESOLVED before the Agent is created so a slash command
+ * that throws (e.g. a confirmation/validation failure) surfaces its error
+ * before any provider/Agent setup runs. The Agent is then created
+ * unconditionally because BOTH paths need it to stream: `processQuery` runs the
+ * resolved query through `agent`, and the @-command fallback additionally uses
+ * `agent.tools.get` for tool lookups (the public Agent.tools API, issue #2376).
+ * If `resolveSlashQuery` returns content it becomes the query; otherwise the
+ * input falls through to @-command/prompt handling. The Agent is always
+ * disposed in the `finally` below.
  */
 async function resolveAndStream(
   params: RunNonInteractiveParams,

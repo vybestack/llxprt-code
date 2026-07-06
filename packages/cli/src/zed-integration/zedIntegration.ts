@@ -91,18 +91,23 @@ export async function runZedIntegration(
   });
 
   try {
-    let zedAgent: ZedAgent | undefined;
+    // Track every ZedAgent the factory creates. The ACP SDK is expected to
+    // invoke the factory once, but if it ever runs more than once we must not
+    // leak the earlier instances (and their sessions/agents) — cleanup disposes
+    // ALL created instances, not just the last-assigned one (issue #2376).
+    const zedAgents: ZedAgent[] = [];
     const stream = acp.ndJsonStream(stdout, stdin);
     // Register cleanup exactly once, outside the factory closure. This avoids
     // duplicate registrations if the factory were ever invoked more than once
-    // (issue #2376). zedAgent is captured via closure so it resolves to the
-    // instance the factory created.
+    // (issue #2376). Dispose concurrently so one slow/failing instance does not
+    // block the others.
     registerCleanup(async () => {
-      await zedAgent?.disposeAllSessions();
+      await Promise.allSettled(zedAgents.map((a) => a.disposeAllSessions()));
     });
     const connection = new acp.AgentSideConnection((conn) => {
       logger.debug(() => 'Creating ZedAgent');
-      zedAgent = new ZedAgent(config, settings, conn);
+      const zedAgent = new ZedAgent(config, settings, conn);
+      zedAgents.push(zedAgent);
       return zedAgent;
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
@@ -358,9 +363,9 @@ export class ZedAgent {
   async disposeAllSessions(): Promise<void> {
     const sessions = Array.from(this.sessions.values());
     this.sessions.clear();
-    for (const session of sessions) {
-      await session.dispose();
-    }
+    // Sessions dispose independently; run concurrently so a slow or failing
+    // session neither blocks shutdown nor short-circuits the others.
+    await Promise.allSettled(sessions.map((session) => session.dispose()));
   }
 }
 

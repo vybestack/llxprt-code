@@ -177,7 +177,20 @@ const refreshCommand: SlashCommand = {
       Date.now(),
     );
 
-    await agent.mcp.refresh();
+    // agent.mcp.refresh() re-runs discovery and restarts servers; a failing
+    // server (or transport) rejects here. Surface it as a user-friendly error
+    // instead of letting it escape as an unhandled rejection.
+    try {
+      await agent.mcp.refresh();
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to restart MCP servers: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
 
     // Reload the slash commands to reflect the changes.
     context.ui.reloadCommands();

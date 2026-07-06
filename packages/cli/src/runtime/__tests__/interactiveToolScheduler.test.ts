@@ -467,10 +467,12 @@ describe('createInteractiveToolScheduler', () => {
 
     const onToolCallsUpdate = vi.fn();
     const outputUpdateHandler = vi.fn();
+    const onAllToolCallsComplete = vi.fn();
     let isMounted = true;
     const mainHooks = buildMainHooks({
       onToolCallsUpdate,
       outputUpdateHandler,
+      onAllToolCallsComplete,
       isMounted: () => isMounted,
     });
     const detach = await capability.attach(mainHooks, buildSubagentHooks());
@@ -483,15 +485,21 @@ describe('createInteractiveToolScheduler', () => {
         toolCallId: string,
         chunk: string | AnsiOutput,
       ) => void;
+      onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
     };
 
-    // Unmount — callbacks must be suppressed.
+    // Unmount — every display callback (including the async
+    // onAllToolCallsComplete) must be suppressed by the isMounted() guard.
     isMounted = false;
     passedCallbacks.onToolCallsUpdate([] as unknown as ToolCall[]);
     passedCallbacks.outputUpdateHandler('id', 'chunk');
+    await passedCallbacks.onAllToolCallsComplete(
+      [] as unknown as CompletedToolCall[],
+    );
 
     expect(onToolCallsUpdate).not.toHaveBeenCalled();
     expect(outputUpdateHandler).not.toHaveBeenCalled();
+    expect(onAllToolCallsComplete).not.toHaveBeenCalled();
 
     detach();
   });

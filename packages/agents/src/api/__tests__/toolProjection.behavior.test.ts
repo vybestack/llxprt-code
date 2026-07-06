@@ -87,12 +87,32 @@ describe('ToolControl.list enriched projection @plan:ISSUE-2376', () => {
     expect(Object.isFrozen(tools)).toBe(true);
     const info = tools.find((t) => t.name === 'read_many_files');
     expect(info).toBeDefined();
+    // buildDepsWithRealTools defaults every tool to enabled; verify the
+    // enabled-set lookup projects true so a regression there is caught.
+    expect(info?.enabled).toBe(true);
     expect(info?.displayName).toBe('Read Many Files');
     expect(info?.description).toBe('Reads many files at once.');
     // MockTool is constructed with a parameter schema; parametersJsonSchema
-    // must be projected from tool.schema.parametersJsonSchema.
+    // must be projected from tool.schema.parametersJsonSchema — assert the
+    // actual content, not just that some object is present.
     expect(info?.parametersSchema).toBeDefined();
     expect(typeof info?.parametersSchema).toBe('object');
+    expect((info?.parametersSchema as Record<string, unknown>).type).toBe(
+      'object',
+    );
+    expect(
+      (info?.parametersSchema as Record<string, unknown>).properties,
+    ).toBeDefined();
+  });
+
+  it('projects enabled=false for tools not in the enabled set', () => {
+    const tool = new MockTool({ name: 'disabled_tool' });
+    // Pass an empty enabled set so the tool is present but NOT enabled.
+    const deps = buildDepsWithRealTools([tool], { enabledNames: [] });
+    const control = new ToolControl(deps);
+    const info = control.list().find((t) => t.name === 'disabled_tool');
+    expect(info).toBeDefined();
+    expect(info?.enabled).toBe(false);
   });
 
   it('omits parametersSchema when the tool schema is null (null does not leak as a type lie)', () => {

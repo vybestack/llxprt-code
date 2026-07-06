@@ -4,9 +4,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { parseZedAuthMethodId } from './zedIntegration.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+
+/**
+ * Shared partial-Agent mock factory. The Session/ZedAgent constructors store
+ * `agent.tools` (passed to ZedPathResolver/ZedToolHandler) and call
+ * `agent.dispose()`, so the stub provides both. Callers pass `extra` for
+ * suite-specific fields (e.g. `getProvider`) without duplicating the factory.
+ */
+function createMockAgent(extra: Record<string, unknown> = {}): {
+  agent: Agent;
+  dispose: ReturnType<typeof vi.fn>;
+} {
+  const dispose = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+  const agent = {
+    dispose,
+    tools: { get: vi.fn() },
+    ...extra,
+  } as unknown as Agent;
+  return { agent, dispose };
+}
 
 // Mock runtimeSettings to test credential cache clearing logic
 const mockGetActiveProfileName = vi.fn<() => string | null>();
@@ -127,14 +154,13 @@ describe('Session agent disposal', () => {
     Session = mod.Session;
   });
 
-  function createMockAgent(): {
-    agent: Agent;
-    dispose: ReturnType<typeof vi.fn>;
-  } {
-    const dispose = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
-    const agent = { dispose } as unknown as Agent;
-    return { agent, dispose };
-  }
+  // Safety net: every test disposes its session to unsubscribe, but if one
+  // throws before dispose() the real todoEvents listener would leak and skew
+  // the exact listenerCount arithmetic in the sibling test. Clear any strays.
+  afterEach(async () => {
+    const { todoEvents } = await import('@vybestack/llxprt-code-core');
+    todoEvents.removeAllListeners('todo-updated');
+  });
 
   function createSession(agent: Agent): InstanceType<typeof Session> {
     const mockConfig = {
@@ -232,18 +258,6 @@ describe('ZedAgent.createAndStoreSession leak guard (issue #2376)', () => {
     ZedAgentMod = await import('./zedIntegration.js');
   });
 
-  function createMockAgent(): {
-    agent: Agent;
-    dispose: ReturnType<typeof vi.fn>;
-  } {
-    const dispose = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
-    const agent = {
-      dispose,
-      getProvider: () => undefined,
-    } as unknown as Agent;
-    return { agent, dispose };
-  }
-
   function createZedAgent(): InstanceType<typeof ZedAgentMod.ZedAgent> {
     const mockConfig = {
       getProfileManager: () => ({ listProfiles: async () => [] }),
@@ -259,7 +273,9 @@ describe('ZedAgent.createAndStoreSession leak guard (issue #2376)', () => {
   }
 
   it('disposes the agent when Session construction fails', async () => {
-    const { agent, dispose } = createMockAgent();
+    const { agent, dispose } = createMockAgent({
+      getProvider: () => undefined,
+    });
     const zedAgent = createZedAgent();
 
     // Force Session construction to fail by passing a config whose
@@ -292,11 +308,14 @@ describe('ZedAgent.createAndStoreSession leak guard (issue #2376)', () => {
   });
 
   it('does not mask the original error if dispose also fails', async () => {
+    // This test needs a rejecting dispose, so it builds the agent inline
+    // rather than via createMockAgent; keep the tools stub for contract parity.
     const dispose = vi
       .fn<() => Promise<void>>()
       .mockRejectedValue(new Error('dispose error'));
     const agent = {
       dispose,
+      tools: { get: vi.fn() },
       getProvider: () => undefined,
     } as unknown as Agent;
     const zedAgent = createZedAgent();

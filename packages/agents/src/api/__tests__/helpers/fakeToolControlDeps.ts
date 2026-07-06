@@ -115,9 +115,14 @@ export function createToolControlDeps(
     }
     return mock as AnyDeclarativeTool;
   });
-  const enabledTools = tools
-    .filter((t) => t.enabled !== false)
-    .map((t) => ({ name: t.name }));
+  // Derive enabledTools from the full AnyDeclarativeTool instances (allTools)
+  // rather than fabricating { name } stubs, mirroring the real
+  // ToolRegistry.getEnabledTools() which returns AnyDeclarativeTool[]. This
+  // keeps the fake future-proof if production ever reads more than `.name`.
+  const enabledNames = new Set(
+    tools.filter((t) => t.enabled !== false).map((t) => t.name),
+  );
+  const enabledTools = allTools.filter((t) => enabledNames.has(t.name));
 
   const settingsService = {
     set: (key: string, value: unknown): void => {

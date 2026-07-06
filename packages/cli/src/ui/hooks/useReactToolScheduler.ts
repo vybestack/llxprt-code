@@ -515,6 +515,9 @@ function useCapabilityAttach(
     capability,
     mainSchedulerCallbacks,
     subagentCallbacks,
+    // setLastToolOutputTime and setInteractiveRuntimeReady are useState setters,
+    // which React guarantees are referentially stable; they are listed only to
+    // satisfy exhaustive-deps and never cause this effect to re-fire.
     setLastToolOutputTime,
     setInteractiveRuntimeReady,
   ]);

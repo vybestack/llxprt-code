@@ -254,6 +254,8 @@ describe('useReactToolScheduler subagent callback freshness', () => {
         ).toHaveBeenCalledWith(expect.any(Function)),
       { interval: 10, timeout: 5000 },
     );
+    // Index 5 of the ReactToolSchedulerResult tuple is the
+    // `interactiveRuntimeReady` flag; wait until the capability has attached.
     await vi.waitFor(() => expect(result.current[5]).toBe(true), {
       interval: 10,
       timeout: 5000,
