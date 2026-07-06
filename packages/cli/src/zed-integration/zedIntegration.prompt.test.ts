@@ -23,13 +23,14 @@ import {
 
 const createdSessions: Session[] = [];
 
-describe('Zed Session.prompt (Agent API) - streaming output', () => {
-  afterEach(async () => {
-    for (const session of createdSessions.splice(0)) {
-      await session.dispose();
-    }
-  });
+async function disposeCreatedSessions(): Promise<void> {
+  for (const session of createdSessions.splice(0)) {
+    await session.dispose();
+  }
+}
 
+describe('Zed Session.prompt (Agent API) - streaming output', () => {
+  afterEach(disposeCreatedSessions);
   it('emits agent_message_chunk events in stream order followed by end_turn', async () => {
     const { agent } = buildFakeAgent([
       { type: 'text', text: 'Hello' },
@@ -126,6 +127,8 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
 });
 
 describe('Zed Session.prompt (Agent API) - tool-call status progression', () => {
+  afterEach(disposeCreatedSessions);
+
   it('surfaces tool_call and tool_call_update events in order', async () => {
     const toolCallId = 'tool-1';
     const { agent } = buildFakeAgent([
@@ -361,6 +364,8 @@ describe('Zed Session.prompt (Agent API) - tool-call status progression', () => 
 });
 
 describe('Zed Session.prompt (Agent API) - tool permission round-trip', () => {
+  afterEach(disposeCreatedSessions);
+
   it('requests permission then completes the tool after approval, in order', async () => {
     const confirmationId = 'conf-1';
     const toolCallId = 'perm-tool-1';
@@ -469,6 +474,8 @@ describe('Zed Session.prompt (Agent API) - tool permission round-trip', () => {
 });
 
 describe('Zed Session.prompt (Agent API) - cancellation', () => {
+  afterEach(disposeCreatedSessions);
+
   it('maps done reasons to ACP stop reasons and terminal errors', async () => {
     const aborted = createSession(
       buildFakeAgent([{ type: 'done', reason: 'aborted' }]).agent,
@@ -603,6 +610,8 @@ describe('Zed Session.prompt (Agent API) - cancellation', () => {
 });
 
 describe('Zed Session.prompt (Agent API) - previously-dropped event variants', () => {
+  afterEach(disposeCreatedSessions);
+
   it('handles notice, loop detection, errors, and ignored metadata events', async () => {
     const notice = createSession(
       buildFakeAgent([
@@ -664,6 +673,8 @@ describe('Zed Session.prompt (Agent API) - previously-dropped event variants', (
 });
 
 describe('Zed Session (Agent API) - lifecycle', () => {
+  afterEach(disposeCreatedSessions);
+
   it('stops receiving todo updates after dispose', async () => {
     const { agent } = buildFakeAgent([{ type: 'done', reason: 'stop' }]);
     const connection = new RecordingConnection();

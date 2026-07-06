@@ -507,9 +507,16 @@ export class ZedPathResolver {
         const absolute = path.isAbsolute(match)
           ? match
           : path.join(targetDir, match);
-        const content = await fileSystemService.readTextFile(absolute);
-        processedQueryParts.push({ text: `\nContent from @${match}:\n` });
-        processedQueryParts.push({ text: content });
+        const appended = await this.readAndAppendGlobMatch(
+          match,
+          absolute,
+          fileSystemService,
+          abortSignal,
+          processedQueryParts,
+        );
+        if (!appended) {
+          return;
+        }
       }
     } catch (error) {
       if (abortSignal.aborted) {
@@ -519,6 +526,22 @@ export class ZedPathResolver {
         text: `\nError reading files (${label}): ${getErrorMessage(error)}`,
       });
     }
+  }
+
+  private async readAndAppendGlobMatch(
+    match: string,
+    absolute: string,
+    fileSystemService: FileSystemService,
+    abortSignal: AbortSignal,
+    processedQueryParts: Part[],
+  ): Promise<boolean> {
+    const content = await fileSystemService.readTextFile(absolute);
+    if (abortSignal.aborted) {
+      return false;
+    }
+    processedQueryParts.push({ text: `\nContent from @${match}:\n` });
+    processedQueryParts.push({ text: content });
+    return true;
   }
 
   private shouldSkipDiscoveredPath(filePath: string): boolean {

@@ -19,13 +19,14 @@ import {
 
 const createdSessions: Session[] = [];
 
-describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => {
-  afterEach(async () => {
-    for (const session of createdSessions.splice(0)) {
-      await session.dispose();
-    }
-  });
+async function disposeCreatedSessions(): Promise<void> {
+  for (const session of createdSessions.splice(0)) {
+    await session.dispose();
+  }
+}
 
+describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => {
+  afterEach(disposeCreatedSessions);
   it('returns cancelled (not an error) when a superseded prompt ends with done:error', async () => {
     const toolCallId = 'stale-error-tool';
     let promptCount = 0;
@@ -87,6 +88,8 @@ describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => 
 });
 
 describe('Zed Session.prompt (Agent API) - terminal tool-status without tool-result', () => {
+  afterEach(disposeCreatedSessions);
+
   it.each([
     ['success', 'completed'],
     ['error', 'failed'],
