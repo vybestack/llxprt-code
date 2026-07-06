@@ -61,7 +61,7 @@ async function statusAction(
     return {
       type: 'message',
       messageType: 'error',
-      content: 'Config not loaded.',
+      content: 'Configuration not loaded.',
     };
   }
 

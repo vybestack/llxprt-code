@@ -11,6 +11,7 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -238,7 +239,12 @@ describe('useAgentStream', () => {
         } as unknown as AnyToolInvocation,
       } as TrackedCancelledToolCall,
     ];
-    const client = new MockedAgentClientClass(mockConfig);
+    const client = createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig) as unknown as Record<
+        string,
+        unknown
+      >,
+    );
 
     // Capture the onComplete callback
     let capturedOnComplete:
@@ -363,7 +369,12 @@ describe('useAgentStream', () => {
       displayCleared: false,
     };
     const allCancelledTools = [cancelledToolCall1, cancelledToolCall2];
-    const client = new MockedAgentClientClass(mockConfig);
+    const client = createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig) as unknown as Record<
+        string,
+        unknown
+      >,
+    );
 
     let capturedOnComplete:
       | ((

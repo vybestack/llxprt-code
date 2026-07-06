@@ -9,12 +9,13 @@ import type {
   HistoryItem,
   SlashCommandProcessorResult,
 } from '../../../types.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import {
   triggerSessionEndHook,
   SessionEndReason,
 } from '@vybestack/llxprt-code-core';
 import { restoreTerminalProtocolsSync } from '../../../utils/terminalProtocolCleanup.js';
+import type { HookSkillState } from '../../../cliUiRuntime.js';
 
 /**
  * Duration in milliseconds to wait for a second Ctrl+C/D press before showing exit prompt.
@@ -54,12 +55,12 @@ export interface UseExitHandlingParams {
   handleSlashCommand: (
     command: string,
   ) => Promise<SlashCommandProcessorResult | false>;
-  config: Config;
+  config: HookSkillState;
 }
 
 function useQuitEffect(
   quittingMessages: HistoryItem[] | null,
-  config: Config,
+  config: HookSkillState,
 ): void {
   useEffect(() => {
     if (quittingMessages) {

@@ -271,6 +271,7 @@ export const AgentConfigSchema = z
     disabledSkills: z.array(z.string()).optional(),
     adminSkillsEnabled: z.boolean().optional(),
     streamIdleTimeoutMs: z.number().optional(),
+    streamFirstResponseTimeoutMs: z.number().optional(),
     toolOutputLimits: AgentToolOutputLimitsSchema.optional(),
     outputFormat: z.enum(['text', 'json', 'stream-json']).optional(),
     shell: AgentShellSchema.optional(),

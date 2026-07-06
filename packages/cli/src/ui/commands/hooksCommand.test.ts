@@ -123,7 +123,7 @@ describe('hooksCommand', () => {
       expect(contextNoConfig.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
-          text: 'Config not loaded.',
+          text: 'Configuration not loaded.',
         }),
         expect.any(Number),
       );
@@ -326,7 +326,7 @@ describe('hooksCommand', () => {
       expect(contextNoConfig.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
-          text: 'Config not loaded.',
+          text: 'Configuration not loaded.',
         }),
         expect.any(Number),
       );
@@ -437,7 +437,7 @@ describe('hooksCommand', () => {
       expect(contextNoConfig.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
-          text: 'Config not loaded.',
+          text: 'Configuration not loaded.',
         }),
         expect.any(Number),
       );

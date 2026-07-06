@@ -20,9 +20,9 @@ import type {
   AnyDeclarativeTool,
   ThoughtSummary,
   IdeInfo,
-  Config,
   LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
+import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type { SlashCommand, CommandContext } from '../../../commands/types.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type {
@@ -37,7 +37,7 @@ import type { UIState } from '../../../contexts/UIStateContext.js';
  */
 export interface UIStateParams {
   // Core app context
-  config: Config;
+  slashCommandRuntime: SlashCommandRuntime;
   settings: LoadedSettings;
   settingsNonce: number;
 
@@ -239,7 +239,7 @@ export interface UIStateParams {
 
 function buildCoreAndTerminal(p: UIStateParams) {
   return {
-    config: p.config,
+    slashCommandRuntime: p.slashCommandRuntime,
     settings: p.settings,
     settingsNonce: p.settingsNonce,
     terminalWidth: p.terminalWidth,

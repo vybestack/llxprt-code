@@ -5,32 +5,31 @@
  */
 
 import {
-  type AgentClientContract,
   uiTelemetryService,
   triggerSessionEndHook,
   triggerSessionStartHook,
   SessionEndReason,
   SessionStartSource,
-  type Config,
   type SessionStartHookOutput,
 } from '@vybestack/llxprt-code-core';
-import {
-  CommandKind,
-  type SlashCommand,
-  type CommandContext,
-} from './types.js';
-import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';
+import { CommandKind, type SlashCommand } from './types.js';
+import type { HookSkillState } from '../cliUiRuntime.js';
+
+type SessionHookRuntime = Pick<
+  HookSkillState,
+  'getEnableHooks' | 'getHookSystem'
+>;
 
 /**
  * Helper to trigger session end hook with fail-open behavior.
  */
 async function triggerSessionEndHookSafe(
-  config: Config | null | undefined,
+  runtime: SessionHookRuntime | null | undefined,
   reason: SessionEndReason,
 ): Promise<void> {
-  if (!config) return;
+  if (!runtime) return;
   try {
-    await triggerSessionEndHook(config, reason);
+    await triggerSessionEndHook(runtime, reason);
   } catch {
     // Hooks are fail-open - continue even if hook fails
   }
@@ -40,29 +39,15 @@ async function triggerSessionEndHookSafe(
  * Helper to trigger session start hook with fail-open behavior.
  */
 async function triggerSessionStartHookSafe(
-  config: Config | null | undefined,
+  runtime: SessionHookRuntime | null | undefined,
   source: SessionStartSource,
 ): Promise<SessionStartHookOutput | undefined> {
-  if (!config) return undefined;
+  if (!runtime) return undefined;
   try {
-    return await triggerSessionStartHook(config, source);
+    return await triggerSessionStartHook(runtime, source);
   } catch {
     // Hooks are fail-open - continue even if hook fails
     return undefined;
-  }
-}
-
-function resolveForegroundAgentClient(
-  context: CommandContext,
-): AgentClientContract | null {
-  if (context.services.config) {
-    return context.services.config.getAgentClient();
-  }
-
-  try {
-    return getCliRuntimeServices().config.getAgentClient();
-  } catch {
-    return null;
   }
 }
 
@@ -72,9 +57,9 @@ export const clearCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (context, _args) => {
-    const agentClient = resolveForegroundAgentClient(context);
+    const agent = context.services.agent;
 
-    if (agentClient) {
+    if (agent) {
       context.ui.setDebugMessage('Clearing terminal and resetting chat.');
 
       // Trigger SessionEnd hook before clearing (fail-open)
@@ -83,7 +68,7 @@ export const clearCommand: SlashCommand = {
         SessionEndReason.Clear,
       );
 
-      await agentClient.resetChat();
+      await agent.resetChat();
 
       // Trigger SessionStart hook after clearing (fail-open)
       const sessionStartOutput = await triggerSessionStartHookSafe(

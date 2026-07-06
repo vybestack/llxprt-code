@@ -5,14 +5,14 @@
  */
 
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export interface SettingsDialogProps {
   settings: LoadedSettings;
   onSelect: (settingName: string | undefined, scope: SettingScope) => void;
   onRestartRequest?: () => void;
   availableTerminalHeight?: number;
-  config?: Config;
+  config?: CliUiRuntime;
 }
 
 export type PendingValue = boolean | number | string | string[];

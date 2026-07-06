@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { WorkspaceContext } from '../utils/workspaceContext.js';
+export interface WorkspacePathBoundary {
+  getDirectories(): readonly string[];
+  isPathWithinWorkspace(inputPath: string): boolean;
+}
 
 /**
  * Validates that a path is within the workspace boundaries.
@@ -15,7 +18,7 @@ import type { WorkspaceContext } from '../utils/workspaceContext.js';
  * @returns null if valid, or an error message string if the path is outside the workspace
  */
 export function validatePathWithinWorkspace(
-  workspaceContext: WorkspaceContext,
+  workspaceContext: WorkspacePathBoundary,
   inputPath: string,
   pathTypeLabel: string = 'File path',
 ): string | null {

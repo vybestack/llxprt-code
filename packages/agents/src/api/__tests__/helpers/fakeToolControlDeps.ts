@@ -108,6 +108,10 @@ export function createToolControlDeps(
     messageBus,
     config,
     editorCallbacksHolder,
+    displayCallbacksHolder: {},
+    resolveClient: () => {
+      throw new Error('not used by ToolControl tests');
+    },
     // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
     keysDeps: { getStorage: () => getToolKeyStorage() },
   };

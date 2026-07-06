@@ -14,13 +14,12 @@
 
 import { useMemo } from 'react';
 import {
-  type Config,
-  type AgentClientContract,
   type EditorType,
   type MessageBus,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItem,
@@ -33,12 +32,13 @@ import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
 import type { AgentStreamOrchestrationDeps } from './useAgentStreamOrchestration.js';
 import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export const useAgentStream = (
-  agentClient: AgentClientContract,
+  agent: Agent,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
-  config: Config,
+  runtime: StreamRuntime,
   settings: LoadedSettings,
   onDebugMessage: (message: string) => void,
   handleSlashCommand: (
@@ -59,9 +59,9 @@ export const useAgentStream = (
   runtimeMessageBus?: MessageBus,
 ) => {
   const orchestration = useAgentStreamOrchestration({
-    agentClient,
+    agent,
     addItem,
-    config,
+    runtime,
     settings,
     onDebugMessage,
     handleSlashCommand,
@@ -82,18 +82,18 @@ export const useAgentStream = (
 
   return useAgentStreamReturn(
     orchestration,
-    config,
+    runtime,
     history,
-    agentClient,
+    agent,
     onDebugMessage,
   );
 };
 
 function useAgentStreamReturn(
   orchestration: ReturnType<typeof useAgentStreamOrchestration>,
-  config: Config,
+  runtime: StreamRuntime,
   history: HistoryItem[],
-  agentClient: AgentClientContract,
+  agent: Agent,
   onDebugMessage: (message: string) => void,
 ) {
   const pendingHistoryItems = usePendingHistoryItems(
@@ -103,11 +103,11 @@ function useAgentStreamReturn(
 
   useCheckpointPersistence(
     orchestration.toolCalls,
-    config,
+    runtime,
     orchestration.st.gitService,
     history,
-    agentClient,
-    config.storage,
+    agent,
+    runtime.storage,
     onDebugMessage,
   );
 

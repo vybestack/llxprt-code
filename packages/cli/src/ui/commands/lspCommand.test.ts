@@ -185,7 +185,7 @@ describe('lspCommand (P34)', () => {
       expect(isMessageAction(result)).toBe(true);
       expect((result as MessageActionReturn).messageType).toBe('error');
       expect((result as MessageActionReturn).content).toBe(
-        'Config not loaded.',
+        'Configuration not loaded.',
       );
     });
 

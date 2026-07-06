@@ -16,6 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../../../config/settings.js';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import { ToolCallStatus } from '../../../types.js';
 import {
@@ -568,11 +569,8 @@ describe('handleSubmissionError', () => {
   const mockAddItem = vi.fn();
   const mockOnAuthError = vi.fn();
   const mockParseAndFormatApiError = vi.mocked(parseAndFormatApiError);
-  const makeConfig = (
-    activeProvider: unknown,
-    providerManagerName?: string,
-  ): Config =>
-    ({
+  const makeConfig = (activeProvider: unknown, providerManagerName?: string) =>
+    createStreamRuntimeForTest({
       getModel: vi.fn(() => 'test-model'),
       getProviderManager: vi.fn(() =>
         providerManagerName === undefined
@@ -582,7 +580,7 @@ describe('handleSubmissionError', () => {
       getSettingsService: vi.fn(() => ({
         get: vi.fn(() => activeProvider),
       })),
-    }) as unknown as Config;
+    });
   const mockConfig = makeConfig(undefined);
 
   beforeEach(() => {
@@ -707,12 +705,12 @@ describe('handleSubmissionError', () => {
 
 // ─── showCitations ────────────────────────────────────────────────────────────
 
-// Shared helper for creating mock Config objects in tests
-const makeTestConfig = (overrides?: Record<string, unknown>): Config =>
-  ({
+// Shared helper for creating mock StreamRuntime objects in tests
+const makeTestConfig = (overrides?: Record<string, unknown>) =>
+  createStreamRuntimeForTest({
     getSettingsService: vi.fn(() => null),
     ...overrides,
-  }) as unknown as Config;
+  });
 
 describe('showCitations', () => {
   const makeConfig = makeTestConfig;

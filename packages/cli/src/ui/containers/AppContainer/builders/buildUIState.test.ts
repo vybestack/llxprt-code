@@ -11,7 +11,7 @@ import type { CommandContext } from '../../../commands/types.js';
 
 const makeParams = (): UIStateParams => ({
   // Core app context
-  config: {} as UIStateParams['config'],
+  slashCommandRuntime: {} as UIStateParams['slashCommandRuntime'],
   settings: {} as UIStateParams['settings'],
   settingsNonce: 0,
 
@@ -190,7 +190,7 @@ describe('buildUIState', () => {
     const params = makeParams();
     const result = buildUIState(params);
 
-    expect(result.config).toBe(params.config);
+    expect(result.slashCommandRuntime).toBe(params.slashCommandRuntime);
     expect(result.settings).toBe(params.settings);
     expect(result.settingsNonce).toBe(0);
     expect(result.terminalWidth).toBe(0);

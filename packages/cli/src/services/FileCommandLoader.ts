@@ -9,7 +9,7 @@ import path from 'path';
 import toml from '@iarna/toml';
 import { glob } from 'glob';
 import { z } from 'zod';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import type { ICommandLoader } from './types.js';
@@ -63,7 +63,7 @@ export class FileCommandLoader implements ICommandLoader {
   private readonly folderTrustEnabled: boolean;
   private readonly isTrustedFolder: boolean;
 
-  constructor(private readonly config: Config | null) {
+  constructor(private readonly config: CliUiRuntime | null) {
     this.folderTrustEnabled = config?.getFolderTrust() === true;
     this.isTrustedFolder = config?.isTrustedFolder() === true;
     this.projectRoot = config?.getProjectRoot() ?? process.cwd();

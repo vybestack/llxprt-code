@@ -7,13 +7,13 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type {
-  Config,
   MessageBus,
   IdeContext,
   ThoughtSummary,
 } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { StreamingState } from '../types.js';
+import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
 import type { HistoryItem, ConsoleMessageItem } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
@@ -93,7 +93,7 @@ export interface LayoutSettings {
 }
 
 export function useLayoutSettings(
-  config: Config,
+  config: UiRuntime,
   settings: LoadedSettings,
   availableTerminalHeight: number,
   terminalHeight: number,
@@ -105,13 +105,14 @@ export function useLayoutSettings(
   const hideContextSummary = settings.merged.ui.hideContextSummary ?? false;
   const hideFooter = settings.merged.ui.hideFooter ?? false;
   const showMemoryUsage =
-    config.getDebugMode() || (settings.merged.ui.showMemoryUsage ?? false);
+    config.app.getDebugMode() || (settings.merged.ui.showMemoryUsage ?? false);
   const disableLoadingPhrases =
-    config.getAccessibility().disableLoadingPhrases === true ||
-    config.getScreenReader();
+    config.app.getAccessibility().disableLoadingPhrases === true ||
+    config.app.getScreenReader();
   const currentThemeName = themeManager.getActiveTheme().name;
   const useAlternateBuffer =
-    settings.merged.ui.useAlternateBuffer === true && !config.getScreenReader();
+    settings.merged.ui.useAlternateBuffer === true &&
+    !config.app.getScreenReader();
   const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
   const effectiveAvailableHeight = constrainHeight
@@ -134,7 +135,7 @@ export function useLayoutSettings(
 }
 
 function useHistoryItemDisplayProps(
-  config: Config,
+  config: SlashCommandRuntime,
   mainAreaWidth: number,
   showTodoPanelSetting: boolean,
   slashCommands: readonly SlashCommand[] | undefined,
@@ -155,7 +156,7 @@ export function useListItems(
   headerElement: React.ReactElement,
   pendingElement: React.ReactElement,
   history: HistoryItem[],
-  config: Config,
+  config: SlashCommandRuntime,
   mainAreaWidth: number,
   staticAreaMaxItemHeight: number,
   slashCommands: readonly SlashCommand[] | undefined,
@@ -202,7 +203,7 @@ export function useListItems(
 }
 
 export function useStaticItems(
-  config: Config,
+  config: SlashCommandRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -270,7 +271,7 @@ export function useStaticItems(
 
 export function usePendingItems(
   uiState: UIState,
-  config: Config,
+  config: SlashCommandRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
@@ -314,7 +315,7 @@ export function usePendingItems(
 
 export function usePendingElement(
   uiState: UIState,
-  config: Config,
+  config: SlashCommandRuntime,
   mainAreaWidth: number,
   constrainHeight: boolean,
   effectiveAvailableHeight: number,
@@ -349,7 +350,7 @@ export function usePendingElement(
 }
 
 export function useScrollableContent(
-  config: Config,
+  config: SlashCommandRuntime,
   settings: LoadedSettings,
   version: string,
   nightly: boolean,
@@ -433,7 +434,7 @@ export function useScrollableContent(
 }
 
 export interface FooterProps {
-  config: Config;
+  config: SlashCommandRuntime;
   settings: LoadedSettings;
   hideFooter: boolean;
   showMemoryUsage: boolean;
@@ -508,7 +509,7 @@ export function FooterSection(props: FooterProps) {
 }
 
 export interface MainControlsProps {
-  config: Config;
+  config: SlashCommandRuntime;
   settings: LoadedSettings;
   startupWarnings: string[];
   updateInfo: UpdateObject | null;
@@ -659,7 +660,7 @@ export interface InlineContentProps {
   llxprtMdFileCount: number;
   coreMemoryFileCount: number;
   contextFileNames: string[];
-  config: Config;
+  config: SlashCommandRuntime;
   showToolDescriptions: boolean;
   showAutoAcceptIndicator: ApprovalMode;
   shellModeActive: boolean;
@@ -800,7 +801,7 @@ export interface QuittingDisplayProps {
   effectiveAvailableHeight: number;
   terminalWidth: number;
   quittingMessages: HistoryItem[];
-  config: Config;
+  config: SlashCommandRuntime;
   slashCommands: readonly SlashCommand[] | undefined;
   showTodoPanelSetting: boolean;
 }

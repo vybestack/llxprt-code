@@ -12,9 +12,10 @@ import {
   type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
 
@@ -87,7 +88,7 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
 interface ToolCallCheckpoint {
   history?: Parameters<NonNullable<LoadHistory>>[0];
   clientHistory?: Parameters<
-    ReturnType<Config['getAgentClient']>['setHistory']
+    ReturnType<CliUiRuntime['getAgentClient']>['setHistory']
   >[0];
   commitHash?: string;
   toolCall: { name: string; args: Record<string, unknown> };
@@ -95,7 +96,7 @@ interface ToolCallCheckpoint {
 
 async function applyCheckpointRestoration(
   context: CommandContext,
-  config: Config,
+  config: CliUiRuntime,
   toolCallData: ToolCallCheckpoint,
 ): Promise<void> {
   const { services, ui } = context;
@@ -130,7 +131,7 @@ async function applyCheckpointRestoration(
 
 async function restoreCheckpoint(
   context: CommandContext,
-  config: Config,
+  config: CliUiRuntime,
   args: string,
   checkpointDir: string,
   jsonFiles: string[],
@@ -218,7 +219,9 @@ async function restoreAction(
   }
 }
 
-export const restoreCommand = (config: Config | null): SlashCommand | null => {
+export const restoreCommand = (
+  config: CliUiRuntime | null,
+): SlashCommand | null => {
   if (config?.getCheckpointingEnabled() !== true) {
     return null;
   }

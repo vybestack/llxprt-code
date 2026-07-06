@@ -6,15 +6,16 @@
 
 import type React from 'react';
 import { Box, Text } from 'ink';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import { SemanticColors } from '../colors.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { Header } from './Header.js';
 import { Tips } from './Tips.js';
 import { useBanner, type BannerData } from '../hooks/useBanner.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface AppHeaderProps {
-  config: Config;
+  config: CliUiRuntime;
   settings: LoadedSettings;
   version: string;
   nightly: boolean;
@@ -49,7 +50,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         <Text color={SemanticColors.text.primary}>{bannerText}</Text>
       )}
       {!(settings.merged.ui.hideTips === true || config.getScreenReader()) && (
-        <Tips config={config} />
+        <Tips memory={config} />
       )}
     </Box>
   );

@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import {
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
   getResponseText,
@@ -19,6 +19,7 @@ import type {
 } from '@google/genai';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
+import type { AgentClientSource } from '../cliUiRuntime.js';
 
 export const PROMPT_COMPLETION_MIN_LENGTH = 5;
 export const PROMPT_COMPLETION_DEBOUNCE_MS = 250;
@@ -32,9 +33,13 @@ export interface PromptCompletion {
   markSelected: (selectedText: string) => void;
 }
 
+export interface PromptCompletionRuntime extends AgentClientSource {
+  getEnablePromptCompletion(): boolean;
+}
+
 export interface UsePromptCompletionOptions {
   buffer: TextBuffer;
-  config?: Config;
+  config?: PromptCompletionRuntime;
   enabled: boolean;
 }
 
@@ -51,7 +56,7 @@ interface PromptCompletionState {
 
 interface PromptSuggestionParams {
   buffer: TextBuffer;
-  config: Config | undefined;
+  config: PromptCompletionRuntime | undefined;
   isPromptCompletionEnabled: boolean;
   clearGhostText: () => void;
   setGhostText: Dispatch<SetStateAction<string>>;
@@ -60,7 +65,7 @@ interface PromptSuggestionParams {
   lastRequestedTextRef: MutableRefObject<string>;
 }
 
-type AgentClient = ReturnType<Config['getAgentClient']>;
+type AgentClient = ReturnType<PromptCompletionRuntime['getAgentClient']>;
 
 function shouldSkipPromptCompletion(
   trimmedText: string,

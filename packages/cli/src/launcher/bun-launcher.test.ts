@@ -376,6 +376,40 @@ describe('relaunchUnderBunIfNeeded', () => {
     expect(createCredentialProxy).not.toHaveBeenCalled();
   });
 
+  it('treats an empty credential socket as missing and starts a proxy', async () => {
+    process.env.LLXPRT_CREDENTIAL_SOCKET = '';
+    let capturedChild: EventEmitter | null = null;
+    const stopProxy = vi.fn(async () => {});
+    const createCredentialProxy = vi.fn(async () => ({
+      socketPath: '/tmp/new.sock',
+      stop: stopProxy,
+    }));
+    const spawnFn = vi.fn(
+      (_cmd: string, _args: string[], _options: { env: NodeJS.ProcessEnv }) => {
+        capturedChild = new EventEmitter();
+        return capturedChild;
+      },
+    );
+
+    const promise = relaunchUnderBunIfNeeded({
+      isRunningUnderBun: () => false,
+      envGuardSet: () => false,
+      resolveBun: vi.fn(async () => '/path/to/bun'),
+      resolveEntry: vi.fn(async () => '/entry.ts'),
+      spawn: spawnFn as unknown as typeof import('node:child_process').spawn,
+      createCredentialProxy,
+    });
+
+    await vi.waitFor(() => expect(capturedChild).not.toBeNull());
+    capturedChild!.emit('close', 0);
+    await promise;
+
+    const spawnEnv = spawnFn.mock.calls[0][2].env as Record<string, string>;
+    expect(spawnEnv.LLXPRT_CREDENTIAL_SOCKET).toBe('/tmp/new.sock');
+    expect(createCredentialProxy).toHaveBeenCalledTimes(1);
+    expect(stopProxy).toHaveBeenCalledTimes(1);
+  });
+
   it('restores process credential socket mutations from the default proxy lifecycle', async () => {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     process.argv = ['/node', '/script.js'];

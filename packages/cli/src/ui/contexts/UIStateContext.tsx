@@ -22,9 +22,9 @@ import type {
   AnyDeclarativeTool,
   ThoughtSummary,
   IdeInfo,
-  Config,
   LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
+import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
 
 import type { LoadedSettings } from '../../config/settings.js';
@@ -38,7 +38,7 @@ import type { SubagentView } from '../components/SubagentManagement/types.js';
  */
 export interface UIState {
   // Core app context
-  config: Config;
+  slashCommandRuntime: SlashCommandRuntime;
   settings: LoadedSettings;
 
   // Terminal dimensions

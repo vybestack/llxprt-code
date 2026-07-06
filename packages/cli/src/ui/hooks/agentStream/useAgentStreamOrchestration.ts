@@ -6,16 +6,14 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import {
-  type Config,
   type EditorType,
-  type AgentClientContract,
   type AnsiOutput,
   type MessageBus,
   type RecordingIntegration,
   type ToolCall,
-  type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -26,18 +24,22 @@ import { type TrackedToolCall } from '../useReactToolScheduler.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import { useStreamState } from './useStreamState.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from './useSubmitQuery.js';
-import { useAgenticLoop } from './useAgenticLoop.js';
+import {
+  useAgentEventStream,
+  type AgentEventRouter,
+} from './useAgentEventStream.js';
 import {
   useCancellation,
   useShellCommandSetup,
   useStreamingState,
   useToolSchedulerSetup,
 } from './useAgentStreamLifecycle.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export interface AgentStreamOrchestrationDeps {
-  agentClient: AgentClientContract;
+  agent: Agent;
   addItem: UseHistoryManagerReturn['addItem'];
-  config: Config;
+  runtime: StreamRuntime;
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
   handleSlashCommand: (
@@ -87,7 +89,7 @@ interface ToolSchedulerState {
 export function useAgentStreamOrchestration(
   args: AgentStreamOrchestrationDeps,
 ): AgentStreamOrchestrationResult {
-  const st = useStreamState(args.addItem, args.config);
+  const st = useStreamState(args.addItem, args.runtime);
   const loopDetectedRef = useRef(false);
   const scheduler = useToolSchedulerState(args, st);
   const pendingToolCallGroupDisplay = usePendingToolGroupDisplay(
@@ -107,9 +109,9 @@ export function useAgentStreamOrchestration(
   // owner of running tasks, so cancelling all of them is the only mechanism
   // that reliably stops detached subagents regardless of launch turn.
   const cancelRunningAsyncTasks = useCallback(() => {
-    const mgr = args.config.getAsyncTaskManager();
+    const mgr = args.runtime.asyncTasks.getAsyncTaskManager();
     mgr?.getRunningTasks().forEach((t) => mgr.cancelTask(t.id));
-  }, [args.config]);
+  }, [args.runtime]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
@@ -125,12 +127,10 @@ export function useAgentStreamOrchestration(
     cancelRunningAsyncTasks,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
-  // creates useStreamEventHandlers → processStreamEvent) and useAgenticLoop
-  // (which provides runLoop). Each is populated synchronously during render.
-  const processStreamEventRef = useRef<
-    ((event: ServerAgentStreamEvent, ts: number) => void) | null
-  >(null);
-  const runLoopRef = useRef<
+  // creates useStreamEventHandlers → processAgentEvent) and useAgentEventStream
+  // (which provides runStream). Each is populated synchronously during render.
+  const processAgentEventRef = useRef<AgentEventRouter | null>(null);
+  const runStreamRef = useRef<
     | ((
         message: PartListUnion,
         signal: AbortSignal,
@@ -146,21 +146,21 @@ export function useAgentStreamOrchestration(
     shell.handleShellCommand,
     loopDetectedRef,
     streamingState,
-    runLoopRef,
+    runStreamRef,
   );
   const submitQuery = submitQueryResult.submitQuery;
   // Populate the ref synchronously so the first render already has the real
   // function available for any synchronous consumer.
-  processStreamEventRef.current = submitQueryResult.processStreamEvent;
+  processAgentEventRef.current = submitQueryResult.processAgentEvent;
 
-  const agenticLoop = useLoopForStream(
+  const agentEventStream = useEventStreamForAgent(
     args,
     st,
     scheduler,
-    processStreamEventRef,
+    processAgentEventRef,
   );
-  // Populate runLoopRef synchronously.
-  runLoopRef.current = agenticLoop.runLoop;
+  // Populate runStreamRef synchronously.
+  runStreamRef.current = agentEventStream.runStream;
 
   return buildResult(
     st,
@@ -178,14 +178,14 @@ function useToolSchedulerState(
   st: ReturnType<typeof useStreamState>,
 ): ToolSchedulerState {
   const scheduler = useToolSchedulerSetup(
-    args.config,
+    args.runtime,
     st.setPendingHistoryItem,
     args.getPreferredEditor,
     args.onEditorClose,
     args.onEditorOpen,
     args.runtimeMessageBus,
     args.addItem,
-    args.agentClient,
+    args.agent,
   );
   const [
     toolCalls,
@@ -219,8 +219,8 @@ function useShell(
     setPendingHistoryItem: st.setPendingHistoryItem,
     setIsResponding: st.setIsResponding,
     onDebugMessage: args.onDebugMessage,
-    config: args.config,
-    agentClient: args.agentClient,
+    runtime: args.runtime,
+    agent: args.agent,
     setShellInputFocused: args.setShellInputFocused,
     terminalWidth: args.terminalWidth,
     terminalHeight: args.terminalHeight,
@@ -235,7 +235,7 @@ function useSubmitForStream(
   handleShellCommand: (query: string, signal: AbortSignal) => boolean,
   loopDetectedRef: React.MutableRefObject<boolean>,
   streamingState: ReturnType<typeof useStreamingState>,
-  runLoopRef: UseSubmitQueryDeps['runLoopRef'],
+  runStreamRef: UseSubmitQueryDeps['runStreamRef'],
 ) {
   const result = useSubmitQuery(
     buildSubmitQueryDeps({
@@ -245,30 +245,22 @@ function useSubmitForStream(
       handleShellCommand,
       loopDetectedRef,
       streamingState,
-      runLoopRef,
+      runStreamRef,
     }),
   );
   return result;
 }
 
-function useLoopForStream(
+function useEventStreamForAgent(
   args: AgentStreamOrchestrationDeps,
   st: ReturnType<typeof useStreamState>,
   scheduler: ToolSchedulerState,
-  processStreamEventRef: React.MutableRefObject<
-    ((event: ServerAgentStreamEvent, ts: number) => void) | null
-  >,
+  processAgentEventRef: React.MutableRefObject<AgentEventRouter | null>,
 ) {
-  return useAgenticLoop({
-    config: args.config,
-    agentClient: args.agentClient,
-    messageBus: args.runtimeMessageBus,
-    interactiveMode:
-      typeof args.config.isInteractive === 'function'
-        ? args.config.isInteractive()
-        : false,
+  return useAgentEventStream({
+    agent: args.agent,
     addItem: args.addItem,
-    processStreamEventRef,
+    processAgentEventRef,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     clearPendingHistoryItem: () => st.setPendingHistoryItem(null),
     performMemoryRefresh: args.performMemoryRefresh,
@@ -322,7 +314,7 @@ interface BuildSubmitQueryDepsArgs {
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   loopDetectedRef: React.MutableRefObject<boolean>;
   streamingState: ReturnType<typeof useStreamingState>;
-  runLoopRef: UseSubmitQueryDeps['runLoopRef'];
+  runStreamRef: UseSubmitQueryDeps['runStreamRef'];
 }
 
 function buildSubmitQueryDeps({
@@ -332,11 +324,11 @@ function buildSubmitQueryDeps({
   handleShellCommand,
   loopDetectedRef,
   streamingState,
-  runLoopRef,
+  runStreamRef,
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
   return {
-    config: args.config,
-    agentClient: args.agentClient,
+    runtime: args.runtime,
+    agent: args.agent,
     addItem: args.addItem,
     settings: args.settings,
     onDebugMessage: args.onDebugMessage,
@@ -368,6 +360,6 @@ function buildSubmitQueryDeps({
     submitQueryRef: st.submitQueryRef,
     isResponding: st.isResponding,
     streamingState,
-    runLoopRef,
+    runStreamRef,
   };
 }

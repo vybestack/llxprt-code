@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
@@ -33,7 +34,6 @@ import { useAppEventHandlers } from './useAppEventHandlers.js';
 import { resolveModelIdentity } from '../../../utils/modelIdentity.js';
 import type { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import type {
-  Config,
   IdeContext,
   RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
@@ -44,7 +44,7 @@ import type { HistoryItem, ConsoleMessageItem } from '../../../types.js';
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
 export interface AppDialogsParams {
-  config: Config;
+  config: SlashCommandRuntime;
   settings: LoadedSettings;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
@@ -227,7 +227,6 @@ function useDialogsAuthProviders(
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
     appState,
-    config,
     recordingIntegration,
   });
   useModelRuntimeSync({
@@ -279,7 +278,7 @@ function useDialogsAuth(
   const { config, settings, appState, addItem } = p;
   const theme = useThemeCommand(settings, appState, addItem);
   const settingsCmd = useSettingsCommand();
-  const folderTrust = useFolderTrust(settings, config, addItem);
+  const folderTrust = useFolderTrust(settings, addItem);
   const welcome = useWelcomeOnboarding({
     settings,
     isFolderTrustComplete:
@@ -324,8 +323,6 @@ function useDialogsProfiles(p: AppDialogsParams) {
     addMessage: (msg) =>
       addItem({ type: msg.type, text: msg.content }, msg.timestamp.getTime()),
     appState,
-    config,
-    settings,
   });
   const createProfile = useCreateProfileDialog({ appState });
   const profileMgmt = useProfileManagement({

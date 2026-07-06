@@ -805,17 +805,33 @@ export class MessageStreamOrchestrator {
 
   /**
    * Resolves the effective model for ModelInfo, preferring the provider
-   * manager's active provider model where available.
+   * manager's active provider model where available. Falls back to the active
+   * provider's default model before the config-level model so providers that
+   * own a meaningful default (e.g. load-balancer pools) are not masked by a
+   * generic config default.
    */
   private _resolveModelForInfo(): string {
     const contentGenConfig = this.deps.config.getContentGeneratorConfig();
     const providerManager = contentGenConfig?.providerManager;
-    const providerModel = providerManager
-      ?.getActiveProvider()
-      ?.getCurrentModel?.();
-    if (providerModel && providerModel.trim() !== '') {
-      return providerModel;
+    const activeProvider = providerManager?.getActiveProvider();
+
+    if (activeProvider !== undefined) {
+      const activeModel: unknown = activeProvider.getCurrentModel?.();
+      if (typeof activeModel === 'string' && activeModel.trim() !== '') {
+        return activeModel;
+      }
+
+      // getDefaultModel is optional on the core RuntimeProvider contract; the
+      // optional-call operator short-circuits when it is absent. Some wider
+      // structural provider shapes type the return as `string | null |
+      // undefined`, so verify it is a non-empty string before trimming rather
+      // than assuming a bare `string`.
+      const defaultModel: unknown = activeProvider.getDefaultModel?.();
+      if (typeof defaultModel === 'string' && defaultModel.trim() !== '') {
+        return defaultModel;
+      }
     }
+
     return this.deps.getEffectiveModel();
   }
 

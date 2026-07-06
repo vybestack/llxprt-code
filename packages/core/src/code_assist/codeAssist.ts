@@ -138,10 +138,24 @@ export async function createCodeAssistServer(
   );
 }
 
+export interface CodeAssistServerSource {
+  getAgentClient():
+    | {
+        getContentGenerator(): ContentGenerator;
+      }
+    | null
+    | undefined;
+}
+
 export function getCodeAssistServer(
-  config: Config,
+  config: CodeAssistServerSource,
 ): CodeAssistServer | undefined {
-  const generator = config.getAgentClient().getContentGenerator();
+  const agentClient = config.getAgentClient();
+  if (!agentClient) {
+    return undefined;
+  }
+
+  const generator = agentClient.getContentGenerator();
 
   // Unwrap the neutral adapter if present
   if (generator instanceof CodeAssistContentGeneratorAdapter) {

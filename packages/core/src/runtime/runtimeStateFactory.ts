@@ -18,8 +18,16 @@ import type {
   AgentRuntimeState,
   RuntimeStateParams,
 } from './AgentRuntimeState.js';
-import type { Config } from '../config/config.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
+
+export interface RuntimeStateConfigSource {
+  getSessionId?(): string | undefined;
+  getProvider?(): string | undefined;
+  getModel?(): string | undefined;
+  getContentGeneratorConfig?(): { model?: string } | undefined;
+  getEphemeralSetting?(key: string): unknown;
+  getProxy?(): string | undefined;
+}
 
 /**
  * Options when deriving runtime state from Config.
@@ -41,7 +49,10 @@ function isValidUrl(candidate: unknown): candidate is string {
   }
 }
 
-function resolveRuntimeId(config: Config, explicitId?: string): string {
+function resolveRuntimeId(
+  config: RuntimeStateConfigSource,
+  explicitId?: string,
+): string {
   if (explicitId) {
     return explicitId;
   }
@@ -56,7 +67,10 @@ function resolveRuntimeId(config: Config, explicitId?: string): string {
     .slice(2, 8)}`;
 }
 
-function resolveProvider(config: Config, override?: string): string {
+function resolveProvider(
+  config: RuntimeStateConfigSource,
+  override?: string,
+): string {
   if (override) {
     return override;
   }
@@ -67,7 +81,7 @@ function resolveProvider(config: Config, override?: string): string {
 }
 
 function resolveModel(
-  config: Config,
+  config: RuntimeStateConfigSource,
   contentModel: string | undefined,
   override?: string,
 ): string {
@@ -78,7 +92,7 @@ function resolveModel(
     return contentModel;
   }
   if (typeof config.getModel === 'function') {
-    const model = (config.getModel as () => unknown)();
+    const model = config.getModel();
     if (typeof model === 'string' && model.length > 0) {
       return model;
     }
@@ -93,7 +107,7 @@ function resolveModel(
  * runtime state, and returns an immutable snapshot for stateless operation.
  */
 export function createAgentRuntimeStateFromConfig(
-  config: Config,
+  config: RuntimeStateConfigSource,
   options: RuntimeStateFromConfigOptions = {},
 ): AgentRuntimeState {
   const contentConfig =

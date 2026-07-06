@@ -20,7 +20,6 @@ import { useHistory } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import { TodoPausePreserver } from '../../../hooks/useTodoPausePreserver.js';
 import {
-  type Config,
   type IContent,
   type IdeInfo,
   type MessageBus,
@@ -43,12 +42,16 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItem } from '../../../types.js';
 import type { TodoContinuationHook } from './useTodoContinuationFlow.js';
+import type {
+  AgentClientSource,
+  StreamRuntime,
+  UiRuntime,
+} from '../../../cliUiRuntime.js';
 
 export interface AppBootstrapProps {
-  config: Config;
+  uiRuntime: UiRuntime;
   /**
    * The single interactive Agent threaded from the composition root.
-   * `config` remains a temporary migration bridge (see #1595).
    */
   agent: Agent;
   settings: LoadedSettings;
@@ -64,13 +67,18 @@ export interface AppBootstrapProps {
 }
 
 export interface AppBootstrapResult {
-  config: Config;
+  uiRuntime: UiRuntime;
+  streamRuntime: StreamRuntime;
   /**
-   * The single interactive Agent, exposed alongside `config` so future
-   * migration steps can replace remaining `config.getAgentClient()` usage
-   * (see #1595). Streaming hooks are intentionally unchanged at this stage.
+   * The single interactive Agent threaded from the composition root.
    */
   agent: Agent;
+  /**
+   * Narrow boundary that resolves the live AgentClient for the streaming
+   * path. Resolved once here so downstream hooks receive an explicit,
+   * minimal surface instead of dereferencing the runtime object inline.
+   */
+  agentClientSource: AgentClientSource;
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
   isFocused: boolean;
@@ -127,7 +135,7 @@ export interface AppBootstrapResult {
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { config, settings, resumedHistory } = props;
+  const { uiRuntime, settings, resumedHistory } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -157,7 +165,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     coreMemoryFileCount,
     setCoreMemoryFileCount: _setCoreMemoryFileCount,
   } = useSessionInitialization({
-    config,
+    uiRuntime,
     addItem,
     loadHistory,
     resumedHistory,
@@ -214,7 +222,7 @@ function useBootstrapEvents(
   runtime: ReturnType<typeof useRuntimeApi>,
 ) {
   const {
-    config,
+    uiRuntime,
     settings,
     recordingIntegration,
     initialRecordingService,
@@ -227,16 +235,20 @@ function useBootstrapEvents(
       initialLockHandle,
     );
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
-  const currentIDE = config.getIdeClient()?.getCurrentIde();
+  const currentIDE = uiRuntime.ide.getIdeClient()?.getCurrentIde();
   useEffect(() => {
-    const ideClient = config.getIdeClient();
-    if (ideClient) {
-      registerCleanup(() => ideClient.disconnect());
+    const ideClient = uiRuntime.ide.getIdeClient();
+    if (ideClient === undefined) {
+      return undefined;
     }
-  }, [config]);
+    registerCleanup(() => {
+      void ideClient.disconnect();
+    });
+    return undefined;
+  }, [uiRuntime]);
   const shouldShowIdePrompt =
     Boolean(currentIDE) &&
-    !config.getIdeMode() &&
+    !uiRuntime.ide.getIdeMode() &&
     settings.merged.hasSeenIdeIntegrationNudge !== true &&
     !idePromptAnswered;
   useUpdateAndOAuthBridges({
@@ -250,10 +262,14 @@ function useBootstrapEvents(
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
   useExtensionAutoUpdate({ settings, onConsoleMessage: handleNewMessage });
-  useCoreEventHandlers({ handleNewMessage, config, recordingIntegrationRef });
+  useCoreEventHandlers({
+    handleNewMessage,
+    uiRuntime,
+    recordingIntegrationRef,
+  });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics } = useTokenMetricsTracking({
-    config,
+    uiRuntime,
     updateHistoryTokenCount,
     recordingIntegrationRef,
   });
@@ -274,12 +290,16 @@ function useBootstrapEvents(
 }
 
 export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
+  const { uiRuntime } = props;
+  const streamRuntime: StreamRuntime = uiRuntime;
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo, h.runtime);
   return {
-    config: props.config,
+    uiRuntime,
+    streamRuntime,
     agent: props.agent,
+    agentClientSource: streamRuntime.agentClientSource,
     settings: props.settings,
     runtimeMessageBus: props.runtimeMessageBus,
     startupWarnings: props.startupWarnings ?? [],

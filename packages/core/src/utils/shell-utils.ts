@@ -31,7 +31,7 @@
  */
 
 import type { AnyToolInvocation } from '../index.js';
-import type { Config } from '../config/config.js';
+import type { ShellReplacementMode } from '../config/configTypes.js';
 import { normalizeShellReplacement } from '../config/config.js';
 import { quote } from 'shell-quote';
 import { isWindows } from './runtime.js';
@@ -587,8 +587,15 @@ type PermissionCheckResult = {
   isHardDenial?: boolean;
 };
 
+export interface ShellPermissionConfig {
+  getEphemeralSetting(key: string): unknown;
+  getShellReplacement(): ShellReplacementMode;
+  getExcludeTools(): string[] | undefined;
+  getCoreTools(): string[] | undefined;
+}
+
 function resolveShellReplacementMode(
-  config: Config,
+  config: ShellPermissionConfig,
 ): 'allowlist' | 'all' | 'none' {
   const ephemeralValue = config.getEphemeralSetting('shell-replacement') as
     | 'allowlist'
@@ -648,7 +655,7 @@ function extractCommandsToValidate(
 
 function checkBlocklist(
   commandsToValidate: string[],
-  config: Config,
+  config: ShellPermissionConfig,
 ): PermissionCheckResult | null {
   const excludeTools = config.getExcludeTools() ?? [];
   const isWildcardBlocked = SHELL_TOOL_NAMES.some((name) =>
@@ -797,7 +804,7 @@ function checkDefaultAllowMode(
  */
 export function checkCommandPermissions(
   command: string,
-  config: Config,
+  config: ShellPermissionConfig,
   sessionAllowlist?: Set<string>,
 ): PermissionCheckResult {
   const shellReplacementMode = resolveShellReplacementMode(config);
@@ -866,7 +873,7 @@ export function checkCommandPermissions(
  */
 export function isCommandAllowed(
   command: string,
-  config: Config,
+  config: ShellPermissionConfig,
 ): { allowed: boolean; reason?: string } {
   // By not providing a sessionAllowlist, we invoke "default allow" behavior.
   const { allAllowed, blockReason } = checkCommandPermissions(command, config);

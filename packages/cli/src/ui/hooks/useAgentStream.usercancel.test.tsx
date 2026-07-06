@@ -11,6 +11,7 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -214,9 +215,11 @@ describe('useAgentStream', () => {
 
   const renderTestHook = (
     initialToolCalls: TrackedToolCall[] = [],
-    agentClient?: unknown,
+    agentClient?: Record<string, unknown>,
   ) => {
-    const client = agentClient ?? mockConfig.getAgentClient();
+    const client = createFakeAgentFromMockClient(
+      agentClient ?? new MockedAgentClientClass(mockConfig),
+    );
 
     const initialProps = {
       client,
@@ -381,7 +384,7 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          mockConfig.getAgentClient(),
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,
@@ -423,7 +426,7 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          mockConfig.getAgentClient(),
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,

@@ -13,7 +13,10 @@ import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/scheduler
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { ToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type {
+  CompletedToolCall,
+  ToolCall,
+} from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
@@ -292,5 +295,194 @@ describe('AgenticLoop with caller display callbacks', () => {
     const completedEvents = events.filter(isToolsComplete);
     expect(completedEvents).toHaveLength(1);
     expect(completedEvents[0].completed[0].status).toBe('success');
+  });
+
+  it('forwards onAllToolCallsComplete with the SAME batch as the tools_complete event, AFTER history recording', async () => {
+    const tool = new MockTool({ name: 'complete_cb_tool' });
+    tool.executeFn.mockResolvedValue({
+      llmContent: 'ok',
+      returnDisplay: 'ok',
+    });
+
+    const toolRegistry = createToolRegistryForTest([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+      interactive: false,
+      approvalMode: ApprovalMode.YOLO,
+    });
+
+    const { client, recordedToolCalls } = createScriptedAgentClient([
+      [
+        toolCallRequestEvent('complete_cb_tool', 'call-allcb', { x: 1 }),
+        finishedEvent(),
+      ],
+      [contentEvent('done'), finishedEvent()],
+    ]);
+
+    const displayCompletions: CompletedToolCall[][] = [];
+    let onCompleteCallCount = 0;
+    // Capture how many recorded-tool-call batches exist WHEN the callback fires,
+    // so we can assert the callback fires AFTER history recording.
+    let recordedCountAtCallback = -1;
+
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+      displayCallbacks: {
+        onAllToolCallsComplete: (completed) => {
+          onCompleteCallCount += 1;
+          recordedCountAtCallback = recordedToolCalls.length;
+          displayCompletions.push(completed);
+        },
+      },
+    });
+
+    const events = await collectEvents(
+      loop,
+      'go',
+      new AbortController().signal,
+    );
+
+    // The callback fired exactly once (one turn with completed tools).
+    expect(onCompleteCallCount).toBe(1);
+    // History was recorded BEFORE the callback (best-effort recordCompletedToolCalls
+    // ran before the callback).
+    expect(recordedCountAtCallback).toBe(1);
+
+    // The callback received the SAME batch as the tools_complete event.
+    const completedEvents = events.filter(isToolsComplete);
+    expect(completedEvents).toHaveLength(1);
+    const eventBatch = completedEvents[0].completed;
+    expect(displayCompletions).toHaveLength(1);
+    expect(displayCompletions[0].length).toBe(eventBatch.length);
+    expect(displayCompletions[0][0].request.callId).toBe(
+      eventBatch[0].request.callId,
+    );
+    expect(displayCompletions[0][0].status).toBe(eventBatch[0].status);
+    expect(displayCompletions[0][0].status).toBe('success');
+  });
+
+  it('a throwing onAllToolCallsComplete callback does not break the loop', async () => {
+    const tool = new MockTool({ name: 'throw_cb_tool' });
+    tool.executeFn.mockResolvedValue({
+      llmContent: 'ok',
+      returnDisplay: 'ok',
+    });
+
+    const toolRegistry = createToolRegistryForTest([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+      interactive: false,
+      approvalMode: ApprovalMode.YOLO,
+    });
+
+    const { client } = createScriptedAgentClient([
+      [
+        toolCallRequestEvent('throw_cb_tool', 'call-throwcb', { x: 1 }),
+        finishedEvent(),
+      ],
+      [contentEvent('survived'), finishedEvent()],
+    ]);
+
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+      displayCallbacks: {
+        onAllToolCallsComplete: () => {
+          throw new Error('callback boom');
+        },
+      },
+    });
+
+    const events = await collectEvents(
+      loop,
+      'go',
+      new AbortController().signal,
+    );
+
+    // The loop completed normally despite the throwing callback.
+    const completedEvents = events.filter(isToolsComplete);
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0].completed[0].status).toBe('success');
+    // The continuation turn ran.
+    const streamContents = events
+      .filter(isStream)
+      .filter((e) => e.event.type === AgentEventType.Content)
+      .map((e) => {
+        const ev = e.event as Extract<
+          ServerAgentStreamEvent,
+          { type: typeof AgentEventType.Content }
+        >;
+        return ev.value;
+      });
+    expect(streamContents).toContain('survived');
+  });
+
+  it('an async-rejecting onAllToolCallsComplete callback does not break the loop or cause unhandled rejection', async () => {
+    const tool = new MockTool({ name: 'async_reject_cb_tool' });
+    tool.executeFn.mockResolvedValue({
+      llmContent: 'ok',
+      returnDisplay: 'ok',
+    });
+
+    const toolRegistry = createToolRegistryForTest([tool]);
+    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+    const config = createTestConfig({
+      messageBus,
+      toolRegistry,
+      policyEngine: createAllowPolicyEngine(),
+      interactive: false,
+      approvalMode: ApprovalMode.YOLO,
+    });
+
+    const { client } = createScriptedAgentClient([
+      [
+        toolCallRequestEvent('async_reject_cb_tool', 'call-asynccb', { x: 1 }),
+        finishedEvent(),
+      ],
+      [contentEvent('survived-async'), finishedEvent()],
+    ]);
+
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      messageBus,
+      displayCallbacks: {
+        onAllToolCallsComplete: async () => {
+          throw new Error('async callback boom');
+        },
+      },
+    });
+
+    const events = await collectEvents(
+      loop,
+      'go',
+      new AbortController().signal,
+    );
+
+    // The loop completed normally despite the async-rejecting callback.
+    const completedEvents = events.filter(isToolsComplete);
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0].completed[0].status).toBe('success');
+    // The continuation turn ran.
+    const streamContents = events
+      .filter(isStream)
+      .filter((e) => e.event.type === AgentEventType.Content)
+      .map((e) => {
+        const ev = e.event as Extract<
+          ServerAgentStreamEvent,
+          { type: typeof AgentEventType.Content }
+        >;
+        return ev.value;
+      });
+    expect(streamContents).toContain('survived-async');
   });
 });

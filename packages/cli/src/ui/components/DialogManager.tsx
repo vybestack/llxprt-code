@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { Box, Text } from 'ink';
 import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type {
   HydratedModel,
-  Config,
   SessionSummary,
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -62,7 +62,7 @@ import { firstNonEmptyString } from '../../utils/coalesce.js';
 interface DialogManagerProps {
   addItem: UseHistoryManagerReturn['addItem'];
   terminalWidth: number;
-  config: Config;
+  config: CliUiRuntime;
   settings: LoadedSettings;
 }
 
@@ -150,7 +150,7 @@ function useModelDialogHandler(
  * @requirement REQ-PR-001, REQ-PR-002
  */
 function useSessionBrowserHandler(
-  config: Config,
+  config: CliUiRuntime,
   commandContext: {
     ui: {
       clear: () => void;
@@ -574,7 +574,7 @@ function renderModelsDialog(
 function renderSessionBrowserDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
-  config: Config,
+  config: CliUiRuntime,
   commandContext: { ui: { pendingItem: unknown } },
   handleSessionBrowserSelect: (
     session: SessionSummary,
@@ -600,7 +600,7 @@ function renderSessionBrowserDialog(
 
 function useDialogManagerState(
   addItem: UseHistoryManagerReturn['addItem'],
-  config: Config,
+  config: CliUiRuntime,
   settings: LoadedSettings,
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
@@ -679,7 +679,7 @@ function renderDialogBodyFirstHalf(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
   settings: LoadedSettings,
-  config: Config,
+  config: CliUiRuntime,
   state: ReturnType<typeof useDialogManagerState>,
 ) {
   if (uiState.isThemeDialogOpen) {
@@ -727,7 +727,7 @@ function renderDialogBodyFirstHalf(
 function renderDialogBodySecondHalf(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
-  config: Config,
+  config: CliUiRuntime,
   addItem: UseHistoryManagerReturn['addItem'],
   state: ReturnType<typeof useDialogManagerState>,
 ) {
@@ -783,7 +783,7 @@ function renderDialogBody(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
   settings: LoadedSettings,
-  config: Config,
+  config: CliUiRuntime,
   addItem: UseHistoryManagerReturn['addItem'],
   state: ReturnType<typeof useDialogManagerState>,
 ) {

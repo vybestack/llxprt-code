@@ -13,28 +13,20 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import {
-  type Config,
-  type MessageSenderType,
-} from '@vybestack/llxprt-code-core';
+import { type MessageSenderType } from '@vybestack/llxprt-code-core';
 import {
   prepareQueryForAgent,
   type PrepareQueryDeps,
 } from '../queryPreparer.js';
 import type { SlashCommandProcessorResult } from '../../../types.js';
-
-// logUserPrompt performs telemetry/config I/O; neutralize it like the dedup
-// test does so the gate logic is exercised in isolation.
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
-  return { ...actual, logUserPrompt: vi.fn() };
-});
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 
 function createDeps(
   overrides: Partial<PrepareQueryDeps> = {},
 ): PrepareQueryDeps {
   return {
-    config: { getModel: () => 'test-model' } as unknown as Config,
+    runtime: createStreamRuntimeForTest({ getModel: () => 'test-model' }),
+    logUserPrompt: vi.fn(),
     addItem: vi.fn(),
     onDebugMessage: vi.fn(),
     handleShellCommand: vi.fn(() => false),

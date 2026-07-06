@@ -11,13 +11,20 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import {
-  type RuntimeConfigWithOptionalServices,
-  type RuntimeMcpServers,
-  asRuntimeConfig,
-  buildMcpStatusMessage,
-} from './mcpDisplay.js';
+import type { RuntimeMcpServers } from './mcpDisplay.js';
+import { buildMcpStatusMessage } from './mcpDisplay.js';
 import { mcpAuthSchema, listOAuthServers, performMcpOAuth } from './mcpAuth.js';
+
+function hasToolRefreshClient(
+  value: unknown,
+): value is { setTools(): Promise<void> } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'setTools' in value &&
+    typeof value.setTools === 'function'
+  );
+}
 
 const getMcpStatus = async (
   context: CommandContext,
@@ -30,17 +37,7 @@ const getMcpStatus = async (
     return {
       type: 'message',
       messageType: 'error',
-      content: 'Config not loaded.',
-    };
-  }
-
-  const runtimeConfig = asRuntimeConfig(config);
-  const toolRegistry = runtimeConfig.getToolRegistry?.();
-  if (!toolRegistry) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'Could not retrieve tool registry.',
+      content: 'Configuration not loaded.',
     };
   }
 
@@ -60,7 +57,6 @@ const getMcpStatus = async (
 
   const message = await buildMcpStatusMessage(
     config,
-    runtimeConfig,
     serverNames,
     mcpServers,
     blockedMcpServers,
@@ -93,14 +89,11 @@ const authCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Config not loaded.',
+        content: 'Configuration not loaded.',
       };
     }
 
     const mcpServers: RuntimeMcpServers = config.getMcpServers() ?? {};
-
-    const runtimeConfig: RuntimeConfigWithOptionalServices =
-      asRuntimeConfig(config);
 
     if (!serverName) {
       return listOAuthServers(mcpServers);
@@ -115,7 +108,7 @@ const authCommand: SlashCommand = {
       };
     }
 
-    return performMcpOAuth(context, serverName, server, runtimeConfig);
+    return performMcpOAuth(context, serverName, server, config);
   },
 };
 
@@ -158,19 +151,11 @@ const refreshCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Config not loaded.',
+        content: 'Configuration not loaded.',
       };
     }
 
-    const runtimeConfig = asRuntimeConfig(config);
-    const toolRegistry = runtimeConfig.getToolRegistry?.();
-    if (!toolRegistry) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Could not retrieve tool registry.',
-      };
-    }
+    const toolRegistry = config.getToolRegistry();
 
     context.ui.addItem(
       {
@@ -180,12 +165,23 @@ const refreshCommand: SlashCommand = {
       Date.now(),
     );
 
-    await toolRegistry.discoverAllTools();
+    try {
+      await toolRegistry.discoverAllTools();
 
-    // Update the client with the new tools
-    const agentClient = runtimeConfig.getAgentClient?.();
-    if (agentClient) {
+      // Update the client with the new tools
+      const agentClient: unknown = config.getAgentClient();
+      if (!hasToolRefreshClient(agentClient)) {
+        throw new Error('Agent client is not available');
+      }
       await agentClient.setTools();
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to restart MCP servers: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
     }
 
     // Reload the slash commands to reflect the changes.

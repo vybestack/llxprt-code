@@ -11,14 +11,12 @@
  * async-task-auto-trigger effect.
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
-  type Config,
-  type AgentClientContract,
   type MessageSenderType,
   type RecordingIntegration,
-  type ServerAgentStreamEvent,
   type ThinkingBlock,
   type ThoughtSummary,
   type ToolCallRequestInfo,
@@ -35,11 +33,30 @@ import { useSessionStats } from '../../contexts/SessionContext.js';
 import { handleSubmissionError } from './streamUtils.js';
 import { prepareTurnForQuery } from './turnPreparation.js';
 import { useStreamEventHandlers } from './useStreamEventHandlers.js';
+import { dispatchAgentEvent } from './agentEventDispatcher.js';
+import type { AgentEventRouter } from './useAgentEventStream.js';
+import {
+  resolveContentPrefixIdentity,
+  createCliModelIdentityRuntime,
+} from '../../utils/modelIdentity.js';
 import type { QueuedSubmission } from './types.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
+
+/**
+ * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
+ * fresh runtime state at call time so a single stable reference can be reused.
+ */
+function defaultGetContentPrefixIdentity(): string | null {
+  try {
+    return resolveContentPrefixIdentity(createCliModelIdentityRuntime());
+  } catch {
+    return null;
+  }
+}
 
 export interface UseSubmitQueryDeps {
-  config: Config;
-  agentClient: AgentClientContract;
+  runtime: StreamRuntime;
+  agent: Agent;
   addItem: (
     item: Omit<HistoryItem, 'id'>,
     timestamp?: number,
@@ -87,12 +104,12 @@ export interface UseSubmitQueryDeps {
   lastModelIdentityRef: React.MutableRefObject<string | null>;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
   /**
-   * Ref to the engine-owned loop runner. Held as a ref to break the circular
-   * dependency: runLoop comes from useAgenticLoop which needs processStreamEvent
-   * from useStreamEventHandlers (created inside this hook). The ref is populated
-   * synchronously during render and read at call time.
+   * Ref to the Agent event-stream runner. Held as a ref to break the circular
+   * dependency: runStream comes from useAgentEventStream which needs
+   * processAgentEvent from useStreamEventHandlers (created inside this hook).
+   * The ref is populated synchronously during render and read at call time.
    */
-  runLoopRef: React.MutableRefObject<
+  runStreamRef: React.MutableRefObject<
     | ((
         message: PartListUnion,
         signal: AbortSignal,
@@ -119,11 +136,8 @@ export interface UseSubmitQueryReturn {
     prompt_id?: string,
   ) => Promise<void>;
   scheduleNextQueuedSubmission: () => void;
-  /** Processes a single stream event (for the AgenticLoop router). */
-  processStreamEvent: (
-    event: ServerAgentStreamEvent,
-    userMessageTimestamp: number,
-  ) => void;
+  /** Processes a single AgentEvent into React state (for the event-stream router). */
+  processAgentEvent: AgentEventRouter;
   displayUserMessage: (
     trimmedQuery: string,
     userMessageTimestamp: number,
@@ -143,13 +157,8 @@ export interface UseSubmitQueryReturn {
 export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
   const { startNewPrompt, getPromptCount } = useSessionStats();
 
-  const {
-    processStreamEvent,
-    displayUserMessage,
-    prepareQueryForAgent,
-    handleLoopDetectedEvent,
-  } = useStreamEventHandlers({
-    config: deps.config,
+  const handlers = useStreamEventHandlers({
+    runtime: deps.runtime,
     settings: deps.settings,
     addItem: deps.addItem,
     onDebugMessage: deps.onDebugMessage,
@@ -176,18 +185,84 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     lastModelIdentityRef: deps.lastModelIdentityRef,
   });
 
+  const processAgentEvent = useProcessAgentEvent(deps, handlers);
+
   const scheduleNextQueuedSubmission = useScheduleNext(deps);
 
   const submitQuery = useSubmitQueryCallback({
     ...deps,
-    displayUserMessage,
-    prepareQueryForAgent,
-    handleLoopDetectedEvent,
+    displayUserMessage: handlers.displayUserMessage,
+    prepareQueryForAgent: handlers.prepareQueryForAgent,
+    handleLoopDetectedEvent: handlers.handleLoopDetectedEvent,
     scheduleNextQueuedSubmission,
     startNewPrompt,
     getPromptCount,
   });
 
+  useSubmitQueryEffects(deps, submitQuery, scheduleNextQueuedSubmission);
+
+  return {
+    submitQuery,
+    scheduleNextQueuedSubmission,
+    processAgentEvent,
+    displayUserMessage: handlers.displayUserMessage,
+    prepareQueryForAgent: handlers.prepareQueryForAgent,
+    handleLoopDetectedEvent: handlers.handleLoopDetectedEvent,
+  };
+}
+
+function useProcessAgentEvent(
+  deps: UseSubmitQueryDeps,
+  handlers: Pick<
+    ReturnType<typeof useStreamEventHandlers>,
+    | 'handleContentEvent'
+    | 'handleUserCancelledEvent'
+    | 'handleErrorEvent'
+    | 'handleChatCompressionEvent'
+    | 'handleFinishedNotice'
+    | 'handleMaxSessionTurnsEvent'
+    | 'handleContextWindowWillOverflowEvent'
+    | 'handleCitationEvent'
+  >,
+) {
+  const agentBufferRef = useRef('');
+  // Latest-ref pattern: store deps+handlers in a ref so the useCallback
+  // never needs to change identity (avoids recreating every render).
+  const latestDeps = useRef(deps);
+  latestDeps.current = deps;
+  const latestHandlers = useRef(handlers);
+  latestHandlers.current = handlers;
+  return useCallback<AgentEventRouter>((event, userMessageTimestamp) => {
+    const result = dispatchAgentEvent(
+      event,
+      {
+        addItem: latestDeps.current.addItem,
+        sanitizeContent: latestDeps.current.sanitizeContent,
+        flushPendingHistoryItem: latestDeps.current.flushPendingHistoryItem,
+        pendingHistoryItemRef: latestDeps.current.pendingHistoryItemRef,
+        thinkingBlocksRef: latestDeps.current.thinkingBlocksRef,
+        turnCancelledRef: latestDeps.current.turnCancelledRef,
+        loopDetectedRef: latestDeps.current.loopDetectedRef,
+        lastModelInfoRef: latestDeps.current.lastModelInfoRef,
+        lastModelIdentityRef: latestDeps.current.lastModelIdentityRef,
+        setPendingHistoryItem: latestDeps.current.setPendingHistoryItem,
+        setLastAgentActivityTime: latestDeps.current.setLastAgentActivityTime,
+        setThought: latestDeps.current.setThought,
+        getContentPrefixIdentity: defaultGetContentPrefixIdentity,
+        ...latestHandlers.current,
+      },
+      agentBufferRef.current,
+      userMessageTimestamp,
+    );
+    agentBufferRef.current = result.agentMessageBuffer;
+  }, []);
+}
+
+function useSubmitQueryEffects(
+  deps: UseSubmitQueryDeps,
+  submitQuery: ReturnType<typeof useSubmitQueryCallback>,
+  scheduleNextQueuedSubmission: () => void,
+) {
   useEffect(() => {
     deps.submitQueryRef.current = submitQuery;
   }, [submitQuery, deps.submitQueryRef]);
@@ -205,7 +280,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
       scheduleNextQueuedSubmission();
     };
 
-    const unsubscribe = deps.config.setupAsyncTaskAutoTrigger(
+    const unsubscribe = deps.runtime.asyncTasks.setupAsyncTaskAutoTrigger(
       isAgentBusy,
       triggerAgentTurn,
     );
@@ -214,20 +289,11 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
       unsubscribe();
     };
   }, [
-    deps.config,
+    deps.runtime,
     deps.streamingState,
     scheduleNextQueuedSubmission,
     deps.queuedSubmissionsRef,
   ]);
-
-  return {
-    submitQuery,
-    scheduleNextQueuedSubmission,
-    processStreamEvent,
-    displayUserMessage,
-    prepareQueryForAgent,
-    handleLoopDetectedEvent,
-  };
 }
 
 function useScheduleNext(deps: UseSubmitQueryDeps) {
@@ -272,8 +338,8 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
       options?: { isContinuation: boolean },
       prompt_id?: string,
     ) => {
-      // submitQuery handles NEW user prompts only; the engine-owned
-      // AgenticLoop drives multi-turn continuation internally.
+      // submitQuery handles NEW user prompts only; the Agent's event stream
+      // drives multi-turn continuation internally.
       void options;
 
       if (isQueueable(cbd.streamingState)) {
@@ -286,7 +352,7 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
 
       const turn = initTurn(cbd, query, prompt_id, cbd.getPromptCount);
 
-      if (isMcpDiscoveryBlocking(cbd.config, turn.trimmedStr)) {
+      if (isMcpDiscoveryBlocking(cbd.runtime, turn.trimmedStr)) {
         cbd.addItem(
           {
             type: 'info' as const,
@@ -325,7 +391,7 @@ async function runSubmitQueryCore(
 
   await prepareTurnForQuery(
     false,
-    cbd.config,
+    cbd.runtime,
     cbd.startNewPrompt,
     cbd.setThought,
     cbd.thinkingBlocksRef,
@@ -343,7 +409,7 @@ async function runSubmitQueryCore(
       handleSubmissionError(
         error,
         cbd.addItem,
-        cbd.config,
+        cbd.runtime,
         cbd.onAuthError,
         turn.userMessageTimestamp,
       );
@@ -378,15 +444,18 @@ function shouldDisplayUserMessage(trimmedStr: string): boolean {
   return !!trimmedStr && !isSlashCommand(trimmedStr);
 }
 
-function isMcpDiscoveryBlocking(config: Config, trimmedStr: string): boolean {
+function isMcpDiscoveryBlocking(
+  runtime: StreamRuntime,
+  trimmedStr: string,
+): boolean {
   if (!trimmedStr) return false;
   if (isSlashCommand(trimmedStr)) return false;
 
-  const mcpManager = config.getMcpClientManager();
+  const mcpManager = runtime.mcp.getMcpClientManager();
   const discoveryState = mcpManager?.getDiscoveryState();
   const configuredMcpServers =
     mcpManager !== undefined
-      ? Object.keys(config.getMcpServers() ?? {}).length
+      ? Object.keys(runtime.mcp.getMcpServers() ?? {}).length
       : 0;
 
   return (
@@ -413,7 +482,8 @@ function initTurn(
   deps.turnCancelledRef.current = false;
 
   const resolvedPromptId =
-    promptId ?? deps.config.getSessionId() + '########' + getPromptCount();
+    promptId ??
+    deps.runtime.session.getSessionId() + '########' + getPromptCount();
 
   const trimmedStr = typeof query === 'string' ? query.trim() : '';
 
@@ -431,16 +501,16 @@ async function executeStream(
   queryToSend: PartListUnion,
   turn: TurnInit,
 ): Promise<void> {
-  const runLoop = deps.runLoopRef.current;
-  if (!runLoop) {
-    throw new Error('AgenticLoop runner is not initialized.');
+  const runStream = deps.runStreamRef.current;
+  if (!runStream) {
+    throw new Error('Agent event-stream runner is not initialized.');
   }
 
-  // The engine-owned AgenticLoop drives the entire multi-turn flow:
-  // send → stream → schedule → execute → feed-back → repeat.
-  await runLoop(queryToSend, turn.abortSignal, turn.promptId);
+  // The Agent owns the entire multi-turn flow: send → stream → schedule →
+  // execute → feed-back → repeat.
+  await runStream(queryToSend, turn.abortSignal, turn.promptId);
 
-  // A newer turn may have started while runLoop was settling (e.g. the user
+  // A newer turn may have started while runStream was settling (e.g. the user
   // cancelled this turn and submitted a new prompt). If the current
   // AbortController no longer belongs to this turn, skip post-stream cleanup
   // so it does not clobber the newer turn's state. Clear loopDetectedRef

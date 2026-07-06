@@ -201,7 +201,7 @@ describe('ThemeDialog', () => {
     terminalBackgroundColor,
     terminalWidth: 120,
     terminalHeight: 40,
-    config: {} as unknown as UIState['config'],
+    slashCommandRuntime: {} as unknown as UIState['slashCommandRuntime'],
     settings: mockSettings,
     history: [],
     pendingHistoryItems: [],

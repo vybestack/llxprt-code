@@ -9,6 +9,7 @@
 import type { Mock } from 'vitest';
 import {
   MockedAgentClientClass,
+  createFakeAgentFromMockClient,
   mockSendMessageStream,
   mockStartChat,
 } from './useAgentStream-test-helpers.js';
@@ -190,10 +191,16 @@ describe('useAgentStream', () => {
   // Helper to create mock tool calls - reduces boilerplate
 
   // Helper to render hook with default parameters - reduces boilerplate
+  const renderHookWithFakeAgent = () =>
+    renderHook(() =>
+      useAgentStream(
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+      ),
+    );
 
   describe('Hook Execution Control Events', () => {
     it('should add info message when AgentExecutionStopped event is received', async () => {
-      const { result } = renderHook(() => useAgentStream(mockConfig));
+      const { result } = renderHookWithFakeAgent();
 
       await act(async () => {
         mockTurnRun.mockReturnValue(
@@ -221,7 +228,7 @@ describe('useAgentStream', () => {
     });
 
     it('should add info message when AgentExecutionBlocked event is received', async () => {
-      const { result } = renderHook(() => useAgentStream(mockConfig));
+      const { result } = renderHookWithFakeAgent();
 
       await act(async () => {
         mockTurnRun.mockReturnValue(
@@ -249,7 +256,7 @@ describe('useAgentStream', () => {
     });
 
     it('should not crash when processing AgentExecutionStopped event', async () => {
-      const { result } = renderHook(() => useAgentStream(mockConfig));
+      const { result } = renderHookWithFakeAgent();
 
       await act(async () => {
         mockTurnRun.mockReturnValue(
@@ -272,7 +279,7 @@ describe('useAgentStream', () => {
     });
 
     it('should not crash when processing AgentExecutionBlocked event', async () => {
-      const { result } = renderHook(() => useAgentStream(mockConfig));
+      const { result } = renderHookWithFakeAgent();
 
       await act(async () => {
         mockTurnRun.mockReturnValue(

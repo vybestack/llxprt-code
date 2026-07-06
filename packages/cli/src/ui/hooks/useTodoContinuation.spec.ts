@@ -4,15 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  type MockedFunction,
-  type Mock,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useTodoContinuation } from './useTodoContinuation.js';
@@ -21,11 +13,14 @@ import {
   Config,
   ApprovalMode,
   type Todo,
-  type AgentClientContract,
-  AgentEventType,
   type ServerAgentStreamEvent,
+  type AgentClientContract,
 } from '@vybestack/llxprt-code-core';
-import { AgentClient as AgentClientClass } from '@vybestack/llxprt-code-agents/internals.js';
+import type {
+  Agent,
+  AgentEvent,
+  AgentInput,
+} from '@vybestack/llxprt-code-agents';
 import { testRegex } from '../../test-utils/regex.js';
 
 // Mock dependencies
@@ -37,10 +32,6 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
     Config: vi.fn(),
   };
 });
-
-vi.mock('@vybestack/llxprt-code-agents/internals.js', () => ({
-  AgentClient: vi.fn(),
-}));
 
 interface MockTodoContext {
   todos: Todo[];
@@ -61,11 +52,43 @@ interface MockAgentClient {
 
 const createEmptyStream =
   async function* (): AsyncGenerator<ServerAgentStreamEvent> {
-    yield {
-      type: AgentEventType.Finished,
-      value: { reason: 'stop' },
-    };
+    // The fake Agent's stream() drains sendMessageStream for side effects only
+    // (e.g. observing that a continuation message was NOT submitted). It does
+    // NOT project raw events — it yields a single done event after draining —
+    // so an empty generator is sufficient here.
   };
+
+/**
+ * Creates a minimal fake Agent whose stream() delegates to the mock client's
+ * sendMessageStream. The useTodoContinuation hook only needs stream() — it
+ * drains events for side effects without rendering. Kept local to avoid
+ * importing useAgentStream-test-helpers (which has module-level vi.mock side
+ * effects incompatible with this spec's Config mock).
+ */
+function createFakeAgent(mockClient: MockAgentClient): Agent {
+  const stream = (
+    input: AgentInput,
+    opts?: { readonly signal?: AbortSignal; readonly promptId?: string },
+  ): AsyncIterable<AgentEvent> =>
+    (async function* () {
+      const inputText = typeof input === 'string' ? input : '';
+      const raw = mockClient.sendMessageStream(
+        inputText,
+        opts?.signal ?? new AbortController().signal,
+        opts?.promptId ?? 'test',
+      );
+      // Drain the mock stream fully for side effects (e.g. assertion spies on
+      // sendMessageStream), then yield a single done event.
+      for await (const _event of raw) {
+        void _event;
+      }
+      yield { type: 'done', reason: 'stop' } as AgentEvent;
+    })();
+
+  return {
+    stream,
+  } as unknown as Agent;
+}
 
 describe('useTodoContinuation - Behavioral Tests', () => {
   let mockConfig: MockConfig;
@@ -91,7 +114,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
     };
-    (Config as unknown as MockedFunction<() => Config>).mockImplementation(
+    (Config as unknown as Mock<() => Config>).mockImplementation(
       () => mockConfig as unknown as Config,
     );
 
@@ -99,11 +122,6 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     mockAgentClient = {
       sendMessageStream: vi.fn(() => createEmptyStream()),
     };
-    (
-      AgentClientClass as unknown as MockedFunction<() => AgentClientContract>
-    ).mockImplementation(
-      () => mockAgentClient as unknown as AgentClientContract,
-    );
 
     // Mock TodoContext
     mockTodoContext = {
@@ -115,7 +133,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         mockTodoContext.paused = value;
       }),
     };
-    (useTodoContext as MockedFunction<typeof useTodoContext>).mockReturnValue(
+    (useTodoContext as Mock<typeof useTodoContext>).mockReturnValue(
       mockTodoContext as unknown as ReturnType<typeof useTodoContext>,
     );
 
@@ -136,7 +154,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false, // not responding
           mockOnDebugMessage,
@@ -165,7 +183,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -190,7 +208,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -215,7 +233,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -240,7 +258,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           true, // currently responding
           mockOnDebugMessage,
@@ -271,7 +289,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -303,7 +321,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -334,7 +352,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -359,7 +377,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-003.1 should respond to todo state changes', () => {
       const { result, rerender } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -400,7 +418,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-003.2 should handle todo_pause events', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -425,7 +443,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-004.1 should track continuation state', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -462,7 +480,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -494,7 +512,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -521,7 +539,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result, rerender } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -561,7 +579,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -591,7 +609,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -625,7 +643,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -654,7 +672,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -684,7 +702,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -710,7 +728,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -738,7 +756,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
 
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,
@@ -773,7 +791,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     it('@requirement REQ-007.4 should expose clearPause function', () => {
       const { result } = renderHook(() =>
         useTodoContinuation(
-          mockAgentClient as unknown as AgentClientContract,
+          createFakeAgent(mockAgentClient),
           mockConfig as unknown as Config,
           false,
           mockOnDebugMessage,

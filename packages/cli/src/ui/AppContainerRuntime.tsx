@@ -6,7 +6,6 @@
 
 import type React from 'react';
 import type {
-  Config,
   MessageBus,
   RecordingIntegration,
   SessionRecordingService,
@@ -14,6 +13,7 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
@@ -40,10 +40,10 @@ import type {
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
 export interface AppContainerRuntimeProps {
-  config: Config;
+  uiRuntime: UiRuntime;
+  slashCommandRuntime: SlashCommandRuntime;
   /**
    * The single interactive Agent threaded from the composition root.
-   * `config` remains a temporary migration bridge (see #1595).
    */
   agent: Agent;
   settings: LoadedSettings;
@@ -74,9 +74,11 @@ function buildInputParams(
   dialogs: AppDialogsResult,
   appState: AppState,
   appDispatch: React.Dispatch<AppAction>,
+  slashCommandRuntime: SlashCommandRuntime,
 ): AppInputParams {
   return {
-    config: bootstrap.config,
+    streamRuntime: bootstrap.streamRuntime,
+    slashCommandRuntime,
     agent: bootstrap.agent,
     settings: bootstrap.settings,
     runtime: bootstrap.runtime,
@@ -142,7 +144,8 @@ function buildLayoutParams(
   input: AppInputResult,
 ): AppLayoutParams {
   return {
-    config: bootstrap.config,
+    uiRuntime: bootstrap.uiRuntime,
+    agent: bootstrap.agent,
     settings: bootstrap.settings,
     todoContinuationRef: bootstrap.todoContinuationRef,
     hadToolCallsRef: bootstrap.hadToolCallsRef,
@@ -201,17 +204,20 @@ function buildLayoutParams(
   };
 }
 
-function buildUIStateParamsCore(r: HookResults) {
+function buildUIStateParamsCore(
+  r: HookResults,
+  slashCommandRuntime: SlashCommandRuntime,
+) {
   const { bootstrap: b, dialogs: d, input: i } = r;
   return {
-    config: b.config,
+    slashCommandRuntime,
     settings: b.settings,
     settingsNonce: d.settingsNonce,
     terminalWidth: i.terminalWidth,
     terminalHeight: i.terminalHeight,
     inputWidth: i.inputWidth,
     suggestionsWidth: i.suggestionsWidth,
-    terminalBackgroundColor: b.config.getTerminalBackground(),
+    terminalBackgroundColor: b.uiRuntime.shell.getTerminalBackground(),
     history: b.history,
     pendingHistoryItems: i.pendingHistoryItems,
     streamingState: i.streamingState,
@@ -308,7 +314,7 @@ function buildUIStateParamsExtra(r: HookResults) {
     shouldShowIdePrompt: b.shouldShowIdePrompt === true,
     currentIDE: b.currentIDE,
     isRestarting: d.isRestarting,
-    isTrustedFolder: b.config.isTrustedFolder(),
+    isTrustedFolder: b.uiRuntime.app.isTrustedFolder(),
     isWelcomeDialogOpen: d.isWelcomeDialogOpen,
     welcomeState: d.welcomeState,
     welcomeAvailableProviders: d.welcomeAvailableProviders,
@@ -409,7 +415,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
   const bootstrap = useAppBootstrap(props);
   const dialogs = useAppDialogs({
-    config: bootstrap.config,
+    config: props.slashCommandRuntime,
     settings: bootstrap.settings,
     appState: props.appState,
     appDispatch: props.appDispatch,
@@ -422,12 +428,18 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
   });
   const input = useAppInput(
-    buildInputParams(bootstrap, dialogs, props.appState, props.appDispatch),
+    buildInputParams(
+      bootstrap,
+      dialogs,
+      props.appState,
+      props.appDispatch,
+      props.slashCommandRuntime,
+    ),
   );
   const layout = useAppLayout(buildLayoutParams(bootstrap, dialogs, input));
   const r: HookResults = { bootstrap, dialogs, input, layout };
   const uiState = useUIStateBuilder({
-    ...buildUIStateParamsCore(r),
+    ...buildUIStateParamsCore(r, props.slashCommandRuntime),
     ...buildUIStateParamsExtra(r),
   });
   const uiActions = useUIActionsBuilder(buildUIActionsParams(r));
@@ -435,7 +447,8 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     <UIStateProvider value={uiState}>
       <UIActionsProvider value={uiActions}>
         <DefaultAppLayout
-          config={bootstrap.config}
+          uiRuntime={bootstrap.uiRuntime}
+          slashCommandRuntime={props.slashCommandRuntime}
           settings={bootstrap.settings}
           startupWarnings={bootstrap.startupWarnings}
           version={props.version}

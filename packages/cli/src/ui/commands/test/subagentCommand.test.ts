@@ -673,6 +673,7 @@ describe('subagentCommand', () => {
         context as unknown as { services: { config: unknown } }
       ).services.config = {
         getAgentClient: vi.fn(() => mockAgentClient),
+        getProvider: vi.fn(() => 'openai'),
       };
     });
 

@@ -7,7 +7,7 @@
 import type React from 'react';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import {
   isNodeError,
   getErrorMessage,
@@ -36,10 +36,11 @@ import {
   sortSuggestions,
 } from './atCompletionUtils.js';
 import type { SlashCommandCompletionContext } from './slashCompletionTypes.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 const debugLogger = new DebugLogger('llxprt:ui:slash-completion');
 
-type RuntimeExtensionConfig = Partial<Pick<Config, 'isExtensionEnabled'>>;
+type RuntimeExtensionConfig = Partial<Pick<CliUiRuntime, 'isExtensionEnabled'>>;
 
 type CompletionSetters = {
   setSuggestions: (s: Suggestion[]) => void;
@@ -327,7 +328,7 @@ async function fetchForDir(
   dir: string,
   cwd: string,
   at: ReturnType<typeof parseAtPath>,
-  cfg: Config | undefined,
+  cfg: CliUiRuntime | undefined,
 ): Promise<Suggestion[]> {
   const fds = cfg ? cfg.getFileService() : null;
   const rec = cfg?.getEnableRecursiveFileSearch() ?? true;
@@ -381,7 +382,7 @@ async function fetchAt(
   dirs: readonly string[],
   cwd: string,
   at: ReturnType<typeof parseAtPath>,
-  cfg: Config | undefined,
+  cfg: CliUiRuntime | undefined,
   mounted: { current: boolean },
   setters: AtSetters,
 ): Promise<void> {
@@ -432,7 +433,7 @@ function handleAtEff(
   col: number,
   dirs: readonly string[],
   cwd: string,
-  cfg: Config | undefined,
+  cfg: CliUiRuntime | undefined,
   startRef: React.MutableRefObject<number>,
   endRef: React.MutableRefObject<number>,
   setters: AtSetters,
@@ -482,7 +483,7 @@ export function handleCompletionEffect(
   cmds: readonly SlashCommand[],
   extCfg: RuntimeExtensionConfig | null | undefined,
   ctx: CommandContext,
-  cfg: Config | undefined,
+  cfg: CliUiRuntime | undefined,
   dirs: readonly string[],
   cwd: string,
   refs: StateRefs,

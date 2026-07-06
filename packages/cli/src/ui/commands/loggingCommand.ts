@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
 import type {
   SlashCommand,
   CommandContext,
@@ -18,9 +17,10 @@ import { SettingScope } from '../../config/settings.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export interface LoggingCommandContext {
-  config: Config;
+  config: CliUiRuntime;
   settings: LoadedSettings;
 }
 
@@ -191,7 +191,7 @@ export async function handleLoggingCommand(
 async function handleLoggingStatus(
   context: LoggingCommandContext,
 ): Promise<CommandResult> {
-  // Read directly from settings, not from cached Config
+  // Read directly from settings, not from cached runtime state
   const isLoggingEnabled =
     context.settings.merged.telemetry.logConversations ?? false;
 
@@ -214,7 +214,7 @@ async function handleEnableLogging(
     logConversations: true,
   });
 
-  // Update the Config to reflect the new setting
+  // Update the runtime state to reflect the new setting
   context.config.updateTelemetrySettings({
     ...context.config.getTelemetrySettings(),
     logConversations: true,
@@ -235,7 +235,7 @@ async function handleDisableLogging(
     logConversations: false,
   });
 
-  // Update the Config to reflect the new setting
+  // Update the runtime state to reflect the new setting
   context.config.updateTelemetrySettings({
     ...context.config.getTelemetrySettings(),
     logConversations: false,

@@ -11,11 +11,11 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
-import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
@@ -214,7 +214,9 @@ describe('useAgentStream', () => {
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: unknown,
   ) => {
-    const client = agentClient ?? mockConfig.getAgentClient();
+    const client = createFakeAgentFromMockClient(
+      agentClient ?? new MockedAgentClientClass(mockConfig),
+    );
 
     const initialProps = {
       client,
@@ -373,7 +375,7 @@ describe('useAgentStream', () => {
     expect(mockSendMessageStream).not.toHaveBeenCalled(); // submitQuery uses this
   });
 
-  it('should submit tool responses when all tool calls are completed and ready', async () => {
+  it('should not call sendMessageStream when all primary tool calls complete (continuation owned by Agent loop)', async () => {
     const toolCall1ResponseParts: Part[] = [{ text: 'tool 1 final response' }];
     const toolCall2ResponseParts: Part[] = [{ text: 'tool 2 final response' }];
     const completedToolCalls: TrackedToolCall[] = [
@@ -390,7 +392,7 @@ describe('useAgentStream', () => {
         response: {
           callId: 'call1',
           responseParts: toolCall1ResponseParts,
-          errorType: undefined, // FIX: Added missing property
+          errorType: undefined,
         },
         tool: {
           displayName: 'MockTool',
@@ -412,9 +414,9 @@ describe('useAgentStream', () => {
         response: {
           callId: 'call2',
           responseParts: toolCall2ResponseParts,
-          errorType: ToolErrorType.UNHANDLED_EXCEPTION, // FIX: Added missing property
+          errorType: ToolErrorType.UNHANDLED_EXCEPTION,
         },
-      } as TrackedCompletedToolCall, // Treat error as a form of completion for submission
+      } as TrackedCompletedToolCall,
     ];
 
     // Capture the onComplete callback
@@ -440,7 +442,7 @@ describe('useAgentStream', () => {
 
     renderHook(() =>
       useAgentStream(
-        new MockedAgentClientClass(mockConfig),
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,
@@ -469,36 +471,20 @@ describe('useAgentStream', () => {
       }
     });
 
-    await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+    // Continuation is owned by the Agent loop, so sendMessageStream is
+    // NOT called again from the CLI for tool-response submission.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
     });
-
-    const expectedMergedResponse = [
-      ...toolCall1ResponseParts,
-      ...toolCall2ResponseParts,
-    ];
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      expectedMergedResponse,
-      expect.any(AbortSignal),
-      'prompt-id-2',
-    );
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
   });
 
-  it('should filter out functionCall parts when submitting tool responses', async () => {
-    const toolCallResponseParts: Part[] = [
-      {
-        functionCall: {
-          id: 'call-filter',
-          name: 'toolFilter',
-          args: {},
-        },
-      },
+  it('should not call sendMessageStream for completed tool calls with functionResponse parts (continuation owned by Agent loop)', async () => {
+    const functionResponseParts: Part[] = [
       {
         functionResponse: {
-          id: 'call-filter',
           name: 'toolFilter',
-          response: { ok: true },
+          response: { result: 'filtered response' },
         },
       },
       { text: 'filtered response' },
@@ -516,7 +502,7 @@ describe('useAgentStream', () => {
         displayCleared: false,
         response: {
           callId: 'call-filter',
-          responseParts: toolCallResponseParts,
+          responseParts: functionResponseParts,
           errorType: undefined,
         },
         tool: {
@@ -550,7 +536,7 @@ describe('useAgentStream', () => {
 
     renderHook(() =>
       useAgentStream(
-        new MockedAgentClientClass(mockConfig),
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,
@@ -577,26 +563,11 @@ describe('useAgentStream', () => {
       }
     });
 
-    await waitFor(() => {
-      expect(mockMarkToolsAsDisplayCleared).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+    // Continuation is owned by the Agent loop, so sendMessageStream is
+    // NOT called again from the CLI for tool-response submission.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
     });
-
-    // functionCall parts should be filtered out - they're already in history
-    // from the original assistant turn
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      [
-        {
-          functionResponse: {
-            id: 'call-filter',
-            name: 'toolFilter',
-            response: { ok: true },
-          },
-        },
-        { text: 'filtered response' },
-      ],
-      expect.any(AbortSignal),
-      'prompt-id-filter',
-    );
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
   });
 });

@@ -30,6 +30,8 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       })),
       getEnableRecursiveFileSearch: () => true,
       getFileFilteringDisableFuzzySearch: () => false,
+      getResourceRegistry: () => ({ getAllResources: () => [] }),
+      getSubagentManager: () => undefined,
     } as unknown as Config;
     vi.clearAllMocks();
   });

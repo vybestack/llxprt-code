@@ -16,7 +16,6 @@ import { useKeypress } from '../../hooks/useKeypress.js';
 import {
   ShellExecutionService,
   splitCommands,
-  type Config,
 } from '@vybestack/llxprt-code-core';
 import { ShellInputPrompt } from '../ShellInputPrompt.js';
 import { StickyHeader } from '../StickyHeader.js';
@@ -28,6 +27,7 @@ import {
   type TextEmphasis,
 } from './ToolShared.js';
 import { ToolResultDisplay } from './ToolResultDisplay.js';
+import type { ShellState } from '../../cliUiRuntime.js';
 
 export type { TextEmphasis } from './ToolShared.js';
 
@@ -128,7 +128,7 @@ function computeShellFocusState(
   ptyId: number | undefined,
   activeShellPtyId: number | null | undefined,
   embeddedShellFocused: boolean | undefined,
-  config: Config | undefined,
+  shell: ShellState | undefined,
 ): ShellFocusState {
   const isShellTool = name === SHELL_COMMAND_NAME || name === SHELL_NAME;
   const lastActivePtyId = ShellExecutionService.getLastActivePtyId();
@@ -149,7 +149,7 @@ function computeShellFocusState(
     embeddedShellFocused === true &&
     isActiveOrAlive;
 
-  const interactiveShellEnabled = config?.getEnableInteractiveShell() === true;
+  const interactiveShellEnabled = shell?.getEnableInteractiveShell() === true;
   const isThisShellFocusable =
     isShellTool &&
     interactiveShellEnabled &&
@@ -231,11 +231,11 @@ function renderCurrentSubcommand(
  */
 function renderShellInput(
   isThisShellFocused: boolean,
-  config: Config | undefined,
+  shell: ShellState | undefined,
   activeShellPtyId: number | null | undefined,
   embeddedShellFocused: boolean | undefined,
 ): React.ReactNode {
-  if (!isThisShellFocused || config == null) {
+  if (!isThisShellFocused || shell == null) {
     return null;
   }
   return (
@@ -305,7 +305,7 @@ function renderToolMessageContent(
   availableTerminalHeight: number | undefined,
   renderOutputAsMarkdown: boolean,
   isThisShellFocused: boolean,
-  config: Config | undefined,
+  shell: ShellState | undefined,
   activeShellPtyId: number | null | undefined,
   embeddedShellFocused: boolean | undefined,
 ): React.ReactNode {
@@ -333,7 +333,7 @@ function renderToolMessageContent(
       />
       {renderShellInput(
         isThisShellFocused,
-        config,
+        shell,
         activeShellPtyId,
         embeddedShellFocused,
       )}
@@ -348,7 +348,7 @@ export interface ToolMessageProps extends IndividualToolCallDisplay {
   renderOutputAsMarkdown?: boolean;
   activeShellPtyId?: number | null;
   embeddedShellFocused?: boolean;
-  config?: Config;
+  shell?: ShellState;
   isFirst?: boolean;
   borderColor?: string;
   borderDimColor?: boolean;
@@ -367,7 +367,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   activeShellPtyId,
   embeddedShellFocused,
   ptyId,
-  config,
+  shell,
   isFirst = false,
   borderColor = Colors.Gray,
   borderDimColor = false,
@@ -380,7 +380,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     ptyId,
     activeShellPtyId,
     embeddedShellFocused,
-    config,
+    shell,
   );
 
   const currentSubcommand = useMemo(
@@ -419,7 +419,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         availableTerminalHeight,
         renderOutputAsMarkdown,
         isThisShellFocused,
-        config,
+        shell,
         activeShellPtyId,
         embeddedShellFocused,
       )}

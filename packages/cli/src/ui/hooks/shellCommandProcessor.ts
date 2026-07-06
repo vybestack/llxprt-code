@@ -11,16 +11,16 @@ import {
 } from '../types.js';
 import { useCallback, useState } from 'react';
 import {
-  type Config,
-  type AgentClientContract,
   isBinary,
   type ShellExecutionResult,
   ShellExecutionService,
   DEFAULT_AGENT_ID,
   type AnsiOutput,
   type ShellOutputEvent,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { type PartListUnion } from '@google/genai';
+import type { PartListUnion } from '@google/genai';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
 import { SHELL_COMMAND_NAME } from '../constants.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
@@ -28,6 +28,13 @@ import crypto from 'crypto';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import type { ShellState, SessionIdentity } from '../cliUiRuntime.js';
+
+/**
+ * Focused runtime for shell command execution: shell capabilities (PTY,
+ * terminal sizing, execution config) plus session directory resolution.
+ */
+type ShellCommandRuntime = ShellState & SessionIdentity;
 
 // Throttle interval for PTY output updates to avoid excessive re-renders.
 // Using 100ms provides smooth visual updates without overwhelming React.
@@ -41,8 +48,8 @@ interface ShellExecutionParams {
   initialToolDisplay: IndividualToolCallDisplay;
   userMessageTimestamp: number;
   pwdFilePath: string | undefined;
-  config: Config;
-  agentClient: AgentClientContract | undefined;
+  config: ShellCommandRuntime;
+  agent: Agent | undefined;
   rawQuery: string;
   abortSignal: AbortSignal;
   onDebugMessage: (message: string) => void;
@@ -62,7 +69,7 @@ interface ShellExecutionParams {
 }
 
 function addShellCommandToAgentHistory(
-  agentClient: AgentClientContract | undefined,
+  agent: Agent | undefined,
   rawQuery: string,
   resultText: string,
 ) {
@@ -71,12 +78,13 @@ function addShellCommandToAgentHistory(
       ? resultText.substring(0, MAX_OUTPUT_LENGTH) + '\n... (truncated)'
       : resultText;
 
-  if (agentClient) {
-    void agentClient.addHistory({
-      role: 'user',
-      parts: [
-        {
-          text: `I ran the following shell command:
+  if (agent) {
+    void agent
+      .addHistory({
+        role: 'user',
+        parts: [
+          {
+            text: `I ran the following shell command:
 \`\`\`sh
 ${rawQuery}
 \`\`\`
@@ -85,9 +93,15 @@ This produced the following result:
 \`\`\`
 ${modelContent}
 \`\`\``,
-        },
-      ],
-    });
+          },
+        ],
+      })
+      .catch((error) => {
+        debugLogger.error(
+          'Failed to add shell command to agent history:',
+          error,
+        );
+      });
   }
 }
 
@@ -171,7 +185,7 @@ function applyResultDisplayUpdate(
 
 function processShellEvent(
   event: ShellOutputEvent,
-  config: Config,
+  config: ShellCommandRuntime,
   state: {
     isBinaryStream: boolean;
     binaryBytesReceived: number;
@@ -212,7 +226,7 @@ function processShellEvent(
 
 function createShellEventHandler(
   callId: string,
-  config: Config,
+  config: ShellCommandRuntime,
   pendingHistoryItemRef:
     | React.MutableRefObject<HistoryItemWithoutId | null>
     | undefined,
@@ -301,7 +315,7 @@ function handleShellResult(
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
-  agentClient: AgentClientContract | undefined,
+  agent: Agent | undefined,
   rawQuery: string,
 ) {
   setPendingHistoryItem(null);
@@ -334,7 +348,7 @@ function handleShellResult(
     userMessageTimestamp,
   );
 
-  addShellCommandToAgentHistory(agentClient, rawQuery, finalOutput);
+  addShellCommandToAgentHistory(agent, rawQuery, finalOutput);
 }
 
 function handleShellError(
@@ -430,7 +444,7 @@ function handleExecutionResult(
         params.userMessageTimestamp,
         params.addItemToHistory,
         params.setPendingHistoryItem,
-        params.agentClient,
+        params.agent,
         params.rawQuery,
       );
     })
@@ -579,8 +593,8 @@ export const useShellCommandProcessor = (
   >,
   onExec: (command: Promise<void>) => void | Promise<void>,
   onDebugMessage: (message: string) => void,
-  config: Config,
-  agentClient: AgentClientContract | undefined,
+  config: ShellCommandRuntime,
+  agent: Agent | undefined,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,
@@ -616,7 +630,7 @@ export const useShellCommandProcessor = (
           userMessageTimestamp,
           pwdFilePath,
           config,
-          agentClient,
+          agent,
           rawQuery,
           abortSignal,
           onDebugMessage,
@@ -641,7 +655,7 @@ export const useShellCommandProcessor = (
       addItemToHistory,
       setPendingHistoryItem,
       onExec,
-      agentClient,
+      agent,
       setShellInputFocused,
       terminalWidth,
       terminalHeight,

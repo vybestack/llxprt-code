@@ -233,6 +233,7 @@ export interface AgentConfig {
   readonly disabledSkills?: readonly string[];
   readonly adminSkillsEnabled?: boolean;
   readonly streamIdleTimeoutMs?: number;
+  readonly streamFirstResponseTimeoutMs?: number;
   readonly toolOutputLimits?: AgentToolOutputLimits;
   readonly outputFormat?: OutputFormat;
   readonly shell?: AgentShell;

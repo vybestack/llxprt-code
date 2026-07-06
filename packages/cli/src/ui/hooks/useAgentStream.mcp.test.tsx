@@ -11,6 +11,7 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
@@ -239,7 +240,9 @@ describe('useAgentStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig);
 
-      const client = new MockedAgentClientClass(mcpMockConfig);
+      const client = createFakeAgentFromMockClient(
+        new MockedAgentClientClass(mcpMockConfig),
+      );
 
       const initialProps = {
         client,
@@ -375,7 +378,9 @@ describe('useAgentStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig);
 
-      const client = new MockedAgentClientClass(noMcpConfig);
+      const client = createFakeAgentFromMockClient(
+        new MockedAgentClientClass(noMcpConfig),
+      );
 
       const initialProps = {
         client,

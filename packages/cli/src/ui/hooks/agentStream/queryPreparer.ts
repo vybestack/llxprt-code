@@ -12,9 +12,7 @@
  */
 
 import {
-  type Config,
   type ToolCallRequestInfo,
-  logUserPrompt,
   UserPromptEvent,
   MessageSenderType,
 } from '@vybestack/llxprt-code-core';
@@ -23,10 +21,20 @@ import { type SlashCommandProcessorResult } from '../../types.js';
 import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { processSlashCommandResult } from './streamUtils.js';
-import { handleAtCommand } from '../atCommandProcessor.js';
+import {
+  buildAtCommandRuntimeFromStream,
+  handleAtCommand,
+} from '../atCommandProcessor.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export interface PrepareQueryDeps {
-  config: Config;
+  runtime: StreamRuntime;
+  /**
+   * Logs a user-prompt telemetry event. Provided by the caller (which has
+   * access to the full telemetry-config boundary) so this module depends only
+   * on the nested StreamRuntime rather than a flat aggregate.
+   */
+  logUserPrompt: (event: UserPromptEvent) => void;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
@@ -94,7 +102,8 @@ async function processStringQuery(
   deps: PrepareQueryDeps,
 ): Promise<PartListUnion | null> {
   const {
-    config,
+    runtime,
+    logUserPrompt,
     logger,
     shellModeActive,
     handleSlashCommand,
@@ -104,7 +113,6 @@ async function processStringQuery(
   } = deps;
 
   logUserPrompt(
-    config,
     new UserPromptEvent(trimmedQuery.length, promptId, trimmedQuery),
   );
   await logger?.logMessage(MessageSenderType.USER, trimmedQuery);
@@ -134,7 +142,7 @@ async function processStringQuery(
   if (isAtCommand(trimmedQuery)) {
     const atCommandResult = await handleAtCommand({
       query: trimmedQuery,
-      config,
+      config: buildAtCommandRuntimeFromStream(runtime),
       addItem,
       onDebugMessage,
       messageId: userMessageTimestamp,

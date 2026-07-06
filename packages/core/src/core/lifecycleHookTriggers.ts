@@ -13,7 +13,6 @@
  * These functions follow the same pattern as coreToolHookTriggers.ts
  */
 
-import type { Config } from '../config/config.js';
 import type {
   SessionStartSource,
   SessionEndReason,
@@ -58,7 +57,7 @@ function getEnabledHookSystem(config: HookConfigBoundary): HookSystem | null {
  * @returns SessionStartHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerSessionStartHook(
-  config: Config,
+  config: HookConfigBoundary,
   source: SessionStartSource,
 ): Promise<SessionStartHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
@@ -97,7 +96,7 @@ export async function triggerSessionStartHook(
  * @returns SessionEndHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerSessionEndHook(
-  config: Config,
+  config: HookConfigBoundary,
   reason: SessionEndReason,
 ): Promise<SessionEndHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
@@ -136,7 +135,7 @@ export async function triggerSessionEndHook(
  * @returns BeforeAgentHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerBeforeAgentHook(
-  config: Config,
+  config: HookConfigBoundary,
   prompt: string,
 ): Promise<BeforeAgentHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
@@ -177,7 +176,7 @@ export async function triggerBeforeAgentHook(
  * @returns AfterAgentHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerAfterAgentHook(
-  config: Config,
+  config: HookConfigBoundary,
   prompt: string,
   promptResponse: string,
   stopHookActive: boolean,
@@ -225,7 +224,7 @@ export async function triggerAfterAgentHook(
  * @returns PreCompressOutput if hooks execute, undefined otherwise
  */
 export async function triggerPreCompressHook(
-  config: Config,
+  config: HookConfigBoundary,
   trigger: PreCompressTrigger,
 ): Promise<PreCompressOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)

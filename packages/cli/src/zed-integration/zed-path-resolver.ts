@@ -4,46 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  Config,
-  ToolResult,
-  AnyDeclarativeTool,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   getErrorMessage,
   isNodeError,
   isWithinRoot,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import type { FilterFilesOptions } from '@vybestack/llxprt-code-storage';
+import type {
+  FileSystemService,
+  FilterFilesOptions,
+} from '@vybestack/llxprt-code-storage';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { Part, PartListUnion } from '@google/genai';
+import type { Part } from '@google/genai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { toToolCallContent } from './zed-helpers.js';
+import { glob } from 'glob';
 import { normalizeToParts } from './zed-content-utils.js';
-
-interface SendUpdateFn {
-  (update: acp.SessionUpdate): Promise<void>;
-}
 
 interface DebugFn {
   (msg: string): void;
 }
 
-type GlobTool =
-  | {
-      buildAndExecute: (
-        args: { pattern: string; path: string },
-        signal: AbortSignal,
-      ) => Promise<ToolResult>;
-    }
-  | undefined;
-
 export class ZedPathResolver {
   constructor(
     private readonly config: Config,
-    private readonly sendUpdate: SendUpdateFn,
     private readonly debug: DebugFn,
   ) {}
 
@@ -74,10 +59,6 @@ export class ZedPathResolver {
     const contentLabelsForDisplay: string[] = [];
     const ignoredPaths: string[] = [];
 
-    const toolRegistry = this.config.getToolRegistry();
-    const readManyFilesTool = toolRegistry.getTool('read_many_files')!;
-    const globTool = toolRegistry.getTool('glob');
-
     await this.resolvePathSpecs(
       atPathCommandParts,
       abortSignal,
@@ -87,7 +68,6 @@ export class ZedPathResolver {
       contentLabelsForDisplay,
       ignoredPaths,
       atPathToResolvedSpecMap,
-      globTool,
     );
 
     const initialQueryText = this.buildQueryText(
@@ -119,7 +99,6 @@ export class ZedPathResolver {
       await this.readReferencedFiles(
         pathSpecsToRead,
         contentLabelsForDisplay,
-        readManyFilesTool,
         abortSignal,
         processedQueryParts,
       );
@@ -188,36 +167,70 @@ export class ZedPathResolver {
     contentLabelsForDisplay: string[],
     ignoredPaths: string[],
     atPathToResolvedSpecMap: Map<string, string>,
-    globTool: GlobTool,
   ): Promise<void> {
     for (const atPathPart of atPathCommandParts) {
       const pathName = (atPathPart as { fileData: { fileUri: string } })
         .fileData.fileUri;
-      if (fileDiscovery.shouldIgnoreFile(pathName, fileFilteringOptions)) {
-        ignoredPaths.push(pathName);
-        this.debug(`Path ${pathName} is ignored and will be skipped.`);
-        continue;
-      }
       const { currentPathSpec, resolvedSuccessfully } =
-        await this.resolveSinglePath(pathName, abortSignal, globTool);
+        await this.resolveSinglePath(pathName, abortSignal);
       if (resolvedSuccessfully) {
-        pathSpecsToRead.push(currentPathSpec);
-        atPathToResolvedSpecMap.set(pathName, currentPathSpec);
-        contentLabelsForDisplay.push(pathName);
+        this.appendResolvedPathSpec(
+          currentPathSpec,
+          pathName,
+          fileDiscovery,
+          fileFilteringOptions,
+          pathSpecsToRead,
+          contentLabelsForDisplay,
+          ignoredPaths,
+          atPathToResolvedSpecMap,
+        );
       }
     }
+  }
+
+  private appendResolvedPathSpec(
+    currentPathSpec: string,
+    pathName: string,
+    fileDiscovery: ReturnType<Config['getFileService']>,
+    fileFilteringOptions: FilterFilesOptions,
+    pathSpecsToRead: string[],
+    contentLabelsForDisplay: string[],
+    ignoredPaths: string[],
+    atPathToResolvedSpecMap: Map<string, string>,
+  ): void {
+    if (fileDiscovery.shouldIgnoreFile(currentPathSpec, fileFilteringOptions)) {
+      ignoredPaths.push(currentPathSpec);
+      this.debug(`Path ${currentPathSpec} is ignored and will be skipped.`);
+      return;
+    }
+    pathSpecsToRead.push(currentPathSpec);
+    atPathToResolvedSpecMap.set(pathName, currentPathSpec);
+    contentLabelsForDisplay.push(pathName);
   }
 
   private async resolveSinglePath(
     pathName: string,
     abortSignal: AbortSignal,
-    globTool: GlobTool,
   ): Promise<{ currentPathSpec: string; resolvedSuccessfully: boolean }> {
     let currentPathSpec = pathName;
     let resolvedSuccessfully = false;
     try {
-      const absolutePath = path.resolve(this.config.getTargetDir(), pathName);
-      if (isWithinRoot(absolutePath, this.config.getTargetDir())) {
+      const targetDir = this.config.getTargetDir();
+      if (this.isGlobPath(pathName)) {
+        const globBase = this.getGlobBasePath(pathName);
+        const absoluteBase = path.resolve(targetDir, globBase);
+        if (isWithinRoot(absoluteBase, targetDir)) {
+          this.debug(`Path ${pathName} resolved to glob: ${pathName}`);
+          return { currentPathSpec: pathName, resolvedSuccessfully: true };
+        }
+        this.debug(
+          `Path ${pathName} is outside the project directory. Skipping.`,
+        );
+        return { currentPathSpec, resolvedSuccessfully: false };
+      }
+
+      const absolutePath = path.resolve(targetDir, pathName);
+      if (isWithinRoot(absolutePath, targetDir)) {
         const stats = await fs.stat(absolutePath);
         if (stats.isDirectory()) {
           currentPathSpec = pathName.endsWith('/')
@@ -240,7 +253,6 @@ export class ZedPathResolver {
         pathName,
         error,
         abortSignal,
-        globTool,
       );
       resolvedSuccessfully = result.resolved;
       if (resolvedSuccessfully && result.resolvedSpec) {
@@ -250,11 +262,27 @@ export class ZedPathResolver {
     return { currentPathSpec, resolvedSuccessfully };
   }
 
+  private isGlobPath(pathName: string): boolean {
+    return /[*?[\]{}()!+]/.test(pathName);
+  }
+
+  private getGlobBasePath(pathName: string): string {
+    const firstGlobIndex = pathName.search(/[*?[\]{}()!+]/);
+    if (firstGlobIndex < 0) {
+      return pathName;
+    }
+    const prefix = pathName.slice(0, firstGlobIndex);
+    const separatorIndex = prefix.lastIndexOf(path.sep);
+    if (separatorIndex < 0) {
+      return '.';
+    }
+    return prefix.slice(0, separatorIndex + 1);
+  }
+
   private async resolveMissingPath(
     pathName: string,
     error: unknown,
     abortSignal: AbortSignal,
-    globTool: GlobTool,
   ): Promise<{ resolved: boolean; resolvedSpec?: string }> {
     if (!isNodeError(error) || error.code !== 'ENOENT') {
       debugLogger.error(
@@ -263,26 +291,24 @@ export class ZedPathResolver {
       return { resolved: false };
     }
 
-    if (!this.config.getEnableRecursiveFileSearch() || !globTool) {
-      this.debug(`Glob tool not found. Path ${pathName} will be skipped.`);
+    if (!this.config.getEnableRecursiveFileSearch()) {
+      this.debug(
+        `Recursive file search disabled. Path ${pathName} will be skipped.`,
+      );
       return { resolved: false };
     }
 
     this.debug(`Path ${pathName} not found directly, attempting glob search.`);
     try {
-      const globResult = await globTool.buildAndExecute(
-        {
-          pattern: `**/*${pathName}*`,
-          path: this.config.getTargetDir(),
-        },
+      const relativePath = await this.globSearchFirstMatch(
+        pathName,
         abortSignal,
       );
-      const resolved = this.extractGlobResult(pathName, globResult);
-      if (resolved) {
+      if (relativePath !== undefined) {
         this.debug(
-          `Glob search for ${pathName} found ${resolved.absolutePath}, using relative path: ${resolved.relativePath}`,
+          `Glob search for ${pathName} found match, using relative path: ${relativePath}`,
         );
-        return { resolved: true, resolvedSpec: resolved.relativePath };
+        return { resolved: true, resolvedSpec: relativePath };
       }
       this.debug(
         `Glob search for '**/*${pathName}*' did not return a usable path. Path ${pathName} will be skipped.`,
@@ -295,35 +321,27 @@ export class ZedPathResolver {
     return { resolved: false };
   }
 
-  private extractGlobResult(
+  private async globSearchFirstMatch(
     pathName: string,
-    globResult: ToolResult,
-  ): { absolutePath: string; relativePath: string } | undefined {
-    if (
-      typeof globResult.llmContent === 'string' &&
-      !globResult.llmContent.startsWith('No files found') &&
-      !globResult.llmContent.startsWith('Error:')
-    ) {
-      const lines = globResult.llmContent.split('\n');
-      if (lines.length > 1 && lines[1]) {
-        const firstMatchAbsolute = lines[1].trim();
-        return {
-          absolutePath: firstMatchAbsolute,
-          relativePath: path.relative(
-            this.config.getTargetDir(),
-            firstMatchAbsolute,
-          ),
-        };
-      }
-      this.debug(
-        `Glob search for '**/*${pathName}*' did not return a usable path. Path ${pathName} will be skipped.`,
-      );
-    } else {
-      this.debug(
-        `Glob search for '**/*${pathName}*' found no files or an error. Path ${pathName} will be skipped.`,
-      );
+    abortSignal: AbortSignal,
+  ): Promise<string | undefined> {
+    const targetDir = this.config.getTargetDir();
+    const entries = await glob(`**/*${pathName}*`, {
+      cwd: targetDir,
+      nodir: true,
+      dot: true,
+      ignore: this.resolveGlobIgnore(),
+      signal: abortSignal,
+    });
+    return entries.find((entry) => !this.shouldSkipDiscoveredPath(entry));
+  }
+
+  private resolveGlobIgnore(): string[] {
+    try {
+      return this.config.getFileExclusions().getCoreIgnorePatterns();
+    } catch {
+      return [];
     }
-    return undefined;
   }
 
   private buildQueryText(
@@ -408,99 +426,164 @@ export class ZedPathResolver {
   private async readReferencedFiles(
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
-    readManyFilesTool: AnyDeclarativeTool,
     abortSignal: AbortSignal,
     processedQueryParts: Part[],
   ): Promise<void> {
-    const toolArgs = { paths: pathSpecsToRead };
-    const callId = `${readManyFilesTool.name}-${Date.now()}`;
-
-    try {
-      const invocation = readManyFilesTool.build(toolArgs);
-
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call',
-        toolCallId: callId,
-        status: 'in_progress',
-        title: invocation.getDescription(),
-        content: [],
-        locations: invocation.toolLocations(),
-        kind: (invocation as { kind?: string }).kind as
-          | acp.ToolKind
-          | undefined,
-      });
-
-      const result = await invocation.execute(abortSignal);
-      const content = toToolCallContent(result) ?? {
-        type: 'content',
-        content: {
-          type: 'text',
-          text: `Successfully read: ${contentLabelsForDisplay.join(', ')}`,
-        },
-      };
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: callId,
-        status: 'completed',
-        content: [content],
-      });
-
-      this.appendFileContent(result.llmContent, processedQueryParts);
-    } catch (error: unknown) {
-      await this.sendUpdate({
-        sessionUpdate: 'tool_call_update',
-        toolCallId: callId,
-        status: 'failed',
-        content: [
-          {
-            type: 'content',
-            content: {
-              type: 'text',
-              text: `Error reading files (${contentLabelsForDisplay.join(', ')}): ${getErrorMessage(error)}`,
-            },
-          },
-        ],
-      });
-
-      throw error;
-    }
-  }
-
-  private appendFileContent(
-    llmContent: PartListUnion | undefined,
-    processedQueryParts: Part[],
-  ): void {
-    if (llmContent === undefined) {
-      debugLogger.warn(
-        'read_many_files tool returned no content or empty content.',
-      );
-      return;
-    }
-
-    const parts = normalizeToParts(llmContent);
-    // Compiled from a string source so the regex construction is explicit.
-    // Matches a "--- <path> ---" header followed by the file's content block.
-    const fileContentSource = '^--- (.*?) ---\\n\\n([\\s\\S]*?)\\n\\n$';
-    const fileContentRegex = new RegExp(fileContentSource);
+    const targetDir = this.config.getTargetDir();
+    const fileSystemService = this.config.getFileSystemService();
     processedQueryParts.push({
       text: '\n--- Content from referenced files ---',
     });
-    for (const part of parts) {
-      if (typeof part.text === 'string') {
-        const match = fileContentRegex.exec(part.text);
-        if (match) {
-          const filePathSpecInContent = match[1];
-          const fileActualContent = match[2].trim();
-          processedQueryParts.push({
-            text: `\nContent from @${filePathSpecInContent}:\n`,
-          });
-          processedQueryParts.push({ text: fileActualContent });
-        } else {
-          processedQueryParts.push({ text: part.text });
+
+    for (let i = 0; i < pathSpecsToRead.length; i++) {
+      if (abortSignal.aborted) {
+        return;
+      }
+      const spec = pathSpecsToRead[i];
+      const label = contentLabelsForDisplay[i] ?? spec;
+      await this.appendSingleSpec(
+        spec,
+        label,
+        targetDir,
+        fileSystemService,
+        abortSignal,
+        processedQueryParts,
+      );
+    }
+  }
+
+  private async appendSingleSpec(
+    spec: string,
+    label: string,
+    targetDir: string,
+    fileSystemService: FileSystemService,
+    abortSignal: AbortSignal,
+    processedQueryParts: Part[],
+  ): Promise<void> {
+    if (this.isGlobPath(spec)) {
+      await this.appendGlobSpec(
+        spec,
+        label,
+        targetDir,
+        fileSystemService,
+        abortSignal,
+        processedQueryParts,
+      );
+      return;
+    }
+    await this.appendSingleFile(
+      spec,
+      label,
+      targetDir,
+      fileSystemService,
+      abortSignal,
+      processedQueryParts,
+    );
+  }
+
+  private async appendGlobSpec(
+    spec: string,
+    label: string,
+    targetDir: string,
+    fileSystemService: FileSystemService,
+    abortSignal: AbortSignal,
+    processedQueryParts: Part[],
+  ): Promise<void> {
+    try {
+      const matches = await glob(spec, {
+        cwd: targetDir,
+        nodir: true,
+        dot: true,
+        ignore: this.resolveGlobIgnore(),
+        signal: abortSignal,
+      });
+      for (const match of matches) {
+        if (abortSignal.aborted) {
+          return;
         }
-      } else {
+        if (this.shouldSkipDiscoveredPath(match)) {
+          continue;
+        }
+        const absolute = path.isAbsolute(match)
+          ? match
+          : path.join(targetDir, match);
+        const appended = await this.readAndAppendGlobMatch(
+          match,
+          absolute,
+          fileSystemService,
+          abortSignal,
+          processedQueryParts,
+        );
+        if (!appended) {
+          return;
+        }
+      }
+    } catch (error) {
+      if (abortSignal.aborted) {
+        return;
+      }
+      processedQueryParts.push({
+        text: `\nError reading files (${label}): ${getErrorMessage(error)}`,
+      });
+    }
+  }
+
+  private async readAndAppendGlobMatch(
+    match: string,
+    absolute: string,
+    fileSystemService: FileSystemService,
+    abortSignal: AbortSignal,
+    processedQueryParts: Part[],
+  ): Promise<boolean> {
+    const content = await fileSystemService.readTextFile(absolute);
+    if (abortSignal.aborted) {
+      return false;
+    }
+    processedQueryParts.push({ text: `\nContent from @${match}:\n` });
+    processedQueryParts.push({ text: content });
+    return true;
+  }
+
+  private shouldSkipDiscoveredPath(filePath: string): boolean {
+    return this.config
+      .getFileService()
+      .shouldIgnoreFile(filePath, this.config.getFileFilteringOptions());
+  }
+
+  private async appendSingleFile(
+    spec: string,
+    label: string,
+    targetDir: string,
+    fileSystemService: FileSystemService,
+    abortSignal: AbortSignal,
+    processedQueryParts: Part[],
+  ): Promise<void> {
+    try {
+      const absolute = path.isAbsolute(spec)
+        ? spec
+        : path.resolve(targetDir, spec);
+      if (!isWithinRoot(absolute, targetDir)) {
+        processedQueryParts.push({
+          text: `\nSkipped file outside project root (${label}).`,
+        });
+        return;
+      }
+      const content = await fileSystemService.readTextFile(absolute);
+      if (abortSignal.aborted) {
+        return;
+      }
+      processedQueryParts.push({ text: `\nContent from @${label}:\n` });
+      const parts = normalizeToParts(content);
+      for (const part of parts) {
         processedQueryParts.push(part);
       }
+    } catch (error) {
+      if (abortSignal.aborted) {
+        return;
+      }
+      processedQueryParts.push({
+        text: `\nError reading file (${label}): ${getErrorMessage(error)}`,
+      });
     }
   }
 

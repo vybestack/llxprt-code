@@ -129,7 +129,10 @@ export function logCliConfiguration(
   logger.emit(logRecord);
 }
 
-export function logUserPrompt(config: Config, event: UserPromptEvent): void {
+export function logUserPrompt(
+  config: ToolLoggingConfig,
+  event: UserPromptEvent,
+): void {
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {

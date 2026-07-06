@@ -19,7 +19,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   type ToolCallBlock,
   type TextBlock,
@@ -99,7 +99,7 @@ export function normalizeToolCallArguments(parameters: unknown): string {
  */
 export function buildToolResponseContent(
   block: ToolResponseBlock,
-  config?: Config,
+  config?: ToolOutputSettingsProvider,
 ): string {
   const payload = buildToolResponsePayload(block, config, true);
   return ensureJsonSafe(
@@ -266,8 +266,11 @@ function processToolResponses(
   content: IContent,
   toolFormat: ToolFormat | undefined,
   resolveToolResponseId: (tr: ToolResponseBlock) => string,
-  buildResponseContent: (block: ToolResponseBlock, config?: Config) => string,
-  config: Config | undefined,
+  buildResponseContent: (
+    block: ToolResponseBlock,
+    config?: ToolOutputSettingsProvider,
+  ) => string,
+  config: ToolOutputSettingsProvider | undefined,
   pendingToolImages: MediaBlock[],
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
@@ -343,7 +346,7 @@ function processContentMessages(
   toolFormat: ToolFormat | undefined,
   resolveToolCallId: (tc: ToolCallBlock) => string,
   resolveToolResponseId: (tr: ToolResponseBlock) => string,
-  config: Config | undefined,
+  config: ToolOutputSettingsProvider | undefined,
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   pendingToolImages: MediaBlock[],
 ): void {
@@ -398,7 +401,7 @@ export function buildMessagesWithReasoning(
   contents: IContent[],
   options: ReasoningMessageOptions,
   toolFormat: ToolFormat | undefined,
-  config: Config | undefined,
+  config: ToolOutputSettingsProvider | undefined,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
   const stripPolicy =
     (options.settings.get('reasoning.stripFromContext') as

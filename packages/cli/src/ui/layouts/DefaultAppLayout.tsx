@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Box, type DOMElement, Static } from 'ink';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
 import { useUIState } from '../contexts/UIStateContext.js';
@@ -29,9 +29,11 @@ import {
   MainControls,
   QuittingDisplay,
 } from './DefaultAppLayoutHelpers.js';
+import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
 
 interface DefaultAppLayoutProps {
-  config: Config;
+  uiRuntime: UiRuntime;
+  slashCommandRuntime: SlashCommandRuntime;
   settings: LoadedSettings;
   startupWarnings: string[];
   version: string;
@@ -44,14 +46,15 @@ interface DefaultAppLayoutProps {
 
 function useDerivedState(
   uiState: ReturnType<typeof useUIState>,
-  config: Config,
+  uiRuntime: UiRuntime,
+  slashCommandRuntime: SlashCommandRuntime,
   settings: LoadedSettings,
   availableTerminalHeight: number,
   version: string,
   nightly: boolean,
 ) {
   const layoutSettings = useLayoutSettings(
-    config,
+    uiRuntime,
     settings,
     availableTerminalHeight,
     uiState.terminalHeight,
@@ -63,7 +66,7 @@ function useDerivedState(
   const dialogsVisible = hasActiveDialog(uiState);
 
   const { listItems, staticItems, pendingItems } = useScrollableContent(
-    config,
+    slashCommandRuntime,
     settings,
     version,
     nightly,
@@ -89,7 +92,8 @@ function useDerivedState(
 }
 
 export const DefaultAppLayout = ({
-  config,
+  uiRuntime,
+  slashCommandRuntime,
   settings,
   startupWarnings,
   version,
@@ -111,7 +115,8 @@ export const DefaultAppLayout = ({
     pendingItems,
   } = useDerivedState(
     uiState,
-    config,
+    uiRuntime,
+    slashCommandRuntime,
     settings,
     availableTerminalHeight,
     version,
@@ -121,7 +126,7 @@ export const DefaultAppLayout = ({
   const mainControlsSharedProps = buildMainControlsProps(
     uiState,
     layoutSettings,
-    config,
+    slashCommandRuntime,
     settings,
     startupWarnings,
     updateInfo,
@@ -138,7 +143,7 @@ export const DefaultAppLayout = ({
         effectiveAvailableHeight={layoutSettings.effectiveAvailableHeight}
         terminalWidth={uiState.terminalWidth}
         quittingMessages={uiState.quittingMessages}
-        config={config}
+        config={slashCommandRuntime}
         slashCommands={uiState.slashCommands}
         showTodoPanelSetting={layoutSettings.showTodoPanelSetting}
       />
@@ -202,7 +207,7 @@ function renderLayout(
 function buildMainControlsProps(
   uiState: ReturnType<typeof useUIState>,
   layoutSettings: ReturnType<typeof useLayoutSettings>,
-  config: Config,
+  slashCommandRuntime: SlashCommandRuntime,
   settings: LoadedSettings,
   startupWarnings: string[],
   updateInfo: UpdateObject | null,
@@ -212,7 +217,7 @@ function buildMainControlsProps(
   onSuggestionsVisibilityChange: (visible: boolean) => void,
 ): MainControlsProps {
   return {
-    config,
+    config: slashCommandRuntime,
     settings,
     startupWarnings,
     updateInfo,

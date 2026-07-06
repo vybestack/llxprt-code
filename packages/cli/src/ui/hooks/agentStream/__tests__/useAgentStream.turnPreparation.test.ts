@@ -5,8 +5,9 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Config, ThinkingBlock } from '@vybestack/llxprt-code-core';
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { prepareTurnForQuery } from '../turnPreparation.js';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 
 const existingThinkingBlock: ThinkingBlock = {
   type: 'thinking',
@@ -34,7 +35,7 @@ describe('prepareTurnForQuery', () => {
     const config = {
       getBucketFailoverHandler: () => handler,
       getSessionId: () => 'runtime-1739',
-    } as unknown as Config;
+    };
     const startNewPrompt = vi.fn(() => {
       callOrder.push('startNewPrompt');
     });
@@ -47,7 +48,7 @@ describe('prepareTurnForQuery', () => {
 
     await prepareTurnForQuery(
       false,
-      config,
+      createStreamRuntimeForTest(config),
       startNewPrompt,
       setThought,
       thinkingBlocksRef,
@@ -82,7 +83,7 @@ describe('prepareTurnForQuery', () => {
     };
     const config = {
       getBucketFailoverHandler: () => handler,
-    } as unknown as Config;
+    };
     const startNewPrompt = vi.fn(() => {
       callOrder.push('startNewPrompt');
     });
@@ -95,7 +96,7 @@ describe('prepareTurnForQuery', () => {
 
     await prepareTurnForQuery(
       true,
-      config,
+      createStreamRuntimeForTest(config),
       startNewPrompt,
       setThought,
       thinkingBlocksRef,
@@ -133,11 +134,17 @@ describe('prepareTurnForQuery', () => {
         return this.sessionId;
       },
       bucketFailoverHandler: handler,
-    } as unknown as Config;
+    };
 
-    await prepareTurnForQuery(false, config, vi.fn(), vi.fn(), {
-      current: [existingThinkingBlock],
-    } as { current: ThinkingBlock[] });
+    await prepareTurnForQuery(
+      false,
+      createStreamRuntimeForTest(config),
+      vi.fn(),
+      vi.fn(),
+      {
+        current: [existingThinkingBlock],
+      } as { current: ThinkingBlock[] },
+    );
 
     expect(callOrder).toStrictEqual([
       'reset',

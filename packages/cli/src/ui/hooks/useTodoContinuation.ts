@@ -5,13 +5,15 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type {
-  Config,
-  AgentClientContract,
-  Todo,
-} from '@vybestack/llxprt-code-core';
+import type { Todo } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useTodoContext } from '../contexts/TodoContext.js';
+
+export interface TodoContinuationRuntime {
+  getEphemeralSettings(): Record<string, unknown>;
+  getApprovalMode(): ApprovalMode;
+}
 
 export interface ContinuationState {
   isActive: boolean;
@@ -48,7 +50,7 @@ export interface TodoContinuationHook {
 function evaluateConditions(
   hadToolCalls: boolean,
   todoPaused: boolean,
-  config: Config,
+  config: TodoContinuationRuntime,
   todos: Todo[],
   isActive: boolean,
 ): ContinuationConditions {
@@ -102,7 +104,7 @@ function findMostRelevantTodo(todos: Todo[]): Todo | null {
   return null;
 }
 
-function generatePrompt(todo: Todo, config: Config): string {
+function generatePrompt(todo: Todo, config: TodoContinuationRuntime): string {
   const isYoloMode = config.getApprovalMode() === ApprovalMode.YOLO;
 
   if (isYoloMode) {
@@ -113,7 +115,7 @@ function generatePrompt(todo: Todo, config: Config): string {
 }
 
 function sendContinuationPrompt(
-  agentClient: AgentClientContract,
+  agent: Agent,
   taskDescription: string,
   continuationPrompt: string,
   onDebugMessage: (message: string) => void,
@@ -140,11 +142,10 @@ function sendContinuationPrompt(
 
   void (async () => {
     try {
-      const stream = agentClient.sendMessageStream(
-        continuationPrompt,
-        abortController.signal,
+      const stream = agent.stream(continuationPrompt, {
+        signal: abortController.signal,
         promptId,
-      );
+      });
       for await (const _event of stream) {
         // Continuation prompts are submitted for side effects; the main stream
         // UI owns rendering for user-initiated turns.
@@ -173,12 +174,12 @@ function sendContinuationPrompt(
 function processContinuation(
   hadToolCalls: boolean,
   todoContext: { todos: Todo[]; paused: boolean },
-  config: Config,
+  config: TodoContinuationRuntime,
   isResponding: boolean,
   continuationState: ContinuationState,
   continuationInProgressRef: React.MutableRefObject<boolean>,
   abortControllerRef: React.MutableRefObject<AbortController | undefined>,
-  agentClient: AgentClientContract,
+  agent: Agent,
   onDebugMessage: (message: string) => void,
   setContinuationState: React.Dispatch<React.SetStateAction<ContinuationState>>,
 ): void {
@@ -210,7 +211,7 @@ function processContinuation(
 
   const continuationPrompt = generatePrompt(activeTodo, config);
   sendContinuationPrompt(
-    agentClient,
+    agent,
     activeTodo.content,
     continuationPrompt,
     onDebugMessage,
@@ -226,8 +227,8 @@ function processContinuation(
  * [REQ-001] Task Continuation Detection, [REQ-002] Continuation Prompting
  */
 export const useTodoContinuation = (
-  agentClient: AgentClientContract,
-  config: Config,
+  agent: Agent,
+  config: TodoContinuationRuntime,
   isResponding: boolean,
   onDebugMessage: (message: string) => void,
 ): TodoContinuationHook => {
@@ -250,7 +251,7 @@ export const useTodoContinuation = (
         continuationState,
         continuationInProgressRef,
         abortControllerRef,
-        agentClient,
+        agent,
         onDebugMessage,
         setContinuationState,
       );
@@ -260,7 +261,7 @@ export const useTodoContinuation = (
       todoContext,
       continuationState,
       isResponding,
-      agentClient,
+      agent,
       onDebugMessage,
     ],
   );

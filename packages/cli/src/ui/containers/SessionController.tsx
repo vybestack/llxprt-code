@@ -17,7 +17,7 @@ import type { HistoryItem } from '../types.js';
 import { MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import {
   getErrorMessage,
   loadCoreMemoryContent,
@@ -39,6 +39,7 @@ import type {
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import type { AppAction, AppState } from '../reducers/appReducer.js';
 import { appReducer, initialAppState } from '../reducers/appReducer.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 // Context type
 export interface SessionContextType {
@@ -69,7 +70,7 @@ export const SessionContext = createContext<SessionContextType | undefined>(
 
 interface SessionControllerProps {
   children: React.ReactNode;
-  config: Config;
+  config: CliUiRuntime;
 }
 
 export const SessionController: React.FC<SessionControllerProps> = ({
@@ -161,7 +162,7 @@ function useCheckPaymentModeChange(
 }
 
 function usePerformMemoryRefresh(
-  config: Config,
+  config: CliUiRuntime,
   addItem: (
     itemData: Omit<HistoryItem, 'id'>,
     baseTimestamp?: number,
@@ -230,7 +231,7 @@ function usePerformMemoryRefresh(
 }
 
 function useModelChangeWatcher(
-  config: Config,
+  config: CliUiRuntime,
   sessionState: SessionState,
   historyLength: number,
   dispatch: React.Dispatch<SessionAction>,

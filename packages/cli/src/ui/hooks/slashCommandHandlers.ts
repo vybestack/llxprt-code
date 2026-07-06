@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { PartListUnion } from '@google/genai';
 import type {
-  Config,
   RecordingIntegration,
   ToolCallConfirmationDetails,
   DebugLogger,
@@ -44,7 +44,7 @@ import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 
 export interface SlashCommandHandlerDeps {
   commands: readonly SlashCommand[] | undefined;
-  config: Config | null;
+  config: CliUiRuntime | null;
   commandContext: CommandContext;
   actions: SlashCommandProcessorActions;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
@@ -579,7 +579,7 @@ async function performSessionResume(
 
 function buildResumeContext(
   deps: SlashCommandHandlerDeps,
-  config: Config,
+  config: CliUiRuntime,
 ): ResumeContext {
   return {
     chatsDir: join(config.storage.getProjectTempDir(), 'chats'),

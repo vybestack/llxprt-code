@@ -6,11 +6,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  type Config,
   type CodeAssistServer,
   UserTierId,
   getCodeAssistServer,
 } from '@vybestack/llxprt-code-core';
+import type { AgentClientSource } from '../cliUiRuntime.js';
 
 export interface PrivacyState {
   isLoading: boolean;
@@ -19,7 +19,7 @@ export interface PrivacyState {
   dataCollectionOptIn?: boolean;
 }
 
-export const usePrivacySettings = (config: Config) => {
+export const usePrivacySettings = (config: AgentClientSource) => {
   const [privacyState, setPrivacyState] = useState<PrivacyState>({
     isLoading: true,
   });
@@ -87,7 +87,9 @@ export const usePrivacySettings = (config: Config) => {
   };
 };
 
-function getCodeAssistServerOrFail(config: Config): CodeAssistServer {
+function getCodeAssistServerOrFail(
+  config: AgentClientSource,
+): CodeAssistServer {
   const server = getCodeAssistServer(config);
   if (server === undefined) {
     throw new Error('Oauth not being used');

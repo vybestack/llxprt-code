@@ -6,13 +6,13 @@
 
 import { useReducer } from 'react';
 import type {
-  Config,
   IContent,
   RecordingIntegration,
   SessionRecordingService,
   LockHandle,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
+import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
@@ -31,11 +31,10 @@ import { appReducer, initialAppState } from './reducers/appReducer.js';
 import { AppContainer } from './AppContainer.js';
 
 interface AppProps {
-  config: Config;
+  uiRuntime: UiRuntime;
+  slashCommandRuntime: SlashCommandRuntime;
   /**
    * The single interactive Agent created at the CLI composition root.
-   * `config` is retained alongside it as a temporary migration bridge until the
-   * remaining UI Config consumers are migrated to the Agent (see #1595).
    */
   agent: Agent;
   settings: LoadedSettings;
@@ -68,7 +67,7 @@ interface AppProps {
  * - AppContainer: Main UI container with UIState/UIActions contexts
  */
 export const AppWrapper = (props: AppProps) => {
-  const renderOptions = inkRenderOptions(props.config, props.settings);
+  const renderOptions = inkRenderOptions(props.uiRuntime.app, props.settings);
   const mouseEventsEnabled = isMouseEventsEnabled(
     renderOptions,
     props.settings,
@@ -80,8 +79,12 @@ export const AppWrapper = (props: AppProps) => {
         <ScrollProvider>
           <SessionStatsProvider>
             <VimModeProvider settings={props.settings}>
-              <ToolCallProvider sessionId={props.config.getSessionId()}>
-                <TodoProvider sessionId={props.config.getSessionId()}>
+              <ToolCallProvider
+                sessionId={props.uiRuntime.session.getSessionId()}
+              >
+                <TodoProvider
+                  sessionId={props.uiRuntime.session.getSessionId()}
+                >
                   <RuntimeContextProvider>
                     <OverflowProvider>
                       <AppWithState {...props} />

@@ -58,9 +58,6 @@ async function restoreActiveProvider(
  * `configOwnership` caller-owned (its default), which means the returned
  * Agent's `dispose()` deliberately SKIPS `config.dispose()` — recording/Config
  * teardown remains owned by the existing bootstrap.
- *
- * The adopted {@link Config} is a temporary migration bridge: later subissues
- * (see #1595) will remove the remaining direct Config consumers in the UI.
  */
 export async function createForegroundAgent({
   config,

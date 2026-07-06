@@ -15,12 +15,14 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
 import { useAgentStream } from './agentStream/index.js';
+import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
@@ -198,11 +200,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
     mockAddItem = vi.fn();
 
-    const mockGetAgentClient = vi.fn().mockImplementation(() => {
-      const clientInstance = new MockedAgentClientClass(mockConfig);
-      return clientInstance;
-    });
-
     const contentGeneratorConfig = {
       model: 'test-model',
       apiKey: 'test-key',
@@ -235,7 +232,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
-      getAgentClient: mockGetAgentClient,
       getMcpClientManager: vi.fn(() => undefined),
       getMcpServers: vi.fn(() => undefined),
       getUsageStatisticsEnabled: () => true,
@@ -315,14 +311,16 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       vi.fn(),
     ]);
 
-    const client = agentClient ?? mockConfig.getAgentClient();
+    const client = createFakeAgentFromMockClient(
+      agentClient ?? new MockedAgentClientClass(mockConfig),
+    );
 
     const { result, rerender } = renderHook(
       (props: {
         client: unknown;
         history: unknown[];
         addItem: UseHistoryManagerReturn['addItem'];
-        config: Config;
+        runtime: ReturnType<typeof createStreamRuntimeForTest>;
         onDebugMessage: (message: string) => void;
         handleSlashCommand: (cmd: unknown) => Promise<unknown>;
         shellModeActive: boolean;
@@ -336,7 +334,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           props.client,
           props.history,
           props.addItem,
-          props.config,
+          props.runtime,
           mockSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -355,7 +353,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           client,
           history: [],
           addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-          config: mockConfig,
+          runtime: createStreamRuntimeForTest(mockConfig),
           onDebugMessage: mockOnDebugMessage,
           handleSlashCommand: mockHandleSlashCommand as unknown as (
             cmd: unknown,
@@ -661,10 +659,10 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
     const { result } = renderHook(() =>
       useAgentStream(
-        mockConfig.getAgentClient(),
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
-        mockConfig,
+        createStreamRuntimeForTest(mockConfig),
         settingsWithReasoning,
         mockOnDebugMessage,
         mockHandleSlashCommand,

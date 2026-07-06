@@ -18,7 +18,6 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import { getGitStatsService } from '../services/git-stats-service.js';
 
-import type { Config } from '../config/config.js';
 import {
   FileOperation,
   recordFileOperationMetric,
@@ -26,8 +25,47 @@ import {
 
 import { ApprovalMode } from '../config/config.js';
 
+export interface CoreToolHostConfig {
+  getSessionId(): string;
+  getTargetDir(): string;
+  getWorkspaceContext(): { getDirectories(): readonly string[] };
+  getApprovalMode(): ApprovalMode;
+  setApprovalMode(mode: ApprovalMode): void;
+  isInteractive(): boolean;
+  getEphemeralSettings(): Record<string, unknown>;
+  getFileService(): IToolHostFileService & {
+    getLlxprtIgnorePatterns(): string[];
+  };
+  getFileFilteringOptions(): IToolHostFileFilteringOptions;
+  getFileExclusions(): {
+    getGlobExcludes(): string[];
+    getReadManyFilesExcludes(): string[];
+  };
+  getFileFilteringRespectLlxprtIgnore(): boolean;
+  getFileSystemService(): IToolHostFileSystemService;
+  getConversationLoggingEnabled(): boolean;
+  getDebugMode(): boolean;
+  getContentGeneratorConfig():
+    | {
+        providerManager?: {
+          getServerToolsProvider?():
+            | {
+                getServerTools: () => string[];
+                invokeServerTool: (
+                  name: string,
+                  params: { prompt: string },
+                  options: { signal: AbortSignal },
+                ) => Promise<unknown>;
+              }
+            | null
+            | undefined;
+        };
+      }
+    | undefined;
+}
+
 export class CoreToolHostAdapter implements IToolHost {
-  constructor(private readonly config: Config) {}
+  constructor(private readonly config: CoreToolHostConfig) {}
 
   getTargetDir(): string {
     return this.config.getTargetDir();
@@ -146,7 +184,7 @@ export class CoreToolHostAdapter implements IToolHost {
     return (
       this.config
         .getContentGeneratorConfig()
-        ?.providerManager?.getServerToolsProvider() ?? null
+        ?.providerManager?.getServerToolsProvider?.() ?? null
     );
   }
 

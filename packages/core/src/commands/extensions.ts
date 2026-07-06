@@ -4,8 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '../config/config.js';
+import type { LlxprtExtension } from '../config/configTypes.js';
 
-export function listExtensions(config: Config) {
+export interface ExtensionListSource {
+  getExtensions(): LlxprtExtension[];
+}
+
+export function listExtensions(config: ExtensionListSource): LlxprtExtension[] {
   return config.getExtensions();
 }

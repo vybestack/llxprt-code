@@ -5,7 +5,6 @@
  */
 
 import type {
-  Config,
   AnyDeclarativeTool,
   MCPServerConfig,
   DiscoveredMCPResource,
@@ -19,6 +18,7 @@ import {
   mcpServerRequiresOAuth,
   type DiscoveredMCPPrompt,
 } from '@vybestack/llxprt-code-mcp';
+import type { McpCommandRuntime } from '../cliUiRuntime.js';
 
 export const COLOR_GREEN = '\u001b[32m';
 export const COLOR_YELLOW = '\u001b[33m';
@@ -29,32 +29,13 @@ export const RESET_COLOR = '\u001b[0m';
 
 export const MAX_MCP_RESOURCES_TO_SHOW = 10;
 
-export type RuntimeConfigWithOptionalServices = Omit<
-  Config,
-  | 'getAgentClient'
-  | 'getMcpClientManager'
-  | 'getResourceRegistry'
-  | 'getToolRegistry'
-> & {
-  getAgentClient?: () => ReturnType<Config['getAgentClient']> | undefined;
-  getMcpClientManager?: () =>
-    | ReturnType<Config['getMcpClientManager']>
-    | undefined;
-  getResourceRegistry?: () =>
-    | ReturnType<Config['getResourceRegistry']>
-    | undefined;
-  getToolRegistry?: () => ReturnType<Config['getToolRegistry']> | undefined;
-};
+export type RuntimeMcpServices = McpCommandRuntime;
 
 export type RuntimeMcpServers = Record<string, MCPServerConfig | undefined>;
 
 type RuntimeMcpResource = Omit<DiscoveredMCPResource, 'name'> & {
   name?: string;
 };
-
-export const asRuntimeConfig = (
-  config: Config,
-): RuntimeConfigWithOptionalServices => config;
 
 export const getResourceName = (resource: DiscoveredMCPResource): string => {
   const runtimeResource = resource as RuntimeMcpResource;
@@ -468,8 +449,7 @@ function buildBlockedServersSection(
 }
 
 export async function buildMcpStatusMessage(
-  config: Config,
-  runtimeConfig: RuntimeConfigWithOptionalServices,
+  runtime: RuntimeMcpServices,
   serverNames: string[],
   mcpServers: RuntimeMcpServers,
   blockedMcpServers: ReadonlyArray<{ name: string; extensionName?: string }>,
@@ -477,10 +457,7 @@ export async function buildMcpStatusMessage(
   showSchema: boolean,
   showTips: boolean,
 ): Promise<string> {
-  const toolRegistry = runtimeConfig.getToolRegistry?.();
-  if (!toolRegistry) {
-    return '';
-  }
+  const toolRegistry = runtime.getToolRegistry();
 
   const connectingServers = serverNames.filter(
     (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTING,
@@ -500,9 +477,8 @@ export async function buildMcpStatusMessage(
   message += 'Configured MCP servers:\n\n';
 
   const allTools = toolRegistry.getAllTools();
-  const promptRegistry = config.getPromptRegistry();
-  const allResources =
-    runtimeConfig.getResourceRegistry?.()?.getAllResources() ?? [];
+  const promptRegistry = runtime.getPromptRegistry();
+  const allResources = runtime.getResourceRegistry().getAllResources();
 
   for (const serverName of serverNames) {
     const server = mcpServers[serverName];

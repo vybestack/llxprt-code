@@ -10,7 +10,6 @@ import {
   getProjectCoreMemoryFilePath,
   loadCoreMemoryContent,
   MemoryTool,
-  type Config,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs/promises';
 import { MessageType } from '../types.js';
@@ -18,12 +17,13 @@ import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js'
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
 import type { LoadedSettings } from '../../config/settings.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 /**
  * Refreshes memory content based on JIT context setting.
  */
 async function refreshMemoryContent(
-  config: Config,
+  config: CliUiRuntime,
   settings: LoadedSettings,
 ): Promise<{ memoryContent: string; fileCount: number }> {
   if (config.isJitContextEnabled()) {
@@ -59,7 +59,7 @@ async function refreshMemoryContent(
 /**
  * Refreshes core memory with fail-open behavior.
  */
-async function refreshCoreMemory(config: Config): Promise<void> {
+async function refreshCoreMemory(config: CliUiRuntime): Promise<void> {
   try {
     const coreContent = await loadCoreMemoryContent(config.getWorkingDir());
     config.setCoreMemory(coreContent);

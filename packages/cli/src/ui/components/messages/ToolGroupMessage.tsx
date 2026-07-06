@@ -14,7 +14,7 @@ import { ToolMessage } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
 import { theme } from '../../semantic-colors.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import {
   DEFAULT_AGENT_ID,
   formatTodoListForDisplay,
@@ -22,6 +22,7 @@ import {
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
 import { useToolCallContext } from '../../contexts/ToolCallContext.js';
+import type { CliUiRuntime } from '../../cliUiRuntime.js';
 
 interface ToolGroupMessageProps {
   groupId: number;
@@ -29,7 +30,7 @@ interface ToolGroupMessageProps {
   agentId?: string;
   availableTerminalHeight?: number;
   terminalWidth: number;
-  config: Config;
+  config: CliUiRuntime;
   isFocused?: boolean;
   showTodoPanel?: boolean;
   activeShellPtyId?: number | null;
@@ -188,7 +189,7 @@ function renderToolCallItem(
   isFocused: boolean,
   activeShellPtyId: number | null | undefined,
   embeddedShellFocused: boolean | undefined,
-  config: Config,
+  config: CliUiRuntime,
   borderColor: string,
   borderDimColor: boolean,
 ): React.ReactNode {
@@ -209,20 +210,15 @@ function renderToolCallItem(
   return (
     <Box key={tool.callId} flexDirection="column" minHeight={1}>
       <ToolMessage
-        callId={tool.callId}
-        name={tool.name}
-        description={tool.description}
-        resultDisplay={tool.resultDisplay}
-        status={tool.status}
-        confirmationDetails={tool.confirmationDetails}
+        key={tool.callId}
+        {...tool}
         availableTerminalHeight={availableTerminalHeightPerToolMessage}
         terminalWidth={innerWidth}
         emphasis={emphasis}
-        renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
         activeShellPtyId={activeShellPtyId}
         embeddedShellFocused={embeddedShellFocused}
-        ptyId={tool.ptyId}
-        config={config}
+        shell={config}
+        isFocused={isFocused}
         isFirst={isFirst}
         borderColor={borderColor}
         borderDimColor={borderDimColor}

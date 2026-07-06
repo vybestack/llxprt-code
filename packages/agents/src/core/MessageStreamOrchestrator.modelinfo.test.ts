@@ -388,4 +388,38 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
       200_000,
     ]);
   });
+
+  it('B1: load-balancer profile reports the active sub-profile model, not the config default', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gemini-2.5-pro',
+      providerName: 'load-balancer',
+      profileName: 'glm',
+      providerManagerActiveModel: 'glm-5.2',
+    });
+
+    const infos = await collectModelInfos(orchestrator, 'prompt-lb-active');
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.model).toBe('glm-5.2');
+    expect(infos[0]?.providerName).toBe('load-balancer');
+    expect(infos[0]?.profileName).toBe('glm');
+    expect(infos[0]?.displayLabel).toBe('glm');
+  });
+
+  it('B2: load-balancer profile with no active selection falls back to the provider default model, never the config Gemini default', async () => {
+    const { orchestrator } = buildOrchestrator({
+      model: 'gemini-2.5-pro',
+      providerName: 'load-balancer',
+      profileName: 'glm',
+      providerManagerActiveModel: '',
+      providerManagerDefaultModel: 'glm-5.2',
+    });
+
+    const infos = await collectModelInfos(orchestrator, 'prompt-lb-default');
+
+    expect(infos).toHaveLength(1);
+    expect(infos[0]?.model).toBe('glm-5.2');
+    expect(infos[0]?.displayLabel).toBe('glm');
+    expect(infos[0]?.model).not.toBe('gemini-2.5-pro');
+  });
 });
