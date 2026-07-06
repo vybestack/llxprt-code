@@ -676,7 +676,7 @@ describe('scripts/bind-release-deps.ts', () => {
  * nightly workflow lacked a failure-notification step. These tests lock the
  * nightly workflow contract: report generation precedes tests, the failure
  * notification job has issues:write permission, and it opens or updates a gh
- * issue with ci/cd and bug labels linking to the workflow run.
+ * issue with the ci/cd label linking to the workflow run.
  */
 describe('.github/workflows/nightly.yml', () => {
   let nightlyWorkflow;
@@ -768,14 +768,17 @@ describe('.github/workflows/nightly.yml', () => {
     expect(notifyFailureRun).toContain('set -euo pipefail');
   });
 
-  it('creates a failure issue with ci/cd and bug labels linking to the workflow run', () => {
+  it('creates a failure issue with the ci/cd label linking to the workflow run', () => {
     const notifyFailureStep = failureNotificationStep();
     const normalizedRun = failureNotificationRun().replace(/\s+/g, ' ').trim();
     expect(notifyFailureStep.env?.RUN_URL).toBe(
       '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
     );
     expect(normalizedRun).toContain('ensure_label "ci/cd"');
-    expect(normalizedRun).toContain('ensure_label "bug"');
+    // The plain "bug" label was removed: it was recreated on every failed
+    // nightly and is not part of this repo's label taxonomy. Guard against it
+    // being reintroduced here.
+    expect(normalizedRun).not.toContain('ensure_label "bug"');
     expect(notifyFailureStep.env?.WINDOWS_CI_RESULT).toBe(
       '${{ needs.windows_ci.result }}',
     );
@@ -786,7 +789,7 @@ describe('.github/workflows/nightly.yml', () => {
       '${{ needs.behavioral_evals.result }}',
     );
     expect(normalizedRun).toContain('LABEL_ARGS+=(--label "ci/cd")');
-    expect(normalizedRun).toContain('LABEL_ARGS+=(--label "bug")');
+    expect(normalizedRun).not.toContain('LABEL_ARGS+=(--label "bug")');
     expect(normalizedRun).toContain('windows_ci=${WINDOWS_CI_RESULT}');
     expect(normalizedRun).toContain('e2e_full=${E2E_FULL_RESULT}');
     expect(normalizedRun).toContain(
