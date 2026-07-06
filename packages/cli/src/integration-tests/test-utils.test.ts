@@ -219,18 +219,19 @@ describe('Test Utilities', () => {
       tempDirs.push(dir);
 
       const filePath = path.join(dir, 'delayed.txt');
+      const createDelayMs = 250;
 
       // Create file after a delay
       setTimeout(() => {
         void fs.writeFile(filePath, 'content');
-      }, 200);
+      }, createDelayMs);
 
       const start = Date.now();
       await waitForFile(filePath, 1000);
       const duration = Date.now() - start;
 
-      expect(duration).toBeGreaterThanOrEqual(200);
-      expect(duration).toBeLessThan(600);
+      expect(duration).toBeGreaterThanOrEqual(createDelayMs - 50);
+      expect(duration).toBeLessThan(700);
     });
 
     it('should timeout if file is not created', async () => {
