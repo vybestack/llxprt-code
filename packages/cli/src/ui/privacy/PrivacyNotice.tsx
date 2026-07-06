@@ -8,11 +8,11 @@ import { Box } from 'ink';
 
 import { GeminiPrivacyNotice } from './GeminiPrivacyNotice.js';
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { ModelState } from '../cliUiRuntime.js';
 
 interface PrivacyNoticeProps {
   onExit: () => void;
-  config: CliUiRuntime;
+  config: ModelState;
 }
 
 /**
@@ -22,7 +22,7 @@ const PrivacyNoticeText = ({
   config,
   onExit,
 }: {
-  config: CliUiRuntime;
+  config: ModelState;
   onExit: () => void;
 }) => {
   // Check active provider to determine which privacy notice to show

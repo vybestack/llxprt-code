@@ -103,14 +103,9 @@ function buildMockConfig(testRootDir: string): CliUiRuntime {
     }),
     getDebugMode: () => false,
     getFileExclusions: () => ({
-      getCoreIgnorePatterns: () => COMMON_IGNORE_PATTERNS,
-      getDefaultExcludePatterns: () => DEFAULT_FILE_EXCLUDES,
       getGlobExcludes: () => COMMON_IGNORE_PATTERNS,
-      buildExcludePatterns: () => DEFAULT_FILE_EXCLUDES,
       getReadManyFilesExcludes: () => DEFAULT_FILE_EXCLUDES,
     }),
-    getUsageStatisticsEnabled: () => false,
-    getEnableExtensionReloading: () => false,
   } as unknown as CliUiRuntime;
 
   return mockConfig;

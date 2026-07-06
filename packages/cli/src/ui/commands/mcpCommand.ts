@@ -14,27 +14,6 @@ import { CommandKind } from './types.js';
 import type { RuntimeMcpServers } from './mcpDisplay.js';
 import { buildMcpStatusMessage } from './mcpDisplay.js';
 import { mcpAuthSchema, listOAuthServers, performMcpOAuth } from './mcpAuth.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core';
-
-interface RefreshAgentClientSource {
-  getAgentClient(): unknown;
-}
-
-function getRefreshAgentClient(
-  source: RefreshAgentClientSource,
-): AgentClientContract | undefined {
-  const agentClient = source.getAgentClient();
-  return isRefreshAgentClient(agentClient) ? agentClient : undefined;
-}
-
-function isRefreshAgentClient(value: unknown): value is AgentClientContract {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'setTools' in value &&
-    typeof value.setTools === 'function'
-  );
-}
 
 const getMcpStatus = async (
   context: CommandContext,
@@ -179,11 +158,7 @@ const refreshCommand: SlashCommand = {
       await toolRegistry.discoverAllTools();
 
       // Update the client with the new tools
-      const agentClient = getRefreshAgentClient(config);
-      if (!agentClient) {
-        throw new Error('Agent client is not available.');
-      }
-      await agentClient.setTools();
+      await config.getAgentClient().setTools();
     } catch (error) {
       return {
         type: 'message',

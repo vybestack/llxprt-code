@@ -23,8 +23,8 @@ import { Command } from '../keyMatchers.js';
 import { defaultKeyBindings } from '../../config/keyBindings.js';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
 import {
+  buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
-  type SlashCommandRuntime,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
 
@@ -516,7 +516,9 @@ describe('AppContainer.keybindings', () => {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
         ),
-        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
+        slashCommandRuntime: buildSlashCommandRuntime(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -537,7 +539,9 @@ describe('AppContainer.keybindings', () => {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
         ),
-        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
+        slashCommandRuntime: buildSlashCommandRuntime(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -563,7 +567,9 @@ describe('AppContainer.keybindings', () => {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
         ),
-        slashCommandRuntime: mockConfig as unknown as SlashCommandRuntime,
+        slashCommandRuntime: buildSlashCommandRuntime(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',

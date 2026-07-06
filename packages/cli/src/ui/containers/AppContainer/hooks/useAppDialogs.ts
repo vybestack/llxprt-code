@@ -278,7 +278,7 @@ function useDialogsAuth(
   const { config, settings, appState, addItem } = p;
   const theme = useThemeCommand(settings, appState, addItem);
   const settingsCmd = useSettingsCommand();
-  const folderTrust = useFolderTrust(settings, config, addItem);
+  const folderTrust = useFolderTrust(settings, addItem);
   const welcome = useWelcomeOnboarding({
     settings,
     isFolderTrustComplete:

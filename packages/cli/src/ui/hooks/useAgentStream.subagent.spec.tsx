@@ -304,7 +304,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockOverrides),
+        createStreamRuntimeForTest(mockConfig, mockOverrides),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -414,7 +414,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockOverrides),
+        createStreamRuntimeForTest(mockConfig, mockOverrides),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -483,7 +483,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockOverrides),
+        createStreamRuntimeForTest(mockConfig, mockOverrides),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -535,7 +535,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockOverrides),
+        createStreamRuntimeForTest(mockConfig, mockOverrides),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (

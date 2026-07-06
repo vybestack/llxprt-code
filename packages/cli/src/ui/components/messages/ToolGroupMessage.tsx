@@ -218,6 +218,7 @@ function renderToolCallItem(
         activeShellPtyId={activeShellPtyId}
         embeddedShellFocused={embeddedShellFocused}
         shell={config}
+        isFocused={isFocused}
         isFirst={isFirst}
         borderColor={borderColor}
         borderDimColor={borderDimColor}

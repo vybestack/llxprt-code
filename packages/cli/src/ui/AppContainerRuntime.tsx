@@ -80,7 +80,6 @@ function buildInputParams(
     streamRuntime: bootstrap.streamRuntime,
     slashCommandRuntime,
     agent: bootstrap.agent,
-    agentClientSource: bootstrap.agentClientSource,
     settings: bootstrap.settings,
     runtime: bootstrap.runtime,
     history: bootstrap.history,

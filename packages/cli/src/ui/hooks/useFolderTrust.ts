@@ -15,8 +15,6 @@ import {
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import process from 'node:process';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
-
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
 type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
@@ -91,30 +89,32 @@ function showStartupMessage(
 
 export const useFolderTrust = (
   settings: LoadedSettings,
-  config: CliUiRuntime,
   addItem?: AddItemFn,
 ) => {
-  const [isTrusted, setIsTrusted] = useState<boolean | undefined>(
-    config.isTrustedFolder(),
-  );
-  const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(false);
-  const [isRestarting, setIsRestarting] = useState(false);
-  const startupMessageSent = useRef(false);
-
   // Folder trust feature flag removed - now using settings directly
   const { folderTrust } = settings.merged;
+  const initialTrust = isWorkspaceTrusted({ folderTrust } as Settings);
+  const [isTrusted, setIsTrusted] = useState<boolean | undefined>(initialTrust);
+  const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
+    initialTrust === undefined,
+  );
+  const [isRestarting, setIsRestarting] = useState(false);
+  const startupMessageSent = useRef(false);
+  const previousFolderTrust = useRef(folderTrust);
 
   useEffect(() => {
-    const trusted = isWorkspaceTrusted({
-      folderTrust,
-    } as Settings);
-    setIsTrusted(trusted);
-    if (trusted === undefined) {
-      setIsFolderTrustDialogOpen(true);
+    const folderTrustChanged = previousFolderTrust.current !== folderTrust;
+    previousFolderTrust.current = folderTrust;
+    const trusted = folderTrustChanged
+      ? isWorkspaceTrusted({ folderTrust } as Settings)
+      : isTrusted;
+    if (folderTrustChanged) {
+      setIsTrusted(trusted);
+      setIsFolderTrustDialogOpen(trusted === undefined);
     }
 
     showStartupMessage(trusted, addItem, startupMessageSent);
-  }, [folderTrust, addItem]);
+  }, [folderTrust, addItem, isTrusted]);
 
   const handleFolderTrustSelect = useCallback(
     (choice: FolderTrustChoice) => {

@@ -745,6 +745,9 @@ export function buildSlashCommandRuntime(
   source: UiRuntimeBareSource,
 ): CliUiRuntime {
   const { storage, ...capabilities } = buildUiRuntimeFromSource(source);
+  // This flattening assumes every capability object exposes unique property
+  // names. If a future capability overlaps an existing one, Object.assign will
+  // keep the last value silently, so add an explicit test when adding slices.
   return Object.assign({}, ...Object.values(capabilities), { storage });
 }
 

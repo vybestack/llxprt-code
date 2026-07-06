@@ -8,6 +8,7 @@ import {
   createRuntimeStateFromConfig,
   type AgentClientContract,
   type AgentClientFactory,
+  type ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 
 type AgentClientFactorySource = Parameters<AgentClientFactory>[0];
@@ -19,6 +20,7 @@ export interface DetachedAutoPromptClientSource {
   getContentGeneratorConfig?(): { model?: string } | undefined;
   getEphemeralSetting?(key: string): unknown;
   getProxy?(): string | undefined;
+  getToolRegistry(): ToolRegistry;
   getAgentClientFactory?(): AutoPromptAgentClientFactory | undefined;
 }
 
@@ -49,6 +51,9 @@ function disposeInvalidClient(value: unknown): void {
 function hasAgentClientFactorySource(
   value: unknown,
 ): value is AgentClientFactorySource {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.getContentGeneratorConfig === 'function' &&
@@ -78,12 +83,12 @@ export function createDetachedAutoPromptClient(
       'No agent client factory available. Run /auth login or try manual mode.',
     );
   }
-  const factorySource = source;
-  if (!hasAgentClientFactorySource(factorySource)) {
+  if (!hasAgentClientFactorySource(source)) {
     throw new Error(
       'Agent client factory source is incomplete. Run /auth login or try manual mode.',
     );
   }
+  const factorySource: AgentClientFactorySource = source;
   let client: unknown;
   try {
     client = factory(factorySource, runtimeState);

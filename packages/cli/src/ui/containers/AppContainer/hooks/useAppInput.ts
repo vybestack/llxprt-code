@@ -40,7 +40,6 @@ export interface AppInputParams {
   streamRuntime: AppBootstrapResult['streamRuntime'];
   slashCommandRuntime: SlashCommandRuntime;
   agent: AppBootstrapResult['agent'];
-  agentClientSource: AppBootstrapResult['agentClientSource'];
   settings: AppBootstrapResult['settings'];
   runtime: AppBootstrapResult['runtime'];
   history: AppBootstrapResult['history'];

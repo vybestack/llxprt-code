@@ -14,7 +14,8 @@ import { StreamingContext } from '../../contexts/StreamingContext.js';
 import { renderWithProviders } from '../../../test-utils/render.js';
 import { Colors } from '../../colors.js';
 import { TOOL_STATUS } from '../../constants.js';
-import type { AnsiOutput, Config } from '@vybestack/llxprt-code-core';
+import type { AnsiOutput } from '@vybestack/llxprt-code-core';
+import type { ShellState } from '../../cliUiRuntime.js';
 
 const isActivePtyMock = vi.hoisted(() => vi.fn());
 const getLastActivePtyIdMock = vi.hoisted(() => vi.fn());
@@ -232,7 +233,7 @@ describe('<ToolMessage />', () => {
   describe('shell focus state for completed shell with live PTY', () => {
     const shellConfig = {
       getEnableInteractiveShell: () => true,
-    } as unknown as Config;
+    } as unknown as ShellState;
 
     beforeEach(() => {
       isActivePtyMock.mockReturnValue(false);

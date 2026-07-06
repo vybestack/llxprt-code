@@ -175,7 +175,7 @@ function renderUseSubmitQuery(
 ) {
   return renderHook(() =>
     useSubmitQuery({
-      runtime: createStreamRuntimeForTest(createMockOverrides()),
+      runtime: createStreamRuntimeForTest({}, createMockOverrides()),
       agent: createMockAgentClient() as unknown as Agent,
       addItem: vi.fn().mockReturnValue(1),
       settings: {} as never,
@@ -582,7 +582,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const { result, rerender } = renderHook(
       ({ streamingState }: { streamingState: StreamingState }) =>
         useSubmitQuery({
-          runtime: createStreamRuntimeForTest(createMockOverrides()),
+          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
           agent: createMockAgentClient() as unknown as Agent,
           addItem: vi.fn().mockReturnValue(1),
           settings: {} as never,

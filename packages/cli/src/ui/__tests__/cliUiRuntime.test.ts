@@ -14,10 +14,13 @@ import {
  * Creates a Proxy-based mock that satisfies the UiRuntimeBareSource structural
  * type. Every method returns a sentinel string so we can verify delegation.
  */
-function createProxySource(): UiRuntimeBareSource {
+function createProxySource(
+  overrides: Record<string, unknown> = {},
+): UiRuntimeBareSource {
   return new Proxy({} as Record<string, unknown>, {
     get(_target, prop: string | symbol) {
       if (typeof prop === 'symbol') return undefined;
+      if (prop in overrides) return overrides[prop];
       if (prop === 'storage') return { id: 'mock-storage' };
       if (prop === 'extensionEnablementManager')
         return {
@@ -43,7 +46,7 @@ describe('buildSlashCommandRuntime', () => {
     expect(Object.getPrototypeOf(adapter)).toBe(Object.prototype);
   });
 
-  it('delegates method calls through to the source', () => {
+  it('delegates method calls through to the source across capability slices', () => {
     const source = createProxySource();
     const adapter = buildSlashCommandRuntime(source);
 
@@ -57,6 +60,12 @@ describe('buildSlashCommandRuntime', () => {
     expect((adapter.getApprovalMode as () => string)()).toBe(
       'delegated:getApprovalMode',
     );
+    expect((adapter.getMaxSessionTurns as unknown as () => string)()).toBe(
+      'delegated:getMaxSessionTurns',
+    );
+    expect((adapter.isInteractive as unknown as () => string)()).toBe(
+      'delegated:isInteractive',
+    );
   });
 
   it('preserves the storage property reference', () => {
@@ -68,5 +77,22 @@ describe('buildSlashCommandRuntime', () => {
     ).toStrictEqual({
       id: 'mock-storage',
     });
+  });
+
+  it('preserves the extensionEnablementManager property reference', () => {
+    const source = createProxySource();
+    const adapter = buildSlashCommandRuntime(source);
+
+    expect(
+      (adapter as unknown as Record<string, unknown>)
+        .extensionEnablementManager,
+    ).toStrictEqual({ id: 'mock-eem' });
+  });
+
+  it('supports absent optional agent-client factory helpers', () => {
+    const source = createProxySource({ getAgentClientFactory: undefined });
+    const adapter = buildSlashCommandRuntime(source);
+
+    expect(adapter.getAgentClientFactory?.()).toBeUndefined();
   });
 });

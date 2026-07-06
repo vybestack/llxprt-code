@@ -111,8 +111,8 @@ export function useSessionInitialization({
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Effect: Seed resumed history into history manager.
-  // This effect is idempotent: resumedHistory is a static prop from mount,
-  // loadHistory replaces (not appends), and StrictMode double-mount is harmless.
+  // The guard ref prevents redundant loadHistory calls across StrictMode
+  // double-mount while keeping resumedHistory as a static mount-time prop.
   useEffect(() => {
     if (
       hasSeededResumedHistory.current ||

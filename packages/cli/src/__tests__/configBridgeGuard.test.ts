@@ -5,7 +5,7 @@
  */
 
 import { beforeAll, describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const CLI_ROOT = join(import.meta.dirname, '..');
@@ -22,7 +22,10 @@ const CORE_CONFIG_IMPORT_PATTERNS = [
 function walk(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    const st = statSync(full);
+    const st = lstatSync(full);
+    if (st.isSymbolicLink()) {
+      continue;
+    }
     if (st.isDirectory()) {
       if (!SKIP_DIRS.has(entry)) {
         walk(full, acc);
