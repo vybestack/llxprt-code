@@ -20,10 +20,13 @@ import type {
   LlxprtExtension,
   MCPResource,
   MCPServerConfig,
+  MessageBus,
   PolicyEngine,
   RedactionConfig,
   RuntimeProviderManager,
   SandboxConfig,
+  SchedulerCallbacks,
+  SchedulerOptions,
   ShellExecutionConfig,
   ShellReplacementMode,
   SkillManager,
@@ -32,11 +35,6 @@ import type {
   ToolRegistry,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
-import type {
-  SchedulerCallbacks,
-  SchedulerOptions,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   DiscoveredMCPPrompt,
   MCPDiscoveryState,
