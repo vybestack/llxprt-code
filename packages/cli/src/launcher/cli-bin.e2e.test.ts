@@ -209,14 +209,24 @@ describe('cli bin end-to-end credential routing', () => {
             ');',
           ].join('\n'),
         );
+        // The wrapper source is fully static: the launcher bin path, the Bun
+        // binary path, and the child entry are passed in through the
+        // environment and read at runtime with process.env, rather than
+        // interpolated into the generated source. This keeps test-controlled
+        // filesystem paths out of the code-construction sink entirely (no
+        // JSON.stringify-into-source, which is not a safe JS escaper for values
+        // like U+2028/U+2029).
         await writeFile(
           launcherWrapper,
           [
             `'use strict';`,
-            `const { runCliBin } = require(${JSON.stringify(binPath)});`,
+            `const binPath = process.env.LLXPRT_E2E_BIN_PATH;`,
+            `const bunPath = process.env.LLXPRT_E2E_BUN_PATH;`,
+            `const childEntry = process.env.LLXPRT_E2E_CHILD_ENTRY;`,
+            `const { runCliBin } = require(binPath);`,
             `runCliBin({`,
-            `  resolveBun: () => ${JSON.stringify(bunPath)},`,
-            `  resolveEntry: () => ${JSON.stringify(childEntry)},`,
+            `  resolveBun: () => bunPath,`,
+            `  resolveEntry: () => childEntry,`,
             `  exit: (code) => process.exit(code ?? 0),`,
             `}).catch((error) => {`,
             `  process.stderr.write(String(error instanceof Error ? error.stack : error));`,
@@ -226,6 +236,11 @@ describe('cli bin end-to-end credential routing', () => {
         );
 
         const childEnv = { ...process.env };
+        // Hand the launcher wrapper its filesystem paths through the
+        // environment so the generated source above stays static.
+        childEnv['LLXPRT_E2E_BIN_PATH'] = binPath;
+        childEnv['LLXPRT_E2E_BUN_PATH'] = bunPath;
+        childEnv['LLXPRT_E2E_CHILD_ENTRY'] = childEntry;
         // Ensure a clean relaunch state so the launcher exercises its full
         // proxy-routing path regardless of env leakage from other tests in the
         // same worker.
