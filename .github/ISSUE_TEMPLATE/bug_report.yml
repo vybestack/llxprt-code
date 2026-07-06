@@ -1,6 +1,5 @@
 name: Bug Report
 description: Report a bug to help us improve LLxprt Code
-labels: ['kind/bug', 'status/need-triage']
 body:
   - type: markdown
     attributes:
