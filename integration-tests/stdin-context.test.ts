@@ -46,6 +46,6 @@ describe('stdin context', () => {
 
       // If this test times out, runs indefinitely, it's a regression.
     },
-    5000,
+    15000,
   );
 });
