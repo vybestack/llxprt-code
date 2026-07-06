@@ -132,7 +132,18 @@ export interface InteractiveToolScheduler {
    * Lazily creates the underlying scheduler (ref-counted via the singleton),
    * registers the interactive subagent scheduler factory, flushes any queued
    * pending requests, and returns a detach function that disposes everything.
-   * Safe to call once per capability instance (per React mount).
+   *
+   * Failure contract: scheduler CREATION failures are non-throwing — attach
+   * resolves with a no-op detach, `isReady()` stays false, and all partial
+   * state (subagent factory registration, pending queue) is rolled back
+   * (matching the pre-capability hook behavior of logging and degrading).
+   * Unexpected synchronous failures (e.g. factory registration throwing)
+   * reject after the same rollback.
+   *
+   * Re-entrancy: calling attach again before the prior detach supersedes the
+   * earlier attach — the earlier scheduler ref is released and the earlier
+   * detach becomes a no-op (generation-guarded), so React StrictMode
+   * double-effects cannot dispose a newer scheduler or clear a newer factory.
    */
   attach(
     mainHooks: MainSchedulerDisplayHooks,
@@ -230,36 +241,37 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
     mainHooks: MainSchedulerDisplayHooks,
     subagentHooks: SubagentDisplayHooks,
   ): Promise<DetachScheduler> {
-    // If a scheduler is already attached from a prior attach, detach it first
-    // (React StrictMode double-effect can race a second attach before the first
-    // detach completes). The generation guard below handles in-flight races.
+    // Tag this attach attempt so stale completions/detaches can be detected
+    // after the async gap (React StrictMode double-effect can race a second
+    // attach before the first detach completes).
+    const myGeneration = ++this.attachGeneration;
+
+    // If a scheduler is already installed from a prior attach, tear it down
+    // first — this attach supersedes it.
     if (this.scheduler) {
       this.config.disposeScheduler(this.sessionId);
       this.scheduler = null;
       this.deregisterSubagentFactory();
     }
 
-    // Tag this attach attempt so we can detect staleness after the async gap.
-    const myGeneration = ++this.attachGeneration;
-
-    this.registerSubagentFactory(subagentHooks);
-
     let instance: ToolSchedulerContract | null;
     try {
+      this.registerSubagentFactory(subagentHooks);
       instance = await this.createMainScheduler(mainHooks);
     } catch (error) {
-      // On failure, roll back the factory registration, clear pending requests,
-      // and rethrow so the caller knows attach failed.
+      // Unexpected failure (e.g. factory registration threw). Roll back the
+      // factory registration + pending queue and rethrow so the caller knows.
       this.rollbackAttach(myGeneration);
       throw error;
     }
 
-    // A newer attach or a detach superseded us — self-dispose and bail.
+    // A newer attach or a detach superseded us — release our scheduler ref and
+    // bail. Do NOT touch the subagent factory: the superseding owner (a newer
+    // attach) controls that registration now.
     if (myGeneration !== this.attachGeneration) {
       if (instance) {
         this.config.disposeScheduler(this.sessionId);
       }
-      this.deregisterSubagentFactory();
       return () => {};
     }
 
@@ -274,25 +286,33 @@ class InteractiveToolSchedulerImpl implements InteractiveToolScheduler {
       return () => {};
     }
 
-    if (instance) {
-      this.scheduler = instance;
-      processPendingRequests(instance, this.pendingRequests);
+    if (instance === null) {
+      // Creation failed (already logged by createMainScheduler). Attach stays
+      // non-throwing for creation failures — matching the pre-capability hook
+      // behavior — but rolls back fully so no half-registered state lingers:
+      // the subagent factory is deregistered and pending requests are cleared.
+      this.deregisterSubagentFactory();
       this.pendingRequests.length = 0;
-    } else {
-      // Creation failed (createMainScheduler returned null). Clear pending
-      // requests so they don't fire on a later attach.
-      this.pendingRequests.length = 0;
+      return () => {};
     }
+
+    this.scheduler = instance;
+    processPendingRequests(instance, this.pendingRequests);
+    this.pendingRequests.length = 0;
 
     let detached = false;
     return () => {
       if (detached) return;
       detached = true;
+      // Only tear down when no newer attach has superseded this one —
+      // otherwise the newer attach owns the scheduler/factory and a stale
+      // detach must not dispose them out from under it.
+      if (myGeneration !== this.attachGeneration) return;
       // Advance the generation so any in-flight attach self-disposes.
       this.attachGeneration++;
       this.deregisterSubagentFactory();
       this.pendingRequests.length = 0;
-      if (this.scheduler) {
+      if (this.scheduler === instance) {
         this.config.disposeScheduler(this.sessionId);
         this.scheduler = null;
       }

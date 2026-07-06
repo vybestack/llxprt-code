@@ -535,4 +535,90 @@ describe('createInteractiveToolScheduler', () => {
     detach1();
     detach2();
   });
+
+  it('a stale detach after a newer attach does not dispose the newer scheduler or clear its factory', async () => {
+    const scheduler1 = buildMockScheduler();
+    const config = buildMockConfig(scheduler1, { hasSubagentFactory: true });
+    const capability = createInteractiveToolScheduler(config, undefined);
+
+    const detach1 = await capability.attach(
+      buildMainHooks(),
+      buildSubagentHooks(),
+    );
+
+    const scheduler2 = buildMockScheduler();
+    config.getOrCreateSchedulerMock.mockResolvedValue(scheduler2);
+    const detach2 = await capability.attach(
+      buildMainHooks(),
+      buildSubagentHooks(),
+    );
+
+    // The double-attach itself disposed scheduler1 once. Record the counts,
+    // then run the STALE detach1 — it must be a generation-guarded no-op.
+    const disposesBefore = config.disposeSchedulerMock.mock.calls.length;
+    const factoryCallsBefore = config.setFactoryCalls.length;
+    detach1();
+
+    expect(config.disposeSchedulerMock.mock.calls.length).toBe(disposesBefore);
+    expect(config.setFactoryCalls.length).toBe(factoryCallsBefore);
+    expect(capability.isReady()).toBe(true);
+
+    // Scheduling still reaches the second scheduler.
+    await capability.schedule(
+      buildRequest({ callId: 'after-stale-detach' }),
+      new AbortController().signal,
+    );
+    expect(scheduler2.scheduleMock).toHaveBeenCalledTimes(1);
+
+    detach2();
+    expect(capability.isReady()).toBe(false);
+  });
+
+  it('a superseded in-flight attach does not deregister the newer attach factory', async () => {
+    const scheduler1 = buildMockScheduler();
+    const config = buildMockConfig(scheduler1, { hasSubagentFactory: true });
+    let resolveFirst: (s: ToolSchedulerContract) => void = () => {};
+    config.getOrCreateSchedulerMock.mockImplementationOnce(
+      () =>
+        new Promise<ToolSchedulerContract>((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    const capability = createInteractiveToolScheduler(config, undefined);
+
+    // First attach hangs in scheduler creation.
+    const firstAttachP = capability.attach(
+      buildMainHooks(),
+      buildSubagentHooks(),
+    );
+
+    // Second attach supersedes it and completes.
+    const scheduler2 = buildMockScheduler();
+    config.getOrCreateSchedulerMock.mockResolvedValue(scheduler2);
+    const detach2 = await capability.attach(
+      buildMainHooks(),
+      buildSubagentHooks(),
+    );
+    expect(capability.isReady()).toBe(true);
+
+    // Now the FIRST attach's creation resolves late (stale generation). It
+    // must release its scheduler ref but must NOT deregister the factory the
+    // second attach installed.
+    const factoryCallsBefore = config.setFactoryCalls.length;
+    resolveFirst(scheduler1);
+    const staleDetach = await firstAttachP;
+
+    expect(config.setFactoryCalls.length).toBe(factoryCallsBefore);
+    expect(capability.isReady()).toBe(true);
+    // The stale attach released its own scheduler ref exactly once.
+    expect(config.disposeSchedulerMock).toHaveBeenCalledWith(
+      config.getSessionId(),
+    );
+
+    staleDetach();
+    expect(capability.isReady()).toBe(true);
+
+    detach2();
+    expect(capability.isReady()).toBe(false);
+  });
 });
