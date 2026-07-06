@@ -5,17 +5,26 @@
  */
 
 import { useCallback } from 'react';
-import {
-  getErrorMessage,
-  type Config,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import { getErrorMessage, debugLogger } from '@vybestack/llxprt-code-core';
 import { type HistoryItem, MessageType } from '../../../types.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import { loadHierarchicalLlxprtMemory } from '../../../../config/environmentLoader.js';
+import type {
+  AppStateRuntime,
+  ExtensionRuntime,
+  FileWorkspaceState,
+  MemoryState,
+  SessionIdentity,
+} from '../../../cliUiRuntime.js';
+
+type MemoryRefreshRuntime = MemoryState &
+  AppStateRuntime &
+  FileWorkspaceState &
+  ExtensionRuntime &
+  SessionIdentity;
 
 interface UseMemoryRefreshActionParams {
-  config: Config;
+  config: MemoryRefreshRuntime;
   settings: LoadedSettings;
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => number;
   setLlxprtMdFileCount: (fileCount: number) => void;

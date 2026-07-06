@@ -4,10 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 
-function getConfiguredContextLimit(config: Config): number | undefined {
+export interface ContextLimitConfig {
+  getEphemeralSetting(key: string): unknown;
+  getContentGeneratorConfig():
+    | {
+        providerManager?: {
+          getActiveProvider?: () =>
+            | {
+                getContextLimit?: () => number | undefined;
+              }
+            | undefined;
+        };
+      }
+    | undefined;
+}
+
+function getConfiguredContextLimit(
+  config: ContextLimitConfig,
+): number | undefined {
   const rawContextLimit = config.getEphemeralSetting('context-limit');
   return typeof rawContextLimit === 'number' &&
     Number.isFinite(rawContextLimit) &&
@@ -22,10 +38,13 @@ function getConfiguredContextLimit(config: Config): number | undefined {
  * limit). Returns undefined for providers that do not implement the method or
  * when no provider is active, so callers fall back to the model-name lookup.
  */
-function getProviderContextLimit(config: Config): number | undefined {
+function getProviderContextLimit(
+  config: ContextLimitConfig,
+): number | undefined {
   try {
     const providerManager = config.getContentGeneratorConfig()?.providerManager;
-    const limit = providerManager?.getActiveProvider()?.getContextLimit?.();
+    const activeProvider = providerManager?.getActiveProvider?.();
+    const limit = activeProvider?.getContextLimit?.();
     return typeof limit === 'number' && Number.isFinite(limit) && limit > 0
       ? limit
       : undefined;
@@ -42,7 +61,7 @@ function getProviderContextLimit(config: Config): number | undefined {
  */
 export function getTokenLimitForConfiguredContext(
   model: string,
-  config: Config,
+  config: ContextLimitConfig,
 ): number {
   const contextLimit =
     getConfiguredContextLimit(config) ?? getProviderContextLimit(config);

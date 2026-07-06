@@ -11,7 +11,6 @@ import type {
   ConfirmationRequest,
 } from '../types.js';
 import type {
-  Config,
   GitService,
   Logger,
   RecordingIntegration,
@@ -28,6 +27,7 @@ import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
 import type {
@@ -51,11 +51,11 @@ export interface CommandContext {
   // Core services and configuration
   services: {
     // Follow-up (#1569, abhipatel12): Ensure that config is never null.
-    config: Config | null;
+    config: CliUiRuntime | null;
     /**
-     * The rich Agent facade adopted from the CLI Config via fromConfig().
+     * The rich Agent facade adopted from the CLI runtime via fromConfig().
      * Provides auth, mcp, tools, hooks, policy, tasks, session, profiles
-     * sub-surfaces so commands avoid deep Config/core access.
+     * sub-surfaces so commands avoid deep runtime/core access.
      * Null until bootstrap constructs it (or in non-interactive/test paths).
      */
     agent: Agent | null;

@@ -165,6 +165,12 @@ describe('McpPromptLoader', () => {
           'test-server': { httpUrl: 'https://test-server.com' },
         }),
       }),
+      getPromptRegistry: () => ({
+        getPromptsByServer: (serverName: string) =>
+          serverName === 'test-server'
+            ? cliCore.getMCPServerPrompts(mockConfigWithPrompts, serverName)
+            : [],
+      }),
     } as unknown as Config;
 
     it('should load prompts as slash commands', async () => {

@@ -25,8 +25,13 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import type { ToolConfirmationRequest } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+} from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 /**
  * @requirement REQ-LOOP-001
@@ -102,13 +107,28 @@ export interface DisplayCallbacks {
   onEditorClose?: () => void;
 }
 
+export interface AgenticLoopRuntime {
+  getSessionId(): string;
+  getModel(): string;
+  disposeScheduler(sessionId: string): void;
+  getOrCreateScheduler(
+    sessionId: string,
+    callbacks: SchedulerCallbacks,
+    options?: SchedulerOptions,
+    dependencies?: {
+      messageBus?: MessageBus;
+      toolRegistry?: ToolRegistry;
+    },
+  ): Promise<ToolSchedulerContract>;
+}
+
 /**
  * @requirement REQ-LOOP-002
  * Construction options for {@link AgenticLoop}.
  *
  * Three injection points:
- *  - **Policy**: `config` carries the `PolicyEngine`/`ApprovalMode`. Pure
- *    engine logic — never touches UI.
+ *  - **Runtime**: `config` carries scheduler/session/model access. Pure engine
+ *    logic — never touches UI.
  *  - **Approval**: the optional `approvalHandler`, invoked only on `ASK_USER`.
  *  - **Display**: the optional {@link DisplayCallbacks}, forwarded to the
  *    scheduler so an embedding UI (e.g. the CLI) can observe tool/output
@@ -118,8 +138,8 @@ export interface DisplayCallbacks {
 export interface AgenticLoopOptions {
   /** Single-turn turn primitive (`sendMessageStream`) and history sink. */
   agentClient: AgentClientContract;
-  /** Carries policy, scheduler singleton, tool registry, session id, interactivity. */
-  config: Config;
+  /** Carries scheduler singleton, session id, and current model identity. */
+  config: AgenticLoopRuntime;
   /** Confirmation bus the scheduler's ConfirmationCoordinator publishes to. */
   messageBus: MessageBus;
   /** Optional handler resolving ASK_USER confirmations. See {@link ApprovalHandler}. */

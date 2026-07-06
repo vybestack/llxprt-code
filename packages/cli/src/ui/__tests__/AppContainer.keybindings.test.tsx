@@ -22,6 +22,11 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { Command } from '../keyMatchers.js';
 import { defaultKeyBindings } from '../../config/keyBindings.js';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
+import {
+  buildSlashCommandRuntime,
+  buildUiRuntimeFromSource,
+  type UiRuntimeBareSource,
+} from '../cliUiRuntime.js';
 
 // Mock config type
 interface MockConfig {
@@ -508,7 +513,12 @@ describe('AppContainer.keybindings', () => {
   describe('keybinding behavior', () => {
     it('should mount component with keybinding handlers active', () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: buildSlashCommandRuntime(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -526,7 +536,12 @@ describe('AppContainer.keybindings', () => {
 
     it('should have copy mode toggle available when using alternate buffer', () => {
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: buildSlashCommandRuntime(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
@@ -549,7 +564,12 @@ describe('AppContainer.keybindings', () => {
       });
 
       const props = {
-        config: mockConfig as unknown as Config,
+        uiRuntime: buildUiRuntimeFromSource(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
+        slashCommandRuntime: buildSlashCommandRuntime(
+          mockConfig as unknown as UiRuntimeBareSource,
+        ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',

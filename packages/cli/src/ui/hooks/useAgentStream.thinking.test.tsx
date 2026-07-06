@@ -22,6 +22,7 @@ import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
 import { useAgentStream } from './agentStream/index.js';
+import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
@@ -319,7 +320,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         client: unknown;
         history: unknown[];
         addItem: UseHistoryManagerReturn['addItem'];
-        config: Config;
+        runtime: ReturnType<typeof createStreamRuntimeForTest>;
         onDebugMessage: (message: string) => void;
         handleSlashCommand: (cmd: unknown) => Promise<unknown>;
         shellModeActive: boolean;
@@ -333,7 +334,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           props.client,
           props.history,
           props.addItem,
-          props.config,
+          props.runtime,
           mockSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -352,7 +353,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           client,
           history: [],
           addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-          config: mockConfig,
+          runtime: createStreamRuntimeForTest(mockConfig),
           onDebugMessage: mockOnDebugMessage,
           handleSlashCommand: mockHandleSlashCommand as unknown as (
             cmd: unknown,
@@ -661,7 +662,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
-        mockConfig,
+        createStreamRuntimeForTest(mockConfig),
         settingsWithReasoning,
         mockOnDebugMessage,
         mockHandleSlashCommand,

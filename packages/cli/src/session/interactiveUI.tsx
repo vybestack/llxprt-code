@@ -28,6 +28,10 @@ import { registerCleanup, registerSyncCleanup } from '../utils/cleanup.js';
 import { appendInteractiveUiDebug } from './debugLog.js';
 import { mouseEventsExitHandler } from './terminalCleanup.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import {
+  buildUiRuntimeFromSource,
+  buildSlashCommandRuntime,
+} from '../ui/cliUiRuntime.js';
 
 /**
  * Module-level reference to the latest rendered Ink instance.
@@ -127,8 +131,6 @@ export function setWindowTitle(title: string, settings: LoadedSettings) {
  * @pseudocode recording-integration.md lines 115-132
  */
 export async function startInteractiveUI(
-  // `config` remains a temporary migration bridge alongside the Agent until the
-  // remaining UI Config consumers are migrated (see #1595).
   config: Config,
   agent: Agent,
   settings: LoadedSettings,
@@ -148,6 +150,8 @@ export async function startInteractiveUI(
   setWindowTitle(basename(workspaceRoot), settings);
 
   const renderOptions = inkRenderOptions(config, settings);
+  const uiRuntime = buildUiRuntimeFromSource(config);
+  const slashCommandRuntime = buildSlashCommandRuntime(config);
   appendInteractiveUiDebug(
     `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
   );
@@ -184,13 +188,14 @@ export async function startInteractiveUI(
         <ErrorBoundary onError={handleError}>
           <SettingsContext.Provider value={settings}>
             <AppWrapper
-              config={config}
+              uiRuntime={uiRuntime}
+              slashCommandRuntime={slashCommandRuntime}
               agent={agent}
               settings={settings}
               runtimeMessageBus={runtimeMessageBus}
               startupWarnings={startupWarnings}
               version={version}
-              terminalBackgroundColor={config.getTerminalBackground()}
+              terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
               recordingIntegration={recordingIntegration}
               resumedHistory={resumedHistory}
               initialRecordingService={initialRecordingService}
@@ -225,21 +230,24 @@ export async function startInteractiveUI(
     registerSyncCleanup(restoreTerminalProtocolsSync);
   }
 
-  setupInstanceLifecycle(instance, settings, config);
+  setupInstanceLifecycle(instance, settings, {
+    projectRoot: config.getProjectRoot(),
+    debugMode: config.getDebugMode(),
+  });
 }
 
 function setupInstanceLifecycle(
   instance: ReturnType<typeof render>,
   settings: LoadedSettings,
-  config: Config,
+  runtimeScalars: { projectRoot: string; debugMode: boolean },
 ): void {
   checkForUpdates(settings)
     .then((info) => {
-      handleAutoUpdate(info, settings, config.getProjectRoot());
+      handleAutoUpdate(info, settings, runtimeScalars.projectRoot);
     })
     .catch((err: unknown) => {
       // Silently ignore update check errors.
-      if (config.getDebugMode()) {
+      if (runtimeScalars.debugMode) {
         debugLogger.error('Update check failed:', err);
       }
     });

@@ -61,10 +61,24 @@ export async function createCodeAssistContentGenerator(
   }
 }
 
+export interface CodeAssistServerSource {
+  getAgentClient():
+    | {
+        getContentGenerator(): ContentGenerator;
+      }
+    | null
+    | undefined;
+}
+
 export function getCodeAssistServer(
-  config: Config,
+  config: CodeAssistServerSource,
 ): CodeAssistServer | undefined {
-  const server = config.getAgentClient().getContentGenerator();
+  const agentClient = config.getAgentClient();
+  if (!agentClient) {
+    return undefined;
+  }
+
+  const server = agentClient.getContentGenerator();
 
   if (!(server instanceof CodeAssistServer)) {
     return undefined;

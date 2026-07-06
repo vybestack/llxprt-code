@@ -11,7 +11,6 @@ import {
 } from '../types.js';
 import { useCallback, useState } from 'react';
 import {
-  type Config,
   isBinary,
   type ShellExecutionResult,
   ShellExecutionService,
@@ -29,6 +28,13 @@ import crypto from 'crypto';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import type { ShellState, SessionIdentity } from '../cliUiRuntime.js';
+
+/**
+ * Focused runtime for shell command execution: shell capabilities (PTY,
+ * terminal sizing, execution config) plus session directory resolution.
+ */
+type ShellCommandRuntime = ShellState & SessionIdentity;
 
 // Throttle interval for PTY output updates to avoid excessive re-renders.
 // Using 100ms provides smooth visual updates without overwhelming React.
@@ -42,7 +48,7 @@ interface ShellExecutionParams {
   initialToolDisplay: IndividualToolCallDisplay;
   userMessageTimestamp: number;
   pwdFilePath: string | undefined;
-  config: Config;
+  config: ShellCommandRuntime;
   agent: Agent | undefined;
   rawQuery: string;
   abortSignal: AbortSignal;
@@ -179,7 +185,7 @@ function applyResultDisplayUpdate(
 
 function processShellEvent(
   event: ShellOutputEvent,
-  config: Config,
+  config: ShellCommandRuntime,
   state: {
     isBinaryStream: boolean;
     binaryBytesReceived: number;
@@ -220,7 +226,7 @@ function processShellEvent(
 
 function createShellEventHandler(
   callId: string,
-  config: Config,
+  config: ShellCommandRuntime,
   pendingHistoryItemRef:
     | React.MutableRefObject<HistoryItemWithoutId | null>
     | undefined,
@@ -587,7 +593,7 @@ export const useShellCommandProcessor = (
   >,
   onExec: (command: Promise<void>) => void | Promise<void>,
   onDebugMessage: (message: string) => void,
-  config: Config,
+  config: ShellCommandRuntime,
   agent: Agent | undefined,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,

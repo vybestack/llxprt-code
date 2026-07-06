@@ -18,8 +18,9 @@ import {
   usePromptCompletion,
   PROMPT_COMPLETION_MIN_LENGTH,
 } from './usePromptCompletion.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import { useCompletion } from './useCompletion.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export enum CompletionMode {
   IDLE = 'IDLE',
@@ -89,7 +90,7 @@ function analyzeCompletionMode(
   cursorCol: number,
   bufferLines: string[],
   bufferText: string,
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
 ): CompletionAnalysis {
   const currentLine = bufferLines[cursorRow] || '';
   const codePoints = toCodePoints(currentLine);
@@ -334,7 +335,7 @@ export function useCommandCompletion(
   commandContext: CommandContext,
   reverseSearchActive: boolean = false,
   shellModeActive: boolean,
-  config?: Config,
+  config?: CliUiRuntime,
 ): UseCommandCompletionReturn {
   const dirs = useMemo(
     () => config?.getWorkspaceContext().getDirectories() ?? [cwd],

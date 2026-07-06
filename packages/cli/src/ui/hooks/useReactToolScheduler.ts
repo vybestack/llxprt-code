@@ -5,7 +5,6 @@
  */
 
 import {
-  type Config,
   type ToolCallRequestInfo,
   type ExecutingToolCall,
   type ScheduledToolCall,
@@ -22,6 +21,7 @@ import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
+import type { StreamRuntime } from '../cliUiRuntime.js';
 // @plan:ISSUE-2376 — scheduler construction lives in the runtime layer, out of
 // cli/src/ui. This hook is a pure renderer that consumes the narrow handle and
 // registers its React display callbacks via SchedulerRefs.
@@ -33,6 +33,15 @@ import {
   useScheduler,
   useExternalSchedulerRegistration,
 } from '../../runtime/interactiveToolScheduler.js';
+
+/**
+ * The scheduler + session slice of the #2384 CliUiRuntime this hook needs.
+ * Scheduler construction itself lives in the runtime layer
+ * (interactiveToolScheduler.ts); this hook only forwards the runtime access.
+ *
+ * @plan:ISSUE-2376
+ */
+type ReactToolSchedulerRuntime = Pick<StreamRuntime, 'scheduler' | 'session'>;
 
 export type ScheduleFn = (
   request: ToolCallRequestInfo | ToolCallRequestInfo[],
@@ -464,7 +473,7 @@ export function useReactToolScheduler(
     tools: CompletedToolCall[],
     options: { isPrimary: boolean },
   ) => Promise<void> | void,
-  config: Config,
+  runtime: ReactToolSchedulerRuntime,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
@@ -480,7 +489,7 @@ export function useReactToolScheduler(
   const [externalSchedulerRegistered, setExternalSchedulerRegistered] =
     useState(false);
   const mainSchedulerId = useState(() => Symbol('main-scheduler'))[0];
-  const sessionId = useMemo(() => config.getSessionId(), [config]);
+  const sessionId = useMemo(() => runtime.session.getSessionId(), [runtime]);
   const pendingScheduleRequests = useRef<PendingScheduleRequests>([]);
 
   const syncedRefs = useRefState(
@@ -499,7 +508,7 @@ export function useReactToolScheduler(
   });
 
   const scheduler = useScheduler(
-    config,
+    runtime,
     sessionId,
     mainSchedulerId,
     refs,
@@ -508,7 +517,7 @@ export function useReactToolScheduler(
   );
 
   useExternalSchedulerRegistration(
-    config,
+    runtime,
     refs,
     runtimeMessageBus,
     setExternalSchedulerRegistered,

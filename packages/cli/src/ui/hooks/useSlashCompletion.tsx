@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
@@ -19,6 +19,7 @@ import {
   type StateRefs,
   type AllSetters,
 } from './slashCompletionEffect.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export interface UseSlashCompletionReturn {
   suggestions: Suggestion[];
@@ -39,7 +40,7 @@ export interface UseSlashCompletionReturn {
   leafCommand: SlashCommand | null;
 }
 
-type RuntimeExtensionConfig = Partial<Pick<Config, 'isExtensionEnabled'>>;
+type RuntimeExtensionConfig = Partial<Pick<CliUiRuntime, 'isExtensionEnabled'>>;
 type RuntimeCommandContext = Omit<CommandContext, 'services'> & {
   services?: { config?: RuntimeExtensionConfig | null };
 };
@@ -138,7 +139,7 @@ function useSetupEffect(
   buf: TextBuffer,
   cmds: readonly SlashCommand[],
   ctx: CommandContext,
-  cfg: Config | undefined,
+  cfg: CliUiRuntime | undefined,
   dirs: readonly string[],
   cwd: string,
   reverseSearchActive: boolean,
@@ -192,7 +193,7 @@ function useSlashCompletionSetup(
   buffer: TextBuffer,
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
   dirs: readonly string[],
   cwd: string,
   reverseSearchActive: boolean,
@@ -352,7 +353,7 @@ export function useSlashCompletion(
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
   reverseSearchActive: boolean = false,
-  config?: Config,
+  config?: CliUiRuntime,
 ): UseSlashCompletionReturn {
   const {
     suggestions,

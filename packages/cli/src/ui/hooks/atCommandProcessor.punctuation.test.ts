@@ -6,8 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
-import type { Config } from '@vybestack/llxprt-code-core';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import * as path from 'path';
 import {
   createTestFile,
@@ -19,7 +19,7 @@ import {
 describe('handleAtCommand (punctuation)', () => {
   let setup: AtCommandTestSetup;
   let testRootDir: string;
-  let mockConfig: Config;
+  let mockConfig: CliUiRuntime;
   let mockAddItem: ReturnType<typeof vi.fn>;
   let mockOnDebugMessage: ReturnType<typeof vi.fn>;
   let abortController: AbortController;

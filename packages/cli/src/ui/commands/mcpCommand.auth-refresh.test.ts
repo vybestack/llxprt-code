@@ -330,6 +330,61 @@ describe('mcpCommand', () => {
       expect(result.content).toContain('server boom');
     });
 
+    it('should return an error when MCP tool discovery fails', async () => {
+      // agent.mcp.refresh() re-runs discovery/restart; a failing server rejects.
+      const refresh = vi
+        .fn()
+        .mockRejectedValue(new Error('connection refused'));
+      const context = createMockCommandContext({
+        services: {
+          config: {
+            getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
+            getBlockedMcpServers: vi.fn().mockReturnValue([]),
+          },
+          agent: createMockAgent(refresh),
+        },
+      });
+      context.ui.reloadCommands = vi.fn();
+
+      const refreshCommand = mcpCommand.subCommands?.find(
+        (cmd) => cmd.name === 'refresh',
+      );
+      const result = await refreshCommand!.action!(context, '');
+
+      assertMessageAction(result);
+      expect(result.messageType).toBe('error');
+      expect(result.content).toContain('Failed to restart MCP servers');
+      expect(result.content).toContain('connection refused');
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(context.ui.reloadCommands).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a non-Error rejection from agent.mcp.refresh() as a string', async () => {
+      // The catch block stringifies non-Error rejections; verify that path.
+      const refresh = vi.fn().mockRejectedValue('transport closed');
+      const context = createMockCommandContext({
+        services: {
+          config: {
+            getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
+            getBlockedMcpServers: vi.fn().mockReturnValue([]),
+          },
+          agent: createMockAgent(refresh),
+        },
+      });
+      context.ui.reloadCommands = vi.fn();
+
+      const refreshCommand = mcpCommand.subCommands?.find(
+        (cmd) => cmd.name === 'refresh',
+      );
+      const result = await refreshCommand!.action!(context, '');
+
+      assertMessageAction(result);
+      expect(result.messageType).toBe('error');
+      expect(result.content).toContain('Failed to restart MCP servers');
+      expect(result.content).toContain('transport closed');
+      expect(context.ui.reloadCommands).not.toHaveBeenCalled();
+    });
+
     it('should show an error if config is not available', async () => {
       const contextWithoutConfig = createMockCommandContext({
         services: {
@@ -345,7 +400,7 @@ describe('mcpCommand', () => {
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Config not loaded.',
+        content: 'Configuration not loaded.',
       });
     });
 

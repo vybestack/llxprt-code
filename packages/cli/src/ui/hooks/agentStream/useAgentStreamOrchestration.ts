@@ -6,7 +6,6 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import {
-  type Config,
   type EditorType,
   type AnsiOutput,
   type MessageBus,
@@ -35,11 +34,12 @@ import {
   useStreamingState,
   useToolSchedulerSetup,
 } from './useAgentStreamLifecycle.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export interface AgentStreamOrchestrationDeps {
   agent: Agent;
   addItem: UseHistoryManagerReturn['addItem'];
-  config: Config;
+  runtime: StreamRuntime;
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
   handleSlashCommand: (
@@ -89,7 +89,7 @@ interface ToolSchedulerState {
 export function useAgentStreamOrchestration(
   args: AgentStreamOrchestrationDeps,
 ): AgentStreamOrchestrationResult {
-  const st = useStreamState(args.addItem, args.config);
+  const st = useStreamState(args.addItem, args.runtime);
   const loopDetectedRef = useRef(false);
   const scheduler = useToolSchedulerState(args, st);
   const pendingToolCallGroupDisplay = usePendingToolGroupDisplay(
@@ -109,9 +109,9 @@ export function useAgentStreamOrchestration(
   // owner of running tasks, so cancelling all of them is the only mechanism
   // that reliably stops detached subagents regardless of launch turn.
   const cancelRunningAsyncTasks = useCallback(() => {
-    const mgr = args.config.getAsyncTaskManager();
+    const mgr = args.runtime.asyncTasks.getAsyncTaskManager();
     mgr?.getRunningTasks().forEach((t) => mgr.cancelTask(t.id));
-  }, [args.config]);
+  }, [args.runtime]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
@@ -178,7 +178,7 @@ function useToolSchedulerState(
   st: ReturnType<typeof useStreamState>,
 ): ToolSchedulerState {
   const scheduler = useToolSchedulerSetup(
-    args.config,
+    args.runtime,
     st.setPendingHistoryItem,
     args.getPreferredEditor,
     args.onEditorClose,
@@ -219,7 +219,7 @@ function useShell(
     setPendingHistoryItem: st.setPendingHistoryItem,
     setIsResponding: st.setIsResponding,
     onDebugMessage: args.onDebugMessage,
-    config: args.config,
+    runtime: args.runtime,
     agent: args.agent,
     setShellInputFocused: args.setShellInputFocused,
     terminalWidth: args.terminalWidth,
@@ -327,7 +327,7 @@ function buildSubmitQueryDeps({
   runStreamRef,
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
   return {
-    config: args.config,
+    runtime: args.runtime,
     agent: args.agent,
     addItem: args.addItem,
     settings: args.settings,

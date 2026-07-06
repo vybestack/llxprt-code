@@ -30,19 +30,32 @@ vi.mock('../../../utils/iContentToHistoryItems.js', () => ({
 }));
 
 interface ConfigStub {
-  getLlxprtMdFileCount: ReturnType<typeof vi.fn>;
-  getCoreMemoryFileCount: ReturnType<typeof vi.fn>;
-  getAgentClient: ReturnType<typeof vi.fn>;
+  hooks: Record<string, unknown>;
+  memory: {
+    getLlxprtMdFileCount: ReturnType<typeof vi.fn>;
+    getCoreMemoryFileCount: ReturnType<typeof vi.fn>;
+  };
+  agentClientSource: {
+    getAgentClient: ReturnType<typeof vi.fn>;
+  };
 }
 
 const makeConfig = (
   llxprtMdFileCount = 0,
   coreMemoryFileCount = 0,
-): ConfigStub => ({
-  getLlxprtMdFileCount: vi.fn().mockReturnValue(llxprtMdFileCount),
-  getCoreMemoryFileCount: vi.fn().mockReturnValue(coreMemoryFileCount),
-  getAgentClient: vi.fn().mockReturnValue(null),
-});
+): ConfigStub => {
+  const hooks = {};
+  return {
+    hooks,
+    memory: {
+      getLlxprtMdFileCount: vi.fn().mockReturnValue(llxprtMdFileCount),
+      getCoreMemoryFileCount: vi.fn().mockReturnValue(coreMemoryFileCount),
+    },
+    agentClientSource: {
+      getAgentClient: vi.fn().mockReturnValue(null),
+    },
+  };
+};
 
 describe('useSessionInitialization', () => {
   beforeEach(() => {
@@ -60,7 +73,7 @@ describe('useSessionInitialization', () => {
 
     const { result } = renderHook(() =>
       useSessionInitialization({
-        config: config as never,
+        uiRuntime: config as never,
         addItem,
         loadHistory,
       }),
@@ -87,7 +100,7 @@ describe('useSessionInitialization', () => {
 
     renderHook(() =>
       useSessionInitialization({
-        config: config as never,
+        uiRuntime: config as never,
         addItem,
         loadHistory,
         resumedHistory,
@@ -108,7 +121,7 @@ describe('useSessionInitialization', () => {
 
     renderHook(() =>
       useSessionInitialization({
-        config: config as never,
+        uiRuntime: config as never,
         addItem,
         loadHistory,
         resumedHistory: [],
@@ -132,7 +145,7 @@ describe('useSessionInitialization', () => {
 
     renderHook(() =>
       useSessionInitialization({
-        config: config as never,
+        uiRuntime: config as never,
         addItem,
         loadHistory,
       }),
@@ -143,7 +156,7 @@ describe('useSessionInitialization', () => {
     });
 
     expect(triggerSessionStartHook).toHaveBeenCalledWith(
-      config,
+      config.hooks,
       SessionStartSource.Startup,
     );
   });
@@ -155,7 +168,7 @@ describe('useSessionInitialization', () => {
 
     const { unmount } = renderHook(() =>
       useSessionInitialization({
-        config: config as never,
+        uiRuntime: config as never,
         addItem,
         loadHistory,
       }),
@@ -188,7 +201,7 @@ describe('useSessionInitialization', () => {
 
     const { rerender } = renderHook(() =>
       useSessionInitialization({
-        config: config as never,
+        uiRuntime: config as never,
         addItem,
         loadHistory,
         resumedHistory,

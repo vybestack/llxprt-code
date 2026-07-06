@@ -5,11 +5,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  type Config,
-  DebugLogger,
-  ExitCodes,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger, ExitCodes } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings, Settings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
@@ -94,28 +90,26 @@ function showStartupMessage(
 
 export const useFolderTrust = (
   settings: LoadedSettings,
-  config: Config,
   addItem?: AddItemFn,
 ) => {
-  const [isTrusted, setIsTrusted] = useState<boolean | undefined>(
-    config.isTrustedFolder(),
-  );
+  // Folder trust feature flag removed - now using settings directly
+  const { folderTrust } = settings.merged;
+  const initialTrust = isWorkspaceTrusted({ folderTrust } as Settings);
+  const [isTrusted, setIsTrusted] = useState<boolean | undefined>(initialTrust);
   const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
-    (config.isTrustedFolder() as boolean | undefined) === undefined,
+    initialTrust === undefined,
   );
   const [isRestarting, setIsRestarting] = useState(false);
   const startupMessageSent = useRef(false);
-
-  // Folder trust feature flag removed - now using settings directly
-  const { folderTrust } = settings.merged;
+  const previousFolderTrust = useRef(folderTrust);
 
   useEffect(() => {
-    const trusted = isWorkspaceTrusted({
-      folderTrust,
-    } as Settings);
-    setIsTrusted(trusted);
-    if (trusted === undefined) {
-      setIsFolderTrustDialogOpen(true);
+    const folderTrustChanged = previousFolderTrust.current !== folderTrust;
+    previousFolderTrust.current = folderTrust;
+    const trusted = isWorkspaceTrusted({ folderTrust } as Settings);
+    if (folderTrustChanged) {
+      setIsTrusted(trusted);
+      setIsFolderTrustDialogOpen(trusted === undefined);
     }
 
     showStartupMessage(trusted, addItem, startupMessageSent);

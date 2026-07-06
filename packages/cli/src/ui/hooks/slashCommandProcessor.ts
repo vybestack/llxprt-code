@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  Config,
-  RecordingIntegration,
-  Todo,
-} from '@vybestack/llxprt-code-core';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { RecordingIntegration, Todo } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
@@ -71,7 +68,7 @@ interface TodoContextValue {
  * @plan PLAN-20260214-SESSIONBROWSER.P23 - Added recordingSwapCallbacks for /continue command
  */
 export const useSlashCommandProcessor = (
-  config: Config | null,
+  config: CliUiRuntime | null,
   agent: Agent | null,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],

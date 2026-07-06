@@ -7,7 +7,7 @@
 /**
  * @hook useCoreEventHandlers
  * @description Bridge core event system to UI
- * @inputs handleNewMessage, config, recordingIntegrationRef
+ * @inputs handleNewMessage, uiRuntime, recordingIntegrationRef
  * @outputs void
  * @sideEffects Multiple event subscriptions
  * @cleanup Unsubscribes all listeners on unmount
@@ -21,21 +21,21 @@ import {
   CoreEvent,
   type UserFeedbackPayload,
   type RecordingIntegration,
-  type Config,
 } from '@vybestack/llxprt-code-core';
 import { ConsolePatcher } from '../utils/ConsolePatcher.js';
 import { registerCleanup } from '../../utils/cleanup.js';
 import type { ConsoleMessageItem } from '../types.js';
+import type { UiRuntime } from '../cliUiRuntime.js';
 
 interface UseCoreEventHandlersOptions {
   handleNewMessage: (message: ConsoleMessageItem) => void;
-  config: Config;
+  uiRuntime: UiRuntime;
   recordingIntegrationRef: MutableRefObject<RecordingIntegration | null>;
 }
 
 export function useCoreEventHandlers({
   handleNewMessage,
-  config,
+  uiRuntime,
   recordingIntegrationRef,
 }: UseCoreEventHandlersOptions): void {
   // Handle core event system for surfacing internal errors
@@ -73,12 +73,12 @@ export function useCoreEventHandlers({
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({
       onNewMessage: handleNewMessage,
-      debugMode: config.getDebugMode(),
+      debugMode: uiRuntime.app.getDebugMode(),
     });
     consolePatcher.patch();
     // registerCleanup handles process.exit; React return handles unmount.
     // cleanup() is idempotent, so double invocation is safe.
     registerCleanup(consolePatcher.cleanup);
     return () => consolePatcher.cleanup();
-  }, [handleNewMessage, config]);
+  }, [handleNewMessage, uiRuntime]);
 }

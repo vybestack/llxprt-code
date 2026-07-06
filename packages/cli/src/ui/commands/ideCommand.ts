@@ -6,7 +6,6 @@
 
 import * as path from 'node:path';
 import {
-  type Config,
   IDEConnectionStatus,
   IDE_DEFINITIONS,
   getIdeInstaller,
@@ -22,6 +21,7 @@ import {
   CommandKind,
 } from './types.js';
 import { SettingScope } from '../../config/settings.js';
+import type { IdeState } from '../cliUiRuntime.js';
 
 function formatFileList(openFiles: File[]): string {
   const basenameCounts = new Map<string, number>();
@@ -109,7 +109,7 @@ function buildStatusCommand(ideClient: IdeClient): SlashCommand {
 }
 
 async function pollForConnection(
-  config: Config,
+  config: IdeState,
   ideClient: IdeClient,
 ): Promise<void> {
   for (let i = 0; i < 10; i++) {
@@ -125,7 +125,7 @@ async function pollForConnection(
 }
 
 function buildInstallCommand(
-  config: Config,
+  config: IdeState,
   ideClient: IdeClient,
   currentIDE: NonNullable<ReturnType<IdeClient['getCurrentIde']>>,
 ): SlashCommand {
@@ -195,7 +195,7 @@ function buildInstallCommand(
   };
 }
 
-function buildEnableCommand(config: Config): SlashCommand {
+function buildEnableCommand(config: IdeState): SlashCommand {
   return {
     name: 'enable',
     description: 'enable IDE integration',
@@ -209,7 +209,7 @@ function buildEnableCommand(config: Config): SlashCommand {
   };
 }
 
-function buildDisableCommand(config: Config): SlashCommand {
+function buildDisableCommand(config: IdeState): SlashCommand {
   return {
     name: 'disable',
     description: 'disable IDE integration',
@@ -227,7 +227,7 @@ function buildDisableCommand(config: Config): SlashCommand {
   };
 }
 
-export const ideCommand = (config: Config | null): SlashCommand | null => {
+export const ideCommand = (config: IdeState | null): SlashCommand | null => {
   if (!config) {
     return null;
   }

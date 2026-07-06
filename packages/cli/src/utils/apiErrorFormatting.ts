@@ -4,10 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+export interface ApiErrorRuntimeInfo {
+  getProviderManager?():
+    | { getActiveProviderName?(): string | undefined }
+    | undefined;
+  getProvider?(): string | undefined;
+  getSettingsService?(): { get(key: string): unknown };
+  getModel?(): string;
+}
 
 export function getActiveProviderNameForApiError(
-  config: Config,
+  config: ApiErrorRuntimeInfo,
 ): string | undefined {
   const activeProvider = getActiveProviderNameFromProviderManager(config);
   if (activeProvider !== undefined) {
@@ -23,7 +30,7 @@ export function getActiveProviderNameForApiError(
 }
 
 export function getErrorFallbackModel(
-  config: Config,
+  config: ApiErrorRuntimeInfo,
   providerName: string | undefined,
 ): string | undefined {
   const trimmedProviderName = providerName?.trim().toLowerCase();
@@ -37,36 +44,40 @@ export function getErrorFallbackModel(
   }
 
   try {
-    return config.getModel();
+    return config.getModel?.();
   } catch {
     return undefined;
   }
 }
 
 function getActiveProviderNameFromProviderManager(
-  config: Config,
+  config: ApiErrorRuntimeInfo,
 ): string | undefined {
   try {
-    const activeProvider = config.getProviderManager()?.getActiveProviderName();
+    const providerManager = config.getProviderManager?.();
+    const activeProvider = providerManager?.getActiveProviderName?.();
     return normalizeProviderName(activeProvider);
   } catch {
     return undefined;
   }
 }
 
-function getProviderNameFromConfig(config: Config): string | undefined {
+function getProviderNameFromConfig(
+  config: ApiErrorRuntimeInfo,
+): string | undefined {
   try {
-    return normalizeProviderName(config.getProvider());
+    return normalizeProviderName(config.getProvider?.());
   } catch {
     return undefined;
   }
 }
 
-function getActiveProviderNameFromSettings(config: Config): string | undefined {
+function getActiveProviderNameFromSettings(
+  config: ApiErrorRuntimeInfo,
+): string | undefined {
   try {
-    const configuredProvider = config
-      .getSettingsService()
-      .get('activeProvider');
+    const settingsService = config.getSettingsService?.();
+    const configuredProvider = settingsService?.get('activeProvider');
     return normalizeProviderName(configuredProvider);
   } catch {
     return undefined;

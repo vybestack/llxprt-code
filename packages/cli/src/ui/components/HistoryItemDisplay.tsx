@@ -28,19 +28,20 @@ import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import { LBStatsDisplay } from './LBStatsDisplay.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import { Help } from './Help.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import type { SlashCommand } from '../commands/types.js';
 import { ChatList } from './views/ChatList.js';
 import { ExtensionsList } from './views/ExtensionsList.js';
 import { HooksList } from './views/HooksList.js';
 import { SkillsList } from './views/SkillsList.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
   availableTerminalHeight?: number;
   terminalWidth: number;
   isPending: boolean;
-  config: Config;
+  config: CliUiRuntime;
   isFocused?: boolean;
   slashCommands?: readonly SlashCommand[]; // For help display
   showTodoPanel?: boolean;
@@ -213,7 +214,7 @@ function renderToolGroupMessage(
   itemForDisplay: HistoryItem,
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
-  config: Config,
+  config: CliUiRuntime,
   isFocused: boolean,
   showTodoPanel: boolean,
   _activeShellPtyId: number | null | undefined,

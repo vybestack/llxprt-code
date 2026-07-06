@@ -31,11 +31,12 @@ import type {
 } from './inputPromptTypes.js';
 import { logicalPosToOffset } from './shared/buffer-operations.js';
 import type { TextBuffer } from './shared/text-buffer.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import clipboardy from 'clipboardy';
+import type { SessionIdentity } from '../cliUiRuntime.js';
 
 // ---------------------------------------------------------------------------
 // Custom hooks
@@ -153,14 +154,18 @@ const useSubmitHandlers = (
   return { handleSubmitAndClear, handleSubmit };
 };
 
-const useClipboardPasteHandler = (buffer: TextBuffer, config: Config) =>
+const useClipboardPasteHandler = (
+  buffer: TextBuffer,
+  session: SessionIdentity,
+) =>
   useCallback(async () => {
     try {
       if (await clipboardHasImage()) {
-        const imagePath = await saveClipboardImage(config.getTargetDir());
+        const targetDir = session.getTargetDir();
+        const imagePath = await saveClipboardImage(targetDir);
         if (imagePath) {
-          cleanupOldClipboardImages(config.getTargetDir()).catch(() => {});
-          const relativePath = path.relative(config.getTargetDir(), imagePath);
+          cleanupOldClipboardImages(targetDir).catch(() => {});
+          const relativePath = path.relative(targetDir, imagePath);
           insertPathReference(buffer, relativePath);
         }
         return;
@@ -179,7 +184,7 @@ const useClipboardPasteHandler = (buffer: TextBuffer, config: Config) =>
     } catch (error) {
       debugLogger.error('Error handling clipboard paste:', error);
     }
-  }, [buffer, config]);
+  }, [buffer, session]);
 
 type InputPromptState = Pick<
   InputPromptProps,

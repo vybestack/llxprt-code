@@ -6,7 +6,6 @@
 
 import type { PartUnion } from '@google/genai';
 import { unescapePath } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
@@ -17,9 +16,31 @@ import {
   resolveAtPathCommands,
 } from './atCommandProcessorHelpers.js';
 import type {
+  AtCommandHelperRuntime,
   AtCommandPart,
   AtCommandProcessResult,
 } from './atCommandProcessorHelpers.js';
+import type { McpState, StreamRuntime } from '../cliUiRuntime.js';
+
+export type AtCommandRuntime = AtCommandHelperRuntime &
+  Pick<McpState, 'getMcpClientManager' | 'getResourceRegistry'>;
+
+export function buildAtCommandRuntimeFromStream(
+  runtime: StreamRuntime,
+): AtCommandRuntime {
+  return {
+    // @plan:ISSUE-2376 — tool lookup is routed through the Agent surface
+    // (getToolHandle), so the @-command runtime no longer exposes
+    // getToolRegistry; it only carries MCP + file/workspace access.
+    getMcpClientManager: () => runtime.mcp.getMcpClientManager(),
+    getResourceRegistry: () => runtime.mcp.getResourceRegistry(),
+    getFileFilteringOptions: () => runtime.files.getFileFilteringOptions(),
+    getWorkspaceContext: () => runtime.files.getWorkspaceContext(),
+    getFileService: () => runtime.files.getFileService(),
+    getEnableRecursiveFileSearch: () =>
+      runtime.files.getEnableRecursiveFileSearch(),
+  };
+}
 
 // Detect if running in PowerShell to handle @ symbol conflicts
 // PowerShell's IntelliSense treats @ as hashtable start and causes severe lag
@@ -35,7 +56,9 @@ let powershellTipShown = false;
 
 interface HandleAtCommandParams {
   query: string;
-  config: Config;
+  config: AtCommandRuntime;
+  // @plan:ISSUE-2376 — named-tool lookup via the public Agent surface,
+  // replacing direct getToolRegistry().getTool access.
   getToolHandle: (name: string) => AgentToolHandle | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
@@ -171,7 +194,7 @@ export async function handleAtCommand({
   const resolution = await resolveAtPathCommands({
     atPathCommandParts,
     config,
-    resourceRegistry: getResourceRegistry(config),
+    resourceRegistry: config.getResourceRegistry(),
     globTool: getToolHandle('glob'),
     signal,
     onDebugMessage,
@@ -228,16 +251,6 @@ function showPowerShellTip(
   onDebugMessage(
     'TIP: PowerShell tip: You can use "+" instead of "@" to avoid IntelliSense lag (e.g., +example.txt instead of @example.txt)',
   );
-}
-
-function getResourceRegistry(config: Config) {
-  return (
-    config as Config & {
-      getResourceRegistry: () => {
-        findResourceByUri: (identifier: string) => unknown;
-      };
-    }
-  ).getResourceRegistry();
 }
 
 function handleMissingReadManyFilesTool(

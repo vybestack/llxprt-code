@@ -25,13 +25,13 @@ import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import { useSubmitQuery } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import {
-  type Config,
   type AgentClientContract,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
 // We stub them so the test can isolate the turn-lifecycle / finally logic.
 
@@ -79,15 +79,21 @@ function createDeferred<T = void>(): {
   return { promise, resolve, reject };
 }
 
-function createMockConfig(): Config {
+function createMockOverrides() {
   return {
-    getSessionId: () => 'test-session',
-    getModel: () => 'test-model',
-    getMcpClientManager: () => undefined,
-    getMcpServers: () => ({}),
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    setupAsyncTaskAutoTrigger: () => () => {},
-  } as unknown as Config;
+    session: { getSessionId: () => 'test-session' },
+    model: {
+      getModel: () => 'test-model',
+      getContentGeneratorConfig: () => ({ model: 'test-model' }),
+    },
+    mcp: {
+      getMcpClientManager: () => undefined,
+      getMcpServers: () => ({}),
+    },
+    asyncTasks: {
+      setupAsyncTaskAutoTrigger: () => () => {},
+    },
+  };
 }
 
 function createMockAgentClient(): AgentClientContract {
@@ -169,7 +175,7 @@ function renderUseSubmitQuery(
 ) {
   return renderHook(() =>
     useSubmitQuery({
-      config: createMockConfig(),
+      runtime: createStreamRuntimeForTest({}, createMockOverrides()),
       agent: createMockAgentClient() as unknown as Agent,
       addItem: vi.fn().mockReturnValue(1),
       settings: {} as never,
@@ -576,7 +582,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const { result, rerender } = renderHook(
       ({ streamingState }: { streamingState: StreamingState }) =>
         useSubmitQuery({
-          config: createMockConfig(),
+          runtime: createStreamRuntimeForTest({}, createMockOverrides()),
           agent: createMockAgentClient() as unknown as Agent,
           addItem: vi.fn().mockReturnValue(1),
           settings: {} as never,

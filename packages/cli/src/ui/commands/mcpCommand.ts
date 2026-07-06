@@ -11,12 +11,8 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import {
-  type RuntimeConfigWithOptionalServices,
-  type RuntimeMcpServers,
-  asRuntimeConfig,
-  buildMcpStatusMessage,
-} from './mcpDisplay.js';
+import type { RuntimeMcpServers } from './mcpDisplay.js';
+import { buildMcpStatusMessage } from './mcpDisplay.js';
 import { mcpAuthSchema, listOAuthServers, performMcpOAuth } from './mcpAuth.js';
 
 const getMcpStatus = async (
@@ -31,7 +27,7 @@ const getMcpStatus = async (
     return {
       type: 'message',
       messageType: 'error',
-      content: 'Config not loaded.',
+      content: 'Configuration not loaded.',
     };
   }
 
@@ -91,14 +87,11 @@ const authCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Config not loaded.',
+        content: 'Configuration not loaded.',
       };
     }
 
     const mcpServers: RuntimeMcpServers = config.getMcpServers() ?? {};
-
-    const runtimeConfig: RuntimeConfigWithOptionalServices =
-      asRuntimeConfig(config);
 
     if (!serverName) {
       return listOAuthServers(mcpServers);
@@ -113,7 +106,7 @@ const authCommand: SlashCommand = {
       };
     }
 
-    return performMcpOAuth(context, serverName, server, runtimeConfig);
+    return performMcpOAuth(context, serverName, server, config);
   },
 };
 
@@ -157,7 +150,7 @@ const refreshCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Config not loaded.',
+        content: 'Configuration not loaded.',
       };
     }
 

@@ -24,6 +24,7 @@ import { renderHook } from '../../../../test-utils/render.js';
 import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import type { QueuedSubmission } from '../types.js';
 
 describe('useDisplayUserMessage — consolidated profile_change path (issue #1770)', () => {
@@ -55,7 +56,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
     };
     const { result } = renderHook(() =>
       useStreamEventHandlers({
-        config: mockConfig,
+        runtime: createStreamRuntimeForTest(mockConfig),
         settings: mockSettings,
         addItem: mockAddItem,
         onDebugMessage: vi.fn(),
@@ -135,7 +136,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
   ) {
     const { result } = renderHook(() =>
       useStreamEventHandlers({
-        config: mockConfig,
+        runtime: createStreamRuntimeForTest(mockConfig),
         settings: mockSettings,
         addItem: mockAddItem,
         onDebugMessage: vi.fn(),

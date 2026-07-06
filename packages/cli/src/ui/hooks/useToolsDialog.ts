@@ -5,11 +5,11 @@
  */
 
 import { useCallback, useState } from 'react';
-import type { Config } from '@vybestack/llxprt-code-core';
 import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { AppState } from '../reducers/appReducer.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface UseToolsDialogParams {
   addMessage: (msg: {
@@ -18,15 +18,13 @@ interface UseToolsDialogParams {
     timestamp: Date;
   }) => void;
   appState: AppState;
-  config: Config;
+  config: CliUiRuntime;
   agent: Agent | null;
 }
 
-function getDisabledToolsFromConfig(config: Config): string[] {
-  const ephemeralSettings = config.getEphemeralSettings() as
-    | Record<string, unknown>
-    | undefined;
-  const disabledToolsValue = ephemeralSettings?.['disabled-tools'];
+function getDisabledToolsFromConfig(config: CliUiRuntime): string[] {
+  const ephemeralSettings = config.getEphemeralSettings();
+  const disabledToolsValue = ephemeralSettings['disabled-tools'];
   return Array.isArray(disabledToolsValue)
     ? (disabledToolsValue as string[])
     : [];
@@ -53,7 +51,7 @@ function buildNoToolsMessage(action: 'enable' | 'disable'): string {
 
 async function loadToolsForDialog(
   agent: Agent | null,
-  config: Config,
+  config: CliUiRuntime,
   action: 'enable' | 'disable',
 ): Promise<ToolInfo[] | null> {
   if (agent === null) {

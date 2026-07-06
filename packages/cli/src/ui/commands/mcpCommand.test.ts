@@ -213,7 +213,7 @@ describe('mcpCommand', () => {
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Config not loaded.',
+        content: 'Configuration not loaded.',
       });
     });
 

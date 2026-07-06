@@ -4,55 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
-import {
-  createRuntimeStateFromConfig,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
-import { createAgentClient } from '@vybestack/llxprt-code-agents';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { SendMessageParameters } from '@google/genai';
 import { FunctionCallingConfigMode } from '@google/genai';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
-
-/**
- * Structural interface describing exactly the agent-client surface this
- * side-channel utility needs. Avoids importing the full agent-client type
- * (issue #2372/#1595) by using the same ReturnType<Config['getAgentClient']>
- * pattern packages/cli/src/ui/hooks/usePromptCompletion.ts uses.
- */
-interface AutoPromptAgentClient {
-  generateDirectMessage(
-    params: SendMessageParameters,
-    promptId: string,
-  ): Promise<{ text?: string }>;
-  dispose(): void;
-  clearTools(): void;
-}
-
-type ConfigAgentClient = ReturnType<Config['getAgentClient']>;
+import {
+  createDetachedAutoPromptClient,
+  type DetachedAutoPromptClientSource,
+} from '../../runtime/autoPromptDetachedClient.js';
 
 const logger = new DebugLogger('llxprt:subagent:auto-prompt');
 
-export function createDetachedAgentClient(config: Config): ConfigAgentClient {
-  const baseRuntimeId =
-    typeof config.getSessionId === 'function'
-      ? config.getSessionId()
-      : undefined;
-  const runtimeState = createRuntimeStateFromConfig(config, {
-    runtimeId: `${baseRuntimeId ?? 'llxprt-session'}#subagent-auto#${Date.now().toString(36)}`,
-  });
-  const client = createAgentClient(config, runtimeState);
-  client.clearTools();
-  return client;
+/**
+ * Runtime surface required by the auto-prompt generator. Combines the
+ * detached-client factory source with provider and agent-client accessors so
+ * this module does not depend on the full Config object.
+ */
+export interface AutoPromptRuntime extends DetachedAutoPromptClientSource {
+  getProvider(): string | undefined;
+  getAgentClient(): AgentClientContract | null | undefined;
 }
 
-export async function generateAutoPrompt(
-  config: Config,
-  description: string,
-): Promise<string> {
+function createAutoPromptRequest(description: string): SendMessageParameters {
   const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${description}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
 
-  const requestPayload: SendMessageParameters = {
+  return {
     message: autoModePrompt,
     config: {
       toolConfig: {
@@ -63,22 +40,52 @@ export async function generateAutoPrompt(
       serverTools: [],
     } as SendMessageParameters['config'] & { serverTools: unknown[] },
   };
+}
 
-  const providerName =
-    typeof config.getProvider === 'function'
-      ? config.getProvider()?.toLowerCase()
-      : undefined;
-  const configuredClient = config.getAgentClient() as
-    | ConfigAgentClient
-    | null
-    | undefined;
+async function requestFromClient(
+  targetClient: AgentClientContract,
+  requestPayload: SendMessageParameters,
+  options?: { useRuntimeScope?: boolean },
+): Promise<{ text?: string }> {
+  const executeRequest = () =>
+    targetClient.generateDirectMessage(requestPayload, 'subagent-auto-prompt');
+  if (options?.useRuntimeScope === false) {
+    return executeRequest();
+  }
+  try {
+    const runtimeBridge = getRuntimeBridge();
+    return await runtimeBridge.runWithScope(executeRequest);
+  } catch (error) {
+    logger.log(
+      () => '[auto-prompt] runtime scope unavailable, falling back',
+      error,
+    );
+    try {
+      return await executeRequest();
+    } catch (fallbackError) {
+      logger.log(
+        () => '[auto-prompt] fallback request also failed',
+        fallbackError,
+      );
+      throw fallbackError;
+    }
+  }
+}
+
+function resolveClient(runtime: AutoPromptRuntime): {
+  client: AgentClientContract;
+  cleanupDetached: AgentClientContract | undefined;
+  useRuntimeScope: boolean;
+  providerName: string | undefined;
+} {
+  const providerName = runtime.getProvider()?.toLowerCase();
+  const configuredClient = runtime.getAgentClient();
   const useDetachedClient =
     configuredClient == null || providerName === 'gemini';
   const cleanupDetached = useDetachedClient
-    ? createDetachedAgentClient(config)
+    ? createDetachedAutoPromptClient(runtime)
     : undefined;
   const client = cleanupDetached ?? configuredClient;
-  const useRuntimeScope = !useDetachedClient;
 
   if (client == null) {
     throw new Error(
@@ -86,25 +93,21 @@ export async function generateAutoPrompt(
     );
   }
 
-  const requestFromClient = async (
-    targetClient: AutoPromptAgentClient,
-    options?: { useRuntimeScope?: boolean },
-  ): Promise<{ text?: string }> => {
-    const executeRequest = () =>
-      targetClient.generateDirectMessage(
-        requestPayload,
-        'subagent-auto-prompt',
-      );
-    if (options?.useRuntimeScope === false) {
-      return executeRequest();
-    }
-    try {
-      const runtimeBridge = getRuntimeBridge();
-      return await runtimeBridge.runWithScope(executeRequest);
-    } catch {
-      return executeRequest();
-    }
+  return {
+    client,
+    cleanupDetached,
+    useRuntimeScope: !useDetachedClient,
+    providerName,
   };
+}
+
+export async function generateAutoPrompt(
+  runtime: AutoPromptRuntime,
+  description: string,
+): Promise<string> {
+  const requestPayload = createAutoPromptRequest(description);
+  const { client, cleanupDetached, useRuntimeScope, providerName } =
+    resolveClient(runtime);
 
   logger.log(() => '[auto-prompt] generating expanded prompt', {
     provider: providerName,
@@ -112,7 +115,9 @@ export async function generateAutoPrompt(
 
   let response: { text?: string };
   try {
-    response = await requestFromClient(client, { useRuntimeScope });
+    response = await requestFromClient(client, requestPayload, {
+      useRuntimeScope,
+    });
   } finally {
     cleanupDetached?.dispose();
   }

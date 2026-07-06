@@ -6,13 +6,10 @@
 
 import { useEffect, useState } from 'react';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import {
-  type Config,
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core';
+import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
+import type { McpDiscoveryRuntime } from '../cliUiRuntime.js';
 
-export function useMcpStatus(config: Config) {
+export function useMcpStatus(config: McpDiscoveryRuntime) {
   const [discoveryState, setDiscoveryState] = useState<MCPDiscoveryState>(
     () =>
       config.getMcpClientManager()?.getDiscoveryState() ??

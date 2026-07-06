@@ -5,18 +5,19 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import {
   triggerSessionStartHook,
   SessionStartSource,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../../types.js';
 import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js';
+import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 /**
  * @hook useSessionInitialization
  * @description One-time session initialization with state machine
- * @inputs config, addItem, loadHistory, resumedHistory
+ * @inputs uiRuntime, addItem, loadHistory, resumedHistory
  * @outputs SessionInitState
  * @sideEffects Session start hook, history seeding
  * @cleanup AbortController.abort() on change/unmount
@@ -28,7 +29,7 @@ import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js
  *   idle --(mount, no resume)--> starting
  *   seeding --(success)--> seeded --> starting
  *   starting --(success)--> started --> memoryInit --> complete
- *   starting --(abort)--> aborted --> starting (new run)
+ *   starting --(abort before success)--> aborted --> starting (new run)
  *
  * Guards:
  *   - hasSeededResumedHistory ref prevents duplicate history seeding
@@ -37,7 +38,7 @@ import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js
  */
 
 export interface UseSessionInitializationParams {
-  config: Config;
+  uiRuntime: UiRuntime;
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
   loadHistory: (newHistory: HistoryItem[]) => void;
   resumedHistory?: IContent[];
@@ -55,12 +56,12 @@ function isAbortSignalAborted(signal: AbortSignal): boolean {
 }
 
 async function runSessionStartHook(
-  config: Config,
+  uiRuntime: UiRuntime,
   addItem: UseSessionInitializationParams['addItem'],
   signal: AbortSignal,
 ): Promise<void> {
   const sessionStartOutput = await triggerSessionStartHook(
-    config,
+    uiRuntime.hooks,
     SessionStartSource.Startup,
   );
 
@@ -81,21 +82,21 @@ async function runSessionStartHook(
 
     const additionalContext = sessionStartOutput.getAdditionalContext();
     if (additionalContext && !isAbortSignalAborted(signal)) {
-      const agentClient = config.getAgentClient();
+      const agentClient = uiRuntime.agentClientSource.getAgentClient();
       try {
         await agentClient.addHistory({
           role: 'user',
           parts: [{ text: additionalContext }],
         });
       } catch {
-        // Hook failures should not block session start.
+        // Failures adding hook-provided context to history are non-fatal.
       }
     }
   }
 }
 
 export function useSessionInitialization({
-  config,
+  uiRuntime,
   addItem,
   loadHistory,
   resumedHistory,
@@ -103,17 +104,23 @@ export function useSessionInitialization({
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
 
-  // Guard ref for idempotency in StrictMode
+  // Guard refs for idempotency in StrictMode
   const hasTriggeredSessionStart = useRef(false);
+  const hasSeededResumedHistory = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Effect: Seed resumed history into history manager.
-  // This effect is idempotent: resumedHistory is a static prop from mount,
-  // loadHistory replaces (not appends), and StrictMode double-mount is harmless.
+  // The guard ref prevents redundant loadHistory calls across StrictMode
+  // double-mount while keeping resumedHistory as a static mount-time prop.
   useEffect(() => {
-    if (!resumedHistory || resumedHistory.length === 0) {
+    if (
+      hasSeededResumedHistory.current ||
+      !resumedHistory ||
+      resumedHistory.length === 0
+    ) {
       return undefined;
     }
+    hasSeededResumedHistory.current = true;
     const uiItems = iContentToHistoryItems(resumedHistory);
     if (uiItems.length > 0) {
       loadHistory(uiItems);
@@ -131,8 +138,8 @@ export function useSessionInitialization({
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
-    void runSessionStartHook(config, addItem, signal).catch(() => {
-      // Hook failures should not block session start.
+    void runSessionStartHook(uiRuntime, addItem, signal).catch(() => {
+      // Hook failures should not block session initialization.
     });
 
     return () => {
@@ -140,13 +147,13 @@ export function useSessionInitialization({
         abortControllerRef.current.abort();
       }
     };
-  }, [config, addItem]);
+  }, [uiRuntime, addItem]);
 
-  // Effect: Initialize memory file counts from config
+  // Effect: Initialize memory file counts from uiRuntime.memory
   useEffect(() => {
-    setLlxprtMdFileCount(config.getLlxprtMdFileCount());
-    setCoreMemoryFileCount(config.getCoreMemoryFileCount());
-  }, [config]);
+    setLlxprtMdFileCount(uiRuntime.memory.getLlxprtMdFileCount());
+    setCoreMemoryFileCount(uiRuntime.memory.getCoreMemoryFileCount());
+  }, [uiRuntime]);
 
   return {
     llxprtMdFileCount,

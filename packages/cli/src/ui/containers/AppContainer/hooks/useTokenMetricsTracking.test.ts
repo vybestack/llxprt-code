@@ -64,7 +64,9 @@ interface AgentClientStub {
 }
 
 interface ConfigStub {
-  getAgentClient: ReturnType<typeof vi.fn>;
+  agentClientSource: {
+    getAgentClient: ReturnType<typeof vi.fn>;
+  };
 }
 
 interface RuntimeApiStub {
@@ -86,7 +88,9 @@ const makeAgentClient = (
 });
 
 const makeConfig = (agentClient: AgentClientStub): ConfigStub => ({
-  getAgentClient: vi.fn().mockReturnValue(agentClient),
+  agentClientSource: {
+    getAgentClient: vi.fn().mockReturnValue(agentClient),
+  },
 });
 
 const makeRuntimeApi = (
@@ -133,7 +137,7 @@ describe('useTokenMetricsTracking', () => {
 
     const { result } = renderHook(() =>
       useTokenMetricsTracking({
-        config: config as never,
+        uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -173,7 +177,7 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
-        config: config as never,
+        uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -225,7 +229,7 @@ describe('useTokenMetricsTracking', () => {
 
     const { unmount } = renderHook(() =>
       useTokenMetricsTracking({
-        config: config as never,
+        uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -279,7 +283,7 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
-        config: config as never,
+        uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -321,7 +325,7 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
-        config: config as never,
+        uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),

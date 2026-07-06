@@ -7,13 +7,127 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { FatalError } from '@vybestack/llxprt-code-core';
 import { resolveBunPath } from './bun-path-resolver.js';
 import { resolveBunEntry } from './bun-entry-resolver.js';
 
-export const BUN_RELAUNCH_ENV = 'LLXPRT_BUN_RELAUNCHED';
-const CREDENTIAL_SOCKET_ENV = 'LLXPRT_CREDENTIAL_SOCKET';
+const NEWLINE = '\n';
+
+interface LauncherCredentialEnvModule {
+  readonly BUN_RELAUNCH_ENV: string;
+  readonly CREDENTIAL_SOCKET_ENV: string;
+  readonly PROXY_SOCKET_PREFIX: string;
+  readonly createLauncherChildEnv: (options: {
+    readonly env?: NodeJS.ProcessEnv;
+    readonly credentialSocketPath?: string | null;
+  }) => NodeJS.ProcessEnv;
+  readonly hasUsableCredentialSocket: (env?: NodeJS.ProcessEnv) => boolean;
+}
+
+function isModuleNotFoundError(error: unknown, targetModule: string): boolean {
+  if (
+    !(
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'MODULE_NOT_FOUND'
+    )
+  ) {
+    return false;
+  }
+  // Only treat this as "the candidate helper itself is missing" when the error
+  // names the candidate module. A MODULE_NOT_FOUND about a transitive
+  // dependency inside the helper must propagate so the real root cause is not
+  // masked by the path-probing fallback.
+  const message =
+    error instanceof Error && typeof error.message === 'string'
+      ? error.message
+      : '';
+  // A MODULE_NOT_FOUND from Node's require() always carries a descriptive
+  // message naming the failed specifier. If no message is present, the error did
+  // not originate from the standard resolution pipeline, so propagate it (return
+  // false) rather than risk masking a real transitive failure by falling back.
+  if (message.length === 0) {
+    return false;
+  }
+  // Inspect only the failed-specifier portion (the first line, before any
+  // "Require stack:" trailer). When a transitive dependency inside the helper
+  // is missing, the require stack lists this helper as the importer, so matching
+  // against the whole message would wrongly swallow that error and mask the real
+  // root cause. Node.js quotes the resolved absolute path in the message, so
+  // only the basename is meaningful for the relative candidate specifiers.
+  const [firstLine = ''] = message.split(NEWLINE, 1);
+  return firstLine.includes(basename(targetModule));
+}
+
+const loadCommonJsModule = createRequire(import.meta.url);
+
+function loadLauncherCredentialEnv(): LauncherCredentialEnvModule {
+  // Resolve the shared helper relative to this module across the layouts this
+  // file can run from:
+  //   - source/dev tree: packages/cli/src/launcher -> ../../bin
+  //   - compiled output: packages/cli/dist/src/launcher -> ../../../bin
+  //   - flattened/packed: packages/cli/dist/launcher -> ../../bin (covered by
+  //     the first entry) or a shallower layout -> ../bin
+  const candidatePaths = [
+    '../../bin/launcher-credential-env.cjs',
+    '../../../bin/launcher-credential-env.cjs',
+    '../bin/launcher-credential-env.cjs',
+  ];
+  for (const candidatePath of candidatePaths) {
+    try {
+      const loaded: unknown = loadCommonJsModule(candidatePath);
+      if (!isLauncherCredentialEnvModule(loaded)) {
+        throw new FatalError(
+          `Launcher credential-env helper at ${candidatePath} is corrupt or incomplete. Your installation may be corrupt; reinstall @vybestack/llxprt-code and try again.`,
+          43,
+        );
+      }
+      return loaded;
+    } catch (error) {
+      if (!isModuleNotFoundError(error, candidatePath)) {
+        throw error;
+      }
+    }
+  }
+  throw new FatalError(
+    'Unable to locate the launcher credential-env helper (bin/launcher-credential-env.cjs). Your installation may be corrupt; reinstall @vybestack/llxprt-code and try again.',
+    43,
+  );
+}
+
+function isLauncherCredentialEnvModule(
+  value: unknown,
+): value is LauncherCredentialEnvModule {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  const stringKeys = [
+    'BUN_RELAUNCH_ENV',
+    'CREDENTIAL_SOCKET_ENV',
+    'PROXY_SOCKET_PREFIX',
+  ];
+  const functionKeys = ['createLauncherChildEnv', 'hasUsableCredentialSocket'];
+  return (
+    stringKeys.every((key) => typeof candidate[key] === 'string') &&
+    functionKeys.every((key) => typeof candidate[key] === 'function')
+  );
+}
+
+// The helper is loaded lazily on first use rather than at module-evaluation
+// time. If the helper cannot be resolved (a corrupt install), the resulting
+// FatalError then surfaces inside relaunchUnderBunIfNeeded/runBunLauncherIfNeeded
+// where index.ts's top-level catch translates it into the correct exit code and
+// user-facing message, instead of crashing as an unhandled import-time throw.
+let launcherCredentialEnvCache: LauncherCredentialEnvModule | undefined;
+
+function getLauncherCredentialEnv(): LauncherCredentialEnvModule {
+  launcherCredentialEnvCache ??= loadLauncherCredentialEnv();
+  return launcherCredentialEnvCache;
+}
 
 export type ExitFn = (code?: number) => never;
 
@@ -48,15 +162,23 @@ function isRunningUnderBunDefault(): boolean {
 }
 
 function envGuardSetDefault(): boolean {
+  const { BUN_RELAUNCH_ENV } = getLauncherCredentialEnv();
   return process.env[BUN_RELAUNCH_ENV] === 'true';
 }
 
-function restoreCredentialSocket(originalSocket: string | undefined): void {
-  if (originalSocket === undefined) {
-    delete process.env[CREDENTIAL_SOCKET_ENV];
+function restoreCredentialSocket(
+  credentialSocketEnv: string,
+  originalSocket: string | undefined,
+): void {
+  // Treat an empty original value the same as "absent" so the restored
+  // environment matches how hasUsableCredentialSocket() interprets it — an
+  // empty-but-present socket var would otherwise mislead any consumer that
+  // checks for mere presence.
+  if (originalSocket === undefined || originalSocket.length === 0) {
+    delete process.env[credentialSocketEnv];
     return;
   }
-  process.env[CREDENTIAL_SOCKET_ENV] = originalSocket;
+  process.env[credentialSocketEnv] = originalSocket;
 }
 
 function toCredentialProxyFatalError(error: unknown): FatalError {
@@ -68,8 +190,13 @@ function toCredentialProxyFatalError(error: unknown): FatalError {
 }
 
 async function createCredentialProxyDefault(): Promise<CredentialProxyHandle | null> {
+  // Resolve the helper constants once up-front. If the helper is corrupt, the
+  // FatalError surfaces here (before any side effects), never inside the
+  // cleanup paths below where it would mask the original failure.
+  const { CREDENTIAL_SOCKET_ENV, PROXY_SOCKET_PREFIX } =
+    getLauncherCredentialEnv();
   const originalSocket = process.env[CREDENTIAL_SOCKET_ENV];
-  const socketDir = await mkdtemp(join(tmpdir(), 'lxcp-'));
+  const socketDir = await mkdtemp(join(tmpdir(), PROXY_SOCKET_PREFIX));
   let handle: { stop: () => Promise<void> } | undefined;
   try {
     const { createAndStartProxy, getProxySocketPath } = await import(
@@ -83,7 +210,7 @@ async function createCredentialProxyDefault(): Promise<CredentialProxyHandle | n
     // Provider proxy startup exposes its socket through module state but also
     // mutates process.env. Restore immediately so only the Bun child receives
     // the proxy socket in its environment.
-    restoreCredentialSocket(originalSocket);
+    restoreCredentialSocket(CREDENTIAL_SOCKET_ENV, originalSocket);
 
     const startedHandle = handle;
     return {
@@ -93,7 +220,7 @@ async function createCredentialProxyDefault(): Promise<CredentialProxyHandle | n
         try {
           await Promise.allSettled([startedHandle.stop(), removeSocketDir]);
         } finally {
-          restoreCredentialSocket(originalSocket);
+          restoreCredentialSocket(CREDENTIAL_SOCKET_ENV, originalSocket);
         }
       },
     };
@@ -101,7 +228,7 @@ async function createCredentialProxyDefault(): Promise<CredentialProxyHandle | n
     if (handle !== undefined) {
       await handle.stop().catch(() => {});
     }
-    restoreCredentialSocket(originalSocket);
+    restoreCredentialSocket(CREDENTIAL_SOCKET_ENV, originalSocket);
     await rm(socketDir, { force: true, recursive: true });
     throw toCredentialProxyFatalError(error);
   }
@@ -170,23 +297,14 @@ async function createChildEnv(
   readonly childEnv: NodeJS.ProcessEnv;
   readonly credentialProxy: CredentialProxyHandle | null;
 }> {
-  // Only start a credential proxy when the parent does not already have one.
-  // If a socket is already set in the environment, the spread below forwards it
-  // to the child unchanged.
-  const credentialProxy =
-    process.env[CREDENTIAL_SOCKET_ENV] !== undefined
-      ? null
-      : await createCredentialProxy();
-  // The relaunch guard is deliberately applied only to the Bun child. The Node
-  // parent waits for that child and exits, while repeated calls in tests can use
-  // the injectable envGuardSet option to model an already-relaunched process.
-  const childEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    [BUN_RELAUNCH_ENV]: 'true',
-  };
-  if (credentialProxy !== null) {
-    childEnv[CREDENTIAL_SOCKET_ENV] = credentialProxy.socketPath;
-  }
+  const { createLauncherChildEnv, hasUsableCredentialSocket } =
+    getLauncherCredentialEnv();
+  const credentialProxy = hasUsableCredentialSocket()
+    ? null
+    : await createCredentialProxy();
+  const childEnv = createLauncherChildEnv({
+    credentialSocketPath: credentialProxy?.socketPath ?? null,
+  });
   return { childEnv, credentialProxy };
 }
 

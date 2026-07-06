@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { CliUiRuntime } from '../cliUiRuntime.js';
 import {
   useCallback,
   useEffect,
@@ -13,7 +14,6 @@ import {
 } from 'react';
 import { AsyncFzf } from 'fzf';
 import type {
-  Config,
   FileFilteringOptions,
   FileSearch,
   MCPResource,
@@ -129,31 +129,25 @@ interface SubagentSuggestionCandidate {
 type PatternInput = string | null;
 
 function fileFilteringOptions(
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
 ): FileFilteringOptions | undefined {
   return config?.getFileFilteringOptions();
 }
 
-function getResourceRegistry(config: Config | undefined) {
+function getResourceRegistry(config: CliUiRuntime | undefined) {
   if (config === undefined) {
     return undefined;
   }
 
-  const configWithOptionalRegistry = config as {
-    getResourceRegistry?: Config['getResourceRegistry'];
-  };
-  return configWithOptionalRegistry.getResourceRegistry?.();
+  return config.getResourceRegistry();
 }
 
-function getSubagentManager(config: Config | undefined) {
+function getSubagentManager(config: CliUiRuntime | undefined) {
   if (config === undefined) {
     return undefined;
   }
 
-  const configWithOptionalSubagents = config as {
-    getSubagentManager?: Config['getSubagentManager'];
-  };
-  return configWithOptionalSubagents.getSubagentManager?.();
+  return config.getSubagentManager();
 }
 
 function hasResourceIdentity(resource: MCPResource): boolean {
@@ -161,7 +155,7 @@ function hasResourceIdentity(resource: MCPResource): boolean {
 }
 
 function buildResourceCandidates(
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
 ): ResourceSuggestionCandidate[] {
   const registry = getResourceRegistry(config);
 
@@ -185,7 +179,7 @@ function buildResourceCandidates(
 }
 
 async function buildSubagentCandidates(
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
 ): Promise<SubagentSuggestionCandidate[]> {
   const subagentManager = getSubagentManager(config);
   if (!subagentManager) {
@@ -272,7 +266,7 @@ async function searchSubagentCandidates(
 }
 
 async function createFileSearcher(
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
   cwd: string,
 ): Promise<FileSearch> {
   const filteringOptions = fileFilteringOptions(config);
@@ -313,7 +307,7 @@ function handleSkippedSearchDispatch(
 async function performSearch(
   fileSearch: FileSearch,
   pattern: string,
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
   controller: AbortController,
   clearSlowSearchTimer: () => void,
   shouldDispatchResult: (pattern: string) => boolean,
@@ -401,7 +395,7 @@ async function performSearch(
 export interface UseAtCompletionProps {
   enabled: boolean;
   pattern: PatternInput;
-  config: Config | undefined;
+  config: CliUiRuntime | undefined;
   cwd: string;
   setSuggestions: (suggestions: Suggestion[]) => void;
   setIsLoadingSuggestions: (isLoading: boolean) => void;
@@ -427,7 +421,7 @@ function useSyncLoadingState(
 
 function useResetOnCwdChange(
   cwd: string,
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
   fileSearch: React.MutableRefObject<FileSearch | null>,
 
   latestRequestedPattern: React.MutableRefObject<PatternInput>,
@@ -540,7 +534,7 @@ function usePatternChangeHandler(
 
 function useInitializationHandler(
   state: AtCompletionState,
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
   cwd: string,
   fileSearch: React.MutableRefObject<FileSearch | null>,
   initializationGeneration: React.MutableRefObject<number>,
@@ -584,7 +578,7 @@ function useInitializationHandler(
 
 function useSearchHandler(
   state: AtCompletionState,
-  config: Config | undefined,
+  config: CliUiRuntime | undefined,
   fileSearch: React.MutableRefObject<FileSearch | null>,
   latestRequestedPattern: React.MutableRefObject<PatternInput>,
   lifecycleGeneration: React.MutableRefObject<number>,

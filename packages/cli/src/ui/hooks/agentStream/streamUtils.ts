@@ -9,14 +9,13 @@
  *
  * Contains:
  * - Pure utility functions (stateless input→output transformations)
- * - Config-bound utilities (depend on runtime config state)
+ * - runtime-bound utilities (depend on runtime config state)
  * - Micro-helpers that enable large functions to stay under 80 lines
  *
  * None of these functions call React hooks.
  */
 
 import {
-  type Config,
   getCodeAssistServer,
   UserTierId,
   UnauthorizedError,
@@ -45,8 +44,10 @@ import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
+  type ApiErrorRuntimeInfo,
 } from '../../../utils/apiErrorFormatting.js';
 import { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 // ─── Re-exported constant ────────────────────────────────────────────────────
 
@@ -384,7 +385,7 @@ export async function processSlashCommandResult(
 export function handleSubmissionError(
   error: unknown,
   addItem: UseHistoryManagerReturn['addItem'],
-  config: Config,
+  runtime: StreamRuntime,
   onAuthError: () => void,
   timestamp: number,
 ): boolean {
@@ -410,8 +411,9 @@ export function handleSubmissionError(
   }
   const isAbortError = error instanceof Error && error.name === 'AbortError';
   if (!isAbortError) {
-    const providerName = getActiveProviderNameForApiError(config);
-    const fallbackModel = getErrorFallbackModel(config, providerName);
+    const apiErrorInfo = buildApiErrorInfo(runtime);
+    const providerName = getActiveProviderNameForApiError(apiErrorInfo);
+    const fallbackModel = getErrorFallbackModel(apiErrorInfo, providerName);
     addItem(
       {
         type: MessageType.ERROR,
@@ -428,8 +430,22 @@ export function handleSubmissionError(
   return false;
 }
 
-// ─── Config-bound utilities ────────────────────────────────────────────────────
+// ─── runtime-bound utilities ────────────────────────────────────────────────────
 // These depend on runtime config state and are NOT pure functions.
+
+/**
+ * Builds a narrow adapter satisfying {@link ApiErrorRuntimeInfo} from the
+ * nested StreamRuntime, so API-error helpers receive focused capability
+ * objects rather than a flat aggregate.
+ */
+export function buildApiErrorInfo(runtime: StreamRuntime): ApiErrorRuntimeInfo {
+  return {
+    getProviderManager: () => runtime.model.getProviderManager(),
+    getProvider: () => runtime.model.getProvider(),
+    getSettingsService: () => runtime.settings.getSettingsService(),
+    getModel: () => runtime.model.getModel(),
+  };
+}
 
 /**
  * Determines whether citations should be shown.
@@ -441,10 +457,12 @@ export function handleSubmissionError(
  */
 export function showCitations(
   settings: LoadedSettings,
-  config: Config,
+  runtime: StreamRuntime,
 ): boolean {
   try {
-    const enabled = config.getSettingsService().get('ui.showCitations');
+    const enabled = runtime.settings
+      .getSettingsService()
+      .get('ui.showCitations');
     if (enabled !== undefined) {
       return enabled as boolean;
     }
@@ -457,7 +475,9 @@ export function showCitations(
     return enabled;
   }
 
-  const server = getCodeAssistServer(config);
+  const server = getCodeAssistServer({
+    getAgentClient: () => runtime.agentClientSource.getAgentClient(),
+  });
   return server != null && server.userTier !== UserTierId.FREE;
 }
 
@@ -466,9 +486,11 @@ export function showCitations(
  * Reads the live value rather than relying on React state, ensuring
  * profile changes via slash commands are immediately reflected.
  */
-export function getCurrentProfileName(config: Config): string | null {
+export function getCurrentProfileName(runtime: StreamRuntime): string | null {
   try {
-    return config.getSettingsService().getCurrentProfileName() ?? null;
+    return (
+      runtime.settings.getSettingsService().getCurrentProfileName() ?? null
+    );
   } catch {
     // Fall through if settings service unavailable
   }

@@ -7,14 +7,14 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import { type Config } from '@vybestack/llxprt-code-core';
+import type { MemoryState } from '../cliUiRuntime.js';
 
 interface TipsProps {
-  config: Config;
+  memory: MemoryState;
 }
 
-export const Tips: React.FC<TipsProps> = ({ config }) => {
-  const llxprtMdFileCount = config.getLlxprtMdFileCount();
+export const Tips: React.FC<TipsProps> = ({ memory }) => {
+  const llxprtMdFileCount = memory.getLlxprtMdFileCount();
   return (
     <Box flexDirection="column">
       <Text color={Colors.Foreground}>Tips for getting started:</Text>

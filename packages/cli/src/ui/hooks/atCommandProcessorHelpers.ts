@@ -4,28 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { FileWorkspaceState } from '../cliUiRuntime.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Buffer } from 'buffer';
 import type { PartListUnion, PartUnion } from '@google/genai';
 import {
-  DEFAULT_AGENT_ID,
   debugLogger,
   getErrorMessage,
   isNodeError,
   validatePathWithinWorkspace,
 } from '@vybestack/llxprt-code-core';
-import type {
-  Config,
-  DiscoveredMCPResource,
-} from '@vybestack/llxprt-code-core';
+import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import type {
   AgentToolHandle,
   AgentToolInvocation,
 } from '@vybestack/llxprt-code-agents';
-import type { HistoryItem, IndividualToolCallDisplay } from '../types.js';
+import type { IndividualToolCallDisplay } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+import { addToolGroup } from './atCommandResourceHelpers.js';
+export { processResourceAttachments } from './atCommandResourceHelpers.js';
 
 export interface AtCommandPart {
   type: 'text' | 'atPath';
@@ -47,6 +45,18 @@ type ResourceRegistry = {
 
 type MaybeToolHandle = AgentToolHandle | undefined;
 
+// @plan:ISSUE-2376 — file/workspace access flows through the #2384 UiRuntime
+// abstraction (FileWorkspaceState), but tool lookup is routed through the
+// public Agent surface (AgentToolHandle) rather than getToolRegistry, so the
+// runtime no longer needs the ToolRuntime.getToolRegistry pick here.
+export type AtCommandHelperRuntime = Pick<
+  FileWorkspaceState,
+  | 'getFileFilteringOptions'
+  | 'getWorkspaceContext'
+  | 'getFileService'
+  | 'getEnableRecursiveFileSearch'
+>;
+
 interface ResolutionState {
   pathSpecsToRead: string[];
   resourceAttachments: DiscoveredMCPResource[];
@@ -62,7 +72,7 @@ interface ResolveCommandsResult extends ResolutionState {
 
 interface ResolveCommandsParams {
   atPathCommandParts: AtCommandPart[];
-  config: Config;
+  config: AtCommandHelperRuntime;
   resourceRegistry: ResourceRegistry;
   globTool: MaybeToolHandle;
   signal: AbortSignal;
@@ -86,24 +96,18 @@ interface FileReadParams {
   processedQueryParts: PartUnion[];
   resourceReadDisplays: IndividualToolCallDisplay[];
   readManyFilesTool: NonNullable<MaybeToolHandle>;
-  respectFileIgnore: ReturnType<Config['getFileFilteringOptions']>;
-  config: Config;
+  respectFileIgnore: ReturnType<
+    AtCommandHelperRuntime['getFileFilteringOptions']
+  >;
+  config: AtCommandHelperRuntime;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
   userMessageTimestamp: number;
   signal: AbortSignal;
 }
 
-interface ResourceReadParams {
-  resourceAttachments: DiscoveredMCPResource[];
-  processedQueryParts: PartUnion[];
-  addItem: UseHistoryManagerReturn['addItem'];
-  userMessageTimestamp: number;
-  mcpClientManager: ReturnType<Config['getMcpClientManager']>;
-}
-
 interface ResolveParams {
-  config: Config;
+  config: AtCommandHelperRuntime;
   globTool: MaybeToolHandle;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
@@ -194,7 +198,7 @@ function recordResourceMatch(
 }
 
 function recordIgnoredPath(
-  config: Config,
+  config: AtCommandHelperRuntime,
   state: ResolutionState,
   pathName: string,
   onDebugMessage: (message: string) => void,
@@ -492,141 +496,6 @@ function buildIgnoredMessages(ignoredByReason: IgnoredByReason): string[] {
   return messages;
 }
 
-export async function processResourceAttachments({
-  resourceAttachments,
-  processedQueryParts,
-  addItem,
-  userMessageTimestamp,
-  mcpClientManager,
-}: ResourceReadParams): Promise<
-  IndividualToolCallDisplay[] | AtCommandProcessResult
-> {
-  const resourceReadDisplays: IndividualToolCallDisplay[] = [];
-  for (const resource of resourceAttachments) {
-    const uri = resource.uri;
-    if (!uri) continue;
-    const display = await readSingleResource(
-      resource,
-      uri,
-      mcpClientManager,
-      processedQueryParts,
-    );
-    resourceReadDisplays.push(display);
-    if (display.status === ToolCallStatus.Error) {
-      return handleResourceReadError(
-        resourceReadDisplays,
-        addItem,
-        userMessageTimestamp,
-      );
-    }
-  }
-  return resourceReadDisplays;
-}
-
-async function readSingleResource(
-  resource: DiscoveredMCPResource,
-  uri: string,
-  mcpClientManager: ReturnType<Config['getMcpClientManager']>,
-  processedQueryParts: PartUnion[],
-): Promise<IndividualToolCallDisplay> {
-  const client = getResourceClient(mcpClientManager, resource.serverName);
-  if (!client) return buildMissingClientDisplay(resource, uri);
-  try {
-    const response = await client.readResource(uri);
-    processedQueryParts.push({
-      text: `\nContent from @${resource.serverName}:${uri}:\n`,
-    });
-    processedQueryParts.push(...convertResourceContentsToParts(response));
-    return buildSuccessResourceDisplay(resource, uri);
-  } catch (error) {
-    return buildErrorResourceDisplay(resource, uri, error);
-  }
-}
-
-type ResourceClient = {
-  readResource: (uri: string) => Promise<{
-    contents?: Array<{
-      text?: string;
-      blob?: string;
-      mimeType?: string;
-      resource?: { text?: string; blob?: string; mimeType?: string };
-    }>;
-  }>;
-};
-
-function getResourceClient(
-  mcpClientManager: ReturnType<Config['getMcpClientManager']>,
-  serverName: string,
-): ResourceClient | undefined {
-  return (
-    mcpClientManager as {
-      getClient?: (name: string) => ResourceClient | undefined;
-    }
-  ).getClient?.(serverName);
-}
-
-function buildMissingClientDisplay(
-  resource: DiscoveredMCPResource,
-  uri: string,
-): IndividualToolCallDisplay {
-  return {
-    callId: `mcp-resource-${resource.serverName}-${uri}`,
-    name: `resources/read (${resource.serverName})`,
-    description: uri,
-    status: ToolCallStatus.Error,
-    resultDisplay: `Error reading resource ${uri}: MCP client for server '${resource.serverName}' is not available or not connected.`,
-    confirmationDetails: undefined,
-  };
-}
-
-function buildSuccessResourceDisplay(
-  resource: DiscoveredMCPResource,
-  uri: string,
-): IndividualToolCallDisplay {
-  return {
-    callId: `mcp-resource-${resource.serverName}-${uri}`,
-    name: `resources/read (${resource.serverName})`,
-    description: uri,
-    status: ToolCallStatus.Success,
-    resultDisplay: `Successfully read resource ${uri}`,
-    confirmationDetails: undefined,
-  };
-}
-
-function buildErrorResourceDisplay(
-  resource: DiscoveredMCPResource,
-  uri: string,
-  error: unknown,
-): IndividualToolCallDisplay {
-  return {
-    callId: `mcp-resource-${resource.serverName}-${uri}`,
-    name: `resources/read (${resource.serverName})`,
-    description: uri,
-    status: ToolCallStatus.Error,
-    resultDisplay: `Error reading resource ${uri}: ${getErrorMessage(error)}`,
-    confirmationDetails: undefined,
-  };
-}
-
-function handleResourceReadError(
-  resourceReadDisplays: IndividualToolCallDisplay[],
-  addItem: UseHistoryManagerReturn['addItem'],
-  userMessageTimestamp: number,
-): AtCommandProcessResult {
-  addToolGroup(addItem, userMessageTimestamp, resourceReadDisplays);
-  const firstError = resourceReadDisplays.find(
-    (d) => d.status === ToolCallStatus.Error,
-  )!;
-  const errorMessages = resourceReadDisplays
-    .filter((d) => d.status === ToolCallStatus.Error)
-    .map((d) => d.resultDisplay);
-  debugLogger.error(errorMessages.filter(Boolean).join(', '));
-  return {
-    processedQuery: null,
-    error: `Exiting due to an error processing the @ command: ${firstError.resultDisplay}`,
-  };
-}
-
 export async function readFilesAndBuildResult({
   pathSpecsToRead,
   contentLabelsForDisplay,
@@ -692,7 +561,9 @@ export async function readFilesAndBuildResult({
 
 function buildToolArgs(
   pathSpecsToRead: string[],
-  respectFileIgnore: ReturnType<Config['getFileFilteringOptions']>,
+  respectFileIgnore: ReturnType<
+    AtCommandHelperRuntime['getFileFilteringOptions']
+  >,
 ) {
   return {
     paths: pathSpecsToRead,
@@ -746,7 +617,7 @@ function appendReadManyFilesContent(
   llmContent: unknown,
   processedQueryParts: PartUnion[],
   absoluteToRelativePathMap: Map<string, string>,
-  config: Config,
+  config: AtCommandHelperRuntime,
   onDebugMessage: (message: string) => void,
 ): void {
   if (!Array.isArray(llmContent)) {
@@ -769,7 +640,7 @@ function processReadManyFilesPart(
   part: unknown,
   processedQueryParts: PartUnion[],
   absoluteToRelativePathMap: Map<string, string>,
-  config: Config,
+  config: AtCommandHelperRuntime,
 ): void {
   if (typeof part !== 'string') {
     processedQueryParts.push(part as PartUnion);
@@ -789,7 +660,7 @@ function processReadManyFilesPart(
 function parseFileContentPart(
   part: string,
   absoluteToRelativePathMap: Map<string, string>,
-  config: Config,
+  config: AtCommandHelperRuntime,
 ): { displayPath: string; content: string } | undefined {
   const fileContentPattern = '^--- (.*?) ---\\n\\n([\\s\\S]*?)\\n\\n$';
   const fileContentRegex = new RegExp(fileContentPattern);
@@ -811,7 +682,7 @@ function parseFileContentPart(
 function resolveDisplayPath(
   filePathSpecInContent: string,
   absoluteToRelativePathMap: Map<string, string>,
-  config: Config,
+  config: AtCommandHelperRuntime,
 ): string {
   const mappedPath = absoluteToRelativePathMap.get(filePathSpecInContent);
   if (mappedPath) return mappedPath;
@@ -820,41 +691,4 @@ function resolveDisplayPath(
       return path.relative(dir, filePathSpecInContent);
   }
   return filePathSpecInContent;
-}
-
-function addToolGroup(
-  addItem: UseHistoryManagerReturn['addItem'],
-  userMessageTimestamp: number,
-  tools: IndividualToolCallDisplay[],
-): void {
-  addItem(
-    { type: 'tool_group', agentId: DEFAULT_AGENT_ID, tools } as Omit<
-      HistoryItem,
-      'id'
-    >,
-    userMessageTimestamp,
-  );
-}
-
-function convertResourceContentsToParts(
-  response: Parameters<ResourceClient['readResource']>[0] extends never
-    ? never
-    : Awaited<ReturnType<ResourceClient['readResource']>>,
-): PartUnion[] {
-  const parts: PartUnion[] = [];
-  for (const content of response.contents ?? []) {
-    const candidate = content.resource ?? content;
-    if (candidate.text) {
-      parts.push({ text: candidate.text });
-      continue;
-    }
-    if (candidate.blob) {
-      const sizeBytes = Buffer.from(candidate.blob, 'base64').length;
-      const mimeType = candidate.mimeType ?? 'application/octet-stream';
-      parts.push({
-        text: `[Binary resource content ${mimeType}, ${sizeBytes} bytes]`,
-      });
-    }
-  }
-  return parts;
 }

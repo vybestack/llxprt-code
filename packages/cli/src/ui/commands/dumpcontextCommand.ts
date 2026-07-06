@@ -65,9 +65,9 @@ function getHistoryService(
   if (!hasCallableGetAgentClient(config)) {
     return null;
   }
-  // The real Config type declares a non-null return, but at runtime the agent
-  // client may be absent before a session starts. Re-type the result honestly
-  // so the nullish guard below is meaningful rather than a no-op.
+  // The declared type is non-null, but at runtime the agent client may be
+  // absent before a session starts. Re-type the result honestly so the nullish
+  // guard below is meaningful rather than a no-op.
   const agentClient = config.getAgentClient() as
     | AgentClientWithHistory
     | null

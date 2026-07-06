@@ -1,9 +1,12 @@
-import {
-  DebugLogger,
-  type Config,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-core';
 import type { SettingDefinition } from '../config/settingsSchema.js';
+
+interface DynamicToolSettingsSource {
+  getToolRegistryInfo(): {
+    registered: Array<{ displayName: string }>;
+    unregistered: Array<{ displayName: string; reason?: string }>;
+  };
+}
 
 const logger = new DebugLogger('llxprt:dynamic-settings');
 
@@ -134,7 +137,7 @@ export const dynamicSettingsRegistry = new DynamicSettingsRegistry();
  * Generate dynamic tool settings based on all potential tools (registered and unregistered)
  */
 export function generateDynamicToolSettings(
-  config?: Config,
+  config?: DynamicToolSettingsSource,
 ): Record<string, SettingDefinition> {
   if (!config) {
     return {};

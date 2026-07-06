@@ -36,11 +36,15 @@ import { useCallback, useEffect, useState } from 'react';
 import type React from 'react';
 
 /**
- * A `Config` narrowed to expose the explicit-message-bus scheduler factory the
- * interactive path relies on. The public `Config` type keeps `getOrCreateScheduler`
- * intentionally loose; this cast documents the exact shape we depend on.
+ * The explicit-message-bus getOrCreateScheduler shape the interactive path
+ * relies on. The public `Config` type keeps `getOrCreateScheduler`
+ * intentionally loose; this documents the exact scheduler surface we depend on
+ * and is shared by both the main runtime access and the subagent config narrow.
+ *
+ * @plan:ISSUE-2376
  */
-export type SchedulerConfigWithExplicitMessageBus = Config & {
+export interface ExplicitMessageBusScheduler {
+  disposeScheduler(sessionId: string): void;
   getOrCreateScheduler(
     sessionId: string,
     callbacks: {
@@ -58,7 +62,35 @@ export type SchedulerConfigWithExplicitMessageBus = Config & {
       messageBus?: MessageBus;
     },
   ): Promise<ToolSchedulerContract>;
-};
+  setInteractiveSubagentSchedulerFactory(
+    factory: SubagentSchedulerFactory | undefined,
+  ): void;
+}
+
+/**
+ * A subagent's own `Config` narrowed to the explicit-message-bus scheduler
+ * factory the interactive path relies on. Used only for the subagent scheduler
+ * args (core's SubagentSchedulerFactory always supplies a Config).
+ *
+ * @plan:ISSUE-2376
+ */
+export type SchedulerConfigWithExplicitMessageBus = Config &
+  ExplicitMessageBusScheduler;
+
+/**
+ * The scheduler sub-runtime (session + scheduler capabilities) this module
+ * consumes. Introduced by #2384's CliUiRuntime split; structurally a
+ * `Pick<StreamRuntime, 'scheduler' | 'session'>`. Declared locally so the
+ * runtime layer does not depend on the UI layer's cliUiRuntime module while
+ * remaining structurally compatible with the `ReactToolSchedulerRuntime` the
+ * hook passes.
+ *
+ * @plan:ISSUE-2376
+ */
+export interface SchedulerRuntimeAccess {
+  session: { getSessionId(): string };
+  scheduler: ExplicitMessageBusScheduler;
+}
 
 const logger = DebugLogger.getLogger('llxprt:cli:interactive-tool-scheduler');
 
@@ -209,7 +241,7 @@ function createSubagentCallbacks(
  * Initializes a scheduler instance.
  */
 async function initializeSchedulerInstance(
-  config: Config,
+  runtime: SchedulerRuntimeAccess,
   sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
@@ -217,16 +249,14 @@ async function initializeSchedulerInstance(
   mounted: React.MutableRefObject<boolean>,
 ): Promise<ToolSchedulerContract | null> {
   try {
-    const instance = await (
-      config as SchedulerConfigWithExplicitMessageBus
-    ).getOrCreateScheduler(
+    const instance = await runtime.scheduler.getOrCreateScheduler(
       sessionId,
       createMainSchedulerCallbacks(mainSchedulerId, refs, mounted),
       undefined,
       { messageBus: runtimeMessageBus },
     );
     if (!mounted.current) {
-      config.disposeScheduler(sessionId);
+      runtime.scheduler.disposeScheduler(sessionId);
       return null;
     }
     return instance;
@@ -245,7 +275,7 @@ async function initializeSchedulerInstance(
  * Hook that manages scheduler initialization effect.
  */
 function useSchedulerEffect(
-  config: Config,
+  runtime: SchedulerRuntimeAccess,
   sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
@@ -259,7 +289,7 @@ function useSchedulerEffect(
 
     const init = async () => {
       const instance = await initializeSchedulerInstance(
-        config,
+        runtime,
         sessionId,
         mainSchedulerId,
         refs,
@@ -282,11 +312,11 @@ function useSchedulerEffect(
     return () => {
       mounted.current = false;
       if (resolved.current) {
-        config.disposeScheduler(sessionId);
+        runtime.scheduler.disposeScheduler(sessionId);
       }
     };
   }, [
-    config,
+    runtime,
     sessionId,
     mainSchedulerId,
     refs,
@@ -300,7 +330,7 @@ function useSchedulerEffect(
  * Hook that manages scheduler initialization.
  */
 export function useScheduler(
-  config: Config,
+  runtime: SchedulerRuntimeAccess,
   sessionId: string,
   mainSchedulerId: symbol,
   refs: SchedulerRefs,
@@ -311,7 +341,7 @@ export function useScheduler(
     null,
   );
   useSchedulerEffect(
-    config,
+    runtime,
     sessionId,
     mainSchedulerId,
     refs,
@@ -333,6 +363,10 @@ function useExternalSchedulerFactoryCreator(
     async (args: Parameters<SubagentSchedulerFactory>[0]) => {
       const schedulerId = Symbol('subagent-scheduler');
       const schedulerSessionId = args.schedulerConfig.getSessionId();
+      // args.schedulerConfig is the subagent's own Config (from core's
+      // SubagentSchedulerFactory), not the interactive runtime; narrow it to the
+      // explicit-message-bus getOrCreateScheduler shape the interactive path
+      // depends on (the public Config type keeps it intentionally loose).
       const instance = await (
         args.schedulerConfig as SchedulerConfigWithExplicitMessageBus
       ).getOrCreateScheduler(
@@ -359,29 +393,31 @@ function useExternalSchedulerFactoryCreator(
  * Hook that manages external scheduler factory setup.
  */
 function useExternalSchedulerSetup(
-  config: Config,
+  runtime: SchedulerRuntimeAccess,
   createExternalScheduler: SubagentSchedulerFactory,
   setExternalSchedulerRegistered: (registered: boolean) => void,
 ): void {
   useEffect(() => {
-    if (!hasInteractiveSubagentScheduler(config)) {
+    if (!hasInteractiveSubagentScheduler(runtime.scheduler)) {
       setExternalSchedulerRegistered(true);
       return () => setExternalSchedulerRegistered(false);
     }
-    config.setInteractiveSubagentSchedulerFactory(createExternalScheduler);
+    runtime.scheduler.setInteractiveSubagentSchedulerFactory(
+      createExternalScheduler,
+    );
     setExternalSchedulerRegistered(true);
     return () => {
       setExternalSchedulerRegistered(false);
-      config.setInteractiveSubagentSchedulerFactory(undefined);
+      runtime.scheduler.setInteractiveSubagentSchedulerFactory(undefined);
     };
-  }, [config, createExternalScheduler, setExternalSchedulerRegistered]);
+  }, [runtime, createExternalScheduler, setExternalSchedulerRegistered]);
 }
 
 /**
  * Composes external scheduler factory creation with its registration effect.
  */
 export function useExternalSchedulerRegistration(
-  config: Config,
+  runtime: SchedulerRuntimeAccess,
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
   setExternalSchedulerRegistered: (registered: boolean) => void,
@@ -391,7 +427,7 @@ export function useExternalSchedulerRegistration(
     runtimeMessageBus,
   );
   useExternalSchedulerSetup(
-    config,
+    runtime,
     createExternalScheduler,
     setExternalSchedulerRegistered,
   );

@@ -7,7 +7,7 @@
 /**
  * @hook useTokenMetricsTracking
  * @description Token metrics collection with HistoryService subscription
- * @inputs runtime, config, updateHistoryTokenCount, recordingIntegrationRef
+ * @inputs runtime, uiRuntime, updateHistoryTokenCount, recordingIntegrationRef
  * @outputs tokenMetrics, historyTokenCount
  * @sideEffects Interval (1s), HistoryService subscription
  * @cleanup Clears interval, unsubscribes on unmount/swap
@@ -20,9 +20,9 @@ import {
   DebugLogger,
   uiTelemetryService,
   type RecordingIntegration,
-  type Config,
 } from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
+import type { UiRuntime } from '../../../cliUiRuntime.js';
 import {
   shouldUpdateTokenMetrics,
   toTokenMetricsSnapshot,
@@ -38,7 +38,7 @@ export interface TokenMetrics {
 }
 
 interface UseTokenMetricsTrackingOptions {
-  config: Config;
+  uiRuntime: UiRuntime;
   updateHistoryTokenCount: (count: number) => void;
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
 }
@@ -50,30 +50,20 @@ type RuntimeHistoryService = Parameters<
   RecordingIntegration['onHistoryServiceReplaced']
 >[0];
 
-interface RuntimeAgentClientBoundary {
-  hasChatInitialized?: () => boolean;
-  getHistoryService?: () => RuntimeHistoryService | null | undefined;
-}
-
-interface RuntimeConfigBoundary {
-  getAgentClient?: () => RuntimeAgentClientBoundary | null | undefined;
-}
-
 function getInitializedHistoryService(
-  config: Config,
+  uiRuntime: UiRuntime,
 ): RuntimeHistoryService | null {
-  const runtimeConfig = config as RuntimeConfigBoundary;
-  const agentClient = runtimeConfig.getAgentClient?.();
+  const agentClient = uiRuntime.agentClientSource.getAgentClient();
 
-  if (agentClient?.hasChatInitialized?.() !== true) {
+  if (agentClient.hasChatInitialized() !== true) {
     return null;
   }
 
-  return agentClient.getHistoryService?.() ?? null;
+  return agentClient.getHistoryService() ?? null;
 }
 
 function useHistoryTokenListener(
-  config: Config,
+  uiRuntime: UiRuntime,
   updateHistoryTokenCount: (count: number) => void,
   tokenLogger: DebugLogger,
 ): void {
@@ -87,7 +77,7 @@ function useHistoryTokenListener(
     const checkInterval = setInterval(() => {
       if (intervalCleared) return;
 
-      const historyService = getInitializedHistoryService(config);
+      const historyService = getInitializedHistoryService(uiRuntime);
 
       // Handle service identity change (including transition to null).
       if (historyService === lastHistoryServiceRef.current) {
@@ -143,7 +133,7 @@ function useHistoryTokenListener(
       lastHistoryServiceRef.current = null;
       lastPublishedHistoryTokensRef.current = null;
     };
-  }, [config, updateHistoryTokenCount, tokenLogger]);
+  }, [uiRuntime, updateHistoryTokenCount, tokenLogger]);
 }
 
 /**
@@ -156,7 +146,7 @@ function useHistoryTokenListener(
  * after provider switch triggers AgentClient.startChat()).
  */
 function useRecordingSubscription(
-  config: Config,
+  uiRuntime: UiRuntime,
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>,
   tokenLogger: DebugLogger,
 ): void {
@@ -176,7 +166,7 @@ function useRecordingSubscription(
     const checkInterval = setInterval(() => {
       if (intervalCleared) return;
 
-      const historyService = getInitializedHistoryService(config);
+      const historyService = getInitializedHistoryService(uiRuntime);
       if (
         historyService === null ||
         historyService === recordingSubscribedServiceRef.current
@@ -194,7 +184,7 @@ function useRecordingSubscription(
       intervalCleared = true;
       recordingSubscribedServiceRef.current = null;
     };
-  }, [config, recordingIntegrationRef, tokenLogger]);
+  }, [uiRuntime, recordingIntegrationRef, tokenLogger]);
 }
 
 function useTokenMetricsPoll(
@@ -256,7 +246,7 @@ function useTokenMetricsPoll(
 }
 
 export function useTokenMetricsTracking({
-  config,
+  uiRuntime,
   updateHistoryTokenCount,
   recordingIntegrationRef,
 }: UseTokenMetricsTrackingOptions): UseTokenMetricsTrackingResult {
@@ -266,8 +256,8 @@ export function useTokenMetricsTracking({
     [],
   );
 
-  useHistoryTokenListener(config, updateHistoryTokenCount, tokenLogger);
-  useRecordingSubscription(config, recordingIntegrationRef, tokenLogger);
+  useHistoryTokenListener(uiRuntime, updateHistoryTokenCount, tokenLogger);
+  useRecordingSubscription(uiRuntime, recordingIntegrationRef, tokenLogger);
   const tokenMetrics = useTokenMetricsPoll(runtime);
 
   return { tokenMetrics };

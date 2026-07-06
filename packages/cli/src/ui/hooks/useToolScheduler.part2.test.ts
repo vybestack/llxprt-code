@@ -42,6 +42,7 @@ import {
   type WaitingToolCall,
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 
 const buildRequest = (
   overrides: Partial<ToolCallRequestInfo> = {},
@@ -465,7 +466,7 @@ const renderScheduler = (
   renderHook(() =>
     useReactToolScheduler(
       onComplete,
-      mockConfig as unknown as Config,
+      createReactToolSchedulerRuntimeForTest(mockConfig),
       setPendingHistoryItem,
       () => undefined,
       () => {},

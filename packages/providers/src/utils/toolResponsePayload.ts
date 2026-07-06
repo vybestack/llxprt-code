@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolResponseBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { limitOutputTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import {
+  limitOutputTokens,
+  type ToolOutputSettingsProvider,
+} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   ensureJsonSafe,
   hasJsonUnsafeCharacters,
@@ -182,7 +184,7 @@ function formatToolResult(
 function limitToolPayload(
   serializedResult: string,
   block: ToolResponseBlock,
-  config?: Config,
+  config?: ToolOutputSettingsProvider,
 ): {
   text: string;
   truncated: boolean;
@@ -224,7 +226,7 @@ function limitToolPayload(
 
 export function buildToolResponsePayload(
   block: ToolResponseBlock,
-  config?: Config,
+  config?: ToolOutputSettingsProvider,
   humanizeJson?: boolean,
 ): ToolResponsePayload {
   const payload: ToolResponsePayload = {

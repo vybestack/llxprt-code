@@ -16,7 +16,6 @@
 
 import { useState, useRef, useCallback, useMemo } from 'react';
 import {
-  type Config,
   type ThoughtSummary,
   EmojiFilter,
   type EmojiFilterMode,
@@ -27,6 +26,7 @@ import { type HistoryItemWithoutId, MessageType } from '../../types.js';
 import { useStateAndRef } from '../useStateAndRef.js';
 import { useLogger } from '../useLogger.js';
 import { type QueuedSubmission } from './types.js';
+import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export interface UseStreamStateReturn {
   initError: string | null;
@@ -68,19 +68,16 @@ export interface UseStreamStateReturn {
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
 }
 
-function useEmojiFilter(config: Config) {
+function useEmojiFilter(runtime: StreamRuntime) {
   return useMemo(() => {
-    const { getEphemeralSetting } = config as {
-      getEphemeralSetting?: Config['getEphemeralSetting'];
-    };
-    const rawMode = getEphemeralSetting?.call(config, 'emojifilter');
+    const rawMode = runtime.ephemeral.getEphemeralSetting('emojifilter');
     const mode: EmojiFilterMode =
       typeof rawMode === 'string' && rawMode.length > 0
         ? (rawMode as EmojiFilterMode)
         : 'auto';
 
     return mode !== 'allowed' ? new EmojiFilter({ mode }) : undefined;
-  }, [config]);
+  }, [runtime]);
 }
 
 function useSanitizeContent(emojiFilter: EmojiFilter | undefined) {
@@ -192,7 +189,7 @@ function useFlushPendingHistoryItem(
 
 export function useStreamState(
   addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
-  config: Config,
+  runtime: StreamRuntime,
 ): UseStreamStateReturn {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -217,10 +214,10 @@ export function useStreamState(
       ) => Promise<void>)
     | null
   >(null);
-  const storage = config.storage;
+  const storage = runtime.storage;
   const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
 
-  const emojiFilter = useEmojiFilter(config);
+  const emojiFilter = useEmojiFilter(runtime);
   const sanitizeContent = useSanitizeContent(emojiFilter);
   const flushPendingHistoryItem = useFlushPendingHistoryItem(
     addItem,
@@ -231,12 +228,12 @@ export function useStreamState(
   );
   const logger = useLogger(storage);
   const gitService = useMemo(() => {
-    const projectRoot = config.getProjectRoot();
+    const projectRoot = runtime.session.getProjectRoot();
     if (projectRoot.length === 0) {
       return undefined;
     }
     return new GitService(projectRoot, storage);
-  }, [config, storage]);
+  }, [runtime, storage]);
 
   return {
     initError,

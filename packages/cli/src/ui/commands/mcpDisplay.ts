@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config, MCPServerConfig } from '@vybestack/llxprt-code-core';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import type {
   ToolInfo,
   McpPromptInfo,
@@ -19,6 +19,7 @@ import {
   MCPServerStatus,
   mcpServerRequiresOAuth,
 } from '@vybestack/llxprt-code-mcp';
+import type { McpCommandRuntime } from '../cliUiRuntime.js';
 
 export const COLOR_GREEN = '\u001b[32m';
 export const COLOR_YELLOW = '\u001b[33m';
@@ -29,24 +30,13 @@ export const RESET_COLOR = '\u001b[0m';
 
 export const MAX_MCP_RESOURCES_TO_SHOW = 10;
 
-export type RuntimeConfigWithOptionalServices = Omit<
-  Config,
-  'getAgentClient' | 'getMcpClientManager' | 'getResourceRegistry'
-> & {
-  getAgentClient?: () => ReturnType<Config['getAgentClient']> | undefined;
-  getMcpClientManager?: () =>
-    | ReturnType<Config['getMcpClientManager']>
-    | undefined;
-  getResourceRegistry?: () =>
-    | ReturnType<Config['getResourceRegistry']>
-    | undefined;
-};
-
 export type RuntimeMcpServers = Record<string, MCPServerConfig | undefined>;
 
-export const asRuntimeConfig = (
-  config: Config,
-): RuntimeConfigWithOptionalServices => config;
+// @plan:ISSUE-2376 — the /mcp status + schema rendering is fully migrated to the
+// Agent surface (agent.mcp.details()); this alias is retained solely for
+// mcpAuth.ts, whose OAuth-restart flow still needs the #2384 McpCommandRuntime
+// (getMcpClientManager/getAgentClient) and is orthogonal to the display path.
+export type RuntimeMcpServices = McpCommandRuntime;
 
 export const getResourceName = (resource: McpResourceInfo): string =>
   resource.name ?? resource.uri;

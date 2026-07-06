@@ -29,11 +29,11 @@ import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import {
-  type Config,
   type AgentClientContract,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
@@ -81,17 +81,6 @@ function createDeferred<T = void>(): {
     reject = rej;
   });
   return { promise, resolve, reject };
-}
-
-function createMockConfig(): Config {
-  return {
-    getSessionId: () => 'test-session',
-    getModel: () => 'test-model',
-    getMcpClientManager: () => undefined,
-    getMcpServers: () => ({}),
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    setupAsyncTaskAutoTrigger: () => () => {},
-  } as unknown as Config;
 }
 
 function createMockAgentClient(): AgentClientContract {
@@ -153,7 +142,7 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
   // anchored to the imported interface and avoids fresh-object-literal
   // excess-property checks that can misfire under incremental typecheck caches.
   const hookDeps: UseSubmitQueryDeps = {
-    config: createMockConfig(),
+    runtime: createStreamRuntimeForTest(),
     agent: createMockAgentClient() as unknown as Agent,
     addItem: deps.addItem,
     settings: {} as never,
