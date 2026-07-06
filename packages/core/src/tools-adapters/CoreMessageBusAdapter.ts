@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { FunctionCall } from '@google/genai';
+import type { ToolCallRequest } from '../llm-types/toolCall.js';
 import {
   ToolConfirmationOutcome,
   type IToolMessageBus,
@@ -78,7 +78,7 @@ export class CoreMessageBusAdapter implements IToolMessageBus {
       return ToolConfirmationOutcome.Cancel;
     }
 
-    const toolCall: FunctionCall = {
+    const toolCall: ToolCallRequest = {
       name: toolName,
       args: toolArgs,
     };

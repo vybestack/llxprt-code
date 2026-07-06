@@ -136,12 +136,11 @@ export function buildCancelledTransition(
       callId: ctx.request.callId,
       responseParts: [
         {
-          functionResponse: {
-            id: ctx.request.callId,
-            name: ctx.request.name,
-            response: {
-              error: `[Operation Cancelled] Reason: ${reason}`,
-            },
+          type: 'tool_response',
+          callId: ctx.request.callId,
+          toolName: ctx.request.name,
+          result: {
+            error: `[Operation Cancelled] Reason: ${reason}`,
           },
         },
       ],
@@ -220,12 +219,11 @@ export function buildCancelAllEntry(
       callId: call.request.callId,
       responseParts: [
         {
-          functionResponse: {
-            id: call.request.callId,
-            name: call.request.name,
-            response: {
-              error: 'Tool call cancelled by user.',
-            },
+          type: 'tool_response',
+          callId: call.request.callId,
+          toolName: call.request.name,
+          result: {
+            error: 'Tool call cancelled by user.',
           },
         },
       ],

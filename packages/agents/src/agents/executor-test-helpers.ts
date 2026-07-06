@@ -17,9 +17,12 @@ import { StreamEventType, type StreamEvent } from '../core/chatSession.js';
 import {
   type FunctionCall,
   type Part,
-  type GenerateContentResponse,
   type GenerateContentConfig,
 } from '@google/genai';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { responseToModelStreamChunk } from '../core/streamChunkWrapper.js';
+import { attachHookRestrictedAllowedTools } from '../core/hookToolRestrictions.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { z } from 'zod';
@@ -56,11 +59,42 @@ export interface ViTestApi {
 export const createMockResponseChunk = (
   parts: Part[],
   functionCalls?: FunctionCall[],
-): GenerateContentResponse =>
-  ({
-    candidates: [{ index: 0, content: { role: 'model', parts } }],
+  allowedTools?: readonly string[],
+): ModelStreamChunk => {
+  // Avoid duplicating function calls: if parts already carry functionCall
+  // entries, only append the functionCalls that are not represented in parts.
+  const existingCallNames = new Set(
+    parts
+      .filter(
+        (p): p is Part & { functionCall: FunctionCall } =>
+          'functionCall' in p && p.functionCall !== undefined,
+      )
+      .map((p) => p.functionCall.id ?? p.functionCall.name),
+  );
+  const candidateParts = [...parts];
+  if (functionCalls && functionCalls.length > 0) {
+    for (const call of functionCalls) {
+      const key = call.id ?? call.name;
+      if (!existingCallNames.has(key)) {
+        candidateParts.push({ functionCall: call });
+      }
+    }
+  }
+  let mockResp = {
+    candidates: [
+      { index: 0, content: { role: 'model', parts: candidateParts } },
+    ],
     ...(functionCalls && functionCalls.length > 0 ? { functionCalls } : {}),
-  }) as unknown as GenerateContentResponse;
+  } as unknown as Parameters<typeof responseToModelStreamChunk>[0];
+  // When the caller specifies hook-restricted allowed tools, attach the
+  // restriction to the synthetic GenerateContentResponse BEFORE wrapping so
+  // the neutral ModelStreamChunk carries hookRestrictions the same way the
+  // real StreamProcessor → TurnProcessor pipeline does.
+  if (allowedTools !== undefined) {
+    mockResp = attachHookRestrictedAllowedTools(mockResp, allowedTools);
+  }
+  return responseToModelStreamChunk(mockResp);
+};
 
 /**
  * Helper to mock a single turn of model response in the stream.
@@ -95,7 +129,7 @@ export const mockModelResponse = (
 export interface CompletedToolCallParams {
   callId: string;
   name: string;
-  responseParts?: Part[];
+  responseParts?: ContentBlock[];
   resultDisplay?: unknown;
   error?: Error;
   errorType?: ToolErrorType;
@@ -188,7 +222,12 @@ export const mockWorkResponse = (
       name: LSTool.Name,
       resultDisplay: 'ok',
       responseParts: [
-        { functionResponse: { name: LSTool.Name, response: {}, id } },
+        {
+          type: 'tool_response',
+          callId: id,
+          toolName: LSTool.Name,
+          result: {},
+        },
       ],
     }),
   );

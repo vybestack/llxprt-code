@@ -22,13 +22,6 @@
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */
 
-import type {
-  Content,
-  GenerateContentConfig,
-  GenerateContentResponse,
-  PartListUnion,
-  SendMessageParameters,
-} from '@google/genai';
 import type { UserTierId } from '../code_assist/types.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
@@ -45,13 +38,99 @@ import type { ContentGenerator } from './contentGenerator.js';
 import type { ToolSchedulerFactory } from './toolSchedulerContract.js';
 import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 
+/**
+ * Structural shapes matching the portions of the @google/genai SDK types used
+ * by the agent-client contract surface. Defined locally so core does not
+ * import @google/genai; the concrete AgentClient (agents package, #2349)
+ * supplies objects that are structurally compatible with these shapes.
+ *
+ * These intentionally model only the fields the contract surface references;
+ * they are NOT a full re-declaration of the SDK types.
+ */
+
+interface ContractFunctionCall {
+  id?: string;
+  args?: Record<string, unknown>;
+  name?: string;
+}
+
+interface ContractFunctionResponse {
+  id?: string;
+  name?: string;
+  response?: Record<string, unknown>;
+}
+
+export interface ContractPart {
+  text?: string;
+  inlineData?: { data?: string; mimeType?: string; displayName?: string };
+  functionCall?: ContractFunctionCall;
+  functionResponse?: ContractFunctionResponse;
+  fileData?: { fileUri?: string; mimeType?: string; displayName?: string };
+  thought?: boolean;
+  thoughtSignature?: string;
+}
+
+export type ContractPartListUnion =
+  | ContractPart
+  | string
+  | Array<ContractPart | string>;
+
+export interface ContractContent {
+  role?: string;
+  parts?: ContractPart[];
+}
+
+export type ContractContentUnion =
+  | ContractContent
+  | ContractPart
+  | string
+  | Array<ContractPart | string>;
+
+export interface ContractGenerateContentConfig {
+  temperature?: number;
+  maxOutputTokens?: number;
+  topP?: number;
+  topK?: number;
+  systemInstruction?: ContractContentUnion;
+  abortSignal?: AbortSignal;
+  tools?: unknown;
+  toolConfig?: unknown;
+}
+
+export interface ContractGenerateContentResponse {
+  text?: string;
+  data: unknown | undefined;
+  functionCalls: ContractFunctionCall[] | undefined;
+  executableCode: unknown | undefined;
+  codeExecutionResult: unknown | undefined;
+  candidates?: Array<{
+    content?: { role?: string; parts?: ContractPart[] };
+    finishReason?: string;
+    index?: number;
+    safetyRatings?: unknown[];
+  }>;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+    cachedContentTokenCount?: number;
+    thoughtsTokenCount?: number;
+    toolUsePromptTokenCount?: number;
+  };
+}
+
+export interface ContractSendMessageParameters {
+  message: ContractPartListUnion;
+  config?: ContractGenerateContentConfig;
+}
+
 export interface AgentChatContract {
   sendMessageStream(
-    params: SendMessageParameters,
+    params: ContractSendMessageParameters,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>>;
-  getHistory(): Content[];
-  setHistory(history: Content[]): void;
+  getHistory(): ContractContent[];
+  setHistory(history: ContractContent[]): void;
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
   wasRecentlyCompressed(): boolean;
@@ -71,45 +150,45 @@ export interface AgentClientContract {
   isInitialized(): boolean;
   hasChatInitialized(): boolean;
   getChat(): AgentChatContract;
-  getHistory(): Promise<Content[]>;
+  getHistory(): Promise<ContractContent[]>;
   getHistoryService(): HistoryService | null;
   storeHistoryServiceForReuse(service: HistoryService): void;
-  storeHistoryForLaterUse(history: Content[]): void;
+  storeHistoryForLaterUse(history: ContractContent[]): void;
   dispose(): void;
   setTools(): Promise<void>;
   clearTools(): void;
   updateSystemInstruction(): Promise<void>;
-  addHistory(content: Content): Promise<void>;
+  addHistory(content: ContractContent): Promise<void>;
   resetChat(): Promise<void>;
-  resumeChat(history: Content[]): Promise<void>;
+  resumeChat(history: ContractContent[]): Promise<void>;
   setHistory(
-    history: Content[],
+    history: ContractContent[],
     options?: { stripThoughts?: boolean },
   ): Promise<void>;
   restoreHistory(historyItems: IContent[]): Promise<void>;
   addDirectoryContext(): Promise<void>;
   getContentGenerator(): ContentGenerator;
-  startChat(extraHistory?: Content[]): Promise<AgentChatContract>;
+  startChat(extraHistory?: ContractContent[]): Promise<AgentChatContract>;
   generateDirectMessage(
-    params: SendMessageParameters,
+    params: ContractSendMessageParameters,
     promptId: string,
-  ): Promise<GenerateContentResponse>;
+  ): Promise<ContractGenerateContentResponse>;
   generateJson(
-    contents: Content[],
+    contents: ContractContent[],
     schema: Record<string, unknown>,
     abortSignal: AbortSignal,
     model: string,
-    config?: GenerateContentConfig,
+    config?: ContractGenerateContentConfig,
   ): Promise<Record<string, unknown>>;
   generateContent(
-    contents: Content[],
-    generationConfig: GenerateContentConfig,
+    contents: ContractContent[],
+    generationConfig: ContractGenerateContentConfig,
     abortSignal: AbortSignal,
     model: string,
-  ): Promise<GenerateContentResponse>;
+  ): Promise<ContractGenerateContentResponse>;
   generateEmbedding(texts: string[]): Promise<number[][]>;
   sendMessageStream(
-    initialRequest: PartListUnion,
+    initialRequest: ContractPartListUnion,
     signal: AbortSignal,
     prompt_id: string,
     turns?: number,

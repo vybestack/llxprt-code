@@ -7,11 +7,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import type { GenerateContentResponse, Part } from '@google/genai';
+import type { Part } from '@google/genai';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import { type MockedChatInstance } from './turn-test-helpers.js';
+import {
+  type MockedChatInstance,
+  mockResponseToChunk,
+} from './turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -105,14 +108,14 @@ describe('Turn run - abort and idle timeout', () => {
     const mockResponseStream = (async function* () {
       yield {
         type: StreamEventType.CHUNK,
-        value: {
+        value: mockResponseToChunk({
           candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-        } as GenerateContentResponse,
+        }),
       };
       abortController.abort();
       yield {
         type: StreamEventType.CHUNK,
-        value: {
+        value: mockResponseToChunk({
           candidates: [
             {
               content: {
@@ -120,7 +123,7 @@ describe('Turn run - abort and idle timeout', () => {
               },
             },
           ],
-        } as GenerateContentResponse,
+        }),
       };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -170,9 +173,9 @@ describe('Turn run - abort and idle timeout', () => {
         try {
           yield {
             type: StreamEventType.CHUNK,
-            value: {
+            value: mockResponseToChunk({
               candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-            } as GenerateContentResponse,
+            }),
           };
           await new Promise<void>((resolve) => {
             abortController.signal.addEventListener('abort', () => resolve(), {
@@ -181,7 +184,7 @@ describe('Turn run - abort and idle timeout', () => {
           });
           yield {
             type: StreamEventType.CHUNK,
-            value: {
+            value: mockResponseToChunk({
               candidates: [
                 {
                   content: {
@@ -189,7 +192,7 @@ describe('Turn run - abort and idle timeout', () => {
                   },
                 },
               ],
-            } as GenerateContentResponse,
+            }),
           };
         } finally {
           // This ensures return() is called when iterator is closed
@@ -239,26 +242,26 @@ describe('Turn run - abort and idle timeout', () => {
         if (shouldAbort) {
           yield {
             type: StreamEventType.CHUNK,
-            value: {
+            value: mockResponseToChunk({
               candidates: [{ content: { parts: [{ text: 'Partial' }] } }],
-            } as GenerateContentResponse,
+            }),
           };
           abortController.abort();
           await new Promise((resolve) => setTimeout(resolve, 10));
           yield {
             type: StreamEventType.CHUNK,
-            value: {
+            value: mockResponseToChunk({
               candidates: [{ content: { parts: [{ text: 'Ignored' }] } }],
-            } as GenerateContentResponse,
+            }),
           };
         } else {
           yield {
             type: StreamEventType.CHUNK,
-            value: {
+            value: mockResponseToChunk({
               candidates: [
                 { content: { parts: [{ text: 'Second call success' }] } },
               ],
-            } as GenerateContentResponse,
+            }),
           };
         }
       })();
@@ -366,9 +369,9 @@ describe('Turn run - abort and idle timeout', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-          } as GenerateContentResponse,
+          }),
         };
         await new Promise<void>(() => {});
       })();
@@ -451,7 +454,7 @@ describe('Turn run - abort and idle timeout', () => {
         (async function* () {
           yield {
             type: StreamEventType.CHUNK,
-            value: {
+            value: mockResponseToChunk({
               candidates: [
                 {
                   content: {
@@ -459,7 +462,7 @@ describe('Turn run - abort and idle timeout', () => {
                   },
                 },
               ],
-            } as GenerateContentResponse,
+            }),
           };
           if (shouldHang) {
             await new Promise<void>(() => {});

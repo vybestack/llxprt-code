@@ -24,7 +24,7 @@ import type {
 import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
-import { isThoughtPart } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { isThoughtPart } from './googlePartHelpers.js';
 import {
   extractCuratedHistory,
   hasTextContent,

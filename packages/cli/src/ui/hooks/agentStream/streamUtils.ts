@@ -16,6 +16,7 @@
  */
 
 import {
+  type CanonicalFinishReason,
   type Config,
   getCodeAssistServer,
   UserTierId,
@@ -30,7 +31,7 @@ import {
   AllBucketsExhaustedError,
   isAuthBucketFailureReason,
 } from '@vybestack/llxprt-code-providers';
-import { type Part, type PartListUnion, FinishReason } from '@google/genai';
+import { type Part, type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -166,36 +167,78 @@ export function collectAgentTools<
 }
 
 /**
- * Maps a FinishReason to a user-visible message string.
- * Returns undefined for normal stop reasons (STOP, UNSPECIFIED).
+ * Maps a finish reason to a user-visible message string.
+ * Returns undefined for normal stop reasons ('stop', undefined).
+ *
+ * Primary classification is on the canonical finish reason. Finer-grained
+ * legacy messages (recitation, language, blocklist, etc.) are surfaced when
+ * the raw provider stop reason string identifies a specific sub-case.
  */
 export function buildFinishReasonMessage(
-  reason: FinishReason,
+  reason: CanonicalFinishReason | undefined,
+  rawStopReason?: string,
 ): string | undefined {
-  const finishReasonMessages: Record<FinishReason, string | undefined> = {
-    [FinishReason.FINISH_REASON_UNSPECIFIED]: undefined,
-    [FinishReason.STOP]: undefined,
-    [FinishReason.MAX_TOKENS]: 'Response truncated due to token limits.',
-    [FinishReason.SAFETY]: 'Response stopped due to safety reasons.',
-    [FinishReason.RECITATION]: 'Response stopped due to recitation policy.',
-    [FinishReason.LANGUAGE]: 'Response stopped due to unsupported language.',
-    [FinishReason.BLOCKLIST]: 'Response stopped due to forbidden terms.',
-    [FinishReason.PROHIBITED_CONTENT]:
-      'Response stopped due to prohibited content.',
-    [FinishReason.SPII]:
-      'Response stopped due to sensitive personally identifiable information.',
-    [FinishReason.OTHER]: 'Response stopped for other reasons.',
-    [FinishReason.MALFORMED_FUNCTION_CALL]:
-      'Response stopped due to malformed function call.',
-    [FinishReason.IMAGE_SAFETY]:
-      'Response stopped due to image safety violations.',
-    [FinishReason.UNEXPECTED_TOOL_CALL]:
-      'Response stopped due to unexpected tool call.',
-    [FinishReason.IMAGE_PROHIBITED_CONTENT]:
-      'Response stopped due to prohibited content.',
-    [FinishReason.NO_IMAGE]: 'Response stopped due to no image.',
-  };
-  return finishReasonMessages[reason];
+  switch (reason) {
+    case 'max_tokens':
+      return 'Response truncated due to token limits.';
+    case 'safety':
+      return resolveSafetyMessage(rawStopReason);
+    case 'refusal':
+      return REFUSAL_NOTICE_MESSAGE;
+    case 'error':
+      return resolveErrorMessage(rawStopReason);
+    case 'stop':
+    case 'tool_calls':
+    case undefined:
+      return undefined;
+    case 'other':
+    default:
+      return resolveOtherMessage(rawStopReason);
+  }
+}
+
+function resolveSafetyMessage(
+  rawStopReason: string | undefined,
+): string | undefined {
+  switch (rawStopReason) {
+    case 'RECITATION':
+      return 'Response stopped due to recitation policy.';
+    case 'BLOCKLIST':
+      return 'Response stopped due to forbidden terms.';
+    case 'PROHIBITED_CONTENT':
+    case 'IMAGE_PROHIBITED_CONTENT':
+      return 'Response stopped due to prohibited content.';
+    case 'SPII':
+      return 'Response stopped due to sensitive personally identifiable information.';
+    case 'IMAGE_SAFETY':
+      return 'Response stopped due to image safety violations.';
+    default:
+      return 'Response stopped due to safety reasons.';
+  }
+}
+
+function resolveErrorMessage(
+  rawStopReason: string | undefined,
+): string | undefined {
+  if (rawStopReason === 'MALFORMED_FUNCTION_CALL') {
+    return 'Response stopped due to malformed function call.';
+  }
+  if (rawStopReason === 'UNEXPECTED_TOOL_CALL') {
+    return 'Response stopped due to unexpected tool call.';
+  }
+  return 'Response stopped due to a model error.';
+}
+
+function resolveOtherMessage(
+  rawStopReason: string | undefined,
+): string | undefined {
+  if (rawStopReason === 'LANGUAGE') {
+    return 'Response stopped due to unsupported language.';
+  }
+  if (rawStopReason === 'NO_IMAGE') {
+    return 'Response stopped due to no image.';
+  }
+  return 'Response stopped for other reasons.';
 }
 
 /**

@@ -24,7 +24,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { Content } from '@google/genai';
+import type { CheckpointContent } from './logger.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 import crypto from 'node:crypto';
@@ -434,7 +434,7 @@ describe('Logger', () => {
   });
 
   describe('saveCheckpoint', () => {
-    const conversation: Content[] = [
+    const conversation: CheckpointContent[] = [
       { role: 'user', parts: [{ text: 'Hello' }] },
       { role: 'model', parts: [{ text: 'Hi there' }] },
     ];
@@ -487,7 +487,7 @@ describe('Logger', () => {
   });
 
   describe('loadCheckpoint', () => {
-    const conversation: Content[] = [
+    const conversation: CheckpointContent[] = [
       { role: 'user', parts: [{ text: 'Hello' }] },
       { role: 'model', parts: [{ text: 'Hi there' }] },
     ];
@@ -585,7 +585,7 @@ describe('Logger', () => {
   });
 
   describe('deleteCheckpoint', () => {
-    const conversation: Content[] = [
+    const conversation: CheckpointContent[] = [
       { role: 'user', parts: [{ text: 'Content to be deleted' }] },
     ];
     const tag = 'delete-me';
@@ -732,7 +732,7 @@ describe('Logger', () => {
   });
 
   describe('Backward compatibility', () => {
-    const conversation: Content[] = [
+    const conversation: CheckpointContent[] = [
       { role: 'user', parts: [{ text: 'Hello' }] },
       { role: 'model', parts: [{ text: 'Hi there' }] },
     ];

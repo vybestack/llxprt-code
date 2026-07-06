@@ -17,7 +17,7 @@
  * depending on agents.
  */
 
-import type { FunctionDeclaration, Part } from '@google/genai';
+import type { ToolDeclaration } from '../llm-types/toolDeclaration.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -148,7 +148,7 @@ export interface ToolConfig {
    * A list of tool names (from the tool registry) or full function declarations
    * that the subagent is permitted to use.
    */
-  tools: Array<string | FunctionDeclaration>;
+  tools: Array<string | ToolDeclaration>;
 }
 
 /**
@@ -165,14 +165,16 @@ export interface OutputConfig {
 export interface SubAgentRuntimeOverrides {
   settingsSnapshot?: ReadonlySettingsSnapshot;
   toolRegistry?: ToolRegistry;
-  environmentContextLoader?: (runtime: AgentRuntimeContext) => Promise<Part[]>;
+  environmentContextLoader?: (
+    runtime: AgentRuntimeContext,
+  ) => Promise<Array<{ text?: string }>>;
   runtimeBundle?: AgentRuntimeLoaderResult;
   messageBus?: MessageBus;
 }
 
 export type EnvironmentContextLoader = (
   runtime: AgentRuntimeContext,
-) => Promise<Part[]>;
+) => Promise<Array<{ text?: string }>>;
 
 export const defaultEnvironmentContextLoader: EnvironmentContextLoader =
   async () => [];

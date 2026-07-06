@@ -19,7 +19,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { getResponseText } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import { getResponseText } from '@vybestack/llxprt-code-core/utils/partUtils.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import type {
   ApprovalMode,
@@ -830,7 +830,7 @@ export class AgentImpl implements Agent {
 
   async getHistory(): Promise<readonly AgentMessage[]> {
     const client = this.deps.resolveClient();
-    return client.getHistory();
+    return (await client.getHistory()) as readonly AgentMessage[];
   }
 
   async setHistory(

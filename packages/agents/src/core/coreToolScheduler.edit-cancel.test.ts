@@ -119,34 +119,66 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     // Regression (Issue #864): ensure cancellation responseParts can be persisted
     // into provider-visible history as a paired tool_call + tool_response.
+    // With the neutral block contract the cancelled response carries only the
+    // tool_response; the tool_call is recorded separately from the model's
+    // streamed assistant message. We simulate the combined turn content the
+    // way the agentic loop records it: an AI message with the tool_call
+    // followed by a user message with the tool_response from the cancelled
+    // call, and verify the converter pairs them into well-formed history.
     const historyService = new HistoryService();
-    const combinedContent: Content = {
+    const turnKey = historyService.generateTurnKey();
+    const idGenerator = historyService.getIdGeneratorCallback(turnKey);
+
+    const assistantContent: Content = {
+      role: 'model',
+      parts: [
+        {
+          functionCall: {
+            id: request.callId,
+            name: request.name,
+            args: request.args,
+          },
+        },
+      ],
+    };
+    historyService.add(
+      ContentConverters.toIContent(
+        assistantContent,
+        idGenerator,
+        undefined,
+        turnKey,
+      ),
+    );
+
+    const toolResponseContent: Content = {
       role: 'user',
       parts: cancelledCall.response.responseParts as Part[],
     };
-
-    const turnKey = historyService.generateTurnKey();
     historyService.add(
       ContentConverters.toIContent(
-        combinedContent,
-        historyService.getIdGeneratorCallback(turnKey),
+        toolResponseContent,
+        idGenerator,
         undefined,
         turnKey,
       ),
     );
 
     const curated = historyService.getCuratedForProvider();
-    expect(curated).toHaveLength(2);
-    expect(curated[0].speaker).toBe('ai');
-    expect(curated[0].blocks[0].type).toBe('tool_call');
-    expect(curated[0].blocks[0]).toMatchObject({
+    expect(curated.filter((c) => c.speaker === 'ai')).toHaveLength(1);
+    expect(curated.filter((c) => c.speaker === 'tool')).toHaveLength(1);
+    // The converter pairs the tool_call and tool_response into a single AI
+    // turn (tool_call) + tool turn (tool_response).
+    const toolCallMessage = curated.find((c) => c.speaker === 'ai');
+    const toolResponseMessage = curated.find((c) => c.speaker === 'tool');
+    expect(toolCallMessage).toBeDefined();
+    expect(toolResponseMessage).toBeDefined();
+    expect(toolCallMessage!.blocks[0]).toMatchObject({
       type: 'tool_call',
       name: 'mockEditTool',
     });
-    const toolCallId = (curated[0].blocks[0] as ToolCallBlock).id;
+    const toolCallId = (toolCallMessage!.blocks[0] as ToolCallBlock).id;
     expect(toolCallId).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
-    expect(curated[1].speaker).toBe('tool');
-    expect(curated[1].blocks[0]).toMatchObject({
+    expect(toolResponseMessage!.blocks[0]).toMatchObject({
       type: 'tool_response',
       callId: toolCallId,
       toolName: 'mockEditTool',

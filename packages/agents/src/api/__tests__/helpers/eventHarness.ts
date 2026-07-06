@@ -17,7 +17,9 @@
  * lives under __tests__/helpers/ which is excluded from the P09 boundary scan.
  */
 
-import { FinishReason, type Part } from '@google/genai';
+import { type Part } from '@google/genai';
+import type { CanonicalFinishReason } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   AgentEventType,
   DEFAULT_AGENT_ID,
@@ -160,7 +162,7 @@ export function streamMaxTurns(): ServerAgentStreamEvent {
 }
 
 export function streamFinished(
-  reason: FinishReason = FinishReason.STOP,
+  reason: CanonicalFinishReason = 'stop',
   stopReason?: string,
 ): ServerAgentStreamEvent {
   return {
@@ -191,7 +193,7 @@ export function streamToolCallRequest(
 
 export function streamToolCallResponse(
   callId: string,
-  responseParts: Part[],
+  responseParts: ContentBlock[],
   overrides: Partial<ToolCallResponseInfo> = {},
 ): ServerAgentStreamEvent {
   const value: ToolCallResponseInfo = {

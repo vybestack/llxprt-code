@@ -10,31 +10,29 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { PartListUnion, FunctionCall } from '@google/genai';
 import type {
-  GenerateContentResponse,
-  FinishReason,
-  GenerateContentResponseUsageMetadata,
-} from '@google/genai';
+  ModelStreamChunk,
+  CanonicalFinishReason,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  IContent,
+  ContentBlock,
+  UsageStats,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  type Part,
-  type PartListUnion,
-  type FunctionCall,
-} from '@google/genai';
-import {
-  getFunctionCallsFromParts,
   analyzeResponseOutcome,
   type ResponseOutcome,
 } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import { isThoughtPart } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { getFunctionCallsFromParts } from './googlePartHelpers.js';
+import { chunkToParts } from './streamChunkWrapper.js';
 import {
   filterHookRestrictedParts,
   filterHookRestrictedFunctionCalls,
-  getHookRestrictedAllowedTools,
-  getHookRestrictedFunctionCallsFromParts,
   getHookRestrictedAllowedToolsForFunctionCall,
   mergeHookRestrictedFunctionCalls,
 } from './hookToolRestrictions.js';
-import { getProviderStopReason } from './providerStopReason.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import {
   getErrorMessage,
@@ -42,6 +40,7 @@ import {
   toFriendlyError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
 import { normalizeToolName } from '@vybestack/llxprt-code-tools';
+import { canonicalizeToolName } from './toolGovernance.js';
 import type { ChatSession } from './chatSession.js';
 import {
   InvalidStreamError,
@@ -73,16 +72,43 @@ const TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE =
   'Stream idle timeout: no response received within the allowed time.';
 
 /**
+ * Filters ContentBlocks by hook-restricted allowed tool names.
+ * Tool-call and tool-response blocks are kept only if their tool name is in
+ * the allowed set; other block types (text, thinking, media, code) always pass.
+ *
+ * @issue #2348 — replaces the Part[]-based filterHookRestrictedParts for the
+ * block-shaped pipeline.
+ */
+function filterBlocksByAllowedTools(
+  blocks: ContentBlock[],
+  allowedToolNames: string[] | undefined,
+): ContentBlock[] {
+  if (allowedToolNames === undefined) {
+    return [...blocks];
+  }
+  const allowed = new Set(allowedToolNames.map(canonicalizeToolName));
+  return blocks.filter((block) => {
+    if (block.type === 'tool_call') {
+      return allowed.has(canonicalizeToolName(block.name));
+    }
+    if (block.type === 'tool_response') {
+      return allowed.has(canonicalizeToolName(block.toolName));
+    }
+    return true;
+  });
+}
+
+/**
  * Options object for {@link Turn.emitFinishReason}. Encapsulates the data
  * needed to emit a Finished event, including the raw provider stop reason
  * (@issue:2329) so it can be surfaced to consumers.
  */
 interface EmitFinishReasonOptions {
-  finishReason: FinishReason;
-  allParts: Part[];
+  finishReason: CanonicalFinishReason;
+  allParts: ContentBlock[];
   functionCalls: FunctionCall[];
   text: string | undefined;
-  usageMetadata: GenerateContentResponseUsageMetadata | undefined;
+  usageMetadata: UsageStats | undefined;
   traceId: string | undefined;
   cumulativeOutcome: ResponseOutcome;
   stopReason: string | undefined;
@@ -180,8 +206,8 @@ export type {
 // A turn manages the agentic loop turn within the server context.
 export class Turn {
   readonly pendingToolCalls: ToolCallRequestInfo[];
-  private debugResponses: GenerateContentResponse[];
-  finishReason: FinishReason | undefined;
+  private debugResponses: ModelStreamChunk[];
+  finishReason: CanonicalFinishReason | undefined;
   private logger: DebugLogger;
 
   constructor(
@@ -283,10 +309,10 @@ export class Turn {
   }
 
   private logNoFinishReason(
-    allParts: Part[],
+    allParts: ContentBlock[],
     functionCalls: FunctionCall[],
     text: string | undefined,
-    usageMetadata: GenerateContentResponseUsageMetadata | undefined,
+    usageMetadata: UsageStats | undefined,
     traceId: string | undefined,
   ): void {
     this.logger.debug(() => `[stream:turn] chunk had no finishReason`, {
@@ -298,50 +324,37 @@ export class Turn {
     });
   }
 
-  private pushFilteredDebugResponse(
-    resp: GenerateContentResponse,
-    allowedParts: Part[],
+  private pushFilteredDebugChunk(
+    chunk: ModelStreamChunk,
+    allowedBlocks: ContentBlock[],
   ): void {
-    this.debugResponses.push(
-      resp.candidates === undefined
-        ? resp
-        : ({
-            ...resp,
-            candidates: resp.candidates.map((candidate, index) =>
-              index === 0
-                ? {
-                    ...candidate,
-                    content:
-                      candidate.content === undefined
-                        ? undefined
-                        : { ...candidate.content, parts: allowedParts },
-                  }
-                : candidate,
-            ),
-          } as GenerateContentResponse),
-    );
+    this.debugResponses.push({
+      ...chunk,
+      content: { ...chunk.content, blocks: allowedBlocks },
+    });
   }
 
   private *processStreamChunk(
-    resp: GenerateContentResponse,
+    chunk: ModelStreamChunk,
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerAgentStreamEvent> {
-    // Check ALL parts for thinking, not just parts[0]
-    // Bug fix: Previously only checked parts[0], missing thoughts in other positions
-    // @plan PLAN-20251202-THINKING.P16
-    const allParts = resp.candidates?.[0]?.content?.parts ?? [];
-    const allowedParts = filterHookRestrictedParts(
-      allParts,
-      getHookRestrictedAllowedTools(resp),
-    );
-    this.pushFilteredDebugResponse(resp, allowedParts);
+    const allBlocks = chunk.content.blocks;
+    const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
 
-    for (const part of allowedParts) {
-      if ((part as unknown as { thought?: boolean }).thought === true) {
-        const thought = parseThought(
-          (part as unknown as { text?: string }).text ?? '',
-        );
+    const allowedParts = filterHookRestrictedParts(
+      chunkToParts(chunk),
+      allowedToolNames,
+    );
+    const allowedBlocks = filterBlocksByAllowedTools(
+      allBlocks,
+      allowedToolNames,
+    );
+    this.pushFilteredDebugChunk(chunk, allowedBlocks);
+
+    for (const block of allowedBlocks) {
+      if (block.type === 'thinking') {
+        const thought = parseThought(block.thought);
         yield {
           type: AgentEventType.Thought,
           value: thought,
@@ -350,41 +363,28 @@ export class Turn {
       }
     }
 
-    const finishReason = resp.candidates?.[0]?.finishReason;
-    // @issue:2329 — thread the raw provider stop reason (repo-owned
-    // providerStopReason field, set by MessageConverter) into the Finished
-    // event so consumers can surface a refusal-specific notice. Native SDK
-    // responses never carry this field, so descriptive finishMessage text
-    // can never leak into the stop-reason signal.
-    const providerStopReason = getProviderStopReason(resp.candidates?.[0]);
-    const text = allowedParts
-      .filter((part) => !isThoughtPart(part))
-      .map((part) => part.text)
-      .filter((partText): partText is string => typeof partText === 'string')
-      .join('');
-    if (text !== '') {
-      yield { type: AgentEventType.Content, value: text, traceId };
+    const finishReason = chunk.finishReason;
+    const providerStopReason = chunk.rawStopReason;
+    const text = yield* this.emitTextContent(allowedBlocks, traceId);
 
-      if (text.trim() !== '') {
-        // Emit citation event if conditions are met
-        // Based on upstream implementation - emit citation after content
-        const citationEvent = this.emitCitation(
-          'Response may contain information from external sources. Please verify important details independently.',
-        );
-        if (citationEvent) {
-          yield citationEvent;
-        }
-      }
-    }
-
-    // Handle function calls (requesting tool execution)
     const partFunctionCalls = getFunctionCallsFromParts(allowedParts) ?? [];
+    const toolCallBlocks: ToolCallBlock[] = allowedBlocks.filter(
+      (block): block is ToolCallBlock => block.type === 'tool_call',
+    );
+    const blockFunctionCalls: FunctionCall[] = toolCallBlocks.map(
+      (block) =>
+        ({
+          id: block.id,
+          name: block.name,
+          args: block.parameters as Record<string, unknown>,
+        }) as FunctionCall,
+    );
     const topLevelFunctionCalls = filterHookRestrictedFunctionCalls(
-      resp.functionCalls ?? [],
-      getHookRestrictedAllowedTools(resp),
+      partFunctionCalls.length > 0 ? partFunctionCalls : blockFunctionCalls,
+      allowedToolNames,
     );
     const functionCalls = mergeHookRestrictedFunctionCalls(
-      partFunctionCalls,
+      partFunctionCalls.length > 0 ? partFunctionCalls : blockFunctionCalls,
       topLevelFunctionCalls,
     );
     for (const [functionCallIndex, fnCall] of functionCalls.entries()) {
@@ -394,28 +394,49 @@ export class Turn {
       }
     }
 
-    // This is the key change: Only yield 'Finished' if there is a finishReason.
-    // Pass only allowed function calls so logging/outcome reflect executable calls.
-    if (finishReason != null) {
+    if (finishReason !== undefined) {
       yield* this.emitFinishReason({
         finishReason,
-        allParts: allowedParts,
+        allParts: allowedBlocks,
         functionCalls,
         text,
-        usageMetadata: resp.usageMetadata,
+        usageMetadata: chunk.usage,
         traceId,
         cumulativeOutcome,
         stopReason: providerStopReason,
       });
     } else {
       this.logNoFinishReason(
-        allowedParts,
+        allowedBlocks,
         functionCalls,
         text,
-        resp.usageMetadata,
+        chunk.usage,
         traceId,
       );
     }
+  }
+
+  private *emitTextContent(
+    blocks: IContent['blocks'],
+    traceId: string | undefined,
+  ): Generator<ServerAgentStreamEvent, string> {
+    const text = blocks
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as { text: string }).text)
+      .join('');
+    if (text !== '') {
+      yield { type: AgentEventType.Content, value: text, traceId };
+
+      if (text.trim() !== '') {
+        const citationEvent = this.emitCitation(
+          'Response may contain information from external sources. Please verify important details independently.',
+        );
+        if (citationEvent) {
+          yield citationEvent;
+        }
+      }
+    }
+    return text;
   }
 
   private createEmptyResponseOutcome(): ResponseOutcome {
@@ -475,15 +496,15 @@ export class Turn {
       if (dispatch.action === 'return') {
         return;
       }
-      if (dispatch.action === 'process' && dispatch.resp != null) {
+      if (dispatch.action === 'process' && dispatch.chunk != null) {
         cumulativeOutcome = this.mergeResponseOutcome(
           cumulativeOutcome,
-          dispatch.resp,
+          dispatch.chunk,
         );
-        const traceId = dispatch.resp.responseId ?? undefined;
+        const traceId = dispatch.chunk.responseId ?? undefined;
         yield* this.processStreamChunk(
-          dispatch.resp,
-          traceId as string,
+          dispatch.chunk,
+          traceId,
           cumulativeOutcome,
         );
       }
@@ -498,14 +519,14 @@ export class Turn {
     {
       action: 'continue' | 'process' | 'return';
       outcome: ResponseOutcome;
-      resp: GenerateContentResponse | null;
+      chunk: ModelStreamChunk | null;
     }
   > {
     // Handle the RETRY event
     if (streamEvent.type === StreamEventType.RETRY) {
       const outcome = this.createEmptyResponseOutcome();
       yield { type: AgentEventType.Retry };
-      return { action: 'continue', outcome, resp: null };
+      return { action: 'continue', outcome, chunk: null };
     }
 
     // Handle AGENT_EXECUTION_STOPPED event
@@ -516,7 +537,7 @@ export class Turn {
         systemMessage: streamEvent.systemMessage,
         contextCleared: streamEvent.contextCleared,
       };
-      return { action: 'return', outcome: cumulativeOutcome, resp: null };
+      return { action: 'return', outcome: cumulativeOutcome, chunk: null };
     }
 
     // Handle AGENT_EXECUTION_BLOCKED event
@@ -527,41 +548,24 @@ export class Turn {
         systemMessage: streamEvent.systemMessage,
         contextCleared: streamEvent.contextCleared,
       };
-      return { action: 'continue', outcome: cumulativeOutcome, resp: null };
+      return { action: 'continue', outcome: cumulativeOutcome, chunk: null };
     }
 
     // Narrow to CHUNK — the only other variant in the discriminated union
-    const resp = streamEvent.value as GenerateContentResponse | null;
-    return { action: 'process', outcome: cumulativeOutcome, resp };
+    const chunk = streamEvent.value as ModelStreamChunk | null;
+    return { action: 'process', outcome: cumulativeOutcome, chunk };
   }
 
   private mergeResponseOutcome(
     cumulativeOutcome: ResponseOutcome,
-    resp: GenerateContentResponse,
+    chunk: ModelStreamChunk,
   ): ResponseOutcome {
-    const parts = resp.candidates?.[0]?.content?.parts ?? [];
-    const allowedParts = filterHookRestrictedParts(
-      parts,
-      getHookRestrictedAllowedTools(resp),
+    const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
+    const allowedBlocks = filterBlocksByAllowedTools(
+      chunk.content.blocks,
+      allowedToolNames,
     );
-    const allowedPartCalls = getHookRestrictedFunctionCallsFromParts(
-      allowedParts,
-      getHookRestrictedAllowedTools(resp),
-    );
-    const allowedMergedCalls = mergeHookRestrictedFunctionCalls(
-      allowedPartCalls,
-      filterHookRestrictedFunctionCalls(
-        resp.functionCalls ?? [],
-        getHookRestrictedAllowedTools(resp),
-      ),
-    );
-    const allowedTopLevelCallParts = allowedMergedCalls
-      .slice(allowedPartCalls.length)
-      .map((functionCall) => ({ functionCall }));
-    const chunkOutcome = analyzeResponseOutcome([
-      ...allowedParts,
-      ...allowedTopLevelCallParts,
-    ]);
+    const chunkOutcome = analyzeResponseOutcome(allowedBlocks);
     return {
       hasVisibleText:
         cumulativeOutcome.hasVisibleText || chunkOutcome.hasVisibleText,
@@ -691,8 +695,9 @@ export class Turn {
     functionCallIndex: number,
   ): ServerAgentStreamEvent | null {
     const callId =
-      fnCall.id ??
-      this.createSyntheticFunctionCallId(fnCall, functionCallIndex);
+      fnCall.id !== undefined && fnCall.id !== ''
+        ? fnCall.id
+        : this.createSyntheticFunctionCallId(fnCall, functionCallIndex);
 
     // REAL FIX: Turn.ts also gets fragmented data - handle properly
     let name = fnCall.name;
@@ -750,7 +755,7 @@ export class Turn {
     return `${name}-${functionCallIndex}-${digest}`;
   }
 
-  getDebugResponses(): GenerateContentResponse[] {
+  getDebugResponses(): ModelStreamChunk[] {
     return this.debugResponses;
   }
 }

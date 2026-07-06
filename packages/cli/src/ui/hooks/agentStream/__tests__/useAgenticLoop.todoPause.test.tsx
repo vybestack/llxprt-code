@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { FinishReason } from '@google/genai';
 import { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useAgenticLoop } from '../useAgenticLoop.js';
@@ -122,7 +121,7 @@ function toolCallRequestEvent(
 function finishedEvent(): ServerAgentStreamEvent {
   return {
     type: AgentEventType.Finished,
-    value: { reason: FinishReason.STOP },
+    value: { reason: 'stop' },
   };
 }
 

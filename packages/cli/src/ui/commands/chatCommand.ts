@@ -29,7 +29,6 @@ import type {
 } from '../types.js';
 import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
-import { type Part } from '@google/genai';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 /**
@@ -177,7 +176,10 @@ const saveCommand: SlashCommand = {
     const chat = client.getChat();
     const history = chat.getHistory();
     if (history.length > INITIAL_HISTORY_LENGTH) {
-      await logger.saveCheckpoint(history, tag);
+      await logger.saveCheckpoint(
+        history as Parameters<typeof logger.saveCheckpoint>[0],
+        tag,
+      );
       return {
         type: 'message',
         messageType: 'info',
@@ -232,7 +234,7 @@ const resumeCommand: SlashCommand = {
       conversation = conversation.map((item) => {
         const filteredItem = { ...item };
         if (Array.isArray(filteredItem.parts)) {
-          filteredItem.parts = filteredItem.parts.map((part: Part) => {
+          filteredItem.parts = filteredItem.parts.map((part) => {
             if (part.text) {
               const filterResult = emojiFilter.filterText(part.text);
               return { ...part, text: filterResult.filtered as string };
@@ -255,8 +257,7 @@ const resumeCommand: SlashCommand = {
     // Convert checkpoint history to UI history items for display
     // Use LoadHistoryActionReturn to properly sync both UI and client history
     const uiHistory: HistoryItemWithoutId[] = conversation.map((content) => {
-      const text =
-        content.parts?.map((part: Part) => part.text ?? '').join('') ?? '';
+      const text = content.parts?.map((part) => part.text ?? '').join('') ?? '';
       return {
         type: content.role === 'user' ? MessageType.USER : MessageType.AI,
         text,
@@ -473,8 +474,7 @@ const restoreHistory = async (
 
   // Convert to UI history items for display
   const uiHistory: HistoryItemWithoutId[] = newHistory.map((content) => {
-    const text =
-      content.parts?.map((part: Part) => part.text ?? '').join('') ?? '';
+    const text = content.parts?.map((part) => part.text ?? '').join('') ?? '';
     return {
       type: content.role === 'user' ? MessageType.USER : MessageType.AI,
       text,

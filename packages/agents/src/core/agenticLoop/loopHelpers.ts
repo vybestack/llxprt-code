@@ -17,6 +17,7 @@ import type { Part } from '@google/genai';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { convertBlocksToParts } from '../MessageConverter.js';
 
 function isFunctionCallPart(part: Part): boolean {
   return 'functionCall' in part;
@@ -81,7 +82,9 @@ export function classifyCompletedTools(tools: CompletedToolCall[]): {
  */
 export function buildToolResponses(geminiTools: CompletedToolCall[]): Part[] {
   return geminiTools.flatMap((toolCall) =>
-    toolCall.response.responseParts.filter((part) => !isFunctionCallPart(part)),
+    convertBlocksToParts(toolCall.response.responseParts).filter(
+      (part) => !isFunctionCallPart(part),
+    ),
   );
 }
 
@@ -98,7 +101,9 @@ export async function recordCancelledToolHistory(
   tools: CompletedToolCall[],
   agentClient: AgentClientContract,
 ): Promise<void> {
-  const allParts = tools.flatMap((tc) => tc.response.responseParts);
+  const allParts = tools.flatMap((tc) =>
+    convertBlocksToParts(tc.response.responseParts),
+  );
   const { functionCalls, functionResponses, otherParts } =
     splitPartsByRole(allParts);
 

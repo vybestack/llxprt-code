@@ -4,26 +4,39 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type PartListUnion,
-  type Part,
-  type GenerateContentResponse,
-} from '@google/genai';
+/**
+ * Structural shape for legacy Google Part input — operates on `unknown` with
+ * structural checks so NO @google/genai import is needed in this file.
+ */
+interface LegacyPartLike {
+  text?: string;
+  thought?: unknown;
+  functionCall?: { name?: string } | undefined;
+  functionResponse?: { name?: string } | undefined;
+  inlineData?: { mimeType?: string } | undefined;
+  fileData?: unknown;
+  videoMetadata?: unknown;
+  codeExecutionResult?: unknown;
+  executableCode?: unknown;
+}
 
-function isEmptyPartValue(value: PartListUnion | undefined | null): boolean {
-  const v = value as unknown;
-  if (v === undefined || v === null || v === false || v === 0) {
+function isEmptyPartValue(value: unknown): boolean {
+  if (value === undefined || value === null || value === false || value === 0) {
     return true;
   }
-  return typeof v === 'number' && Number.isNaN(v);
+  return typeof value === 'number' && Number.isNaN(value);
+}
+
+function isNonNullObject(value: unknown): value is LegacyPartLike {
+  return typeof value === 'object' && value !== null;
 }
 
 /**
- * Converts a PartListUnion into a string.
+ * Converts a legacy PartListUnion-shaped value into a string.
  * If verbose is true, includes summary representations of non-text parts.
  */
 export function partToString(
-  value: PartListUnion | undefined | null,
+  value: unknown,
   options?: { verbose?: boolean },
 ): string {
   if (isEmptyPartValue(value)) {
@@ -36,13 +49,11 @@ export function partToString(
     return value.map((part) => partToString(part, options)).join('');
   }
 
-  // Cast to Part, assuming it might contain project-specific fields
-  const part = value as Part & {
-    videoMetadata?: unknown;
-    thought?: unknown;
-    codeExecutionResult?: unknown;
-    executableCode?: unknown;
-  };
+  if (!isNonNullObject(value)) {
+    return '';
+  }
+
+  const part = value;
 
   if (options?.verbose === true) {
     if (part.videoMetadata !== undefined) {
@@ -58,7 +69,6 @@ export function partToString(
       return `[Executable Code]`;
     }
 
-    // Standard Part fields
     if (part.fileData !== undefined) {
       return `[File Data]`;
     }
@@ -77,34 +87,48 @@ export function partToString(
 }
 
 /**
- * Safely extracts text from a GenerateContentResponse.
- * Unlike the .text getter on GenerateContentResponse, this function
- * handles cases where the response has no candidates or is safety-blocked
- * without throwing errors.
+ * Structural shape for a legacy GenerateContentResponse — operates on `unknown`
+ * with structural checks so NO @google/genai import is needed in this file.
+ * @phase3 — hookTranslator (Phase 3) calls this; full retirement removes it.
+ */
+interface LegacyGenerateContentResponseLike {
+  candidates?:
+    | Array<{
+        content?: { parts?: Array<{ text?: string }> } | undefined;
+      }>
+    | undefined;
+}
+
+/**
+ * Safely extracts text from a legacy GenerateContentResponse-shaped object.
+ * Unlike the SDK's .text getter, this function handles cases where the
+ * response has no candidates or is safety-blocked without throwing errors.
  *
- * @param response - The GenerateContentResponse to extract text from
- * @returns The concatenated text from the first candidate's parts, or null if unavailable
+ * @param response — Legacy GenerateContentResponse-shaped object
+ * @returns The concatenated text from the first candidate's parts, or null
+ * @phase3 — Retire when hookTranslator migrates to neutral ModelOutput (#2348 hooks phase)
  */
 export function getResponseText(
-  response: GenerateContentResponse,
+  response: LegacyGenerateContentResponseLike,
 ): string | null {
-  if (response.candidates && response.candidates.length > 0) {
-    const candidate = response.candidates[0];
-
-    if (candidate.content?.parts && candidate.content.parts.length > 0) {
-      return candidate.content.parts
-        .filter((part) => part.text)
-        .map((part) => part.text)
-        .join('');
-    }
+  if (
+    response.candidates &&
+    response.candidates.length > 0 &&
+    response.candidates[0].content?.parts &&
+    response.candidates[0].content.parts.length > 0
+  ) {
+    return response.candidates[0].content.parts
+      .filter((part) => part.text)
+      .map((part) => part.text)
+      .join('');
   }
   return null;
 }
 
 /**
- * Convert a PartListUnion to a verbose string representation.
+ * Convert a legacy PartListUnion-shaped value to a verbose string representation.
  * This is the canonical replacement for the retired geminiRequest.partListUnionToString.
  */
-export function partListUnionToString(value: PartListUnion): string {
+export function partListUnionToString(value: unknown): string {
   return partToString(value, { verbose: true });
 }

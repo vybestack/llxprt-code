@@ -7,7 +7,6 @@
 import { copyToClipboard } from '../utils/commandUtils.js';
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
-import type { Part, Content } from '@google/genai';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 
 export const copyCommand: SlashCommand = {
@@ -31,9 +30,7 @@ export const copyCommand: SlashCommand = {
     const history = chat.getHistory();
 
     // Get the last message from the AI (model role)
-    const lastAiMessage = history
-      .filter((item: Content) => item.role === 'model')
-      .pop();
+    const lastAiMessage = history.filter((item) => item.role === 'model').pop();
 
     if (!lastAiMessage) {
       return {
@@ -44,8 +41,8 @@ export const copyCommand: SlashCommand = {
     }
     // Extract text from the parts
     const lastAiOutput = lastAiMessage.parts
-      ?.filter((part: Part) => part.text)
-      .map((part: Part) => part.text)
+      ?.filter((part) => part.text)
+      .map((part) => part.text)
       .join('');
 
     if (lastAiOutput) {

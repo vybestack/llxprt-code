@@ -277,7 +277,10 @@ export function processNonInteractiveTextResponse(
       ctx.output.terminate_reason = SubagentTerminateMode.ERROR;
       throw new Error(finalFilter.error ?? 'Content blocked by emoji filter');
     }
-    ctx.output.final_message = finalFilter.text;
+    // Only adopt model text as the final message when nothing more authoritative
+    // (e.g. a fatal tool-unavailable message) has already claimed it. Later,
+    // finalizeOutput appends the emitted-variables suffix.
+    ctx.output.final_message ??= finalFilter.text;
   }
 
   const preview =

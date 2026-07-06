@@ -92,7 +92,8 @@ describe('CoreToolScheduler non-interactive mode', () => {
     const erroredCall = completedCalls[0] as ErroredToolCall;
     const errorResponse = erroredCall.response;
     const errorParts = errorResponse.responseParts;
-    const errorMessage = errorParts[0].functionResponse.response.error;
+    const errorMessage = (errorParts[0] as { result?: { error?: string } })
+      .result?.error;
     expect(errorMessage).toContain(
       'Tool execution for "confirmTool" requires user confirmation, which is not supported in non-interactive mode.',
     );
@@ -344,7 +345,8 @@ describe('CoreToolScheduler non-interactive mode', () => {
 
     const erroredCall = dangerousCall as ErroredToolCall;
     const errorParts = erroredCall.response.responseParts;
-    const errorMessage = errorParts[0].functionResponse.response.error;
+    const errorMessage = (errorParts[0] as { result?: { error?: string } })
+      .result?.error;
     expect(errorMessage).toContain('requires user confirmation');
     expect(errorMessage).toContain('non-interactive mode');
   });

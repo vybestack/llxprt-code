@@ -129,22 +129,18 @@ export * from './utils/formatters.js';
 export * from './utils/sanitization.js';
 export * from './utils/unicodeUtils.js';
 export {
-  getResponseText,
-  getResponseTextFromParts,
-  getFunctionCalls,
-  getFunctionCallsFromParts,
-  getFunctionCallsAsJson,
-  getFunctionCallsFromPartsAsJson,
-  getStructuredResponse,
-  getStructuredResponseFromParts,
-  createFunctionResponsePart,
+  createToolResponseBlock,
   limitStringOutput,
-  limitFunctionResponsePart,
-  toParts,
+  limitToolResponseBlock,
+  legacyPartsToBlocks,
   convertToFunctionResponse,
   extractAgentIdFromMetadata,
   createErrorResponse,
   analyzeResponseOutcome,
+  getResponseTextFromBlocks,
+  getToolCallBlocks,
+  getToolCallBlocksAsJson,
+  getStructuredResponseFromBlocks,
   type ResponseOutcome,
 } from './utils/generateContentResponseUtilities.js';
 export * from './utils/filesearch/fileSearch.js';

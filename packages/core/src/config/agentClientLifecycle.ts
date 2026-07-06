@@ -7,12 +7,12 @@
  * (e.g. on model switch, auth refresh, provider change).
  */
 
-import type { Content } from '@google/genai';
 import type { DebugLogger } from '../debug/DebugLogger.js';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import type {
   AgentClientContract,
   AgentClientFactory,
+  ContractContent,
 } from '../core/clientContract.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { Config } from './config.js';
@@ -25,7 +25,9 @@ import type { Config } from './config.js';
  * History Content[] is external data from the Gemini API that was
  * serialized/deserialized, so parts are validated at this boundary.
  */
-export function stripThoughtSignatures(history: Content[]): Content[] {
+export function stripThoughtSignatures(
+  history: ContractContent[],
+): ContractContent[] {
   return history.map((content) => {
     if (!content.parts) {
       return content;
@@ -89,7 +91,7 @@ export async function extractExistingState(
   logger: DebugLogger,
   agentClient: AgentClientContract | null | undefined,
 ): Promise<{
-  history: Content[];
+  history: ContractContent[];
   historyService: ReturnType<AgentClientContract['getHistoryService']>;
 }> {
   if (agentClient === null || agentClient === undefined) {
@@ -174,7 +176,7 @@ export function buildNewContentGeneratorConfig(
 export function transferHistoryToNewClient(
   logger: DebugLogger,
   newAgentClient: AgentClientContract,
-  existingHistory: Content[],
+  existingHistory: ContractContent[],
   existingHistoryService: ReturnType<AgentClientContract['getHistoryService']>,
   newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
   previousVertexai: boolean | undefined,

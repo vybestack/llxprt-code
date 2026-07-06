@@ -19,7 +19,6 @@ import {
   type AnyToolInvocation,
   REFUSAL_NOTICE_MESSAGE,
 } from '@vybestack/llxprt-code-core';
-import { FinishReason } from '@google/genai';
 import { createMockConfig } from '../utils/testing_utils.js';
 import { CoderAgentEvent } from '../types.js';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
@@ -240,7 +239,7 @@ describe('Task', () => {
       await task.acceptAgentMessage({
         type: AgentEventType.Finished,
         value: {
-          reason: FinishReason.STOP,
+          reason: 'stop',
           stopReason: 'refusal',
         },
       });
@@ -285,7 +284,7 @@ describe('Task', () => {
       await task.acceptAgentMessage({
         type: AgentEventType.Finished,
         value: {
-          reason: FinishReason.STOP,
+          reason: 'stop',
         },
       });
 
@@ -307,7 +306,7 @@ describe('Task', () => {
       await task.acceptAgentMessage({
         type: AgentEventType.Finished,
         value: {
-          reason: FinishReason.STOP,
+          reason: 'stop',
           stopReason: 'end_turn',
         },
       });

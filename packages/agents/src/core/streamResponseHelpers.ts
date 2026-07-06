@@ -33,13 +33,11 @@ import {
   mergeHookRestrictedFunctionCalls,
   getHookRestrictedAllowedTools,
 } from './hookToolRestrictions.js';
-import { analyzeResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import type { ResponseOutcome } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import { analyzeResponseOutcomeFromParts } from './googlePartHelpers.js';
 import { isFunctionResponse } from '@vybestack/llxprt-code-core/utils/messageInspectors.js';
-import {
-  InvalidStreamError,
-  isThoughtPart,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { isThoughtPart } from './googlePartHelpers.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /** Whether a finish reason is missing (null, undefined, or empty string). */
@@ -125,7 +123,7 @@ export function accumulateChunkMetadata(
   const outcomeParts = [...effectiveParts, ...allowedTopLevelCallParts];
 
   if (outcomeParts.length > 0) {
-    const chunkOutcome = analyzeResponseOutcome(outcomeParts);
+    const chunkOutcome = analyzeResponseOutcomeFromParts(outcomeParts);
     acc.outcome = {
       hasVisibleText: acc.outcome.hasVisibleText || chunkOutcome.hasVisibleText,
       hasThinking: acc.outcome.hasThinking || chunkOutcome.hasThinking,

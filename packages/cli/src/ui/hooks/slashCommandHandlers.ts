@@ -223,7 +223,7 @@ async function handleActionResult(
     case 'submit_prompt':
       return {
         type: 'submit_prompt',
-        content: stringifyPrompt(result.content),
+        content: stringifyPrompt(result.content as PartListUnion),
       };
     case 'confirm_shell_commands':
       return confirmShellCommands(deps, result);

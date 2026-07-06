@@ -19,7 +19,10 @@ import {
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
-import type { Part } from '@google/genai';
+import type {
+  ContentBlock,
+  ToolResponseBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
@@ -134,11 +137,10 @@ describe('executeToolCall', () => {
       resultDisplay: 'Success!',
       responseParts: [
         {
-          functionResponse: {
-            name: 'testTool',
-            id: 'call1',
-            response: { output: 'Tool executed successfully' },
-          },
+          type: 'tool_response',
+          callId: 'call1',
+          toolName: 'testTool',
+          result: { output: 'Tool executed successfully' },
         },
       ],
     });
@@ -186,12 +188,10 @@ describe('executeToolCall', () => {
     expect(response.error?.message).toContain('could not be loaded');
     expect(response.resultDisplay).toContain('could not be loaded');
 
-    const functionResponsePart = response.responseParts.find(
-      (part) => part.functionResponse,
+    const toolResponsePart = response.responseParts.find(
+      (part): part is ToolResponseBlock => part.type === 'tool_response',
     );
-    const payload = functionResponsePart?.functionResponse?.response as
-      | { error?: unknown }
-      | undefined;
+    const payload = toolResponsePart?.result as { error?: unknown } | undefined;
     expect(typeof payload?.error).toBe('string');
     expect(payload?.error).toContain('could not be loaded');
   });
@@ -252,10 +252,10 @@ describe('executeToolCall', () => {
     expect(response.error?.message).toBe('Execution failed');
     expect(response.resultDisplay).toBe('Execution failed');
 
-    const functionResponsePart = response.responseParts.find(
-      (part) => part.functionResponse,
+    const toolResponsePart = response.responseParts.find(
+      (part): part is ToolResponseBlock => part.type === 'tool_response',
     );
-    const payload = functionResponsePart?.functionResponse?.response as
+    const payload = toolResponsePart?.result as
       | { error?: unknown; output?: unknown }
       | undefined;
     expect(payload?.output).toBeUndefined();
@@ -287,12 +287,10 @@ describe('executeToolCall', () => {
     expect(response.errorType).toBe(ToolErrorType.UNHANDLED_EXCEPTION);
     expect(response.resultDisplay).toBe('Something went very wrong');
 
-    const functionResponsePart = response.responseParts.find(
-      (part) => part.functionResponse,
+    const toolResponsePart = response.responseParts.find(
+      (part): part is ToolResponseBlock => part.type === 'tool_response',
     );
-    const payload = functionResponsePart?.functionResponse?.response as
-      | { error?: unknown }
-      | undefined;
+    const payload = toolResponsePart?.result as { error?: unknown } | undefined;
     expect(payload?.error).toBe('Something went very wrong');
   });
 
@@ -374,11 +372,16 @@ describe('executeToolCall', () => {
       isClientInitiated: false,
       prompt_id: 'prompt-id-6',
     };
-    const imageDataPart: Part = {
-      inlineData: { mimeType: 'image/png', data: 'base64data' },
+    const imageDataPart: ContentBlock = {
+      type: 'media',
+      mimeType: 'image/png',
+      data: 'base64data',
+      encoding: 'base64',
     };
     const toolResult: ToolResult = {
-      llmContent: [imageDataPart],
+      llmContent: [
+        { inlineData: { mimeType: 'image/png', data: 'base64data' } },
+      ],
       returnDisplay: 'Image processed',
     };
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
@@ -396,17 +399,14 @@ describe('executeToolCall', () => {
       error: undefined,
       errorType: undefined,
       resultDisplay: 'Image processed',
-      // responseParts now contains only functionResponse + inlineData (not functionCall)
-      // The functionCall is already recorded in history from the original assistant message.
-      // Including it again would create duplicate tool_use blocks for Anthropic. (Issue #1150)
+      // responseParts now contains only tool_response + media block (not tool_call)
       responseParts: [
         {
-          functionResponse: {
-            name: 'testTool',
-            id: 'call6',
-            response: {
-              output: 'Binary content provided (1 item(s)).',
-            },
+          type: 'tool_response',
+          callId: 'call6',
+          toolName: 'testTool',
+          result: {
+            output: 'Binary content provided (1 item(s)).',
           },
         },
         imageDataPart,
@@ -551,15 +551,14 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       );
 
       const parts = response.responseParts;
-      // responseParts now contains only functionResponse (not functionCall)
-      // The functionCall is already recorded in history from the original assistant message.
-      // Including it again would create duplicate tool_use blocks for Anthropic. (Issue #1150)
+      // responseParts now contains only tool_response (not tool_call)
       expect(parts.length).toBeGreaterThanOrEqual(1);
 
-      // First part should be functionResponse (not functionCall anymore)
-      expect(parts[0].functionResponse).toBeDefined();
-      expect(parts[0].functionResponse?.id).toBe(request.callId);
-      expect(parts[0].functionResponse?.name).toBe(request.name);
+      // First part should be tool_response (not tool_call anymore)
+      const first = parts[0] as ToolResponseBlock;
+      expect(first.type).toBe('tool_response');
+      expect(first.callId).toBe(request.callId);
+      expect(first.toolName).toBe(request.name);
     });
   });
 
@@ -766,12 +765,12 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       );
 
       const parts = response.responseParts;
-      // Error responseParts should contain only functionResponse (no functionCall).
-      // The functionCall is already in history from the model's assistant message.
-      // Including it causes Anthropic invalid_request_error (Issue #244).
+      // Error responseParts should contain only tool_response (no tool_call).
       expect(parts).toHaveLength(1);
-      expect(parts[0]).not.toHaveProperty('functionCall');
-      expect(parts[0].functionResponse?.id).toBe(request.callId);
+      expect(parts[0]).not.toHaveProperty('type', 'tool_call');
+      const first = parts[0] as ToolResponseBlock;
+      expect(first.type).toBe('tool_response');
+      expect(first.callId).toBe(request.callId);
     });
 
     it('should return error for tool that does not exist', async () => {
@@ -814,14 +813,19 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 function getFullResponseText(response: ToolCallResponseInfo): string {
   const chunks: string[] = [];
   for (const part of response.responseParts) {
-    const payload = part.functionResponse?.response as
-      | { output?: unknown; error?: unknown }
-      | undefined;
-    if (payload) {
-      if (typeof payload.output === 'string') chunks.push(payload.output);
-      if (typeof payload.error === 'string') chunks.push(payload.error);
+    if (part.type === 'tool_response') {
+      const payload = part.result as
+        | { output?: unknown; error?: unknown }
+        | undefined;
+      if (payload && typeof payload.output === 'string') {
+        chunks.push(payload.output);
+      }
+      if (payload && typeof payload.error === 'string') {
+        chunks.push(payload.error);
+      }
+    } else if (part.type === 'text' && typeof part.text === 'string') {
+      chunks.push(part.text);
     }
-    if (typeof part.text === 'string') chunks.push(part.text);
   }
   return chunks.join('\n');
 }

@@ -11,12 +11,6 @@
  */
 
 import type {
-  GenerateContentResponseUsageMetadata,
-  FinishReason,
-  Part,
-  FunctionDeclaration,
-} from '@google/genai';
-import type {
   ToolCallConfirmationDetails,
   ToolResult,
   ToolResultDisplay,
@@ -24,6 +18,9 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { ThoughtSummary } from '../utils/thoughtUtils.js';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
+import type { ToolDeclaration } from '../llm-types/index.js';
+import type { CanonicalFinishReason } from '../llm-types/index.js';
+import type { ContentBlock, UsageStats } from '../services/history/IContent.js';
 
 export const DEFAULT_AGENT_ID = 'primary';
 
@@ -33,7 +30,7 @@ export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
 // Define a structure for tools passed to the server
 export interface ServerTool {
   name: string;
-  schema: FunctionDeclaration;
+  schema: ToolDeclaration;
   // The execute method signature might differ slightly or be wrapped
   execute(
     params: Record<string, unknown>,
@@ -107,7 +104,7 @@ export interface ToolCallRequestInfo {
 
 export interface ToolCallResponseInfo {
   callId: string;
-  responseParts: Part[];
+  responseParts: ContentBlock[];
   resultDisplay: ToolResultDisplay | undefined;
   error: Error | undefined;
   errorType: ToolErrorType | undefined;
@@ -244,8 +241,8 @@ export type ServerFinishedOutcome = {
 export type ServerFinishedEvent = {
   type: AgentEventType.Finished;
   value: {
-    reason: FinishReason;
-    usageMetadata?: GenerateContentResponseUsageMetadata;
+    reason: CanonicalFinishReason;
+    usageMetadata?: UsageStats;
     outcome?: ServerFinishedOutcome;
     // @issue:2329 — the raw provider stop reason (e.g. 'refusal', 'end_turn')
     // threaded from the repo-owned candidate providerStopReason carrier, so

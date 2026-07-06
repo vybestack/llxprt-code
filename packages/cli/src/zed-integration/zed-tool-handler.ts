@@ -16,6 +16,7 @@ import {
   ToolConfirmationOutcome,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { FunctionCall, Part } from '@google/genai';
@@ -337,12 +338,17 @@ export class ZedToolHandler {
       agent_id: DEFAULT_AGENT_ID,
     });
 
-    const functionResponseParts = convertToFunctionResponse(
+    const functionResponseBlocks = convertToFunctionResponse(
       fc.name!,
       callId,
       toolResult.llmContent,
       this.config,
     );
+    const functionResponseParts =
+      ContentConverters.toGeminiContent({
+        speaker: 'tool',
+        blocks: functionResponseBlocks,
+      }).parts ?? [];
     const message = extractToolResultText(toolResult);
 
     return {

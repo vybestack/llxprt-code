@@ -5,7 +5,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Content, GenerateContentResponse } from '@google/genai';
+import type {
+  ContractContent,
+  ContractGenerateContentResponse,
+} from '../core/clientContract.js';
 import { Config, type ConfigParameters } from './config.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { AgentClientContract } from '../core/clientContract.js';
@@ -50,7 +53,7 @@ function emptyServerStream(): AsyncGenerator<never, never> {
 
 function createFakeAgentClient(): AgentClientContract {
   let initialized = false;
-  const history: Content[] = [];
+  const history: ContractContent[] = [];
   return {
     async initialize(_config: ContentGeneratorConfig): Promise<void> {
       initialized = true;
@@ -74,14 +77,14 @@ function createFakeAgentClient(): AgentClientContract {
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: vi.fn(),
-    storeHistoryForLaterUse(storedHistory: Content[]): void {
+    storeHistoryForLaterUse(storedHistory: ContractContent[]): void {
       history.push(...storedHistory);
     },
     dispose: vi.fn(),
     setTools: vi.fn(async () => {}),
     clearTools: vi.fn(),
     updateSystemInstruction: vi.fn(async () => {}),
-    addHistory: vi.fn(async (content: Content) => {
+    addHistory: vi.fn(async (content: ContractContent) => {
       history.push(content);
     }),
     resetChat: vi.fn(async () => {}),
@@ -100,9 +103,11 @@ function createFakeAgentClient(): AgentClientContract {
       performCompression: vi.fn(async () => 0 as never),
       recordCompletedToolCalls: vi.fn(),
     })),
-    generateDirectMessage: vi.fn(async () => ({}) as GenerateContentResponse),
+    generateDirectMessage: vi.fn(
+      async () => ({}) as ContractGenerateContentResponse,
+    ),
     generateJson: vi.fn(async () => ({})),
-    generateContent: vi.fn(async () => ({}) as GenerateContentResponse),
+    generateContent: vi.fn(async () => ({}) as ContractGenerateContentResponse),
     generateEmbedding: vi.fn(async () => []),
     sendMessageStream: vi.fn(() => emptyServerStream()),
     getUserTier: vi.fn(() => undefined),

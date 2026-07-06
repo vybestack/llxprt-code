@@ -16,8 +16,10 @@ import {
 } from './checkpointUtils.js';
 import type { ToolCallRequestInfo } from '../core/turn.js';
 import type { GitService } from '../services/gitService.js';
-import type { AgentClientContract as AgentClient } from '../core/clientContract.js';
-import type { Content } from '@google/genai';
+import type {
+  AgentClientContract as AgentClient,
+  ContractContent,
+} from '../core/clientContract.js';
 
 describe('checkpointUtils', () => {
   describe('generateCheckpointFileName', () => {
@@ -271,7 +273,7 @@ describe('checkpointUtils', () => {
         },
       ];
 
-      const mockClientHistory: Content[] = [
+      const mockClientHistory: ContractContent[] = [
         { role: 'user', parts: [{ text: 'test message' }] },
       ];
 

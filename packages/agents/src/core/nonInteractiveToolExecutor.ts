@@ -10,7 +10,6 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { type Part } from '@google/genai';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   type CompletedToolCall,
@@ -197,16 +196,15 @@ function createErrorCompletedToolCall(
       errorType,
       resultDisplay: error.message,
       responseParts: [
-        // Only functionResponse — the functionCall is already recorded in
+        // Only tool_response — the tool_call is already recorded in
         // history from the model's assistant message (Issue #244).
         {
-          functionResponse: {
-            id: request.callId,
-            name: request.name,
-            response: { error: error.message },
-          },
+          type: 'tool_response',
+          callId: request.callId,
+          toolName: request.name,
+          result: { error: error.message },
         },
-      ] as Part[],
+      ],
     },
     durationMs,
   };

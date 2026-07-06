@@ -25,6 +25,7 @@ import type {
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { StreamEventType } from './chatSession.js';
+import { responseToModelStreamChunk } from './streamChunkWrapper.js';
 import { type ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -50,10 +51,11 @@ import type {
   SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 export function createCompletedToolCallResponse(params: {
   callId: string;
-  responseParts?: Part[];
+  responseParts?: ContentBlock[];
   resultDisplay?: unknown;
   error?: Error;
   errorType?: ToolErrorType;
@@ -123,22 +125,28 @@ export function createMockStream(
     index++;
 
     return (async function* () {
-      let mockResponseValue: Partial<GenerateContentResponse>;
+      // Build the candidate content parts. When the model returns tool
+      // calls, they must live inside content.parts (the same shape the real
+      // synthetic GenerateContentResponse produces) so that the neutral
+      // ModelStreamChunk wrap surfaces them as tool_call blocks.
+      let parts: Part[];
 
       if (response === 'stop' || response.length === 0) {
-        mockResponseValue = {
-          candidates: [{ content: { parts: [{ text: 'Done.' }] } }],
-        };
+        parts = [{ text: 'Done.' }];
       } else {
-        mockResponseValue = {
-          candidates: [],
-          functionCalls: response,
-        };
+        parts = response.map((call) => ({ functionCall: call }));
       }
+
+      const mockResponseValue = {
+        candidates: [{ content: { role: 'model', parts } }],
+        functionCalls: response === 'stop' ? [] : response,
+      };
 
       yield {
         type: StreamEventType.CHUNK,
-        value: mockResponseValue as GenerateContentResponse,
+        value: responseToModelStreamChunk(
+          mockResponseValue as unknown as GenerateContentResponse,
+        ),
       };
     })();
   });

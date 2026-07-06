@@ -526,7 +526,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
         (event) => event.type === AgentEventType.Finished,
       );
       expect(finishedEvents).toHaveLength(1);
-      expect(finishedEvents[0].value).toMatchObject({ reason: 'STOP' });
+      expect(finishedEvents[0].value).toMatchObject({ reason: 'stop' });
     },
   );
 });

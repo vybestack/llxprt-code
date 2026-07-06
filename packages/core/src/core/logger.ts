@@ -6,13 +6,29 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { type Content, type Part } from '@google/genai';
 import { ensureDir } from '../utils/paths.js';
 import type { EmojiFilter } from '../filters/EmojiFilter.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const LOG_FILE_NAME = 'logs.json';
+
+/**
+ * Structural shapes for checkpoint (de)serialization. Checkpoints are stored
+ * as JSON and round-tripped through ContentConverters at the provider
+ * boundary, so these intentionally operate on the legacy Google-shaped
+ * `Content`/`Part` wire structure without importing @google/genai.
+ */
+interface CheckpointPart {
+  text?: string;
+  [key: string]: unknown;
+}
+
+export interface CheckpointContent {
+  role?: string;
+  parts?: CheckpointPart[];
+  [key: string]: unknown;
+}
 
 export enum MessageSenderType {
   USER = 'user',
@@ -330,7 +346,7 @@ export class Logger {
   }
 
   async saveCheckpoint(
-    conversation: Content[],
+    conversation: CheckpointContent[],
     tag: string,
     context?: object,
   ): Promise<void> {
@@ -354,7 +370,7 @@ export class Logger {
     tag: string,
     emojiFilter?: EmojiFilter,
   ): Promise<{
-    history: Content[];
+    history: CheckpointContent[];
     context?: object;
   }> {
     if (!this.initialized) {
@@ -370,24 +386,29 @@ export class Logger {
       let parsedContent = JSON.parse(fileContent);
       if (Array.isArray(parsedContent)) {
         // Backwards compatibility for old format
-        parsedContent = { history: parsedContent as Content[] };
+        parsedContent = { history: parsedContent as CheckpointContent[] };
       }
 
       // Apply emoji filtering if provided
       if (emojiFilter) {
-        const filteredHistory = parsedContent.history.map((item: Content) => {
-          const filteredItem = { ...item };
-          if (Array.isArray(filteredItem.parts)) {
-            filteredItem.parts = filteredItem.parts.map((part: Part) =>
-              filterPartText(part, emojiFilter),
-            );
-          }
-          return filteredItem;
-        });
+        const filteredHistory = parsedContent.history.map(
+          (item: CheckpointContent) => {
+            const filteredItem = { ...item };
+            if (Array.isArray(filteredItem.parts)) {
+              filteredItem.parts = filteredItem.parts.map(
+                (part: CheckpointPart) => filterPartText(part, emojiFilter),
+              );
+            }
+            return filteredItem;
+          },
+        );
         parsedContent.history = filteredHistory;
       }
 
-      return parsedContent as { history: Content[]; context?: object };
+      return parsedContent as {
+        history: CheckpointContent[];
+        context?: object;
+      };
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'ENOENT') {
@@ -489,7 +510,10 @@ export class Logger {
   }
 }
 
-function filterPartText(part: Part, emojiFilter: EmojiFilter): Part {
+function filterPartText(
+  part: CheckpointPart,
+  emojiFilter: EmojiFilter,
+): CheckpointPart {
   if (!part.text) {
     return part;
   }

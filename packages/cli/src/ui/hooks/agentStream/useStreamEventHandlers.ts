@@ -389,7 +389,7 @@ function useFinishedEventHandler(deps: StreamEventHandlerDeps) {
       // to the generic finish-reason message.
       const message =
         buildRefusalNoticeMessage(event.value.stopReason) ??
-        buildFinishReasonMessage(event.value.reason);
+        buildFinishReasonMessage(event.value.reason, event.value.stopReason);
       if (message)
         addItem(
           { type: 'info', text: `WARNING:  ${message}` },

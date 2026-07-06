@@ -5,23 +5,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { partToString, partListUnionToString } from './partUtils.js';
-import { getResponseText } from './generateContentResponseUtilities.js';
-import type { GenerateContentResponse, Part } from '@google/genai';
-
-const mockResponse = (
-  parts?: Array<{ text?: string; functionCall?: unknown }>,
-): GenerateContentResponse => ({
-  candidates: parts
-    ? [{ content: { parts: parts as Part[], role: 'model' }, index: 0 }]
-    : [],
-  promptFeedback: { safetyRatings: [] },
-  text: undefined,
-  data: undefined,
-  functionCalls: undefined,
-  executableCode: undefined,
-  codeExecutionResult: undefined,
-});
+import {
+  getResponseText,
+  partToString,
+  partListUnionToString,
+} from './partUtils.js';
 
 describe('partUtils', () => {
   describe('partToString (default behavior)', () => {
@@ -43,10 +31,10 @@ describe('partUtils', () => {
     });
 
     it('should return empty string for non-text parts', () => {
-      const part: Part = { inlineData: { mimeType: 'image/png', data: '' } };
-      expect(partToString(part)).toBe('');
-      const part2: Part = { functionCall: { name: 'test' } };
-      expect(partToString(part2)).toBe('');
+      expect(
+        partToString({ inlineData: { mimeType: 'image/png', data: '' } }),
+      ).toBe('');
+      expect(partToString({ functionCall: { name: 'test' } })).toBe('');
     });
   });
 
@@ -68,59 +56,67 @@ describe('partUtils', () => {
     });
 
     it('should return the text property if the part is an object with text', () => {
-      const part: Part = { text: 'hello world' };
-      expect(partToString(part, verboseOptions)).toBe('hello world');
+      expect(partToString({ text: 'hello world' }, verboseOptions)).toBe(
+        'hello world',
+      );
     });
 
     it('should return descriptive string for videoMetadata part', () => {
-      const part = { videoMetadata: {} } as Part;
-      expect(partToString(part, verboseOptions)).toBe('[Video Metadata]');
+      expect(partToString({ videoMetadata: {} }, verboseOptions)).toBe(
+        '[Video Metadata]',
+      );
     });
 
     it('should return descriptive string for thought part', () => {
-      const part = { thought: 'thinking' } as unknown as Part;
-      expect(partToString(part, verboseOptions)).toBe('[Thought: thinking]');
+      expect(partToString({ thought: 'thinking' }, verboseOptions)).toBe(
+        '[Thought: thinking]',
+      );
     });
 
     it('should return descriptive string for codeExecutionResult part', () => {
-      const part = { codeExecutionResult: {} } as Part;
-      expect(partToString(part, verboseOptions)).toBe(
+      expect(partToString({ codeExecutionResult: {} }, verboseOptions)).toBe(
         '[Code Execution Result]',
       );
     });
 
     it('should return descriptive string for executableCode part', () => {
-      const part = { executableCode: {} } as Part;
-      expect(partToString(part, verboseOptions)).toBe('[Executable Code]');
+      expect(partToString({ executableCode: {} }, verboseOptions)).toBe(
+        '[Executable Code]',
+      );
     });
 
     it('should return descriptive string for fileData part', () => {
-      const part = { fileData: {} } as Part;
-      expect(partToString(part, verboseOptions)).toBe('[File Data]');
+      expect(partToString({ fileData: {} }, verboseOptions)).toBe(
+        '[File Data]',
+      );
     });
 
     it('should return descriptive string for functionCall part', () => {
-      const part = { functionCall: { name: 'myFunction' } } as Part;
-      expect(partToString(part, verboseOptions)).toBe(
-        '[Function Call: myFunction]',
-      );
+      expect(
+        partToString({ functionCall: { name: 'myFunction' } }, verboseOptions),
+      ).toBe('[Function Call: myFunction]');
     });
 
     it('should return descriptive string for functionResponse part', () => {
-      const part = { functionResponse: { name: 'myFunction' } } as Part;
-      expect(partToString(part, verboseOptions)).toBe(
-        '[Function Response: myFunction]',
-      );
+      expect(
+        partToString(
+          { functionResponse: { name: 'myFunction' } },
+          verboseOptions,
+        ),
+      ).toBe('[Function Response: myFunction]');
     });
 
     it('should return descriptive string for inlineData part', () => {
-      const part = { inlineData: { mimeType: 'image/png', data: '' } } as Part;
-      expect(partToString(part, verboseOptions)).toBe('<image/png>');
+      expect(
+        partToString(
+          { inlineData: { mimeType: 'image/png', data: '' } },
+          verboseOptions,
+        ),
+      ).toBe('<image/png>');
     });
 
     it('should return an empty string for an unknown part type', () => {
-      const part: Part = {};
-      expect(partToString(part, verboseOptions)).toBe('');
+      expect(partToString({}, verboseOptions)).toBe('');
     });
 
     it('should handle complex nested arrays with various part types', () => {
@@ -133,31 +129,40 @@ describe('partUtils', () => {
           { inlineData: { mimeType: 'audio/mp3', data: '' } },
         ],
       ];
-      expect(partToString(parts as Part, verboseOptions)).toBe(
+      expect(partToString(parts, verboseOptions)).toBe(
         'start middle[Function Call: func1] end<audio/mp3>',
       );
     });
   });
 
   describe('getResponseText', () => {
-    it('should return undefined when no candidates exist', () => {
-      const response = mockResponse(undefined);
-      expect(getResponseText(response)).toBeUndefined();
+    it('returns null when there are no candidates', () => {
+      expect(getResponseText({ candidates: [] })).toBeNull();
     });
 
-    it('should return concatenated text from first candidate', () => {
-      const result = mockResponse([{ text: 'a' }, { text: 'b' }]);
-      expect(getResponseText(result)).toBe('ab');
+    it('returns null when the first candidate has no parts', () => {
+      expect(
+        getResponseText({ candidates: [{ content: { parts: [] } }] }),
+      ).toBeNull();
     });
 
-    it('should ignore parts without text', () => {
-      const result = mockResponse([{ functionCall: {} }, { text: 'hello' }]);
-      expect(getResponseText(result)).toBe('hello');
-    });
+    it('returns concatenated text from the first candidate', () => {
+      const response = {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                { text: 'alpha' },
+                { inlineData: { mimeType: 'text/plain', data: 'x' } },
+                { text: ' beta' },
+              ],
+            },
+          },
+        ],
+      };
 
-    it('should return undefined when candidate has no parts', () => {
-      const result = mockResponse([]);
-      expect(getResponseText(result)).toBeUndefined();
+      expect(getResponseText(response)).toBe('alpha beta');
     });
   });
 
@@ -167,13 +172,11 @@ describe('partUtils', () => {
     });
 
     it('stringifies a single Part with text', () => {
-      const part: Part = { text: 'part text' };
-      expect(partListUnionToString(part)).toBe('part text');
+      expect(partListUnionToString({ text: 'part text' })).toBe('part text');
     });
 
     it('stringifies an array of Parts', () => {
-      const parts: Part[] = [{ text: 'a' }, { text: 'b' }];
-      const result = partListUnionToString(parts);
+      const result = partListUnionToString([{ text: 'a' }, { text: 'b' }]);
       // verbose mode concatenates text from all parts
       expect(result).toContain('a');
       expect(result).toContain('b');

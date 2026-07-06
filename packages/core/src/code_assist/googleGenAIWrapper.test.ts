@@ -43,8 +43,7 @@ describe('GoogleGenAIWrapper (neutral)', () => {
   it('generateContent converts neutral request and returns neutral ModelOutput', async () => {
     const models = makeModels();
     vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({ models }) as unknown as GoogleGenAI,
+      () => ({ models }) as unknown as GoogleGenAI,
     );
 
     const wrapper = new GoogleGenAIWrapper(
@@ -54,7 +53,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
     const request: ModelGenerationRequest = {
       model: 'gemini-pro',
-      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] }],
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+      ],
     };
 
     const output = await wrapper.generateContent(request, 'prompt-id');
@@ -76,8 +77,7 @@ describe('GoogleGenAIWrapper (neutral)', () => {
   it('generateContentStream yields neutral ModelStreamChunk values', async () => {
     const models = makeModels();
     vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({ models }) as unknown as GoogleGenAI,
+      () => ({ models }) as unknown as GoogleGenAI,
     );
 
     const wrapper = new GoogleGenAIWrapper(
@@ -87,7 +87,9 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
     const request: ModelGenerationRequest = {
       model: 'gemini-pro',
-      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] }],
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+      ],
     };
 
     const stream = await wrapper.generateContentStream(request, 'prompt-id');
@@ -107,8 +109,7 @@ describe('GoogleGenAIWrapper (neutral)', () => {
   it('countTokens returns neutral CountTokensResult', async () => {
     const models = makeModels();
     vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({ models }) as unknown as GoogleGenAI,
+      () => ({ models }) as unknown as GoogleGenAI,
     );
 
     const wrapper = new GoogleGenAIWrapper(
@@ -126,8 +127,7 @@ describe('GoogleGenAIWrapper (neutral)', () => {
   it('embedContent returns neutral EmbedContentResult', async () => {
     const models = makeModels();
     vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({ models }) as unknown as GoogleGenAI,
+      () => ({ models }) as unknown as GoogleGenAI,
     );
 
     const wrapper = new GoogleGenAIWrapper(
@@ -142,8 +142,7 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
   it('properly initializes GoogleGenAI with config', () => {
     vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({ models: makeModels() }) as unknown as GoogleGenAI,
+      () => ({ models: makeModels() }) as unknown as GoogleGenAI,
     );
 
     const config = {
@@ -165,8 +164,7 @@ describe('GoogleGenAIWrapper (neutral)', () => {
 
   it('handles undefined apiKey', () => {
     vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({ models: makeModels() }) as unknown as GoogleGenAI,
+      () => ({ models: makeModels() }) as unknown as GoogleGenAI,
     );
 
     const config = {

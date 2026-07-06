@@ -39,11 +39,13 @@ import {
 import {
   StreamEventType,
   type StreamEvent,
-  isThoughtPart,
   isSchemaDepthError,
   INVALID_CONTENT_RETRY_OPTIONS,
-  type UsageMetadataWithCache,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import {
+  isThoughtPart,
+  type UsageMetadataWithCache,
+} from './googlePartHelpers.js';
 import {
   attachHookRestrictedAllowedTools,
   filterHookRestrictedContents,
@@ -58,6 +60,8 @@ import {
   AgentExecutionBlockedError,
 } from './chatSession.js';
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
+import { responseToModelStreamChunk } from './streamChunkWrapper.js';
+import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{ name: string }>;
 }>;
@@ -67,7 +71,16 @@ interface ToolSelectionHookResult {
   allowedFunctionNames: string[] | undefined;
 }
 
-import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
+/**
+ * Wraps a GenerateContentResponse chunk into a CHUNK StreamEvent carrying
+ * the neutral ModelStreamChunk at the yield boundary.
+ */
+function wrapChunk(resp: GenerateContentResponse): StreamEvent {
+  return {
+    type: StreamEventType.CHUNK,
+    value: responseToModelStreamChunk(resp),
+  };
+}
 
 /**
  * Reads user memory from the runtime config. Config is typed with a required
@@ -243,7 +256,7 @@ export class TurnProcessor {
         userContent,
       );
       for await (const chunk of stream) {
-        yield { type: StreamEventType.CHUNK, value: chunk };
+        yield wrapChunk(chunk);
       }
       return { error: null, action: 'stop' };
     } catch (error) {
@@ -265,7 +278,7 @@ export class TurnProcessor {
           contextCleared: error.contextCleared,
         };
         if (error.syntheticResponse) {
-          yield { type: StreamEventType.CHUNK, value: error.syntheticResponse };
+          yield wrapChunk(error.syntheticResponse);
         }
         return { error: null, action: 'stop' };
       }
@@ -413,7 +426,7 @@ export class TurnProcessor {
         durationMs,
         error,
       );
-      this._enrichSchemaDepthError(error);
+      enrichSchemaDepthError(error, this.generationConfig.tools, this.logger);
       this.sendPromise = Promise.resolve();
       throw error;
     } finally {
@@ -840,83 +853,6 @@ export class TurnProcessor {
     ) {
       this.historyService.syncTotalTokens(this.lastPromptTokenCount);
       await this.historyService.waitForTokenUpdates();
-    }
-  }
-
-  /**
-   * Enriches schema depth errors with additional context for debugging.
-   */
-  private _enrichSchemaDepthError(error: unknown): void {
-    if (
-      error instanceof ApiError &&
-      error.message !== '' &&
-      isSchemaDepthError(error.message)
-    ) {
-      const tools = this.generationConfig.tools;
-      if (!Array.isArray(tools)) {
-        return;
-      }
-
-      const toolNames: string[] = [];
-      const cyclicSchemaTools: string[] = [];
-
-      for (const toolGroup of tools) {
-        this._collectCyclicSchemaToolNames(
-          toolGroup,
-          toolNames,
-          cyclicSchemaTools,
-        );
-      }
-
-      const metadata = {
-        totalTools: toolNames.length,
-        toolNames,
-        cyclicSchemaTools,
-      };
-
-      const extraDetails =
-        cyclicSchemaTools.length > 0
-          ? `\n\nTools with cyclic schemas detected: ${cyclicSchemaTools.join(', ')}\n` +
-            `This is a known issue that can cause "maximum schema depth exceeded" errors.\n` +
-            `Please review the schema definitions for these tools.`
-          : '';
-
-      this.logger.error(
-        () => `[TurnProcessor] Schema depth error encountered${extraDetails}`,
-        metadata,
-      );
-    }
-  }
-
-  /**
-   * Collects tool names and any with cyclic schemas from a single tool group.
-   * Tool groups can be malformed at runtime, so the shape is validated before use.
-   */
-  private _collectCyclicSchemaToolNames(
-    toolGroup: unknown,
-    toolNames: string[],
-    cyclicSchemaTools: string[],
-  ): void {
-    if (
-      typeof toolGroup !== 'object' ||
-      toolGroup === null ||
-      !('functionDeclarations' in toolGroup) ||
-      !Array.isArray(toolGroup.functionDeclarations)
-    ) {
-      return;
-    }
-
-    for (const funcDecl of toolGroup.functionDeclarations) {
-      const name = funcDecl.name ?? 'unknown';
-      toolNames.push(name);
-      const schema = funcDecl.parametersJsonSchema;
-      if (
-        schema != null &&
-        typeof schema === 'object' &&
-        hasCycleInSchema(schema as Record<string, unknown>)
-      ) {
-        cyclicSchemaTools.push(name);
-      }
     }
   }
 }

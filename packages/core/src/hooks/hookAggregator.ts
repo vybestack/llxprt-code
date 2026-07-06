@@ -9,7 +9,15 @@
  * @requirement:HOOK-092,HOOK-093,HOOK-094,HOOK-095,HOOK-096,HOOK-097,HOOK-098,HOOK-099,HOOK-100,HOOK-101,HOOK-102,HOOK-103,HOOK-104,HOOK-105
  */
 
-import { FunctionCallingConfigMode } from '@google/genai';
+/**
+ * Structural equivalent of @google/genai FunctionCallingConfigMode enum values.
+ * Defined locally so core does not import @google/genai.
+ */
+const FunctionCallingConfigMode = {
+  AUTO: 'AUTO',
+  ANY: 'ANY',
+  NONE: 'NONE',
+} as const;
 import type {
   HookOutput,
   HookExecutionResult,
@@ -300,7 +308,7 @@ export class HookAggregator {
     }
 
     // Determine final mode and function names
-    let finalMode: FunctionCallingConfigMode;
+    let finalMode: 'AUTO' | 'ANY' | 'NONE';
     let finalFunctionNames: string[] | undefined;
 
     if (hasNoneMode) {

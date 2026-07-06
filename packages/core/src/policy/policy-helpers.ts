@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { FunctionCall } from '@google/genai';
+import type { ToolCallRequest } from '../llm-types/toolCall.js';
 import type { AnyToolInvocation } from '@vybestack/llxprt-code-tools';
 import { BaseToolInvocation } from '@vybestack/llxprt-code-tools';
 import type {
@@ -83,7 +83,7 @@ export function handlePolicyDenial(
 
   setStatusFn(request.callId, 'error', response);
 
-  const toolCall: FunctionCall = {
+  const toolCall: ToolCallRequest = {
     name: context.toolName,
     args: context.args,
   };
@@ -104,7 +104,7 @@ export function publishConfirmationRequest(
   context: PolicyContext,
   messageBus: MessageBus,
 ): void {
-  const toolCall: FunctionCall = {
+  const toolCall: ToolCallRequest = {
     ...(context.callId !== undefined ? { id: context.callId } : {}),
     name: context.toolName,
     args: context.args,

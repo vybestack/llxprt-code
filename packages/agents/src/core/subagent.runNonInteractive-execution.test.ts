@@ -162,9 +162,10 @@ describe('subagent.ts', () => {
 
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
       expect(scope.output.emitted_vars).toStrictEqual({});
-      expect(scope.output.final_message).toMatch(
-        /Completed the requested task/i,
-      );
+      // The model emitted "Done." text before stopping, so that text is
+      // surfaced as the final message (the default "Completed the requested
+      // task" message only applies when the model emits no text).
+      expect(scope.output.final_message).toBe('Done.');
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
       expect(mockSendMessageStream.mock.calls[0][0].message).toStrictEqual([
         {
@@ -302,7 +303,7 @@ describe('subagent.ts', () => {
       vi.mocked(executeToolCall).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call_1',
-          responseParts: [{ text: 'file1.txt\nfile2.ts' }],
+          responseParts: [{ type: 'text', text: 'file1.txt\nfile2.ts' }],
           resultDisplay: 'Listed 2 files',
         }),
       });
@@ -380,7 +381,9 @@ describe('subagent.ts', () => {
       vi.mocked(executeToolCall).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call_fail',
-          responseParts: [{ text: 'ERROR: Tool failed catastrophically' }],
+          responseParts: [
+            { type: 'text', text: 'ERROR: Tool failed catastrophically' },
+          ],
           resultDisplay: 'Tool failed catastrophically',
           error: new Error('Failure'),
           errorType: ToolErrorType.INVALID_TOOL_PARAMS,
@@ -446,18 +449,10 @@ describe('subagent.ts', () => {
           callId: 'call_err',
           responseParts: [
             {
-              functionCall: {
-                id: 'call_err',
-                name: 'erroring_tool',
-                args: {},
-              },
-            },
-            {
-              functionResponse: {
-                id: 'call_err',
-                name: 'erroring_tool',
-                response: { error: 'Tool crashed' },
-              },
+              type: 'tool_response',
+              callId: 'call_err',
+              toolName: 'erroring_tool',
+              result: { error: 'Tool crashed' },
             },
           ],
           resultDisplay: 'Tool crashed',
@@ -569,13 +564,11 @@ describe('subagent.ts', () => {
           callId: 'call_write',
           responseParts: [
             {
-              functionResponse: {
-                id: 'call_write',
-                name: 'write_file',
-                response: {
-                  error:
-                    'Tool "write_file" is disabled in the current profile.',
-                },
+              type: 'tool_response',
+              callId: 'call_write',
+              toolName: 'write_file',
+              result: {
+                error: 'Tool "write_file" is disabled in the current profile.',
               },
             },
           ],

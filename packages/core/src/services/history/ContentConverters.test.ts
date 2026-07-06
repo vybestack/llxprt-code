@@ -5,8 +5,18 @@ import type {
   ToolResponseBlock,
   ThinkingBlock,
 } from './IContent';
-import type { Content } from '@google/genai';
 import { describe, it, expect } from 'vitest';
+
+/**
+ * Structural shape matching Google's Content for test fixtures.
+ * The bridge (ContentConverters.ts) accepts structurally-compatible objects;
+ * tests build them with this local type to avoid importing @google/genai
+ * outside the sanctioned bridge file.
+ */
+interface TestContent {
+  role: string;
+  parts: Array<Record<string, unknown>>;
+}
 
 const CANONICAL_ID_PATTERN = /^hist_tool_[a-zA-Z0-9_-]+$/;
 
@@ -17,7 +27,7 @@ function expectCanonical(id: string): void {
 describe('ContentConverters - Tool ID Normalization', () => {
   describe('toIContent - Converting TO History Format', () => {
     it('should canonicalize tool call IDs', () => {
-      const geminiContent: Content = {
+      const geminiContent: TestContent = {
         role: 'model',
         parts: [
           {
@@ -43,7 +53,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
     });
 
     it('should canonicalize tool response IDs', () => {
-      const toolResponseContent: Content = {
+      const toolResponseContent: TestContent = {
         role: 'user',
         parts: [
           {
@@ -69,7 +79,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
     });
 
     it('should maintain tool call/response pairing with matching raw IDs', () => {
-      const geminiContent: Content = {
+      const geminiContent: TestContent = {
         role: 'user',
         parts: [
           {
@@ -106,7 +116,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
     });
 
     it('should canonicalize ids consistently when callback provides turn-based ids', () => {
-      const geminiContent: Content = {
+      const geminiContent: TestContent = {
         role: 'user',
         parts: [
           {
@@ -131,7 +141,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
     });
 
     it('should use callback for tool responses when IDs are missing', () => {
-      const toolResponseContent: Content = {
+      const toolResponseContent: TestContent = {
         role: 'user',
         parts: [
           {
@@ -161,7 +171,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
     });
 
     it('should generate canonical IDs when IDs are missing', () => {
-      const geminiContent: Content = {
+      const geminiContent: TestContent = {
         role: 'model',
         parts: [
           {
@@ -186,7 +196,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
     });
 
     it('should preserve thinking signature when converting from Gemini content', () => {
-      const geminiContent: Content = {
+      const geminiContent: TestContent = {
         role: 'model',
         parts: [
           {
@@ -215,7 +225,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
     });
 
     it('should preserve explicit Anthropic thinking sourceField metadata', () => {
-      const geminiContent: Content = {
+      const geminiContent: TestContent = {
         role: 'model',
         parts: [
           {
@@ -223,7 +233,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
             thought: true,
             thoughtSignature: 'anthropic-sig',
             llxprtSourceField: 'thinking',
-          } as Content['parts'][number] & { llxprtSourceField: string },
+          } as TestContent['parts'][number] & { llxprtSourceField: string },
         ],
       };
 
@@ -246,7 +256,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
 
   describe('Real-world Provider Switching Scenario', () => {
     it('should keep canonical IDs for tool call/response pairs', () => {
-      const assistantMessage: Content = {
+      const assistantMessage: TestContent = {
         role: 'model',
         parts: [
           {
@@ -274,7 +284,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
 
       expectCanonical(toolCallBlock.id);
 
-      const toolResponse: Content = {
+      const toolResponse: TestContent = {
         role: 'user',
         parts: [
           {
@@ -301,7 +311,7 @@ describe('ContentConverters - Tool ID Normalization', () => {
     });
 
     it('should canonicalize multiple tool calls with various provider IDs', () => {
-      const multiToolMessage: Content = {
+      const multiToolMessage: TestContent = {
         role: 'model',
         parts: [
           {

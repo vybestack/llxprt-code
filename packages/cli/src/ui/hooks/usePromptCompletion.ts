@@ -128,7 +128,7 @@ async function requestPromptSuggestion(
   );
   if (signal.aborted) return '';
 
-  return deriveSuggestionText(response, trimmedText);
+  return deriveSuggestionText(response as GenerateContentResponse, trimmedText);
 }
 
 function isCursorAtBufferEnd(buffer: TextBuffer): boolean {

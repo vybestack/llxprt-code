@@ -9,7 +9,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FinishReason } from '@google/genai';
 import type { Part } from '@google/genai';
 import {
   UnauthorizedError,
@@ -254,35 +253,33 @@ describe('collectAgentTools', () => {
 // ─── buildFinishReasonMessage ─────────────────────────────────────────────────
 
 describe('buildFinishReasonMessage', () => {
-  it('returns undefined for STOP', () => {
-    expect(buildFinishReasonMessage(FinishReason.STOP)).toBeUndefined();
+  it('returns undefined for stop', () => {
+    expect(buildFinishReasonMessage('stop')).toBeUndefined();
   });
 
-  it('returns undefined for FINISH_REASON_UNSPECIFIED', () => {
-    expect(
-      buildFinishReasonMessage(FinishReason.FINISH_REASON_UNSPECIFIED),
-    ).toBeUndefined();
+  it('returns undefined for undefined', () => {
+    expect(buildFinishReasonMessage(undefined)).toBeUndefined();
   });
 
-  it('returns message for MAX_TOKENS', () => {
-    expect(buildFinishReasonMessage(FinishReason.MAX_TOKENS)).toMatch(
+  it('returns message for max_tokens', () => {
+    expect(buildFinishReasonMessage('max_tokens')).toMatch(
       testRegex('truncated', 'i'),
     );
   });
 
-  it('returns message for SAFETY', () => {
-    expect(buildFinishReasonMessage(FinishReason.SAFETY)).toMatch(/safety/i);
+  it('returns message for safety', () => {
+    expect(buildFinishReasonMessage('safety')).toMatch(/safety/i);
   });
 
-  it('returns message for RECITATION', () => {
-    expect(buildFinishReasonMessage(FinishReason.RECITATION)).toMatch(
+  it('returns recitation message for safety with RECITATION stopReason', () => {
+    expect(buildFinishReasonMessage('safety', 'RECITATION')).toMatch(
       testRegex('recitation', 'i'),
     );
   });
 
-  it('returns message for MALFORMED_FUNCTION_CALL', () => {
+  it('returns message for error with MALFORMED_FUNCTION_CALL stopReason', () => {
     expect(
-      buildFinishReasonMessage(FinishReason.MALFORMED_FUNCTION_CALL),
+      buildFinishReasonMessage('error', 'MALFORMED_FUNCTION_CALL'),
     ).toBeDefined();
   });
 });

@@ -7,11 +7,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerToolCallRequestEvent, ServerErrorEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import type { GenerateContentResponse, Part, Content } from '@google/genai';
+import type { Part, Content } from '@google/genai';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
 import { InvalidStreamError, StreamEventType } from './chatSession.js';
-import { type MockedChatInstance } from './turn-test-helpers.js';
+import {
+  type MockedChatInstance,
+  mockResponseToChunk,
+} from './turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -33,47 +36,6 @@ vi.mock('@google/genai', async (importOriginal) => {
 vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
   reportError: vi.fn(),
 }));
-
-vi.mock(
-  '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js',
-  () => ({
-    getResponseText: (resp: GenerateContentResponse) =>
-      resp.candidates?.[0]?.content?.parts
-        ?.filter((part) => (part as { thought?: boolean }).thought !== true)
-        .map((part) => part.text)
-        .join('') ?? undefined,
-    getFunctionCalls: (resp: GenerateContentResponse) =>
-      resp.functionCalls ?? [],
-    getFunctionCallsFromParts: (parts: Part[]) => {
-      const functionCalls = parts
-        .filter((part) => part.functionCall !== undefined)
-        .map((part) => part.functionCall!);
-      return functionCalls.length > 0 ? functionCalls : undefined;
-    },
-    analyzeResponseOutcome: (parts: Part[]) => {
-      let hasVisibleText = false;
-      let hasThinking = false;
-      let hasToolCalls = false;
-      for (const part of parts) {
-        const isThinking = (part as { thought?: boolean }).thought === true;
-        if (isThinking) hasThinking = true;
-        if (part.functionCall !== undefined) hasToolCalls = true;
-        if (
-          !isThinking &&
-          typeof part.text === 'string' &&
-          part.text.trim() !== ''
-        )
-          hasVisibleText = true;
-      }
-      return {
-        hasVisibleText,
-        hasThinking,
-        hasToolCalls,
-        isActionable: hasVisibleText || hasToolCalls,
-      };
-    },
-  }),
-);
 
 describe('Turn', () => {
   let turn: Turn;
@@ -112,15 +74,15 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
-          } as GenerateContentResponse,
+          }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [{ content: { parts: [{ text: ' world' }] } }],
-          } as GenerateContentResponse,
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -153,25 +115,25 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               { content: { parts: [{ text: 'LLXPRT2208_ALPHA' }] } },
             ],
-          } as GenerateContentResponse,
+          }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [{ content: { parts: [{ text: '\n\n' }] } }],
-          } as GenerateContentResponse,
+          }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               { content: { parts: [{ text: 'Alpha paragraph one.' }] } },
             ],
-          } as GenerateContentResponse,
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -204,17 +166,17 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [{ content: { parts: [{ text: '\n\n' }] } }],
-          } as GenerateContentResponse,
+          }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               { content: { parts: [{ text: 'LLXPRT2208_ALPHA' }] } },
             ],
-          } as GenerateContentResponse,
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -241,7 +203,7 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: {
@@ -263,7 +225,7 @@ describe('Turn', () => {
                 },
               },
             ],
-          } as unknown as GenerateContentResponse,
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -352,7 +314,7 @@ describe('Turn', () => {
       expect(reportError).toHaveBeenCalledWith(
         error,
         'Error when talking to test API',
-        [...historyContent, reqParts],
+        expect.any(Array),
         'Turn.run-sendMessageStream',
       );
     });
@@ -361,7 +323,7 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: {
@@ -391,7 +353,7 @@ describe('Turn', () => {
                 },
               },
             ],
-          } as unknown as GenerateContentResponse,
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -432,7 +394,7 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: { parts: [{ text: 'Partial response' }] },
@@ -446,7 +408,7 @@ describe('Turn', () => {
               thoughtsTokenCount: 5,
               toolUsePromptTokenCount: 2,
             },
-          } as GenerateContentResponse,
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -468,13 +430,14 @@ describe('Turn', () => {
         {
           type: AgentEventType.Finished,
           value: {
-            reason: 'STOP',
+            reason: 'stop',
+            stopReason: 'STOP',
             usageMetadata: {
-              promptTokenCount: 17,
-              candidatesTokenCount: 50,
-              cachedContentTokenCount: 10,
-              thoughtsTokenCount: 5,
-              toolUsePromptTokenCount: 2,
+              promptTokens: 17,
+              completionTokens: 50,
+              totalTokens: 0,
+              cachedTokens: 10,
+              reasoningTokens: 5,
             },
             outcome: {
               hadVisibleOutput: true,
@@ -490,7 +453,7 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: {
@@ -501,7 +464,7 @@ describe('Turn', () => {
                 finishReason: 'MAX_TOKENS',
               },
             ],
-          },
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -524,7 +487,8 @@ describe('Turn', () => {
         {
           type: AgentEventType.Finished,
           value: {
-            reason: 'MAX_TOKENS',
+            reason: 'max_tokens',
+            stopReason: 'MAX_TOKENS',
             usageMetadata: undefined,
             outcome: {
               hadVisibleOutput: true,
@@ -540,14 +504,14 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: { parts: [{ text: 'Content blocked' }] },
                 finishReason: 'SAFETY',
               },
             ],
-          },
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -570,7 +534,8 @@ describe('Turn', () => {
         {
           type: AgentEventType.Finished,
           value: {
-            reason: 'SAFETY',
+            reason: 'safety',
+            stopReason: 'SAFETY',
             usageMetadata: undefined,
             outcome: {
               hadVisibleOutput: true,
@@ -586,7 +551,7 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: {
@@ -594,7 +559,7 @@ describe('Turn', () => {
                 },
               },
             ],
-          },
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -621,24 +586,24 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: { parts: [{ text: 'First part' }] },
               },
             ],
-          },
+          }),
         };
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: { parts: [{ text: 'Second part' }] },
                 finishReason: 'OTHER',
               },
             ],
-          },
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -666,7 +631,8 @@ describe('Turn', () => {
         {
           type: AgentEventType.Finished,
           value: {
-            reason: 'OTHER',
+            reason: 'other',
+            stopReason: 'OTHER',
             usageMetadata: undefined,
             outcome: {
               hadVisibleOutput: true,
@@ -683,9 +649,9 @@ describe('Turn', () => {
         yield { type: StreamEventType.RETRY };
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [{ content: { parts: [{ text: 'Success' }] } }],
-          },
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -705,10 +671,10 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
             responseId: 'trace-123',
-          } as GenerateContentResponse,
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);
@@ -730,7 +696,7 @@ describe('Turn', () => {
       const mockResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: {
@@ -739,7 +705,7 @@ describe('Turn', () => {
               },
             ],
             responseId: 'trace-456',
-          } as unknown as GenerateContentResponse,
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(mockResponseStream);

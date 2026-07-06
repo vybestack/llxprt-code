@@ -16,7 +16,6 @@
  * the real MockTool infra (the actual tool the scheduler invokes).
  */
 
-import { FinishReason } from '@google/genai';
 import { vi } from 'vitest';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 import type { AgenticLoop } from '../AgenticLoop.js';
@@ -218,7 +217,7 @@ export function contentEvent(text: string): ServerAgentStreamEvent {
 export function finishedEvent(): ServerAgentStreamEvent {
   return {
     type: AgentEventType.Finished,
-    value: { reason: FinishReason.STOP },
+    value: { reason: 'stop' },
   };
 }
 

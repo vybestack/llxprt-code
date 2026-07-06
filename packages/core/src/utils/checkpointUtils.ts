@@ -6,15 +6,17 @@
 
 import * as path from 'node:path';
 import type { GitService } from '../services/gitService.js';
-import type { AgentClientContract } from '../core/clientContract.js';
+import type {
+  AgentClientContract,
+  ContractContent,
+} from '../core/clientContract.js';
 import { getErrorMessage } from './errors.js';
 import { z } from 'zod';
-import type { Content } from '@google/genai';
 import type { ToolCallRequestInfo } from '../core/turn.js';
 
 export interface ToolCallData<HistoryType = unknown, ArgsType = unknown> {
   history?: HistoryType;
-  clientHistory?: Content[];
+  clientHistory?: ContractContent[];
   commitHash?: string;
   toolCall: {
     name: string;

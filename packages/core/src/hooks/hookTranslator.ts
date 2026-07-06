@@ -4,16 +4,107 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  GenerateContentResponse,
-  GenerateContentParameters,
-  ToolConfig,
-  FinishReason,
-  FunctionCallingConfig,
-} from '@google/genai';
 import { z } from 'zod';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { getResponseText } from '../utils/partUtils.js';
+
+/**
+ * Structural shapes matching the portions of the @google/genai SDK types used
+ * by the hook translator's internal plumbing. Defined locally so core does
+ * not import @google/genai. The external LLMRequest/LLMResponse wire format
+ * (the stable user-facing hook JSON contract) is unchanged.
+ *
+ * The agents layer (#2349) passes objects that are structurally compatible
+ * with these shapes.
+ */
+export interface HookPart {
+  text?: string;
+  thought?: boolean;
+  functionCall?: { id?: string; name?: string; args?: Record<string, unknown> };
+  functionResponse?: {
+    id?: string;
+    name?: string;
+    response?: Record<string, unknown>;
+  };
+  inlineData?: { mimeType?: string; data?: string };
+}
+
+export interface HookContent {
+  role?: string;
+  parts?: HookPart[];
+}
+
+export interface HookGenerateContentConfig {
+  temperature?: number;
+  maxOutputTokens?: number;
+  topP?: number;
+  topK?: number;
+  systemInstruction?: unknown;
+  [key: string]: unknown;
+}
+
+type HookFinishReason =
+  | 'FINISH_REASON_UNSPECIFIED'
+  | 'STOP'
+  | 'MAX_TOKENS'
+  | 'SAFETY'
+  | 'RECITATION'
+  | 'LANGUAGE'
+  | 'OTHER'
+  | 'BLOCKLIST'
+  | 'PROHIBITED_CONTENT'
+  | 'SPII'
+  | 'MALFORMED_FUNCTION_CALL'
+  | 'IMAGE_SAFETY'
+  | 'UNEXPECTED_TOOL_CALL'
+  | 'IMAGE_PROHIBITED_CONTENT'
+  | 'NO_IMAGE';
+
+export interface HookGenerateContentParameters {
+  model?: string;
+  contents: HookContent[] | HookContent | string;
+  config?: HookGenerateContentConfig;
+  [key: string]: unknown;
+}
+
+export interface HookCandidate {
+  content?: { role?: string; parts?: HookPart[] };
+  finishReason?: HookFinishReason;
+  index?: number;
+  safetyRatings?: Array<{
+    category?: unknown;
+    probability?: unknown;
+    blocked?: boolean;
+  }>;
+}
+
+export interface HookGenerateContentResponse {
+  text?: string;
+  data: unknown | undefined;
+  functionCalls:
+    | Array<{ id?: string; name?: string; args?: Record<string, unknown> }>
+    | undefined;
+  executableCode: unknown | undefined;
+  codeExecutionResult: unknown | undefined;
+  candidates?: HookCandidate[];
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+    [key: string]: unknown;
+  };
+}
+
+export interface HookFunctionCallingConfig {
+  mode?: 'AUTO' | 'ANY' | 'NONE';
+  allowedFunctionNames?: string[];
+  [key: string]: unknown;
+}
+
+export interface HookSdkToolConfig {
+  functionCallingConfig?: HookFunctionCallingConfig;
+  [key: string]: unknown;
+}
 
 /**
  * Decoupled LLM request format - stable across LLxprt CLI versions
@@ -104,17 +195,23 @@ export interface HookLLMRequestBoundary {
  * Base class for hook translators - handles version-specific translation logic
  */
 export abstract class HookTranslator {
-  abstract toHookLLMRequest(sdkRequest: GenerateContentParameters): LLMRequest;
+  abstract toHookLLMRequest(
+    sdkRequest: HookGenerateContentParameters,
+  ): LLMRequest;
   abstract fromHookLLMRequest(
     hookRequest: LLMRequest,
-    baseRequest?: GenerateContentParameters,
-  ): GenerateContentParameters;
-  abstract toHookLLMResponse(sdkResponse: GenerateContentResponse): LLMResponse;
+    baseRequest?: HookGenerateContentParameters,
+  ): HookGenerateContentParameters;
+  abstract toHookLLMResponse(
+    sdkResponse: HookGenerateContentResponse,
+  ): LLMResponse;
   abstract fromHookLLMResponse(
     hookResponse: LLMResponse,
-  ): GenerateContentResponse;
-  abstract toHookToolConfig(sdkToolConfig: ToolConfig): HookToolConfig;
-  abstract fromHookToolConfig(hookToolConfig: HookToolConfig): ToolConfig;
+  ): HookGenerateContentResponse;
+  abstract toHookToolConfig(sdkToolConfig: HookSdkToolConfig): HookToolConfig;
+  abstract fromHookToolConfig(
+    hookToolConfig: HookToolConfig,
+  ): HookSdkToolConfig;
 }
 
 /**
@@ -165,7 +262,7 @@ function isContentWithParts(
  * Helper to safely extract generation config from SDK request
  * The SDK uses a config field that contains generation parameters
  */
-function extractGenerationConfig(request: GenerateContentParameters):
+function extractGenerationConfig(request: HookGenerateContentParameters):
   | {
       temperature?: number;
       maxOutputTokens?: number;
@@ -207,7 +304,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
    * manipulation without needing to handle complex multimodal content.
    * Future versions may expose additional content types if needed.
    */
-  toHookLLMRequest(sdkRequest: GenerateContentParameters): LLMRequest {
+  toHookLLMRequest(sdkRequest: HookGenerateContentParameters): LLMRequest {
     const messages: LLMRequest['messages'] = [];
 
     const rawContents = sdkRequest.contents as unknown;
@@ -234,7 +331,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
     const config = extractGenerationConfig(sdkRequest);
 
     return {
-      model: sdkRequest.model || DEFAULT_GEMINI_FLASH_MODEL,
+      model: sdkRequest.model ?? DEFAULT_GEMINI_FLASH_MODEL,
       messages,
       config: {
         temperature: config?.temperature,
@@ -277,15 +374,15 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
    */
   fromHookLLMRequest(
     hookRequest: LLMRequest,
-    baseRequest?: GenerateContentParameters,
-  ): GenerateContentParameters {
+    baseRequest?: HookGenerateContentParameters,
+  ): HookGenerateContentParameters {
     // When the hook did not supply messages, preserve the base contents.
     // Only rebuild contents from messages when the hook actually provided them.
     // Shallow-copy the base contents array (when present and an array) so that
     // downstream in-place mutation of the result cannot corrupt baseRequest.
     const hookMessages = hookRequest.messages;
     const baseContents = baseRequest?.contents;
-    let contents: GenerateContentParameters['contents'];
+    let contents: HookGenerateContentParameters['contents'];
     if (Array.isArray(hookMessages)) {
       contents = hookMessages.map((message) => ({
         role: message.role === 'model' ? 'model' : message.role,
@@ -316,7 +413,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
     // read model defensively as an optional string before coalescing.
     const hookModel =
       typeof hookRequest.model === 'string' ? hookRequest.model : undefined;
-    const result: GenerateContentParameters = {
+    const result: HookGenerateContentParameters = {
       ...baseRequest,
       model: hookModel ?? baseRequest?.model ?? DEFAULT_GEMINI_FLASH_MODEL,
       contents,
@@ -334,7 +431,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
         maxOutputTokens: hookRequest.config.maxOutputTokens,
         topP: hookRequest.config.topP,
         topK: hookRequest.config.topK,
-      } as GenerateContentParameters['config'];
+      } as HookGenerateContentParameters['config'];
     }
 
     return result;
@@ -343,7 +440,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
   /**
    * Convert genai SDK GenerateContentResponse to stable LLMResponse
    */
-  toHookLLMResponse(sdkResponse: GenerateContentResponse): LLMResponse {
+  toHookLLMResponse(sdkResponse: HookGenerateContentResponse): LLMResponse {
     return {
       text: getResponseText(sdkResponse) ?? undefined,
       candidates: (sdkResponse.candidates ?? []).map((candidate) => {
@@ -381,10 +478,14 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
   /**
    * Convert stable LLMResponse to genai SDK GenerateContentResponse
    */
-  fromHookLLMResponse(hookResponse: LLMResponse): GenerateContentResponse {
+  fromHookLLMResponse(hookResponse: LLMResponse): HookGenerateContentResponse {
     // Build response object with proper structure
-    const response: GenerateContentResponse = {
+    const response: HookGenerateContentResponse = {
       text: hookResponse.text,
+      data: undefined,
+      functionCalls: [],
+      executableCode: undefined,
+      codeExecutionResult: undefined,
       candidates: hookResponse.candidates.map((candidate) => ({
         content: {
           role: 'model',
@@ -392,12 +493,12 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
             text: part,
           })),
         },
-        finishReason: candidate.finishReason as FinishReason,
+        finishReason: candidate.finishReason,
         index: candidate.index,
         safetyRatings: candidate.safetyRatings,
       })),
       usageMetadata: hookResponse.usageMetadata,
-    } as GenerateContentResponse;
+    };
 
     return response;
   }
@@ -405,9 +506,9 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
   /**
    * Convert genai SDK ToolConfig to stable HookToolConfig
    */
-  toHookToolConfig(sdkToolConfig: ToolConfig): HookToolConfig {
+  toHookToolConfig(sdkToolConfig: HookSdkToolConfig): HookToolConfig {
     return {
-      mode: sdkToolConfig.functionCallingConfig?.mode as HookToolConfig['mode'],
+      mode: sdkToolConfig.functionCallingConfig?.mode,
       allowedFunctionNames:
         sdkToolConfig.functionCallingConfig?.allowedFunctionNames,
     };
@@ -416,13 +517,14 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
   /**
    * Convert stable HookToolConfig to genai SDK ToolConfig
    */
-  fromHookToolConfig(hookToolConfig: HookToolConfig): ToolConfig {
-    const functionCallingConfig: FunctionCallingConfig | undefined =
-      hookToolConfig.mode || hookToolConfig.allowedFunctionNames
-        ? ({
+  fromHookToolConfig(hookToolConfig: HookToolConfig): HookSdkToolConfig {
+    const functionCallingConfig: HookFunctionCallingConfig | undefined =
+      hookToolConfig.mode !== undefined ||
+      hookToolConfig.allowedFunctionNames !== undefined
+        ? {
             mode: hookToolConfig.mode,
             allowedFunctionNames: hookToolConfig.allowedFunctionNames,
-          } as FunctionCallingConfig)
+          }
         : undefined;
 
     return {

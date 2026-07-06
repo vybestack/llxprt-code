@@ -43,7 +43,7 @@ import type {
   ServerFinishedOutcome,
   AgentErrorEventValue,
 } from './turn.js';
-import type { PartListUnion } from '@google/genai';
+import type { ContentBlock } from '../services/history/IContent.js';
 
 /** @deprecated Use AgentEventType instead. Will be removed in a future major. */
 export const GeminiEventType = AgentEventType;
@@ -104,5 +104,8 @@ export type ServerGeminiAgentExecutionBlockedEvent =
 /** @deprecated Use AgentErrorEventValue instead. Will be removed in a future major. */
 export type GeminiErrorEventValue = AgentErrorEventValue;
 
-/** @deprecated Use PartListUnion from @google/genai directly. Will be removed in a future major. */
-export type GeminiCodeRequest = PartListUnion;
+/**
+ * @deprecated Use the neutral ContentBlock[] or string directly (via
+ * ToolResultContent from llm-types). Will be removed in a future major.
+ */
+export type GeminiCodeRequest = string | ContentBlock | ContentBlock[];

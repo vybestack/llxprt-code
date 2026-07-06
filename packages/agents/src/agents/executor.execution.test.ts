@@ -92,11 +92,10 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
         resultDisplay: 'file1.txt',
         responseParts: [
           {
-            functionResponse: {
-              name: LSTool.Name,
-              response: { result: 'file1.txt' },
-              id: 'call1',
-            },
+            type: 'tool_response',
+            callId: 'call1',
+            toolName: LSTool.Name,
+            result: { result: 'file1.txt' },
           },
         ],
         error: undefined,
@@ -195,11 +194,10 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
         resultDisplay: 'ok',
         responseParts: [
           {
-            functionResponse: {
-              name: LSTool.Name,
-              response: {},
-              id: 'call1',
-            },
+            type: 'tool_response',
+            callId: 'call1',
+            toolName: LSTool.Name,
+            result: {},
           },
         ],
       }),
@@ -251,11 +249,10 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
         resultDisplay: 'ok',
         responseParts: [
           {
-            functionResponse: {
-              name: LSTool.Name,
-              response: {},
-              id: 'call1',
-            },
+            type: 'tool_response',
+            callId: 'call1',
+            toolName: LSTool.Name,
+            result: {},
           },
         ],
       }),
@@ -423,11 +420,10 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
         resultDisplay: 'ok',
         responseParts: [
           {
-            functionResponse: {
-              name: reqInfo.name,
-              response: {},
-              id: reqInfo.callId,
-            },
+            type: 'tool_response',
+            callId: reqInfo.callId,
+            toolName: reqInfo.name,
+            result: {},
           },
         ],
       });

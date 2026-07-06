@@ -5,12 +5,13 @@
  */
 
 import { type ToolResult } from '@vybestack/llxprt-code-tools';
-import type { GenerateContentResponse } from '@google/genai';
-import { type Content, type GenerateContentConfig } from '@google/genai';
-import type { AgentClientContract } from '../core/clientContract.js';
+import type {
+  AgentClientContract,
+  ContractContent,
+  ContractGenerateContentConfig,
+} from '../core/clientContract.js';
 import { DEFAULT_GEMINI_FLASH_LITE_MODEL } from '../config/models.js';
-import { getResponseText } from './generateContentResponseUtilities.js';
-import { partToString } from './partUtils.js';
+import { getResponseText, partToString } from './partUtils.js';
 import { debugLogger } from './debugLogger.js';
 
 /**
@@ -76,19 +77,21 @@ export async function summarizeToolOutput(
     String(maxOutputTokens),
   ).replace('{textToSummarize}', textToSummarize);
 
-  const contents: Content[] = [{ role: 'user', parts: [{ text: prompt }] }];
-  const toolOutputSummarizerConfig: GenerateContentConfig = {
+  const contents: ContractContent[] = [
+    { role: 'user', parts: [{ text: prompt }] },
+  ];
+  const toolOutputSummarizerConfig: ContractGenerateContentConfig = {
     maxOutputTokens,
   };
   try {
-    const parsedResponse = (await agentClient.generateContent(
+    const parsedResponse = await agentClient.generateContent(
       contents,
       toolOutputSummarizerConfig,
       abortSignal,
       DEFAULT_GEMINI_FLASH_LITE_MODEL,
-    )) as unknown as GenerateContentResponse;
+    );
     const responseText = getResponseText(parsedResponse);
-    return responseText === undefined || responseText === ''
+    return responseText === null || responseText === ''
       ? textToSummarize
       : responseText;
   } catch (error) {

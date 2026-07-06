@@ -37,10 +37,11 @@ import {
 import {
   filterHookRestrictedParts,
   filterHookRestrictedFunctionCalls,
-  getHookRestrictedAllowedTools,
   getHookRestrictedFunctionCallsFromParts,
   mergeHookRestrictedFunctionCalls,
 } from './hookToolRestrictions.js';
+import { getFunctionCallsFromParts } from './googlePartHelpers.js';
+import { chunkToParts } from './streamChunkWrapper.js';
 import type { ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -137,17 +138,22 @@ export function collectNonInteractiveChunk(
   logger: DebugLogger,
   subagentId: string,
 ): { text: string; hookRestrictedAllowedTools: string[] | undefined } {
-  const allowedTools = getHookRestrictedAllowedTools(resp.value);
-  const parts = resp.value.candidates?.[0]?.content?.parts ?? [];
+  const chunk = resp.value;
+  const allowedTools = chunk.hookRestrictions?.allowedToolNames;
+  const parts = chunkToParts(chunk);
   const partCalls = getHookRestrictedFunctionCallsFromParts(
     parts,
     allowedTools,
   );
-  const topLevelCalls = filterHookRestrictedFunctionCalls(
-    resp.value.functionCalls ?? [],
+  const topLevelCalls = getFunctionCallsFromParts(parts) ?? [];
+  const filteredTopCalls = filterHookRestrictedFunctionCalls(
+    topLevelCalls,
     allowedTools,
   );
-  const chunkCalls = mergeHookRestrictedFunctionCalls(partCalls, topLevelCalls);
+  const chunkCalls = mergeHookRestrictedFunctionCalls(
+    partCalls,
+    filteredTopCalls,
+  );
   if (chunkCalls.length > 0) {
     functionCalls.push(...chunkCalls);
     logger.debug(
@@ -155,9 +161,13 @@ export function collectNonInteractiveChunk(
         `Subagent ${subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
     );
   }
+  const chunkText = chunk.content.blocks
+    .filter((b) => b.type === 'text' && typeof b.text === 'string')
+    .map((b) => (b as { text: string }).text)
+    .join('');
   if (allowedTools === undefined) {
     return {
-      text: resp.value.text ?? '',
+      text: chunkText,
       hookRestrictedAllowedTools: undefined,
     };
   }

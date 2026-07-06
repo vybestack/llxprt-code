@@ -3,7 +3,7 @@ import { MessageBus } from './message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';
 import { MessageBusType, type ToolConfirmationRequest } from './types.js';
-import type { FunctionCall } from '@google/genai';
+import type { ToolCallRequest } from '../llm-types/toolCall.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { debugLogger } from '../utils/debugLogger.js';
 
@@ -117,7 +117,7 @@ describe('MessageBus', () => {
         policyEngine = new PolicyEngine(config);
         messageBus = new MessageBus(policyEngine);
 
-        const toolCall: FunctionCall = { name: 'edit', args: {} };
+        const toolCall: ToolCallRequest = { name: 'edit', args: {} };
         const result = await messageBus.requestConfirmation(toolCall, {});
 
         expect(result).toBe(true);
@@ -133,7 +133,7 @@ describe('MessageBus', () => {
         const handler = vi.fn();
         messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler);
 
-        const toolCall: FunctionCall = { name: 'edit', args: {} };
+        const toolCall: ToolCallRequest = { name: 'edit', args: {} };
         await messageBus.requestConfirmation(toolCall, {});
 
         expect(handler).not.toHaveBeenCalled();
@@ -148,7 +148,7 @@ describe('MessageBus', () => {
         policyEngine = new PolicyEngine(config);
         messageBus = new MessageBus(policyEngine);
 
-        const toolCall: FunctionCall = { name: 'shell', args: {} };
+        const toolCall: ToolCallRequest = { name: 'shell', args: {} };
         const result = await messageBus.requestConfirmation(toolCall, {});
 
         expect(result).toBe(false);
@@ -164,7 +164,7 @@ describe('MessageBus', () => {
         const handler = vi.fn();
         messageBus.subscribe(MessageBusType.TOOL_POLICY_REJECTION, handler);
 
-        const toolCall: FunctionCall = { name: 'shell', args: {} };
+        const toolCall: ToolCallRequest = { name: 'shell', args: {} };
         await messageBus.requestConfirmation(toolCall, {});
 
         expect(handler).toHaveBeenCalledWith(
@@ -188,7 +188,7 @@ describe('MessageBus', () => {
         const handler = vi.fn();
         messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler);
 
-        const toolCall: FunctionCall = { name: 'edit', args: {} };
+        const toolCall: ToolCallRequest = { name: 'edit', args: {} };
         const confirmationPromise = messageBus.requestConfirmation(
           toolCall,
           {},
@@ -225,7 +225,7 @@ describe('MessageBus', () => {
         const handler = vi.fn();
         messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler);
 
-        const toolCall: FunctionCall = { name: 'edit', args: {} };
+        const toolCall: ToolCallRequest = { name: 'edit', args: {} };
         const confirmationPromise = messageBus.requestConfirmation(
           toolCall,
           {},
@@ -253,7 +253,7 @@ describe('MessageBus', () => {
         const handler = vi.fn();
         messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler);
 
-        const toolCall: FunctionCall = { name: 'edit', args: {} };
+        const toolCall: ToolCallRequest = { name: 'edit', args: {} };
         const confirmationPromise = messageBus.requestConfirmation(
           toolCall,
           {},
@@ -281,7 +281,10 @@ describe('MessageBus', () => {
         const handler = vi.fn();
         messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler);
 
-        const toolCall: FunctionCall = { name: 'run_shell_command', args: {} };
+        const toolCall: ToolCallRequest = {
+          name: 'run_shell_command',
+          args: {},
+        };
         const confirmationPromise = messageBus.requestConfirmation(
           toolCall,
           {},
@@ -312,7 +315,7 @@ describe('MessageBus', () => {
         const handler = vi.fn();
         messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler);
 
-        const toolCall: FunctionCall = { name: 'edit', args: {} };
+        const toolCall: ToolCallRequest = { name: 'edit', args: {} };
         const confirmationPromise = messageBus.requestConfirmation(
           toolCall,
           {},
@@ -349,7 +352,7 @@ describe('MessageBus', () => {
         policyEngine = new PolicyEngine(config);
         messageBus = new MessageBus(policyEngine);
 
-        const toolCall: FunctionCall = { name: 'edit', args: {} };
+        const toolCall: ToolCallRequest = { name: 'edit', args: {} };
         const confirmationPromise = messageBus.requestConfirmation(
           toolCall,
           {},
@@ -378,7 +381,7 @@ describe('MessageBus', () => {
         policyEngine = new PolicyEngine(config);
         messageBus = new MessageBus(policyEngine);
 
-        const toolCall: FunctionCall = { name: 'my-server__tool', args: {} };
+        const toolCall: ToolCallRequest = { name: 'my-server__tool', args: {} };
         const result = await messageBus.requestConfirmation(
           toolCall,
           {},
@@ -396,7 +399,7 @@ describe('MessageBus', () => {
         messageBus = new MessageBus(policyEngine);
 
         // Tool claims to be from 'trusted-server' but actually from 'malicious-server'
-        const toolCall: FunctionCall = {
+        const toolCall: ToolCallRequest = {
           name: 'trusted-server__tool',
           args: {},
         };

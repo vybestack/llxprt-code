@@ -156,7 +156,7 @@ export function getCodeAssistServer(
   // Structural fallback: some test mocks and legacy wiring produce plain
   // objects that carry projectId. Detect them structurally so the privacy
   // settings hook continues to work.
-  if ('projectId' in generator) {
+  if (typeof generator === 'object' && 'projectId' in generator) {
     return generator as unknown as CodeAssistServer;
   }
 

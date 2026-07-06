@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { FinishReason } from '@google/genai';
 import type React from 'react';
 import {
   AgentEventType,
@@ -426,7 +425,7 @@ describe('dispatchStreamEvent - stream buffer lifecycle', () => {
       1000,
     );
     const finished = dispatchStreamEvent(
-      { type: AgentEventType.Finished, value: { reason: FinishReason.STOP } },
+      { type: AgentEventType.Finished, value: { reason: 'stop' } },
       deps,
       first.agentMessageBuffer,
       1000,
@@ -458,7 +457,7 @@ describe('dispatchStreamEvent - stream buffer lifecycle', () => {
     });
 
     const result = dispatchStreamEvent(
-      { type: AgentEventType.Finished, value: { reason: FinishReason.STOP } },
+      { type: AgentEventType.Finished, value: { reason: 'stop' } },
       deps,
       'first',
       1000,
@@ -475,7 +474,7 @@ function createTerminalEvent(eventType: AgentEventType): GeminiEvent {
     case AgentEventType.Finished:
       return {
         type: eventType,
-        value: { reason: FinishReason.STOP },
+        value: { reason: 'stop' },
       } as GeminiEvent;
     case AgentEventType.Error:
       return {

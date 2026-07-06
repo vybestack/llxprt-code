@@ -13,11 +13,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type React from 'react';
-import { FinishReason } from '@google/genai';
 import type {
   Config,
   ServerFinishedEvent,
   AgentEventType,
+  CanonicalFinishReason,
 } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
@@ -82,7 +82,7 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
   }
 
   function makeFinishedEvent(
-    reason: FinishReason,
+    reason: CanonicalFinishReason,
     stopReason?: string,
   ): ServerFinishedEvent {
     return {
@@ -98,7 +98,7 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
     const result = renderHandlers();
 
     result.current.handleFinishedEvent(
-      makeFinishedEvent(FinishReason.STOP, 'refusal'),
+      makeFinishedEvent('stop', 'refusal'),
       1000,
     );
 
@@ -114,7 +114,7 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
     const result = renderHandlers();
 
     result.current.handleFinishedEvent(
-      makeFinishedEvent(FinishReason.SAFETY, 'refusal'),
+      makeFinishedEvent('safety', 'refusal'),
       1000,
     );
 
@@ -125,10 +125,7 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
   it('falls back to the generic message for SAFETY without a refusal stopReason', () => {
     const result = renderHandlers();
 
-    result.current.handleFinishedEvent(
-      makeFinishedEvent(FinishReason.SAFETY),
-      2000,
-    );
+    result.current.handleFinishedEvent(makeFinishedEvent('safety'), 2000);
 
     expect(mockAddItem).toHaveBeenCalledTimes(1);
     const [item] = mockAddItem.mock.calls[0];
@@ -140,7 +137,7 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
     const result = renderHandlers();
 
     result.current.handleFinishedEvent(
-      makeFinishedEvent(FinishReason.STOP, 'end_turn'),
+      makeFinishedEvent('stop', 'end_turn'),
       3000,
     );
 
@@ -150,10 +147,7 @@ describe('useFinishedEventHandler — refusal notice (issue #2329)', () => {
   it('adds no item for a STOP completion without any stopReason', () => {
     const result = renderHandlers();
 
-    result.current.handleFinishedEvent(
-      makeFinishedEvent(FinishReason.STOP),
-      4000,
-    );
+    result.current.handleFinishedEvent(makeFinishedEvent('stop'), 4000);
 
     expect(mockAddItem).not.toHaveBeenCalled();
   });

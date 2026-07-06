@@ -6,78 +6,46 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  getResponseText,
-  getResponseTextFromParts,
-  getFunctionCalls,
-  getFunctionCallsFromParts,
-  getFunctionCallsAsJson,
-  getFunctionCallsFromPartsAsJson,
-  getStructuredResponse,
-  getStructuredResponseFromParts,
-  convertToFunctionResponse,
-  createFunctionResponsePart,
-  limitFunctionResponsePart,
-  limitStringOutput,
-  toParts,
   analyzeResponseOutcome,
+  getResponseTextFromBlocks,
+  getToolCallBlocks,
+  getToolCallBlocksAsJson,
+  getStructuredResponseFromBlocks,
+  convertToFunctionResponse,
+  createToolResponseBlock,
+  limitToolResponseBlock,
+  limitStringOutput,
+  legacyPartsToBlocks,
+  createErrorResponse,
 } from './generateContentResponseUtilities.js';
 import type {
-  GenerateContentResponse,
-  Part,
-  SafetyRating,
-} from '@google/genai';
-import { FinishReason } from '@google/genai';
+  TextBlock,
+  ToolCallBlock,
+  ThinkingBlock,
+} from '../services/history/IContent.js';
 
-const mockTextPart = (text: string): Part => ({ text });
-const mockFunctionCallPart = (
+const textBlock = (text: string): TextBlock => ({ type: 'text', text });
+const thinkingBlock = (thought: string): ThinkingBlock => ({
+  type: 'thinking',
+  thought,
+  isHidden: true,
+  sourceField: 'thought',
+});
+const toolCallBlock = (
   name: string,
   args?: Record<string, unknown>,
-): Part => ({
-  functionCall: { name, args: args ?? {} },
-});
-
-const mockResponse = (
-  parts: Part[],
-  finishReason: FinishReason = FinishReason.STOP,
-  safetyRatings: SafetyRating[] = [],
-): GenerateContentResponse => ({
-  candidates: [
-    {
-      content: {
-        parts,
-        role: 'model',
-      },
-      index: 0,
-      finishReason,
-      safetyRatings,
-    },
-  ],
-  promptFeedback: {
-    safetyRatings: [],
-  },
-  text: undefined,
-  data: undefined,
-  functionCalls: undefined,
-  executableCode: undefined,
-  codeExecutionResult: undefined,
-});
-
-const minimalMockResponse = (
-  candidates: GenerateContentResponse['candidates'],
-): GenerateContentResponse => ({
-  candidates,
-  promptFeedback: { safetyRatings: [] },
-  text: undefined,
-  data: undefined,
-  functionCalls: undefined,
-  executableCode: undefined,
-  codeExecutionResult: undefined,
+  id?: string,
+): ToolCallBlock => ({
+  type: 'tool_call',
+  id: id ?? 'call-1',
+  name,
+  parameters: args ?? {},
 });
 
 describe('generateContentResponseUtilities', () => {
   describe('analyzeResponseOutcome', () => {
     it('should detect visible text', () => {
-      const outcome = analyzeResponseOutcome([{ text: 'Hello' }]);
+      const outcome = analyzeResponseOutcome([textBlock('Hello')]);
       expect(outcome).toStrictEqual({
         hasVisibleText: true,
         hasThinking: false,
@@ -87,7 +55,7 @@ describe('generateContentResponseUtilities', () => {
     });
 
     it('should treat whitespace-only text as not visible', () => {
-      const outcome = analyzeResponseOutcome([{ text: '   ' }]);
+      const outcome = analyzeResponseOutcome([textBlock('   ')]);
       expect(outcome).toStrictEqual({
         hasVisibleText: false,
         hasThinking: false,
@@ -96,10 +64,8 @@ describe('generateContentResponseUtilities', () => {
       });
     });
 
-    it('should detect thought parts as thinking only', () => {
-      const outcome = analyzeResponseOutcome([
-        { text: 'thinking...', thought: true },
-      ]);
+    it('should detect thinking blocks', () => {
+      const outcome = analyzeResponseOutcome([thinkingBlock('thinking...')]);
       expect(outcome).toStrictEqual({
         hasVisibleText: false,
         hasThinking: true,
@@ -109,9 +75,7 @@ describe('generateContentResponseUtilities', () => {
     });
 
     it('should detect tool calls', () => {
-      const outcome = analyzeResponseOutcome([
-        { functionCall: { name: 'testFunc', args: {} } },
-      ]);
+      const outcome = analyzeResponseOutcome([toolCallBlock('testFunc')]);
       expect(outcome).toStrictEqual({
         hasVisibleText: false,
         hasThinking: false,
@@ -120,11 +84,11 @@ describe('generateContentResponseUtilities', () => {
       });
     });
 
-    it('should detect mixed parts', () => {
+    it('should detect mixed blocks', () => {
       const outcome = analyzeResponseOutcome([
-        { text: 'Hello' },
-        { text: 'thinking...', thought: true },
-        { functionCall: { name: 'func', args: {} } },
+        textBlock('Hello'),
+        thinkingBlock('thinking...'),
+        toolCallBlock('func'),
       ]);
       expect(outcome).toStrictEqual({
         hasVisibleText: true,
@@ -134,7 +98,7 @@ describe('generateContentResponseUtilities', () => {
       });
     });
 
-    it('should return all false for empty parts', () => {
+    it('should return all false for empty blocks', () => {
       const outcome = analyzeResponseOutcome([]);
       expect(outcome).toStrictEqual({
         hasVisibleText: false,
@@ -144,312 +108,143 @@ describe('generateContentResponseUtilities', () => {
       });
     });
 
-    it('should not count thought text as visible text', () => {
+    it('should not count thinking block as visible text', () => {
       const outcome = analyzeResponseOutcome([
-        { text: 'thinking only', thought: true },
-        { text: '' },
+        thinkingBlock('thinking only'),
+        textBlock(''),
       ]);
       expect(outcome.hasVisibleText).toBe(false);
       expect(outcome.hasThinking).toBe(true);
       expect(outcome.isActionable).toBe(false);
     });
-
-    it('should detect tool calls independently from thought status', () => {
-      const outcome = analyzeResponseOutcome([
-        {
-          text: 'thinking while calling',
-          thought: true,
-          functionCall: { name: 'testFunc', args: {} },
-        },
-      ]);
-      expect(outcome).toStrictEqual({
-        hasVisibleText: false,
-        hasThinking: true,
-        hasToolCalls: true,
-        isActionable: true,
-      });
-    });
   });
 
-  describe('getResponseText', () => {
-    it('should return undefined for no candidates', () => {
-      expect(getResponseText(minimalMockResponse(undefined))).toBeUndefined();
+  describe('getResponseTextFromBlocks', () => {
+    it('should return undefined for no blocks', () => {
+      expect(getResponseTextFromBlocks([])).toBeUndefined();
     });
-    it('should return undefined for empty candidates array', () => {
-      expect(getResponseText(minimalMockResponse([]))).toBeUndefined();
+    it('should extract text from a single text block', () => {
+      expect(getResponseTextFromBlocks([textBlock('Hello')])).toBe('Hello');
     });
-    it('should return undefined for no parts', () => {
-      const response = mockResponse([]);
-      expect(getResponseText(response)).toBeUndefined();
-    });
-    it('should extract text from a single text part', () => {
-      const response = mockResponse([mockTextPart('Hello')]);
-      expect(getResponseText(response)).toBe('Hello');
-    });
-    it('should concatenate text from multiple text parts', () => {
-      const response = mockResponse([
-        mockTextPart('Hello '),
-        mockTextPart('World'),
-      ]);
-      expect(getResponseText(response)).toBe('Hello World');
-    });
-    it('should ignore function call parts', () => {
-      const response = mockResponse([
-        mockTextPart('Hello '),
-        mockFunctionCallPart('testFunc'),
-        mockTextPart('World'),
-      ]);
-      expect(getResponseText(response)).toBe('Hello World');
-    });
-    it('should return undefined if only function call parts exist', () => {
-      const response = mockResponse([
-        mockFunctionCallPart('testFunc'),
-        mockFunctionCallPart('anotherFunc'),
-      ]);
-      expect(getResponseText(response)).toBeUndefined();
-    });
-    it('should filter out thought parts using canonical isThoughtPart', () => {
-      const response = mockResponse([
-        { text: 'thinking...', thought: true } as Part,
-        mockTextPart('visible'),
-        { text: 'more thinking', thought: true } as Part,
-      ]);
-      expect(getResponseText(response)).toBe('visible');
-    });
-    it('should return undefined when only thought parts exist', () => {
-      const response = mockResponse([
-        { text: 'thinking...', thought: true } as Part,
-      ]);
-      expect(getResponseText(response)).toBeUndefined();
-    });
-  });
-
-  describe('getResponseTextFromParts', () => {
-    it('should return undefined for no parts', () => {
-      expect(getResponseTextFromParts([])).toBeUndefined();
-    });
-    it('should extract text from a single text part', () => {
-      expect(getResponseTextFromParts([mockTextPart('Hello')])).toBe('Hello');
-    });
-    it('should concatenate text from multiple text parts', () => {
+    it('should concatenate text from multiple text blocks', () => {
       expect(
-        getResponseTextFromParts([
-          mockTextPart('Hello '),
-          mockTextPart('World'),
+        getResponseTextFromBlocks([textBlock('Hello '), textBlock('World')]),
+      ).toBe('Hello World');
+    });
+    it('should ignore tool call blocks', () => {
+      expect(
+        getResponseTextFromBlocks([
+          textBlock('Hello '),
+          toolCallBlock('testFunc'),
+          textBlock('World'),
         ]),
       ).toBe('Hello World');
     });
-    it('should ignore function call parts', () => {
+    it('should return undefined if only tool call blocks exist', () => {
       expect(
-        getResponseTextFromParts([
-          mockTextPart('Hello '),
-          mockFunctionCallPart('testFunc'),
-          mockTextPart('World'),
-        ]),
-      ).toBe('Hello World');
-    });
-    it('should return undefined if only function call parts exist', () => {
-      expect(
-        getResponseTextFromParts([
-          mockFunctionCallPart('testFunc'),
-          mockFunctionCallPart('anotherFunc'),
+        getResponseTextFromBlocks([
+          toolCallBlock('testFunc'),
+          toolCallBlock('anotherFunc'),
         ]),
       ).toBeUndefined();
     });
-    it('should filter out thought parts using canonical isThoughtPart', () => {
+    it('should filter out thinking blocks', () => {
       expect(
-        getResponseTextFromParts([
-          { text: 'thinking...', thought: true } as Part,
-          mockTextPart('visible'),
-          { text: 'more thinking', thought: true } as Part,
+        getResponseTextFromBlocks([
+          thinkingBlock('thinking...'),
+          textBlock('visible'),
+          thinkingBlock('more thinking'),
         ]),
       ).toBe('visible');
     });
-    it('should return undefined when only thought parts exist', () => {
+    it('should return undefined when only thinking blocks exist', () => {
       expect(
-        getResponseTextFromParts([
-          { text: 'thinking...', thought: true } as Part,
-        ]),
+        getResponseTextFromBlocks([thinkingBlock('thinking...')]),
       ).toBeUndefined();
     });
   });
 
-  describe('getFunctionCalls', () => {
-    it('should return undefined for no candidates', () => {
-      expect(getFunctionCalls(minimalMockResponse(undefined))).toBeUndefined();
+  describe('getToolCallBlocks', () => {
+    it('should return empty for no blocks', () => {
+      expect(getToolCallBlocks([])).toStrictEqual([]);
     });
-    it('should return undefined for empty candidates array', () => {
-      expect(getFunctionCalls(minimalMockResponse([]))).toBeUndefined();
+    it('should extract a single tool call block', () => {
+      const block = toolCallBlock('testFunc', { a: 1 });
+      expect(getToolCallBlocks([block])).toStrictEqual([block]);
     });
-    it('should return undefined for no parts', () => {
-      const response = mockResponse([]);
-      expect(getFunctionCalls(response)).toBeUndefined();
-    });
-    it('should extract a single function call', () => {
-      const func = { name: 'testFunc', args: { a: 1 } };
-      const response = mockResponse([
-        mockFunctionCallPart(func.name, func.args),
+    it('should extract multiple tool call blocks', () => {
+      const block1 = toolCallBlock('testFunc1', { a: 1 });
+      const block2 = toolCallBlock('testFunc2', { b: 2 });
+      expect(getToolCallBlocks([block1, block2])).toStrictEqual([
+        block1,
+        block2,
       ]);
-      expect(getFunctionCalls(response)).toStrictEqual([func]);
     });
-    it('should extract multiple function calls', () => {
-      const func1 = { name: 'testFunc1', args: { a: 1 } };
-      const func2 = { name: 'testFunc2', args: { b: 2 } };
-      const response = mockResponse([
-        mockFunctionCallPart(func1.name, func1.args),
-        mockFunctionCallPart(func2.name, func2.args),
-      ]);
-      expect(getFunctionCalls(response)).toStrictEqual([func1, func2]);
+    it('should ignore text blocks', () => {
+      const block = toolCallBlock('testFunc', { a: 1 });
+      expect(
+        getToolCallBlocks([textBlock('Some text'), block, textBlock('text')]),
+      ).toStrictEqual([block]);
     });
-    it('should ignore text parts', () => {
-      const func = { name: 'testFunc', args: { a: 1 } };
-      const response = mockResponse([
-        mockTextPart('Some text'),
-        mockFunctionCallPart(func.name, func.args),
-        mockTextPart('More text'),
-      ]);
-      expect(getFunctionCalls(response)).toStrictEqual([func]);
-    });
-    it('should return undefined if only text parts exist', () => {
-      const response = mockResponse([
-        mockTextPart('Some text'),
-        mockTextPart('More text'),
-      ]);
-      expect(getFunctionCalls(response)).toBeUndefined();
+    it('should return empty if only text blocks exist', () => {
+      expect(
+        getToolCallBlocks([textBlock('Some text'), textBlock('More text')]),
+      ).toStrictEqual([]);
     });
   });
 
-  describe('getFunctionCallsFromParts', () => {
-    it('should return undefined for no parts', () => {
-      expect(getFunctionCallsFromParts([])).toBeUndefined();
-    });
-    it('should extract a single function call', () => {
-      const func = { name: 'testFunc', args: { a: 1 } };
-      expect(
-        getFunctionCallsFromParts([mockFunctionCallPart(func.name, func.args)]),
-      ).toStrictEqual([func]);
-    });
-    it('should extract multiple function calls', () => {
-      const func1 = { name: 'testFunc1', args: { a: 1 } };
-      const func2 = { name: 'testFunc2', args: { b: 2 } };
-      expect(
-        getFunctionCallsFromParts([
-          mockFunctionCallPart(func1.name, func1.args),
-          mockFunctionCallPart(func2.name, func2.args),
-        ]),
-      ).toStrictEqual([func1, func2]);
-    });
-    it('should ignore text parts', () => {
-      const func = { name: 'testFunc', args: { a: 1 } };
-      expect(
-        getFunctionCallsFromParts([
-          mockTextPart('Some text'),
-          mockFunctionCallPart(func.name, func.args),
-          mockTextPart('More text'),
-        ]),
-      ).toStrictEqual([func]);
-    });
-    it('should return undefined if only text parts exist', () => {
-      expect(
-        getFunctionCallsFromParts([
-          mockTextPart('Some text'),
-          mockTextPart('More text'),
-        ]),
-      ).toBeUndefined();
-    });
-  });
-
-  describe('getFunctionCallsAsJson', () => {
-    it('should return JSON string of function calls', () => {
-      const func1 = { name: 'testFunc1', args: { a: 1 } };
-      const func2 = { name: 'testFunc2', args: { b: 2 } };
-      const response = mockResponse([
-        mockFunctionCallPart(func1.name, func1.args),
-        mockTextPart('text in between'),
-        mockFunctionCallPart(func2.name, func2.args),
-      ]);
-      const expectedJson = JSON.stringify([func1, func2], null, 2);
-      expect(getFunctionCallsAsJson(response)).toBe(expectedJson);
-    });
-    it('should return undefined if no function calls', () => {
-      const response = mockResponse([mockTextPart('Hello')]);
-      expect(getFunctionCallsAsJson(response)).toBeUndefined();
-    });
-  });
-
-  describe('getFunctionCallsFromPartsAsJson', () => {
-    it('should return JSON string of function calls from parts', () => {
-      const func1 = { name: 'testFunc1', args: { a: 1 } };
-      const func2 = { name: 'testFunc2', args: { b: 2 } };
-      const parts = [
-        mockFunctionCallPart(func1.name, func1.args),
-        mockTextPart('text in between'),
-        mockFunctionCallPart(func2.name, func2.args),
+  describe('getToolCallBlocksAsJson', () => {
+    it('should return JSON string of tool call blocks', () => {
+      const blocks = [
+        toolCallBlock('testFunc1', { a: 1 }, 'id-1'),
+        toolCallBlock('testFunc2', { b: 2 }, 'id-2'),
       ];
-      const expectedJson = JSON.stringify([func1, func2], null, 2);
-      expect(getFunctionCallsFromPartsAsJson(parts)).toBe(expectedJson);
+      const expected = JSON.stringify(
+        [
+          { id: 'id-1', name: 'testFunc1', args: { a: 1 } },
+          { id: 'id-2', name: 'testFunc2', args: { b: 2 } },
+        ],
+        null,
+        2,
+      );
+      expect(getToolCallBlocksAsJson(blocks)).toBe(expected);
     });
-    it('should return undefined if no function calls in parts', () => {
-      const parts = [mockTextPart('Hello')];
-      expect(getFunctionCallsFromPartsAsJson(parts)).toBeUndefined();
+    it('should return "[]" if no tool calls', () => {
+      expect(getToolCallBlocksAsJson([textBlock('Hello')])).toBe('[]');
     });
   });
 
-  describe('getStructuredResponse', () => {
+  describe('getStructuredResponseFromBlocks', () => {
     it('should return only text if only text exists', () => {
-      const response = mockResponse([mockTextPart('Hello World')]);
-      expect(getStructuredResponse(response)).toBe('Hello World');
-    });
-    it('should return only function call JSON if only function calls exist', () => {
-      const func = { name: 'testFunc', args: { data: 'payload' } };
-      const response = mockResponse([
-        mockFunctionCallPart(func.name, func.args),
-      ]);
-      const expectedJson = JSON.stringify([func], null, 2);
-      expect(getStructuredResponse(response)).toBe(expectedJson);
-    });
-    it('should return text and function call JSON if both exist', () => {
-      const text = 'Consider this data:';
-      const func = { name: 'processData', args: { item: 42 } };
-      const response = mockResponse([
-        mockTextPart(text),
-        mockFunctionCallPart(func.name, func.args),
-      ]);
-      const expectedJson = JSON.stringify([func], null, 2);
-      expect(getStructuredResponse(response)).toBe(`${text}\n${expectedJson}`);
-    });
-    it('should return undefined if neither text nor function calls exist', () => {
-      const response = mockResponse([]);
-      expect(getStructuredResponse(response)).toBeUndefined();
-    });
-  });
-
-  describe('getStructuredResponseFromParts', () => {
-    it('should return only text if only text exists in parts', () => {
-      const parts = [mockTextPart('Hello World')];
-      expect(getStructuredResponseFromParts(parts)).toBe('Hello World');
-    });
-    it('should return only function call JSON if only function calls exist in parts', () => {
-      const func = { name: 'testFunc', args: { data: 'payload' } };
-      const parts = [mockFunctionCallPart(func.name, func.args)];
-      const expectedJson = JSON.stringify([func], null, 2);
-      expect(getStructuredResponseFromParts(parts)).toBe(expectedJson);
-    });
-    it('should return text and function call JSON if both exist in parts', () => {
-      const text = 'Consider this data:';
-      const func = { name: 'processData', args: { item: 42 } };
-      const parts = [
-        mockTextPart(text),
-        mockFunctionCallPart(func.name, func.args),
-      ];
-      const expectedJson = JSON.stringify([func], null, 2);
-      expect(getStructuredResponseFromParts(parts)).toBe(
-        `${text}\n${expectedJson}`,
+      expect(getStructuredResponseFromBlocks([textBlock('Hello World')])).toBe(
+        'Hello World',
       );
     });
-    it('should return undefined if neither text nor function calls exist in parts', () => {
-      const parts: Part[] = [];
-      expect(getStructuredResponseFromParts(parts)).toBeUndefined();
+    it('should return only tool call JSON if only tool calls exist', () => {
+      const block = toolCallBlock('testFunc', { data: 'payload' });
+      const expected = JSON.stringify(
+        [{ id: block.id, name: block.name, args: block.parameters }],
+        null,
+        2,
+      );
+      expect(getStructuredResponseFromBlocks([block])).toBe(expected);
+    });
+    it('should return text and tool call JSON if both exist', () => {
+      const block = toolCallBlock('processData', { item: 42 });
+      const expected = JSON.stringify(
+        [{ id: block.id, name: block.name, args: block.parameters }],
+        null,
+        2,
+      );
+      expect(
+        getStructuredResponseFromBlocks([
+          textBlock('Consider this data:'),
+          block,
+        ]),
+      ).toBe(`Consider this data:\n${expected}`);
+    });
+    it('should return undefined if neither text nor tool calls exist', () => {
+      expect(getStructuredResponseFromBlocks([])).toBeUndefined();
     });
   });
 
@@ -461,15 +256,14 @@ describe('generateContentResponseUtilities', () => {
       }),
     };
 
-    it('creates a functionResponse part with the provided id, name, and output', () => {
+    it('creates a tool_response block with the provided callId, toolName, and output', () => {
       expect(
-        createFunctionResponsePart('call-1', 'read_file', 'done'),
+        createToolResponseBlock('call-1', 'read_file', 'done'),
       ).toStrictEqual({
-        functionResponse: {
-          id: 'call-1',
-          name: 'read_file',
-          response: { output: 'done' },
-        },
+        type: 'tool_response',
+        callId: 'call-1',
+        toolName: 'read_file',
+        result: { output: 'done' },
       });
     });
 
@@ -497,172 +291,202 @@ describe('generateContentResponseUtilities', () => {
       );
     });
 
-    it('rewrites only functionResponse.output when output limiting applies', () => {
+    it('rewrites only tool_response.result.output when output limiting applies', () => {
       const oversizedText = Array.from(
         { length: 200 },
         (_, index) => `word${index}`,
       ).join(' ');
-      const inputPart: Part = {
-        functionResponse: {
-          id: 'call-2',
-          name: 'read_file',
-          response: {
-            output: oversizedText,
-            summary: 'preserved',
-          },
-        },
-      };
+      const block = createToolResponseBlock(
+        'call-2',
+        'read_file',
+        oversizedText,
+      );
+      block.result = { output: oversizedText, summary: 'preserved' };
 
-      const limitedPart = limitFunctionResponsePart(
-        inputPart,
+      const limitedBlock = limitToolResponseBlock(
+        block,
         'read_file',
         configWithTruncation,
       );
 
-      expect(limitedPart).toStrictEqual({
-        functionResponse: {
-          id: 'call-2',
-          name: 'read_file',
-          response: {
-            output: expect.stringContaining(
-              'read_file output exceeded token limit',
-            ),
-            summary: 'preserved',
-          },
-        },
+      expect(limitedBlock.result).toStrictEqual({
+        output: expect.stringContaining(
+          'read_file output exceeded token limit',
+        ),
+        summary: 'preserved',
       });
     });
 
-    it('normalizes strings and preserves non-null parts in toParts', () => {
-      const functionResponsePart: Part = {
-        functionResponse: {
-          id: 'call-3',
-          name: 'tool',
-          response: { output: 'kept' },
-        },
-      };
-
-      expect(
-        toParts(['alpha', functionResponsePart, null, 'beta']),
-      ).toStrictEqual([
-        { text: 'alpha' },
-        functionResponsePart,
-        { text: 'beta' },
-      ]);
+    it('converts legacy string parts to text blocks via legacyPartsToBlocks', () => {
+      const blocks = legacyPartsToBlocks(['alpha', { text: 'beta' }]);
+      expect(blocks).toStrictEqual([textBlock('alpha'), textBlock('beta')]);
     });
 
-    it('wraps string llmContent in a single functionResponse', () => {
-      expect(
-        convertToFunctionResponse('tool', 'call-4', 'simple output'),
-      ).toStrictEqual([
+    it('converts legacy thought parts to thinking blocks', () => {
+      const blocks = legacyPartsToBlocks([{ text: 'hidden', thought: true }]);
+      expect(blocks).toStrictEqual([thinkingBlock('hidden')]);
+    });
+
+    it('does not treat non-true thought markers as thinking blocks', () => {
+      const blocks = legacyPartsToBlocks([
+        { text: 'visible', thought: 'true' },
+      ]);
+      expect(blocks).toStrictEqual([textBlock('visible')]);
+    });
+
+    it('converts legacy function call and response parts', () => {
+      const blocks = legacyPartsToBlocks([
+        { functionCall: { id: 'call-a', name: 'lookup', args: { q: 'x' } } },
         {
           functionResponse: {
-            id: 'call-4',
-            name: 'tool',
-            response: { output: 'simple output' },
+            id: 'call-a',
+            name: 'lookup',
+            response: { output: 'found' },
           },
         },
       ]);
-    });
 
-    it('aggregates text parts with newlines into one functionResponse output', () => {
-      expect(
-        convertToFunctionResponse('tool', 'call-5', [
-          { text: 'line 1' },
-          { text: 'line 2' },
-        ]),
-      ).toStrictEqual([
+      expect(blocks).toStrictEqual([
+        toolCallBlock('lookup', { q: 'x' }, 'call-a'),
         {
-          functionResponse: {
-            id: 'call-5',
-            name: 'tool',
-            response: { output: 'line 1\nline 2' },
-          },
+          type: 'tool_response',
+          callId: 'call-a',
+          toolName: 'lookup',
+          result: { output: 'found' },
         },
       ]);
     });
 
-    it('passes through functionResponse content using the current call id and tool name', () => {
+    it('converts legacy fileData parts to url media blocks', () => {
+      const blocks = legacyPartsToBlocks([
+        {
+          fileData: { fileUri: 'gs://bucket/file.txt', mimeType: 'text/plain' },
+        },
+      ]);
+
+      expect(blocks).toStrictEqual([
+        {
+          type: 'media',
+          mimeType: 'text/plain',
+          data: 'gs://bucket/file.txt',
+          encoding: 'url',
+        },
+      ]);
+    });
+    it('wraps string llmContent in a single tool_response block', () => {
+      const result = convertToFunctionResponse(
+        'tool',
+        'call-4',
+        'simple output',
+      );
+      expect(result).toStrictEqual([
+        createToolResponseBlock('call-4', 'tool', 'simple output'),
+      ]);
+    });
+
+    it('aggregates text parts with newlines into one tool_response output', () => {
+      const result = convertToFunctionResponse('tool', 'call-5', [
+        { text: 'line 1' },
+        { text: 'line 2' },
+      ]);
+      expect(result).toStrictEqual([
+        {
+          type: 'tool_response',
+          callId: 'call-5',
+          toolName: 'tool',
+          result: { output: 'line 1\nline 2' },
+        },
+      ]);
+    });
+
+    it('passes through tool_response content using the current call id and tool name', () => {
       const originalResponse = {
         output: 'existing output',
         extra: { nested: true },
       };
 
-      expect(
-        convertToFunctionResponse('tool', 'call-6', {
-          functionResponse: {
-            id: 'old-id',
-            name: 'old-name',
-            response: originalResponse,
-          },
-        }),
-      ).toStrictEqual([
+      const result = convertToFunctionResponse('tool', 'call-6', {
+        functionResponse: {
+          id: 'old-id',
+          name: 'old-name',
+          response: originalResponse,
+        },
+      });
+
+      expect(result).toStrictEqual([
         {
-          functionResponse: {
-            id: 'call-6',
-            name: 'tool',
-            response: originalResponse,
-          },
+          type: 'tool_response',
+          callId: 'call-6',
+          toolName: 'tool',
+          result: originalResponse,
         },
       ]);
     });
 
-    it('returns binary sibling parts after the generated functionResponse part', () => {
-      const fileDataPart: Part = {
-        fileData: {
-          fileUri: 'gs://bucket/example.txt',
-          mimeType: 'text/plain',
-        },
-      };
-      const inlineDataPart: Part = {
-        inlineData: {
-          data: 'YWJj',
-          mimeType: 'text/plain',
-        },
-      };
-
-      expect(
-        convertToFunctionResponse('tool', 'call-7', [
-          { text: 'summary' },
-          inlineDataPart,
-          fileDataPart,
-        ]),
-      ).toStrictEqual([
+    it('returns media sibling blocks after the generated tool_response block', () => {
+      const result = convertToFunctionResponse('tool', 'call-7', [
+        { text: 'summary' },
         {
-          functionResponse: {
-            id: 'call-7',
-            name: 'tool',
-            response: { output: 'summary' },
+          inlineData: {
+            data: 'YWJj',
+            mimeType: 'text/plain',
           },
         },
-        fileDataPart,
-        inlineDataPart,
-      ]);
-    });
-
-    it('describes binary-only content in the functionResponse while preserving siblings', () => {
-      const inlineDataPart: Part = {
-        inlineData: {
-          data: 'YWJj',
-          mimeType: 'text/plain',
-        },
-      };
-
-      expect(
-        convertToFunctionResponse('tool', 'call-8', [inlineDataPart]),
-      ).toStrictEqual([
         {
-          functionResponse: {
-            id: 'call-8',
-            name: 'tool',
-            response: { output: 'Binary content provided (1 item(s)).' },
+          fileData: {
+            fileUri: 'gs://bucket/example.txt',
+            mimeType: 'text/plain',
           },
         },
-        inlineDataPart,
       ]);
+
+      expect(result).toHaveLength(3);
+      expect(result[0].type).toBe('tool_response');
+      expect(
+        (result[0] as { result: { output: string } }).result,
+      ).toStrictEqual({
+        output: 'summary',
+      });
+      expect(result[1]).toStrictEqual({
+        type: 'media',
+        mimeType: 'text/plain',
+        data: 'YWJj',
+        encoding: 'base64',
+      });
+      expect(result[2]).toStrictEqual({
+        type: 'media',
+        mimeType: 'text/plain',
+        data: 'gs://bucket/example.txt',
+        encoding: 'url',
+      });
     });
 
-    it('limits oversized string content before wrapping it in a functionResponse', () => {
+    it('describes binary-only content in the tool_response while preserving siblings', () => {
+      const result = convertToFunctionResponse('tool', 'call-8', [
+        {
+          inlineData: {
+            data: 'YWJj',
+            mimeType: 'text/plain',
+          },
+        },
+      ]);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toStrictEqual({
+        type: 'tool_response',
+        callId: 'call-8',
+        toolName: 'tool',
+        result: { output: 'Binary content provided (1 item(s)).' },
+      });
+      expect(result[1]).toStrictEqual({
+        type: 'media',
+        mimeType: 'text/plain',
+        data: 'YWJj',
+        encoding: 'base64',
+      });
+    });
+
+    it('limits oversized string content before wrapping it in a tool_response', () => {
       const oversizedText = Array.from(
         { length: 200 },
         (_, index) => `word${index}`,
@@ -675,19 +499,37 @@ describe('generateContentResponseUtilities', () => {
         configWithTruncation,
       );
 
-      expect(converted).toStrictEqual([
-        {
-          functionResponse: {
-            id: 'call-9',
-            name: 'read_file',
-            response: {
-              output: expect.stringContaining(
-                'read_file output exceeded token limit',
-              ),
-            },
-          },
-        },
-      ]);
+      expect(converted).toHaveLength(1);
+      expect(converted[0].type).toBe('tool_response');
+      expect(
+        (converted[0] as { result: { output: string } }).result.output,
+      ).toContain('read_file output exceeded token limit');
+    });
+  });
+
+  describe('createErrorResponse', () => {
+    it('creates a tool_response block with the error message in result', () => {
+      const request = {
+        callId: 'call-err',
+        name: 'failingTool',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      };
+      const error = new Error('Something went wrong');
+      const result = createErrorResponse(request, error, undefined);
+
+      expect(result.callId).toBe('call-err');
+      expect(result.error).toBe(error);
+      expect(result.resultDisplay).toBe('Something went wrong');
+      // Only a tool_response block (no functionCall) — orphan tool_use protection (#244)
+      expect(result.responseParts).toHaveLength(1);
+      expect(result.responseParts[0]).toStrictEqual({
+        type: 'tool_response',
+        callId: 'call-err',
+        toolName: 'failingTool',
+        result: { error: 'Something went wrong' },
+      });
     });
   });
 });

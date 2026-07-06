@@ -28,7 +28,7 @@ import {
 import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { vi, describe, beforeEach, it, expect } from 'vitest';
-import type { GenerateContentResponseUsageMetadata } from '@google/genai';
+import type { RuntimeUsageMetadata } from '../runtime/AgentRuntimeContext.js';
 import * as uiTelemetry from './uiTelemetry.js';
 
 // Mock ClearcutLogger to avoid import errors
@@ -191,7 +191,7 @@ describe('loggers', () => {
     });
 
     it('should log an API response with all fields', () => {
-      const usageData: GenerateContentResponseUsageMetadata = {
+      const usageData: RuntimeUsageMetadata = {
         promptTokenCount: 17,
         candidatesTokenCount: 50,
         cachedContentTokenCount: 10,
@@ -254,7 +254,7 @@ describe('loggers', () => {
     });
 
     it('should log an API response with an error', () => {
-      const usageData: GenerateContentResponseUsageMetadata = {
+      const usageData: RuntimeUsageMetadata = {
         promptTokenCount: 17,
         candidatesTokenCount: 50,
         cachedContentTokenCount: 10,

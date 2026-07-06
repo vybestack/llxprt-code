@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Part } from '@google/genai';
 import type { Config } from '../config/config.js';
 import { getFolderStructure } from './getFolderStructure.js';
 
@@ -50,9 +49,11 @@ ${folderStructure}`;
  * This includes the current working directory, date, operating system, and folder structure.
  * Optionally, it can also include the full file context if enabled.
  * @param {Config} config - The runtime configuration and services.
- * @returns A promise that resolves to an array of `Part` objects containing environment information.
+ * @returns A promise that resolves to an array of text parts containing environment information.
  */
-export async function getEnvironmentContext(config: Config): Promise<Part[]> {
+export async function getEnvironmentContext(
+  config: Config,
+): Promise<Array<{ text: string }>> {
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
     year: 'numeric',
@@ -72,7 +73,7 @@ ${directoryContext}
 ${environmentMemory}
         `.trim();
 
-  const initialParts: Part[] = [{ text: context }];
+  const initialParts: Array<{ text: string }> = [{ text: context }];
 
   return initialParts;
 }

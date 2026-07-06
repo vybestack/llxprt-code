@@ -40,7 +40,7 @@ import { isRecord } from './jsonSchema.js';
  */
 export interface HookRestrictions {
   allowedToolNames?: string[];
-  filteredRestrictedCalls?: ToolCallRequest[];
+  hadFilteredRestrictedCalls?: boolean;
 }
 
 /**
@@ -132,8 +132,8 @@ export function accumulateModelStreamChunk(
   const hookRestrictions = chunk.hookRestrictions ?? acc.hookRestrictions;
   if (hookRestrictions !== undefined) {
     // Defensive copy: top-level object is copied so callers cannot mutate the
-    // original acc/chunk. Nested arrays (allowedToolNames, filteredRestrictedCalls)
-    // are shared by reference — callers must not mutate them.
+    // original acc/chunk. Nested arrays (allowedToolNames) are shared by
+    // reference — callers must not mutate them.
     result.hookRestrictions = { ...hookRestrictions };
   }
 

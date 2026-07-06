@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
-import type { Content } from '@google/genai';
+import type { ContractContent } from '../core/clientContract.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from './config.js';
 import * as path from 'node:path';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
@@ -207,14 +207,14 @@ describe('Server Config (config.ts)', () => {
         model: 'gemini-pro',
         apiKey: 'test-key',
       };
-      const committedHistory: Content[] = [
+      const committedHistory: ContractContent[] = [
         {
           role: 'user',
           parts: [{ text: 'Remember we are fixing issue 2049' }],
         },
         { role: 'model', parts: [{ text: 'We are preserving history.' }] },
       ];
-      const partialInFlightHistory: Content[] = [
+      const partialInFlightHistory: ContractContent[] = [
         ...committedHistory,
         { role: 'user', parts: [{ text: 'This turn is still retrying' }] },
       ];
@@ -317,7 +317,7 @@ describe('Server Config (config.ts)', () => {
         vertexai: true,
       });
 
-      const mockExistingHistory: Content[] = [
+      const mockExistingHistory: ContractContent[] = [
         {
           role: 'model',
           parts: [

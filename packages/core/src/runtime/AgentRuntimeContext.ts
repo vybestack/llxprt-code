@@ -157,7 +157,7 @@ export interface ApiResponseEvent {
   runtimeId?: string;
   provider?: string;
   timestamp?: number;
-  usageMetadata?: GenerateContentResponseUsageMetadata;
+  usageMetadata?: RuntimeUsageMetadata;
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -297,8 +297,23 @@ export interface AgentRuntimeContextFactoryOptions {
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
-import type { GenerateContentResponseUsageMetadata } from '@google/genai';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
+
+/**
+ * Structural shape matching the usage-metadata fields consumed by the
+ * telemetry ApiResponseEvent. Defined locally so core does not import
+ * @google/genai; the telemetry package (owned by #2351) accepts structurally-
+ * compatible objects.
+ */
+export interface RuntimeUsageMetadata {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+  cachedContentTokenCount?: number;
+  thoughtsTokenCount?: number;
+  toolUsePromptTokenCount?: number;
+  [key: string]: unknown;
+}
 
 /**
  * Provider adapter interface supplied to runtime context.

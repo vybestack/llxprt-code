@@ -115,21 +115,23 @@ function injectStubModelResponse(
   };
 
   // A stub ChatSession whose sendMessageStream yields one CHUNK carrying the
-  // stub reply, then completes. The Turn pipeline translates this CHUNK into
-  // a ServerAgentStreamEvent of type Content with the reply text. getConfig
-  // returns undefined to disable the idle-timeout watchdog (0 ms = off).
+  // stub reply, then completes. The CHUNK value uses the neutral
+  // ModelStreamChunk shape (content: IContent with TextBlock) that the
+  // TurnProcessor now emits at this boundary. The Turn pipeline translates
+  // this CHUNK into a ServerAgentStreamEvent of type Content with the reply
+  // text. getConfig returns undefined to disable the idle-timeout watchdog
+  // (0 ms = off).
   internal.chat = {
     getConfig: () => undefined,
     sendMessageStream: async () => {
       const chunkStreamEvent: StreamEvent = {
         type: StreamEventType.CHUNK,
         value: {
-          candidates: [
-            {
-              content: { parts: [{ text: replyText }] },
-              finishReason: 'STOP',
-            },
-          ],
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: replyText }],
+          },
+          finishReason: 'stop',
         } as never,
       };
       return (async function* (): AsyncGenerator<StreamEvent> {

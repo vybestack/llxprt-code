@@ -22,6 +22,7 @@ import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { Schema, FunctionDeclaration } from '@google/genai';
 import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
+import { convertBlocksToParts } from '../core/MessageConverter.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -34,9 +35,11 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { TASK_COMPLETE_TOOL_NAME } from './recovery.js';
 import type { AgentDefinition, SubagentActivityEventType } from './types.js';
 
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
 /** Result of executing one or more tool calls. */
 export interface ToolExecutionResult {
-  responseParts: Part[];
+  responseParts: ContentBlock[];
   partialResult: string | null;
 }
 
@@ -489,7 +492,7 @@ async function assembleToolResponses(
   let partialResult: string | null = null;
   for (const result of asyncResults) {
     if (result) {
-      toolResponseParts.push(...result.responseParts);
+      toolResponseParts.push(...convertBlocksToParts(result.responseParts));
       if (result.partialResult !== null) {
         partialResult = result.partialResult;
       }

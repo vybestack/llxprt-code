@@ -51,7 +51,9 @@ export function enforceBeforeModelHookDecision(
   }
   if (beforeModelResult?.isBlockingDecision() !== true) return;
 
-  let syntheticResponse = beforeModelResult.getSyntheticResponse();
+  let syntheticResponse = beforeModelResult.getSyntheticResponse() as
+    | GenerateContentResponse
+    | undefined;
   if (syntheticResponse) {
     const candidate = syntheticResponse.candidates?.[0];
     const candidateFinishReason = candidate?.finishReason as

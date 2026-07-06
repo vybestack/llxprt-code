@@ -286,7 +286,9 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(completedCalls[0].status).toBe('success');
     const responsePart = expectSuccessful(completedCalls[0]).response
       .responseParts[0];
-    expect(responsePart.functionResponse?.response).toStrictEqual({
+    expect(
+      (responsePart as { result?: { output?: string } }).result,
+    ).toStrictEqual({
       output: 'tool output\n\nafter hook note',
     });
   });
@@ -328,7 +330,9 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(completedCalls[0].status).toBe('success');
     const responsePart = expectSuccessful(completedCalls[0]).response
       .responseParts[0];
-    expect(responsePart.functionResponse?.response).toStrictEqual({
+    expect(
+      (responsePart as { result?: { output?: string } }).result,
+    ).toStrictEqual({
       output: 'tool output\n\nbefore hook note',
     });
   });

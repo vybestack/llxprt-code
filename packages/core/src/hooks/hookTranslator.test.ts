@@ -11,13 +11,8 @@ import {
   type LLMRequest,
   type LLMResponse,
   type HookToolConfig,
+  type HookSdkToolConfig,
 } from './hookTranslator.js';
-import type {
-  GenerateContentParameters,
-  GenerateContentResponse,
-  ToolConfig,
-  ContentListUnion,
-} from '@google/genai';
 
 describe('HookTranslator', () => {
   let translator: HookTranslatorGenAIv1;
@@ -34,7 +29,7 @@ describe('HookTranslator', () => {
 
   describe('LLM Request Translation', () => {
     it('should convert SDK request to hook format', () => {
-      const sdkRequest: GenerateContentParameters = {
+      const sdkRequest: Record<string, unknown> = {
         model: 'gemini-1.5-flash',
         contents: [
           {
@@ -46,7 +41,7 @@ describe('HookTranslator', () => {
           temperature: 0.7,
           maxOutputTokens: 1000,
         },
-      } as unknown as GenerateContentParameters;
+      } as unknown as Record<string, unknown>;
 
       const hookRequest = translator.toHookLLMRequest(sdkRequest);
 
@@ -68,10 +63,10 @@ describe('HookTranslator', () => {
     });
 
     it('should handle string contents', () => {
-      const sdkRequest: GenerateContentParameters = {
+      const sdkRequest: Record<string, unknown> = {
         model: 'gemini-1.5-flash',
         contents: ['Simple string message'],
-      } as unknown as GenerateContentParameters;
+      } as unknown as Record<string, unknown>;
 
       const hookRequest = translator.toHookLLMRequest(sdkRequest);
 
@@ -84,10 +79,10 @@ describe('HookTranslator', () => {
     });
 
     it('should handle conversion errors gracefully', () => {
-      const sdkRequest: GenerateContentParameters = {
+      const sdkRequest: Record<string, unknown> = {
         model: 'gemini-1.5-flash',
-        contents: [null as unknown as ContentListUnion], // Invalid content
-      } as unknown as GenerateContentParameters;
+        contents: [null], // Invalid content
+      };
 
       const hookRequest = translator.toHookLLMRequest(sdkRequest);
 
@@ -125,7 +120,7 @@ describe('HookTranslator', () => {
 
   describe('LLM Response Translation', () => {
     it('should convert SDK response to hook format', () => {
-      const sdkResponse: GenerateContentResponse = {
+      const sdkResponse: Record<string, unknown> = {
         text: 'Hello response',
         candidates: [
           {
@@ -142,7 +137,7 @@ describe('HookTranslator', () => {
           candidatesTokenCount: 20,
           totalTokenCount: 30,
         },
-      } as unknown as GenerateContentResponse;
+      } as unknown as Record<string, unknown>;
 
       const hookResponse = translator.toHookLLMResponse(sdkResponse);
 
@@ -198,7 +193,7 @@ describe('HookTranslator', () => {
           mode: 'ANY',
           allowedFunctionNames: ['tool1', 'tool2'],
         },
-      } as unknown as ToolConfig;
+      } satisfies HookSdkToolConfig;
 
       const hookToolConfig = translator.toHookToolConfig(sdkToolConfig);
 
@@ -223,7 +218,7 @@ describe('HookTranslator', () => {
     });
 
     it('should handle undefined tool config', () => {
-      const sdkToolConfig = {} as ToolConfig;
+      const sdkToolConfig = {} as Record<string, unknown>;
 
       const hookToolConfig = translator.toHookToolConfig(sdkToolConfig);
 

@@ -365,13 +365,12 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       const frPart = responseParts.find(
         (p) =>
           typeof p === 'object' &&
-          'functionResponse' in p &&
-          p.functionResponse?.response != null,
+          'type' in p &&
+          p.type === 'tool_response' &&
+          p.result != null,
       );
       expect(frPart).toBeDefined();
-      const output = (
-        frPart as { functionResponse: { response: { output: string } } }
-      ).functionResponse.response.output;
+      const output = (frPart as { result: { output: string } }).result.output;
 
       // Original was 30k chars. With per-tool budget of 2.5k tokens (2k effective),
       // the output must be significantly smaller.

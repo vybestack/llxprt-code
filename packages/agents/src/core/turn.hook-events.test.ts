@@ -7,14 +7,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
-import type {
-  GenerateContentResponse,
-  Part,
-  FinishReason,
-} from '@google/genai';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
-import { type MockedChatInstance } from './turn-test-helpers.js';
+import {
+  type MockedChatInstance,
+  mockResponseToChunk,
+} from './turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -127,7 +125,7 @@ describe('Turn - hook execution control events', () => {
       candidates: [
         {
           content: { parts: [{ text: 'Synthetic response after block' }] },
-          finishReason: 'STOP' as FinishReason,
+          finishReason: 'STOP',
         },
       ],
     } as GenerateContentResponse;
@@ -136,7 +134,7 @@ describe('Turn - hook execution control events', () => {
         type: StreamEventType.AGENT_EXECUTION_BLOCKED,
         reason: 'Hook blocked execution',
       };
-      yield { type: StreamEventType.CHUNK, value: resp };
+      yield { type: StreamEventType.CHUNK, value: mockResponseToChunk(resp) };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];
@@ -232,7 +230,7 @@ describe('Turn - hook execution control events', () => {
       candidates: [
         {
           content: { parts: [{ text: 'Response after block' }] },
-          finishReason: 'STOP' as FinishReason,
+          finishReason: 'STOP',
         },
       ],
     } as GenerateContentResponse;
@@ -242,7 +240,7 @@ describe('Turn - hook execution control events', () => {
         reason: 'Hook blocked execution',
         contextCleared: true,
       };
-      yield { type: StreamEventType.CHUNK, value: resp };
+      yield { type: StreamEventType.CHUNK, value: mockResponseToChunk(resp) };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
     const reqParts: Part[] = [{ text: 'test message' }];

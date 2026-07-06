@@ -7,7 +7,6 @@
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
-import { type PartUnion } from '@google/genai';
 import mime from 'mime-types';
 import { type FileSystemService } from '../services/fileSystemService.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools';
@@ -301,8 +300,24 @@ export async function detectFileType(
   return 'text';
 }
 
+/**
+ * Legacy media-content shape produced for image/pdf/audio/video reads.
+ * Structurally matches the provider Part `inlineData` shape so existing
+ * consumers (tools → history → ContentConverters) are unaffected, without
+ * importing @google/genai.
+ */
+export interface FileReadInlineData {
+  inlineData: { data: string; mimeType: string };
+}
+
+/**
+ * Content payload for a processed file read: plain text string for text
+ * files, or an inline-data object for binary media.
+ */
+export type FileReadContent = string | FileReadInlineData;
+
 export interface ProcessedFileReadResult {
-  llmContent: PartUnion; // string for text, Part for image/pdf/unreadable binary
+  llmContent: FileReadContent;
   returnDisplay: string;
   error?: string; // Optional error message for the LLM if file processing failed
   errorType?: ToolErrorType; // Structured error type

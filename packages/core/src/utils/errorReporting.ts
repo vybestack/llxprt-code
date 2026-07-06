@@ -7,7 +7,6 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { type Content } from '@google/genai';
 
 function reportToStderr(message: string, ...extras: unknown[]): void {
   const parts = [message, ...extras];
@@ -84,7 +83,7 @@ async function writeMinimalReport(
 export async function reportError(
   error: Error | unknown,
   baseMessage: string,
-  context?: Content[] | Record<string, unknown> | unknown[],
+  context?: unknown[] | Record<string, unknown>,
   type = 'general',
   reportingDir = os.tmpdir(), // for testing
 ): Promise<void> {

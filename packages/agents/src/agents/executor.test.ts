@@ -12,7 +12,6 @@ import { ReadFileTool } from '@vybestack/llxprt-code-tools';
 import { ChatSession, StreamEventType } from '../core/chatSession.js';
 import { type FunctionCall } from '@google/genai';
 import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import { attachHookRestrictedAllowedTools } from '../core/hookToolRestrictions.js';
 import {
   setupExecutorFixture,
   createTestDefinition,
@@ -127,8 +126,9 @@ describe('AgentExecutor', () => {
         args: { command: 'echo blocked' },
         id: 'blocked-call',
       };
-      const blockedResponse = attachHookRestrictedAllowedTools(
-        createMockResponseChunk([{ functionCall: blockedCall }], [blockedCall]),
+      const blockedResponse = createMockResponseChunk(
+        [{ functionCall: blockedCall }],
+        [blockedCall],
         ['read_file'],
       );
       mockSendMessageStream
@@ -178,11 +178,9 @@ describe('AgentExecutor', () => {
         args: { command: 'echo blocked' },
         id: 'blocked-call',
       };
-      const mixedResponse = attachHookRestrictedAllowedTools(
-        createMockResponseChunk(
-          [{ functionCall: allowedCall }, { functionCall: blockedCall }],
-          [allowedCall, blockedCall],
-        ),
+      const mixedResponse = createMockResponseChunk(
+        [{ functionCall: allowedCall }, { functionCall: blockedCall }],
+        [allowedCall, blockedCall],
         [LSTool.Name],
       );
       mockSendMessageStream.mockImplementationOnce(async () =>

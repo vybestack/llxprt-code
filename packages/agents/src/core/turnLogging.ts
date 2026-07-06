@@ -98,7 +98,8 @@ export function logApiResponse(
     sessionId: runtimeState.sessionId,
     runtimeId: runtimeState.runtimeId,
     provider: runtimeState.provider,
-    usageMetadata,
+    usageMetadata:
+      usageMetadata === undefined ? undefined : { ...usageMetadata },
     responseText,
   });
 }

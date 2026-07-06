@@ -72,11 +72,12 @@ import {
   getProposedContent,
   resolveModel,
   resolveTimestamp,
-  normalizeResponseToGenAiParts,
   buildLlmPartsFromToolCalls,
   createCheckpointsForRestorableTools,
   buildServerAndToolMetadata,
 } from './task-runtime-helpers.js';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 export class Task {
   id: string;
@@ -640,17 +641,20 @@ export class Task {
     logger.info(
       `[Task] Adding ${completedTools.length} tool responses to history without generating a new response.`,
     );
-    const responsesToAdd = completedTools.flatMap(
+    const responsesToAdd: ContentBlock[] = completedTools.flatMap(
       (toolCall) => toolCall.response.responseParts,
     );
 
-    for (const response of responsesToAdd) {
-      const parts = normalizeResponseToGenAiParts(response);
-      void this.agentClient.addHistory({
-        role: 'user',
-        parts,
-      });
-    }
+    const geminiParts =
+      ContentConverters.toGeminiContent({
+        speaker: 'tool',
+        blocks: responsesToAdd,
+      }).parts ?? [];
+
+    void this.agentClient.addHistory({
+      role: 'user',
+      parts: geminiParts,
+    });
   }
 
   async *sendCompletedToolsToLlm(

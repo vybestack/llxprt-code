@@ -26,6 +26,7 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import type { Content } from '@google/genai';
 import { join } from 'node:path';
 import {
   Logger,
@@ -190,8 +191,11 @@ export class SessionControl implements AgentSessionControl {
   async createCheckpoint(label?: string): Promise<SessionCheckpoint> {
     const logger = await this.getLogger();
     const tag = label ?? `checkpoint-${Date.now()}`;
-    const history = await this.deps.resolveClient().getHistory();
-    await logger.saveCheckpoint(history, tag);
+    const history = (await this.deps.resolveClient().getHistory()) as Content[];
+    await logger.saveCheckpoint(
+      history as Parameters<typeof logger.saveCheckpoint>[0],
+      tag,
+    );
     return {
       id: tag,
       createdAt: new Date().toISOString(),
@@ -306,7 +310,7 @@ export class SessionControl implements AgentSessionControl {
       provider: this.deps.getProvider(),
       model: this.deps.getModel(),
     });
-    const history = await this.deps.resolveClient().getHistory();
+    const history = (await this.deps.resolveClient().getHistory()) as Content[];
     const items: IContent[] = ContentConverters.toIContents(history);
     for (const item of items) {
       service.recordContent(item);

@@ -4,12 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateContentResponse } from '@google/genai';
-import {
-  type Part,
-  type FunctionCall,
-  type PartListUnion,
-} from '@google/genai';
 import {
   limitOutputTokens,
   type ToolOutputSettingsProvider,
@@ -20,11 +14,17 @@ import {
   type ToolCallResponseInfo,
 } from '../index.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
-import { isThoughtPart } from '../core/chatSessionTypes.js';
+import type {
+  ContentBlock,
+  TextBlock,
+  ToolCallBlock,
+  ToolResponseBlock,
+  MediaBlock,
+} from '../services/history/IContent.js';
 import { DebugLogger } from '../debug/index.js';
 
 /**
- * Canonical outcome of a model response, derived from its parts.
+ * Canonical outcome of a model response, derived from its blocks.
  * Single source of truth for whether a response produced visible text,
  * thinking content, tool calls, or any actionable output.
  */
@@ -36,29 +36,24 @@ export interface ResponseOutcome {
 }
 
 /**
- * Analyze response parts to determine the canonical outcome.
+ * Analyze response blocks to determine the canonical outcome.
  * This is the single authoritative function for detecting visible text,
  * thinking content, and tool calls — eliminating ad-hoc duplication
  * across StreamProcessor, turn.ts, MessageConverter, and client.ts.
  */
-export function analyzeResponseOutcome(parts: Part[]): ResponseOutcome {
+export function analyzeResponseOutcome(
+  blocks: ContentBlock[],
+): ResponseOutcome {
   let hasVisibleText = false;
   let hasThinking = false;
   let hasToolCalls = false;
 
-  for (const part of parts) {
-    const isThinking = isThoughtPart(part);
-    if (isThinking) {
+  for (const block of blocks) {
+    if (block.type === 'thinking') {
       hasThinking = true;
-    }
-    if (part.functionCall !== undefined) {
+    } else if (block.type === 'tool_call') {
       hasToolCalls = true;
-    }
-    if (
-      !isThinking &&
-      typeof part.text === 'string' &&
-      part.text.trim() !== ''
-    ) {
+    } else if (block.type === 'text' && block.text.trim() !== '') {
       hasVisibleText = true;
     }
   }
@@ -73,25 +68,16 @@ export function analyzeResponseOutcome(parts: Part[]): ResponseOutcome {
 
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
-export function getResponseText(
-  response: GenerateContentResponse,
+/**
+ * Concatenate TextBlock text, filtering out thinking blocks.
+ * Returns undefined when no non-empty text blocks exist.
+ */
+export function getResponseTextFromBlocks(
+  blocks: ContentBlock[],
 ): string | undefined {
-  const parts = response.candidates?.[0]?.content?.parts;
-  if (!parts) {
-    return undefined;
-  }
-  return getResponseTextFromParts(parts);
-}
-
-export function getResponseTextFromParts(parts: Part[]): string | undefined {
-  // Filter out thought parts - thinking content should only go through Thought events,
-  // not be duplicated in Content events. Model context path handles thinking separately
-  // via IContent blocks and reasoning ephemerals. Uses canonical isThoughtPart
-  // from chatSessionTypes for consistent filtering. (fixes #721, #1730)
-  const textSegments = parts
-    .filter((part) => !isThoughtPart(part))
-    .map((part) => part.text)
-    .filter((text): text is string => typeof text === 'string');
+  const textSegments = blocks
+    .filter((block): block is TextBlock => block.type === 'text')
+    .map((block) => block.text);
 
   if (textSegments.length === 0) {
     return undefined;
@@ -99,81 +85,51 @@ export function getResponseTextFromParts(parts: Part[]): string | undefined {
   return textSegments.join('');
 }
 
-export function getFunctionCalls(
-  response: GenerateContentResponse,
-): FunctionCall[] | undefined {
-  const parts = response.candidates?.[0]?.content?.parts;
-  if (!parts) {
-    return undefined;
-  }
-
-  const functionCallParts = parts
-    .filter((part) => !!part.functionCall)
-    .map((part) => part.functionCall as FunctionCall);
-  return functionCallParts.length > 0 ? functionCallParts : undefined;
+/**
+ * Extract tool-call blocks from content blocks.
+ */
+export function getToolCallBlocks(blocks: ContentBlock[]): ToolCallBlock[] {
+  return blocks.filter(
+    (block): block is ToolCallBlock => block.type === 'tool_call',
+  );
 }
 
-export function getFunctionCallsFromParts(
-  parts: Part[],
-): FunctionCall[] | undefined {
-  const functionCallParts = parts
-    .filter((part) => !!part.functionCall)
-    .map((part) => part.functionCall as FunctionCall);
-  return functionCallParts.length > 0 ? functionCallParts : undefined;
+/**
+ * Extract tool-call blocks from content blocks and return as JSON string.
+ */
+function serializeToolCallBlocksAsJson(blocks: ToolCallBlock[]): string {
+  return JSON.stringify(
+    blocks.map((b) => ({
+      id: b.id,
+      name: b.name,
+      args: b.parameters,
+    })),
+    null,
+    2,
+  );
 }
 
-export function getFunctionCallsAsJson(
-  response: GenerateContentResponse,
+export function getToolCallBlocksAsJson(blocks: ContentBlock[]): string {
+  return serializeToolCallBlocksAsJson(getToolCallBlocks(blocks));
+}
+
+/**
+ * Return a structured response string combining text and tool-call JSON.
+ */
+export function getStructuredResponseFromBlocks(
+  blocks: ContentBlock[],
 ): string | undefined {
-  const functionCalls = getFunctionCalls(response);
-  if (!functionCalls) {
-    return undefined;
-  }
-  return JSON.stringify(functionCalls, null, 2);
-}
+  const textContent = getResponseTextFromBlocks(blocks);
+  const toolCallBlocks = getToolCallBlocks(blocks);
 
-export function getFunctionCallsFromPartsAsJson(
-  parts: Part[],
-): string | undefined {
-  const functionCalls = getFunctionCallsFromParts(parts);
-  if (!functionCalls) {
-    return undefined;
-  }
-  return JSON.stringify(functionCalls, null, 2);
-}
-
-export function getStructuredResponse(
-  response: GenerateContentResponse,
-): string | undefined {
-  const textContent = getResponseText(response);
-  const functionCallsJson = getFunctionCallsAsJson(response);
-
-  if (textContent && functionCallsJson) {
-    return `${textContent}\n${functionCallsJson}`;
+  if (textContent && toolCallBlocks.length > 0) {
+    return `${textContent}\n${serializeToolCallBlocksAsJson(toolCallBlocks)}`;
   }
   if (textContent) {
     return textContent;
   }
-  if (functionCallsJson) {
-    return functionCallsJson;
-  }
-  return undefined;
-}
-
-export function getStructuredResponseFromParts(
-  parts: Part[],
-): string | undefined {
-  const textContent = getResponseTextFromParts(parts);
-  const functionCallsJson = getFunctionCallsFromPartsAsJson(parts);
-
-  if (textContent && functionCallsJson) {
-    return `${textContent}\n${functionCallsJson}`;
-  }
-  if (textContent) {
-    return textContent;
-  }
-  if (functionCallsJson) {
-    return functionCallsJson;
+  if (toolCallBlocks.length > 0) {
+    return serializeToolCallBlocksAsJson(toolCallBlocks);
   }
   return undefined;
 }
@@ -186,17 +142,22 @@ export function getStructuredResponseFromParts(
  * These are pure transformation functions with no state dependencies.
  */
 
-export function createFunctionResponsePart(
+/**
+ * Creates a ToolResponseBlock with the given callId, toolName, and output string.
+ * The result payload uses { output: string } shape, matching the legacy
+ * functionResponse.response shape so ContentConverters produces byte-identical
+ * provider payloads.
+ */
+export function createToolResponseBlock(
   callId: string,
   toolName: string,
   output: string,
-): Part {
+): ToolResponseBlock {
   return {
-    functionResponse: {
-      id: callId,
-      name: toolName,
-      response: { output },
-    },
+    type: 'tool_response',
+    callId,
+    toolName,
+    result: { output },
   };
 }
 
@@ -218,132 +179,218 @@ export function limitStringOutput(
   return limited.message ?? '';
 }
 
-export function limitFunctionResponsePart(
-  part: Part,
+/**
+ * Applies output limiting to a ToolResponseBlock's result.output field.
+ * Returns a new block if modified; returns the original block unchanged otherwise.
+ */
+export function limitToolResponseBlock(
+  block: ToolResponseBlock,
   toolName: string,
   config?: ToolOutputSettingsProvider,
-): Part {
-  if (!config || !part.functionResponse) {
-    return part;
+): ToolResponseBlock {
+  if (!config) {
+    return block;
   }
-  const response = part.functionResponse.response;
-  if (!response || typeof response !== 'object') {
-    return part;
+  const result = block.result;
+  if (result == null || typeof result !== 'object') {
+    return block;
   }
-  const existingOutput = response['output'];
+  const existingOutput = (result as Record<string, unknown>)['output'];
   if (typeof existingOutput !== 'string') {
-    return part;
+    return block;
   }
   const limitedOutput = limitStringOutput(existingOutput, toolName, config);
   if (limitedOutput === existingOutput) {
-    return part;
+    return block;
   }
   return {
-    ...part,
-    functionResponse: {
-      ...part.functionResponse,
-      response: {
-        ...response,
-        output: limitedOutput,
-      },
+    ...block,
+    result: {
+      ...(result as Record<string, unknown>),
+      output: limitedOutput,
     },
   };
 }
 
-export function toParts(input: PartListUnion): Part[] {
-  const parts: Part[] = [];
-  // SDK PartListUnion callers can pass nullish entries at runtime
-  const entries = (Array.isArray(input) ? input : [input]) as Array<
-    Part | string | null | undefined
-  >;
-  for (const part of entries) {
-    if (typeof part === 'string') {
-      parts.push({ text: part });
-    } else if (part !== null && part !== undefined) {
-      parts.push(part);
-    }
-  }
-  return parts;
+/**
+ * Structural shape for legacy PartListUnion input. Operates on `unknown` with
+ * structural checks — no @google/genai import needed.
+ */
+interface LegacyPartLike {
+  text?: string;
+  thought?: unknown;
+  functionCall?: { id?: string; name?: string; args?: unknown } | undefined;
+  functionResponse?:
+    | { id?: string; name?: string; response?: unknown }
+    | undefined;
+  inlineData?: { mimeType?: string; data?: string } | undefined;
+  fileData?: { fileUri?: string; mimeType?: string } | undefined;
 }
 
+function isLegacyPartLike(value: unknown): value is LegacyPartLike {
+  return typeof value === 'object' && value !== null;
+}
+
+function toBlocksFromLegacyParts(input: unknown): ContentBlock[] {
+  const entries = (Array.isArray(input) ? input : [input]) as unknown[];
+  const blocks: ContentBlock[] = [];
+
+  for (const entry of entries) {
+    if (typeof entry === 'string') {
+      blocks.push({ type: 'text', text: entry });
+    } else if (
+      entry !== null &&
+      entry !== undefined &&
+      isLegacyPartLike(entry)
+    ) {
+      blocks.push(...legacyPartToBlocks(entry));
+    }
+  }
+
+  return blocks;
+}
+
+function legacyPartToBlocks(part: LegacyPartLike): ContentBlock[] {
+  if ('thought' in part && part.thought === true) {
+    return [
+      {
+        type: 'thinking',
+        thought: part.text ?? '',
+        isHidden: true,
+        sourceField: 'thought',
+      },
+    ];
+  }
+
+  if ('text' in part && typeof part.text === 'string') {
+    return [{ type: 'text', text: part.text }];
+  }
+
+  if (part.functionCall) {
+    return [
+      {
+        type: 'tool_call',
+        id: part.functionCall.id ?? '',
+        name: part.functionCall.name ?? '',
+        parameters: part.functionCall.args ?? {},
+      },
+    ];
+  }
+
+  if (part.functionResponse) {
+    return [
+      {
+        type: 'tool_response',
+        callId: part.functionResponse.id ?? '',
+        toolName: part.functionResponse.name ?? '',
+        result: part.functionResponse.response ?? {},
+      },
+    ];
+  }
+
+  if (part.inlineData) {
+    return [
+      {
+        type: 'media',
+        mimeType: part.inlineData.mimeType ?? '',
+        data: part.inlineData.data ?? '',
+        encoding: 'base64',
+      },
+    ];
+  }
+
+  if (part.fileData) {
+    return [
+      {
+        type: 'media',
+        mimeType: part.fileData.mimeType ?? 'application/octet-stream',
+        data: part.fileData.fileUri ?? '',
+        encoding: 'url',
+      },
+    ];
+  }
+
+  return [];
+}
+
+/**
+ * Converts a legacy PartListUnion-shaped input (typed as `unknown` with
+ * structural checks) to ContentBlock[]. Replaces the old `toParts` function.
+ */
+export function legacyPartsToBlocks(input: unknown): ContentBlock[] {
+  return toBlocksFromLegacyParts(input);
+}
+
+/**
+ * Converts a legacy PartListUnion-shaped input to tool-response ContentBlocks.
+ *
+ * Preserves ALL current behaviors:
+ * - string → single tool_response block with limited output
+ * - text parts → joined into single tool_response block
+ * - functionResponse passthrough → single tool_response block preserving the
+ *   existing response payload, with output limiting applied
+ * - inlineData/fileData → sibling MediaBlocks after the tool_response block
+ * - empty+binary → "Binary content provided (N item(s))." message
+ * - output limiting via limitOutputTokens applied identically
+ */
 export function convertToFunctionResponse(
   toolName: string,
   callId: string,
-  llmContent: PartListUnion,
+  llmContent: unknown,
   config?: ToolOutputSettingsProvider,
-): Part[] {
-  // Handle simple string case
+): ContentBlock[] {
   if (typeof llmContent === 'string') {
     const limitedOutput = limitStringOutput(llmContent, toolName, config);
-    return [createFunctionResponsePart(callId, toolName, limitedOutput)];
+    return [createToolResponseBlock(callId, toolName, limitedOutput)];
   }
 
-  const parts = toParts(llmContent);
+  const blocks = toBlocksFromLegacyParts(llmContent);
 
-  // Separate text from binary types
   const textParts: string[] = [];
-  const inlineDataParts: Part[] = [];
-  const fileDataParts: Part[] = [];
+  const mediaBlocks: MediaBlock[] = [];
 
-  for (const part of parts) {
-    if (part.text !== undefined) {
-      textParts.push(part.text);
-    } else if (part.inlineData) {
-      inlineDataParts.push(part);
-    } else if (part.fileData) {
-      fileDataParts.push(part);
-    } else if (part.functionResponse) {
-      // Passthrough case - preserve existing response
-      if (parts.length > 1) {
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      textParts.push(block.text);
+    } else if (block.type === 'media') {
+      mediaBlocks.push(block);
+    } else if (block.type === 'tool_response') {
+      if (blocks.length > 1) {
         toolSchedulerLogger.warn(
-          'convertToFunctionResponse received multiple parts with a functionResponse. ' +
-            'Only the functionResponse will be used, other parts will be ignored',
+          'convertToFunctionResponse received multiple blocks with a tool_response. ' +
+            'Only the tool_response will be used, other blocks will be ignored',
         );
       }
-      const passthroughPart = {
-        functionResponse: {
-          id: callId,
-          name: toolName,
-          response: part.functionResponse.response,
-        },
+      const passthroughBlock: ToolResponseBlock = {
+        type: 'tool_response',
+        callId,
+        toolName,
+        result: block.result,
       };
-      // Apply output limits to the passthrough case as well
-      return [limitFunctionResponsePart(passthroughPart, toolName, config)];
+      return [limitToolResponseBlock(passthroughBlock, toolName, config)];
     }
-    // Ignore other part types (e.g., functionCall)
   }
 
-  // Build the primary response part
-  const part: Part = {
-    functionResponse: {
-      id: callId,
-      name: toolName,
-      response: textParts.length > 0 ? { output: textParts.join('\n') } : {},
-    },
+  const primaryBlock: ToolResponseBlock = {
+    type: 'tool_response',
+    callId,
+    toolName,
+    result: textParts.length > 0 ? { output: textParts.join('\n') } : {},
   };
 
-  // Handle binary content - use sibling format for all providers
-  const siblingParts: Part[] = [...fileDataParts, ...inlineDataParts];
-
-  // Add descriptive text if response object is empty but we have binary content
-  if (
-    textParts.length === 0 &&
-    (inlineDataParts.length > 0 || fileDataParts.length > 0)
-  ) {
-    const totalBinaryItems = inlineDataParts.length + fileDataParts.length;
-    part.functionResponse!.response = {
-      output: `Binary content provided (${totalBinaryItems} item(s)).`,
+  if (textParts.length === 0 && mediaBlocks.length > 0) {
+    primaryBlock.result = {
+      output: `Binary content provided (${mediaBlocks.length} item(s)).`,
     };
   }
 
-  // Apply output limits to the functionResponse
-  const limitedPart = limitFunctionResponsePart(part, toolName, config);
+  const limitedBlock = limitToolResponseBlock(primaryBlock, toolName, config);
 
-  if (siblingParts.length > 0) {
-    return [limitedPart, ...siblingParts];
+  if (mediaBlocks.length > 0) {
+    return [limitedBlock, ...mediaBlocks];
   }
 
-  return [limitedPart];
+  return [limitedBlock];
 }
 
 export function extractAgentIdFromMetadata(
@@ -367,15 +414,11 @@ export const createErrorResponse = (
   callId: request.callId,
   error,
   responseParts: [
-    // Only functionResponse — the functionCall is already recorded in history
-    // from the model's assistant message. Re-emitting it here would create
-    // orphan tool_use blocks for Anthropic (Issue #244).
     {
-      functionResponse: {
-        id: request.callId,
-        name: request.name,
-        response: { error: error.message },
-      },
+      type: 'tool_response',
+      callId: request.callId,
+      toolName: request.name,
+      result: { error: error.message },
     },
   ],
   resultDisplay: error.message,

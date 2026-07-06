@@ -6,7 +6,12 @@
  */
 
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { CallableTool, Tool, Part, FunctionCall } from '@google/genai';
+import type {
+  McpCallableTool,
+  McpPart,
+  McpTool,
+} from '../tools-adapters/CoreMcpToolServiceAdapter.js';
+import type { ToolCallRequest } from '../llm-types/toolCall.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
@@ -290,7 +295,7 @@ function extractToolDefs(response: {
   return tools ?? [];
 }
 
-class LspNavigationCallableTool implements CallableTool {
+class LspNavigationCallableTool implements McpCallableTool {
   constructor(
     private readonly mcpClient: Client,
     private readonly toolDef: {
@@ -300,7 +305,7 @@ class LspNavigationCallableTool implements CallableTool {
     },
   ) {}
 
-  async tool(): Promise<Tool> {
+  async tool(): Promise<McpTool> {
     return {
       functionDeclarations: [
         {
@@ -312,7 +317,7 @@ class LspNavigationCallableTool implements CallableTool {
     };
   }
 
-  async callTool(functionCalls: FunctionCall[]): Promise<Part[]> {
+  async callTool(functionCalls: ToolCallRequest[]): Promise<McpPart[]> {
     if (functionCalls.length !== 1) {
       throw new Error(
         'LspNavigationCallableTool only supports single function call',
@@ -321,8 +326,8 @@ class LspNavigationCallableTool implements CallableTool {
     const call = functionCalls[0];
     const result = await this.mcpClient.callTool(
       {
-        name: call.name ?? this.toolDef.name,
-        arguments: call.args ?? {},
+        name: call.name,
+        arguments: call.args,
       },
       undefined,
       { timeout: LSP_NAVIGATION_REQUEST_TIMEOUT_MS },
@@ -353,7 +358,7 @@ async function registerDiscoveredTools(
     const callableTool = new LspNavigationCallableTool(client, toolDef);
 
     const discoveredTool = new DiscoveredMCPTool(
-      callableTool,
+      callableTool as ConstructorParameters<typeof DiscoveredMCPTool>[0],
       'lsp-navigation',
       toolDef.name,
       toolDef.description ?? '',

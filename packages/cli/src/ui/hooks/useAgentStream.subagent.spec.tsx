@@ -24,7 +24,7 @@ import type {
   AnyDeclarativeTool,
 } from '@vybestack/llxprt-code-core';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
-import type { Part, PartListUnion } from '@google/genai';
+import type { PartListUnion } from '@google/genai';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
@@ -309,7 +309,7 @@ describe('useAgentStream subagent isolation', () => {
       displayCleared: false,
       response: {
         callId: 'subagent-call',
-        responseParts: [{ text: 'subagent output' } as Part],
+        responseParts: [{ type: 'text', text: 'subagent output' }],
         resultDisplay: undefined,
         error: undefined,
         errorType: undefined,
@@ -358,7 +358,7 @@ describe('useAgentStream subagent isolation', () => {
       displayCleared: false,
       response: {
         callId: 'subagent-pending',
-        responseParts: [{ text: 'pending output' } as Part],
+        responseParts: [{ type: 'text', text: 'pending output' }],
         resultDisplay: undefined,
         error: undefined,
         errorType: undefined,
@@ -427,7 +427,7 @@ describe('useAgentStream subagent isolation', () => {
       displayCleared: true,
       response: {
         callId: 'subagent-cleared',
-        responseParts: [{ text: 'cleared output' } as Part],
+        responseParts: [{ type: 'text', text: 'cleared output' }],
         resultDisplay: undefined,
         error: undefined,
         errorType: undefined,
@@ -543,7 +543,7 @@ describe('useAgentStream subagent isolation', () => {
       displayCleared: false,
       response: {
         callId: 'client-callId',
-        responseParts: [{ text: 'dir listing' } as Part],
+        responseParts: [{ type: 'text', text: 'dir listing' }],
         resultDisplay: undefined,
         error: undefined,
         errorType: undefined,

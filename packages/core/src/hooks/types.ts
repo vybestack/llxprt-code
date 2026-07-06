@@ -5,17 +5,14 @@
  */
 
 import type {
-  GenerateContentResponse,
-  GenerateContentParameters,
-  ToolConfig as GenAIToolConfig,
-  ToolListUnion,
-} from '@google/genai';
-import type {
   LLMRequest,
   LLMResponse,
   HookToolConfig,
   HookLLMRequestBoundary,
   HookLLMRequestBoundaryParseResult,
+  HookGenerateContentParameters,
+  HookGenerateContentResponse,
+  HookSdkToolConfig,
 } from './hookTranslator.js';
 import {
   defaultHookTranslator,
@@ -23,6 +20,11 @@ import {
   parseHookLLMRequestBoundaryResult,
 } from './hookTranslator.js';
 import type { ConfigSource } from './hookRegistry.js';
+
+type HookToolListUnion = Array<{
+  functionDeclarations?: Array<{ name?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}>;
 
 /**
  * Generate a unique key for a hook configuration
@@ -200,8 +202,8 @@ export class DefaultHookOutput implements HookOutput {
    * Apply LLM request modifications (specific method for BeforeModel hooks)
    */
   applyLLMRequestModifications(
-    target: GenerateContentParameters,
-  ): GenerateContentParameters {
+    target: HookGenerateContentParameters,
+  ): HookGenerateContentParameters {
     // Base implementation - overridden by BeforeModelHookOutput
     return target;
   }
@@ -210,11 +212,11 @@ export class DefaultHookOutput implements HookOutput {
    * Apply tool config modifications (specific method for BeforeToolSelection hooks)
    */
   applyToolConfigModifications(target: {
-    toolConfig?: GenAIToolConfig;
-    tools?: ToolListUnion;
+    toolConfig?: HookSdkToolConfig;
+    tools?: HookToolListUnion;
   }): {
-    toolConfig?: GenAIToolConfig;
-    tools?: ToolListUnion;
+    toolConfig?: HookSdkToolConfig;
+    tools?: HookToolListUnion;
   } {
     // Base implementation - overridden by BeforeToolSelectionHookOutput
     return target;
@@ -322,7 +324,7 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
   /**
    * Get synthetic LLM response if provided by hook
    */
-  getSyntheticResponse(): GenerateContentResponse | undefined {
+  getSyntheticResponse(): HookGenerateContentResponse | undefined {
     if (
       this.hookSpecificOutput &&
       isNonNullObjectRecord(this.hookSpecificOutput['llm_response'])
@@ -340,8 +342,8 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
    * Apply modifications to LLM request
    */
   override applyLLMRequestModifications(
-    target: GenerateContentParameters,
-  ): GenerateContentParameters {
+    target: HookGenerateContentParameters,
+  ): HookGenerateContentParameters {
     if (
       this.hookSpecificOutput &&
       isNonNullObjectRecord(this.hookSpecificOutput['llm_request'])
@@ -438,11 +440,11 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
    * in addition to the SDK-compatible functionCallingConfig structure.
    */
   override applyToolConfigModifications(target: {
-    toolConfig?: GenAIToolConfig & { allowedFunctionNames?: string[] };
-    tools?: ToolListUnion;
+    toolConfig?: HookSdkToolConfig & { allowedFunctionNames?: string[] };
+    tools?: HookToolListUnion;
   }): {
-    toolConfig?: GenAIToolConfig & { allowedFunctionNames?: string[] };
-    tools?: ToolListUnion;
+    toolConfig?: HookSdkToolConfig & { allowedFunctionNames?: string[] };
+    tools?: HookToolListUnion;
   } {
     if (
       this.hookSpecificOutput &&
@@ -475,7 +477,7 @@ export class AfterModelHookOutput extends DefaultHookOutput {
   /**
    * Get modified LLM response if provided by hook
    */
-  getModifiedResponse(): GenerateContentResponse | undefined {
+  getModifiedResponse(): HookGenerateContentResponse | undefined {
     if (
       this.hookSpecificOutput &&
       isNonNullObjectRecord(this.hookSpecificOutput['llm_response'])

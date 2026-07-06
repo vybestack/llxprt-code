@@ -38,7 +38,7 @@ import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
-import { getResponseTextFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import { getResponseTextFromParts } from './googlePartHelpers.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 
@@ -650,7 +650,9 @@ export class DirectMessageProcessor {
       };
     }
 
-    const syntheticResponse = beforeModelResult?.getSyntheticResponse();
+    const syntheticResponse = beforeModelResult?.getSyntheticResponse() as
+      | GenerateContentResponse
+      | undefined;
     if (syntheticResponse) {
       return { syntheticResponse };
     }
@@ -676,7 +678,9 @@ export class DirectMessageProcessor {
     beforeModelResult: BeforeModelHookOutput,
   ): GenerateContentResponse {
     return (
-      beforeModelResult.getSyntheticResponse() ??
+      (beforeModelResult.getSyntheticResponse() as
+        | GenerateContentResponse
+        | undefined) ??
       ({
         candidates: [
           {
@@ -811,7 +815,7 @@ export class DirectMessageProcessor {
    */
   private _applyAfterModelResult(
     afterModelResult: {
-      getModifiedResponse(): GenerateContentResponse | undefined;
+      getModifiedResponse(): unknown;
     },
     currentResponse: GenerateContentResponse,
     allowedFunctionNames: string[] | undefined,
@@ -820,7 +824,9 @@ export class DirectMessageProcessor {
     responseModified: boolean;
     aggregatedText: string | undefined;
   } {
-    const modifiedResponse = afterModelResult.getModifiedResponse();
+    const modifiedResponse = afterModelResult.getModifiedResponse() as
+      | GenerateContentResponse
+      | undefined;
     if (!modifiedResponse) {
       return {
         directResponse: currentResponse,

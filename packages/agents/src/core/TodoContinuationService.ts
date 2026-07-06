@@ -5,6 +5,7 @@
  */
 
 import { type PartListUnion, type Part } from '@google/genai';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentEventType } from './turn.js';
 import type { ServerAgentStreamEvent, ToolCallResponseInfo } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -39,20 +40,9 @@ function asTextPart(part: Part): { text: string } | undefined {
  * Extracts the function-response name from a Part if present. Runtime
  * payloads can include null or malformed entries despite declared types.
  */
-function getFunctionResponseName(part: Part): string | undefined {
-  const candidate = part as unknown;
-  if (
-    typeof candidate === 'object' &&
-    candidate !== null &&
-    'functionResponse' in candidate
-  ) {
-    const fr = (candidate as { functionResponse: unknown }).functionResponse;
-    if (fr !== null && typeof fr === 'object') {
-      const name = (fr as { name?: unknown }).name;
-      if (typeof name === 'string') {
-        return name;
-      }
-    }
+function getToolResponseName(block: ContentBlock): string | undefined {
+  if (block.type === 'tool_response') {
+    return block.toolName;
   }
   return undefined;
 }
@@ -363,7 +353,7 @@ export class TodoContinuationService {
       return false;
     }
     return response.responseParts.some((part) => {
-      const name = getFunctionResponseName(part);
+      const name = getToolResponseName(part);
       return name !== undefined && name.toLowerCase() === 'todo_pause';
     });
   }

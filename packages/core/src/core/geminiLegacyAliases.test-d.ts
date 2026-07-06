@@ -32,7 +32,7 @@ import type {
   ServerFinishedOutcome,
   AgentErrorEventValue,
 } from './turn.js';
-import type { PartListUnion } from '@google/genai';
+import type { ContentBlock } from '../services/history/IContent.js';
 import type {
   GeminiEventType,
   ServerGeminiStreamEvent,
@@ -93,4 +93,6 @@ expectTypeOf<ServerGeminiModelInfoEvent>().toEqualTypeOf<ServerModelInfoEvent>()
 expectTypeOf<ServerGeminiAgentExecutionStoppedEvent>().toEqualTypeOf<ServerAgentExecutionStoppedEvent>();
 expectTypeOf<ServerGeminiAgentExecutionBlockedEvent>().toEqualTypeOf<ServerAgentExecutionBlockedEvent>();
 expectTypeOf<GeminiErrorEventValue>().toEqualTypeOf<AgentErrorEventValue>();
-expectTypeOf<GeminiCodeRequest>().toEqualTypeOf<PartListUnion>();
+expectTypeOf<GeminiCodeRequest>().toEqualTypeOf<
+  string | ContentBlock | ContentBlock[]
+>();

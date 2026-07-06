@@ -5,8 +5,10 @@
  */
 
 import { createHash } from 'node:crypto';
-import { type Content, Type } from '@google/genai';
-import { type AgentClientContract } from '../core/clientContract.js';
+import type {
+  AgentClientContract,
+  ContractContent,
+} from '../core/clientContract.js';
 import { LruCache } from './LruCache.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 
@@ -72,12 +74,12 @@ export interface SearchReplaceEdit {
 }
 
 const SearchReplaceEditSchema = {
-  type: Type.OBJECT,
+  type: 'object',
   properties: {
-    explanation: { type: Type.STRING },
-    search: { type: Type.STRING },
-    replace: { type: Type.STRING },
-    noChangesRequired: { type: Type.BOOLEAN },
+    explanation: { type: 'string' },
+    search: { type: 'string' },
+    replace: { type: 'string' },
+    noChangesRequired: { type: 'boolean' },
   },
   required: ['search', 'replace', 'explanation'],
 };
@@ -128,7 +130,7 @@ export async function FixLLMEditWithInstruction(
     .replace('{error}', error)
     .replace('{current_content}', current_content);
 
-  const contents: Content[] = [
+  const contents: ContractContent[] = [
     {
       role: 'user',
       parts: [

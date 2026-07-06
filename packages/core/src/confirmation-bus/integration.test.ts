@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { FunctionCall } from '@google/genai';
+import type { ToolCallRequest } from '../llm-types/toolCall.js';
 
 import { MessageBus } from './message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
@@ -159,7 +159,7 @@ priority = 50
         requestHandler,
       );
 
-      const toolCall: FunctionCall = { name: 'edit', args: {} };
+      const toolCall: ToolCallRequest = { name: 'edit', args: {} };
       const confirmationPromise = messageBus.requestConfirmation(toolCall, {});
 
       // Wait for request to be published
@@ -200,7 +200,7 @@ priority = 50
         requestHandler,
       );
 
-      const toolCall: FunctionCall = { name: 'edit', args: {} };
+      const toolCall: ToolCallRequest = { name: 'edit', args: {} };
       const confirmationPromise = messageBus.requestConfirmation(toolCall, {});
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -238,7 +238,7 @@ priority = 50
       const policyEngine = new PolicyEngine(config);
       const messageBus = new MessageBus(policyEngine);
 
-      const toolCall: FunctionCall = { name: 'edit', args: {} };
+      const toolCall: ToolCallRequest = { name: 'edit', args: {} };
       const confirmationPromise = messageBus.requestConfirmation(toolCall, {});
 
       // Fast-forward past the 5-minute timeout
@@ -264,7 +264,7 @@ priority = 50
         requestHandler,
       );
 
-      const toolCall: FunctionCall = { name: 'edit', args: {} };
+      const toolCall: ToolCallRequest = { name: 'edit', args: {} };
       const result = await messageBus.requestConfirmation(toolCall, {});
 
       expect(result).toBe(true);
@@ -286,7 +286,7 @@ priority = 50
         rejectionHandler,
       );
 
-      const toolCall: FunctionCall = { name: 'shell', args: {} };
+      const toolCall: ToolCallRequest = { name: 'shell', args: {} };
       const result = await messageBus.requestConfirmation(toolCall, {});
 
       expect(result).toBe(false);
@@ -370,7 +370,7 @@ priority = 10
       const messageBus = new MessageBus(policyEngine);
 
       // Valid MCP tool with correct serverName
-      const validToolCall: FunctionCall = {
+      const validToolCall: ToolCallRequest = {
         name: 'myserver__tool',
         args: {},
       };
@@ -398,7 +398,7 @@ priority = 10
       );
 
       // Tool claims to be from 'trusted' but actually from 'malicious'
-      const spoofedToolCall: FunctionCall = {
+      const spoofedToolCall: ToolCallRequest = {
         name: 'trusted__tool',
         args: {},
       };
@@ -456,19 +456,19 @@ priority = 10
       );
 
       // Test ALLOW flow
-      const globCall: FunctionCall = { name: 'glob', args: {} };
+      const globCall: ToolCallRequest = { name: 'glob', args: {} };
       const globResult = await messageBus.requestConfirmation(globCall, {});
       expect(globResult).toBe(true);
       expect(requestHandler).not.toHaveBeenCalled();
 
       // Test DENY flow
-      const shellCall: FunctionCall = { name: 'shell', args: {} };
+      const shellCall: ToolCallRequest = { name: 'shell', args: {} };
       const shellResult = await messageBus.requestConfirmation(shellCall, {});
       expect(shellResult).toBe(false);
       expect(rejectionHandler).toHaveBeenCalled();
 
       // Test ASK_USER flow
-      const editCall: FunctionCall = { name: 'edit', args: {} };
+      const editCall: ToolCallRequest = { name: 'edit', args: {} };
       const editPromise = messageBus.requestConfirmation(editCall, {});
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -509,9 +509,9 @@ priority = 10
       );
 
       // Start multiple confirmations concurrently
-      const tool1: FunctionCall = { name: 'edit', args: { file: '1.ts' } };
-      const tool2: FunctionCall = { name: 'edit', args: { file: '2.ts' } };
-      const tool3: FunctionCall = { name: 'edit', args: { file: '3.ts' } };
+      const tool1: ToolCallRequest = { name: 'edit', args: { file: '1.ts' } };
+      const tool2: ToolCallRequest = { name: 'edit', args: { file: '2.ts' } };
+      const tool3: ToolCallRequest = { name: 'edit', args: { file: '3.ts' } };
 
       const promise1 = messageBus.requestConfirmation(tool1, { file: '1.ts' });
       const promise2 = messageBus.requestConfirmation(tool2, { file: '2.ts' });
@@ -560,7 +560,7 @@ priority = 10
         rejectionHandler,
       );
 
-      const toolCall: FunctionCall = { name: 'edit', args: {} };
+      const toolCall: ToolCallRequest = { name: 'edit', args: {} };
       const result = await messageBus.requestConfirmation(toolCall, {});
 
       expect(result).toBe(false);
@@ -577,7 +577,7 @@ priority = 10
       const policyEngine = new PolicyEngine(config);
       const messageBus = new MessageBus(policyEngine);
 
-      const toolCall: FunctionCall = { name: 'glob', args: {} };
+      const toolCall: ToolCallRequest = { name: 'glob', args: {} };
       const result = await messageBus.requestConfirmation(toolCall, {});
 
       expect(result).toBe(true);
@@ -602,7 +602,7 @@ priority = 10
       messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler2);
       messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler3);
 
-      const toolCall: FunctionCall = { name: 'edit', args: {} };
+      const toolCall: ToolCallRequest = { name: 'edit', args: {} };
       const confirmationPromise = messageBus.requestConfirmation(toolCall, {});
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -635,7 +635,7 @@ priority = 10
       const policyEngine = new PolicyEngine();
       const messageBus = new MessageBus(policyEngine);
 
-      const toolCall: FunctionCall = { args: {} }; // No name
+      const toolCall: ToolCallRequest = { args: {} }; // No name
 
       await expect(
         messageBus.requestConfirmation(toolCall, {}),

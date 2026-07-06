@@ -18,8 +18,8 @@ import {
   type PromptConfig,
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { GenerateContentResponse } from '@google/genai';
 import { ChatSession, StreamEventType } from './chatSession.js';
+import { mockResponseToChunk } from './turn-test-helpers.js';
 import {
   createContentGenerator,
   type ContentGenerator,
@@ -251,12 +251,11 @@ describe('subagent.ts', () => {
           return (async function* () {
             yield {
               type: StreamEventType.CHUNK,
-              value: {
-                text: 'partial output',
+              value: mockResponseToChunk({
                 candidates: [
                   { content: { parts: [{ text: 'partial output' }] } },
                 ],
-              } as GenerateContentResponse,
+              }),
             };
 
             await new Promise<void>((_resolve, reject) => {
@@ -448,7 +447,7 @@ describe('subagent.ts', () => {
       const interactiveResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: {
@@ -464,7 +463,7 @@ describe('subagent.ts', () => {
                 },
               },
             ],
-          },
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(interactiveResponseStream);
@@ -569,7 +568,7 @@ describe('subagent.ts', () => {
       const interactiveResponseStream = (async function* () {
         yield {
           type: StreamEventType.CHUNK,
-          value: {
+          value: mockResponseToChunk({
             candidates: [
               {
                 content: {
@@ -585,7 +584,7 @@ describe('subagent.ts', () => {
                 },
               },
             ],
-          },
+          }),
         };
       })();
       mockSendMessageStream.mockResolvedValue(interactiveResponseStream);

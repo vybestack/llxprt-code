@@ -17,7 +17,6 @@ import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useTodoContinuation } from './useTodoContinuation.js';
 import { useTodoContext } from '../contexts/TodoContext.js';
-import { FinishReason } from '@google/genai';
 import {
   Config,
   ApprovalMode,
@@ -64,7 +63,7 @@ const createEmptyStream =
   async function* (): AsyncGenerator<ServerAgentStreamEvent> {
     yield {
       type: AgentEventType.Finished,
-      value: { reason: FinishReason.STOP },
+      value: { reason: 'stop' },
     };
   };
 

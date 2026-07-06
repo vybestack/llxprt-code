@@ -138,12 +138,11 @@ function injectStubModelResponse(
       const chunkStreamEvent: StreamEvent = {
         type: StreamEventType.CHUNK,
         value: {
-          candidates: [
-            {
-              content: { parts: [{ text: replyText }] },
-              finishReason: 'STOP',
-            },
-          ],
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: replyText }],
+          },
+          finishReason: 'stop',
         } as never,
       };
       return (async function* (): AsyncGenerator<StreamEvent> {

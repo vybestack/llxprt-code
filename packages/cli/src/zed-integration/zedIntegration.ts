@@ -5,13 +5,13 @@
  */
 
 import {
+  type ContentBlock,
   type Config,
   type AgentChatContract,
   type AgentClientContract,
   clearCachedCredentialFile,
   getErrorStatus,
   DebugLogger,
-  getFunctionCalls,
   EmojiFilter,
   type FilterConfiguration,
   todoEvents,
@@ -22,6 +22,7 @@ import {
   debugLogger,
   createInkStdio,
 } from '@vybestack/llxprt-code-core';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import * as acp from '@agentclientprotocol/sdk';
 import {
   StreamEventType,
@@ -52,6 +53,24 @@ import {
 } from './zed-provider-auth.js';
 
 export { parseZedAuthMethodId } from './zed-helpers.js';
+
+/**
+ * Extracts tool-call function-call objects from ContentBlock[] (tool_call blocks),
+ * returning the Google FunctionCall shape expected by zed integration consumers.
+ */
+function extractFunctionCallsFromChunk(blocks: ContentBlock[]): FunctionCall[] {
+  const calls: FunctionCall[] = [];
+  for (const block of blocks) {
+    if (block.type === 'tool_call') {
+      calls.push({
+        id: block.id,
+        name: block.name,
+        args: block.parameters as Record<string, unknown>,
+      });
+    }
+  }
+  return calls;
+}
 
 function isAbortSignalAborted(signal: AbortSignal): boolean {
   return signal.aborted;
@@ -478,27 +497,29 @@ export class Session {
       if (pendingSend.signal.aborted) {
         break;
       }
-      if (
-        resp.type === StreamEventType.CHUNK &&
-        resp.value.candidates &&
-        resp.value.candidates.length > 0
-      ) {
-        const chunkResult = this.processChunkCandidates(
-          resp.value.candidates[0],
-          flushBatch,
-          hasStreamedAgentContent,
-          pendingText,
-          pendingThought,
-          scheduleBatchFlush,
-        );
-        hasStreamedAgentContent = chunkResult.hasStreamedAgentContent;
-        pendingText = chunkResult.pendingText;
-        pendingThought = chunkResult.pendingThought;
-      }
       if (resp.type === StreamEventType.CHUNK) {
-        const respFunctionCalls = getFunctionCalls(resp.value);
-        if (respFunctionCalls && respFunctionCalls.length > 0) {
-          functionCalls.push(...respFunctionCalls);
+        const candidateContent = ContentConverters.toGeminiContent(
+          resp.value.content,
+        );
+        if (candidateContent.parts && candidateContent.parts.length > 0) {
+          const chunkResult = this.processChunkCandidates(
+            { content: candidateContent },
+            flushBatch,
+            hasStreamedAgentContent,
+            pendingText,
+            pendingThought,
+            scheduleBatchFlush,
+          );
+          hasStreamedAgentContent = chunkResult.hasStreamedAgentContent;
+          pendingText = chunkResult.pendingText;
+          pendingThought = chunkResult.pendingThought;
+        }
+
+        const chunkFunctionCalls = extractFunctionCallsFromChunk(
+          resp.value.content.blocks,
+        );
+        if (chunkFunctionCalls.length > 0) {
+          functionCalls.push(...chunkFunctionCalls);
         }
       }
     }

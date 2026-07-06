@@ -29,8 +29,8 @@ import {
   type ThoughtPart,
   isThoughtPart,
   type UsageMetadataWithCache,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { getResponseTextFromParts } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+} from './googlePartHelpers.js';
+import { getResponseTextFromParts } from './googlePartHelpers.js';
 import { setProviderStopReason } from './providerStopReason.js';
 
 const logger = new DebugLogger('llxprt:core:message-converter');
@@ -405,7 +405,7 @@ function convertAllFunctionResponses(parts: Part[]): IContent {
   return { speaker: 'tool', blocks };
 }
 
-function classifyMixedParts(parts: Part[]): {
+export function classifyMixedParts(parts: Part[]): {
   blocks: ContentBlock[];
   hasAIContent: boolean;
   hasToolContent: boolean;

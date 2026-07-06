@@ -13,6 +13,8 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { convertBlocksToParts } from './MessageConverter.js';
 import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
 import {
   executeToolCall,
@@ -180,11 +182,6 @@ export function resolveToolName(
 // ---------------------------------------------------------------------------
 
 export function finalizeOutput(output: OutputObject): void {
-  const message = output.final_message;
-  if (typeof message === 'string' && message.trim().length > 0) {
-    return;
-  }
-
   const emittedVars = asUnknownRecord(output.emitted_vars);
   const emittedEntries = Object.entries(emittedVars)
     .filter(
@@ -194,6 +191,19 @@ export function finalizeOutput(output: OutputObject): void {
         String(value).trim().length > 0,
     )
     .map(([key, value]) => `${key}=${String(value)}`);
+
+  const varsSuffix =
+    emittedEntries.length > 0
+      ? ` Emitted variables: ${emittedEntries.join(', ')}.`
+      : '';
+
+  const existing = output.final_message;
+  if (typeof existing === 'string' && existing.trim().length > 0) {
+    // Preserve model-emitted text, but still surface emitted variables so
+    // callers can introspect what the subagent produced.
+    output.final_message = `${existing.trim()}${varsSuffix}`.trim();
+    return;
+  }
 
   let baseMessage: string;
   switch (output.terminate_reason) {
@@ -213,11 +223,6 @@ export function finalizeOutput(output: OutputObject): void {
       baseMessage = 'Stopped due to an unrecoverable error.';
       break;
   }
-
-  const varsSuffix =
-    emittedEntries.length > 0
-      ? ` Emitted variables: ${emittedEntries.join(', ')}.`
-      : '';
 
   output.final_message = `${baseMessage}${varsSuffix}`.trim();
 }
@@ -480,10 +485,11 @@ export async function processFunctionCalls(
 }
 
 function pushNonFunctionCallResponseParts(
-  responseParts: Part[],
+  responseParts: ContentBlock[],
   toolResponseParts: Part[],
 ): void {
-  for (const part of responseParts) {
+  const parts = convertBlocksToParts(responseParts);
+  for (const part of parts) {
     if (!('functionCall' in part)) {
       toolResponseParts.push(part);
     }
@@ -507,14 +513,13 @@ async function executeNonInteractiveTool(
       callId,
       responseParts: [
         {
-          functionResponse: {
-            id: callId,
-            name: requestInfo.name,
-            response: {
-              emit_variable_name: valName,
-              emit_variable_value: valVal,
-              message: successMessage,
-            },
+          type: 'tool_response',
+          callId,
+          toolName: requestInfo.name,
+          result: {
+            emit_variable_name: valName,
+            emit_variable_value: valVal,
+            message: successMessage,
           },
         },
       ],

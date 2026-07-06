@@ -82,18 +82,16 @@ function buildErrorResponse(call: ToolCall, error: unknown): CompletedToolCall {
       callId: call.request.callId,
       responseParts: [
         {
-          functionCall: {
-            id: call.request.callId,
-            name: call.request.name,
-            args: call.request.args,
-          },
+          type: 'tool_call' as const,
+          id: call.request.callId,
+          name: call.request.name,
+          parameters: call.request.args,
         },
         {
-          functionResponse: {
-            id: call.request.callId,
-            name: call.request.name,
-            response: { error: msg },
-          },
+          type: 'tool_response' as const,
+          callId: call.request.callId,
+          toolName: call.request.name,
+          result: { error: msg },
         },
       ],
       resultDisplay: msg,
@@ -117,18 +115,16 @@ function buildSuccessResponse(
       callId: call.request.callId,
       responseParts: [
         {
-          functionCall: {
-            id: call.request.callId,
-            name: call.request.name,
-            args: call.request.args,
-          },
+          type: 'tool_call' as const,
+          id: call.request.callId,
+          name: call.request.name,
+          parameters: call.request.args,
         },
         {
-          functionResponse: {
-            id: call.request.callId,
-            name: call.request.name,
-            response: { output: result.llmContent },
-          },
+          type: 'tool_response' as const,
+          callId: call.request.callId,
+          toolName: call.request.name,
+          result: { output: result.llmContent },
         },
       ],
       resultDisplay: result.returnDisplay,
@@ -222,19 +218,17 @@ async function processScheduledCall(
             callId: call.request.callId,
             responseParts: [
               {
-                functionCall: {
-                  id: call.request.callId,
-                  name: call.request.name,
-                  args: call.request.args,
-                },
+                type: 'tool_call' as const,
+                id: call.request.callId,
+                name: call.request.name,
+                parameters: call.request.args,
               },
               {
-                functionResponse: {
-                  id: call.request.callId,
-                  name: call.request.name,
-                  response: {
-                    error: `User did not allow tool call ${call.request.name}. Reason: User cancelled.`,
-                  },
+                type: 'tool_response' as const,
+                callId: call.request.callId,
+                toolName: call.request.name,
+                result: {
+                  error: `User did not allow tool call ${call.request.name}. Reason: User cancelled.`,
                 },
               },
             ],
@@ -320,19 +314,17 @@ const buildMockScheduler = (
             callId: req.callId,
             responseParts: [
               {
-                functionCall: {
-                  id: req.callId,
-                  name: req.name,
-                  args: req.args,
-                },
+                type: 'tool_call' as const,
+                id: req.callId,
+                name: req.name,
+                parameters: req.args,
               },
               {
-                functionResponse: {
-                  id: req.callId,
-                  name: req.name,
-                  response: {
-                    error: `Tool "${req.name}" could not be loaded. Did you mean one of: "mockTool", "anotherTool"?`,
-                  },
+                type: 'tool_response' as const,
+                callId: req.callId,
+                toolName: req.name,
+                result: {
+                  error: `Tool "${req.name}" could not be loaded. Did you mean one of: "mockTool", "anotherTool"?`,
                 },
               },
             ],
@@ -603,9 +595,8 @@ describe('useReactToolScheduler (split)', () => {
     expect(completedCalls[0].response.responseParts).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          functionResponse: expect.objectContaining({
-            response: { output: expectedOutput },
-          }),
+          type: 'tool_response',
+          result: { output: expectedOutput },
         }),
       ]),
     );

@@ -56,7 +56,7 @@ function buildMockRequest(args: unknown): ToolCallRequestInfo {
 function buildMockResponse(): ToolCallResponseInfo {
   return {
     callId: 'test-call-id',
-    responseParts: [{ text: 'test result' }],
+    responseParts: [{ type: 'text', text: 'test result' }],
     resultDisplay: undefined,
     error: undefined,
     errorType: undefined,

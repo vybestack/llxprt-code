@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Part, GenerateContentResponseUsageMetadata } from '@google/genai';
-import type { GenerateContentResponse } from '@google/genai';
-import type { ThinkingBlock } from '../services/history/IContent.js';
+import type { ModelStreamChunk } from '../llm-types/index.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -21,7 +19,7 @@ export enum StreamEventType {
 }
 
 export type StreamEvent =
-  | { type: StreamEventType.CHUNK; value: GenerateContentResponse }
+  | { type: StreamEventType.CHUNK; value: ModelStreamChunk }
   | { type: StreamEventType.RETRY }
   | {
       type: StreamEventType.AGENT_EXECUTION_STOPPED;
@@ -35,27 +33,6 @@ export type StreamEvent =
       systemMessage?: string;
       contextCleared?: boolean;
     };
-
-export type UsageMetadataWithCache = GenerateContentResponseUsageMetadata & {
-  cache_read_input_tokens?: number;
-  cache_creation_input_tokens?: number;
-};
-
-export type ThoughtPart = Part & {
-  thought: true;
-  text?: string;
-  thoughtSignature?: string;
-  llxprtSourceField?: ThinkingBlock['sourceField'];
-};
-
-export function isThoughtPart(part: Part | undefined): part is ThoughtPart {
-  return Boolean(
-    part &&
-      typeof part === 'object' &&
-      'thought' in part &&
-      part.thought === true,
-  );
-}
 
 /**
  * Options for retrying due to invalid content from the model.

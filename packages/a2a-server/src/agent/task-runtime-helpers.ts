@@ -23,6 +23,7 @@ import {
 import type { MessageBus } from '@vybestack/llxprt-code-core';
 import type { DEFAULT_GUI_EDITOR } from '@vybestack/llxprt-code-core';
 import type { PartUnion, Part as genAiPart } from '@google/genai';
+import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import * as fs from 'node:fs';
 import { logger } from '../utils/logger.js';
 import type { TaskMetadata } from '../types.js';
@@ -138,7 +139,12 @@ export function buildLlmPartsFromToolCalls(
   for (const completedToolCall of completedToolCalls) {
     const responseParts = completedToolCall.response.responseParts;
     if (Array.isArray(responseParts)) {
-      llmParts.push(...responseParts);
+      const geminiParts =
+        ContentConverters.toGeminiContent({
+          speaker: 'tool',
+          blocks: responseParts,
+        }).parts ?? [];
+      llmParts.push(...geminiParts);
     } else {
       llmParts.push(responseParts);
     }

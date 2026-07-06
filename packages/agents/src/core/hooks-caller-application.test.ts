@@ -389,12 +389,8 @@ describe('Hook Caller Application', () => {
       // The response should contain the systemMessage in some form
       // This could be via responseParts or metadata depending on implementation
       const responseText = successCall.response.responseParts
-        .map((p) => {
-          if ('functionResponse' in p) {
-            return JSON.stringify(p.functionResponse?.response);
-          }
-          return '';
-        })
+        .filter((p) => p.type === 'tool_response')
+        .map((p) => JSON.stringify(p.result))
         .join('');
       expect(responseText).toContain('Security scan: file contents verified');
     });

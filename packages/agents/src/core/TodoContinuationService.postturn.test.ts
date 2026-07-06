@@ -104,12 +104,11 @@ function functionResponsePart(
   response: Record<string, unknown> = {},
 ): ToolCallResponseInfo['responseParts'][number] {
   return {
-    functionResponse: {
-      name,
-      id,
-      response,
-    },
-  } as ToolCallResponseInfo['responseParts'][number];
+    type: 'tool_response',
+    callId: id,
+    toolName: name,
+    result: response,
+  };
 }
 
 function makeToolResponse(

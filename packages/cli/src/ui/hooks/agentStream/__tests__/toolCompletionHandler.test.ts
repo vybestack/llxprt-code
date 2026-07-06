@@ -14,7 +14,10 @@
 
 import type React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Part } from '@google/genai';
+import type {
+  ContentBlock,
+  ToolResponseBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type {
   TrackedToolCall,
@@ -28,19 +31,25 @@ import { buildToolResponses } from '@vybestack/llxprt-code-agents';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const functionCallPart: Part = {
-  functionCall: { name: 'test_tool', args: {} },
+const toolCallBlock: ContentBlock = {
+  type: 'tool_call',
+  id: 'call-1',
+  name: 'test_tool',
+  parameters: {},
 };
-const functionResponsePart: Part = {
-  functionResponse: { name: 'test_tool', response: { result: 'ok' } },
+const toolResponseBlock: ToolResponseBlock = {
+  type: 'tool_response',
+  callId: 'call-1',
+  toolName: 'test_tool',
+  result: { result: 'ok' },
 };
-const textPart: Part = { text: 'some text output' };
+const textBlock: ContentBlock = { type: 'text', text: 'some text output' };
 
 function makeCompletedTool(overrides: {
   callId: string;
   agentId?: string;
   name?: string;
-  responseParts?: Part[];
+  responseParts?: ContentBlock[];
   isClientInitiated?: boolean;
   prompt_id?: string;
   status?: 'success' | 'error';
@@ -58,7 +67,7 @@ function makeCompletedTool(overrides: {
     displayCleared: false,
     response: {
       callId: overrides.callId,
-      responseParts: overrides.responseParts ?? [functionResponsePart],
+      responseParts: overrides.responseParts ?? [toolResponseBlock],
       resultDisplay: undefined,
       error: undefined,
       errorType: undefined,
@@ -148,8 +157,10 @@ describe('classifyCompletedTools', () => {
     });
     // Force undefined responseParts
     (
-      toolWithNoResponse as unknown as { response: { responseParts: Part[] } }
-    ).response.responseParts = undefined as unknown as Part[];
+      toolWithNoResponse as unknown as {
+        response: { responseParts: ContentBlock[] };
+      }
+    ).response.responseParts = undefined as unknown as ContentBlock[];
     const result = classifyCompletedTools([toolWithNoResponse]);
     expect(result.primaryTools).toHaveLength(0);
   });
@@ -171,7 +182,7 @@ describe('buildToolResponses', () => {
   it('includes functionResponse parts', () => {
     const tool = makeCompletedTool({
       callId: 'call-1',
-      responseParts: [functionResponsePart],
+      responseParts: [toolResponseBlock],
     });
     const result = buildToolResponses([tool]);
     expect(result).toHaveLength(1);
@@ -181,7 +192,7 @@ describe('buildToolResponses', () => {
   it('excludes functionCall parts', () => {
     const tool = makeCompletedTool({
       callId: 'call-1',
-      responseParts: [functionCallPart, functionResponsePart],
+      responseParts: [toolCallBlock, toolResponseBlock],
     });
     const result = buildToolResponses([tool]);
     expect(result).toHaveLength(1);
@@ -192,7 +203,7 @@ describe('buildToolResponses', () => {
   it('includes text/other parts', () => {
     const tool = makeCompletedTool({
       callId: 'call-1',
-      responseParts: [textPart],
+      responseParts: [textBlock],
     });
     const result = buildToolResponses([tool]);
     expect(result).toHaveLength(1);
@@ -202,11 +213,11 @@ describe('buildToolResponses', () => {
   it('handles multiple tools', () => {
     const tool1 = makeCompletedTool({
       callId: 'c1',
-      responseParts: [functionResponsePart],
+      responseParts: [toolResponseBlock],
     });
     const tool2 = makeCompletedTool({
       callId: 'c2',
-      responseParts: [functionResponsePart],
+      responseParts: [toolResponseBlock],
     });
     const result = buildToolResponses([tool1, tool2]);
     expect(result).toHaveLength(2);

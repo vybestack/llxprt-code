@@ -117,12 +117,11 @@ describe('policy-helpers', () => {
           error: expect.any(Error),
           responseParts: expect.arrayContaining([
             expect.objectContaining({
-              functionResponse: expect.objectContaining({
-                id: 'call-123',
-                name: 'test-tool',
-                response: expect.objectContaining({
-                  error: 'Policy denied execution of tool "test-tool".',
-                }),
+              type: 'tool_response',
+              callId: 'call-123',
+              toolName: 'test-tool',
+              result: expect.objectContaining({
+                error: 'Policy denied execution of tool "test-tool".',
               }),
             }),
           ]),

@@ -709,7 +709,9 @@ export class StreamProcessor {
     }
 
     if (afterModelResult?.isBlockingDecision() === true) {
-      const modifiedResponse = afterModelResult.getModifiedResponse();
+      const modifiedResponse = afterModelResult.getModifiedResponse() as
+        | GenerateContentResponse
+        | undefined;
       const syntheticResponse = attachHookRestrictedAllowedTools(
         modifiedResponse ?? convertedChunk,
         hookRestrictedAllowedTools,
@@ -724,7 +726,9 @@ export class StreamProcessor {
       );
     }
 
-    const modifiedResponse = afterModelResult?.getModifiedResponse();
+    const modifiedResponse = afterModelResult?.getModifiedResponse() as
+      | GenerateContentResponse
+      | undefined;
     if (modifiedResponse) {
       return { type: 'modified', response: modifiedResponse };
     }

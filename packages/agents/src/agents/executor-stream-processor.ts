@@ -10,16 +10,16 @@ import type {
   Part,
   FunctionCall,
   FunctionDeclaration,
-  GenerateContentResponse,
 } from '@google/genai';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   filterHookRestrictedFunctionCalls,
   filterHookRestrictedParts,
-  getHookRestrictedAllowedTools,
   getHookRestrictedFunctionCallsFromParts,
-  hasFilteredHookRestrictedToolCalls,
   mergeHookRestrictedFunctionCalls,
 } from '../core/hookToolRestrictions.js';
+import { chunkToParts } from '../core/streamChunkWrapper.js';
+import { getFunctionCallsFromParts } from '../core/googlePartHelpers.js';
 import { parseThought } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
 import {
   nextStreamEventWithIdleTimeout,
@@ -47,7 +47,7 @@ export type StreamEmitActivityFn = (
  */
 type StreamEventRead =
   | { kind: 'done' }
-  | { kind: 'chunk'; value: GenerateContentResponse }
+  | { kind: 'chunk'; value: ModelStreamChunk }
   | { kind: 'skip' };
 
 /**
@@ -183,13 +183,13 @@ async function readStreamEvent(
 
 /** Processes a single stream chunk, extracting thoughts, function calls, and text. */
 function processStreamChunk(
-  chunk: GenerateContentResponse,
+  chunk: ModelStreamChunk,
   functionCalls: FunctionCall[],
   onText: (text: string) => void,
   emitActivity: StreamEmitActivityFn,
 ): boolean {
-  const parts = chunk.candidates?.[0]?.content?.parts ?? [];
-  const allowedTools = getHookRestrictedAllowedTools(chunk);
+  const parts = chunkToParts(chunk);
+  const allowedTools = chunk.hookRestrictions?.allowedToolNames;
   const filteredParts = filterHookRestrictedParts(parts, allowedTools);
   const { subject } = parseThought(
     filteredParts.find((p: Part) => p.thought === true)?.text ?? '',
@@ -203,16 +203,17 @@ function processStreamChunk(
     filteredParts,
     allowedTools,
   );
-  const topLevelCalls = filterHookRestrictedFunctionCalls(
-    chunk.functionCalls ?? [],
+  const topLevelCalls = getFunctionCallsFromParts(parts) ?? [];
+  const allowedFunctionCalls = filterHookRestrictedFunctionCalls(
+    topLevelCalls,
     allowedTools,
   );
-  const allowedFunctionCalls = mergeHookRestrictedFunctionCalls(
+  const mergedCalls = mergeHookRestrictedFunctionCalls(
     partCalls,
-    topLevelCalls,
+    allowedFunctionCalls,
   );
-  if (allowedFunctionCalls.length > 0) {
-    functionCalls.push(...allowedFunctionCalls);
+  if (mergedCalls.length > 0) {
+    functionCalls.push(...mergedCalls);
   }
 
   const text = filteredParts
@@ -224,5 +225,5 @@ function processStreamChunk(
     onText(text);
   }
 
-  return hasFilteredHookRestrictedToolCalls(chunk);
+  return chunk.hookRestrictions?.hadFilteredRestrictedCalls === true;
 }
