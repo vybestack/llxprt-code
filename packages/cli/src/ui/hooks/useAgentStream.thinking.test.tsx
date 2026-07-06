@@ -15,6 +15,7 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
@@ -23,7 +24,6 @@ import * as ReactDOM from 'react-dom';
 import { useAgentStream } from './agentStream/index.js';
 import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import type {
   Config,
   EditorType,
@@ -199,11 +199,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
     mockAddItem = vi.fn();
 
-    const mockGetAgentClient = vi.fn().mockImplementation(() => {
-      const clientInstance = new MockedAgentClientClass(mockConfig);
-      return clientInstance;
-    });
-
     const contentGeneratorConfig = {
       model: 'test-model',
       apiKey: 'test-key',
@@ -236,7 +231,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
-      getAgentClient: mockGetAgentClient,
       getMcpClientManager: vi.fn(() => undefined),
       getMcpServers: vi.fn(() => undefined),
       getUsageStatisticsEnabled: () => true,
@@ -316,7 +310,9 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       vi.fn(),
     ]);
 
-    const client = agentClient ?? mockConfig.getAgentClient();
+    const client = createFakeAgentFromMockClient(
+      agentClient ?? new MockedAgentClientClass(mockConfig),
+    );
 
     const { result, rerender } = renderHook(
       (props: {
@@ -335,11 +331,9 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         }
         return useAgentStream(
           props.client,
-          () => undefined,
           props.history,
           props.addItem,
           props.config,
-          createInteractiveToolScheduler(props.config, undefined),
           mockSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -664,12 +658,10 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
     const { result } = renderHook(() =>
       useAgentStream(
-        mockConfig.getAgentClient(),
-        () => undefined,
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,
-        createInteractiveToolScheduler(mockConfig, undefined),
         settingsWithReasoning,
         mockOnDebugMessage,
         mockHandleSlashCommand,

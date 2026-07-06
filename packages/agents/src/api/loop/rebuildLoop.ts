@@ -32,6 +32,13 @@ export interface LoopHolder {
   activeRunController?: AbortController;
   /** Facade-recorded per-turn subscription unsubscribers (G1). */
   subscriptions?: ReadonlyArray<() => void>;
+  /**
+   * The client the current loop was bound to at construction. Compared against
+   * `deps.resolveClient()` before each `stream()` turn so a stale client
+   * (e.g. after a slash-command refreshAuth outside the facade) triggers a
+   * rebuild instead of streaming through the old client.
+   */
+  boundClient?: AgenticLoopOptions['agentClient'];
 }
 
 /** Dependencies for rebuildLoop (switch-rebind.md RebuildLoopDeps). */
@@ -95,6 +102,7 @@ export function rebuildLoop(deps: RebuildLoopDeps): AgenticLoop {
     messageBus: deps.messageBus,
     approvalHandler: deps.approvalHandler,
     displayCallbacks: deps.displayCallbacks,
+    interactiveMode: deps.config.isInteractive(),
   });
 
   // @pseudocode switch-rebind.md step 23: fresh facade-owned controller for
@@ -105,5 +113,57 @@ export function rebuildLoop(deps: RebuildLoopDeps): AgenticLoop {
 
   // @pseudocode switch-rebind.md step 25: store the new loop
   holder.current = newLoop;
+  holder.boundClient = currentClient;
   return newLoop;
+}
+
+/** Returns true when the holder's loop is bound to the given client. */
+export function isLoopBoundToClient(
+  holder: LoopHolder,
+  client: AgenticLoopOptions['agentClient'],
+): boolean {
+  return holder.boundClient === client;
+}
+
+/** Rebuilds via `rebuild` when the holder's bound client differs from the current. */
+export function ensureFreshClientLoop(
+  holder: LoopHolder,
+  resolveClient: () => AgenticLoopOptions['agentClient'],
+  rebuild: () => void,
+): void {
+  if (holder.current === undefined) {
+    return;
+  }
+  if (isLoopBoundToClient(holder, resolveClient())) {
+    return;
+  }
+  rebuild();
+}
+
+/**
+ * Resolves the holder's loop after a stale-client rebuild attempt. Returns the
+ * live loop on success, or a structured error message when the rebuild threw
+ * or no loop is initialized — so stream() can yield error/done events instead
+ * of rejecting the async generator.
+ */
+export function resolveLoopOrError(
+  holder: LoopHolder,
+  resolveClient: () => AgenticLoopOptions['agentClient'],
+  rebuild: () => void,
+):
+  | { loop: AgenticLoop; error?: undefined }
+  | { loop?: undefined; error: { message: string } } {
+  try {
+    ensureFreshClientLoop(holder, resolveClient, rebuild);
+  } catch (e) {
+    return {
+      error: {
+        message: `Agent loop initialization failed: ${e instanceof Error ? e.message : String(e)}`,
+      },
+    };
+  }
+  const loop = holder.current;
+  return loop
+    ? { loop }
+    : { error: { message: 'Agent loop is not initialized' } };
 }

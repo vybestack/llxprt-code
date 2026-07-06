@@ -9,10 +9,15 @@ import {
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
   resolveStreamIdleTimeoutMs,
+  resolveStreamFirstResponseTimeoutMs,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
   LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
+  LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+  STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
+  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
 } from './streamIdleTimeout.js';
 
 describe('nextStreamEventWithIdleTimeout', () => {
@@ -571,5 +576,240 @@ describe('resolveStreamIdleTimeoutMs', () => {
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
     });
+  });
+});
+
+describe('resolveStreamFirstResponseTimeoutMs', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV];
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS is 300000 (5 minutes)', () => {
+    expect(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS).toBe(300_000);
+  });
+
+  it('returns 300000 (DEFAULT-ON) when no env var or config is set — the liveness fix for issue #2379', () => {
+    const result = resolveStreamFirstResponseTimeoutMs();
+    expect(result).toBe(DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS);
+    expect(result).toBe(300_000);
+  });
+
+  it('returns 300000 (DEFAULT-ON) when config has no getEphemeralSetting', () => {
+    const result = resolveStreamFirstResponseTimeoutMs({});
+    expect(result).toBe(300_000);
+  });
+
+  it('env var LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS overrides default', () => {
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '60000';
+    const result = resolveStreamFirstResponseTimeoutMs();
+    expect(result).toBe(60_000);
+  });
+
+  it('env var overrides config setting', () => {
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '120000';
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return 90_000;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(120_000); // env wins over the CORRECT config key
+  });
+
+  it('hyphenated ephemeral setting is used when no env var', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return 180_000;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(180_000);
+  });
+
+  it('camelCase ephemeral setting is used when no env var and no hyphenated', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY) {
+          return 150_000;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(150_000);
+  });
+
+  it('hyphenated takes priority over camelCase when both are present', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return 200_000;
+        }
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY) {
+          return 100_000;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(200_000); // hyphenated wins
+  });
+
+  it('env var takes priority over both ephemeral keys', () => {
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '450000';
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return 200_000;
+        }
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY) {
+          return 100_000;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(450_000); // env wins
+  });
+
+  it('explicit 0 in env disables the watchdog (returns 0)', () => {
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '0';
+    const result = resolveStreamFirstResponseTimeoutMs();
+    expect(result).toBe(0);
+  });
+
+  it('explicit 0 in hyphenated ephemeral disables the watchdog (returns 0)', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return 0;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(0);
+  });
+
+  it('negative value is normalized to 0 (disabled)', () => {
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '-1';
+    const result = resolveStreamFirstResponseTimeoutMs();
+    expect(result).toBe(0);
+  });
+
+  it('invalid env var string falls through to default (300000)', () => {
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = 'not-a-number';
+    const result = resolveStreamFirstResponseTimeoutMs();
+    expect(result).toBe(300_000);
+  });
+
+  it('numeric NaN config value falls through to default (300000)', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return Number.NaN;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(300_000);
+  });
+
+  it('numeric Infinity config value falls through to default (300000)', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return Number.POSITIVE_INFINITY;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(300_000);
+  });
+
+  it('empty string env var falls through to default (not parsed as 0)', () => {
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '';
+    const result = resolveStreamFirstResponseTimeoutMs();
+    expect(result).toBe(300_000);
+  });
+
+  it('whitespace-only env var falls through to default', () => {
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '   ';
+    const result = resolveStreamFirstResponseTimeoutMs();
+    expect(result).toBe(300_000);
+  });
+
+  it('invalid hyphenated value falls through to camelCase', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return 'not-a-number';
+        }
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY) {
+          return 90_000;
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(90_000);
+  });
+
+  it('falls through to default when camelCase is invalid', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY) {
+          return 'not-a-number';
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(300_000);
+  });
+
+  it('string config value is parsed correctly', () => {
+    const mockConfig = {
+      getEphemeralSetting: (key: string) => {
+        if (key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY) {
+          return '45000';
+        }
+        return undefined;
+      },
+    };
+    const result = resolveStreamFirstResponseTimeoutMs(mockConfig);
+    expect(result).toBe(45_000);
+  });
+
+  it('is independent from resolveStreamIdleTimeoutMs — different keys, different defaults', () => {
+    // First-response: default-on (300000); idle: default-off (0)
+    expect(resolveStreamFirstResponseTimeoutMs()).toBe(300_000);
+    expect(resolveStreamIdleTimeoutMs()).toBe(0);
+
+    // Setting the first-response env does not affect idle resolution
+    process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV] = '42000';
+    expect(resolveStreamFirstResponseTimeoutMs()).toBe(42_000);
+    expect(resolveStreamIdleTimeoutMs()).toBe(0);
+
+    // Setting the idle env does not affect first-response resolution
+    delete process.env[LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV];
+    process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '77000';
+    expect(resolveStreamFirstResponseTimeoutMs()).toBe(300_000);
+    expect(resolveStreamIdleTimeoutMs()).toBe(77_000);
   });
 });

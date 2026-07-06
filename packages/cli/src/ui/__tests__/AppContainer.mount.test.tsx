@@ -12,7 +12,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type React from 'react';
 
 // Mock heavy dependencies first before importing component
 vi.mock('../../hooks/agentStream/index.js', () => ({
@@ -396,7 +395,6 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 
 // Type for the mock config
 interface MockConfig {
@@ -479,37 +477,38 @@ describe('AppContainer.mount', () => {
     vi.restoreAllMocks();
   });
 
-  /** Builds the common props object shared by all mount test cases. */
-  function buildProps(
-    overrides: Partial<React.ComponentProps<typeof AppContainer>> = {},
-  ): React.ComponentProps<typeof AppContainer> {
-    return {
-      config: mockConfig as unknown as Config,
-      agent: createMockAgent(mockConfig as unknown as Config),
-      interactiveToolScheduler: createInteractiveToolScheduler(
-        mockConfig as unknown as Config,
-        undefined,
-      ),
-      settings: mockSettings,
-      version: '1.0.0-test',
-      appState: initialAppState,
-      appDispatch: vi.fn(),
-      ...overrides,
-    };
-  }
-
   describe('component mounting', () => {
     it('should mount without throwing errors', () => {
+      // Arrange: All dependencies mocked
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
+
       // Act & Assert: Should not throw when rendering
       expect(() => {
-        renderWithProviders(<AppContainer {...buildProps()} />);
+        renderWithProviders(<AppContainer {...props} />);
       }).not.toThrow();
     });
 
     it('should render with provider contexts active', () => {
+      // Arrange
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
+
       // Act
       const { lastFrame, unmount } = renderWithProviders(
-        <AppContainer {...buildProps()} />,
+        <AppContainer {...props} />,
       );
 
       // Assert: Component renders output (indicating UIStateProvider and UIActionsProvider are active)
@@ -519,10 +518,18 @@ describe('AppContainer.mount', () => {
     });
 
     it('should render DefaultAppLayout', () => {
+      // Arrange
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
+
       // Act
-      const { lastFrame } = renderWithProviders(
-        <AppContainer {...buildProps()} />,
-      );
+      const { lastFrame } = renderWithProviders(<AppContainer {...props} />);
 
       // Assert: DefaultAppLayout renders content (e.g., footer with target dir)
       // The footer should show the working directory from config
@@ -537,12 +544,19 @@ describe('AppContainer.mount', () => {
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
         { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there!' }] },
       ];
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        resumedHistory,
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       // Act & Assert: Should not throw when rendering with resumed history
       expect(() => {
-        renderWithProviders(
-          <AppContainer {...buildProps({ resumedHistory })} />,
-        );
+        renderWithProviders(<AppContainer {...props} />);
       }).not.toThrow();
     });
   });
@@ -551,22 +565,37 @@ describe('AppContainer.mount', () => {
     it('should mount with startupWarnings without errors', () => {
       // Arrange
       const startupWarnings = ['Warning 1', 'Warning 2'];
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        startupWarnings,
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       // Act & Assert: Should not throw when rendering with startup warnings
       expect(() => {
-        renderWithProviders(
-          <AppContainer {...buildProps({ startupWarnings })} />,
-        );
+        renderWithProviders(<AppContainer {...props} />);
       }).not.toThrow();
     });
   });
 
   describe('unmount behavior', () => {
     it('should unmount without errors', () => {
+      // Arrange
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
+
       // Act
-      const { unmount } = renderWithProviders(
-        <AppContainer {...buildProps()} />,
-      );
+      const { unmount } = renderWithProviders(<AppContainer {...props} />);
 
       // Assert: Should not throw when unmounting
       expect(() => {

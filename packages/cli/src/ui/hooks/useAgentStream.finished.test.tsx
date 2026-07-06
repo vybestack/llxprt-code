@@ -11,13 +11,13 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
@@ -231,12 +231,10 @@ describe('useAgentStream', () => {
 
     return renderHook(() =>
       useAgentStream(
-        new MockedAgentClientClass(mockConfig),
-        () => undefined,
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,
-        createInteractiveToolScheduler(mockConfig, undefined),
         mockLoadedSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
@@ -272,12 +270,10 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          new MockedAgentClientClass(mockConfig),
-          () => undefined,
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -451,12 +447,10 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          new MockedAgentClientClass(mockConfig),
-          () => undefined,
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -631,15 +625,13 @@ describe('useAgentStream', () => {
 
     const { result } = renderHook(() =>
       useAgentStream(
-        new MockedAgentClientClass(mockConfig),
-        () => undefined,
+        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
         [],
         mockAddItem,
         mockConfig,
-        createInteractiveToolScheduler(mockConfig, undefined),
         mockLoadedSettings,
-        vi.fn(),
-        vi.fn(),
+        mockOnDebugMessage,
+        mockHandleSlashCommand,
         false,
         () => 'vscode' as EditorType,
         vi.fn(),

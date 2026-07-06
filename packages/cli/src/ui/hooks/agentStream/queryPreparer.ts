@@ -19,15 +19,18 @@ import {
   MessageSenderType,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
-import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import { type SlashCommandProcessorResult } from '../../types.js';
 import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { processSlashCommandResult } from './streamUtils.js';
 import { handleAtCommand } from '../atCommandProcessor.js';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 
 export interface PrepareQueryDeps {
   config: Config;
+  // Resolves a named tool (read_many_files/glob) via the public Agent API for
+  // @file processing, replacing direct config.getToolRegistry().getTool access
+  // (#2376).
   getToolHandle: (name: string) => AgentToolHandle | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;

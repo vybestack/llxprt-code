@@ -61,6 +61,7 @@ import {
   type ShellExecutionResult,
   type ShellOutputEvent,
 } from '@vybestack/llxprt-code-core';
+import { createFakeAgentFromMockClient } from './useAgentStream-test-helpers.js';
 import * as fs from 'fs';
 // import os from 'os'; // Not needed - mocked above
 // import * as path from 'path';
@@ -150,7 +151,9 @@ describe('useShellCommandProcessor', () => {
         onExecMock,
         onDebugMessageMock,
         mockConfig,
-        mockAgentClient,
+        createFakeAgentFromMockClient(
+          mockAgentClient as unknown as Record<string, unknown>,
+        ),
         setShellInputFocusedMock,
         80,
         24,
@@ -425,7 +428,9 @@ describe('useShellCommandProcessor', () => {
           onExecMock,
           onDebugMessageMock,
           mockConfig,
-          mockAgentClient,
+          createFakeAgentFromMockClient(
+            mockAgentClient as unknown as Record<string, unknown>,
+          ),
           setShellInputFocusedMock,
           80,
           24,

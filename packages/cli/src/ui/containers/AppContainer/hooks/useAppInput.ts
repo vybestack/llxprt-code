@@ -26,7 +26,6 @@ import { isEditorAvailable } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../../../config/settings.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { IdeIntegrationNudgeResult } from '../../../IdeIntegrationNudge.js';
-import type { InteractiveToolScheduler } from '../../../../runtime/interactiveToolScheduler.js';
 import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
@@ -39,7 +38,6 @@ export interface AppInputParams {
   // From bootstrap
   config: AppBootstrapResult['config'];
   agent: AppBootstrapResult['agent'];
-  interactiveToolScheduler: InteractiveToolScheduler;
   settings: AppBootstrapResult['settings'];
   runtime: AppBootstrapResult['runtime'];
   history: AppBootstrapResult['history'];
@@ -313,8 +311,6 @@ function useInputStreamSetup(
 ) {
   const {
     config,
-    agent,
-    interactiveToolScheduler,
     settings,
     history,
     addItem,
@@ -331,25 +327,13 @@ function useInputStreamSetup(
     ...core,
     ...p,
   };
-  // Stable callback keyed on agent so downstream useMemo/useCallback chains in
-  // useStreamEventHandlers don't churn every render from a fresh arrow.
-  const getToolHandle = useCallback(
-    (name: string) => agent.tools.get(name),
-    [agent],
-  );
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
   const geminiResult = useAgentStream(
-    // Migration bridge (#1595): this config.getAgentClient() call is the last
-    // remaining direct Config consumer in the streaming path. A later subissue
-    // replaces it with the threaded Agent once the streaming hooks migrate to
-    // the public Agent API; the hooks are intentionally unchanged at this stage.
-    config.getAgentClient(),
-    getToolHandle,
+    p.agent,
     history,
     addItem,
     config,
-    interactiveToolScheduler,
     settings,
     setDebugMessage,
     handleSlashCommand,

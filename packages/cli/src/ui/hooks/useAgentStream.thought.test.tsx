@@ -12,13 +12,13 @@ import {
   mockSendMessageStream,
   mockStartChat,
   mockParseAndFormatApiError,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
   TrackedToolCall,
@@ -239,11 +239,9 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(mockConfig),
-          () => undefined,
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -322,12 +320,10 @@ describe('useAgentStream', () => {
 
       const { result, rerender } = renderHook(() =>
         useAgentStream(
-          mockConfig.getAgentClient(),
-          () => undefined,
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -410,12 +406,10 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          mockConfig.getAgentClient(),
-          () => undefined,
+          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -463,11 +457,9 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(mockConfig),
-          () => undefined,
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -522,11 +514,9 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(mockConfig),
-          () => undefined,
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,

@@ -11,7 +11,7 @@
  * when the active profile differed from lastProfileNameRef. This created
  * duplicate notifications alongside the ModelInfo event path.
  *
- * ModelInfo (streamEventDispatcher.handleModelInfoEvent) is now the single
+ * ModelInfo (agentEventDispatcher.handleModelInfoEvent) is now the single
  * inline notification owner. useDisplayUserMessage must only add the USER
  * message and track lastProfileNameRef — it must NOT add profile_change items.
  */

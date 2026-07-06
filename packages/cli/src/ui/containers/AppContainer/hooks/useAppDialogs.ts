@@ -46,7 +46,7 @@ const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
 export interface AppDialogsParams {
   config: Config;
-  agent: Agent;
+  agent: Agent | null;
   settings: LoadedSettings;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;

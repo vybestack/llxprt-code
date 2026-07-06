@@ -26,6 +26,7 @@ import { rebuildLoop, createLoopHolder } from '../../loop/rebuildLoop.js';
 import type { LoopHolder, RebuildLoopDeps } from '../../loop/rebuildLoop.js';
 import type { AgenticLoop } from '../../../core/agenticLoop/AgenticLoop.js';
 import type { AgenticLoopOptions } from '../../../core/agenticLoop/types.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 export { createLoopHolder };
 export type { LoopHolder };
@@ -57,7 +58,9 @@ export function createRebuildLoopProbe(): RebuildLoopProbe {
   let client: AgenticLoopOptions['agentClient'] =
     {} as AgenticLoopOptions['agentClient'];
 
-  const config = {} as RebuildLoopDeps['config'];
+  const config = {
+    isInteractive: () => false,
+  } as unknown as RebuildLoopDeps['config'];
   const messageBus = {} as RebuildLoopDeps['messageBus'];
 
   class FakeAgenticLoop {
@@ -87,4 +90,9 @@ export function createRebuildLoopProbe(): RebuildLoopProbe {
 /** A distinct, identity-comparable fake client value. */
 export function makeClient(tag: string): AgenticLoopOptions['agentClient'] {
   return { __tag: tag } as unknown as AgenticLoopOptions['agentClient'];
+}
+
+/** Builds a minimal config fixture whose isInteractive() returns the given flag. */
+export function createInteractiveConfig(interactive: boolean): Config {
+  return { isInteractive: () => interactive } as unknown as Config;
 }

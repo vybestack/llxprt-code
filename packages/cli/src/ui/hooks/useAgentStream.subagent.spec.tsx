@@ -15,12 +15,12 @@ import type {
   TrackedToolCall,
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import type {
   Config,
   AgentClientContract as AgentClient,
   EditorType,
   AnyToolInvocation,
+  ToolRegistry,
   AnyDeclarativeTool,
 } from '@vybestack/llxprt-code-core';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
@@ -199,6 +199,10 @@ describe('useAgentStream subagent isolation', () => {
       vertexai: false,
       showMemoryUsage: false,
       contextFileName: undefined,
+      getToolRegistry: vi.fn(
+        () =>
+          ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
+      ),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       getCheckpointingEnabled: vi.fn(() => false),
       getAgentClient: mockGetAgentClient,
@@ -274,11 +278,9 @@ describe('useAgentStream subagent isolation', () => {
     renderHook(() =>
       useAgentStream(
         client,
-        () => undefined,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
-        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -386,11 +388,9 @@ describe('useAgentStream subagent isolation', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         client,
-        () => undefined,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
-        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -457,11 +457,9 @@ describe('useAgentStream subagent isolation', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         client,
-        () => undefined,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
-        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -511,11 +509,9 @@ describe('useAgentStream subagent isolation', () => {
     renderHook(() =>
       useAgentStream(
         client,
-        () => undefined,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
         mockConfig,
-        createInteractiveToolScheduler(mockConfig, undefined),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (

@@ -114,6 +114,10 @@ function assembleDeps(
     // resolveClient may yield undefined (T9c null-guard case); AgentDeps types it non-optional,
     // so cast the variance at this single injected seam (runtime null-guard is the behavior under test).
     resolveClient: resolveClient as AgentDeps['resolveClient'],
+    // getCurrentSequenceModel never touches these holders; minimal stand-ins.
+    displayCallbacks: {},
+    editorCallbacksHolder: { editorCallbacks: {} },
+    displayCallbacksHolder: {},
   };
 }
 

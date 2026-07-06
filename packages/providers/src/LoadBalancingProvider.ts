@@ -415,6 +415,24 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   /**
+   * Report the effective model for the currently selected sub-profile so the
+   * agent/UI layer never falls back to a top-level default (e.g. Gemini) for a
+   * load-balancer profile. Before any selection, falls back to the first
+   * sub-profile model.
+   */
+  getCurrentModel(): string {
+    if (this.lastSelected !== null) {
+      const selected = this.config.subProfiles.find(
+        (candidate) => candidate.name === this.lastSelected,
+      );
+      if (selected !== undefined) {
+        return resolveSubProfileModel(selected);
+      }
+    }
+    return this.getDefaultModel();
+  }
+
+  /**
    * Get server tools (stub for Phase 1)
    * Will be implemented in later phases to aggregate tools from delegate providers
    */

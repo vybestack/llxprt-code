@@ -56,7 +56,7 @@ export function getEditorDisplayName(editor: EditorType): string {
   return EDITOR_DISPLAY_NAMES[editor] || editor;
 }
 
-function isValidEditorType(editor: string): editor is EditorType {
+export function isValidEditorType(editor: string): editor is EditorType {
   return EDITORS_SET.has(editor);
 }
 

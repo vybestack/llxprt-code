@@ -41,6 +41,7 @@ import type { Agent } from './agent.js';
 import { AgentConfigSchema } from './config-schema.js';
 import { toConfigParameters } from './agentConfig.adapter.js';
 import { AgenticLoop } from '../core/agenticLoop/AgenticLoop.js';
+import type { DisplayCallbacks } from '../core/agenticLoop/types.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import {
   wrapRegistryWithConfirmation,
@@ -59,7 +60,9 @@ import {
   buildAgentClientFactory,
   wrapSchedulerFactory,
   wrapApprovalHandler,
-  deriveDisplayCallbacks,
+  createStableDisplayCallbacks,
+  type StableDisplayCallbacksHolder,
+  type StableEditorCallbacksHolder,
   recordOwnership,
   AgentBootstrapError,
 } from './agentBootstrap.js';
@@ -218,6 +221,32 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
 }
 
 /**
+ * Builds the shared holders + ONE stable forwarding DisplayCallbacks object.
+ * The stable object reads live from the holders so post-construction
+ * setDisplayCallbacks/setEditorCallbacks are observable by the CURRENT loop.
+ */
+function buildStableDisplayCallbacks(
+  editorCallbacks: EditorCallbacks | undefined,
+): {
+  readonly editorCallbacksHolder: StableEditorCallbacksHolder;
+  readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
+  readonly displayCallbacks: DisplayCallbacks;
+} {
+  const editorCallbacksHolder: StableEditorCallbacksHolder = {
+    editorCallbacks: editorCallbacks ?? {},
+  };
+  const displayCallbacksHolder: StableDisplayCallbacksHolder = {};
+  return {
+    editorCallbacksHolder,
+    displayCallbacksHolder,
+    displayCallbacks: createStableDisplayCallbacks(
+      editorCallbacksHolder,
+      displayCallbacksHolder,
+    ),
+  };
+}
+
+/**
  * Finalizes the agent after the runtime context is active and authenticated.
  * Builds the runtime state, binds the post-auth client, constructs the initial
  * loop, records ownership, builds the facade, and fires the SessionStart hook.
@@ -280,14 +309,15 @@ export async function finalizeAgent(
   const resolveClient = () => config.getAgentClient();
   const approvalHandler =
     onApproval !== undefined ? wrapApprovalHandler(onApproval) : undefined;
-  const displayCallbacks = deriveDisplayCallbacks(editorCallbacks);
+  const { editorCallbacksHolder, displayCallbacksHolder, displayCallbacks } =
+    buildStableDisplayCallbacks(editorCallbacks);
   rebuildLoop({
     loopHolder,
     resolveClient,
     config,
     messageBus,
     ...(approvalHandler !== undefined ? { approvalHandler } : {}),
-    ...(displayCallbacks !== undefined ? { displayCallbacks } : {}),
+    displayCallbacks,
     AgenticLoopCtor: AgenticLoop,
   });
 
@@ -306,6 +336,8 @@ export async function finalizeAgent(
     initialHistoryService,
     approvalHandler,
     displayCallbacks,
+    editorCallbacksHolder,
+    displayCallbacksHolder,
     onOAuthPrompt,
     editorCallbacks,
     initialAuth: parsed.auth,
@@ -333,7 +365,9 @@ interface AssembleFacadeDeps {
   readonly resolveClient: () => ReturnType<Config['getAgentClient']>;
   readonly initialHistoryService: HistoryService;
   readonly approvalHandler: ReturnType<typeof wrapApprovalHandler> | undefined;
-  readonly displayCallbacks: ReturnType<typeof deriveDisplayCallbacks>;
+  readonly displayCallbacks: DisplayCallbacks;
+  readonly editorCallbacksHolder: StableEditorCallbacksHolder;
+  readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
   readonly onOAuthPrompt: unknown;
   readonly editorCallbacks: EditorCallbacks | undefined;
   readonly initialAuth: AgentAuth | undefined;
@@ -383,9 +417,9 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
     ...(deps.approvalHandler !== undefined
       ? { approvalHandler: deps.approvalHandler }
       : {}),
-    ...(deps.displayCallbacks !== undefined
-      ? { displayCallbacks: deps.displayCallbacks }
-      : {}),
+    displayCallbacks: deps.displayCallbacks,
+    editorCallbacksHolder: deps.editorCallbacksHolder,
+    displayCallbacksHolder: deps.displayCallbacksHolder,
     onOAuthPrompt: deps.onOAuthPrompt,
     editorCallbacks: deps.editorCallbacks,
     ...(deps.initialAuth !== undefined

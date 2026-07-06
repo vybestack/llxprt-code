@@ -41,7 +41,6 @@ import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type { InteractiveToolScheduler } from '../../../../runtime/interactiveToolScheduler.js';
 import type { HistoryItem } from '../../../types.js';
 import type { TodoContinuationHook } from './useTodoContinuationFlow.js';
 
@@ -52,11 +51,6 @@ export interface AppBootstrapProps {
    * `config` remains a temporary migration bridge (see #1595).
    */
   agent: Agent;
-  /**
-   * The interactive tool-scheduler capability, constructed at the composition
-   * root and injected so UI code never imports the scheduler factory.
-   */
-  interactiveToolScheduler: InteractiveToolScheduler;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -77,11 +71,6 @@ export interface AppBootstrapResult {
    * (see #1595). Streaming hooks are intentionally unchanged at this stage.
    */
   agent: Agent;
-  /**
-   * The interactive tool-scheduler capability, threaded from the composition
-   * root to the streaming hooks so UI code never constructs the scheduler.
-   */
-  interactiveToolScheduler: InteractiveToolScheduler;
   settings: LoadedSettings;
   runtime: ReturnType<typeof useRuntimeApi>;
   isFocused: boolean;
@@ -291,7 +280,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   return {
     config: props.config,
     agent: props.agent,
-    interactiveToolScheduler: props.interactiveToolScheduler,
     settings: props.settings,
     runtimeMessageBus: props.runtimeMessageBus,
     startupWarnings: props.startupWarnings ?? [],

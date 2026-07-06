@@ -10,7 +10,6 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from './config/settings.js';
-import { createInteractiveToolScheduler } from './runtime/interactiveToolScheduler.js';
 
 // Mock writeToStdout for exit-handler tests
 const { mockWriteToStdout } = vi.hoisted(() => ({
@@ -148,7 +147,6 @@ describe('startInteractiveUI', () => {
     await startInteractiveUI(
       mockConfig,
       mockAgent,
-      createInteractiveToolScheduler(mockConfig, undefined),
       mockSettings,
       mockStartupWarnings,
       mockWorkspaceRoot,
@@ -177,7 +175,6 @@ describe('startInteractiveUI', () => {
     await startInteractiveUI(
       mockConfig,
       mockAgent,
-      createInteractiveToolScheduler(mockConfig, undefined),
       mockSettings,
       mockStartupWarnings,
       mockWorkspaceRoot,
@@ -232,7 +229,6 @@ describe('startInteractiveUI', () => {
       await startInteractiveUI(
         mouseEnabledConfig,
         mockAgent,
-        createInteractiveToolScheduler(mouseEnabledConfig, undefined),
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,
@@ -280,7 +276,6 @@ describe('startInteractiveUI', () => {
       startInteractiveUI(
         mouseEnabledConfig,
         mockAgent,
-        createInteractiveToolScheduler(mouseEnabledConfig, undefined),
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,
@@ -341,7 +336,6 @@ describe('startInteractiveUI', () => {
       await startInteractiveUI(
         mouseEnabledConfig,
         mockAgent,
-        createInteractiveToolScheduler(mouseEnabledConfig, undefined),
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,

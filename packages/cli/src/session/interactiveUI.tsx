@@ -28,7 +28,6 @@ import { registerCleanup, registerSyncCleanup } from '../utils/cleanup.js';
 import { appendInteractiveUiDebug } from './debugLog.js';
 import { mouseEventsExitHandler } from './terminalCleanup.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { InteractiveToolScheduler } from '../runtime/interactiveToolScheduler.js';
 
 /**
  * Module-level reference to the latest rendered Ink instance.
@@ -132,7 +131,6 @@ export async function startInteractiveUI(
   // remaining UI Config consumers are migrated (see #1595).
   config: Config,
   agent: Agent,
-  interactiveToolScheduler: InteractiveToolScheduler,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
@@ -188,7 +186,6 @@ export async function startInteractiveUI(
             <AppWrapper
               config={config}
               agent={agent}
-              interactiveToolScheduler={interactiveToolScheduler}
               settings={settings}
               runtimeMessageBus={runtimeMessageBus}
               startupWarnings={startupWarnings}

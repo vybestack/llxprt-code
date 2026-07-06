@@ -12,13 +12,13 @@ import {
   mockSendMessageStream,
   mockStartChat,
   mockParseAndFormatApiError,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
   TrackedToolCall,
@@ -215,7 +215,9 @@ describe('useAgentStream', () => {
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: unknown,
   ) => {
-    const client = agentClient ?? mockConfig.getAgentClient();
+    const client = createFakeAgentFromMockClient(
+      agentClient ?? new MockedAgentClientClass(mockConfig),
+    );
 
     const initialProps = {
       client,
@@ -275,11 +277,9 @@ describe('useAgentStream', () => {
 
         return useAgentStream(
           props.client,
-          () => undefined,
           props.history,
           props.addItem,
           props.config,
-          createInteractiveToolScheduler(props.config, undefined),
           props.loadedSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -460,11 +460,9 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(mockConfig),
-          () => undefined,
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           () => {},
           mockHandleSlashCommand,
@@ -546,11 +544,9 @@ describe('useAgentStream', () => {
       renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(mockConfig),
-          () => undefined,
           [],
           mockAddItem,
           mockConfig,
-          createInteractiveToolScheduler(mockConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -605,11 +601,9 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           new MockedAgentClientClass(testConfig),
-          () => undefined,
           [],
           mockAddItem,
           testConfig,
-          createInteractiveToolScheduler(testConfig, undefined),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,

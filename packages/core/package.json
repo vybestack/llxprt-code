@@ -150,6 +150,10 @@
       "bun": "./src/services/history/IContent.ts",
       "import": "./dist/src/services/history/IContent.js"
     },
+    "./llm-types/index.js": {
+      "bun": "./src/llm-types/index.ts",
+      "import": "./dist/src/llm-types/index.js"
+    },
     "./services/history/historyProviderPipeline.js": {
       "bun": "./src/services/history/historyProviderPipeline.ts",
       "import": "./dist/src/services/history/historyProviderPipeline.js"

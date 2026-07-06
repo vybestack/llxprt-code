@@ -22,7 +22,6 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { Command } from '../keyMatchers.js';
 import { defaultKeyBindings } from '../../config/keyBindings.js';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 
 // Mock config type
 interface MockConfig {
@@ -511,10 +510,6 @@ describe('AppContainer.keybindings', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
-        interactiveToolScheduler: createInteractiveToolScheduler(
-          mockConfig as unknown as Config,
-          undefined,
-        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -533,10 +528,6 @@ describe('AppContainer.keybindings', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
-        interactiveToolScheduler: createInteractiveToolScheduler(
-          mockConfig as unknown as Config,
-          undefined,
-        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -560,10 +551,6 @@ describe('AppContainer.keybindings', () => {
       const props = {
         config: mockConfig as unknown as Config,
         agent: createMockAgent(mockConfig as unknown as Config),
-        interactiveToolScheduler: createInteractiveToolScheduler(
-          mockConfig as unknown as Config,
-          undefined,
-        ),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

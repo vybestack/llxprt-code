@@ -4,40 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
-import { parseZedAuthMethodId } from './zedIntegration.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+  createSessionScopedConfig,
+  parseZedAuthMethodId,
+} from './zedIntegration.js';
+import type { Config } from '@vybestack/llxprt-code-core';
 
-/**
- * Shared partial-Agent mock factory. The Session/ZedAgent constructors store
- * `agent.tools` (passed to ZedPathResolver/ZedToolHandler) and call
- * `agent.dispose()`, so the stub provides both. Callers pass `extra` for
- * suite-specific fields (e.g. `getProvider`) without duplicating the factory.
- */
-function createMockAgent(extra: Record<string, unknown> = {}): {
-  agent: Agent;
-  dispose: ReturnType<typeof vi.fn>;
-} {
-  const dispose = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
-  const agent = {
-    dispose,
-    tools: { get: vi.fn() },
-    ...extra,
-  } as unknown as Agent;
-  return { agent, dispose };
-}
-
-// Mock runtimeSettings to test credential cache clearing logic
+const mockFromConfig = vi.hoisted(() => vi.fn());
 const mockGetActiveProfileName = vi.fn<() => string | null>();
 const mockLoadProfileByName = vi.fn<(name: string) => Promise<void>>();
+
+vi.mock('@vybestack/llxprt-code-agents', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+  };
+});
+
 vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerAgentRuntimeFactories: vi.fn(),
   resetAgentRuntimeFactories: vi.fn(),
@@ -47,6 +32,7 @@ vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
     mockGetActiveProfileName(...(args as [])),
   loadProfileByName: (...args: unknown[]) =>
     mockLoadProfileByName(...(args as [string])),
+  setCliRuntimeContext: vi.fn(),
 }));
 
 const mockClearCachedCredentialFile = vi.fn<() => Promise<void>>();
@@ -78,8 +64,162 @@ describe('zedIntegration auth method validation', () => {
   });
 });
 
+describe('createSessionScopedConfig', () => {
+  it('keeps session-scoped services isolated without mutating the base config', async () => {
+    const baseFileSystemService = {
+      readTextFile: vi.fn(async (_path: string) => 'base'),
+      writeTextFile: vi.fn(async () => undefined),
+    };
+    const firstFileSystemService = {
+      readTextFile: vi.fn(async (_path: string) => 'first'),
+      writeTextFile: vi.fn(async () => undefined),
+    };
+    const secondFileSystemService = {
+      readTextFile: vi.fn(async (_path: string) => 'second'),
+      writeTextFile: vi.fn(async () => undefined),
+    };
+    const replacementFileSystemService = {
+      readTextFile: vi.fn(async (_path: string) => 'replacement'),
+      writeTextFile: vi.fn(async () => undefined),
+    };
+    const baseProviderManager = { id: 'base' };
+    const firstProviderManager = { id: 'first' };
+    const secondProviderManager = { id: 'second' };
+    const baseConfig = {
+      getFileSystemService: () => baseFileSystemService,
+      setFileSystemService: vi.fn(),
+      getProviderManager: () => baseProviderManager,
+      setProviderManager: vi.fn(),
+      getTargetDir: () => '/project',
+    };
+
+    const firstConfig = createSessionScopedConfig(
+      baseConfig as unknown as Config,
+      firstFileSystemService,
+    );
+    const secondConfig = createSessionScopedConfig(
+      baseConfig as unknown as Config,
+      secondFileSystemService,
+    );
+
+    expect(await firstConfig.getFileSystemService().readTextFile('/x')).toBe(
+      'first',
+    );
+    expect(await secondConfig.getFileSystemService().readTextFile('/x')).toBe(
+      'second',
+    );
+    expect(await baseConfig.getFileSystemService().readTextFile('/x')).toBe(
+      'base',
+    );
+    expect(firstConfig.getProviderManager()).toBe(baseProviderManager);
+    expect(secondConfig.getProviderManager()).toBe(baseProviderManager);
+
+    firstConfig.setFileSystemService(replacementFileSystemService);
+    firstConfig.setProviderManager(firstProviderManager as never);
+    secondConfig.setProviderManager(secondProviderManager as never);
+
+    expect(await firstConfig.getFileSystemService().readTextFile('/x')).toBe(
+      'replacement',
+    );
+    expect(await secondConfig.getFileSystemService().readTextFile('/x')).toBe(
+      'second',
+    );
+    expect(firstConfig.getProviderManager()).toBe(firstProviderManager);
+    expect(secondConfig.getProviderManager()).toBe(secondProviderManager);
+    expect(baseConfig.getProviderManager()).toBe(baseProviderManager);
+    expect(baseConfig.setFileSystemService).not.toHaveBeenCalled();
+    expect(baseConfig.setProviderManager).not.toHaveBeenCalled();
+  });
+});
+
+describe('ZedAgent.newSession', () => {
+  it('creates independent Agent sessions with session-scoped configs', async () => {
+    const capturedConfigs: Config[] = [];
+    const capturedOptions: Array<{ config: Config; sessionId?: string }> = [];
+    mockFromConfig.mockImplementation(
+      async (options: { config: Config; sessionId?: string }) => {
+        capturedOptions.push(options);
+        capturedConfigs.push(options.config);
+        return {
+          getApprovalMode: () => 'default',
+          setApprovalMode: vi.fn(),
+          dispose: vi.fn().mockResolvedValue(undefined),
+          async *stream() {},
+          tools: { respondToConfirmation: vi.fn() },
+        };
+      },
+    );
+    const baseProviderManager = { id: 'base' };
+    const firstProviderManager = { id: 'first' };
+    const secondProviderManager = { id: 'second' };
+    const baseConfig = {
+      getFileSystemService: () => ({
+        readTextFile: vi.fn(async () => 'base'),
+        writeTextFile: vi.fn(async () => undefined),
+      }),
+      getProviderManager: () => baseProviderManager,
+      setProviderManager: vi.fn(),
+      getProfileManager: () => undefined,
+      getEphemeralSetting: () => undefined,
+      getTargetDir: () => '/project',
+    } as unknown as Config;
+    const connection = {
+      readTextFile: vi.fn(async (_params: { sessionId: string }) => ({
+        content: 'client',
+      })),
+      writeTextFile: vi.fn(async () => undefined),
+    };
+    const mod = await import('./zedIntegration.js');
+    const zedAgent = new mod.ZedAgent(
+      baseConfig,
+      { debug: () => {} } as never,
+      connection as never,
+    );
+
+    await zedAgent.initialize({
+      protocolVersion: '1',
+      clientCapabilities: {
+        fs: { readTextFile: true, writeTextFile: true },
+      },
+    } as never);
+    const firstSession = await zedAgent.newSession({
+      cwd: '/project/first',
+    } as never);
+    const secondSession = await zedAgent.newSession({
+      cwd: '/project/second',
+    } as never);
+    expect(capturedOptions).toHaveLength(2);
+    expect(capturedOptions[0].sessionId).toBe(firstSession.sessionId);
+    expect(capturedOptions[1].sessionId).toBe(secondSession.sessionId);
+    expect(capturedOptions[0].sessionId).not.toBe(capturedOptions[1].sessionId);
+    expect(capturedConfigs[0].getProviderManager()).toBe(baseProviderManager);
+    expect(capturedConfigs[1].getProviderManager()).toBe(baseProviderManager);
+    capturedConfigs[0].setProviderManager(firstProviderManager as never);
+    capturedConfigs[1].setProviderManager(secondProviderManager as never);
+
+    expect(capturedConfigs).toHaveLength(2);
+    expect(capturedConfigs[0]).not.toBe(capturedConfigs[1]);
+    expect(capturedConfigs[0].getTargetDir()).toBe('/project/first');
+    expect(capturedConfigs[1].getTargetDir()).toBe('/project/second');
+    expect(capturedConfigs[0].getProviderManager()).toBe(firstProviderManager);
+    expect(capturedConfigs[1].getProviderManager()).toBe(secondProviderManager);
+    expect(baseConfig.getProviderManager()).toBe(baseProviderManager);
+    expect(baseConfig.setProviderManager).not.toHaveBeenCalled();
+    expect(
+      await capturedConfigs[0].getFileSystemService().readTextFile('/x'),
+    ).toBe('client');
+    expect(
+      await capturedConfigs[1].getFileSystemService().readTextFile('/x'),
+    ).toBe('client');
+    const firstRead = connection.readTextFile.mock.calls[0];
+    const secondRead = connection.readTextFile.mock.calls[1];
+    expect(firstRead).toBeDefined();
+    expect(secondRead).toBeDefined();
+    expect(firstRead[0].sessionId).not.toBe(secondRead[0].sessionId);
+  });
+});
+
 describe('ZedAgent.authenticate credential cache', () => {
-  // Import dynamically after mocks are set up
   let ZedAgent: typeof import('./zedIntegration.js').ZedAgent;
 
   beforeAll(async () => {
@@ -99,16 +239,11 @@ describe('ZedAgent.authenticate credential cache', () => {
       }),
       getEphemeralSetting: () => undefined,
     };
-    const agent = new ZedAgent(
+    return new ZedAgent(
       mockConfig as never,
       { debug: () => {} } as never,
       undefined as never,
     );
-    // Stub applyRuntimeProviderOverrides to avoid config dependencies
-    vi.spyOn(agent as never, 'applyRuntimeProviderOverrides').mockResolvedValue(
-      undefined,
-    );
-    return agent;
   }
 
   it('clears credential cache when switching to a different profile', async () => {
@@ -142,200 +277,5 @@ describe('ZedAgent.authenticate credential cache', () => {
 
     expect(mockClearCachedCredentialFile).toHaveBeenCalledOnce();
     expect(mockLoadProfileByName).toHaveBeenCalledWith('alpha');
-  });
-});
-
-describe('Session agent disposal', () => {
-  // Import dynamically after mocks are set up
-  let Session: typeof import('./zedIntegration.js').Session;
-
-  beforeAll(async () => {
-    const mod = await import('./zedIntegration.js');
-    Session = mod.Session;
-  });
-
-  // Safety net: every test disposes its session to unsubscribe, but if one
-  // throws before dispose() the real todoEvents listener would leak and skew
-  // the exact listenerCount arithmetic in the sibling test. Clear any strays.
-  afterEach(async () => {
-    const { todoEvents } = await import('@vybestack/llxprt-code-core');
-    todoEvents.removeAllListeners('todo-updated');
-  });
-
-  function createSession(agent: Agent): InstanceType<typeof Session> {
-    const mockConfig = {
-      getEphemeralSetting: () => undefined,
-      getFileSystemService: () => ({}),
-      getWorkspaceContext: () => ({
-        getDirectories: () => [],
-      }),
-      getDebugMode: () => false,
-    };
-    const mockChat = {};
-    return new Session(
-      'test-session-id',
-      mockChat as never,
-      mockConfig as never,
-      undefined as never,
-      agent,
-    );
-  }
-
-  it('disposes the agent on dispose()', async () => {
-    const { agent, dispose } = createMockAgent();
-    const session = createSession(agent);
-
-    await session.dispose();
-
-    expect(dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it('unsubscribes the todo-update listener on dispose()', async () => {
-    const { todoEvents } = await import('@vybestack/llxprt-code-core');
-    const { agent } = createMockAgent();
-    const before = todoEvents.listenerCount('todo-updated');
-    const session = createSession(agent);
-    expect(todoEvents.listenerCount('todo-updated')).toBe(before + 1);
-
-    await session.dispose();
-
-    expect(todoEvents.listenerCount('todo-updated')).toBe(before);
-  });
-
-  it('guards against double-dispose (calls agent.dispose exactly once)', async () => {
-    const { agent, dispose } = createMockAgent();
-    const session = createSession(agent);
-
-    await session.dispose();
-    await session.dispose();
-    await session.dispose();
-
-    expect(dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it('disposes all sessions via ZedAgent.disposeAllSessions', async () => {
-    const ZedAgentMod = await import('./zedIntegration.js');
-    const { agent: agent1, dispose: dispose1 } = createMockAgent();
-    const { agent: agent2, dispose: dispose2 } = createMockAgent();
-
-    const mockConfig = {
-      getProfileManager: () => ({ listProfiles: async () => [] }),
-      getEphemeralSetting: () => undefined,
-      getFileSystemService: () => ({}),
-      getWorkspaceContext: () => ({ getDirectories: () => [] }),
-      getDebugMode: () => false,
-    };
-
-    const zedAgent = new ZedAgentMod.ZedAgent(
-      mockConfig as never,
-      { debug: () => {} } as never,
-      undefined as never,
-    );
-
-    const session1 = createSession(agent1);
-    const session2 = createSession(agent2);
-    // Access private sessions map via the same pattern the tests use
-    (zedAgent as never as { sessions: Map<string, unknown> }).sessions.set(
-      's1',
-      session1,
-    );
-    (zedAgent as never as { sessions: Map<string, unknown> }).sessions.set(
-      's2',
-      session2,
-    );
-
-    await zedAgent.disposeAllSessions();
-
-    expect(dispose1).toHaveBeenCalledTimes(1);
-    expect(dispose2).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('ZedAgent.createAndStoreSession leak guard (issue #2376)', () => {
-  let ZedAgentMod: typeof import('./zedIntegration.js');
-
-  beforeAll(async () => {
-    ZedAgentMod = await import('./zedIntegration.js');
-  });
-
-  function createZedAgent(): InstanceType<typeof ZedAgentMod.ZedAgent> {
-    const mockConfig = {
-      getProfileManager: () => ({ listProfiles: async () => [] }),
-      getEphemeralSetting: () => undefined,
-      getProvider: () => undefined,
-      getModel: () => undefined,
-    };
-    return new ZedAgentMod.ZedAgent(
-      mockConfig as never,
-      { debug: () => {} } as never,
-      undefined as never,
-    );
-  }
-
-  it('disposes the agent when Session construction fails', async () => {
-    const { agent, dispose } = createMockAgent({
-      getProvider: () => undefined,
-    });
-    const zedAgent = createZedAgent();
-
-    // Force Session construction to fail by passing a config whose
-    // getEphemeralSetting throws (the Session constructor reads it).
-    // getProvider/getModel are provided so restoreActiveProvider passes.
-    const throwingConfig = {
-      getEphemeralSetting: () => {
-        throw new Error('boom');
-      },
-      getProvider: () => undefined,
-      getModel: () => undefined,
-    };
-
-    await expect(
-      zedAgent.createAndStoreSession(
-        agent,
-        throwingConfig as never,
-        'fail-session',
-        {} as never,
-      ),
-    ).rejects.toThrow('boom');
-
-    // The agent must be disposed exactly once.
-    expect(dispose).toHaveBeenCalledTimes(1);
-
-    // The session must NOT be stored.
-    const sessions = (zedAgent as unknown as { sessions: Map<string, unknown> })
-      .sessions;
-    expect(sessions.has('fail-session')).toBe(false);
-  });
-
-  it('does not mask the original error if dispose also fails', async () => {
-    // This test needs a rejecting dispose, so it builds the agent inline
-    // rather than via createMockAgent; keep the tools stub for contract parity.
-    const dispose = vi
-      .fn<() => Promise<void>>()
-      .mockRejectedValue(new Error('dispose error'));
-    const agent = {
-      dispose,
-      tools: { get: vi.fn() },
-      getProvider: () => undefined,
-    } as unknown as Agent;
-    const zedAgent = createZedAgent();
-
-    const throwingConfig = {
-      getEphemeralSetting: () => {
-        throw new Error('original');
-      },
-      getProvider: () => undefined,
-      getModel: () => undefined,
-    };
-
-    // The original error must surface, not the dispose error.
-    await expect(
-      zedAgent.createAndStoreSession(
-        agent,
-        throwingConfig as never,
-        'fail-both',
-        {} as never,
-      ),
-    ).rejects.toThrow('original');
   });
 });

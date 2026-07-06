@@ -10,6 +10,7 @@
   "AgentCompressionEvent",
   "AgentConfig",
   "AgentContextWarningEvent",
+  "AgentDisplayCallbacks",
   "AgentDoneEvent",
   "AgentError",
   "AgentErrorCode",

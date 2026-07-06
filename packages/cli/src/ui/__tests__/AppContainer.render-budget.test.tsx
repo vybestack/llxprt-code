@@ -12,7 +12,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type React from 'react';
 import {
   renderWithProviders,
   createMockSettings,
@@ -21,7 +20,6 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 
 // Mock config type
 interface MockConfig {
@@ -457,30 +455,16 @@ describe('AppContainer.render-budget', () => {
     vi.restoreAllMocks();
   });
 
-  // Shared prop factory so future prop additions stay in one place (mirrors
-  // AppContainer.mount.test.tsx's buildProps). Each call builds a fresh agent,
-  // scheduler, and appDispatch to keep tests isolated.
-  function buildProps(
-    overrides: Partial<React.ComponentProps<typeof AppContainer>> = {},
-  ): React.ComponentProps<typeof AppContainer> {
-    return {
-      config: mockConfig as unknown as Config,
-      agent: createMockAgent(mockConfig as unknown as Config),
-      interactiveToolScheduler: createInteractiveToolScheduler(
-        mockConfig as unknown as Config,
-        undefined,
-      ),
-      settings: mockSettings,
-      version: '1.0.0-test',
-      appState: initialAppState,
-      appDispatch: vi.fn(),
-      ...overrides,
-    };
-  }
-
   describe('callback stability', () => {
     it('should maintain stable output across re-renders', () => {
-      const props = buildProps();
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       const { rerender, unmount, lastFrame } = renderWithProviders(
         <AppContainer {...props} />,
@@ -505,7 +489,14 @@ describe('AppContainer.render-budget', () => {
     });
 
     it('should not throw on rapid re-renders', () => {
-      const props = buildProps();
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       const { rerender, unmount } = renderWithProviders(
         <AppContainer {...props} />,
@@ -524,7 +515,14 @@ describe('AppContainer.render-budget', () => {
 
   describe('memoization', () => {
     it('should use useMemo for computed values', () => {
-      const props = buildProps();
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       const { unmount } = renderWithProviders(<AppContainer {...props} />);
 
@@ -537,7 +535,14 @@ describe('AppContainer.render-budget', () => {
     });
 
     it('should use useCallback for event handlers', () => {
-      const props = buildProps();
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       const { unmount } = renderWithProviders(<AppContainer {...props} />);
 
@@ -552,7 +557,14 @@ describe('AppContainer.render-budget', () => {
 
   describe('render performance', () => {
     it('should mount within reasonable time', async () => {
-      const props = buildProps();
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       const startTime = performance.now();
       const { unmount } = renderWithProviders(<AppContainer {...props} />);
@@ -565,7 +577,14 @@ describe('AppContainer.render-budget', () => {
     });
 
     it('should handle re-renders efficiently', async () => {
-      const props = buildProps();
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       const { rerender, unmount } = renderWithProviders(
         <AppContainer {...props} />,
@@ -589,7 +608,14 @@ describe('AppContainer.render-budget', () => {
 
   describe('cleanup smoke test', () => {
     it('should complete mount/unmount cycles without errors', () => {
-      const props = buildProps();
+      const props = {
+        config: mockConfig as unknown as Config,
+        agent: createMockAgent(mockConfig as unknown as Config),
+        settings: mockSettings,
+        version: '1.0.0-test',
+        appState: initialAppState,
+        appDispatch: vi.fn(),
+      };
 
       // Multiple mount/unmount cycles — no errors indicates proper cleanup
       for (let i = 0; i < 3; i++) {

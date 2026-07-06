@@ -84,6 +84,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     vi.useFakeTimers();
     process.env = { ...originalEnv };
     delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
+    delete process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS;
     mockChatInstance = {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
@@ -112,6 +113,12 @@ describe('Turn - stream idle timeout behavioral tests', () => {
         if (key === 'stream-idle-timeout-ms') {
           return customTimeoutMs;
         }
+        // Disable the first-response watchdog so this test isolates the
+        // inter-chunk idle watchdog (the first chunk arrives immediately,
+        // then an inter-chunk gap exceeds the timeout).
+        if (key === 'stream-first-response-timeout-ms') {
+          return 0;
+        }
         return undefined;
       },
     });
@@ -131,6 +138,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     mockGetHistory.mockReturnValue([]);
 
     const mockResponseStream = (async function* () {
+      yield {
+        type: StreamEventType.CHUNK,
+        value: {
+          candidates: [{ content: { parts: [{ text: 'First chunk' }] } }],
+        } as GenerateContentResponse,
+      };
+      // Inter-chunk gap that exceeds the 30s inter-chunk idle timeout.
       await vi.advanceTimersByTimeAsync(45_000);
       yield {
         type: StreamEventType.CHUNK,
@@ -154,7 +168,10 @@ describe('Turn - stream idle timeout behavioral tests', () => {
 
     await vi.advanceTimersByTimeAsync(29_999);
     await Promise.resolve();
-    expect(events).toHaveLength(0);
+    // First chunk arrived immediately (Content), but the inter-chunk idle
+    // timeout (30s gap before the second chunk) has not yet elapsed.
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe(AgentEventType.Content);
 
     await vi.advanceTimersByTimeAsync(2);
     await Promise.resolve();
@@ -221,6 +238,12 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     const mockGetConfig = vi.fn().mockReturnValue({
       getEphemeralSetting: (key: string) => {
         if (key === 'stream-idle-timeout-ms') {
+          return 0;
+        }
+        // Also disable the first-response watchdog so this test isolates the
+        // inter-chunk-disabled path (a stream whose first chunk is delayed
+        // must not time out when both watchdogs are disabled).
+        if (key === 'stream-first-response-timeout-ms') {
           return 0;
         }
         return undefined;
@@ -293,6 +316,12 @@ describe('Turn - stream idle timeout behavioral tests', () => {
         if (key === 'stream-idle-timeout-ms') {
           return configTimeoutMs;
         }
+        // Disable the first-response watchdog so this test isolates the
+        // inter-chunk idle env-var precedence (first chunk arrives fast,
+        // then an inter-chunk gap exceeds the env-driven inter-chunk timeout).
+        if (key === 'stream-first-response-timeout-ms') {
+          return 0;
+        }
         return undefined;
       },
     });
@@ -312,6 +341,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     mockGetHistory.mockReturnValue([]);
 
     const mockResponseStream = (async function* () {
+      yield {
+        type: StreamEventType.CHUNK,
+        value: {
+          candidates: [{ content: { parts: [{ text: 'First chunk' }] } }],
+        } as GenerateContentResponse,
+      };
+      // Inter-chunk gap exceeding the env-driven 15s inter-chunk timeout.
       await vi.advanceTimersByTimeAsync(30_000);
       yield {
         type: StreamEventType.CHUNK,
@@ -351,6 +387,13 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       getEphemeralSetting: (key: string) => {
         if (key === 'stream-idle-timeout-ms') {
           return undefined;
+        }
+        // Explicitly disable the first-response watchdog so this test isolates
+        // the inter-chunk default-off contract. (By default first-response is
+        // ON at 5 min; disabling it here lets the stream's delayed first chunk
+        // flow unbounded, which is what the inter-chunk default-off path tests.)
+        if (key === 'stream-first-response-timeout-ms') {
+          return 0;
         }
         return undefined;
       },

@@ -9,7 +9,6 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { clearCommand } from './clearCommand';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';
 // Mock the telemetry service
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
@@ -23,22 +22,8 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-  resetAgentRuntimeFactories: vi.fn(),
-  ephemeralSettingHelp: {},
-  parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-    success: true,
-    value: rawValue,
-  })),
-  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-  getCliRuntimeServices: vi.fn(),
-}));
-
-import type {
-  Config,
-  AgentClientContract as AgentClient,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { assertDefined } from '../../test-utils/assertions.js';
 import {
   uiTelemetryService,
@@ -57,27 +42,21 @@ describe('clearCommand', () => {
 
   beforeEach(() => {
     mockResetChat = vi.fn().mockResolvedValue(undefined);
-    const mockGetChatRecordingService = vi.fn();
     vi.clearAllMocks();
-    vi.mocked(getCliRuntimeServices).mockReset();
 
     mockContext = createMockCommandContext({
       services: {
         config: {
-          getAgentClient: () =>
-            ({
-              resetChat: mockResetChat,
-              getChat: () => ({
-                getChatRecordingService: mockGetChatRecordingService,
-              }),
-            }) as unknown as AgentClient,
           setSessionId: vi.fn(),
-        },
+        } as unknown as Config,
+        agent: {
+          resetChat: mockResetChat,
+        } as unknown as Agent,
       },
     });
   });
 
-  it('should set debug message, reset chat, reset telemetry, update history token count, and clear UI when config is available', async () => {
+  it('should set debug message, reset chat via agent, reset telemetry, update history token count, and clear UI when agent is available', async () => {
     await clearAction(mockContext, '');
 
     expect(mockContext.ui.setDebugMessage).toHaveBeenCalledWith(
@@ -111,58 +90,23 @@ describe('clearCommand', () => {
     expect(updateHistoryTokenCountOrder).toBeLessThan(clearOrder);
   });
 
-  it('should fallback to runtime services when command context lacks config', async () => {
-    const runtimeResetChat = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(getCliRuntimeServices).mockReturnValue({
-      config: {
-        getAgentClient: () =>
-          ({
-            resetChat: runtimeResetChat,
-          }) as unknown as AgentClient,
-      } as Config,
-      settingsService: {} as unknown,
-      providerManager: {} as unknown,
-    });
-
-    const nullConfigContext = createMockCommandContext({
+  it('should skip reset when no agent is available (terminal-only clear)', async () => {
+    const noAgentContext = createMockCommandContext({
       services: {
         config: null,
+        agent: null,
       },
     });
 
-    await clearAction(nullConfigContext, '');
+    await clearAction(noAgentContext, '');
 
-    expect(nullConfigContext.ui.setDebugMessage).toHaveBeenCalledWith(
-      'Clearing terminal and resetting chat.',
-    );
-    expect(runtimeResetChat).toHaveBeenCalledTimes(1);
-    expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(1);
-    expect(nullConfigContext.ui.updateHistoryTokenCount).toHaveBeenCalledWith(
-      0,
-    );
-    expect(nullConfigContext.ui.clear).toHaveBeenCalledTimes(1);
-  });
-
-  it('should skip reset when no config is available anywhere', async () => {
-    vi.mocked(getCliRuntimeServices).mockImplementation(() => {
-      throw new Error('runtime unavailable');
-    });
-
-    const nullConfigContext = createMockCommandContext({
-      services: {
-        config: null,
-      },
-    });
-
-    await clearAction(nullConfigContext, '');
-
-    expect(nullConfigContext.ui.setDebugMessage).toHaveBeenCalledWith(
+    expect(noAgentContext.ui.setDebugMessage).toHaveBeenCalledWith(
       'Clearing terminal.',
     );
     expect(mockResetChat).not.toHaveBeenCalled();
     expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(0);
     expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(1);
-    expect(nullConfigContext.ui.clear).toHaveBeenCalledTimes(1);
+    expect(noAgentContext.ui.clear).toHaveBeenCalledTimes(1);
   });
 
   /**
@@ -171,9 +115,7 @@ describe('clearCommand', () => {
    * @requirement REQ-R4-1 (SessionEnd before clear, SessionStart after clear)
    *
    * These tests verify that clearCommand triggers session lifecycle hooks
-   * in the correct order. These tests WILL FAIL in RED phase because
-   * clearCommand does not currently call triggerSessionEndHook or
-   * triggerSessionStartHook.
+   * in the correct order.
    */
 
   it('should trigger SessionEnd hook before resetChat when clearing', async () => {
@@ -235,5 +177,42 @@ describe('clearCommand', () => {
     // Assert: clear still completes
     expect(mockResetChat).toHaveBeenCalledTimes(1);
     expect(mockContext.ui.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not trigger hooks when agent is absent (terminal-only clear)', async () => {
+    const noAgentContext = createMockCommandContext({
+      services: {
+        config: null,
+        agent: null,
+      },
+    });
+
+    await clearAction(noAgentContext, '');
+
+    expect(triggerSessionEndHook).not.toHaveBeenCalled();
+    expect(triggerSessionStartHook).not.toHaveBeenCalled();
+  });
+
+  it('should proceed with resetChat but not call hooks when agent is present but config is null', async () => {
+    vi.clearAllMocks();
+
+    const nullConfigContext = createMockCommandContext({
+      services: {
+        config: null,
+        agent: {
+          resetChat: mockResetChat,
+        } as unknown as Agent,
+      },
+    });
+
+    await clearAction(nullConfigContext, '');
+
+    // agent.resetChat() still proceeds (the agent-branch path runs)
+    expect(mockResetChat).toHaveBeenCalledTimes(1);
+    expect(nullConfigContext.ui.clear).toHaveBeenCalledTimes(1);
+    // Hooks are NOT called — triggerSessionEndHookSafe/triggerSessionStartHookSafe
+    // early-return when config is null.
+    expect(triggerSessionEndHook).not.toHaveBeenCalled();
+    expect(triggerSessionStartHook).not.toHaveBeenCalled();
   });
 });

@@ -6,12 +6,9 @@
 
 import {
   type Config,
-  type AgentChatContract,
-  type AgentClientContract,
   clearCachedCredentialFile,
   getErrorStatus,
   DebugLogger,
-  getFunctionCalls,
   EmojiFilter,
   type FilterConfiguration,
   todoEvents,
@@ -19,54 +16,43 @@ import {
   type Todo,
   DEFAULT_AGENT_ID,
   type ApprovalMode,
+  type RuntimeProviderManager,
+  isWithinRoot,
   debugLogger,
   createInkStdio,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import {
-  StreamEventType,
-  type StreamEvent,
-  type Agent,
   fromConfig,
+  type Agent,
+  type AgentEvent,
+  type DoneReason,
+  type ThoughtSummary,
 } from '@vybestack/llxprt-code-agents';
+import { Readable, Writable } from 'node:stream';
+import * as path from 'node:path';
+import { type Part } from '@google/genai';
+import { type LoadedSettings } from '../config/settings.js';
+import { randomUUID } from 'crypto';
 import {
   getActiveProfileName,
   loadProfileByName,
   setCliRuntimeContext,
 } from '@vybestack/llxprt-code-providers/runtime.js';
-
-import { Readable, Writable } from 'node:stream';
-import { type Content, type Part, type FunctionCall } from '@google/genai';
-import { type LoadedSettings } from '../config/settings.js';
-import { randomUUID } from 'crypto';
-import { runExitCleanup, registerCleanup } from '../utils/cleanup.js';
-import { restoreActiveProvider } from '../cliAgentBootstrap.js';
+import { runExitCleanup } from '../utils/cleanup.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { parseZedAuthMethodId, buildAvailableModes } from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
-import { ZedToolHandler } from './zed-tool-handler.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
-  applyRuntimeProviderOverrides,
-  activateProviderFromConfig,
-  applyProfileModelParams,
-  authenticateWithProviderOrFallback,
-  verifyContentGeneratorConfig,
-  startChatWithRetry,
-} from './zed-provider-auth.js';
+  emitToolCallStart,
+  emitToolStatus,
+  emitToolResult,
+  requestToolConfirmation,
+  type PermissionRoundTripResult,
+} from './zed-tool-handler.js';
 
 export { parseZedAuthMethodId } from './zed-helpers.js';
-
-function isAbortSignalAborted(signal: AbortSignal): boolean {
-  return signal.aborted;
-}
-
-function getRuntimeAgentClient(
-  config: Config,
-): AgentClientContract | undefined {
-  return (
-    config as { getAgentClient: () => AgentClientContract | undefined }
-  ).getAgentClient();
-}
 
 export async function runZedIntegration(
   config: Config,
@@ -90,35 +76,79 @@ export async function runZedIntegration(
     allowDefaultHandoff: true,
   });
 
+  let zedAgent: ZedAgent | undefined;
+
   try {
-    // Track every ZedAgent the factory creates. The ACP SDK is expected to
-    // invoke the factory once, but if it ever runs more than once we must not
-    // leak the earlier instances (and their sessions/agents) — cleanup disposes
-    // ALL created instances, not just the last-assigned one (issue #2376).
-    const zedAgents: ZedAgent[] = [];
     const stream = acp.ndJsonStream(stdout, stdin);
-    // Register cleanup exactly once, outside the factory closure. This avoids
-    // duplicate registrations if the factory were ever invoked more than once
-    // (issue #2376). Dispose concurrently so one slow/failing instance does not
-    // block the others.
-    registerCleanup(async () => {
-      await Promise.allSettled(zedAgents.map((a) => a.disposeAllSessions()));
-    });
     const connection = new acp.AgentSideConnection((conn) => {
       logger.debug(() => 'Creating ZedAgent');
-      const zedAgent = new ZedAgent(config, settings, conn);
-      zedAgents.push(zedAgent);
+      zedAgent = new ZedAgent(config, settings, conn);
       return zedAgent;
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
 
-    await connection.closed.finally(() => {
-      void runExitCleanup();
-    });
+    try {
+      await connection.closed;
+    } finally {
+      await zedAgent?.disposeAll();
+      await runExitCleanup();
+    }
   } catch (e) {
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
     throw e;
   }
+}
+
+function resolveSessionTargetDir(
+  config: Config,
+  cwd: string | undefined,
+): string {
+  if (cwd === undefined || cwd.trim().length === 0) {
+    return config.getTargetDir();
+  }
+  const candidate = path.isAbsolute(cwd)
+    ? cwd
+    : path.resolve(config.getTargetDir(), cwd);
+  return isWithinRoot(candidate, config.getTargetDir())
+    ? candidate
+    : config.getTargetDir();
+}
+
+export function createSessionScopedConfig(
+  config: Config,
+  initialFileSystemService: ReturnType<Config['getFileSystemService']>,
+  targetDir: string = config.getTargetDir(),
+): Config {
+  let fileSystemService = initialFileSystemService;
+  let providerManager: RuntimeProviderManager | undefined =
+    config.getProviderManager();
+  return new Proxy(config, {
+    get(target, property, receiver) {
+      if (property === 'getFileSystemService') {
+        return () => fileSystemService;
+      }
+      if (property === 'setFileSystemService') {
+        return (nextFileSystemService: typeof fileSystemService) => {
+          fileSystemService = nextFileSystemService;
+        };
+      }
+      if (property === 'getProviderManager') {
+        return () => providerManager;
+      }
+      if (property === 'setProviderManager') {
+        return (nextProviderManager: RuntimeProviderManager) => {
+          providerManager = nextProviderManager;
+        };
+      }
+      if (property === 'getProjectRoot') {
+        return () => targetDir;
+      }
+      if (property === 'getTargetDir') {
+        return () => targetDir;
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
 }
 
 export class ZedAgent {
@@ -162,10 +192,6 @@ export class ZedAgent {
     };
   }
 
-  async applyRuntimeProviderOverrides(): Promise<void> {
-    await applyRuntimeProviderOverrides(this.config, this.logger);
-  }
-
   async authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
     const profileManager = this.config.getProfileManager();
     const availableProfiles = profileManager
@@ -179,155 +205,55 @@ export class ZedAgent {
     }
 
     await loadProfileByName(profileName);
-    await this.applyRuntimeProviderOverrides();
   }
 
   async newSession({
-    cwd: _cwd,
+    cwd,
     mcpServers: _mcpServers,
   }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
-      const sessionConfig = this.config;
+      const baseFileSystemService = this.config.getFileSystemService();
+      const sessionFileSystemService = this.clientCapabilities?.fs
+        ? new AcpFileSystemService(
+            this.connection,
+            sessionId,
+            this.clientCapabilities.fs,
+            baseFileSystemService,
+          )
+        : baseFileSystemService;
+      const sessionConfig = createSessionScopedConfig(
+        this.config,
+        sessionFileSystemService,
+        resolveSessionTargetDir(this.config, cwd),
+      );
 
       this.logger.debug(() => `newSession - creating session ${sessionId}`);
 
-      if (this.clientCapabilities?.fs) {
-        const acpFileSystemService = new AcpFileSystemService(
-          this.connection,
-          sessionId,
-          this.clientCapabilities.fs,
-          sessionConfig.getFileSystemService(),
-        );
-        sessionConfig.setFileSystemService(acpFileSystemService);
-      }
-
-      let agentClient = getRuntimeAgentClient(sessionConfig);
-      const hasContentGeneratorConfig =
-        sessionConfig.getContentGeneratorConfig() !== undefined;
-
-      this.logger.debug(
-        () =>
-          `AgentClient exists: ${!!agentClient}, ContentGeneratorConfig exists: ${hasContentGeneratorConfig}`,
-      );
-
-      if (!agentClient || !hasContentGeneratorConfig) {
-        agentClient = await this.autoAuthenticate(sessionConfig);
-      }
-
-      this.logger.debug(() => 'Successfully obtained AgentClient');
-      verifyContentGeneratorConfig(sessionConfig, this.logger);
-
-      const chat = await startChatWithRetry(
-        agentClient,
-        sessionConfig,
-        this.logger,
-      );
-
-      // Create the Agent via fromConfig so the Zed tool handlers can resolve
-      // tools through the public Agent.tools API instead of touching the
-      // ToolRegistry directly (issue #2376). Restore the provider state that
-      // fromConfig's activate() may disturb.
       const agent = await fromConfig({
         config: sessionConfig,
-        messageBus: undefined,
         sessionId,
       });
 
-      // Guard the post-fromConfig steps: if restoreActiveProvider, Session
-      // construction, or sessions.set throws, dispose the freshly created
-      // agent so it is not leaked (issue #2376).
-      await this.createAndStoreSession(agent, sessionConfig, sessionId, chat);
+      const session = new Session(
+        sessionId,
+        agent,
+        sessionConfig,
+        this.connection,
+      );
+      this.sessions.set(sessionId, session);
 
       return {
         sessionId,
         modes: {
           availableModes: buildAvailableModes(),
-          currentModeId: sessionConfig.getApprovalMode(),
+          currentModeId: agent.getApprovalMode(),
         },
       };
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
       throw error;
     }
-  }
-
-  /**
-   * Restores the active provider on the freshly created agent, then constructs
-   * and stores the Session. If any step fails, the agent is disposed so it is
-   * not leaked (issue #2376). The dispose itself is guarded so its failure
-   * never masks the original error.
-   *
-   * Extracted as a separate method so the leak-guard behavior is unit-testable
-   * without needing to exercise the full newSession authentication flow.
-   */
-  async createAndStoreSession(
-    agent: Agent,
-    sessionConfig: Config,
-    sessionId: string,
-    chat: AgentChatContract,
-  ): Promise<void> {
-    try {
-      await restoreActiveProvider(sessionConfig, agent);
-
-      const session = new Session(
-        sessionId,
-        chat,
-        sessionConfig,
-        this.connection,
-        agent,
-      );
-      this.sessions.set(sessionId, session);
-    } catch (creationError) {
-      try {
-        await agent.dispose();
-      } catch (disposeError) {
-        this.logger.debug(
-          () =>
-            `Error disposing leaked session agent: ${
-              disposeError instanceof Error
-                ? disposeError.message
-                : String(disposeError)
-            }`,
-        );
-      }
-      throw creationError;
-    }
-  }
-
-  async autoAuthenticate(sessionConfig: Config): Promise<AgentClientContract> {
-    this.logger.debug(
-      () => 'AgentClient not available - attempting auto-authentication',
-    );
-
-    const { providerManager, hasActiveProvider } =
-      await activateProviderFromConfig(sessionConfig, this.logger);
-
-    if (hasActiveProvider) {
-      try {
-        await applyRuntimeProviderOverrides(sessionConfig, this.logger);
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `ERROR: Failed to apply runtime provider overrides: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      applyProfileModelParams(sessionConfig, providerManager, this.logger);
-    }
-
-    await authenticateWithProviderOrFallback(
-      sessionConfig,
-      providerManager,
-      this.logger,
-    );
-
-    const agentClient = getRuntimeAgentClient(sessionConfig);
-    if (!agentClient) {
-      throw new Error(
-        'Failed to authenticate. Please ensure valid credentials are available.',
-      );
-    }
-    return agentClient;
   }
 
   async setSessionMode(
@@ -356,16 +282,33 @@ export class ZedAgent {
     return session.prompt(params);
   }
 
-  /**
-   * Disposes every active session's Agent. Called during process exit cleanup
-   * so per-session agents constructed via fromConfig are not leaked.
-   */
-  async disposeAllSessions(): Promise<void> {
-    const sessions = Array.from(this.sessions.values());
+  async disposeAll(): Promise<void> {
+    const sessions = [...this.sessions.values()];
     this.sessions.clear();
-    // Sessions dispose independently; run concurrently so a slow or failing
-    // session neither blocks shutdown nor short-circuits the others.
     await Promise.allSettled(sessions.map((session) => session.dispose()));
+  }
+}
+
+function mapDoneReasonToStopReason(reason: DoneReason): acp.StopReason {
+  switch (reason) {
+    case 'stop':
+    case 'loop-detected':
+      return 'end_turn';
+    case 'aborted':
+      return 'cancelled';
+    case 'max-turns':
+      return 'max_turn_requests';
+    case 'context-overflow':
+      return 'max_tokens';
+    case 'refusal':
+      return 'refusal';
+    case 'error':
+    case 'hook-stopped':
+      throw new Error(`Agent stopped with terminal reason: ${reason}`);
+    default: {
+      const exhaustive: never = reason;
+      return exhaustive;
+    }
   }
 }
 
@@ -374,16 +317,22 @@ export class Session {
   private emojiFilter: EmojiFilter;
   private logger: DebugLogger;
   private pathResolver: ZedPathResolver;
-  private toolHandler: ZedToolHandler;
+  private activeConfirmations = new Map<
+    string,
+    {
+      readonly cancelWaiter: () => void;
+      readonly promptGeneration: number;
+      settled: boolean;
+    }
+  >();
+  private promptGeneration = 0;
   private readonly todoListener: (event: TodoUpdateEvent) => void;
-  private _disposed = false;
 
   constructor(
     private readonly id: string,
-    private readonly chat: AgentChatContract,
+    private readonly agent: Agent,
     private readonly config: Config,
     private readonly connection: acp.AgentSideConnection,
-    private readonly agent: Agent,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
     const configuredEmojiFilterMode = this.config.getEphemeralSetting(
@@ -393,18 +342,8 @@ export class Session {
     const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
     this.emojiFilter = new EmojiFilter(filterConfig);
 
-    this.pathResolver = new ZedPathResolver(
-      this.config,
-      this.agent.tools,
-      (update) => this.sendUpdate(update),
-      (msg) => this.debug(msg),
-    );
-    this.toolHandler = new ZedToolHandler(
-      this.id,
-      this.config,
-      this.agent.tools,
-      this.connection,
-      (update) => this.sendUpdate(update),
+    this.pathResolver = new ZedPathResolver(this.config, (msg) =>
+      this.debug(msg),
     );
 
     this.todoListener = (event: TodoUpdateEvent) => {
@@ -424,11 +363,12 @@ export class Session {
     if (!mode) {
       throw new Error(`Invalid or unavailable mode: ${modeId}`);
     }
-    this.config.setApprovalMode(mode.id as ApprovalMode);
+    this.agent.setApprovalMode(mode.id as ApprovalMode);
     return {};
   }
 
   async cancelPendingPrompt(): Promise<void> {
+    this.settleActiveConfirmation();
     if (!this.pendingPrompt) {
       return;
     }
@@ -436,90 +376,88 @@ export class Session {
     this.pendingPrompt = null;
   }
 
-  /**
-   * Disposes the session's Agent and unsubscribes the plan-update listener,
-   * guarding against double-dispose. Errors are caught and logged via the
-   * DebugLogger so disposal never masks an in-flight error.
-   */
-  async dispose(): Promise<void> {
-    if (this._disposed) {
+  private settleActiveConfirmation(): void {
+    const confirmations = [...this.activeConfirmations.entries()];
+    this.activeConfirmations.clear();
+    for (const [confirmationId, state] of confirmations) {
+      if (state.settled) {
+        continue;
+      }
+      state.settled = true;
+      try {
+        this.agent.tools.respondToConfirmation(
+          confirmationId,
+          ToolConfirmationOutcome.Cancel,
+        );
+      } catch (error) {
+        debugLogger.error('Failed to cancel active tool confirmation:', error);
+      } finally {
+        state.cancelWaiter();
+      }
+    }
+  }
+
+  private settleConfirmation(confirmationId: string): void {
+    const state = this.activeConfirmations.get(confirmationId);
+    if (state === undefined) {
       return;
     }
-    this._disposed = true;
-    try {
-      todoEvents.offTodoUpdated(this.todoListener);
-    } catch (error) {
-      this.logger.debug(
-        () =>
-          `Error unsubscribing todo listener: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
+    this.activeConfirmations.delete(confirmationId);
+    if (state.settled) {
+      return;
     }
+    state.settled = true;
     try {
-      await this.agent.dispose();
-    } catch (error) {
-      this.logger.debug(
-        () =>
-          `Error disposing session agent: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+      this.agent.tools.respondToConfirmation(
+        confirmationId,
+        ToolConfirmationOutcome.Cancel,
       );
+    } catch (error) {
+      debugLogger.error('Failed to cancel active tool confirmation:', error);
+    } finally {
+      state.cancelWaiter();
     }
   }
 
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
-    this.pendingPrompt?.abort();
+    await this.cancelPendingPrompt();
     const pendingSend = new AbortController();
     this.pendingPrompt = pendingSend;
+    this.promptGeneration += 1;
+    const promptGeneration = this.promptGeneration;
 
     const promptId = Math.random().toString(16).slice(2);
-    const chat = this.chat;
 
-    let parts: Part[];
     try {
-      parts = await this.pathResolver.resolvePrompt(
-        params.prompt,
-        pendingSend.signal,
-      );
-    } catch (error) {
-      if (
-        pendingSend.signal.aborted ||
-        (error instanceof Error && error.name === 'AbortError')
-      ) {
-        return { stopReason: 'cancelled' };
-      }
-      throw error;
-    }
-
-    let nextMessage: Content | null = { role: 'user', parts };
-    let hasStreamedAgentContent = false;
-    const fallbackMessages: string[] = [];
-
-    while (nextMessage !== null) {
-      const functionCalls: FunctionCall[] = [];
-
+      let parts: Part[];
       try {
-        const responseStream = await chat.sendMessageStream(
-          {
-            message: nextMessage.parts ?? [],
-            config: { abortSignal: pendingSend.signal },
-          },
-          promptId,
+        parts = await this.pathResolver.resolvePrompt(
+          params.prompt,
+          pendingSend.signal,
         );
-        nextMessage = null;
-
-        const streamResult = await this.processStreamResponse(
-          responseStream,
-          pendingSend,
-          functionCalls,
-        );
-        hasStreamedAgentContent =
-          streamResult.hasStreamedAgentContent || hasStreamedAgentContent;
-
-        if (pendingSend.signal.aborted) {
+      } catch (error) {
+        if (
+          pendingSend.signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
+        ) {
           return { stopReason: 'cancelled' };
         }
+        throw error;
+      }
+
+      const batcher = new StreamBatcher(this.emojiFilter, (u) =>
+        this.sendUpdate(u),
+      );
+      let terminalStopReason: acp.StopReason | null = null;
+
+      try {
+        terminalStopReason = await this.consumeAgentStream(
+          parts,
+          pendingSend,
+          promptId,
+          promptGeneration,
+          batcher,
+        );
       } catch (error) {
         if (getErrorStatus(error) === 429) {
           throw new acp.RequestError(
@@ -534,211 +472,259 @@ export class Session {
           return { stopReason: 'cancelled' };
         }
         throw error;
+      } finally {
+        await batcher.flush();
       }
 
-      if (functionCalls.length > 0) {
-        const toolResult = await this.executeToolCalls(
-          functionCalls,
-          pendingSend.signal,
-          promptId,
-          fallbackMessages,
-        );
-        if (toolResult.cancelled) {
-          return { stopReason: 'cancelled' };
-        }
-        nextMessage = toolResult.nextMessage;
+      if (pendingSend.signal.aborted && terminalStopReason !== 'cancelled') {
+        return { stopReason: 'cancelled' };
+      }
+
+      if (terminalStopReason !== null) {
+        return { stopReason: terminalStopReason };
+      }
+
+      return { stopReason: 'end_turn' };
+    } finally {
+      if (this.pendingPrompt === pendingSend) {
+        this.pendingPrompt = null;
       }
     }
-
-    await this.sendFallbackContent(hasStreamedAgentContent, fallbackMessages);
-    return { stopReason: 'end_turn' };
   }
 
-  private async processStreamResponse(
-    responseStream: AsyncIterable<StreamEvent>,
+  private async consumeAgentStream(
+    parts: Part[],
     pendingSend: AbortController,
-    functionCalls: FunctionCall[],
-  ): Promise<{ hasStreamedAgentContent: boolean }> {
-    const BATCH_INTERVAL_MS = 100;
-    let pendingText = '';
-    let pendingThought = '';
-    let batchTimer: ReturnType<typeof setTimeout> | null = null;
-    let hasStreamedAgentContent = false;
-
-    const flushBatch = () => {
-      if (batchTimer !== null) {
-        clearTimeout(batchTimer);
-        batchTimer = null;
-      }
-      if (pendingThought.length > 0) {
-        hasStreamedAgentContent = true;
-        void this.sendUpdate({
-          sessionUpdate: 'agent_thought_chunk',
-          content: { type: 'text', text: pendingThought },
-        });
-        pendingThought = '';
-      }
-      if (pendingText.length > 0) {
-        hasStreamedAgentContent = true;
-        void this.sendUpdate({
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: pendingText },
-        });
-        pendingText = '';
-      }
-    };
-
-    const scheduleBatchFlush = () => {
-      batchTimer ??= setTimeout(flushBatch, BATCH_INTERVAL_MS);
-    };
-
-    for await (const resp of responseStream) {
-      if (pendingSend.signal.aborted) {
-        break;
-      }
-      if (
-        resp.type === StreamEventType.CHUNK &&
-        resp.value.candidates &&
-        resp.value.candidates.length > 0
-      ) {
-        const chunkResult = this.processChunkCandidates(
-          resp.value.candidates[0],
-          flushBatch,
-          hasStreamedAgentContent,
-          pendingText,
-          pendingThought,
-          scheduleBatchFlush,
-        );
-        hasStreamedAgentContent = chunkResult.hasStreamedAgentContent;
-        pendingText = chunkResult.pendingText;
-        pendingThought = chunkResult.pendingThought;
-      }
-      if (resp.type === StreamEventType.CHUNK) {
-        const respFunctionCalls = getFunctionCalls(resp.value);
-        if (respFunctionCalls && respFunctionCalls.length > 0) {
-          functionCalls.push(...respFunctionCalls);
+    promptId: string,
+    promptGeneration: number,
+    batcher: StreamBatcher,
+  ): Promise<acp.StopReason | null> {
+    const eventStream = this.agent.stream(parts, {
+      signal: pendingSend.signal,
+      promptId,
+      maxTurns: this.config.getMaxSessionTurns(),
+    });
+    let terminalStopReason: acp.StopReason | null = null;
+    for await (const event of eventStream) {
+      if (this.isPromptStale(promptGeneration, pendingSend)) {
+        if (event.type === 'done') {
+          return 'cancelled';
         }
-      }
-    }
-
-    flushBatch();
-    return { hasStreamedAgentContent };
-  }
-
-  private processChunkCandidates(
-    candidate: { content?: { parts?: Part[] } },
-    flushBatch: () => void,
-    hasStreamedAgentContent: boolean,
-    pendingText: string,
-    pendingThought: string,
-    scheduleBatchFlush: () => void,
-  ): {
-    hasStreamedAgentContent: boolean;
-    pendingText: string;
-    pendingThought: string;
-  } {
-    for (const part of candidate.content?.parts ?? []) {
-      const text = part.text;
-      if (text === undefined || text.length === 0) {
         continue;
       }
-      const filterResult = this.emojiFilter.filterText(text);
-      if (filterResult.blocked) {
-        flushBatch();
-        hasStreamedAgentContent = true;
-        void this.sendUpdate({
-          sessionUpdate: 'agent_message_chunk',
-          content: {
-            type: 'text',
-            text: '[Error: Response blocked due to emoji detection]',
-          },
-        });
-      } else {
-        const filteredText = this.extractFilteredText(filterResult);
-        if (filteredText.length > 0) {
-          const accumulated = this.accumulateFilteredText(
-            part,
-            filteredText,
-            pendingThought,
-            pendingText,
-          );
-          pendingThought = accumulated.pendingThought;
-          pendingText = accumulated.pendingText;
-          scheduleBatchFlush();
+      const stopReason = await this.handleAgentEvent(
+        event,
+        batcher,
+        promptGeneration,
+        pendingSend,
+      );
+      if (stopReason !== null) {
+        terminalStopReason = stopReason;
+      }
+    }
+    return terminalStopReason;
+  }
+
+  private async handleAgentEvent(
+    event: AgentEvent,
+    batcher: StreamBatcher,
+    promptGeneration: number,
+    pendingSend: AbortController,
+  ): Promise<acp.StopReason | null> {
+    switch (event.type) {
+      case 'text':
+        batcher.append(event.text, false);
+        return null;
+      case 'thinking': {
+        const thoughtText = this.extractThoughtText(event.thought);
+        if (thoughtText.length > 0) {
+          batcher.append(thoughtText, true);
         }
+        return null;
+      }
+      case 'tool-call':
+        await batcher.flush();
+        await emitToolCallStart(event.call, (u) => this.sendUpdate(u));
+        return null;
+      case 'tool-status':
+        await batcher.flush();
+        await emitToolStatus(event.update, (u) => this.sendUpdate(u));
+        return null;
+      case 'tool-result':
+        await batcher.flush();
+        await emitToolResult(event.result, (u) => this.sendUpdate(u));
+        return null;
+      case 'tool-confirmation':
+        await batcher.flush();
+        await this.handleToolConfirmation(event, promptGeneration, pendingSend);
+        return null;
+      case 'done':
+        await batcher.flush();
+        return mapDoneReasonToStopReason(event.reason);
+      case 'error':
+        await batcher.flush();
+        throw this.translateErrorEvent(event);
+      case 'idle-timeout':
+        await batcher.flush();
+        throw this.translateIdleTimeout(event);
+      case 'invalid-stream':
+        await batcher.flush();
+        throw new Error(
+          'Agent produced an invalid stream that could not be recovered.',
+        );
+      case 'hook-blocked':
+        await batcher.flush();
+        throw new Error(
+          event.info.systemMessage ?? 'Agent stopped by a hook blocker.',
+        );
+      case 'loop-detected':
+        // The agent detects a tool-call loop. Map to end_turn so the client
+        // sees a clean turn end rather than an indefinite hang.
+        await batcher.flush();
+        return 'end_turn';
+      case 'notice':
+        // Informational notices have no direct ACP SessionUpdate; surface as
+        // an agent message so the user sees them.
+        await batcher.flush();
+        await this.sendUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: event.message },
+        });
+        return null;
+      case 'usage': {
+        await batcher.flush();
+        await this.sendUsageUpdate(event.usage);
+        return null;
+      }
+      case 'context-warning':
+      case 'compression':
+      case 'model-info':
+      case 'retry':
+      case 'citation':
+        // These variants have no faithful ACP translation: usage is mapped
+        // separately, compression/model-info/citation are metadata, retry is
+        // an internal agent detail, and context-warning is advisory. They are
+        // intentionally consumed without surfacing to ACP.
+        return null;
+      default: {
+        // Exhaustiveness guard: any future AgentEvent variant added to the
+        // union without an explicit case above will fail to type-check here.
+        const exhaustive: never = event;
+        throw new Error(`Unhandled agent event: ${String(exhaustive)}`);
       }
     }
-    return { hasStreamedAgentContent, pendingText, pendingThought };
   }
 
-  private extractFilteredText(filterResult: {
-    filtered: string | unknown;
-  }): string {
-    return typeof filterResult.filtered === 'string'
-      ? filterResult.filtered
-      : '';
-  }
-
-  private accumulateFilteredText(
-    part: Part,
-    filteredText: string,
-    pendingThought: string,
-    pendingText: string,
-  ): { pendingThought: string; pendingText: string } {
-    if (part.thought === true) {
-      return { pendingThought: pendingThought + filteredText, pendingText };
-    }
-    return { pendingThought, pendingText: pendingText + filteredText };
-  }
-
-  private async executeToolCalls(
-    functionCalls: FunctionCall[],
-    signal: AbortSignal,
-    promptId: string,
-    fallbackMessages: string[],
-  ): Promise<
-    { nextMessage: Content | null; cancelled: false } | { cancelled: true }
-  > {
-    const toolResponseParts: Part[] = [];
-    for (const fc of functionCalls) {
-      if (isAbortSignalAborted(signal)) {
-        return { cancelled: true };
-      }
-      const response = await this.toolHandler.runTool(signal, promptId, fc);
-      if (isAbortSignalAborted(signal)) {
-        return { cancelled: true };
-      }
-      toolResponseParts.push(...response.parts);
-      if (response.message) {
-        fallbackMessages.push(response.message);
-      }
-    }
-    if (toolResponseParts.length > 0) {
-      return {
-        nextMessage: { role: 'user', parts: toolResponseParts },
-        cancelled: false,
-      };
-    }
-    return { nextMessage: null, cancelled: false };
-  }
-
-  private async sendFallbackContent(
-    hasStreamedAgentContent: boolean,
-    fallbackMessages: string[],
+  private async sendUsageUpdate(
+    usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
   ): Promise<void> {
-    if (hasStreamedAgentContent || fallbackMessages.length === 0) {
+    const outputTokens = usage.candidatesTokenCount ?? 0;
+    const size = usage.totalTokenCount ?? outputTokens;
+    if (size === 0 && outputTokens === 0) {
       return;
     }
-    const combinedMessage = fallbackMessages
-      .map((message) => message.trim())
-      .filter((message) => message.length > 0)
-      .join('\n\n');
-    if (combinedMessage.length > 0) {
-      await this.sendUpdate({
-        sessionUpdate: 'agent_message_chunk',
-        content: { type: 'text', text: combinedMessage },
+    await this.sendUpdate({
+      sessionUpdate: 'usage_update',
+      used: size,
+      size,
+    });
+  }
+
+  private isPromptStale(
+    promptGeneration: number,
+    pendingSend: AbortController,
+  ): boolean {
+    return (
+      this.pendingPrompt !== pendingSend ||
+      this.promptGeneration !== promptGeneration ||
+      pendingSend.signal.aborted
+    );
+  }
+
+  private async handleToolConfirmation(
+    event: Extract<AgentEvent, { type: 'tool-confirmation' }>,
+    promptGeneration: number,
+    pendingSend: AbortController,
+  ): Promise<void> {
+    const confirmationId = event.confirmation.confirmationId;
+    const cancelled = new Promise<null>((resolve) => {
+      this.activeConfirmations.set(confirmationId, {
+        cancelWaiter: () => resolve(null),
+        promptGeneration,
+        settled: false,
       });
+    });
+
+    if (this.isPromptStale(promptGeneration, pendingSend)) {
+      this.settleConfirmation(confirmationId);
+      return;
     }
+
+    let result: PermissionRoundTripResult | null;
+    try {
+      result = await Promise.race([
+        requestToolConfirmation(
+          this.id,
+          event.confirmation.toolCallId,
+          event.confirmation.name,
+          event.confirmation.details,
+          this.connection,
+        ),
+        cancelled,
+      ] as const);
+    } catch (error) {
+      this.settleConfirmation(confirmationId);
+      throw error;
+    }
+
+    const state = this.activeConfirmations.get(confirmationId);
+    if (
+      result === null ||
+      state === undefined ||
+      state.settled ||
+      state.promptGeneration !== promptGeneration
+    ) {
+      return;
+    }
+
+    state.settled = true;
+    this.activeConfirmations.delete(confirmationId);
+    try {
+      this.agent.tools.respondToConfirmation(
+        confirmationId,
+        result.decision,
+        result.payload,
+        result.requiresUserConfirmation,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to respond to tool confirmation ${confirmationId}: ${message}`,
+      );
+    }
+  }
+
+  private extractThoughtText(thought: ThoughtSummary): string {
+    const parts = [thought.subject, thought.description].filter(
+      (v) => v.length > 0,
+    );
+    return parts.join(parts.length > 1 ? ' ' : '');
+  }
+
+  private translateErrorEvent(
+    event: Extract<AgentEvent, { type: 'error' }>,
+  ): Error {
+    const error = new Error(event.error.message);
+    if (event.error.status !== undefined) {
+      Object.assign(error, { status: event.error.status });
+    }
+    return error;
+  }
+
+  private translateIdleTimeout(
+    event: Extract<AgentEvent, { type: 'idle-timeout' }>,
+  ): Error {
+    return new Error(event.error.message);
   }
 
   private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
@@ -775,5 +761,108 @@ export class Session {
       priority: 'medium' as const,
     }));
     await this.sendUpdate({ sessionUpdate: 'plan', entries });
+  }
+
+  async dispose(): Promise<void> {
+    try {
+      todoEvents.offTodoUpdated(this.todoListener);
+      this.settleActiveConfirmation();
+      this.pendingPrompt?.abort();
+      this.pendingPrompt = null;
+    } finally {
+      try {
+        await this.agent.dispose();
+      } catch (error) {
+        debugLogger.error('Failed to dispose Zed session agent:', error);
+      }
+    }
+  }
+}
+
+const BATCH_INTERVAL_MS = 100;
+
+class StreamBatcher {
+  private pendingChunks: Array<{ kind: 'text' | 'thought'; text: string }> = [];
+  private batchTimer: ReturnType<typeof setTimeout> | null = null;
+  private flushChain: Promise<void> = Promise.resolve();
+
+  constructor(
+    private readonly emojiFilter: EmojiFilter,
+    private readonly sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
+  ) {}
+
+  append(text: string, isThought: boolean): void {
+    const filterResult = isThought
+      ? this.emojiFilter.filterText(text)
+      : this.emojiFilter.filterStreamChunk(text);
+    if (filterResult.blocked) {
+      const pending = this.flushChain
+        .then(() => this.doFlush())
+        .then(() =>
+          this.sendUpdate({
+            sessionUpdate: 'agent_message_chunk',
+            content: {
+              type: 'text',
+              text: '[Error: Response blocked due to emoji detection]',
+            },
+          }),
+        );
+      this.flushChain = pending.catch(() => undefined);
+      return;
+    }
+    const filteredText =
+      typeof filterResult.filtered === 'string' ? filterResult.filtered : '';
+    if (filteredText.length === 0) {
+      return;
+    }
+    this.appendPendingChunk(isThought ? 'thought' : 'text', filteredText);
+    this.batchTimer ??= setTimeout(() => {
+      this.batchTimer = null;
+      void this.flush();
+    }, BATCH_INTERVAL_MS);
+  }
+
+  async flush(): Promise<void> {
+    if (this.batchTimer !== null) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+    const pending = this.flushChain
+      .then(() => this.doFlush())
+      .then(() => this.flushEmojiBuffer());
+    this.flushChain = pending.catch(() => undefined);
+    await pending;
+  }
+
+  private async flushEmojiBuffer(): Promise<void> {
+    const remaining = this.emojiFilter.flushBuffer();
+    if (remaining.length === 0) {
+      return;
+    }
+    this.appendPendingChunk('text', remaining);
+    await this.doFlush();
+  }
+
+  private appendPendingChunk(kind: 'text' | 'thought', text: string): void {
+    const lastChunk = this.pendingChunks.at(-1);
+    if (lastChunk?.kind === kind) {
+      lastChunk.text += text;
+      return;
+    }
+    this.pendingChunks.push({ kind, text });
+  }
+
+  private async doFlush(): Promise<void> {
+    const chunks = this.pendingChunks;
+    this.pendingChunks = [];
+    for (const chunk of chunks) {
+      await this.sendUpdate({
+        sessionUpdate:
+          chunk.kind === 'thought'
+            ? 'agent_thought_chunk'
+            : 'agent_message_chunk',
+        content: { type: 'text', text: chunk.text },
+      });
+    }
   }
 }

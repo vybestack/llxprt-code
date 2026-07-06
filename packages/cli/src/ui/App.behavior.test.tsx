@@ -443,11 +443,9 @@ describe('App UI', () => {
       vi.mocked(useAgentStream).mockImplementation(
         (
           _client,
-          _getToolHandle,
           _history,
           _addItem,
           _config,
-          _interactiveToolScheduler,
           _settings,
           _onDebugMessage,
           _handleSlashCommand,

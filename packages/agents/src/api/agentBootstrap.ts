@@ -25,6 +25,11 @@ import type {
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import type {
+  OutputUpdateHandler,
+  ToolCallsUpdateHandler,
+  CompletedToolCall,
+} from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { AgentClient } from '../core/client.js';
 import type {
   AgentConfig,
@@ -37,6 +42,7 @@ import type {
   ApprovalHandler,
   DisplayCallbacks,
 } from '../core/agenticLoop/types.js';
+import { isValidEditorType } from '@vybestack/llxprt-code-core/utils/editor.js';
 import type { AgentEvent, AgentToolCall, DoneReason } from './event-types.js';
 import type { ProviderInfo, ToolInfo, SessionStats } from './agent.js';
 
@@ -181,29 +187,71 @@ export function wrapApprovalHandler(
 }
 
 /**
- * Derives DisplayCallbacks from EditorCallbacks for the AgenticLoop.
- * @pseudocode createAgent.md step 147
+ * Validates a public EditorCallbacks preferred-editor string against the
+ * known EditorType union. Unknown values are dropped (undefined) so an
+ * unsupported editor cannot slip into the internal editor flow.
  */
-export function deriveDisplayCallbacks(
-  editorCallbacks: EditorCallbacks | undefined,
-): DisplayCallbacks | undefined {
-  if (editorCallbacks === undefined) {
-    return undefined;
-  }
-  const cbs: DisplayCallbacks = {};
-  if (editorCallbacks.getPreferredEditor !== undefined) {
-    cbs.getPreferredEditor = () =>
-      editorCallbacks.getPreferredEditor?.() as
-        | ReturnType<NonNullable<DisplayCallbacks['getPreferredEditor']>>
-        | undefined;
-  }
-  if (editorCallbacks.onEditorOpen !== undefined) {
-    cbs.onEditorOpen = editorCallbacks.onEditorOpen;
-  }
-  if (editorCallbacks.onEditorClose !== undefined) {
-    cbs.onEditorClose = editorCallbacks.onEditorClose;
-  }
-  return cbs;
+function toValidEditorType(
+  editor: string | undefined,
+): ReturnType<NonNullable<DisplayCallbacks['getPreferredEditor']>> {
+  return editor !== undefined && isValidEditorType(editor) ? editor : undefined;
+}
+
+/**
+ * The mutable holder for post-construction display callbacks. ToolControl's
+ * `setDisplayCallbacks` writes here; the stable forwarding object reads the
+ * LATEST values at call time so registration is observable by the CURRENT
+ * loop's turn (and survives loop rebuilds).
+ */
+export interface StableDisplayCallbacksHolder {
+  onToolCallsUpdate?: ToolCallsUpdateHandler;
+  outputUpdateHandler?: OutputUpdateHandler;
+  onAllToolCallsComplete?: (
+    completed: CompletedToolCall[],
+  ) => void | Promise<void>;
+}
+
+/**
+ * The mutable editor-callbacks holder, mirror of AgentImpl.editorCallbacksHolder.
+ */
+export interface StableEditorCallbacksHolder {
+  editorCallbacks: EditorCallbacks;
+}
+
+/**
+ * Builds ONE stable forwarding {@link DisplayCallbacks} object whose methods
+ * read the LATEST values at call time:
+ *  - onToolCallsUpdate/outputUpdateHandler/onAllToolCallsComplete read from
+ *    {@link StableDisplayCallbacksHolder} (written by
+ *    {@link AgentToolControl.setDisplayCallbacks}).
+ *  - getPreferredEditor/onEditorOpen/onEditorClose read live from
+ *    {@link StableEditorCallbacksHolder} (written by
+ *    {@link AgentToolControl.setEditorCallbacks}).
+ *
+ * This object is what rebuildLoop receives in BOTH build sites (the initial
+ * build and every subsequent rebuild), so registration survives provider/model
+ * switches and loop rebuilds. The editor trio reading live from the holder
+ * ALSO makes `tools.setEditorCallbacks` changes observable by the CURRENT loop
+ * (not just after a rebuild).
+ */
+export function createStableDisplayCallbacks(
+  editorHolder: StableEditorCallbacksHolder,
+  displayHolder: StableDisplayCallbacksHolder,
+): DisplayCallbacks {
+  return {
+    onToolCallsUpdate: (toolCalls) => {
+      displayHolder.onToolCallsUpdate?.(toolCalls);
+    },
+    outputUpdateHandler: (callId, chunk) => {
+      displayHolder.outputUpdateHandler?.(callId, chunk);
+    },
+    onAllToolCallsComplete: (completed) =>
+      displayHolder.onAllToolCallsComplete?.(completed),
+    getPreferredEditor: () =>
+      toValidEditorType(editorHolder.editorCallbacks.getPreferredEditor?.()),
+    onEditorOpen: () => editorHolder.editorCallbacks.onEditorOpen?.(),
+    onEditorClose: () => editorHolder.editorCallbacks.onEditorClose?.(),
+  };
 }
 
 /**

@@ -11,12 +11,12 @@ import {
   MockedAgentClientClass,
   mockSendMessageStream,
   mockStartChat,
+  createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useAgentStream } from './agentStream/index.js';
-import { createInteractiveToolScheduler } from '../../runtime/interactiveToolScheduler.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type { TrackedToolCall } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
@@ -240,7 +240,9 @@ describe('useAgentStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig);
 
-      const client = new MockedAgentClientClass(mcpMockConfig);
+      const client = createFakeAgentFromMockClient(
+        new MockedAgentClientClass(mcpMockConfig),
+      );
 
       const initialProps = {
         client,
@@ -268,11 +270,9 @@ describe('useAgentStream', () => {
           ]);
           return useAgentStream(
             props.client,
-            () => undefined,
             props.history,
             props.addItem,
             props.config,
-            createInteractiveToolScheduler(props.config, undefined),
             props.loadedSettings,
             props.onDebugMessage,
             props.handleSlashCommand,
@@ -378,7 +378,9 @@ describe('useAgentStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig);
 
-      const client = new MockedAgentClientClass(noMcpConfig);
+      const client = createFakeAgentFromMockClient(
+        new MockedAgentClientClass(noMcpConfig),
+      );
 
       const initialProps = {
         client,
@@ -406,11 +408,9 @@ describe('useAgentStream', () => {
           ]);
           return useAgentStream(
             props.client,
-            () => undefined,
             props.history,
             props.addItem,
             props.config,
-            createInteractiveToolScheduler(props.config, undefined),
             props.loadedSettings,
             props.onDebugMessage,
             props.handleSlashCommand,

@@ -112,4 +112,6 @@ export type {
   LspStatusSnapshot,
   MemoryChangedEvent,
   MemoryRefreshResult,
+  // Phase A issue #2372: post-construction display-callbacks type
+  AgentDisplayCallbacks,
 } from './agent.js';

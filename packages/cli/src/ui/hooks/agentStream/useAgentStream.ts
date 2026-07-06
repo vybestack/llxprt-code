@@ -15,13 +15,12 @@
 import { useMemo } from 'react';
 import {
   type Config,
-  type AgentClientContract,
   type EditorType,
   type MessageBus,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
-import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItem,
@@ -29,7 +28,6 @@ import {
   type SlashCommandProcessorResult,
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
-import type { InteractiveToolScheduler } from '../../../runtime/interactiveToolScheduler.js';
 import { mergePendingToolGroupsForDisplay } from './streamUtils.js';
 import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
@@ -37,12 +35,10 @@ import type { AgentStreamOrchestrationDeps } from './useAgentStreamOrchestration
 import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
 
 export const useAgentStream = (
-  agentClient: AgentClientContract,
-  getToolHandle: (name: string) => AgentToolHandle | undefined,
+  agent: Agent,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   config: Config,
-  interactiveToolScheduler: InteractiveToolScheduler,
   settings: LoadedSettings,
   onDebugMessage: (message: string) => void,
   handleSlashCommand: (
@@ -63,11 +59,9 @@ export const useAgentStream = (
   runtimeMessageBus?: MessageBus,
 ) => {
   const orchestration = useAgentStreamOrchestration({
-    agentClient,
-    getToolHandle,
+    agent,
     addItem,
     config,
-    interactiveToolScheduler,
     settings,
     onDebugMessage,
     handleSlashCommand,
@@ -90,7 +84,7 @@ export const useAgentStream = (
     orchestration,
     config,
     history,
-    agentClient,
+    agent,
     onDebugMessage,
   );
 };
@@ -99,7 +93,7 @@ function useAgentStreamReturn(
   orchestration: ReturnType<typeof useAgentStreamOrchestration>,
   config: Config,
   history: HistoryItem[],
-  agentClient: AgentClientContract,
+  agent: Agent,
   onDebugMessage: (message: string) => void,
 ) {
   const pendingHistoryItems = usePendingHistoryItems(
@@ -112,7 +106,7 @@ function useAgentStreamReturn(
     config,
     orchestration.st.gitService,
     history,
-    agentClient,
+    agent,
     config.storage,
     onDebugMessage,
   );
