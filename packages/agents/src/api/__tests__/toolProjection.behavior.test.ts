@@ -343,4 +343,17 @@ describe('ToolControl.get via hardened fakeToolControlDeps @plan:ISSUE-2376', ()
     expect(info?.server).toBe('srv');
     expect(info?.serverToolName).toBe('remote_tool');
   });
+
+  it('get() returns a handle with source "mcp" for MCP tools and "builtin" for others', () => {
+    // Covers wrapToolHandle's MCP detection, which now uses the same
+    // readOptionalStringProp accessor as list() so both surfaces classify
+    // tools identically (@plan:ISSUE-2376).
+    const { deps } = createToolControlDeps([
+      { name: 'mcp_tool', serverName: 'srv', serverToolName: 'remote_tool' },
+      { name: 'builtin_tool' },
+    ]);
+    const control = new ToolControl(deps);
+    expect(control.get('mcp_tool')?.source).toBe('mcp');
+    expect(control.get('builtin_tool')?.source).toBe('builtin');
+  });
 });

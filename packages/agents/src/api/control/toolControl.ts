@@ -428,7 +428,10 @@ function projectResult(result: ToolResult): AgentToolExecResult {
  * @plan:ISSUE-2376
  */
 export function wrapToolHandle(tool: AnyDeclarativeTool): AgentToolHandle {
-  const isMcp = (tool as { serverName?: string }).serverName !== undefined;
+  // Use the same centralized, type-validated accessor as ToolControl.list()
+  // (readOptionalStringProp) instead of a bespoke cast, so MCP detection stays
+  // consistent and a non-string serverName cannot be misread as an MCP tool.
+  const isMcp = readOptionalStringProp(tool, 'serverName') !== undefined;
   const base: AgentToolHandle = {
     name: tool.name,
     displayName: tool.displayName,
