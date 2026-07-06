@@ -250,7 +250,6 @@
         "@agentclientprotocol/sdk": "^0.14.1",
         "@anthropic-ai/sdk": "^0.55.1",
         "@dqbd/tiktoken": "^1.0.21",
-        "@google/genai": "1.30.0",
         "@iarna/toml": "^2.2.5",
         "@modelcontextprotocol/sdk": "^1.25.2",
         "@vybestack/llxprt-code-agents": "file:../agents",
@@ -3540,9 +3539,15 @@
 
     "@vybestack/llxprt-code/@vybestack/llxprt-code-auth": ["@vybestack/llxprt-code-auth@file:packages/auth", { "dependencies": { "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.8.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
+    "@vybestack/llxprt-code/@vybestack/llxprt-code-ide-integration": ["@vybestack/llxprt-code-ide-integration@file:packages/ide-integration", { "dependencies": { "@modelcontextprotocol/sdk": "^1.25.2", "@vybestack/llxprt-code-telemetry": "file:../telemetry", "undici": "^7.28.0", "vscode-jsonrpc": "^8.2.1", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
+    "@vybestack/llxprt-code/@vybestack/llxprt-code-settings": ["@vybestack/llxprt-code-settings@file:packages/settings", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
     "@vybestack/llxprt-code/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", { "dependencies": { "env-paths": "^4.0.0", "ignore": "^7.0.0" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" }, "optionalDependencies": { "@napi-rs/keyring": "^1.2.0" } }],
 
     "@vybestack/llxprt-code/@vybestack/llxprt-code-telemetry": ["@vybestack/llxprt-code-telemetry@file:packages/telemetry", { "dependencies": { "@google/genai": "1.30.0", "@opentelemetry/api": "^1.9.0", "@opentelemetry/api-logs": "^0.219.0", "@opentelemetry/core": "^2.8.0", "@opentelemetry/exporter-logs-otlp-grpc": "^0.219.0", "@opentelemetry/exporter-logs-otlp-http": "^0.219.0", "@opentelemetry/exporter-metrics-otlp-grpc": "^0.219.0", "@opentelemetry/exporter-metrics-otlp-http": "^0.219.0", "@opentelemetry/exporter-trace-otlp-grpc": "^0.219.0", "@opentelemetry/exporter-trace-otlp-http": "^0.219.0", "@opentelemetry/instrumentation-http": "^0.219.0", "@opentelemetry/resources": "^2.8.0", "@opentelemetry/sdk-logs": "^0.219.0", "@opentelemetry/sdk-metrics": "^2.8.0", "@opentelemetry/sdk-node": "^0.219.0", "@opentelemetry/sdk-trace-base": "^2.8.0", "@opentelemetry/sdk-trace-node": "^2.8.0", "@opentelemetry/semantic-conventions": "^1.29.0", "debug": "^4.3.4" }, "devDependencies": { "@types/debug": "^4.1.12", "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
+    "@vybestack/llxprt-code/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage" }, "devDependencies": { "@lydell/node-pty": "1.1.0", "strip-ansi": "^7.1.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
     "@vybestack/llxprt-code-a2a-server/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", { "dependencies": { "env-paths": "^4.0.0", "ignore": "^7.0.0" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" }, "optionalDependencies": { "@napi-rs/keyring": "^1.2.0" } }],
 
@@ -3550,7 +3555,13 @@
 
     "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-auth": ["@vybestack/llxprt-code-auth@file:packages/auth", { "dependencies": { "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.8.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-ide-integration": ["@vybestack/llxprt-code-ide-integration@file:packages/ide-integration", { "dependencies": { "@modelcontextprotocol/sdk": "^1.25.2", "@vybestack/llxprt-code-telemetry": "file:../telemetry", "undici": "^7.28.0", "vscode-jsonrpc": "^8.2.1", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
     "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-policy": ["@vybestack/llxprt-code-policy@file:packages/policy", { "dependencies": { "@iarna/toml": "^2.2.5", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-settings": ["@vybestack/llxprt-code-settings@file:packages/settings", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage" }, "devDependencies": { "@lydell/node-pty": "1.1.0", "strip-ansi": "^7.1.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
     "@vybestack/llxprt-code-agents/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
@@ -3558,11 +3569,17 @@
 
     "@vybestack/llxprt-code-core/@vybestack/llxprt-code-auth": ["@vybestack/llxprt-code-auth@file:packages/auth", { "dependencies": { "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.8.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
+    "@vybestack/llxprt-code-core/@vybestack/llxprt-code-ide-integration": ["@vybestack/llxprt-code-ide-integration@file:packages/ide-integration", { "dependencies": { "@modelcontextprotocol/sdk": "^1.25.2", "@vybestack/llxprt-code-telemetry": "file:../telemetry", "undici": "^7.28.0", "vscode-jsonrpc": "^8.2.1", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
     "@vybestack/llxprt-code-core/@vybestack/llxprt-code-policy": ["@vybestack/llxprt-code-policy@file:packages/policy", { "dependencies": { "@iarna/toml": "^2.2.5", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
+    "@vybestack/llxprt-code-core/@vybestack/llxprt-code-settings": ["@vybestack/llxprt-code-settings@file:packages/settings", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
     "@vybestack/llxprt-code-core/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", { "dependencies": { "env-paths": "^4.0.0", "ignore": "^7.0.0" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" }, "optionalDependencies": { "@napi-rs/keyring": "^1.2.0" } }],
 
     "@vybestack/llxprt-code-core/@vybestack/llxprt-code-telemetry": ["@vybestack/llxprt-code-telemetry@file:packages/telemetry", { "dependencies": { "@google/genai": "1.30.0", "@opentelemetry/api": "^1.9.0", "@opentelemetry/api-logs": "^0.219.0", "@opentelemetry/core": "^2.8.0", "@opentelemetry/exporter-logs-otlp-grpc": "^0.219.0", "@opentelemetry/exporter-logs-otlp-http": "^0.219.0", "@opentelemetry/exporter-metrics-otlp-grpc": "^0.219.0", "@opentelemetry/exporter-metrics-otlp-http": "^0.219.0", "@opentelemetry/exporter-trace-otlp-grpc": "^0.219.0", "@opentelemetry/exporter-trace-otlp-http": "^0.219.0", "@opentelemetry/instrumentation-http": "^0.219.0", "@opentelemetry/resources": "^2.8.0", "@opentelemetry/sdk-logs": "^0.219.0", "@opentelemetry/sdk-metrics": "^2.8.0", "@opentelemetry/sdk-node": "^0.219.0", "@opentelemetry/sdk-trace-base": "^2.8.0", "@opentelemetry/sdk-trace-node": "^2.8.0", "@opentelemetry/semantic-conventions": "^1.29.0", "debug": "^4.3.4" }, "devDependencies": { "@types/debug": "^4.1.12", "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
+    "@vybestack/llxprt-code-core/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage" }, "devDependencies": { "@lydell/node-pty": "1.1.0", "strip-ansi": "^7.1.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
     "@vybestack/llxprt-code-core/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
@@ -3572,6 +3589,8 @@
 
     "@vybestack/llxprt-code-ide-integration/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
+    "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-settings": ["@vybestack/llxprt-code-settings@file:packages/settings", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
     "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", { "dependencies": { "env-paths": "^4.0.0", "ignore": "^7.0.0" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" }, "optionalDependencies": { "@napi-rs/keyring": "^1.2.0" } }],
 
     "@vybestack/llxprt-code-mcp/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
@@ -3580,7 +3599,11 @@
 
     "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-auth": ["@vybestack/llxprt-code-auth@file:packages/auth", { "dependencies": { "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.8.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-settings": ["@vybestack/llxprt-code-settings@file:packages/settings", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
+
     "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", { "dependencies": { "env-paths": "^4.0.0", "ignore": "^7.0.0" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" }, "optionalDependencies": { "@napi-rs/keyring": "^1.2.0" } }],
+
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage" }, "devDependencies": { "@lydell/node-pty": "1.1.0", "strip-ansi": "^7.1.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
     "@vybestack/llxprt-code-providers/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
@@ -3589,6 +3612,8 @@
     "@vybestack/llxprt-code-telemetry/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
     "@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", { "dependencies": { "env-paths": "^4.0.0", "ignore": "^7.0.0" }, "devDependencies": { "@types/node": "^24.2.1", "typescript": "^5.3.3", "vitest": "^3.2.6" }, "optionalDependencies": { "@napi-rs/keyring": "^1.2.0" } }],
+
+    "@vybestack/llxprt-code-tools/@vybestack/llxprt-code-test-utils": ["@vybestack/llxprt-code-test-utils@file:packages/test-utils", { "dependencies": { "@vybestack/llxprt-code-storage": "file:../storage" }, "devDependencies": { "@lydell/node-pty": "1.1.0", "strip-ansi": "^7.1.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
     "@vybestack/llxprt-code-tools/mime-types": ["mime-types@2.1.35", "", { "dependencies": { "mime-db": "1.52.0" } }, "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw=="],
 
@@ -3761,6 +3786,8 @@
     "keytar/node-addon-api": ["node-addon-api@4.3.0", "", {}, "sha512-73sE9+3UaLYYFmDsFZnqCInzPyh3MqIwZO9cw58yIqAZhONrrabrYyYe3TuIqtIiOuTXVhsGau8hcrhhwSsDIQ=="],
 
     "lazystream/readable-stream": ["readable-stream@2.3.8", "", { "dependencies": { "core-util-is": "~1.0.0", "inherits": "~2.0.3", "isarray": "~1.0.0", "process-nextick-args": "~2.0.0", "safe-buffer": "~5.1.1", "string_decoder": "~1.1.1", "util-deprecate": "~1.0.1" } }, "sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA=="],
+
+    "llxprt-code-vscode-ide-companion/@vybestack/llxprt-code-ide-integration": ["@vybestack/llxprt-code-ide-integration@file:packages/ide-integration", { "dependencies": { "@modelcontextprotocol/sdk": "^1.25.2", "@vybestack/llxprt-code-telemetry": "file:../telemetry", "undici": "^7.28.0", "vscode-jsonrpc": "^8.2.1", "zod": "^3.25.76" }, "devDependencies": { "@types/node": "^24.2.1", "fast-check": "^4.2.0", "typescript": "^5.3.3", "vitest": "^3.2.6" } }],
 
     "load-json-file/parse-json": ["parse-json@4.0.0", "", { "dependencies": { "error-ex": "^1.3.1", "json-parse-better-errors": "^1.0.1" } }, "sha512-aOIos8bujGN93/8Ox/jPLh7RwVnPEysynVFE+fQZyg6jKELEHwzgKdLRFHUgXJL6kylijVSBC4BvN9OmsB48Rw=="],
 
@@ -3968,9 +3995,21 @@
 
     "@vscode/vsce/minimatch/brace-expansion": ["brace-expansion@5.0.7", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA=="],
 
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-ide-integration/@vybestack/llxprt-code-telemetry": ["@vybestack/llxprt-code-telemetry@file:packages/telemetry", {}],
+
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-settings/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
+
+    "@vybestack/llxprt-code-agents/@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
+
     "@vybestack/llxprt-code-agents/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
     "@vybestack/llxprt-code-auth/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
+
+    "@vybestack/llxprt-code-core/@vybestack/llxprt-code-ide-integration/@vybestack/llxprt-code-telemetry": ["@vybestack/llxprt-code-telemetry@file:packages/telemetry", {}],
+
+    "@vybestack/llxprt-code-core/@vybestack/llxprt-code-settings/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
+
+    "@vybestack/llxprt-code-core/@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
 
     "@vybestack/llxprt-code-core/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
@@ -3978,19 +4017,35 @@
 
     "@vybestack/llxprt-code-ide-integration/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
+    "@vybestack/llxprt-code-mcp/@vybestack/llxprt-code-settings/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
+
     "@vybestack/llxprt-code-mcp/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
     "@vybestack/llxprt-code-policy/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
+
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-settings/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
+
+    "@vybestack/llxprt-code-providers/@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
 
     "@vybestack/llxprt-code-providers/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
     "@vybestack/llxprt-code-telemetry/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
+    "@vybestack/llxprt-code-tools/@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
+
     "@vybestack/llxprt-code-tools/mime-types/mime-db": ["mime-db@1.52.0", "", {}, "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg=="],
 
     "@vybestack/llxprt-code/@vybestack/llxprt-code-auth/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
+    "@vybestack/llxprt-code/@vybestack/llxprt-code-ide-integration/@vybestack/llxprt-code-telemetry": ["@vybestack/llxprt-code-telemetry@file:packages/telemetry", {}],
+
+    "@vybestack/llxprt-code/@vybestack/llxprt-code-ide-integration/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
+
+    "@vybestack/llxprt-code/@vybestack/llxprt-code-settings/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
+
     "@vybestack/llxprt-code/@vybestack/llxprt-code-telemetry/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
+
+    "@vybestack/llxprt-code/@vybestack/llxprt-code-test-utils/@vybestack/llxprt-code-storage": ["@vybestack/llxprt-code-storage@file:packages/storage", {}],
 
     "ansi-align/string-width/emoji-regex": ["emoji-regex@8.0.0", "", {}, "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="],
 
@@ -4079,6 +4134,10 @@
     "lazystream/readable-stream/safe-buffer": ["safe-buffer@5.1.2", "", {}, "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g=="],
 
     "lazystream/readable-stream/string_decoder": ["string_decoder@1.1.1", "", { "dependencies": { "safe-buffer": "~5.1.0" } }, "sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg=="],
+
+    "llxprt-code-vscode-ide-companion/@vybestack/llxprt-code-ide-integration/@vybestack/llxprt-code-telemetry": ["@vybestack/llxprt-code-telemetry@file:packages/telemetry", {}],
+
+    "llxprt-code-vscode-ide-companion/@vybestack/llxprt-code-ide-integration/fast-check": ["fast-check@4.8.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="],
 
     "multimatch/minimatch/brace-expansion": ["brace-expansion@1.1.15", "", { "dependencies": { "balanced-match": "^1.0.0", "concat-map": "0.0.1" } }, "sha512-EwOCDEex4quD37XhqM3omwtMoJjr//isUZz1JopUNWms+4Z2ViyM/k1YIRePpoVNnQhENnxtFjLaxNHrT7xIUg=="],
 
@@ -4224,6 +4283,8 @@
 
     "@vybestack/llxprt-code/@vybestack/llxprt-code-auth/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
+    "@vybestack/llxprt-code/@vybestack/llxprt-code-ide-integration/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
+
     "@vybestack/llxprt-code/@vybestack/llxprt-code-telemetry/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
     "ansi-align/string-width/strip-ansi/ansi-regex": ["ansi-regex@5.0.1", "", {}, "sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ=="],
@@ -4265,6 +4326,8 @@
     "glob/minimatch/brace-expansion/balanced-match": ["balanced-match@4.0.4", "", {}, "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA=="],
 
     "gradient-string/chalk/ansi-styles/color-convert": ["color-convert@2.0.1", "", { "dependencies": { "color-name": "~1.1.4" } }, "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ=="],
+
+    "llxprt-code-vscode-ide-companion/@vybestack/llxprt-code-ide-integration/fast-check/pure-rand": ["pure-rand@8.4.1", "", {}, "sha512-c58R2+SPFcSIPXoU834QN/KPDDOSd8sXcSrqf6e83Me6Rrp1EYkxukkjXMVrKvKaADs1SOyNkWdfvLf6zY8qLQ=="],
 
     "npm-run-all/chalk/supports-color/has-flag": ["has-flag@3.0.0", "", {}, "sha512-sKJf1+ceQBr4SMkvQnBDNDtf4TXpVhVGateu0t918bl30FnbE2m4vNLX+VWe/dpjlb+HugGYzW7uQXH98HPEYw=="],
 
