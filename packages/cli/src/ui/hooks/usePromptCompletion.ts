@@ -13,10 +13,10 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type {
-  Content,
-  GenerateContentConfig,
-  GenerateContentResponse,
-} from '@google/genai';
+  ContractContent,
+  ContractGenerateContentConfig,
+  ContractGenerateContentResponse,
+} from '@vybestack/llxprt-code-core';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
 import type { AgentClientSource } from '../cliUiRuntime.js';
@@ -80,8 +80,10 @@ function shouldSkipPromptCompletion(
 }
 
 function buildPromptCompletionRequest(trimmedText: string): {
-  contents: Content[];
-  generationConfig: GenerateContentConfig;
+  contents: ContractContent[];
+  generationConfig: ContractGenerateContentConfig & {
+    thinkingConfig?: { thinkingBudget?: number };
+  };
 } {
   return {
     contents: [
@@ -105,7 +107,7 @@ function buildPromptCompletionRequest(trimmedText: string): {
 }
 
 function deriveSuggestionText(
-  response: GenerateContentResponse,
+  response: ContractGenerateContentResponse,
   trimmedText: string,
 ): string {
   const responseText = getResponseText(response);
@@ -133,7 +135,7 @@ async function requestPromptSuggestion(
   );
   if (signal.aborted) return '';
 
-  return deriveSuggestionText(response as GenerateContentResponse, trimmedText);
+  return deriveSuggestionText(response, trimmedText);
 }
 
 function isCursorAtBufferEnd(buffer: TextBuffer): boolean {

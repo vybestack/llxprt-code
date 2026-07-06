@@ -9,12 +9,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Part } from '@google/genai';
 import {
   UnauthorizedError,
   parseAndFormatApiError,
 } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, ContractPart } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
@@ -65,7 +64,7 @@ describe('mergePartListUnions', () => {
   });
 
   it('merges Part objects directly', () => {
-    const part: Part = { text: 'foo' };
+    const part: ContractPart = { text: 'foo' };
     const result = mergePartListUnions([part]);
     expect(result).toStrictEqual([{ text: 'foo' }]);
   });
@@ -175,7 +174,7 @@ describe('mergePendingToolGroupsForDisplay', () => {
 
 describe('splitPartsByRole', () => {
   it('separates functionCall parts into functionCalls array', () => {
-    const parts: Part[] = [
+    const parts: ContractPart[] = [
       { functionCall: { name: 'foo', args: {} } },
       { text: 'hello' },
     ];
@@ -187,7 +186,7 @@ describe('splitPartsByRole', () => {
   });
 
   it('separates functionResponse parts into functionResponses array', () => {
-    const parts: Part[] = [
+    const parts: ContractPart[] = [
       { functionResponse: { name: 'foo', response: { result: 'ok' } } },
     ];
     const { functionCalls, functionResponses, otherParts } =
@@ -207,7 +206,7 @@ describe('splitPartsByRole', () => {
   });
 
   it('correctly separates mixed content', () => {
-    const parts: Part[] = [
+    const parts: ContractPart[] = [
       { functionCall: { name: 'a', args: {} } },
       { functionResponse: { name: 'a', response: {} } },
       { text: 'text' },

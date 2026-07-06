@@ -59,7 +59,6 @@ import { SubagentManager } from '@vybestack/llxprt-code-core';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { MessageType } from '../../types.js';
-import { FunctionCallingConfigMode } from '@google/genai';
 import type {
   CommandContext,
   MessageActionReturn,
@@ -700,7 +699,7 @@ describe('subagentCommand', () => {
       expect(callArgs.config).toStrictEqual({
         toolConfig: {
           functionCallingConfig: {
-            mode: FunctionCallingConfigMode.NONE,
+            mode: 'NONE',
           },
         },
         serverTools: [],
@@ -735,7 +734,7 @@ describe('subagentCommand', () => {
           config: {
             toolConfig: {
               functionCallingConfig: {
-                mode: FunctionCallingConfigMode.NONE,
+                mode: 'NONE',
               },
             },
             serverTools: [],
@@ -764,7 +763,7 @@ describe('subagentCommand', () => {
           config: {
             toolConfig: {
               functionCallingConfig: {
-                mode: FunctionCallingConfigMode.NONE,
+                mode: 'NONE',
               },
             },
             serverTools: [],

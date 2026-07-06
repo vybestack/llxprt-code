@@ -27,14 +27,14 @@ import type {
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
-  Config,
-  EditorType,
-  AnyToolInvocation,
   AnyDeclarativeTool,
+  AnyToolInvocation,
+  Config,
+  ContractPartListUnion,
+  EditorType,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
-import type { PartListUnion } from '@google/genai';
 import { StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
@@ -452,7 +452,7 @@ describe('useAgentStream', () => {
   });
 
   it('should not flicker streaming state to Idle between tool completion and submission', async () => {
-    const toolCallResponseParts: PartListUnion = [
+    const toolCallResponseParts: ContractPartListUnion = [
       { text: 'tool 1 final response' },
     ];
 

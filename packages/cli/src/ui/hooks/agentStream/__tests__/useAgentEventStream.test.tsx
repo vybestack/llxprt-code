@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ContractPartListUnion } from '@vybestack/llxprt-code-core';
+
 /**
  * Behavioral tests for useAgentEventStream — the CLI's consumer of the public
  * Agent facade. These tests verify that the hook correctly:
@@ -22,7 +24,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
-import type { PartListUnion } from '@google/genai';
 import type { AgentEvent, Agent } from '@vybestack/llxprt-code-agents';
 import type { AgentEventRouter } from '../useAgentEventStream.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
@@ -99,7 +100,7 @@ describe('useAgentEventStream', () => {
     const controller = new AbortController();
     await act(async () => {
       await result.current.runStream(
-        'test' as PartListUnion,
+        'test' as ContractPartListUnion,
         controller.signal,
         'prompt-1',
       );
@@ -142,7 +143,7 @@ describe('useAgentEventStream', () => {
     // Start streaming, then abort after first chunk
     const promise = act(async () => {
       const p = result.current.runStream(
-        'test' as PartListUnion,
+        'test' as ContractPartListUnion,
         controller.signal,
         'prompt-abort',
       );
@@ -195,14 +196,14 @@ describe('useAgentEventStream', () => {
       // Start both runs "simultaneously" — the second is queued behind the
       // first via the inflightRunRef serialization chain.
       const p1 = result.current.runStream(
-        'a' as PartListUnion,
+        'a' as ContractPartListUnion,
         controller.signal,
         'p1',
       );
       // Let the microtask queue flush so run 1 starts before run 2 is called
       await new Promise((r) => setTimeout(r, 0));
       const p2 = result.current.runStream(
-        'b' as PartListUnion,
+        'b' as ContractPartListUnion,
         controller.signal,
         'p2',
       );

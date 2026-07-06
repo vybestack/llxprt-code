@@ -31,7 +31,6 @@ import type {
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import { AgentEventType as ServerEventType } from '@vybestack/llxprt-code-core';
-import { FinishReason } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { HistoryItemAi } from '../types.js';
 import { MessageType } from '../types.js';
@@ -404,7 +403,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         };
         yield {
           type: ServerEventType.Finished,
-          value: { reason: FinishReason.STOP },
+          value: { reason: 'STOP' },
         };
       })(),
     );
@@ -467,7 +466,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         };
         yield {
           type: ServerEventType.Finished,
-          value: { reason: FinishReason.STOP },
+          value: { reason: 'STOP' },
         };
       })(),
     );
@@ -494,7 +493,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         };
         yield {
           type: ServerEventType.Finished,
-          value: { reason: FinishReason.STOP },
+          value: { reason: 'STOP' },
         };
       })(),
     );
@@ -542,7 +541,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         };
         yield {
           type: ServerEventType.Finished,
-          value: { reason: FinishReason.STOP },
+          value: { reason: 'STOP' },
         };
       })(),
     );
@@ -608,7 +607,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           };
           yield {
             type: ServerEventType.Finished,
-            value: { reason: FinishReason.STOP },
+            value: { reason: 'STOP' },
           };
         })(),
       );
@@ -689,7 +688,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           };
           yield {
             type: ServerEventType.Finished,
-            value: { reason: FinishReason.STOP },
+            value: { reason: 'STOP' },
           };
         })(),
       );
@@ -758,7 +757,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           };
           yield {
             type: ServerEventType.Finished,
-            value: { reason: FinishReason.STOP },
+            value: { reason: 'STOP' },
           };
         })(),
       );

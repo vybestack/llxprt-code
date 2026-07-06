@@ -5,14 +5,14 @@
  */
 
 import type {
+  ContractPart,
   ServerAgentStreamEvent,
   ToolErrorType,
 } from '@vybestack/llxprt-code-core';
-import type { Part } from '@google/genai';
 
 export function createCompletedToolCallResponse(params: {
   callId: string;
-  responseParts?: Part[];
+  responseParts?: ContractPart[];
   resultDisplay?: unknown;
   error?: Error;
   errorType?: ToolErrorType;

@@ -20,8 +20,8 @@ import {
   type ThinkingBlock,
   type ThoughtSummary,
   type ToolCallRequestInfo,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
-import { type PartListUnion } from '@google/genai';
 import {
   StreamingState,
   type HistoryItem,
@@ -91,7 +91,7 @@ export interface UseSubmitQueryDeps {
   abortActiveStream: (reason?: unknown) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   handleSlashCommand: (
-    cmd: PartListUnion,
+    cmd: ContractPartListUnion,
   ) => Promise<SlashCommandProcessorResult | false>;
   logger:
     | { logMessage: (sender: MessageSenderType, text: string) => Promise<void> }
@@ -111,7 +111,7 @@ export interface UseSubmitQueryDeps {
    */
   runStreamRef: React.MutableRefObject<
     | ((
-        message: PartListUnion,
+        message: ContractPartListUnion,
         signal: AbortSignal,
         promptId: string,
       ) => Promise<void>)
@@ -119,7 +119,7 @@ export interface UseSubmitQueryDeps {
   >;
   submitQueryRef: React.MutableRefObject<
     | ((
-        query: PartListUnion,
+        query: ContractPartListUnion,
         options?: { isContinuation: boolean },
         prompt_id?: string,
       ) => Promise<void>)
@@ -131,7 +131,7 @@ export interface UseSubmitQueryDeps {
 
 export interface UseSubmitQueryReturn {
   submitQuery: (
-    query: PartListUnion,
+    query: ContractPartListUnion,
     options?: { isContinuation: boolean },
     prompt_id?: string,
   ) => Promise<void>;
@@ -143,12 +143,12 @@ export interface UseSubmitQueryReturn {
     userMessageTimestamp: number,
   ) => void;
   prepareQueryForAgent: (
-    query: PartListUnion,
+    query: ContractPartListUnion,
     userMessageTimestamp: number,
     abortSignal: AbortSignal,
     promptId: string,
   ) => Promise<{
-    queryToSend: PartListUnion | null;
+    queryToSend: ContractPartListUnion | null;
     shouldProceed: boolean;
   }>;
   handleLoopDetectedEvent: () => void;
@@ -321,11 +321,14 @@ function useScheduleNext(deps: UseSubmitQueryDeps) {
 interface SubmitQueryCallbackDeps extends UseSubmitQueryDeps {
   displayUserMessage: (q: string, t: number) => void;
   prepareQueryForAgent: (
-    query: PartListUnion,
+    query: ContractPartListUnion,
     userMessageTimestamp: number,
     abortSignal: AbortSignal,
     promptId: string,
-  ) => Promise<{ queryToSend: PartListUnion | null; shouldProceed: boolean }>;
+  ) => Promise<{
+    queryToSend: ContractPartListUnion | null;
+    shouldProceed: boolean;
+  }>;
   handleLoopDetectedEvent: () => void;
   scheduleNextQueuedSubmission: () => void;
   startNewPrompt: () => void;
@@ -335,7 +338,7 @@ interface SubmitQueryCallbackDeps extends UseSubmitQueryDeps {
 function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
   return useCallback(
     async (
-      query: PartListUnion,
+      query: ContractPartListUnion,
       options?: { isContinuation: boolean },
       prompt_id?: string,
     ) => {
@@ -376,7 +379,7 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
 
 async function runSubmitQueryCore(
   cbd: SubmitQueryCallbackDeps,
-  query: PartListUnion,
+  query: ContractPartListUnion,
   turn: TurnInit,
 ): Promise<void> {
   const { queryToSend, shouldProceed } = await cbd.prepareQueryForAgent(
@@ -473,7 +476,7 @@ interface TurnInit {
 
 function initTurn(
   deps: UseSubmitQueryDeps,
-  query: PartListUnion,
+  query: ContractPartListUnion,
   promptId: string | undefined,
   getPromptCount: () => number,
 ): TurnInit {
@@ -499,7 +502,7 @@ function initTurn(
 async function executeStream(
   deps: UseSubmitQueryDeps,
   handleLoopDetectedEvent: () => void,
-  queryToSend: PartListUnion,
+  queryToSend: ContractPartListUnion,
   turn: TurnInit,
 ): Promise<void> {
   const runStream = deps.runStreamRef.current;

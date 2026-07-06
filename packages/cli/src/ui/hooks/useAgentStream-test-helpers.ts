@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ContractContent } from '@vybestack/llxprt-code-core';
+
 import { vi } from 'vitest';
-import type { Content } from '@google/genai';
 import type {
   Agent,
   AgentEvent,
@@ -184,7 +185,7 @@ function createHistoryControl(mockClient: Record<string, unknown>) {
       const fn = mockClient.getHistory as
         | (() => Promise<readonly unknown[]>)
         | undefined;
-      return fn ? ((await fn()) as unknown as readonly Content[]) : [];
+      return fn ? ((await fn()) as unknown as readonly ContractContent[]) : [];
     },
     async setHistory() {},
     async addHistory(message: unknown) {

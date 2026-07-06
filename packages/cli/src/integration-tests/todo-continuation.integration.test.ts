@@ -14,13 +14,13 @@ import {
   createRuntimeStateFromConfig,
   type TodoUpdateEvent,
   type ServerAgentStreamEvent,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import {
   AgentClient,
   type Turn,
 } from '@vybestack/llxprt-code-agents/internals.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { PartListUnion } from '@google/genai';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -256,7 +256,7 @@ describe('Task-list Continuation Integration Tests', () => {
 
       const originalSendMessageStream = agentClient.sendMessageStream;
       agentClient.sendMessageStream = vi.fn(async function* (
-        request: PartListUnion,
+        request: ContractPartListUnion,
         signal: AbortSignal,
         prompt_id: string,
         turns?: number,

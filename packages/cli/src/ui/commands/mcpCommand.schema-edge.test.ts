@@ -15,8 +15,6 @@ import {
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
-import type { CallableTool } from '@google/genai';
-import { Type } from '@google/genai';
 import type {
   Agent,
   McpDetailStatus,
@@ -62,13 +60,15 @@ const createMockMCPTool = (
   description?: string,
 ) =>
   new DiscoveredMCPTool(
-    { callTool: vi.fn(), tool: vi.fn() } as unknown as CallableTool,
+    { callTool: vi.fn(), tool: vi.fn() } as unknown as ConstructorParameters<
+      typeof DiscoveredMCPTool
+    >[0],
     serverName,
     serverToolName,
     description === undefined || description === ''
       ? `Description for ${serverToolName}`
       : description,
-    { type: Type.OBJECT, properties: {} },
+    { type: 'OBJECT', properties: {} },
     true,
   );
 
@@ -157,14 +157,17 @@ describe('mcpCommand', () => {
       });
 
       const tool1 = new DiscoveredMCPTool(
-        { callTool: vi.fn(), tool: vi.fn() } as unknown as CallableTool,
+        {
+          callTool: vi.fn(),
+          tool: vi.fn(),
+        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[0],
         'server1',
         'tool1',
         'This is tool 1 description',
         {
-          type: Type.OBJECT,
+          type: 'OBJECT',
           properties: {
-            param1: { type: Type.STRING, description: 'First parameter' },
+            param1: { type: 'STRING', description: 'First parameter' },
           },
           required: ['param1'],
         },
@@ -172,14 +175,17 @@ describe('mcpCommand', () => {
       );
 
       const tool2 = new DiscoveredMCPTool(
-        { callTool: vi.fn(), tool: vi.fn() } as unknown as CallableTool,
+        {
+          callTool: vi.fn(),
+          tool: vi.fn(),
+        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[0],
         'server1',
         'tool2',
         'This is tool 2 description',
         {
-          type: Type.OBJECT,
+          type: 'OBJECT',
           properties: {
-            param2: { type: Type.NUMBER, description: 'Second parameter' },
+            param2: { type: 'NUMBER', description: 'Second parameter' },
           },
           required: ['param2'],
         },
@@ -219,7 +225,10 @@ describe('mcpCommand', () => {
       // exercising the no-parameter-schema path (createMockMCPTool always
       // supplies an object schema, which would not).
       const toolWithoutSchema = new DiscoveredMCPTool(
-        { callTool: vi.fn(), tool: vi.fn() } as unknown as CallableTool,
+        {
+          callTool: vi.fn(),
+          tool: vi.fn(),
+        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[0],
         'server1',
         'tool1',
         'Tool without schema',

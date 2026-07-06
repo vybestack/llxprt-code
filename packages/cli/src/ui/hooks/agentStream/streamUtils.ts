@@ -25,12 +25,13 @@ import {
   type ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
   type ThinkingBlock,
+  type ContractPart,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import {
   AllBucketsExhaustedError,
   isAuthBucketFailureReason,
 } from '@vybestack/llxprt-code-providers';
-import { type Part, type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -64,9 +65,12 @@ export { REFUSAL_NOTICE_MESSAGE } from '../../../utils/refusalNotice.js';
 // ─── Pure utility functions ───────────────────────────────────────────────────
 
 /**
- * Adds a part (string or Part object) to the result array.
+ * Adds a part (string or ContractPart object) to the result array.
  */
-function addPartToResult(part: string | Part, resultParts: Part[]): void {
+function addPartToResult(
+  part: string | ContractPart,
+  resultParts: ContractPart[],
+): void {
   if (typeof part === 'string') {
     resultParts.push({ text: part });
   } else {
@@ -75,10 +79,12 @@ function addPartToResult(part: string | Part, resultParts: Part[]): void {
 }
 
 /**
- * Merges an array of PartListUnions into a single flat Part[].
+ * Merges an array of ContractPartListUnions into a single flat ContractPart[].
  */
-export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
-  const resultParts: Part[] = [];
+export function mergePartListUnions(
+  list: ContractPartListUnion[],
+): ContractPartListUnion {
+  const resultParts: ContractPart[] = [];
   for (const item of list) {
     if (Array.isArray(item)) {
       for (const part of item) {
@@ -391,7 +397,10 @@ export async function processSlashCommandResult(
   ) => Promise<void> | void,
   prompt_id: string,
   abortSignal: AbortSignal,
-): Promise<{ queryToSend: PartListUnion | null; shouldProceed: boolean }> {
+): Promise<{
+  queryToSend: ContractPartListUnion | null;
+  shouldProceed: boolean;
+}> {
   switch (result.type) {
     case 'schedule_tool': {
       const { toolName, toolArgs } = result;

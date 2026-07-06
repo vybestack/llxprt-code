@@ -27,14 +27,14 @@ import type {
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
-  Config,
-  EditorType,
-  AnyToolInvocation,
   AnyDeclarativeTool,
+  AnyToolInvocation,
+  Config,
+  ContractPartListUnion,
+  EditorType,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
-import type { PartListUnion } from '@google/genai';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -226,7 +226,7 @@ describe('useAgentStream', () => {
       config: mockConfig,
       onDebugMessage: mockOnDebugMessage,
       handleSlashCommand: mockHandleSlashCommand as unknown as (
-        cmd: PartListUnion,
+        cmd: ContractPartListUnion,
       ) => Promise<SlashCommandProcessorResult | false>,
       shellModeActive: false,
       loadedSettings: mockLoadedSettings,

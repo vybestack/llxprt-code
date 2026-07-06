@@ -25,9 +25,9 @@ import {
   type ServerContentEvent,
   logUserPrompt,
   type UserPromptEvent,
+  type ContractPartListUnion,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -110,12 +110,12 @@ interface StreamEventHandlersResult {
     userMessageTimestamp: number,
   ) => void;
   prepareQueryForAgent: (
-    query: PartListUnion,
+    query: ContractPartListUnion,
     userMessageTimestamp: number,
     abortSignal: AbortSignal,
     promptId: string,
   ) => Promise<{
-    queryToSend: PartListUnion | null;
+    queryToSend: ContractPartListUnion | null;
     shouldProceed: boolean;
   }>;
 }
@@ -141,7 +141,7 @@ interface StreamEventHandlerDeps {
   turnCancelledRef: React.MutableRefObject<boolean>;
   queuedSubmissionsRef: React.MutableRefObject<
     Array<{
-      query: PartListUnion;
+      query: ContractPartListUnion;
       options?: { isContinuation: boolean };
       promptId?: string;
     }>
@@ -159,7 +159,7 @@ interface StreamEventHandlerDeps {
   abortActiveStream: (reason?: unknown) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   handleSlashCommand: (
-    cmd: PartListUnion,
+    cmd: ContractPartListUnion,
   ) => Promise<SlashCommandProcessorResult | false>;
   logger:
     | { logMessage: (sender: MessageSenderType, text: string) => Promise<void> }
@@ -461,7 +461,7 @@ function usePrepareQueryForAgent(deps: StreamEventHandlerDeps) {
   const prepareQueryDeps = usePrepareQueryDeps(deps);
   return useCallback(
     async (
-      query: PartListUnion,
+      query: ContractPartListUnion,
       userMessageTimestamp: number,
       abortSignal: AbortSignal,
       prompt_id: string,
