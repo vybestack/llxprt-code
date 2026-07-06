@@ -521,7 +521,7 @@ export class ChatSession {
 
   async performCompression(
     prompt_id: string,
-    options?: { bypassCooldown?: boolean },
+    options?: { bypassCooldown?: boolean; trigger?: 'manual' | 'auto' },
   ): Promise<PerformCompressionResult> {
     return this.compressionHandler.performCompression(prompt_id, options);
   }
@@ -532,6 +532,17 @@ export class ChatSession {
 
   getLastPromptTokenCount(): number {
     return this.compressionHandler.lastPromptTokenCount ?? 0;
+  }
+
+  /**
+   * Baseline prompt tokens for projection: prefer the API-observed count,
+   * falling back to the history-derived estimate. Mirrors
+   * CompressionHandler.getProjectedPromptBaseline() so callers that re-check
+   * capacity right after compression (which nulls lastPromptTokenCount) get an
+   * accurate baseline instead of 0.
+   */
+  getProjectedPromptBaseline(): number {
+    return this.compressionHandler.getProjectedPromptBaseline();
   }
 
   recordCompletedToolCalls(

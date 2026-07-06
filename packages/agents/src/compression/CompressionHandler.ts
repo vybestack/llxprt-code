@@ -360,7 +360,7 @@ export class CompressionHandler {
    * Compute the baseline prompt token count for hard-limit projection.
    * Prefer API-observed prompt tokens when available (includes cache read/write).
    */
-  private getProjectedPromptBaseline(): number {
+  getProjectedPromptBaseline(): number {
     return this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0
       ? this.lastPromptTokenCount
       : this.getEffectiveTokenCount();
