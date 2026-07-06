@@ -25,7 +25,6 @@ import { renderHook, waitFor } from '../../../../test-utils/render.js';
 import { useSubmitQuery } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import {
-  type Config,
   type AgentClientContract,
   type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
@@ -79,15 +78,21 @@ function createDeferred<T = void>(): {
   return { promise, resolve, reject };
 }
 
-function createMockConfig(): Config {
+function createMockOverrides() {
   return {
-    getSessionId: () => 'test-session',
-    getModel: () => 'test-model',
-    getMcpClientManager: () => undefined,
-    getMcpServers: () => ({}),
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    setupAsyncTaskAutoTrigger: () => () => {},
-  } as unknown as Config;
+    session: { getSessionId: () => 'test-session' },
+    model: {
+      getModel: () => 'test-model',
+      getContentGeneratorConfig: () => ({ model: 'test-model' }),
+    },
+    mcp: {
+      getMcpClientManager: () => undefined,
+      getMcpServers: () => ({}),
+    },
+    asyncTasks: {
+      setupAsyncTaskAutoTrigger: () => () => {},
+    },
+  };
 }
 
 function createMockAgentClient(): AgentClientContract {
@@ -169,7 +174,7 @@ function renderUseSubmitQuery(
 ) {
   return renderHook(() =>
     useSubmitQuery({
-      runtime: createStreamRuntimeForTest(createMockConfig()),
+      runtime: createStreamRuntimeForTest(createMockOverrides()),
       agentClient: createMockAgentClient(),
       addItem: vi.fn().mockReturnValue(1),
       settings: {} as never,
@@ -576,7 +581,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const { result, rerender } = renderHook(
       ({ streamingState }: { streamingState: StreamingState }) =>
         useSubmitQuery({
-          runtime: createStreamRuntimeForTest(createMockConfig()),
+          runtime: createStreamRuntimeForTest(createMockOverrides()),
           agentClient: createMockAgentClient(),
           addItem: vi.fn().mockReturnValue(1),
           settings: {} as never,

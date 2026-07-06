@@ -29,7 +29,10 @@ import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
 import { StreamingState } from '../types.js';
-import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
+import {
+  createStreamRuntimeForTest,
+  type StreamRuntimeTestOverrides,
+} from './agentStream/__tests__/streamRuntimeTestHelper.js';
 
 const inkMock = vi.hoisted(() => {
   const noop = vi.fn(() => null);
@@ -156,6 +159,7 @@ const mockUseReactToolScheduler = useReactToolScheduler as Mock<
 
 describe('useAgentStream subagent isolation', () => {
   let mockConfig: Config;
+  let mockOverrides: StreamRuntimeTestOverrides;
   let mockSettings: LoadedSettings;
   let mockAddItem: Mock;
   let mockOnDebugMessage: Mock;
@@ -227,6 +231,25 @@ describe('useAgentStream subagent isolation', () => {
       },
     } as unknown as LoadedSettings;
 
+    mockOverrides = {
+      session: {
+        getSessionId: () => 'session-123',
+        getProjectRoot: () => '/tmp/project',
+      },
+      model: {
+        getModel: () => 'gemini-2.5-pro',
+        getContentGeneratorConfig: () => contentGeneratorConfig,
+      },
+      agentClientSource: { getAgentClient: mockGetAgentClient },
+      checkpoint: { getCheckpointingEnabled: () => false },
+      tools: {
+        getToolRegistry: vi.fn(
+          () =>
+            ({ getToolSchemaList: vi.fn(() => []) }) as unknown as ToolRegistry,
+        ),
+      },
+    };
+
     mockScheduleToolCalls = vi.fn();
     mockMarkToolsAsDisplayCleared = vi.fn();
 
@@ -281,7 +304,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockConfig),
+        createStreamRuntimeForTest(mockOverrides),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -391,7 +414,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockConfig),
+        createStreamRuntimeForTest(mockOverrides),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -460,7 +483,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockConfig),
+        createStreamRuntimeForTest(mockOverrides),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (
@@ -512,7 +535,7 @@ describe('useAgentStream subagent isolation', () => {
         client,
         [],
         mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-        createStreamRuntimeForTest(mockConfig),
+        createStreamRuntimeForTest(mockOverrides),
         mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand as unknown as (

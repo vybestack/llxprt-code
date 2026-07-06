@@ -32,7 +32,6 @@ import type {
   ToolRegistry,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
-import type { AutoPromptAgentClientFactory } from '../runtime/autoPromptDetachedClient.js';
 import type {
   SchedulerCallbacks,
   SchedulerOptions,
@@ -142,8 +141,7 @@ export interface UiToolRegistryInfo {
  */
 export interface AgentClientSource {
   getAgentClient(): AgentClientContract;
-  getAgentClientFactory?(): AutoPromptAgentClientFactory | undefined;
-  getAgentClientFactorySource?(): Parameters<AgentClientFactory>[0] | undefined;
+  getAgentClientFactory?(): AgentClientFactory | undefined;
 }
 
 /**
@@ -512,7 +510,6 @@ function buildAgentClientSource(
   return {
     getAgentClient: () => source.getAgentClient(),
     getAgentClientFactory: () => source.getAgentClientFactory?.(),
-    getAgentClientFactorySource: () => source.getAgentClientFactorySource?.(),
   };
 }
 
@@ -657,7 +654,7 @@ function buildAsyncTaskRuntime(
  * composition edge. Each field is a concrete focused adapter so the nested
  * runtime does not expose the flat source object below the composition edge.
  */
-export function buildStreamRuntimeFromSource(
+function buildStreamRuntimeFromSource(
   source: StreamRuntimeBareSource,
 ): StreamRuntime {
   return {
@@ -731,49 +728,26 @@ export function buildUiRuntimeFromSource(
 }
 
 /**
- * Slash-command boundary. Slash commands consume a broad runtime surface
- * (memory, tools, MCP, IDE, hooks, settings, extensions, etc.), so this named
- * boundary keeps that surface explicit and confined to the command layer.
- * Streaming and AppContainer internals use StreamRuntime/UiRuntime instead.
- *
- * Callers MUST use {@link buildSlashCommandRuntime} at the composition edge to
- * produce a flat delegation adapter — never pass the raw Config instance
- * directly as a SlashCommandRuntime prop.
+ * @deprecated Use {@link CliUiRuntime} instead. Slash-command code and other
+ * broad-runtime consumers are being migrated to the canonical alias; this type
+ * is retained temporarily to avoid a flag-day rename across all call sites and
+ * will be removed once the migration completes.
  */
-export type SlashCommandRuntime = UiRuntimeBareSource;
+export type SlashCommandRuntime = CliUiRuntime;
 
 /**
- * Builds a flat delegation adapter satisfying {@link SlashCommandRuntime} from
- * the bootstrap source. This breaks the Config identity link: downstream code
+ * Builds a flat delegation adapter satisfying {@link CliUiRuntime} from the
+ * bootstrap source. This breaks the Config identity link: downstream code
  * receives a plain object literal with delegated methods, not the raw Config
- * instance. Each method delegates through the focused capability builders so
- * the adapter is structurally identical to the nested UiRuntime but exposes the
- * flat surface that slash commands and dialogs expect.
+ * instance. The adapter flattens every capability produced by
+ * {@link buildUiRuntimeFromSource} into a single object so slash commands and
+ * dialogs receive the flat surface they expect.
  */
 export function buildSlashCommandRuntime(
   source: UiRuntimeBareSource,
-): SlashCommandRuntime {
-  const r = buildUiRuntimeFromSource(source);
-  const step1 = Object.assign(
-    {},
-    r.session,
-    r.model,
-    r.agentClientSource,
-    r.shell,
-  );
-  const step2 = Object.assign(step1, r.files, r.memory, r.ide, r.hooks);
-  const step3 = Object.assign(step2, r.mcp, r.settings, r.tools, r.scheduler);
-  const step4 = Object.assign(
-    step3,
-    r.asyncTasks,
-    r.bucketFailover,
-    r.checkpoint,
-    r.sessionLimits,
-  );
-  const step5 = Object.assign(step4, r.interactive, r.ephemeral, {
-    storage: r.storage,
-  });
-  return Object.assign(step5, r.approval, r.extensions, r.app);
+): CliUiRuntime {
+  const { storage, ...capabilities } = buildUiRuntimeFromSource(source);
+  return Object.assign({}, ...Object.values(capabilities), { storage });
 }
 
 /**

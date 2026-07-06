@@ -20,7 +20,6 @@ export interface DetachedAutoPromptClientSource {
   getEphemeralSetting?(key: string): unknown;
   getProxy?(): string | undefined;
   getAgentClientFactory?(): AutoPromptAgentClientFactory | undefined;
-  getAgentClientFactorySource?(): AgentClientFactorySource | undefined;
 }
 
 export type AutoPromptAgentClientFactory = AgentClientFactory;
@@ -79,7 +78,7 @@ export function createDetachedAutoPromptClient(
       'No agent client factory available. Run /auth login or try manual mode.',
     );
   }
-  const factorySource = source.getAgentClientFactorySource?.() ?? source;
+  const factorySource = source;
   if (!hasAgentClientFactorySource(factorySource)) {
     throw new Error(
       'Agent client factory source is incomplete. Run /auth login or try manual mode.',
