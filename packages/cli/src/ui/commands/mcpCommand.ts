@@ -15,6 +15,17 @@ import type { RuntimeMcpServers } from './mcpDisplay.js';
 import { buildMcpStatusMessage } from './mcpDisplay.js';
 import { mcpAuthSchema, listOAuthServers, performMcpOAuth } from './mcpAuth.js';
 
+function hasToolRefreshClient(
+  value: unknown,
+): value is { setTools(): Promise<void> } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'setTools' in value &&
+    typeof value.setTools === 'function'
+  );
+}
+
 const getMcpStatus = async (
   context: CommandContext,
   showDescriptions: boolean,
@@ -158,7 +169,11 @@ const refreshCommand: SlashCommand = {
       await toolRegistry.discoverAllTools();
 
       // Update the client with the new tools
-      await config.getAgentClient().setTools();
+      const agentClient: unknown = config.getAgentClient();
+      if (!hasToolRefreshClient(agentClient)) {
+        throw new Error('Agent client is not available');
+      }
+      await agentClient.setTools();
     } catch (error) {
       return {
         type: 'message',

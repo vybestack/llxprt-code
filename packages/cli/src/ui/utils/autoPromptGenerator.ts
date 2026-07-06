@@ -14,14 +14,13 @@ import {
   type DetachedAutoPromptClientSource,
 } from '../../runtime/autoPromptDetachedClient.js';
 
-/**
- * Structural interface describing exactly the agent-client surface this
- * side-channel utility needs. Avoids importing the full agent-client type
- * (issue #2372/#1595) by using the same ReturnType<Config['getAgentClient']>
- * pattern packages/cli/src/ui/hooks/usePromptCompletion.ts uses.
- */
 const logger = new DebugLogger('llxprt:subagent:auto-prompt');
 
+/**
+ * Runtime surface required by the auto-prompt generator. Combines the
+ * detached-client factory source with provider and agent-client accessors so
+ * this module does not depend on the full Config object.
+ */
 export interface AutoPromptRuntime extends DetachedAutoPromptClientSource {
   getProvider(): string | undefined;
   getAgentClient(): AgentClientContract | null | undefined;

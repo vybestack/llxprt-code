@@ -106,7 +106,6 @@ export function useSessionInitialization({
 
   // Guard refs for idempotency in StrictMode
   const hasTriggeredSessionStart = useRef(false);
-  const sessionStartCompleted = useRef(false);
   const hasSeededResumedHistory = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -139,23 +138,13 @@ export function useSessionInitialization({
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
-    void runSessionStartHook(uiRuntime, addItem, signal)
-      .then(() => {
-        if (!signal.aborted) {
-          sessionStartCompleted.current = true;
-        }
-      })
-      .catch(() => {
-        // Leave the run incomplete so cleanup can reset the trigger guard and
-        // allow a retry on the next render after a genuine hook failure.
-      });
+    void runSessionStartHook(uiRuntime, addItem, signal).catch(() => {
+      // Hook failures should not block session initialization.
+    });
 
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
-      }
-      if (!sessionStartCompleted.current) {
-        hasTriggeredSessionStart.current = false;
       }
     };
   }, [uiRuntime, addItem]);

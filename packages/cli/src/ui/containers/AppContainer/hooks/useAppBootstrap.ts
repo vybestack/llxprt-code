@@ -241,16 +241,10 @@ function useBootstrapEvents(
     if (ideClient === undefined) {
       return undefined;
     }
-    let disconnected = false;
-    const disconnect = () => {
-      if (disconnected) {
-        return;
-      }
-      disconnected = true;
+    registerCleanup(() => {
       void ideClient.disconnect();
-    };
-    registerCleanup(disconnect);
-    return disconnect;
+    });
+    return undefined;
   }, [uiRuntime]);
   const shouldShowIdePrompt =
     Boolean(currentIDE) &&

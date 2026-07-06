@@ -15,6 +15,7 @@ import {
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import process from 'node:process';
+
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 
 type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
@@ -105,16 +106,14 @@ export const useFolderTrust = (
   useEffect(() => {
     const folderTrustChanged = previousFolderTrust.current !== folderTrust;
     previousFolderTrust.current = folderTrust;
-    const trusted = folderTrustChanged
-      ? isWorkspaceTrusted({ folderTrust } as Settings)
-      : isTrusted;
+    const trusted = isWorkspaceTrusted({ folderTrust } as Settings);
     if (folderTrustChanged) {
       setIsTrusted(trusted);
       setIsFolderTrustDialogOpen(trusted === undefined);
     }
 
     showStartupMessage(trusted, addItem, startupMessageSent);
-  }, [folderTrust, addItem, isTrusted]);
+  }, [folderTrust, addItem]);
 
   const handleFolderTrustSelect = useCallback(
     (choice: FolderTrustChoice) => {

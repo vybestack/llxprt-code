@@ -50,7 +50,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         <Text color={SemanticColors.text.primary}>{bannerText}</Text>
       )}
       {!(settings.merged.ui.hideTips === true || config.getScreenReader()) && (
-        <Tips config={config} />
+        <Tips memory={config} />
       )}
     </Box>
   );
