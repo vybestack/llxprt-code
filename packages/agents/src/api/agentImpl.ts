@@ -88,7 +88,7 @@ import {
   drainToResult,
   buildAgentResult,
   buildProviderInfos,
-  buildToolInfos,
+  buildToolInfosFromRegistry,
   toPartListUnion,
   type OwnershipRecord,
   type StableDisplayCallbacksHolder,
@@ -1020,19 +1020,13 @@ export class AgentImpl implements Agent {
     return buildProviderInfos(names, configured);
   }
 
-  /**
-   * Returns a concrete ToolInfo[] from the tool registry.
-   * @plan:PLAN-20260617-COREAPI.P15
-   * @requirement:REQ-017
-   */
+  /** Projects the enriched ToolInfo[] from the registry (added by #2376). */
   listTools(): readonly ToolInfo[] {
     const registry = this.deps.config.getToolRegistry();
-    const allTools = registry.getAllTools().map((t) => ({
-      name: t.name,
-      serverName: (t as { serverName?: string }).serverName,
-    }));
-    const enabledNames = new Set(registry.getEnabledTools().map((t) => t.name));
-    return buildToolInfos(allTools, enabledNames);
+    return buildToolInfosFromRegistry(
+      registry.getAllTools(),
+      new Set(registry.getEnabledTools().map((t) => t.name)),
+    );
   }
 
   /**

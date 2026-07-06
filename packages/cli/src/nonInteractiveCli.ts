@@ -24,7 +24,11 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { type Part } from '@google/genai';
 import { activateSettingsRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import {
+  fromConfig,
+  type Agent,
+  type AgentToolHandle,
+} from '@vybestack/llxprt-code-agents';
 
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
@@ -192,29 +196,48 @@ function createEmojiFilter(config: Config): EmojiFilter | undefined {
     : undefined;
 }
 
-async function resolveNonInteractiveQuery(
+/**
+ * Resolves a slash command to its submitted prompt parts, or undefined when
+ * the input is not a slash command (or the command produced no content).
+ * Runs BEFORE Agent construction (matching the pre-#2376 ordering) so a
+ * slash-only input that fails or exits never requires provider setup.
+ */
+async function resolveSlashQuery(
   input: string,
   abortController: AbortController,
   config: Config,
   settings: LoadedSettings,
-): Promise<Part[]> {
-  if (isSlashCommand(input)) {
-    const slashCommandResult = await handleSlashCommand(
-      input,
-      abortController,
-      config,
-      settings,
-    );
-    if (
-      slashCommandResult !== undefined &&
-      (typeof slashCommandResult !== 'string' || slashCommandResult.length > 0)
-    ) {
-      return slashCommandResult as Part[];
-    }
+): Promise<Part[] | undefined> {
+  if (!isSlashCommand(input)) {
+    return undefined;
   }
+  const slashCommandResult = await handleSlashCommand(
+    input,
+    abortController,
+    config,
+    settings,
+  );
+  if (
+    slashCommandResult !== undefined &&
+    (typeof slashCommandResult !== 'string' || slashCommandResult.length > 0)
+  ) {
+    return slashCommandResult as Part[];
+  }
+  return undefined;
+}
+
+async function resolveAtQuery(
+  input: string,
+  abortController: AbortController,
+  config: Config,
+  getToolHandle: (name: string) => AgentToolHandle | undefined,
+): Promise<Part[]> {
   const { processedQuery, error } = await handleAtCommand({
     query: input,
     config,
+    // Tool lookups resolve through the public Agent.tools API (issue #2376):
+    // the caller supplies getToolHandle from the already-created Agent.
+    getToolHandle,
     addItem: (_item, _timestamp) => 0,
     onDebugMessage: () => {},
     messageId: Date.now(),
@@ -244,6 +267,7 @@ function emitUserMessage(
 
 async function processQuery(
   query: Part[],
+  agent: Agent,
   params: RunNonInteractiveParams,
   options: {
     abortController: AbortController;
@@ -254,51 +278,89 @@ async function processQuery(
     startTime: number;
   },
 ): Promise<void> {
-  let agent: Agent | undefined;
-  try {
-    agent = await fromConfig({
+  const eventStream = agent.stream(query, {
+    signal: options.abortController.signal,
+    promptId: params.prompt_id,
+    maxTurns: params.config.getMaxSessionTurns(),
+  });
+  await processAgentStream(
+    eventStream,
+    {
       config: params.config,
-      messageBus: params.runtimeMessageBus,
-      sessionId: params.config.getSessionId(),
-    });
-    const eventStream = agent.stream(query, {
-      signal: options.abortController.signal,
-      promptId: params.prompt_id,
-      maxTurns: params.config.getMaxSessionTurns(),
-    });
-    await processAgentStream(
-      eventStream,
-      {
-        config: params.config,
-        jsonOutput: options.jsonOutput,
-        streamJsonOutput: options.streamJsonOutput,
-        streamFormatter: options.streamFormatter,
-        emojiFilter: options.emojiFilter,
-        createProfileNameWriter: () =>
-          createProfileNameWriter(
-            params.config,
-            options.jsonOutput,
-            options.streamFormatter,
-          ),
-      },
-      options.startTime,
-      () => uiTelemetryService.getMetrics(),
-    );
+      jsonOutput: options.jsonOutput,
+      streamJsonOutput: options.streamJsonOutput,
+      streamFormatter: options.streamFormatter,
+      emojiFilter: options.emojiFilter,
+      createProfileNameWriter: () =>
+        createProfileNameWriter(
+          params.config,
+          options.jsonOutput,
+          options.streamFormatter,
+        ),
+    },
+    options.startTime,
+    () => uiTelemetryService.getMetrics(),
+  );
+}
+
+/**
+ * Resolves the query, streams the response, and disposes the agent. Extracted
+ * from runNonInteractive to keep function length within lint limits.
+ *
+ * Slash commands are RESOLVED before the Agent is created so a slash command
+ * that throws (e.g. a confirmation/validation failure) surfaces its error
+ * before any provider/Agent setup runs. The Agent is then created
+ * unconditionally because BOTH paths need it to stream: `processQuery` runs the
+ * resolved query through `agent`, and the @-command fallback additionally uses
+ * `agent.tools.get` for tool lookups (the public Agent.tools API, issue #2376).
+ * If `resolveSlashQuery` returns content it becomes the query; otherwise the
+ * input falls through to @-command/prompt handling. The Agent is always
+ * disposed in the `finally` below.
+ */
+async function resolveAndStream(
+  params: RunNonInteractiveParams,
+  options: {
+    abortController: AbortController;
+    jsonOutput: boolean;
+    streamJsonOutput: boolean;
+    streamFormatter: StreamJsonFormatter | null;
+    emojiFilter: EmojiFilter | undefined;
+    startTime: number;
+  },
+): Promise<void> {
+  const { config, input, settings } = params;
+  const slashQuery = await resolveSlashQuery(
+    input,
+    options.abortController,
+    config,
+    settings,
+  );
+  const agent = await fromConfig({
+    config,
+    messageBus: params.runtimeMessageBus,
+    sessionId: config.getSessionId(),
+  });
+  try {
+    const query =
+      slashQuery ??
+      (await resolveAtQuery(input, options.abortController, config, (name) =>
+        agent.tools.get(name),
+      ));
+    emitUserMessage(options.streamFormatter, input);
+    await processQuery(query, agent, params, options);
   } finally {
-    if (agent !== undefined) {
-      // Dispose in its own try/catch so a disposal failure never masks the
-      // original error thrown by the stream/turn loop above.
-      try {
-        await agent.dispose();
-      } catch (disposeError) {
-        debugLogger.error(
-          `Failed to dispose agent: ${
-            disposeError instanceof Error
-              ? disposeError.message
-              : String(disposeError)
-          }`,
-        );
-      }
+    // Dispose in its own try/catch so a disposal failure never masks the
+    // original error thrown by resolve/processQuery above.
+    try {
+      await agent.dispose();
+    } catch (disposeError) {
+      debugLogger.error(
+        `Failed to dispose agent: ${
+          disposeError instanceof Error
+            ? disposeError.message
+            : String(disposeError)
+        }`,
+      );
     }
   }
 }
@@ -306,7 +368,7 @@ async function processQuery(
 export async function runNonInteractive(
   params: RunNonInteractiveParams,
 ): Promise<void> {
-  const { config, input, settings, deferTelemetryShutdown = false } = params;
+  const { config, deferTelemetryShutdown = false } = params;
   const outputFormat = config.getOutputFormat();
   const jsonOutput = outputFormat === OutputFormat.JSON;
   const streamJsonOutput = outputFormat === OutputFormat.STREAM_JSON;
@@ -338,14 +400,7 @@ export async function runNonInteractive(
     );
     emitStreamInit(streamFormatter, config);
     stdinCancellation.setup();
-    const query = await resolveNonInteractiveQuery(
-      input,
-      abortController,
-      config,
-      settings,
-    );
-    emitUserMessage(streamFormatter, input);
-    await processQuery(query, params, {
+    await resolveAndStream(params, {
       abortController,
       jsonOutput,
       streamJsonOutput,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { FileWorkspaceState, ToolRuntime } from '../cliUiRuntime.js';
+import type { FileWorkspaceState } from '../cliUiRuntime.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { PartListUnion, PartUnion } from '@google/genai';
@@ -14,10 +14,11 @@ import {
   isNodeError,
   validatePathWithinWorkspace,
 } from '@vybestack/llxprt-code-core';
+import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import type {
-  AnyToolInvocation,
-  DiscoveredMCPResource,
-} from '@vybestack/llxprt-code-core';
+  AgentToolHandle,
+  AgentToolInvocation,
+} from '@vybestack/llxprt-code-agents';
 import type { IndividualToolCallDisplay } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -42,17 +43,18 @@ type ResourceRegistry = {
   findResourceByUri: (identifier: string) => DiscoveredMCPResource | undefined;
 };
 
-export type AtCommandHelperRuntime = Pick<ToolRuntime, 'getToolRegistry'> &
-  Pick<
-    FileWorkspaceState,
-    | 'getFileFilteringOptions'
-    | 'getWorkspaceContext'
-    | 'getFileService'
-    | 'getEnableRecursiveFileSearch'
-  >;
+type MaybeToolHandle = AgentToolHandle | undefined;
 
-type ToolRegistryTool = ReturnType<
-  ReturnType<AtCommandHelperRuntime['getToolRegistry']>['getTool']
+// @plan:ISSUE-2376 — file/workspace access flows through the #2384 UiRuntime
+// abstraction (FileWorkspaceState), but tool lookup is routed through the
+// public Agent surface (AgentToolHandle) rather than the tool registry, so the
+// runtime slice here carries only file/workspace access.
+export type AtCommandHelperRuntime = Pick<
+  FileWorkspaceState,
+  | 'getFileFilteringOptions'
+  | 'getWorkspaceContext'
+  | 'getFileService'
+  | 'getEnableRecursiveFileSearch'
 >;
 
 interface ResolutionState {
@@ -72,7 +74,7 @@ interface ResolveCommandsParams {
   atPathCommandParts: AtCommandPart[];
   config: AtCommandHelperRuntime;
   resourceRegistry: ResourceRegistry;
-  globTool: ToolRegistryTool;
+  globTool: MaybeToolHandle;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
 }
@@ -93,7 +95,7 @@ interface FileReadParams {
   absoluteToRelativePathMap: Map<string, string>;
   processedQueryParts: PartUnion[];
   resourceReadDisplays: IndividualToolCallDisplay[];
-  readManyFilesTool: NonNullable<ToolRegistryTool>;
+  readManyFilesTool: NonNullable<MaybeToolHandle>;
   respectFileIgnore: ReturnType<
     AtCommandHelperRuntime['getFileFilteringOptions']
   >;
@@ -106,13 +108,13 @@ interface FileReadParams {
 
 interface ResolveParams {
   config: AtCommandHelperRuntime;
-  globTool: ToolRegistryTool;
+  globTool: MaybeToolHandle;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
 }
 
 interface GlobSearchParams {
-  globTool: NonNullable<ToolRegistryTool>;
+  globTool: NonNullable<MaybeToolHandle>;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
 }
@@ -513,7 +515,7 @@ export async function readFilesAndBuildResult({
       addToolGroup(addItem, userMessageTimestamp, resourceReadDisplays);
     return { processedQuery: processedQueryParts };
   }
-  let invocation: AnyToolInvocation | undefined;
+  let invocation: AgentToolInvocation | undefined;
   try {
     invocation = readManyFilesTool.build(
       buildToolArgs(pathSpecsToRead, respectFileIgnore),
@@ -573,8 +575,8 @@ function buildToolArgs(
 }
 
 function buildReadSuccessDisplay(
-  readManyFilesTool: NonNullable<ToolRegistryTool>,
-  invocation: AnyToolInvocation,
+  readManyFilesTool: NonNullable<MaybeToolHandle>,
+  invocation: AgentToolInvocation,
   result: { returnDisplay?: unknown },
   contentLabelsForDisplay: string[],
   userMessageTimestamp: number,
@@ -593,8 +595,8 @@ function buildReadSuccessDisplay(
 }
 
 function buildReadErrorDisplay(
-  readManyFilesTool: NonNullable<ToolRegistryTool>,
-  invocation: AnyToolInvocation | undefined,
+  readManyFilesTool: NonNullable<MaybeToolHandle>,
+  invocation: AgentToolInvocation | undefined,
   contentLabelsForDisplay: string[],
   userMessageTimestamp: number,
   error: unknown,

@@ -268,6 +268,61 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     );
   });
 
+  it('resolves slash commands before creating the Agent, so a failing slash-only input never constructs one', async () => {
+    const mockCommand = {
+      name: 'confirm',
+      description: 'a command that needs confirmation',
+      action: vi.fn().mockResolvedValue({
+        type: 'confirm_shell_commands',
+        commands: ['rm -rf /'],
+      }),
+    };
+    mockGetCommands.mockReturnValue([mockCommand]);
+    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+
+    await expect(
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: '/confirm',
+        prompt_id: 'prompt-id-no-agent',
+      }),
+    ).rejects.toThrow(
+      'Exiting due to a confirmation prompt requested by the command.',
+    );
+
+    expect(vi.mocked(fromConfig)).not.toHaveBeenCalled();
+  });
+
+  it('creates and disposes the Agent for a slash command that submits a prompt', async () => {
+    const mockCommand = {
+      name: 'submits',
+      description: 'a command that submits a prompt',
+      action: vi.fn().mockResolvedValue({
+        type: 'submit_prompt',
+        content: [{ text: 'Prompt from command' }],
+      }),
+    };
+    mockGetCommands.mockReturnValue([mockCommand]);
+    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const fakeAgent = buildFakeAgent();
+    vi.mocked(fromConfig).mockResolvedValue(fakeAgent);
+    agentState.events = [
+      { type: 'text', text: 'ok' },
+      { type: 'done', reason: 'stop' },
+    ];
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: '/submits',
+      prompt_id: 'prompt-id-agent-lifecycle',
+    });
+
+    expect(vi.mocked(fromConfig)).toHaveBeenCalledTimes(1);
+    expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('should treat an unknown slash command as a regular prompt', async () => {
     // No commands are mocked, so any slash command is "unknown"
     mockGetCommands.mockReturnValue([]);

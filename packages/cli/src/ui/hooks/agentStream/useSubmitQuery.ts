@@ -159,6 +159,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
 
   const handlers = useStreamEventHandlers({
     runtime: deps.runtime,
+    agent: deps.agent,
     settings: deps.settings,
     addItem: deps.addItem,
     onDebugMessage: deps.onDebugMessage,

@@ -17,6 +17,10 @@ import {
   mcpServerRequiresOAuth,
 } from '@vybestack/llxprt-code-core';
 import type { McpControlDeps } from './mcpControl.js';
+import {
+  projectRegistryTool,
+  readOptionalStringProp,
+} from '../agentBootstrap.js';
 
 /**
  * Inputs AgentImpl supplies so the MCP wiring can resolve the live
@@ -53,7 +57,29 @@ export function buildMcpControlDeps(
     isMcpAuthenticated,
     markAuthenticated,
     getManager: () => config.getMcpClientManager(),
-    getToolRegistry: () => config.getToolRegistry(),
+    // @plan:ISSUE-2376 — project the real registry tools (AnyDeclarativeTool)
+    // into the McpToolRegistryView element shape by reusing
+    // projectRegistryTool (the same helper toolControl.ts list() uses), so
+    // displayName/parametersSchema/serverToolName flow through consistently
+    // without duplicating the projection or relying on unsafe field casts.
+    getToolRegistry: () => {
+      const registry = config.getToolRegistry();
+      return {
+        getAllTools: () =>
+          registry.getAllTools().map((t) =>
+            projectRegistryTool({
+              name: t.name,
+              displayName: t.displayName,
+              description: t.description,
+              schema: t.schema,
+              serverName: readOptionalStringProp(t, 'serverName'),
+              serverToolName: readOptionalStringProp(t, 'serverToolName'),
+            }),
+          ),
+        getEnabledTools: () =>
+          registry.getEnabledTools().map((t) => ({ name: t.name })),
+      };
+    },
     getServerConfigs: () => config.getMcpServers(),
     getBlockedServers: () => config.getBlockedMcpServers() ?? [],
     getPromptRegistry: () => ({

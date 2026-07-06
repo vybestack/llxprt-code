@@ -496,14 +496,132 @@ export function buildProviderInfos(
 }
 
 /**
+ * Type-safely reads an optional string property from a tool that may carry
+ * runtime-only fields (serverName, serverToolName) not declared on
+ * {@link AnyDeclarativeTool}. Returns undefined for missing/non-string values.
+ * Uses a Record index for dynamic property access after a runtime `in` check.
+ *
+ * Shared by {@link projectRegistryTool} consumers (ToolControl.list and the
+ * MCP registry-view wiring) so the guard lives in exactly one place.
+ *
+ * @plan:ISSUE-2376
+ */
+export function readOptionalStringProp(
+  tool: object,
+  prop: string,
+): string | undefined {
+  if (!(prop in tool)) {
+    return undefined;
+  }
+  const record = tool as Record<string, unknown>;
+  const value = record[prop];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * Projects a single registry tool (`AnyDeclarativeTool`) into the enriched
+ * element shape {@link buildToolInfos} consumes. Centralizes the schema/
+ * identity read so both `AgentImpl.listTools()` and `ToolControl.list()` stay
+ * in sync without duplication.
+ *
+ * @plan:ISSUE-2376
+ */
+export function projectRegistryTool(tool: {
+  readonly name: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly schema: { readonly parametersJsonSchema?: unknown };
+  readonly serverName?: string;
+  readonly serverToolName?: string;
+}): {
+  readonly name: string;
+  readonly serverName?: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly parametersSchema?: Readonly<Record<string, unknown>>;
+  readonly serverToolName?: string;
+} {
+  const schema = tool.schema.parametersJsonSchema;
+  return {
+    name: tool.name,
+    serverName: tool.serverName,
+    displayName: tool.displayName,
+    description: tool.description,
+    // A JSON-schema object is a plain (non-null, non-array) object. Arrays
+    // satisfy `typeof === 'object'` but must not be projected as a schema —
+    // that would be a type lie for ToolInfo.parametersSchema consumers.
+    ...(typeof schema === 'object' && schema !== null && !Array.isArray(schema)
+      ? { parametersSchema: schema as Readonly<Record<string, unknown>> }
+      : {}),
+    ...(tool.serverToolName !== undefined
+      ? { serverToolName: tool.serverToolName }
+      : {}),
+  };
+}
+
+/**
+ * Structural view of a registry tool element. Declares optional serverName /
+ * serverToolName because {@link AnyDeclarativeTool} does not expose them as
+ * public properties — MCP tools carry them at runtime. Optional properties
+ * are satisfied by absence, so plain builtin tools pass structurally.
+ *
+ * @plan:ISSUE-2376
+ */
+export interface RegistryToolElementView {
+  readonly name: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly schema: { readonly parametersJsonSchema?: unknown };
+  readonly serverName?: string;
+  readonly serverToolName?: string;
+}
+
+/**
+ * Convenience: builds the ToolInfo[] array directly from raw registry tools
+ * (`AnyDeclarativeTool[]`) + the enabled set, projecting each via
+ * {@link projectRegistryTool}. Keeps `AgentImpl.listTools()` minimal.
+ *
+ * @plan:ISSUE-2376
+ */
+export function buildToolInfosFromRegistry(
+  tools: readonly RegistryToolElementView[],
+  enabledSet: ReadonlySet<string>,
+): readonly ToolInfo[] {
+  return buildToolInfos(
+    tools.map((t) =>
+      projectRegistryTool({
+        name: t.name,
+        displayName: t.displayName,
+        description: t.description,
+        schema: t.schema,
+        // Guard the runtime-only MCP fields with the same string validation
+        // used by ToolControl.list() and the MCP registry-view wiring, so all
+        // three projection paths coerce a malformed non-string value to
+        // undefined identically rather than propagating it into ToolInfo.
+        serverName: readOptionalStringProp(t, 'serverName'),
+        serverToolName: readOptionalStringProp(t, 'serverToolName'),
+      }),
+    ),
+    enabledSet,
+  );
+}
+
+/**
  * Builds the ToolInfo[] array from the tool registry tool list.
  * @plan:PLAN-20260617-COREAPI.P15
  * @requirement:REQ-017
+ * @plan:ISSUE-2376 — projects the enriched displayName/description/
+ * parametersSchema/serverToolName fields additively (each included only when
+ * the source element defines it).
  */
 export function buildToolInfos(
   tools: ReadonlyArray<{
     readonly name: string;
     readonly serverName?: string;
+    readonly displayName?: string;
+    readonly description?: string;
+    readonly parametersSchema?: Readonly<Record<string, unknown>>;
+    readonly serverToolName?: string;
   }>,
   enabledSet: ReadonlySet<string>,
 ): readonly ToolInfo[] {
@@ -511,9 +629,21 @@ export function buildToolInfos(
     const isMcp = tool.serverName !== undefined;
     return {
       name: tool.name,
+      ...(tool.description !== undefined
+        ? { description: tool.description }
+        : {}),
       source: isMcp ? 'mcp' : 'builtin',
       ...(isMcp ? { server: tool.serverName } : {}),
       enabled: enabledSet.has(tool.name),
+      ...(tool.displayName !== undefined
+        ? { displayName: tool.displayName }
+        : {}),
+      ...(tool.parametersSchema !== undefined
+        ? { parametersSchema: tool.parametersSchema }
+        : {}),
+      ...(tool.serverToolName !== undefined
+        ? { serverToolName: tool.serverToolName }
+        : {}),
     };
   });
 }

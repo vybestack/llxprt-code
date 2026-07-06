@@ -4,19 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import type {
-  AnyDeclarativeTool,
-  MCPServerConfig,
-  DiscoveredMCPResource,
-} from '@vybestack/llxprt-code-core';
+  ToolInfo,
+  McpPromptInfo,
+  McpResourceInfo,
+  Agent,
+  McpServerDetail,
+} from '@vybestack/llxprt-code-agents';
 import {
-  DiscoveredMCPTool,
   getMCPDiscoveryState,
   getMCPServerStatus,
   MCPDiscoveryState,
   MCPServerStatus,
   mcpServerRequiresOAuth,
-  type DiscoveredMCPPrompt,
 } from '@vybestack/llxprt-code-mcp';
 import type { McpCommandRuntime } from '../cliUiRuntime.js';
 
@@ -29,18 +30,16 @@ export const RESET_COLOR = '\u001b[0m';
 
 export const MAX_MCP_RESOURCES_TO_SHOW = 10;
 
-export type RuntimeMcpServices = McpCommandRuntime;
-
 export type RuntimeMcpServers = Record<string, MCPServerConfig | undefined>;
 
-type RuntimeMcpResource = Omit<DiscoveredMCPResource, 'name'> & {
-  name?: string;
-};
+// @plan:ISSUE-2376 — the /mcp status + schema rendering is fully migrated to the
+// Agent surface (agent.mcp.details()); this alias is retained solely for
+// mcpAuth.ts, whose OAuth-restart flow still needs the #2384 McpCommandRuntime
+// (getMcpClientManager/getAgentClient) and is orthogonal to the display path.
+export type RuntimeMcpServices = McpCommandRuntime;
 
-export const getResourceName = (resource: DiscoveredMCPResource): string => {
-  const runtimeResource = resource as RuntimeMcpResource;
-  return runtimeResource.name ?? runtimeResource.uri;
-};
+export const getResourceName = (resource: McpResourceInfo): string =>
+  resource.name ?? resource.uri;
 
 function resolveTokenStatus(isExpired: boolean): {
   suffix: string;
@@ -103,9 +102,9 @@ function appendIndentedLines(
 
 function buildToolCountSuffix(
   status: MCPServerStatus,
-  serverTools: DiscoveredMCPTool[],
-  serverPrompts: DiscoveredMCPPrompt[],
-  serverResources: DiscoveredMCPResource[],
+  serverTools: ToolInfo[],
+  serverPrompts: McpPromptInfo[],
+  serverResources: McpResourceInfo[],
 ): string {
   if (status === MCPServerStatus.CONNECTED) {
     const parts: string[] = [];
@@ -136,8 +135,8 @@ function buildToolCountSuffix(
   return ` (${serverTools.length} tools cached)`;
 }
 
-function buildToolSchemaSection(tool: DiscoveredMCPTool): string {
-  const parameters = tool.schema.parametersJsonSchema ?? tool.schema.parameters;
+function buildToolSchemaSection(tool: ToolInfo): string {
+  const parameters = tool.parametersSchema;
   if (!parameters) {
     return '';
   }
@@ -148,7 +147,7 @@ function buildToolSchemaSection(tool: DiscoveredMCPTool): string {
 }
 
 function buildToolsSection(
-  serverTools: DiscoveredMCPTool[],
+  serverTools: ToolInfo[],
   showDescriptions: boolean,
   showSchema: boolean,
 ): string {
@@ -158,7 +157,7 @@ function buildToolsSection(
   let section = `  ${COLOR_CYAN}Tools:${RESET_COLOR}\n`;
   const toolsToShow = serverTools.slice(0, MAX_MCP_RESOURCES_TO_SHOW);
   for (const tool of toolsToShow) {
-    const toolName = tool.serverToolName;
+    const toolName = tool.serverToolName ?? tool.name;
 
     if (showDescriptions && tool.description) {
       const descLines = tool.description.trim().split('\n');
@@ -179,7 +178,7 @@ function buildToolsSection(
 }
 
 function buildPromptsSection(
-  serverPrompts: DiscoveredMCPPrompt[],
+  serverPrompts: McpPromptInfo[],
   showDescriptions: boolean,
   hasPriorSection: boolean,
 ): string {
@@ -206,7 +205,7 @@ function buildPromptsSection(
 }
 
 function buildResourcesSection(
-  serverResources: DiscoveredMCPResource[],
+  serverResources: McpResourceInfo[],
   showDescriptions: boolean,
   hasPriorSection: boolean,
 ): string {
@@ -236,9 +235,9 @@ function buildResourcesSection(
 }
 
 function buildAuthHintSuffix(
-  serverTools: DiscoveredMCPTool[],
-  serverPrompts: DiscoveredMCPPrompt[],
-  serverResources: DiscoveredMCPResource[],
+  serverTools: ToolInfo[],
+  serverPrompts: McpPromptInfo[],
+  serverResources: McpResourceInfo[],
   originalStatus: MCPServerStatus,
   needsAuthHint: boolean,
   serverName: string,
@@ -265,9 +264,9 @@ function buildAuthHintSuffix(
 
 function getServerDisplayStatus(
   serverName: string,
-  serverTools: DiscoveredMCPTool[],
-  serverPrompts: DiscoveredMCPPrompt[],
-  serverResources: DiscoveredMCPResource[],
+  serverTools: ToolInfo[],
+  serverPrompts: McpPromptInfo[],
+  serverResources: McpResourceInfo[],
 ): {
   status: MCPServerStatus;
   originalStatus: MCPServerStatus;
@@ -308,9 +307,9 @@ async function buildServerHeader(
   serverName: string,
   server: MCPServerConfig,
   statusInfo: ReturnType<typeof getServerDisplayStatus>,
-  serverTools: DiscoveredMCPTool[],
-  serverPrompts: DiscoveredMCPPrompt[],
-  serverResources: DiscoveredMCPResource[],
+  serverTools: ToolInfo[],
+  serverPrompts: McpPromptInfo[],
+  serverResources: McpResourceInfo[],
 ): Promise<{
   header: string;
   needsAuthHint: boolean;
@@ -345,23 +344,12 @@ async function buildServerHeader(
 async function buildServerEntry(
   serverName: string,
   server: MCPServerConfig,
-  allTools: AnyDeclarativeTool[],
-  promptRegistry: {
-    getPromptsByServer(name: string): DiscoveredMCPPrompt[];
-  },
-  allResources: DiscoveredMCPResource[],
+  serverTools: ToolInfo[],
+  serverPrompts: McpPromptInfo[],
+  serverResources: McpResourceInfo[],
   showDescriptions: boolean,
   showSchema: boolean,
 ): Promise<string> {
-  const serverTools = allTools.filter((tool: AnyDeclarativeTool) => {
-    const isMcpTool = tool instanceof DiscoveredMCPTool;
-    return isMcpTool && tool.serverName === serverName;
-  }) as DiscoveredMCPTool[];
-  const serverPrompts = promptRegistry.getPromptsByServer(serverName);
-  const serverResources = allResources.filter(
-    (resource) => resource.serverName === serverName,
-  );
-
   const statusInfo = getServerDisplayStatus(
     serverName,
     serverTools,
@@ -449,7 +437,7 @@ function buildBlockedServersSection(
 }
 
 export async function buildMcpStatusMessage(
-  runtime: RuntimeMcpServices,
+  agent: Agent | null,
   serverNames: string[],
   mcpServers: RuntimeMcpServers,
   blockedMcpServers: ReadonlyArray<{ name: string; extensionName?: string }>,
@@ -457,7 +445,9 @@ export async function buildMcpStatusMessage(
   showSchema: boolean,
   showTips: boolean,
 ): Promise<string> {
-  const toolRegistry = runtime.getToolRegistry();
+  if (agent === null) {
+    return '';
+  }
 
   const connectingServers = serverNames.filter(
     (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTING,
@@ -476,21 +466,33 @@ export async function buildMcpStatusMessage(
 
   message += 'Configured MCP servers:\n\n';
 
-  const allTools = toolRegistry.getAllTools();
-  const promptRegistry = runtime.getPromptRegistry();
-  const allResources = runtime.getResourceRegistry().getAllResources();
+  // Degrade gracefully if details() rejects: proceed with an empty detail map
+  // and append a visible warning so the user still sees server names/status
+  // (which don't depend on details).
+  let detailByServer = new Map<string, McpServerDetail>();
+  try {
+    const details = await agent.mcp.details({
+      includeTools: true,
+      includePrompts: true,
+      includeResources: true,
+    });
+    detailByServer = new Map(details.servers.map((s) => [s.name, s]));
+  } catch (error) {
+    message += `${COLOR_YELLOW}Failed to load MCP tool details: ${error instanceof Error ? error.message : String(error)}${RESET_COLOR}\n\n`;
+  }
 
   for (const serverName of serverNames) {
     const server = mcpServers[serverName];
     if (!server) {
       continue;
     }
+    const detail = detailByServer.get(serverName);
     message += await buildServerEntry(
       serverName,
       server,
-      allTools,
-      promptRegistry,
-      allResources,
+      [...(detail?.tools ?? [])],
+      [...(detail?.prompts ?? [])],
+      [...(detail?.resources ?? [])],
       showDescriptions,
       showSchema,
     );

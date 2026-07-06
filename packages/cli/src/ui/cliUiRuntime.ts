@@ -121,11 +121,6 @@ export interface UiContentGeneratorConfig {
   };
 }
 
-export interface UiToolRegistryInfo {
-  registered: Array<{ displayName: string }>;
-  unregistered: Array<{ displayName: string; reason?: string }>;
-}
-
 /**
  * Focused capability read-models. Each exposes only the members a single
  * consumer family needs, so callers depend on the smallest suitable surface
@@ -304,6 +299,25 @@ export interface SchedulerRuntime {
   ): void;
 }
 
+export interface UiToolRegistryInfo {
+  registered: Array<{ displayName: string }>;
+  unregistered: Array<{ displayName: string; reason?: string }>;
+}
+
+/**
+ * Tool-registry SOURCE capability. This is a bare-source read-model (part of
+ * {@link StreamRuntimeBareSource}) consumed by the focused MCP/auto-prompt
+ * boundaries ({@link McpCommandRuntime}, the auto-prompt runtime) and by the
+ * settings dialog's dynamic tool-settings derivation. It is intentionally NOT
+ * re-exposed as a projected `tools` slice on {@link StreamRuntime}: the
+ * streaming/UI path lists tools through the public `agent.tools` surface
+ * (#2376), so no UI hook reads the registry off the runtime.
+ */
+export interface ToolRuntime {
+  getToolRegistry(): ToolRegistry;
+  getToolRegistryInfo(): UiToolRegistryInfo;
+}
+
 /**
  * Async-task capability for background task auto-trigger and cancellation.
  */
@@ -370,14 +384,6 @@ export interface ApprovalState {
 }
 
 /**
- * Tool-registry capability for tool listing and display.
- */
-export interface ToolRuntime {
-  getToolRegistry(): ToolRegistry;
-  getToolRegistryInfo(): UiToolRegistryInfo;
-}
-
-/**
  * Extension capability for extension display and enablement.
  */
 export interface ExtensionRuntime {
@@ -424,7 +430,6 @@ export interface StreamRuntime {
   hooks: HookSkillState;
   mcp: McpState;
   settings: SettingsTelemetryState;
-  tools: ToolRuntime;
   scheduler: SchedulerRuntime;
   asyncTasks: AsyncTaskRuntime;
   bucketFailover: BucketFailoverRuntime;
@@ -618,13 +623,6 @@ function buildSettingsRuntime(
   };
 }
 
-function buildToolRuntime(source: StreamRuntimeBareSource): ToolRuntime {
-  return {
-    getToolRegistry: () => source.getToolRegistry(),
-    getToolRegistryInfo: () => source.getToolRegistryInfo(),
-  };
-}
-
 function buildSchedulerRuntime(
   source: StreamRuntimeBareSource,
 ): SchedulerRuntime {
@@ -666,7 +664,6 @@ function buildStreamRuntimeFromSource(
     hooks: buildHooksRuntime(source),
     mcp: buildMcpRuntime(source),
     settings: buildSettingsRuntime(source),
-    tools: buildToolRuntime(source),
     scheduler: buildSchedulerRuntime(source),
     asyncTasks: buildAsyncTaskRuntime(source),
     bucketFailover: {

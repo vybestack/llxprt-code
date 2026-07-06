@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
 import { type DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { ToolCallStatus } from '../types.js';
@@ -25,6 +26,7 @@ describe('handleAtCommand', () => {
   let mockAddItem: ReturnType<typeof vi.fn>;
   let mockOnDebugMessage: ReturnType<typeof vi.fn>;
   let abortController: AbortController;
+  let getToolHandle: (name: string) => AgentToolHandle | undefined;
 
   beforeEach(async () => {
     setup = await setupAtCommandTest();
@@ -33,6 +35,7 @@ describe('handleAtCommand', () => {
     mockAddItem = setup.mockAddItem;
     mockOnDebugMessage = setup.mockOnDebugMessage;
     abortController = setup.abortController;
+    getToolHandle = setup.getToolHandle;
   });
 
   afterEach(async () => {
@@ -96,6 +99,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 1001,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(findResourceByUri).toHaveBeenCalledWith(
@@ -129,6 +133,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 123,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -146,6 +151,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 124,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -178,6 +184,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 125,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -214,6 +221,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 126,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -245,6 +253,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 127,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -272,6 +281,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 125,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -309,6 +319,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 130,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -343,6 +354,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 131,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -375,6 +387,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 132,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result.processedQuery).not.toBeNull();
@@ -418,6 +431,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 133,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     expect(result).toStrictEqual({
@@ -442,6 +456,7 @@ describe('handleAtCommand', () => {
       onDebugMessage: mockOnDebugMessage,
       messageId: 999,
       signal: abortController.signal,
+      getToolHandle,
     });
 
     // Assert

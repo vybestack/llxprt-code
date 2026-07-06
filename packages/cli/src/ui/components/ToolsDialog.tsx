@@ -8,12 +8,12 @@ import type React from 'react';
 import { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
-import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
+import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 
 interface ToolsDialogProps {
-  tools: AnyDeclarativeTool[];
+  tools: ToolInfo[];
   action: 'enable' | 'disable';
   disabledTools: string[];
   onSelect: (toolName: string) => void;
@@ -36,7 +36,7 @@ const EmptyToolsMessage: React.FC<{ action: 'enable' | 'disable' }> = ({
 );
 
 const SelectedToolInfo: React.FC<{
-  selectedTool: AnyDeclarativeTool | undefined;
+  selectedTool: ToolInfo | undefined;
 }> = ({ selectedTool }) => {
   if (selectedTool == null) return null;
   return (
@@ -64,7 +64,7 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
 
   const items = availableTools.map((tool) => ({
     key: tool.name,
-    label: tool.displayName,
+    label: tool.displayName ?? tool.name,
     value: tool.name,
   }));
 

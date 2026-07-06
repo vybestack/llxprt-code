@@ -5,6 +5,7 @@
  */
 
 import { vi } from 'vitest';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import {
@@ -112,10 +113,16 @@ export function setupDiagnosticsTest(): DiagnosticsTestSetup {
         getMcpServerCommand: vi.fn(() => null),
         getUserMemory: vi.fn(() => null),
         getLlxprtMdFileCount: vi.fn(() => 0),
-        getToolRegistry: vi.fn(async () => ({
-          getAllTools: () => [],
-        })),
       },
+      // Partial mock: only `tools.list` is exercised by diagnosticsCommand's
+      // appendToolsAndTelemetry. Cast via `unknown as Agent` (rather than the
+      // broader `as never`) to convey that this is a deliberate partial
+      // stand-in for the full Agent surface.
+      agent: {
+        tools: {
+          list: vi.fn(() => []),
+        },
+      } as unknown as Agent,
       settings: {
         merged: {
           ui: {

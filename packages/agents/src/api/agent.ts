@@ -123,6 +123,24 @@ export interface ToolInfo {
   readonly source: 'builtin' | 'mcp' | 'extension' | 'skill';
   readonly server?: string;
   readonly enabled: boolean;
+  /**
+   * User-facing display name (mirrors `DeclarativeTool.displayName`).
+   * (added by #2376)
+   */
+  readonly displayName?: string;
+  /**
+   * JSON schema for the tool's parameters (mirrors
+   * `FunctionDeclaration.parametersJsonSchema`); only present when the tool
+   * declares one.
+   * (added by #2376)
+   */
+  readonly parametersSchema?: Readonly<Record<string, unknown>>;
+  /**
+   * For MCP tools, the tool name as the originating server knows it
+   * (mirrors `DiscoveredMCPTool.serverToolName`); absent for builtins.
+   * (added by #2376)
+   */
+  readonly serverToolName?: string;
 }
 
 export interface ProviderStatus {
@@ -191,6 +209,11 @@ export interface McpPromptInfo {
 export interface McpResourceInfo {
   readonly name?: string;
   readonly uri: string;
+  /**
+   * Resource description (mirrors `MCPResource.description`).
+   * (added by #2376)
+   */
+  readonly description?: string;
 }
 
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
@@ -322,6 +345,108 @@ export interface AgentToolKeyControl {
 }
 
 /**
+ * Projected result of a tool execution. Mirrors the shape of `ToolResult`
+ * (from `@vybestack/llxprt-code-tools`) the CLI consumers
+ * (atCommandProcessorHelpers.ts, zed-tool-handler.ts) read: `llmContent` for
+ * history, `returnDisplay` for UI, and an optional `error` sentinel.
+ *
+ * (added by #2376)
+ */
+export interface AgentToolExecResult {
+  readonly llmContent: unknown;
+  readonly returnDisplay?: unknown;
+  readonly error?: unknown;
+}
+
+/**
+ * A file/location a tool invocation will affect. Mirrors `ToolLocation` from
+ * `@vybestack/llxprt-code-tools` (used by zed-tool-handler.ts).
+ *
+ * (added by #2376)
+ */
+export interface AgentToolLocation {
+  readonly path: string;
+  readonly line?: number;
+}
+
+/**
+ * Confirmation details surfaced by `shouldConfirmExecute`. Typed opaquely
+ * (`unknown`) so the public surface does not couple to the engine's
+ * `ToolCallConfirmationDetails` union; consumers that need the structured
+ * shape cast at the boundary (as zed-tool-handler.ts already does).
+ *
+ * (added by #2376)
+ */
+export type AgentToolConfirmationDetails = unknown;
+
+/**
+ * Thin projection of a built tool invocation. Exposes the methods the CLI
+ * consumers actually call: `getDescription` (display title), `execute` (run +
+ * collect result), `shouldConfirmExecute` + `toolLocations` (zed-tool-handler.ts
+ * permission flow). The projection delegates to the real `AnyToolInvocation`;
+ * it never drives the confirmation flow itself.
+ *
+ * (added by #2376)
+ */
+export interface AgentToolInvocation {
+  getDescription(): string;
+  execute(
+    signal: AbortSignal,
+    updateOutput?: (chunk: string) => void,
+  ): Promise<AgentToolExecResult>;
+  shouldConfirmExecute(
+    signal: AbortSignal,
+  ): Promise<AgentToolConfirmationDetails | false>;
+  toolLocations(): readonly AgentToolLocation[];
+}
+
+/**
+ * A context bundle that context-aware tools accept. Mirrors the shape
+ * zed-tool-handler.ts assigns via `tool.context = { sessionId, interactiveMode }`.
+ *
+ * (added by #2376)
+ */
+export interface AgentToolContext {
+  readonly sessionId: string;
+  readonly interactiveMode: boolean;
+}
+
+/**
+ * A named-tool lookup handle. Returned by `AgentToolControl.get(name)`; wraps a
+ * real `AnyDeclarativeTool` so consumers (the CLI at-command processor, the
+ * Zed integration) can build/execute tools without touching `ToolRegistry`
+ * directly. The handle exposes the tool's identity
+ * (`name`/`displayName`/`description`/`kind`/`source`), a `build()` that yields
+ * a thin `AgentToolInvocation` projection, a `buildAndExecute()` convenience,
+ * and an optional `setContext()` for context-aware tools.
+ *
+ * (added by #2376)
+ */
+export interface AgentToolHandle {
+  readonly name: string;
+  readonly displayName: string;
+  readonly description?: string;
+  readonly kind?: string;
+  /**
+   * The tool's origin, mirroring `ToolInfo.source`. The current projection
+   * distinguishes `'mcp'` (server-discovered tools) from `'builtin'` (all
+   * locally registered tools, including extension/skill-provided ones) —
+   * matching the `buildToolInfos` classification. Consumers use it for
+   * telemetry `tool_type` ('mcp' vs 'native') without needing the
+   * `DiscoveredMCPTool` instanceof check.
+   *
+   * (added by #2376)
+   */
+  readonly source?: ToolInfo['source'];
+  build(params: Record<string, unknown>): AgentToolInvocation;
+  buildAndExecute(
+    params: Record<string, unknown>,
+    signal: AbortSignal,
+  ): Promise<AgentToolExecResult>;
+  setContext?(context: AgentToolContext): void;
+}
+
+/**
  * Post-construction display callbacks a UI client attaches to a constructed
  * Agent via {@link AgentToolControl.setDisplayCallbacks}. These flow through to
  * the AgenticLoop's scheduler via a stable forwarding object, so registration
@@ -341,7 +466,20 @@ export interface AgentDisplayCallbacks {
 }
 
 export interface AgentToolControl {
+  /**
+   * Returns a frozen snapshot of every registered tool projected to
+   * {@link ToolInfo} (name, displayName, description, parametersSchema,
+   * source/server, enabled). This is the canonical read-only listing surface
+   * for UI consumers (see #2376).
+   */
   list(): readonly ToolInfo[];
+  /**
+   * Named-tool lookup; returns the matching {@link AgentToolHandle} or
+   * `undefined` when no tool is registered under `name`.
+   *
+   * (added by #2376)
+   */
+  get(name: string): AgentToolHandle | undefined;
   setEnabled(names: readonly string[]): Promise<void>;
   onConfirmationRequest(cb: (req: ToolConfirmation) => void): Unsubscribe;
   respondToConfirmation(
@@ -375,6 +513,14 @@ export interface AgentMcpControl {
   toolsByServer(): Readonly<Record<string, readonly ToolInfo[]>>;
   auth(server: string): Promise<McpServerAuthStatus>;
   discoveryState(): McpDiscoveryState;
+  /**
+   * Re-runs MCP discovery for the named server, or for ALL configured
+   * servers when `server` is omitted, then re-publishes the client tool
+   * declarations so newly discovered tools become callable. A no-op when
+   * MCP is not initialized; discovery/restart failures propagate to the
+   * caller. This is the public replacement for direct
+   * `toolRegistry.discoverAllTools()` access (see #2376).
+   */
   refresh(server?: string): Promise<void>;
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
   authenticate(server: string): Promise<McpServerAuthStatus>;

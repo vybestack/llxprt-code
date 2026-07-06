@@ -467,6 +467,50 @@ These providers use the OpenAI-compatible endpoint approach (most also have buil
 - Effective prompt budget = context-limit − max_tokens − safety.
 - The `/provider qwen` alias is for Qwen's own service, not for Cerebras.
 
+## AI Gateways / Proxies
+
+### LiteLLM
+
+[LiteLLM](https://github.com/BerriAI/litellm) is an open-source AI gateway that provides a unified OpenAI-compatible interface to 100+ LLM providers (Azure OpenAI, AWS Bedrock, Vertex AI, Groq, Together, and more).
+
+```bash
+/provider litellm      # Has built-in alias
+/key your-litellm-key
+/model anthropic/claude-sonnet-4-20250514
+```
+
+Or without the alias:
+
+```bash
+/provider openai
+/baseurl http://127.0.0.1:4000/v1/
+/key your-litellm-key
+/model gpt-4o
+```
+
+#### Model geometry & recommended settings (LiteLLM)
+
+Context and output limits depend on the underlying model routed through the proxy. Start with conservative defaults and adjust:
+
+```bash
+/set context-limit 128000
+/set modelparam max_tokens 4096
+```
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "litellm",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "modelParams": { "max_tokens": 4096 },
+  "ephemeralSettings": { "context-limit": 200000 }
+}
+```
+
+**Environment variable:** `export LITELLM_API_KEY=sk-...`
+
 ## Local Models
 
 For complete local-model guidance, see [Using Local Models](../local-models.md).

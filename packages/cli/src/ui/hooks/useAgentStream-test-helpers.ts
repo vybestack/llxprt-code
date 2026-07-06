@@ -161,6 +161,7 @@ function createFakeStream(
 function createStubToolControl(): Agent['tools'] {
   return {
     list: () => [],
+    get: () => undefined,
     async setEnabled() {},
     onConfirmationRequest: () => () => {},
     respondToConfirmation: (

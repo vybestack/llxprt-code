@@ -38,6 +38,7 @@ function createDeps(
     },
     shellModeActive: false,
     scheduleToolCalls: vi.fn(),
+    getToolHandle: () => undefined,
     ...overrides,
   };
 }

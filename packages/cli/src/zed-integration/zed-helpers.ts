@@ -5,7 +5,6 @@
  */
 
 import {
-  type ToolResult,
   type ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
   ApprovalMode,
@@ -23,11 +22,55 @@ export function parseZedAuthMethodId(
   return z.enum(availableProfiles as [string, ...string[]]).parse(methodId);
 }
 
+/**
+ * Structural input for {@link toToolCallContent}: the display/error fields of
+ * a tool execution result. Both the core `ToolResult` and the public
+ * `AgentToolExecResult` (from `@vybestack/llxprt-code-agents`) satisfy it, so
+ * Zed code can pass either without casts.
+ */
+export interface ToolCallContentInput {
+  readonly returnDisplay?: unknown;
+  readonly error?: unknown;
+}
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return undefined;
+}
+
+interface FileDiffDisplay {
+  fileDiff: string;
+  fileName: string;
+  originalContent: string | null;
+  newContent: string;
+}
+
+function isFileDiffDisplay(value: object): value is FileDiffDisplay {
+  // returnDisplay is now typed `unknown` (it may be an AgentToolExecResult from
+  // the public API surface), so an object carrying only `fileDiff` must NOT be
+  // treated as a full FileDiffDisplay — that would yield `path: undefined` and
+  // invalid ACP diff content. Require every field the diff branch dereferences.
+  return (
+    'fileDiff' in value &&
+    'fileName' in value &&
+    'originalContent' in value &&
+    'newContent' in value
+  );
+}
+
 export function toToolCallContent(
-  toolResult: ToolResult,
+  toolResult: ToolCallContentInput,
 ): acp.ToolCallContent | null {
-  if (toolResult.error?.message) {
-    throw new Error(toolResult.error.message);
+  const errorMessage = getErrorMessage(toolResult.error);
+  if (errorMessage !== undefined && errorMessage.length > 0) {
+    throw new Error(errorMessage);
   }
 
   const returnDisplay = toolResult.returnDisplay;
@@ -41,10 +84,10 @@ export function toToolCallContent(
       content: { type: 'text', text: returnDisplay },
     };
   }
-  if (typeof returnDisplay !== 'object') {
+  if (typeof returnDisplay !== 'object' || returnDisplay === null) {
     return null;
   }
-  if ('fileDiff' in returnDisplay) {
+  if (isFileDiffDisplay(returnDisplay)) {
     return {
       type: 'diff',
       path: returnDisplay.fileName,
@@ -53,8 +96,9 @@ export function toToolCallContent(
     };
   }
   const content =
-    'content' in returnDisplay && typeof returnDisplay.content === 'string'
-      ? returnDisplay.content
+    'content' in returnDisplay &&
+    typeof (returnDisplay as { content: unknown }).content === 'string'
+      ? (returnDisplay as { content: string }).content
       : '';
   return {
     type: 'content',

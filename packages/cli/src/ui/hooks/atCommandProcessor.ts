@@ -6,7 +6,7 @@
 
 import type { PartUnion } from '@google/genai';
 import { unescapePath } from '@vybestack/llxprt-code-core';
-
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   buildInitialQueryText,
@@ -29,7 +29,9 @@ export function buildAtCommandRuntimeFromStream(
   runtime: StreamRuntime,
 ): AtCommandRuntime {
   return {
-    getToolRegistry: () => runtime.tools.getToolRegistry(),
+    // @plan:ISSUE-2376 — tool lookup is routed through the Agent surface
+    // (getToolHandle), so the @-command runtime no longer exposes
+    // getToolRegistry; it only carries MCP + file/workspace access.
     getMcpClientManager: () => runtime.mcp.getMcpClientManager(),
     getResourceRegistry: () => runtime.mcp.getResourceRegistry(),
     getFileFilteringOptions: () => runtime.files.getFileFilteringOptions(),
@@ -55,6 +57,9 @@ let powershellTipShown = false;
 interface HandleAtCommandParams {
   query: string;
   config: AtCommandRuntime;
+  // @plan:ISSUE-2376 — named-tool lookup via the public Agent surface,
+  // replacing direct getToolRegistry().getTool access.
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
   messageId: number;
@@ -166,6 +171,7 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
 export async function handleAtCommand({
   query,
   config,
+  getToolHandle,
   addItem,
   onDebugMessage,
   messageId: userMessageTimestamp,
@@ -180,8 +186,7 @@ export async function handleAtCommand({
   if (atPathCommandParts.length === 0)
     return { processedQuery: [{ text: query }] };
 
-  const toolRegistry = config.getToolRegistry();
-  const readManyFilesTool = toolRegistry.getTool('read_many_files');
+  const readManyFilesTool = getToolHandle('read_many_files');
   if (!readManyFilesTool) {
     return handleMissingReadManyFilesTool(addItem, userMessageTimestamp);
   }
@@ -190,7 +195,7 @@ export async function handleAtCommand({
     atPathCommandParts,
     config,
     resourceRegistry: config.getResourceRegistry(),
-    globTool: toolRegistry.getTool('glob'),
+    globTool: getToolHandle('glob'),
     signal,
     onDebugMessage,
   });

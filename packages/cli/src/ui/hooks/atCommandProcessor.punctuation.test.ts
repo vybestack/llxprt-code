@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import * as path from 'path';
 import {
@@ -22,6 +23,7 @@ describe('handleAtCommand (punctuation)', () => {
   let mockAddItem: ReturnType<typeof vi.fn>;
   let mockOnDebugMessage: ReturnType<typeof vi.fn>;
   let abortController: AbortController;
+  let getToolHandle: (name: string) => AgentToolHandle | undefined;
 
   beforeEach(async () => {
     setup = await setupAtCommandTest();
@@ -30,6 +32,7 @@ describe('handleAtCommand (punctuation)', () => {
     mockAddItem = setup.mockAddItem;
     mockOnDebugMessage = setup.mockOnDebugMessage;
     abortController = setup.abortController;
+    getToolHandle = setup.getToolHandle;
   });
 
   afterEach(async () => {
@@ -141,6 +144,7 @@ describe('handleAtCommand (punctuation)', () => {
           onDebugMessage: mockOnDebugMessage,
           messageId,
           signal: abortController.signal,
+          getToolHandle,
         });
 
         const fileInQuery = fileName;
@@ -171,6 +175,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 411,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({
@@ -202,6 +207,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 412,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({
@@ -227,6 +233,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 413,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({
@@ -252,6 +259,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 414,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({
@@ -277,6 +285,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 415,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({
@@ -305,6 +314,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 416,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({
@@ -330,6 +340,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 417,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({
@@ -358,6 +369,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 418,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({
@@ -386,6 +398,7 @@ describe('handleAtCommand (punctuation)', () => {
         onDebugMessage: mockOnDebugMessage,
         messageId: 421,
         signal: abortController.signal,
+        getToolHandle,
       });
 
       expect(result).toStrictEqual({

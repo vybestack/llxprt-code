@@ -30,6 +30,8 @@ import type {
   ToolConfirmationOutcome,
   ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-tools';
+import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../../config-types.js';
 import type { ToolControlDeps } from '../../control/toolControl.js';
 
@@ -39,6 +41,7 @@ export interface FakeRegistryToolEntry {
   readonly name: string;
   readonly serverName?: string;
   readonly enabled?: boolean;
+  readonly serverToolName?: string;
 }
 
 export interface ToolControlDepsHandle {
@@ -63,6 +66,46 @@ const noopEditorCallbacks: EditorCallbacks = {
   onEditorOpen: () => {},
 };
 
+/**
+ * Builds REAL invocable MockTool instances so ToolControl.get(name) returns a
+ * handle whose build()/buildAndExecute() delegate to genuine tool behavior
+ * (execute returns { llmContent: `ran:${name}`, returnDisplay: '...' }).
+ * serverName/serverToolName are attached at runtime for MCP tools so the
+ * projectRegistryTool projection reads them (MockTool does not declare them;
+ * they are runtime-only on real DiscoveredMCPTool instances).
+ */
+function buildFakeRegistryTools(
+  tools: readonly FakeRegistryToolEntry[],
+): AnyDeclarativeTool[] {
+  const attachRuntimeProp = (
+    mock: MockTool,
+    key: 'serverName' | 'serverToolName',
+    value: string | undefined,
+  ): void => {
+    if (value === undefined) return;
+    Object.defineProperty(mock, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  };
+  return tools.map((t) => {
+    const mock = new MockTool({
+      name: t.name,
+      displayName: t.name,
+      description: t.name,
+      execute: async () => ({
+        llmContent: `ran:${t.name}`,
+        returnDisplay: `ran:${t.name}`,
+      }),
+    });
+    attachRuntimeProp(mock, 'serverName', t.serverName);
+    attachRuntimeProp(mock, 'serverToolName', t.serverToolName);
+    return mock as AnyDeclarativeTool;
+  });
+}
+
 export function createToolControlDeps(
   tools: readonly FakeRegistryToolEntry[] = [],
 ): ToolControlDepsHandle {
@@ -78,13 +121,15 @@ export function createToolControlDeps(
     },
   );
 
-  const allTools = tools.map((t) => ({
-    name: t.name,
-    ...(t.serverName !== undefined ? { serverName: t.serverName } : {}),
-  }));
-  const enabledTools = tools
-    .filter((t) => t.enabled !== false)
-    .map((t) => ({ name: t.name }));
+  const allTools: AnyDeclarativeTool[] = buildFakeRegistryTools(tools);
+  // Derive enabledTools from the full AnyDeclarativeTool instances (allTools)
+  // rather than fabricating { name } stubs, mirroring the real
+  // ToolRegistry.getEnabledTools() which returns AnyDeclarativeTool[]. This
+  // keeps the fake future-proof if production ever reads more than `.name`.
+  const enabledNames = new Set(
+    tools.filter((t) => t.enabled !== false).map((t) => t.name),
+  );
+  const enabledTools = allTools.filter((t) => enabledNames.has(t.name));
 
   const settingsService = {
     set: (key: string, value: unknown): void => {
@@ -94,9 +139,12 @@ export function createToolControlDeps(
     },
   };
 
+  const toolMap = new Map(allTools.map((t) => [t.name, t]));
   const toolRegistry = {
     getAllTools: () => allTools,
     getEnabledTools: () => enabledTools,
+    getTool: (name: string): AnyDeclarativeTool | undefined =>
+      toolMap.get(name),
   };
 
   const config = {

@@ -17,6 +17,13 @@ import {
 import type { MessageActionReturn } from './types.js';
 import type { CallableTool } from '@google/genai';
 import { Type } from '@google/genai';
+import type {
+  Agent,
+  McpDetailStatus,
+  McpResourceInfo,
+  McpServerDetail,
+  ToolInfo,
+} from '@vybestack/llxprt-code-agents';
 
 // Mock external dependencies
 vi.mock('open', () => ({
@@ -55,25 +62,18 @@ function assertMessageAction(
   }
 }
 
-const createMockMCPResource = (
-  serverName: string,
-  uri: string,
-  name: string,
-) => ({
-  serverName,
-  uri,
+const createMockMCPResource = (uri: string, name: string): McpResourceInfo => ({
   name,
-  mimeType: 'text/plain',
+  uri,
   description: `Description for ${name}`,
-  discoveredAt: Date.now(),
 });
 
-// Helper function to create a mock DiscoveredMCPTool
+// Helper function to create a mock DiscoveredMCPTool (used to derive ToolInfo)
 const createMockMCPTool = (
   serverToolName: string,
   serverName: string,
   description?: string,
-) =>
+): DiscoveredMCPTool =>
   new DiscoveredMCPTool(
     {
       callTool: vi.fn(),
@@ -88,49 +88,112 @@ const createMockMCPTool = (
     true,
   );
 
+/**
+ * Projects a DiscoveredMCPTool into the public ToolInfo shape, mirroring what
+ * agent.mcp.details() returns. Used by createMockAgent to build realistic
+ * detail payloads from legacy tool instances the tests already construct.
+ */
+function projectToolToInfo(tool: DiscoveredMCPTool): ToolInfo {
+  const schema = tool.schema.parametersJsonSchema;
+  return {
+    name: tool.name,
+    displayName: tool.displayName,
+    ...(tool.description.length > 0 ? { description: tool.description } : {}),
+    source: 'mcp',
+    server: tool.serverName,
+    enabled: true,
+    serverToolName: tool.serverToolName,
+    ...(typeof schema === 'object' && schema !== null
+      ? { parametersSchema: schema as Readonly<Record<string, unknown>> }
+      : {}),
+  };
+}
+
+interface MockAgentOptions {
+  tools?: DiscoveredMCPTool[];
+  resources?: Array<{ serverName: string; resource: McpResourceInfo }>;
+  blockedServers?: Array<{ name: string; extensionName: string }>;
+}
+
+/**
+ * Creates a minimal Agent mock whose mcp.details() returns per-server tool /
+ * resource projections. This replaces the old config.getToolRegistry() mock.
+ */
+function createMockAgent(opts: MockAgentOptions = {}): Agent {
+  const tools = opts.tools ?? [];
+  const toolsByServer = new Map<string, ToolInfo[]>();
+  for (const tool of tools) {
+    const bucket = toolsByServer.get(tool.serverName) ?? [];
+    bucket.push(projectToolToInfo(tool));
+    toolsByServer.set(tool.serverName, bucket);
+  }
+  const resourcesByServer = new Map<string, McpResourceInfo[]>();
+  for (const entry of opts.resources ?? []) {
+    const bucket = resourcesByServer.get(entry.serverName) ?? [];
+    bucket.push(entry.resource);
+    resourcesByServer.set(entry.serverName, bucket);
+  }
+  const servers: McpServerDetail[] = [
+    ...new Set([...toolsByServer.keys(), ...resourcesByServer.keys()]),
+  ].map((name) => ({
+    name,
+    authenticated: false,
+    requiresAuth: false,
+    oauthStatus: 'not-required' as const,
+    sessionAuthenticated: false,
+    tools: toolsByServer.get(name) ?? [],
+    resources: resourcesByServer.get(name) ?? [],
+  }));
+  const detailStatus: McpDetailStatus = {
+    servers,
+    blockedServers: opts.blockedServers ?? [],
+  };
+  return {
+    mcp: {
+      details: vi.fn().mockResolvedValue(detailStatus),
+      refresh: vi.fn().mockResolvedValue(undefined),
+      status: vi.fn(),
+      listServers: vi.fn().mockReturnValue([]),
+      toolsByServer: vi.fn().mockReturnValue({}),
+      auth: vi.fn(),
+      discoveryState: vi.fn().mockReturnValue('ready'),
+      authenticate: vi.fn(),
+    },
+    tools: {
+      list: vi.fn().mockReturnValue([]),
+      get: vi.fn(),
+      setEnabled: vi.fn(),
+      onConfirmationRequest: vi.fn(),
+      respondToConfirmation: vi.fn(),
+      onToolUpdate: vi.fn(),
+      setEditorCallbacks: vi.fn(),
+      keys: {} as never,
+    },
+  } as unknown as Agent;
+}
+
 describe('mcpCommand', () => {
   let mockContext: ReturnType<typeof createMockCommandContext>;
   let mockConfig: {
-    getToolRegistry: ReturnType<typeof vi.fn>;
     getMcpServers: ReturnType<typeof vi.fn>;
     getBlockedMcpServers: ReturnType<typeof vi.fn>;
-    getPromptRegistry: ReturnType<typeof vi.fn>;
-    getResourceRegistry: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Set up default mock environment
     delete process.env.SANDBOX;
-
-    // Default mock implementations
     vi.mocked(getMCPServerStatus).mockReturnValue(MCPServerStatus.CONNECTED);
     vi.mocked(getMCPDiscoveryState).mockReturnValue(
       MCPDiscoveryState.COMPLETED,
     );
-
-    // Create mock config with all necessary methods
     mockConfig = {
-      getToolRegistry: vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue([]),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      }),
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
-      getPromptRegistry: vi.fn().mockReturnValue({
-        getAllPrompts: vi.fn().mockReturnValue([]),
-        getPromptsByServer: vi.fn().mockReturnValue([]),
-      }),
-      getResourceRegistry: vi.fn().mockReturnValue({
-        getAllResources: vi.fn().mockReturnValue([]),
-      }),
-      getAgentClient: vi.fn().mockReturnValue(null),
     };
-
     mockContext = createMockCommandContext({
       services: {
         config: mockConfig,
+        agent: createMockAgent(),
       },
       ui: {
         reloadCommands: vi.fn(),
@@ -144,33 +207,40 @@ describe('mcpCommand', () => {
         services: {
           config: null,
         },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        ui: { reloadCommands: vi.fn() },
       });
-
       const result = await mcpCommand.action!(contextWithoutConfig, '');
-
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Configuration not loaded.',
       });
     });
+
+    it('should show an error if agent is not available', async () => {
+      const contextWithNoAgent = createMockCommandContext({
+        services: {
+          config: mockConfig,
+          agent: null,
+        },
+        ui: { reloadCommands: vi.fn() },
+      });
+      const result = await mcpCommand.action!(contextWithNoAgent, '');
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Could not retrieve tools from the agent.',
+      });
+    });
   });
 
   describe('no MCP servers configured', () => {
     beforeEach(() => {
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue([]),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
       mockConfig.getMcpServers = vi.fn().mockReturnValue({});
     });
 
     it('should display a message with a URL when no MCP servers are configured', async () => {
       const result = await mcpCommand.action!(mockContext, '');
-
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
@@ -182,101 +252,52 @@ describe('mcpCommand', () => {
 
   describe('with configured MCP servers', () => {
     beforeEach(() => {
-      const mockMcpServers = {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1' },
         server2: { command: 'cmd2' },
         server3: { command: 'cmd3' },
-      };
-
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-
-      // Ensure the tool registry is properly set up with tools
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue([]),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Update the mockContext with the new config
-      mockContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
       });
     });
 
     it('should display configured MCP servers with status indicators and their tools', async () => {
-      // Setup getMCPServerStatus mock implementation
       vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
         if (serverName === 'server2') return MCPServerStatus.CONNECTED;
-        return MCPServerStatus.DISCONNECTED; // server3
+        return MCPServerStatus.DISCONNECTED;
       });
-
-      // Mock tools from each server using actual DiscoveredMCPTool instances
-      const mockServer1Tools = [
-        createMockMCPTool('server1_tool1', 'server1'),
-        createMockMCPTool('server1_tool2', 'server1'),
-      ];
-      const mockServer2Tools = [createMockMCPTool('server2_tool1', 'server2')];
-      const mockServer3Tools = [createMockMCPTool('server3_tool1', 'server3')];
 
       const allTools = [
-        ...mockServer1Tools,
-        ...mockServer2Tools,
-        ...mockServer3Tools,
+        createMockMCPTool('server1_tool1', 'server1'),
+        createMockMCPTool('server1_tool2', 'server1'),
+        createMockMCPTool('server2_tool1', 'server2'),
+        createMockMCPTool('server3_tool1', 'server3'),
       ];
 
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(allTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Update mockContext with the new config for this test
       const testContext = createMockCommandContext({
         services: {
           config: mockConfig,
+          agent: createMockAgent({ tools: allTools }),
         },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, '');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('Configured MCP servers:'),
-      });
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
       const message = result.content;
 
-      // Server 1 - Connected
       expect(message).toContain(
         '[READY] \u001b[1mserver1\u001b[0m - Ready (2 tools)',
       );
       expect(message).toContain('server1_tool1');
       expect(message).toContain('server1_tool2');
-
-      // Server 2 - Connected
       expect(message).toContain(
         '[READY] \u001b[1mserver2\u001b[0m - Ready (1 tool)',
       );
       expect(message).toContain('server2_tool1');
-
-      // Server 3 - Disconnected but with cached tools, so shows as Ready
       expect(message).toContain(
         '[READY] \u001b[1mserver3\u001b[0m - Ready (1 tool)',
       );
       expect(message).toContain('server3_tool1');
-
-      // Check that helpful tips are displayed when no arguments are provided
       expect(message).toContain('TIP: Tips:');
       expect(message).toContain('/mcp desc');
       expect(message).toContain('/mcp schema');
@@ -291,46 +312,31 @@ describe('mcpCommand', () => {
         return MCPServerStatus.DISCONNECTED;
       });
 
-      const mockServer1Tools = [createMockMCPTool('server1_tool1', 'server1')];
-      const mockServer2Tools: DiscoveredMCPTool[] = [];
-      const allTools = [...mockServer1Tools, ...mockServer2Tools];
-
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(allTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      mockConfig.getResourceRegistry = vi.fn().mockReturnValue({
-        getAllResources: vi
-          .fn()
-          .mockReturnValue([
-            createMockMCPResource(
-              'server1',
-              'file:///docs/readme.md',
-              'README',
-            ),
-            createMockMCPResource(
-              'server2',
-              'file:///docs/changelog.md',
-              'CHANGELOG',
-            ),
-          ]),
-      });
+      const tools = [createMockMCPTool('server1_tool1', 'server1')];
+      const resources = [
+        {
+          serverName: 'server1',
+          resource: createMockMCPResource('file:///docs/readme.md', 'README'),
+        },
+        {
+          serverName: 'server2',
+          resource: createMockMCPResource(
+            'file:///docs/changelog.md',
+            'CHANGELOG',
+          ),
+        },
+      ];
 
       const testContext = createMockCommandContext({
         services: {
           config: mockConfig,
+          agent: createMockAgent({ tools, resources }),
         },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, '');
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
       const message = result.content;
 
       expect(message).toContain('Ready (1 tool, 1 resource)');
@@ -343,56 +349,31 @@ describe('mcpCommand', () => {
     });
 
     it('should display tool descriptions when desc argument is used', async () => {
-      const mockMcpServers = {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: {
           command: 'cmd1',
           description: 'This is a server description',
         },
-      };
+      });
 
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-
-      // Mock tools with descriptions using actual DiscoveredMCPTool instances
-      const mockServerTools = [
+      const tools = [
         createMockMCPTool('tool1', 'server1', 'This is tool 1 description'),
         createMockMCPTool('tool2', 'server1', 'This is tool 2 description'),
       ];
 
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(mockServerTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Update context with new config
       const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        services: { config: mockConfig, agent: createMockAgent({ tools }) },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, 'desc');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('Configured MCP servers:'),
-      });
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
       const message = result.content;
 
-      // Check that server description is included
       expect(message).toContain('\u001b[1mserver1\u001b[0m - Ready (2 tools)');
       expect(message).toContain(
         '\u001b[32mThis is a server description\u001b[0m',
       );
-
-      // Check that tool descriptions are included
       expect(message).toContain('\u001b[36mtool1\u001b[0m');
       expect(message).toContain(
         '\u001b[32mThis is tool 1 description\u001b[0m',
@@ -401,100 +382,56 @@ describe('mcpCommand', () => {
       expect(message).toContain(
         '\u001b[32mThis is tool 2 description\u001b[0m',
       );
-
-      // Check that tips are NOT displayed when arguments are provided
       expect(message).not.toContain('TIP: Tips:');
     });
 
     it('should not display descriptions when nodesc argument is used', async () => {
-      const mockMcpServers = {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: {
           command: 'cmd1',
           description: 'This is a server description',
         },
-      };
+      });
 
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-
-      const mockServerTools = [
+      const tools = [
         createMockMCPTool('tool1', 'server1', 'This is tool 1 description'),
       ];
 
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(mockServerTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Update context with new config
       const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        services: { config: mockConfig, agent: createMockAgent({ tools }) },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, 'nodesc');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('Configured MCP servers:'),
-      });
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
       const message = result.content;
 
-      // Check that descriptions are not included
       expect(message).not.toContain('This is a server description');
       expect(message).not.toContain('This is tool 1 description');
       expect(message).toContain('\u001b[36mtool1\u001b[0m');
-
-      // Check that tips are NOT displayed when arguments are provided
       expect(message).not.toContain('TIP: Tips:');
     });
 
     it('should indicate when a server has no tools', async () => {
-      const mockMcpServers = {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1' },
         server2: { command: 'cmd2' },
-      };
+      });
 
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-
-      // Setup server statuses
       vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        if (serverName === 'server2') return MCPServerStatus.DISCONNECTED;
         return MCPServerStatus.DISCONNECTED;
       });
 
-      // Mock tools - only server1 has tools
-      const mockServerTools = [createMockMCPTool('server1_tool1', 'server1')];
+      const tools = [createMockMCPTool('server1_tool1', 'server1')];
 
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(mockServerTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Update context with new config
       const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        services: { config: mockConfig, agent: createMockAgent({ tools }) },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, '');
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
       const message = result.content;
 
       expect(message).toContain(
@@ -508,62 +445,41 @@ describe('mcpCommand', () => {
     });
 
     it('should show startup indicator when servers are connecting', async () => {
-      const mockMcpServers = {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1' },
         server2: { command: 'cmd2' },
-      };
+      });
 
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
-
-      // Setup server statuses with one connecting
       vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
         if (serverName === 'server2') return MCPServerStatus.CONNECTING;
         return MCPServerStatus.DISCONNECTED;
       });
 
-      // Setup discovery state as in progress
       vi.mocked(getMCPDiscoveryState).mockReturnValue(
         MCPDiscoveryState.IN_PROGRESS,
       );
 
-      // Mock tools
-      const mockServerTools = [
+      const tools = [
         createMockMCPTool('server1_tool1', 'server1'),
         createMockMCPTool('server2_tool1', 'server2'),
       ];
 
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
-        getAllTools: vi.fn().mockReturnValue(mockServerTools),
-        discoverAllTools: vi.fn().mockResolvedValue(undefined),
-      });
-
-      // Update context with new config
       const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        services: { config: mockConfig, agent: createMockAgent({ tools }) },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, '');
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
       const message = result.content;
 
-      // Check that startup indicator is shown
       expect(message).toContain(
         'MCP servers are starting up (1 initializing)...',
       );
       expect(message).toContain(
         'Note: First startup may take longer. Tool availability will update automatically.',
       );
-
-      // Check server statuses
       expect(message).toContain(
         '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
       );
@@ -573,29 +489,18 @@ describe('mcpCommand', () => {
     });
 
     it('should display the extension name for servers from extensions', async () => {
-      const mockMcpServers = {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1', extensionName: 'my-extension' },
-      };
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
+      });
 
-      // Create new context with updated config
       const testContext = createMockCommandContext({
-        services: {
-          config: mockConfig,
-        },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        services: { config: mockConfig, agent: createMockAgent() },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, '');
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
-      const message = result.content;
-
-      expect(message).toContain('server1 (from my-extension)');
+      expect(result.content).toContain('server1 (from my-extension)');
     });
 
     it('should display blocked MCP servers', async () => {
@@ -605,59 +510,89 @@ describe('mcpCommand', () => {
       ];
       mockConfig.getBlockedMcpServers = vi.fn().mockReturnValue(blockedServers);
 
-      // Create new context with updated config
       const testContext = createMockCommandContext({
         services: {
           config: mockConfig,
+          agent: createMockAgent({ blockedServers }),
         },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, '');
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
-      const message = result.content;
-
-      expect(message).toContain(
+      expect(result.content).toContain(
         '[BLOCKED] \u001b[1mblocked-server (from my-extension)\u001b[0m - Blocked',
       );
     });
 
     it('should display both active and blocked servers correctly', async () => {
-      const mockMcpServers = {
+      mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1', extensionName: 'my-extension' },
-      };
-      mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
+      });
       const blockedServers = [
         { name: 'blocked-server', extensionName: 'another-extension' },
       ];
       mockConfig.getBlockedMcpServers = vi.fn().mockReturnValue(blockedServers);
 
-      // Create new context with updated config
       const testContext = createMockCommandContext({
         services: {
           config: mockConfig,
+          agent: createMockAgent({ blockedServers }),
         },
-        ui: {
-          reloadCommands: vi.fn(),
-        },
+        ui: { reloadCommands: vi.fn() },
       });
 
       const result = await mcpCommand.action!(testContext, '');
-
       assertMessageAction(result);
-      expect(result.content).toBeTruthy();
-
-      const message = result.content;
-
-      expect(message).toContain('server1 (from my-extension)');
-      expect(message).toContain(
+      expect(result.content).toContain('server1 (from my-extension)');
+      expect(result.content).toContain(
         '[BLOCKED] \u001b[1mblocked-server (from another-extension)\u001b[0m - Blocked',
       );
+    });
+
+    it('degrades gracefully when agent.mcp.details() rejects, showing servers and a warning', async () => {
+      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
+        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
+        return MCPServerStatus.DISCONNECTED;
+      });
+
+      // Create an agent whose mcp.details() rejects.
+      const failingAgent = {
+        mcp: {
+          details: vi.fn().mockRejectedValue(new Error('details unavailable')),
+          refresh: vi.fn().mockResolvedValue(undefined),
+          status: vi.fn(),
+          listServers: vi.fn().mockReturnValue([]),
+        },
+        tools: { list: vi.fn().mockReturnValue([]) },
+      } as unknown as Agent;
+
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+          agent: failingAgent,
+        },
+        ui: { reloadCommands: vi.fn() },
+      });
+
+      // Must NOT throw — it should degrade and return a message.
+      const result = await mcpCommand.action!(testContext, '');
+      assertMessageAction(result);
+      const message = result.content;
+
+      // Server headers must still render correctly (status rendering does not
+      // depend on details()). Match the full header pattern — a bare substring
+      // like 'server1' would pass even if header rendering were broken.
+      expect(message).toContain(
+        '[READY] \u001b[1mserver1\u001b[0m - Ready (0 tools)',
+      );
+      expect(message).toContain(
+        '[DISCONNECTED] \u001b[1mserver2\u001b[0m - Disconnected',
+      );
+
+      // Warning line must be present.
+      expect(message).toContain('Failed to load MCP tool details');
+      expect(message).toContain('details unavailable');
     });
   });
 });

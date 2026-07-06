@@ -6,6 +6,7 @@
 
 import { vi } from 'vitest';
 import {
+  type AnyDeclarativeTool,
   CoreToolHostAdapter,
   GlobTool,
   type MessageBus,
@@ -14,6 +15,10 @@ import {
   COMMON_IGNORE_PATTERNS,
   DEFAULT_FILE_EXCLUDES,
 } from '@vybestack/llxprt-code-core';
+import type {
+  AgentToolHandle,
+  AgentToolInvocation,
+} from '@vybestack/llxprt-code-agents';
 import {
   FileDiscoveryService,
   StandardFileSystemService,
@@ -23,6 +28,83 @@ import * as fsPromises from 'fs/promises';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+
+/**
+ * Minimal adapter that wraps a real tool (from ToolRegistry.getTool) as an
+ * AgentToolHandle for the at-command test harness. Mirrors the
+ * production-equivalent result projection (llmContent + returnDisplay
+ * unconditionally, error only when defined) so tests exercise shapes that
+ * match what ToolControl.get()/wrapInvocation produces internally.
+ *
+ * Note: production's ToolControl.get() uses the internal `wrapToolHandle`
+ * (packages/agents/src/api/control/toolControl.ts), which is deliberately NOT
+ * exported from the agents barrel. Re-exporting it purely to DRY this test
+ * harness would widen the public API surface (and churn the public-surface
+ * guard snapshots) for no runtime benefit, so we keep a small, typed local
+ * adapter instead.
+ */
+function wrapToolForTest(t: AnyDeclarativeTool): AgentToolHandle {
+  /**
+   * Projects a raw tool result to the public shape: llmContent and
+   * returnDisplay always present, error included only when defined.
+   */
+  const projectResult = (result: {
+    llmContent: unknown;
+    returnDisplay?: unknown;
+    error?: unknown;
+  }): { llmContent: unknown; returnDisplay?: unknown; error?: unknown } => {
+    const projected: {
+      llmContent: unknown;
+      returnDisplay?: unknown;
+      error?: unknown;
+    } = {
+      llmContent: result.llmContent,
+      returnDisplay: result.returnDisplay,
+    };
+    if (result.error !== undefined) {
+      projected.error = result.error;
+    }
+    return projected;
+  };
+  const buildInvocation = (
+    params: Record<string, unknown>,
+  ): AgentToolInvocation => {
+    const invocation = t.build(params);
+    return {
+      getDescription: () => invocation.getDescription(),
+      execute: async (signal, updateOutput) => {
+        // Mirror production wrapInvocation (toolControl.ts): the public
+        // AgentToolInvocation.execute contract forwards only string chunks, so
+        // filter here too rather than passing updateOutput straight through.
+        const result = await invocation.execute(
+          signal,
+          updateOutput !== undefined
+            ? (chunk) => {
+                if (typeof chunk === 'string') {
+                  updateOutput(chunk);
+                }
+              }
+            : undefined,
+        );
+        return projectResult(result);
+      },
+      shouldConfirmExecute: (signal) => invocation.shouldConfirmExecute(signal),
+      toolLocations: () => invocation.toolLocations(),
+    };
+  };
+  return {
+    name: t.name,
+    displayName: t.displayName,
+    ...(t.description.length > 0 ? { description: t.description } : {}),
+    kind: t.kind,
+    source: 'builtin',
+    build: buildInvocation,
+    buildAndExecute: async (params, signal) => {
+      const result = await t.buildAndExecute(params, signal);
+      return projectResult(result);
+    },
+  };
+}
 
 export async function createTestFile(
   fullPath: string,
@@ -40,6 +122,7 @@ export interface AtCommandTestSetup {
   mockOnDebugMessage: ReturnType<typeof vi.fn>;
   abortController: AbortController;
   originalCwd: string;
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
 }
 
 function buildMockConfig(testRootDir: string): CliUiRuntime {
@@ -141,6 +224,12 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
   registry.registerTool(new GlobTool(toolHost));
   vi.mocked(mockConfig.getToolRegistry).mockReturnValue(registry);
 
+  const getToolHandle = (name: string): AgentToolHandle | undefined => {
+    const tool = registry.getTool(name);
+    if (tool === undefined) return undefined;
+    return wrapToolForTest(tool);
+  };
+
   return {
     testRootDir,
     mockConfig,
@@ -148,6 +237,7 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
     mockOnDebugMessage,
     abortController,
     originalCwd,
+    getToolHandle,
   };
 }
 

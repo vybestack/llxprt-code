@@ -19,11 +19,11 @@ import type {
 import type {
   IdeContext,
   ApprovalMode,
-  AnyDeclarativeTool,
   ThoughtSummary,
   IdeInfo,
   LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
+import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
 
@@ -92,7 +92,7 @@ export interface UIState {
   contextLimit: number | undefined;
   profiles: string[];
   toolsDialogAction: 'enable' | 'disable';
-  toolsDialogTools: AnyDeclarativeTool[];
+  toolsDialogTools: ToolInfo[];
   toolsDialogDisabledTools: string[];
   workspaceLlxprtExtensions: LlxprtExtension[];
   loggingDialogData: { entries: unknown[] };

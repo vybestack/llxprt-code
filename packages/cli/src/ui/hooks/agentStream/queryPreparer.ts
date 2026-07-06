@@ -26,9 +26,14 @@ import {
   handleAtCommand,
 } from '../atCommandProcessor.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 
 export interface PrepareQueryDeps {
   runtime: StreamRuntime;
+  // @plan:ISSUE-2376 — resolves read_many_files/glob via the public Agent
+  // surface for @file processing, replacing direct
+  // getToolRegistry().getTool access.
+  getToolHandle: (name: string) => AgentToolHandle | undefined;
   /**
    * Logs a user-prompt telemetry event. Provided by the caller (which has
    * access to the full telemetry-config boundary) so this module depends only
@@ -143,6 +148,7 @@ async function processStringQuery(
     const atCommandResult = await handleAtCommand({
       query: trimmedQuery,
       config: buildAtCommandRuntimeFromStream(runtime),
+      getToolHandle: deps.getToolHandle,
       addItem,
       onDebugMessage,
       messageId: userMessageTimestamp,

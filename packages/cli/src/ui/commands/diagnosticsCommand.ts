@@ -15,6 +15,7 @@ import type {
 import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import path from 'node:path';
 import process from 'node:process';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -449,20 +450,22 @@ function appendStaticSections(
 
 function appendToolsAndTelemetry(
   diagnostics: string[],
-  config: NonNullable<CommandContext['services']['config']>,
+  agent: Agent | null,
   settings: CommandContext['services']['settings'],
 ): void {
   diagnostics.push('\n## Tools');
   try {
-    const toolRegistry = config.getToolRegistry();
-    const tools = toolRegistry.getAllTools();
+    if (!agent) {
+      throw new Error('agent not available');
+    }
+    const tools = agent.tools.list();
     diagnostics.push(`- Available Tools: ${tools.length}`);
-    const toolNames = tools.map((t: { name: string }) => t.name).slice(0, 10);
+    const toolNames = tools.map((t) => t.name).slice(0, 10);
     if (toolNames.length > 0) {
       diagnostics.push(`- First 10 Tools: ${toolNames.join(', ')}`);
     }
   } catch {
-    diagnostics.push('- Tool Registry: Not initialized');
+    diagnostics.push('- Agent tools: Not initialized');
   }
 
   diagnostics.push('\n## Telemetry');
@@ -527,7 +530,7 @@ export const diagnosticsCommand: SlashCommand = {
       appendEphemeralSettings(diagnostics, ephemeralSettings, logger);
       appendDumpContextInfo(diagnostics, ephemeralSettings);
       appendStaticSections(diagnostics, config, settings, ephemeralSettings);
-      appendToolsAndTelemetry(diagnostics, config, settings);
+      appendToolsAndTelemetry(diagnostics, context.services.agent, settings);
       await appendOAuthTokens(diagnostics, logger);
 
       return {

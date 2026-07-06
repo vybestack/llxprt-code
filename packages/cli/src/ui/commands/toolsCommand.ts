@@ -10,7 +10,7 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType } from '../types.js';
-import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
+import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { type CommandArgumentSchema } from './schema/types.js';
 
@@ -125,7 +125,7 @@ function persistToolLists(
 }
 
 function buildStatusLine(
-  tool: AnyDeclarativeTool,
+  tool: ToolInfo,
   disabledSet: Set<string>,
   allowedSet: Set<string>,
   showDescriptions: boolean,
@@ -135,23 +135,24 @@ function buildStatusLine(
     allowedSet.size === 0 || allowedSet.has(canonical);
   const isDisabled = disabledSet.has(canonical) || !isExplicitlyAllowed;
   const statusLabel = isDisabled ? '[disabled]' : '[enabled]';
+  const display = tool.displayName ?? tool.name;
 
   if (!showDescriptions || !tool.description) {
-    return `  - ${tool.displayName} ${statusLabel}`;
+    return `  - ${display} ${statusLabel}`;
   }
 
   const descLines = tool.description.trim().split('\n');
   const body = descLines.map((line) => `      ${line}`).join('\n');
-  return `  - ${tool.displayName} (${tool.name}) ${statusLabel}\n${body}`;
+  return `  - ${display} (${tool.name}) ${statusLabel}\n${body}`;
 }
 
 function formatListMessage(
-  tools: AnyDeclarativeTool[],
+  tools: readonly ToolInfo[],
   disabledSet: Set<string>,
   allowedSet: Set<string>,
   showDescriptions: boolean,
 ): string {
-  const filtered = tools.filter((tool) => !('serverName' in tool));
+  const filtered = tools.filter((tool) => tool.source !== 'mcp');
 
   if (filtered.length === 0) {
     return 'Available LLxprt Code tools:\n\n  No tools available\n';
@@ -169,15 +170,15 @@ function formatListMessage(
 
 function resolveToolByName(
   identifier: string,
-  tools: AnyDeclarativeTool[],
-): AnyDeclarativeTool | null {
+  tools: readonly ToolInfo[],
+): ToolInfo | null {
   const normalized = normalizeToolName(identifier);
-  const canonicalMap = new Map<string, AnyDeclarativeTool>();
-  const friendlyMap = new Map<string, AnyDeclarativeTool>();
+  const canonicalMap = new Map<string, ToolInfo>();
+  const friendlyMap = new Map<string, ToolInfo>();
 
   for (const tool of tools) {
     canonicalMap.set(normalizeToolName(tool.name), tool);
-    friendlyMap.set(normalizeToolName(tool.displayName), tool);
+    friendlyMap.set(normalizeToolName(tool.displayName ?? tool.name), tool);
   }
 
   if (canonicalMap.has(normalized)) {
@@ -197,7 +198,7 @@ async function handleToggleTool(
   remainder: string,
   disabled: Set<string>,
   allowed: Set<string>,
-  tools: AnyDeclarativeTool[],
+  tools: readonly ToolInfo[],
 ): Promise<void> {
   const identifier = stripQuotes(remainder);
   if (!identifier) {
@@ -212,7 +213,7 @@ async function handleToggleTool(
   }
 
   const target = resolveToolByName(identifier, tools);
-  if (!target || 'serverName' in target) {
+  if (!target || target.source === 'mcp') {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -224,18 +225,19 @@ async function handleToggleTool(
   }
 
   const canonical = normalizeToolName(target.name);
+  const display = target.displayName ?? target.name;
   let feedback: string;
 
   if (subcommand === 'disable') {
     disabled.add(canonical);
     allowed.delete(canonical);
-    feedback = `Disabled tool '${target.displayName}'.`;
+    feedback = `Disabled tool '${display}'.`;
   } else {
     disabled.delete(canonical);
     if (allowed.size > 0) {
       allowed.add(canonical);
     }
-    feedback = `Enabled tool '${target.displayName}'.`;
+    feedback = `Enabled tool '${display}'.`;
   }
 
   persistToolLists(context, disabled, allowed);
@@ -255,7 +257,7 @@ async function handleToggleTool(
           type: MessageType.INFO,
           text: `Warning: failed to refresh Gemini tool schema after ${
             subcommand === 'disable' ? 'disabling' : 'enabling'
-          } '${target.displayName}': ${error instanceof Error ? error.message : String(error)}`,
+          } '${display}': ${error instanceof Error ? error.message : String(error)}`,
         },
         Date.now(),
       );
@@ -271,14 +273,12 @@ export const toolsCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: toolsSchema,
   action: async (context: CommandContext, args = ''): Promise<void> => {
-    const config = context.services.config;
-    const toolRegistry = config?.getToolRegistry();
-
-    if (!toolRegistry) {
+    const agent = context.services.agent;
+    if (!agent) {
       context.ui.addItem(
         {
           type: MessageType.ERROR,
-          text: 'Could not retrieve tool registry.',
+          text: 'Could not retrieve tools from the agent.',
         },
         Date.now(),
       );
@@ -295,7 +295,7 @@ export const toolsCommand: SlashCommand = {
         : tokens.join(' ');
 
     const { disabled, allowed } = readToolLists(context);
-    const tools = toolRegistry.getAllTools();
+    const tools = agent.tools.list();
 
     const showDescriptions =
       subcommand === 'desc' || subcommand === 'descriptions';

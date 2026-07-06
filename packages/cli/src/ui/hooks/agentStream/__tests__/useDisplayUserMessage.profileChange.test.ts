@@ -19,6 +19,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type React from 'react';
 import type { Config } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
@@ -78,6 +79,9 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         handleSlashCommand: vi.fn().mockResolvedValue(false),
         logger: null,
         shellModeActive: false,
+        agent: {
+          tools: { get: vi.fn(() => undefined) },
+        } as unknown as Agent,
         loopDetectedRef: { current: false },
         lastProfileNameRef,
         lastModelInfoRef: { current: null },
@@ -155,6 +159,9 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         handleSlashCommand: vi.fn().mockResolvedValue(false),
         logger: null,
         shellModeActive: false,
+        agent: {
+          tools: { get: vi.fn(() => undefined) },
+        } as unknown as Agent,
         loopDetectedRef: { current: false },
         lastProfileNameRef,
         lastModelInfoRef: { current: null },

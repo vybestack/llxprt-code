@@ -15,17 +15,6 @@ import type { RuntimeMcpServers } from './mcpDisplay.js';
 import { buildMcpStatusMessage } from './mcpDisplay.js';
 import { mcpAuthSchema, listOAuthServers, performMcpOAuth } from './mcpAuth.js';
 
-function hasToolRefreshClient(
-  value: unknown,
-): value is { setTools(): Promise<void> } {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'setTools' in value &&
-    typeof value.setTools === 'function'
-  );
-}
-
 const getMcpStatus = async (
   context: CommandContext,
   showDescriptions: boolean,
@@ -33,11 +22,20 @@ const getMcpStatus = async (
   showTips: boolean = false,
 ): Promise<SlashCommandActionReturn> => {
   const { config } = context.services;
+  const agent = context.services.agent;
   if (!config) {
     return {
       type: 'message',
       messageType: 'error',
       content: 'Configuration not loaded.',
+    };
+  }
+
+  if (!agent) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Could not retrieve tools from the agent.',
     };
   }
 
@@ -56,7 +54,7 @@ const getMcpStatus = async (
   }
 
   const message = await buildMcpStatusMessage(
-    config,
+    agent,
     serverNames,
     mcpServers,
     blockedMcpServers,
@@ -147,6 +145,7 @@ const refreshCommand: SlashCommand = {
     context: CommandContext,
   ): Promise<SlashCommandActionReturn> => {
     const { config } = context.services;
+    const agent = context.services.agent;
     if (!config) {
       return {
         type: 'message',
@@ -155,7 +154,13 @@ const refreshCommand: SlashCommand = {
       };
     }
 
-    const toolRegistry = config.getToolRegistry();
+    if (!agent) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Could not retrieve tools from the agent.',
+      };
+    }
 
     context.ui.addItem(
       {
@@ -165,15 +170,11 @@ const refreshCommand: SlashCommand = {
       Date.now(),
     );
 
+    // agent.mcp.refresh() re-runs discovery and restarts servers; a failing
+    // server (or transport) rejects here. Surface it as a user-friendly error
+    // instead of letting it escape as an unhandled rejection.
     try {
-      await toolRegistry.discoverAllTools();
-
-      // Update the client with the new tools
-      const agentClient: unknown = config.getAgentClient();
-      if (!hasToolRefreshClient(agentClient)) {
-        throw new Error('Agent client is not available');
-      }
-      await agentClient.setTools();
+      await agent.mcp.refresh();
     } catch (error) {
       return {
         type: 'message',

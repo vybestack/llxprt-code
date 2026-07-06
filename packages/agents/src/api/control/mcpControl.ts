@@ -28,6 +28,7 @@ import type {
   McpStatus,
   ToolInfo,
 } from '../agent.js';
+import { buildToolInfos } from '../agentBootstrap.js';
 
 /**
  * Read-only view of the tool registry the MCP control needs to project
@@ -35,12 +36,17 @@ import type {
  *
  * @plan:PLAN-20260617-COREAPI.P22
  * @requirement:REQ-013
+ * @plan:ISSUE-2376 — the element type carries the enriched fields projected
+ * onto ToolInfo (displayName, parametersSchema, serverToolName).
  */
 export interface McpToolRegistryView {
   getAllTools(): ReadonlyArray<{
     readonly name: string;
     readonly description?: string;
     readonly serverName?: string;
+    readonly displayName?: string;
+    readonly parametersSchema?: Readonly<Record<string, unknown>>;
+    readonly serverToolName?: string;
   }>;
   getEnabledTools(): ReadonlyArray<{ readonly name: string }>;
 }
@@ -54,11 +60,13 @@ export interface McpPromptRegistryView {
 }
 
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+// @plan:ISSUE-2376 — element type carries description (projected onto McpResourceInfo).
 export interface McpResourceRegistryView {
   getAllResources(): ReadonlyArray<{
     serverName: string;
     name?: string;
     uri: string;
+    description?: string;
   }>;
 }
 
@@ -221,10 +229,14 @@ export class McpControl implements AgentMcpControl {
 
   /**
    * Groups the discovered MCP tools (registry tools carrying a non-empty
-   * serverName) under their originating server name.
+   * serverName) under their originating server name. Projects the enriched
+   * displayName/parametersSchema/serverToolName fields (added by #2376)
+   * additively — each is included only when the registry view element defines
+   * it.
    *
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
+   * @plan:ISSUE-2376
    */
   toolsByServer(): Readonly<Record<string, readonly ToolInfo[]>> {
     const registry = this.deps?.getToolRegistry();
@@ -232,21 +244,22 @@ export class McpControl implements AgentMcpControl {
       return {};
     }
     const enabled = new Set(registry.getEnabledTools().map((t) => t.name));
+    // Keep only MCP tools (those with a non-empty serverName), then reuse the
+    // shared buildToolInfos projection so the additive-field logic lives in
+    // exactly one place (see #2376) rather than being re-implemented here.
+    const mcpTools = registry
+      .getAllTools()
+      .filter(
+        (tool) => tool.serverName !== undefined && tool.serverName.length > 0,
+      );
     const grouped = new Map<string, ToolInfo[]>();
-    for (const tool of registry.getAllTools()) {
-      const server = tool.serverName;
-      if (server === undefined || server.length === 0) {
+    for (const info of buildToolInfos(mcpTools, enabled)) {
+      // buildToolInfos sets `server` from serverName for MCP-sourced tools;
+      // the filter above guarantees it is a non-empty string here.
+      const server = info.server;
+      if (server === undefined) {
         continue;
       }
-      const info: ToolInfo = {
-        name: tool.name,
-        ...(tool.description !== undefined
-          ? { description: tool.description }
-          : {}),
-        source: 'mcp',
-        server,
-        enabled: enabled.has(tool.name),
-      };
       const bucket = grouped.get(server);
       if (bucket === undefined) {
         grouped.set(server, [info]);
@@ -442,6 +455,7 @@ export class McpControl implements AgentMcpControl {
       serverName: string;
       name?: string;
       uri: string;
+      description?: string;
     }>,
     oauthStatus: McpOAuthStatus,
   ): McpServerDetail {
@@ -477,7 +491,13 @@ export class McpControl implements AgentMcpControl {
     if (includeResources) {
       detail.resources = resourcesAll
         .filter((r) => r.serverName === name)
-        .map((r) => ({ name: r.name, uri: r.uri }));
+        .map((r) => ({
+          name: r.name,
+          uri: r.uri,
+          ...(r.description !== undefined
+            ? { description: r.description }
+            : {}),
+        }));
     }
     return detail;
   }

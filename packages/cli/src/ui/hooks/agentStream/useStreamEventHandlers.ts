@@ -26,6 +26,7 @@ import {
   logUserPrompt,
   type UserPromptEvent,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type PartListUnion } from '@google/genai';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
@@ -121,6 +122,10 @@ interface StreamEventHandlersResult {
 
 interface StreamEventHandlerDeps {
   runtime: StreamRuntime;
+  // @plan:ISSUE-2376 — the Agent surface supplies named-tool lookup
+  // (agent.tools.get) for @file processing; threaded alongside the #2384
+  // StreamRuntime rather than through getToolRegistry.
+  agent: Agent;
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   onDebugMessage: (message: string) => void;
@@ -500,6 +505,7 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
   return useMemo(
     () => ({
       runtime: deps.runtime,
+      getToolHandle: (name: string) => deps.agent.tools.get(name),
       logUserPrompt: (event: UserPromptEvent) =>
         logUserPrompt(
           {
@@ -519,6 +525,7 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
     }),
     [
       deps.runtime,
+      deps.agent,
       deps.addItem,
       deps.onDebugMessage,
       deps.handleShellCommand,
