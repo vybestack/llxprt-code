@@ -30,6 +30,16 @@ function resolveExecutableFromPath(command: string): string | null {
     result.stdout.split(/\r?\n/).find((line) => line.trim() !== '') ?? null
   );
 }
+async function resolveTestBunPath(workspaceBunPath: string): Promise<string> {
+  const envBunPath = process.env['BUN_PATH'];
+  if (envBunPath !== undefined) {
+    return envBunPath;
+  }
+  if (await pathExists(workspaceBunPath)) {
+    return workspaceBunPath;
+  }
+  return resolveExecutableFromPath('bun') ?? workspaceBunPath;
+}
 
 const cliPackageRoot = resolve(__dirname, '..', '..');
 const credentialSocketEnv = 'LLXPRT_CREDENTIAL_SOCKET';
@@ -176,11 +186,7 @@ describe('cli bin end-to-end credential routing', () => {
         '.bin',
         process.platform === 'win32' ? 'bun.cmd' : 'bun',
       );
-      const bunPath =
-        process.env['BUN_PATH'] ??
-        ((await pathExists(workspaceBunPath)) ? workspaceBunPath : null) ??
-        resolveExecutableFromPath('bun') ??
-        workspaceBunPath;
+      const bunPath = await resolveTestBunPath(workspaceBunPath);
       // Fail fast with an actionable message if the monorepo layout has
       // shifted, rather than surfacing an opaque ENOENT from inside the spawned
       // subprocess. Do this BEFORE creating the temp dir so a stale path can

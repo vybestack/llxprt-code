@@ -19,7 +19,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { getResponseText } from '@vybestack/llxprt-code-core/utils/partUtils.js';
+import { getResponseText } from '@vybestack/llxprt-code-core';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import type {
   ApprovalMode,

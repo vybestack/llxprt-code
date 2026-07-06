@@ -12,11 +12,13 @@ import type { Content, Part, PartListUnion } from '@google/genai';
  * text segments. Local replacement for the retired core helper
  * getResponseTextFromParts (which migrated to ContentBlock[]).
  */
+function isHiddenThoughtPart(part: Part): boolean {
+  return 'thought' in part && part.thought === true;
+}
+
 function getResponseTextFromPartsLocal(parts: Part[]): string | undefined {
   const textSegments = parts
-    .filter(
-      (part) => (part as unknown as { thought?: boolean }).thought !== true,
-    )
+    .filter((part) => !isHiddenThoughtPart(part))
     .map((part) => part.text)
     .filter((text): text is string => typeof text === 'string');
   if (textSegments.length === 0) {
